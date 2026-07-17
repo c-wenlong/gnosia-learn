@@ -40,6 +40,4 @@ jobs:
 
       - name: Production build
         run: npm run build
-        env:
-          # Build does not require a live key; chat API fails gracefully without it.
-          XAI_API_KEY: ""
+        # Agent chat uses free providers at runtime; build does not need live keys.
