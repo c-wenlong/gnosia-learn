@@ -1,0 +1,185 @@
+import type { Course } from "@/lib/types";
+
+export const cp4283: Course = {
+  id: "cp4283",
+  slug: "cp4283",
+  code: "CP4283",
+  title: "Deep Generative Models",
+  credits: 4,
+  prereq: "120 units, Foundations of Machine Learning",
+  notes:
+    'Traces the "chain of ideas" in generative modeling — each model as an answer to the last one\'s weaknesses.',
+  inferred: false,
+  tags: ["generative-models", "transformers"],
+  modules: [
+    {
+      id: "cp4283-m1",
+      slug: "m1-autoregressive-models",
+      title: "Autoregressive Models",
+      order: 1,
+      topics: [
+        {
+          id: "cp4283-m1-t1",
+          title: "Chain-rule factorization of joint distributions",
+          subtopics: ["p(x) as product of conditionals"],
+        },
+        {
+          id: "cp4283-m1-t2",
+          title: "PixelRNN / PixelCNN-style approaches",
+          subtopics: ["Image generation as sequence modeling"],
+        },
+        {
+          id: "cp4283-m1-t3",
+          title: "Language modeling as generation",
+          subtopics: ["Next-token prediction"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m1-r1",
+          title: "van den Oord et al. — PixelCNN",
+          url: "https://arxiv.org/abs/1606.05328",
+          type: "paper",
+        },
+      ],
+    },
+    {
+      id: "cp4283-m2",
+      slug: "m2-variational-autoencoders",
+      title: "Variational Autoencoders",
+      order: 2,
+      topics: [
+        {
+          id: "cp4283-m2-t1",
+          title: "Latent variable models and ELBO",
+          subtopics: ["Evidence lower bound derivation"],
+        },
+        {
+          id: "cp4283-m2-t2",
+          title: "Reparameterization trick and posterior collapse",
+          subtopics: ["Stochastic gradients", "Collapse failure modes"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m2-r1",
+          title: "Kingma & Welling — Auto-Encoding Variational Bayes",
+          url: "https://arxiv.org/abs/1312.6114",
+          type: "paper",
+        },
+      ],
+    },
+    {
+      id: "cp4283-m3",
+      slug: "m3-generative-adversarial-networks",
+      title: "Generative Adversarial Networks",
+      order: 3,
+      topics: [
+        {
+          id: "cp4283-m3-t1",
+          title: "Adversarial training dynamics",
+          subtopics: ["Minimax game", "Mode collapse"],
+        },
+        {
+          id: "cp4283-m3-t2",
+          title: "Key GAN variants and stabilization",
+          subtopics: ["Training tricks", "Architectural variants"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m3-r1",
+          title: "Goodfellow et al. — Generative Adversarial Nets",
+          url: "https://arxiv.org/abs/1406.2661",
+          type: "paper",
+        },
+      ],
+    },
+    {
+      id: "cp4283-m4",
+      slug: "m4-normalizing-flows",
+      title: "Normalizing Flows",
+      order: 4,
+      topics: [
+        {
+          id: "cp4283-m4-t1",
+          title: "Invertible transformations and change-of-variables",
+          subtopics: ["Exact likelihood", "Jacobian determinants"],
+        },
+        {
+          id: "cp4283-m4-t2",
+          title: "Coupling layers and trade-offs",
+          subtopics: ["vs VAEs and GANs"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m4-r1",
+          title: "Dinh et al. — Density estimation using Real NVP",
+          url: "https://arxiv.org/abs/1605.08803",
+          type: "paper",
+        },
+      ],
+    },
+    {
+      id: "cp4283-m5",
+      slug: "m5-diffusion-models",
+      title: "Diffusion Models",
+      order: 5,
+      topics: [
+        {
+          id: "cp4283-m5-t1",
+          title: "Forward and reverse diffusion process",
+          subtopics: ["Noise schedules", "Denoising reverse steps"],
+        },
+        {
+          id: "cp4283-m5-t2",
+          title: "Score-based generative modeling",
+          subtopics: ["Denoising objectives", "Link to modern image generators"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m5-r1",
+          title: "Ho et al. — Denoising Diffusion Probabilistic Models",
+          url: "https://arxiv.org/abs/2006.11239",
+          type: "paper",
+        },
+        {
+          id: "cp4283-m5-r2",
+          title: "Lilian Weng — What are Diffusion Models?",
+          url: "https://lilianweng.github.io/posts/2021-07-11-diffusion-models/",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cp4283-m6",
+      slug: "m6-transformers-as-generative-models",
+      title: "Transformers as Generative Models",
+      order: 6,
+      topics: [
+        {
+          id: "cp4283-m6-t1",
+          title: "Self-attention mechanics",
+          subtopics: ["Q/K/V", "Multi-head attention"],
+        },
+        {
+          id: "cp4283-m6-t2",
+          title: "Autoregressive transformers for text/image",
+          subtopics: ["Where LLMs fit in the generative lineage"],
+        },
+      ],
+      resources: [
+        {
+          id: "cp4283-m6-r1",
+          title: "Vaswani et al. — Attention Is All You Need",
+          url: "https://arxiv.org/abs/1706.03762",
+          type: "paper",
+        },
+      ],
+    },
+  ],
+  capstone:
+    'Place a generative model of your choice in the "problem it was built to solve" narrative — implement a minimal version and explain what it fixes relative to its predecessor.',
+};
