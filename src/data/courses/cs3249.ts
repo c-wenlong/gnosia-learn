@@ -1,0 +1,175 @@
+import type { Course } from "@/lib/types";
+
+export const cs3249: Course = {
+  id: "cs3249",
+  slug: "cs3249",
+  code: "CS3249",
+  title: "Conversational User Interface",
+  credits: 4,
+  prereq: "CS2103 (waiver for AY26/27); CS2111 from AY27/28",
+  track: "HCI focus area",
+  notes:
+    "Builds on general UI/interaction design foundations, specializing into language-driven interfaces.",
+  inferred: false,
+  tags: ["hci", "agentic-ai"],
+  modules: [
+    {
+      id: "cs3249-m1",
+      slug: "m1-ui-design-foundations-recap",
+      title: "UI Design Foundations Recap",
+      order: 1,
+      topics: [
+        {
+          id: "cs3249-m1-t1",
+          title: "Interaction models and GUI programming basics",
+          subtopics: ["Layout", "Event-driven UIs"],
+        },
+        {
+          id: "cs3249-m1-t2",
+          title: "Usability principles for conversational contexts",
+          subtopics: ["Feedback", "Consistency", "Error prevention"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m1-r1",
+          title: "Nielsen Norman Group — Usability Heuristics",
+          url: "https://www.nngroup.com/articles/ten-usability-heuristics/",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cs3249-m2",
+      slug: "m2-conversational-interface-fundamentals",
+      title: "Conversational Interface Fundamentals",
+      order: 2,
+      topics: [
+        {
+          id: "cs3249-m2-t1",
+          title: "Dialogue design principles",
+          subtopics: ["Turn-taking", "Conversational grounding"],
+        },
+        {
+          id: "cs3249-m2-t2",
+          title: "Intent- and slot-based interaction models",
+          subtopics: ["Classic dialogue systems"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m2-r1",
+          title: "Google Conversation Design guidelines",
+          url: "https://developers.google.com/assistant/conversation-design/welcome",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cs3249-m3",
+      slug: "m3-nlu-dialogue-management",
+      title: "NLU & Dialogue Management",
+      order: 3,
+      topics: [
+        {
+          id: "cs3249-m3-t1",
+          title: "Intent recognition and slot filling",
+          subtopics: ["Classification", "Entity extraction"],
+        },
+        {
+          id: "cs3249-m3-t2",
+          title: "Dialogue state tracking and flow design",
+          subtopics: ["State machines", "Conversation graphs"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m3-r1",
+          title: "Rasa open source docs (dialogue management concepts)",
+          url: "https://rasa.com/docs/",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cs3249-m4",
+      slug: "m4-llm-based-conversational-agents",
+      title: "LLM-Based Conversational Agents",
+      order: 4,
+      topics: [
+        {
+          id: "cs3249-m4-t1",
+          title: "Prompting for dialogue and context management",
+          subtopics: ["Window management", "System prompts"],
+        },
+        {
+          id: "cs3249-m4-t2",
+          title: "Grounding responses, ambiguity, and repair",
+          subtopics: ["Hallucination control", "Clarification strategies"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m4-r1",
+          title: "OpenAI — Prompt engineering guide",
+          url: "https://platform.openai.com/docs/guides/prompt-engineering",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cs3249-m5",
+      slug: "m5-voice-multimodal-interfaces",
+      title: "Voice & Multimodal Interfaces",
+      order: 5,
+      topics: [
+        {
+          id: "cs3249-m5-t1",
+          title: "Speech input/output considerations",
+          subtopics: ["ASR/TTS latency", "Prosody and clarity"],
+        },
+        {
+          id: "cs3249-m5-t2",
+          title: "Multimodal grounding",
+          subtopics: ["Text + voice + UI elements"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m5-r1",
+          title: "Web Speech API (MDN)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API",
+          type: "docs",
+        },
+      ],
+    },
+    {
+      id: "cs3249-m6",
+      slug: "m6-evaluating-conversational-systems",
+      title: "Evaluating Conversational Systems",
+      order: 6,
+      topics: [
+        {
+          id: "cs3249-m6-t1",
+          title: "Usability testing methods for CUIs",
+          subtopics: ["Task success", "Conversation quality metrics"],
+        },
+        {
+          id: "cs3249-m6-t2",
+          title: "Error recovery and breakdown handling",
+          subtopics: ["Repair strategies", "Fallback design"],
+        },
+      ],
+      resources: [
+        {
+          id: "cs3249-m6-r1",
+          title: "Nielsen Norman Group — Conversational UI guidelines",
+          url: "https://www.nngroup.com/articles/voice-first/",
+          type: "docs",
+        },
+      ],
+    },
+  ],
+  capstone:
+    "Design and build a working conversational interface prototype, user-tested for at least one breakdown/recovery scenario.",
+};
