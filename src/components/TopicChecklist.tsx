@@ -4,19 +4,26 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Course, Module, Topic } from "@/lib/types";
 import { useLearner } from "@/lib/learner-context";
+import { TopicRecap } from "@/components/TopicRecap";
 
 function TopicRowEditor({
   topic,
+  course,
+  module,
   done,
   initialNote,
   launchHref,
+  hasRecap,
   onToggle,
   onSaveNote,
 }: {
   topic: Topic;
+  course: Course;
+  module: Module;
   done: boolean;
   initialNote: string;
   launchHref: string;
+  hasRecap: boolean;
   onToggle: () => void;
   onSaveNote: (note: string) => void;
 }) {
@@ -55,7 +62,7 @@ function TopicRowEditor({
               href={launchHref}
               className="inline-flex shrink-0 items-center rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
             >
-              Launch Agent
+              {hasRecap ? "Resume Agent" : "Launch Agent"}
             </Link>
           </div>
           {topic.subtopics.length > 0 && (
@@ -65,22 +72,25 @@ function TopicRowEditor({
               ))}
             </ul>
           )}
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-2 text-xs font-medium text-[var(--accent-strong)] hover:underline"
-          >
-            {expanded ? "Hide note" : draft ? "Edit note" : "Add note"}
-          </button>
-          {expanded && (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Personal notes for this topic…"
-              rows={3}
-              className="mt-2 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none ring-[var(--accent)] focus:ring-2"
-            />
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="text-xs font-medium text-[var(--accent-strong)] hover:underline"
+            >
+              {expanded ? "Hide note" : draft ? "Edit note" : "Add note"}
+            </button>
+            <TopicRecap course={course} module={module} topic={topic} />
+            {expanded && (
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Personal notes for this topic…"
+                rows={3}
+                className="w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] outline-none ring-[var(--accent)] focus:ring-2"
+              />
+            )}
+          </div>
         </div>
       </div>
     </li>
@@ -107,9 +117,12 @@ function TopicRow({
     <TopicRowEditor
       key={`${topic.id}-${epoch}`}
       topic={topic}
+      course={course}
+      module={module}
       done={done}
       initialNote={savedNote}
       launchHref={launchHref}
+      hasRecap={Boolean(state.knowledge[topic.id])}
       onToggle={() => toggleTopicCompletion(topic.id)}
       onSaveNote={(note) => updateNote(topic.id, note)}
     />

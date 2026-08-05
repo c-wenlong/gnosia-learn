@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import type { Course, Module, Topic } from "@/lib/types";
+import type {
+  Course,
+  KnowledgeInput,
+  Module,
+  Topic,
+  TopicKnowledge,
+} from "@/lib/types";
 import { useLearner } from "@/lib/learner-context";
 import {
   buildAgentSessionContext,
   DEFAULT_AGENT_MODEL,
 } from "@/lib/agent/prompt";
+import { RecapCard, RecapEditor } from "@/components/TopicRecap";
 
 type Role = "user" | "assistant";
 
@@ -31,14 +38,31 @@ export function AgentSession({
   module: Module;
   topic: Topic;
 }) {
-  const { state } = useLearner();
+  const { state, ready, saveKnowledge, saveError } = useLearner();
   const learnerNote = state.notes[topic.id] ?? "";
+  const storedKnowledge = state.knowledge[topic.id];
+
+  // Snapshot the recap once localStorage has hydrated, then hold it: the
+  // session resumes from what was known when it opened, so saving a recap
+  // mid-session doesn't rewrite the tutor's premise underneath it.
+  const [priorKnowledge, setPriorKnowledge] = useState<
+    TopicKnowledge | undefined
+  >(undefined);
+  const priorFrozen = useRef(false);
+
+  useEffect(() => {
+    if (priorFrozen.current || !ready) return;
+    priorFrozen.current = true;
+    setPriorKnowledge(storedKnowledge);
+  }, [ready, storedKnowledge]);
+
   const session = useMemo(
     () =>
       buildAgentSessionContext(course, module, topic, {
         learnerNote: learnerNote || undefined,
+        priorKnowledge,
       }),
-    [course, module, topic, learnerNote],
+    [course, module, topic, learnerNote, priorKnowledge],
   );
 
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -49,7 +73,15 @@ export function AgentSession({
   const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState(session.model);
+  const [summarizing, setSummarizing] = useState(false);
+  const [recapError, setRecapError] = useState("");
+  const [recapDraft, setRecapDraft] = useState<Partial<KnowledgeInput> | null>(
+    null,
+  );
+  const [justSaved, setJustSaved] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const hasDialogue = messages.some((m) => m.role === "assistant");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,6 +109,7 @@ export function AgentSession({
           moduleSlug: module.slug,
           topicId: topic.id,
           learnerNote: learnerNote || undefined,
+          priorKnowledge,
           messages: history.map((m) => ({
             role: m.role,
             content: m.content,
@@ -135,6 +168,58 @@ export function AgentSession({
     }
   }
 
+  async function summarizeSession() {
+    if (summarizing || !hasDialogue) return;
+    setSummarizing(true);
+    setRecapError("");
+    try {
+      const res = await fetch("/api/agent/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseSlug: course.slug,
+          moduleSlug: module.slug,
+          topicId: topic.id,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      });
+      const data = (await res.json()) as {
+        knowledge?: KnowledgeInput;
+        error?: string;
+        code?: string;
+        raw?: string;
+      };
+
+      if (!res.ok || !data.knowledge) {
+        // Fall back to hand-writing it, seeded with whatever came back.
+        setRecapDraft({
+          summary: data.raw?.trim() ?? "",
+          keyPoints: [],
+          misconceptions: [],
+          openQuestions: [],
+        });
+        setRecapError(
+          `${data.error ?? "Could not generate a recap"} — write it by hand below; it saves to the same place.`,
+        );
+        return;
+      }
+
+      saveKnowledge(topic.id, data.knowledge);
+      setJustSaved(true);
+      setRecapDraft(null);
+    } catch (e) {
+      setRecapError(
+        e instanceof Error ? e.message : "Recap request failed — write it by hand.",
+      );
+      setRecapDraft({});
+    } finally {
+      setSummarizing(false);
+    }
+  }
+
   async function startSession() {
     if (started || busy) return;
     setStarted(true);
@@ -184,6 +269,22 @@ export function AgentSession({
         </p>
         <p className="text-sm text-[var(--muted-strong)]">{session.angle}</p>
       </header>
+
+      {priorKnowledge && (
+        <section className="space-y-2">
+          <RecapCard
+            knowledge={priorKnowledge}
+            course={course}
+            module={module}
+            topic={topic}
+            title="Recall from last time"
+          />
+          <p className="text-xs text-[var(--muted)]">
+            This is in the tutor&apos;s context. It will resume from here rather
+            than re-introducing the topic.
+          </p>
+        </section>
+      )}
 
       <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
@@ -301,6 +402,99 @@ export function AgentSession({
             Send
           </button>
         </form>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Keep this session
+          </h2>
+          <p className="mt-1 text-sm text-[var(--muted-strong)]">
+            The dialogue itself is not stored. Save a recap and it becomes the
+            durable record for this topic — shown on the module page, and handed
+            to the tutor the next time you open it.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={summarizeSession}
+            disabled={!hasDialogue || summarizing}
+            className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {summarizing
+              ? "Summarising…"
+              : storedKnowledge
+                ? "Save recap (replaces saved)"
+                : "Save session recap"}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setRecapDraft(recapDraft ? null : (storedKnowledge ?? {}))
+            }
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hover)]"
+          >
+            {recapDraft ? "Close editor" : "Write recap by hand"}
+          </button>
+        </div>
+
+        {!hasDialogue && (
+          <p className="text-xs text-[var(--muted)]">
+            Run at least one exchange with the tutor to auto-summarise, or write
+            the recap by hand.
+          </p>
+        )}
+
+        {recapError && (
+          <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">
+            {recapError}
+          </p>
+        )}
+
+        {saveError && (
+          <p className="rounded-md border border-red-300/60 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-700/50 dark:bg-red-950/40 dark:text-red-200">
+            {saveError}
+          </p>
+        )}
+
+        {recapDraft && (
+          <RecapEditor
+            initial={recapDraft}
+            submitLabel="Save recap"
+            onSave={(input) => {
+              saveKnowledge(topic.id, input);
+              setRecapDraft(null);
+              setRecapError("");
+              setJustSaved(true);
+            }}
+            onCancel={() => setRecapDraft(null)}
+          />
+        )}
+
+        {storedKnowledge && !recapDraft && (
+          <div className="space-y-2">
+            {justSaved && (
+              <p className="text-xs font-medium text-[var(--accent-strong)]">
+                Saved — this now appears on the module page.
+              </p>
+            )}
+            <RecapCard
+              knowledge={storedKnowledge}
+              course={course}
+              module={module}
+              topic={topic}
+              title="Saved recap"
+              onEdit={() => setRecapDraft(storedKnowledge)}
+            />
+          </div>
+        )}
+
+        <p className="text-xs text-[var(--muted)]">
+          Recaps live in this browser and survive a progress reset. Use{" "}
+          <strong>Copy as Markdown</strong> to keep one outside it.
+        </p>
       </section>
     </div>
   );

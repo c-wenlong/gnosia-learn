@@ -6,6 +6,8 @@ import {
   completeWithFallback,
   type ChatMessage,
 } from "@/lib/agent/providers";
+import { KNOWLEDGE_LIMITS } from "@/lib/storage";
+import type { TopicKnowledge } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -15,6 +17,59 @@ interface ChatBody {
   topicId: string;
   messages: ChatMessage[];
   learnerNote?: string;
+  priorKnowledge?: Partial<TopicKnowledge>;
+}
+
+/**
+ * Recaps live in the learner's browser, so they arrive with the request.
+ * Clamp them before they reach the prompt.
+ */
+function sanitizeKnowledge(
+  raw: Partial<TopicKnowledge> | undefined,
+  topicId: string,
+): TopicKnowledge | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const list = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value
+          .filter((v): v is string => typeof v === "string")
+          .map((v) => v.trim().slice(0, KNOWLEDGE_LIMITS.itemChars))
+          .filter(Boolean)
+          .slice(0, KNOWLEDGE_LIMITS.listItems)
+      : [];
+
+  const summary =
+    typeof raw.summary === "string"
+      ? raw.summary.trim().slice(0, KNOWLEDGE_LIMITS.summaryChars)
+      : "";
+  const keyPoints = list(raw.keyPoints);
+  const misconceptions = list(raw.misconceptions);
+  const openQuestions = list(raw.openQuestions);
+  if (
+    !summary &&
+    keyPoints.length === 0 &&
+    misconceptions.length === 0 &&
+    openQuestions.length === 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    topicId,
+    summary,
+    keyPoints,
+    misconceptions,
+    openQuestions,
+    source: raw.source === "manual" ? "manual" : "agent",
+    updatedAt:
+      typeof raw.updatedAt === "string"
+        ? raw.updatedAt
+        : new Date().toISOString(),
+    sessions:
+      typeof raw.sessions === "number" && raw.sessions > 0
+        ? Math.floor(raw.sessions)
+        : 1,
+  };
 }
 
 export async function POST(req: Request) {
@@ -25,7 +80,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { courseSlug, moduleSlug, topicId, messages, learnerNote } = body;
+  const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
+    body;
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {
     return NextResponse.json(
       { error: "courseSlug, moduleSlug, topicId, and messages are required" },
@@ -42,7 +98,10 @@ export async function POST(req: Request) {
     found.course,
     found.module,
     found.topic,
-    { learnerNote },
+    {
+      learnerNote,
+      priorKnowledge: sanitizeKnowledge(priorKnowledge, topicId),
+    },
   );
 
   // Always inject our system prompt as the authoritative first message.

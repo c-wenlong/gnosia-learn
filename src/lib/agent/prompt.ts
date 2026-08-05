@@ -1,5 +1,6 @@
-import type { Course, Module, Topic } from "@/lib/types";
+import type { Course, Module, Topic, TopicKnowledge } from "@/lib/types";
 import { buildLearningObjectives, buildSessionAngle } from "./objectives";
+import { formatPriorKnowledgeBlock } from "./summary";
 
 export interface AgentSessionContext {
   course: Course;
@@ -20,7 +21,11 @@ export function buildAgentSessionContext(
   course: Course,
   module: Module,
   topic: Topic,
-  options?: { model?: string; learnerNote?: string },
+  options?: {
+    model?: string;
+    learnerNote?: string;
+    priorKnowledge?: TopicKnowledge;
+  },
 ): AgentSessionContext {
   const model = options?.model ?? DEFAULT_AGENT_MODEL;
   const objectives = buildLearningObjectives(course, module, topic);
@@ -29,6 +34,10 @@ export function buildAgentSessionContext(
     options?.learnerNote && options.learnerNote.trim()
       ? `\n## Learner notes (from their study hub)\n${options.learnerNote.trim()}\n`
       : "";
+  const priorKnowledge = options?.priorKnowledge;
+  const knowledgeBlock = priorKnowledge
+    ? `\n${formatPriorKnowledgeBlock(priorKnowledge)}\n`
+    : "";
 
   const siblingTopics = module.topics
     .filter((t) => t.id !== topic.id)
@@ -73,13 +82,17 @@ ${topic.subtopics.map((s) => `  - ${s}`).join("\n") || "  - (none listed)"}
 
 ### Curated resources for this module
 ${resources || "- (none curated)"}
-${noteBlock}
+${noteBlock}${knowledgeBlock}
 ## What the learner should be able to answer by the end
 By the end of this micro-session, the learner should be able to:
 ${objectives.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 
 ## How to teach (strict)
-1. Open with a 2–4 sentence framing of the topic and why it matters in this course, then ask **one** diagnostic question.
+1. ${
+    priorKnowledge
+      ? "This is a RETURN visit. Open by reflecting back, in one or two sentences, what they established last time, then ask **one** question that either checks that ground still holds or pushes into an open question. Never re-open the topic from zero."
+      : "Open with a 2–4 sentence framing of the topic and why it matters in this course, then ask **one** diagnostic question."
+  }
 2. Prefer Socratic method: questions, counter-examples, "what if…", "explain as if teaching a peer".
 3. Keep turns short. Do not dump a textbook chapter unless the learner explicitly asks for a lecture.
 4. After each learner reply: (a) brief feedback, (b) correct misconceptions, (c) one next question or a tiny exercise.
@@ -95,11 +108,18 @@ ${objectives.map((o, i) => `${i + 1}. ${o}`).join("\n")}
 - When useful, include a tiny worked example (5–10 lines max).
 `;
 
-  const openingUserSeed = [
-    `Start the micro-session on "${topic.title}" for ${course.code}.`,
-    `Session goal: I should be able to answer the end-of-session objectives by the time we finish.`,
-    `Please open with brief framing + one diagnostic question. Do not lecture yet.`,
-  ].join(" ");
+  const openingUserSeed = priorKnowledge
+    ? [
+        `Resume my micro-session on "${topic.title}" for ${course.code}.`,
+        `I have studied this before — my recap is in your context.`,
+        `Pick up from what I already established and push on the open questions.`,
+        `Open by checking one piece of that ground, not by re-introducing the topic.`,
+      ].join(" ")
+    : [
+        `Start the micro-session on "${topic.title}" for ${course.code}.`,
+        `Session goal: I should be able to answer the end-of-session objectives by the time we finish.`,
+        `Please open with brief framing + one diagnostic question. Do not lecture yet.`,
+      ].join(" ");
 
   const terminalCommand = [
     `# Launch Self-Learn agent for ${course.code} · ${topic.title}`,
