@@ -11,7 +11,7 @@ export function ResetCourseButton({ topicIds }: { topicIds: string[] }) {
       onClick={() => {
         if (
           window.confirm(
-            "Reset all progress and notes for this course? This cannot be undone.",
+            "Reset all progress and notes for this course? Saved topic recaps are kept. This cannot be undone.",
           )
         ) {
           resetCourse(topicIds);

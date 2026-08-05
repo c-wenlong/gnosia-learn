@@ -1,6 +1,6 @@
 # Self-Learn · AY2026/27 Course Shortlist
 
-Docs-style self-study hub for the NUS SoC AY2026/27 course shortlist. Track topic progress, attach notes and resources, explore cross-course themes, and launch **Grok 4.5** Socratic micro-sessions per topic.
+Docs-style self-study hub for the NUS SoC AY2026/27 course shortlist. Track topic progress, attach notes and resources, explore cross-course themes, launch Socratic micro-sessions per topic, and keep a durable recap of what each session established.
 
 ## What this is
 
@@ -10,9 +10,10 @@ A Next.js study hub that turns the shortlist roadmap into navigable modules:
 | --- | --- |
 | `/` | Course catalog + overall progress |
 | `/courses/[slug]` | Course overview, modules, capstone, related courses |
-| `/courses/[slug]/[module]` | Topic checklist, notes, curated + user resources |
+| `/courses/[slug]/[module]` | Topic checklist, notes, recaps, curated + user resources |
 | `/courses/[slug]/[module]/session?topic=…` | Launch Agent Socratic micro-session |
-| `POST /api/agent/chat` | Server proxy to xAI (Grok) with injected system prompt |
+| `POST /api/agent/chat` | Server proxy to the free provider cascade with injected system prompt |
+| `POST /api/agent/summarize` | Turns a finished session transcript into a structured topic recap |
 
 ### Courses covered
 
@@ -34,13 +35,33 @@ Inferred courses show a banner: topics come from the announcement + standard sub
 - **Docs UX** — left sidebar, prose modules, light default + dark toggle
 - **Progress** — per-topic checkboxes; module/course/global progress derived client-side
 - **Notes** — expandable per-topic notes
+- **Recaps** — durable per-topic record of what you actually established (see below)
 - **Resources** — curated starter links per module + user-added links
 - **Tags** — cross-course themes (`hci`, `agentic-ai`, `transformers`, …)
 - **Launch Agent** — Socratic micro-learning with full context system prompt
   - Browser chat via free cascade: **NVIDIA NIM → Gemini Flash → OpenRouter free**
   - Copy system prompt / terminal launch pack always available
 
-All learner state lives in **browser localStorage** (`self-learn:v1`). No accounts or backend DB.
+All learner state lives in **browser localStorage** (`self-learn:v1`, schema `version: 2`). No accounts or backend DB.
+
+## Topic recaps (the recall layer)
+
+Sessions are ephemeral; recaps are not. After a micro-session, **Save session recap** sends the transcript to `/api/agent/summarize`, which returns a structured record — summary, key points, misconceptions corrected, open questions — stored against the topic id.
+
+That record then does three jobs:
+
+1. **Recall** — it renders on the module page under the topic, so months later you can see what you concluded without re-reading anything.
+2. **Continuation** — reopening the topic injects it into the tutor's system prompt. The session switches to resume mode: the tutor reflects the established ground back, then pushes on your open questions instead of re-introducing the topic. The Launch Agent button reads **Resume Agent** once a recap exists.
+3. **Export** — **Copy as Markdown** lifts a recap out of localStorage so it can live in your notes or in git.
+
+Recaps can also be written or corrected by hand (**Add recap** on any topic, **Write recap by hand** in a session), which is the fallback when no provider keys are set or a free model returns something unusable. A manual edit does not increment the session count.
+
+Deliberate behaviours worth knowing:
+
+- **Progress resets keep recaps.** `resetCourseProgress` clears checkboxes and notes only — resetting progress means "study this again", not "forget what I concluded". Use **Forget** on a recap to delete it.
+- **The recap is frozen for the duration of a session**, so saving mid-session doesn't rewrite the premise the tutor is working from.
+- **Summaries and lists are clamped** (`KNOWLEDGE_LIMITS` in `src/lib/storage.ts`) and a full quota surfaces as a visible error rather than a silent dropped write.
+- **v1 state migrates automatically** — old progress carries over and gains an empty `knowledge` map.
 
 ## Stack
 
@@ -90,15 +111,16 @@ Without any of these keys, the site still works; Launch Agent supports **Copy sy
 ```
 src/
   app/                    # App Router pages + API routes
-    api/agent/chat/       # Grok proxy (injects system prompt server-side)
+    api/agent/chat/       # Tutor proxy (injects system prompt server-side)
+    api/agent/summarize/  # Transcript → structured topic recap
     courses/[slug]/…
-  components/             # UI (shell, checklist, agent session, …)
+  components/             # UI (shell, checklist, agent session, recap card, …)
   data/courses/           # Typed curriculum (10 courses)
   data/tags.ts
   lib/
-    agent/                # Prompt builder, objectives, topic lookup
+    agent/                # Prompt builder, objectives, topic lookup, recap summariser
     progress.ts           # Progress math
-    storage.ts            # localStorage reducers
+    storage.ts            # localStorage reducers + v1→v2 migration
     learner-context.tsx   # Client state store
 ```
 
@@ -123,7 +145,9 @@ Unit tests (Vitest) cover:
 - Curriculum integrity (10 courses, unique topic IDs, inferred flags, related tags)
 - Progress counting and formatting
 - Learner state reducers (toggle, notes, resources, reset, theme)
-- Agent prompt/objectives/lookup (Grok 4.5 default, context embedding)
+- Knowledge recaps (session counting, clamping, reset survival, v1→v2 migration)
+- Recap summariser (tolerant JSON parsing, resume-mode prompt switching, Markdown export)
+- Agent prompt/objectives/lookup (free cascade default, context embedding)
 
 ```bash
 npm run test

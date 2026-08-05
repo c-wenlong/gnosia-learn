@@ -8,11 +8,18 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { LearnerState, ThemeMode, UserResource } from "@/lib/types";
+import type {
+  KnowledgeInput,
+  LearnerState,
+  ThemeMode,
+  UserResource,
+} from "@/lib/types";
 import {
   addUserResource,
+  clearKnowledge,
   defaultState,
   loadState,
+  recordKnowledge,
   removeUserResource,
   resetCourseProgress,
   saveState,
@@ -25,6 +32,8 @@ import {
 interface LearnerContextValue {
   state: LearnerState;
   ready: boolean;
+  /** Non-null when the last write to localStorage failed (e.g. quota). */
+  saveError: string | null;
   setThemeMode: (theme: ThemeMode) => void;
   toggleTopicCompletion: (topicId: string) => void;
   updateNote: (topicId: string, note: string) => void;
@@ -33,6 +42,12 @@ interface LearnerContextValue {
     resource: Omit<UserResource, "id">,
   ) => void;
   removeResource: (moduleId: string, resourceId: string) => void;
+  saveKnowledge: (
+    topicId: string,
+    input: KnowledgeInput,
+    options?: { countSession?: boolean },
+  ) => void;
+  forgetKnowledge: (topicId: string) => void;
   resetCourse: (topicIds: string[]) => void;
   markVisited: (courseSlug: string, moduleSlug?: string) => void;
 }
@@ -41,6 +56,7 @@ const LearnerContext = createContext<LearnerContextValue | null>(null);
 
 const serverSnapshot = defaultState();
 let clientSnapshot: LearnerState | null = null;
+let saveError: string | null = null;
 const listeners = new Set<() => void>();
 
 function getClientSnapshot(): LearnerState {
@@ -65,7 +81,8 @@ function commit(updater: (prev: LearnerState) => LearnerState) {
   const prev = getClientSnapshot();
   const next = updater(prev);
   clientSnapshot = next;
-  saveState(next);
+  const result = saveState(next);
+  saveError = result.ok ? null : result.error;
   emit();
 }
 
@@ -84,6 +101,12 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     emptySubscribe,
     () => true,
     () => false,
+  );
+
+  const currentSaveError = useSyncExternalStore(
+    subscribe,
+    () => saveError,
+    () => null,
   );
 
   const setThemeMode = useCallback((theme: ThemeMode) => {
@@ -113,6 +136,21 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const saveKnowledge = useCallback(
+    (
+      topicId: string,
+      input: KnowledgeInput,
+      options?: { countSession?: boolean },
+    ) => {
+      commit((prev) => recordKnowledge(prev, topicId, input, options));
+    },
+    [],
+  );
+
+  const forgetKnowledge = useCallback((topicId: string) => {
+    commit((prev) => clearKnowledge(prev, topicId));
+  }, []);
+
   const resetCourse = useCallback((topicIds: string[]) => {
     commit((prev) => resetCourseProgress(prev, topicIds));
   }, []);
@@ -128,22 +166,28 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       ready,
+      saveError: currentSaveError,
       setThemeMode,
       toggleTopicCompletion,
       updateNote,
       addResource,
       removeResource,
+      saveKnowledge,
+      forgetKnowledge,
       resetCourse,
       markVisited,
     }),
     [
       state,
       ready,
+      currentSaveError,
       setThemeMode,
       toggleTopicCompletion,
       updateNote,
       addResource,
       removeResource,
+      saveKnowledge,
+      forgetKnowledge,
       resetCourse,
       markVisited,
     ],
