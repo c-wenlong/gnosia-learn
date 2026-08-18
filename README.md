@@ -1,6 +1,22 @@
 # Self-Learn · AY2026/27 Course Shortlist
 
-Docs-style self-study hub for the NUS SoC AY2026/27 course shortlist. Track topic progress, attach notes and resources, explore cross-course themes, launch Socratic micro-sessions per topic, and keep a durable recap of what each session established.
+A personal learning workspace with two halves that feed each other:
+
+1. **The roadmap** — a docs-style hub over the NUS SoC AY2026/27 course
+   shortlist. Track topic progress, attach notes and resources, launch
+   Socratic micro-sessions, keep a durable recap of each one.
+2. **The learning pipeline** — a local, file-backed tutoring loop that runs
+   inside Claude Code. It measures what you know, plans a path from there,
+   teaches one step at a time, and schedules what you will forget.
+
+The roadmap says what is worth learning. The pipeline is how you actually
+learn it, and what you learn flows back into a knowledge base the hub
+renders. **[Full pipeline architecture →](learn/README.md)**
+
+```
+/learn <anything>     in Claude Code — probe, plan, teach, close
+/review               spaced repetition over what is due
+```
 
 ## What this is
 
@@ -9,6 +25,7 @@ A Next.js study hub that turns the shortlist roadmap into navigable modules:
 | Surface | Purpose |
 | --- | --- |
 | `/` | Course catalog + overall progress |
+| `/learn` | Knowledge base: mastery per concept, the frontier, the dependency graph |
 | `/courses/[slug]` | Course overview, modules, capstone, related courses |
 | `/courses/[slug]/[module]` | Topic checklist, notes, recaps, curated + user resources |
 | `/courses/[slug]/[module]/session?topic=…` | Launch Agent Socratic micro-session |
@@ -63,9 +80,48 @@ Deliberate behaviours worth knowing:
 - **Summaries and lists are clamped** (`KNOWLEDGE_LIMITS` in `src/lib/storage.ts`) and a full quota surfaces as a visible error rather than a silent dropped write.
 - **v1 state migrates automatically** — old progress carries over and gains an empty `knowledge` map.
 
+## The learning pipeline
+
+A four-phase loop — **Probe → Plan → Teach → Close** — driven by a
+dependency-free Node CLI and orchestrated by Claude Code skills. Full detail
+in **[learn/README.md](learn/README.md)**; the short version:
+
+| Phase | What happens |
+| --- | --- |
+| **Probe** | Adaptive diagnostic. Questions are chosen by expected information gain, so it binary-searches the edge of your understanding instead of marching through a syllabus. Measuring does not count as teaching. |
+| **Plan** | Topologically ordered path from what you hold to the goal, with mastered prerequisites dropped. Claims get fact-checked by a subagent; the DAG gets rendered before any teaching starts. |
+| **Teach** | One reasoning step at a time at the frontier, with a check after each. Diagrams come from a subagent that views its own SVG and fixes it. |
+| **Close** | Concept notes written, checks stored, session logged, map and index regenerated, review scheduled. |
+
+State lives in `learn/` as plain files:
+
+```
+learn/concepts/*.md    atomic notes (Obsidian-compatible, wikilinked)
+learn/sessions/*.md    one log per session, written live
+learn/state/           model.json · reviews.json · events.jsonl · index.json
+learn/map.md           generated mermaid knowledge map
+```
+
+`events.jsonl` is the source of truth — an append-only trajectory of every
+answer with its before/after belief. Everything else is derived and can be
+rebuilt, which is what makes the model auditable and its parameters safe to
+change.
+
+Mastery uses **Bayesian Knowledge Tracing**; review scheduling uses **SM-2**.
+Both are implemented from scratch in ~200 lines each with no dependencies —
+see the architecture doc for the formulas, defaults, and the honest list of
+what these models get wrong.
+
+```bash
+npm run learn -- status      # where you are
+npm run learn -- doctor      # validate the concept graph
+npm run learn -- help        # the full primitive surface
+```
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
+- Learning pipeline: plain Node ESM (`scripts/learn/`), zero dependencies
 - Vitest for unit tests
 - Free OpenAI-compatible chat providers for agent sessions (NVIDIA / Gemini / OpenRouter)
 - Vercel for hosting; GitHub Actions for CI/CD
@@ -89,8 +145,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run start` | Serve production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest unit tests (CI) |
+| `npm run test` | Vitest unit tests (CI) — covers `src/` and `scripts/` |
 | `npm run test:watch` | Vitest watch mode |
+| `npm run learn -- <cmd>` | The learning pipeline CLI (`help` for the full surface) |
 
 ### Environment variables (free cascade)
 
@@ -113,15 +170,34 @@ src/
   app/                    # App Router pages + API routes
     api/agent/chat/       # Tutor proxy (injects system prompt server-side)
     api/agent/summarize/  # Transcript → structured topic recap
+    learn/                # Knowledge base view (reads learn/state/index.json)
     courses/[slug]/…
-  components/             # UI (shell, checklist, agent session, recap card, …)
+  components/             # UI (shell, checklist, agent session, recap card, graph)
   data/courses/           # Typed curriculum (10 courses)
   data/tags.ts
   lib/
     agent/                # Prompt builder, objectives, topic lookup, recap summariser
+    kb/                   # Server-only loader for the knowledge base snapshot
     progress.ts           # Progress math
     storage.ts            # localStorage reducers + v1→v2 migration
     learner-context.tsx   # Client state store
+
+scripts/learn/            # The learning pipeline (plain Node ESM, no deps)
+  cli.mjs                 # `npm run learn -- <command>`
+  lib/
+    bkt.mjs               # Bayesian Knowledge Tracing
+    graph.mjs             # Concept DAG: cycles, topo sort, frontier, planning
+    schedule.mjs          # SM-2 spaced repetition
+    markdown.mjs          # Frontmatter, wikilinks, check blocks
+    store.mjs             # Atomic reads/writes over learn/
+    render.mjs            # Mermaid map + web index
+
+.claude/
+  skills/learn/           # The Probe → Plan → Teach → Close orchestrator
+  skills/review/          # Spaced-repetition session
+  agents/                 # concept-mapper · fact-checker · diagram-maker
+
+learn/                    # The knowledge base itself (see learn/README.md)
 ```
 
 ## Launch Agent (micro-learning)
@@ -148,6 +224,10 @@ Unit tests (Vitest) cover:
 - Knowledge recaps (session counting, clamping, reset survival, v1→v2 migration)
 - Recap summariser (tolerant JSON parsing, resume-mode prompt switching, Markdown export)
 - Agent prompt/objectives/lookup (free cascade default, context embedding)
+- Pipeline: BKT update formulas and convergence, information gain ordering
+- Pipeline: DAG cycle detection, topological order, frontier advance, path planning
+- Pipeline: SM-2 interval ladder, lapses, leeches, interval ceiling
+- Pipeline: frontmatter round-trip, wikilink extraction, check parsing
 
 ```bash
 npm run test

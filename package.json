@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "learn": "node scripts/learn/cli.mjs"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",

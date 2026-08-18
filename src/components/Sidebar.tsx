@@ -122,6 +122,11 @@ export function Sidebar({
             <NavLink href="/" active={pathname === "/"}>
               All courses
             </NavLink>
+            <div onClick={onClose}>
+              <NavLink href="/learn" active={pathname === "/learn"}>
+                Knowledge base
+              </NavLink>
+            </div>
           </div>
           <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             Courses
