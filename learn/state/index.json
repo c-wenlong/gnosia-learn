@@ -1,0 +1,325 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-18T01:51:46.841Z",
+  "stats": {
+    "total": 11,
+    "mastered": 0,
+    "learning": 0,
+    "untouched": 11
+  },
+  "frontier": [
+    "vector-as-a-list-of-numbers"
+  ],
+  "concepts": [
+    {
+      "id": "attention-weights",
+      "title": "Attention weights",
+      "summary": "Attention weights are a softmax over scaled query-key dot products.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "dot-product",
+        "softmax",
+        "query-key-value-projections"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "dot-product",
+      "title": "Dot product",
+      "summary": "The dot product of two vectors measures alignment, and is the sum of elementwise products.",
+      "tags": [],
+      "requires": [
+        "vector-as-a-list-of-numbers"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [],
+      "openQuestions": []
+    },
+    {
+      "id": "multi-head-attention",
+      "title": "Multi-head attention",
+      "summary": "Several attention heads run in parallel over different learned subspaces, then concatenate.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "self-attention"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "positional-encoding",
+      "title": "Positional encoding",
+      "summary": "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "self-attention"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "query-key-value-projections",
+      "title": "Query key value projections",
+      "summary": "Each token is projected into three roles: what it seeks, what it offers, and what it passes on.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "vector-as-a-list-of-numbers"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "react-loop",
+      "title": "ReAct loop",
+      "summary": "ReAct interleaves reasoning traces with tool calls, so each observation can revise the plan mid-flight.",
+      "tags": [
+        "agentic-ai"
+      ],
+      "requires": [
+        "tool-calling"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m3-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "self-attention",
+      "title": "Self-attention",
+      "summary": "Self-attention lets every token attend to every other token in the same sequence.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "attention-weights"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "softmax",
+      "title": "Softmax",
+      "summary": "Softmax exponentiates a score vector and normalises it, producing a peaked probability distribution.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "vector-as-a-list-of-numbers"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [],
+      "openQuestions": []
+    },
+    {
+      "id": "tool-calling",
+      "title": "Tool calling",
+      "summary": "A model emits a structured call against a declared schema; the harness executes it and returns the result into context.",
+      "tags": [
+        "agentic-ai"
+      ],
+      "requires": [
+        "transformer-block"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m3-t2"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "transformer-block",
+      "title": "Transformer block",
+      "summary": "A transformer block is multi-head attention plus a feed-forward network, each wrapped in a residual connection and normalisation.",
+      "tags": [
+        "transformers"
+      ],
+      "requires": [
+        "multi-head-attention",
+        "positional-encoding"
+      ],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [
+        "cp4284-m1-t1"
+      ],
+      "openQuestions": []
+    },
+    {
+      "id": "vector-as-a-list-of-numbers",
+      "title": "Vector as a list of numbers",
+      "summary": "A vector is an element of a vector space; coordinates are a choice, not the object.",
+      "tags": [],
+      "requires": [],
+      "pL": 0.25,
+      "mastery": "gap",
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null,
+      "due": null,
+      "lapses": 0,
+      "leech": false,
+      "sources": [],
+      "topics": [],
+      "openQuestions": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "dot-product",
+      "to": "attention-weights"
+    },
+    {
+      "from": "softmax",
+      "to": "attention-weights"
+    },
+    {
+      "from": "query-key-value-projections",
+      "to": "attention-weights"
+    },
+    {
+      "from": "vector-as-a-list-of-numbers",
+      "to": "dot-product"
+    },
+    {
+      "from": "self-attention",
+      "to": "multi-head-attention"
+    },
+    {
+      "from": "self-attention",
+      "to": "positional-encoding"
+    },
+    {
+      "from": "vector-as-a-list-of-numbers",
+      "to": "query-key-value-projections"
+    },
+    {
+      "from": "tool-calling",
+      "to": "react-loop"
+    },
+    {
+      "from": "attention-weights",
+      "to": "self-attention"
+    },
+    {
+      "from": "vector-as-a-list-of-numbers",
+      "to": "softmax"
+    },
+    {
+      "from": "transformer-block",
+      "to": "tool-calling"
+    },
+    {
+      "from": "multi-head-attention",
+      "to": "transformer-block"
+    },
+    {
+      "from": "positional-encoding",
+      "to": "transformer-block"
+    }
+  ],
+  "mermaid": "```mermaid\nflowchart TD\n  n_vector_as_a_list_of_numbers[\"Vector as a list of numbers<br/><small>25%</small>\"]\n  n_dot_product[\"Dot product<br/><small>25%</small>\"]\n  n_query_key_value_projections[\"Query key value projections<br/><small>25%</small>\"]\n  n_softmax[\"Softmax<br/><small>25%</small>\"]\n  n_attention_weights[\"Attention weights<br/><small>25%</small>\"]\n  n_self_attention[\"Self-attention<br/><small>25%</small>\"]\n  n_multi_head_attention[\"Multi-head attention<br/><small>25%</small>\"]\n  n_positional_encoding[\"Positional encoding<br/><small>25%</small>\"]\n  n_transformer_block[\"Transformer block<br/><small>25%</small>\"]\n  n_tool_calling[\"Tool calling<br/><small>25%</small>\"]\n  n_react_loop[\"ReAct loop<br/><small>25%</small>\"]\n  n_vector_as_a_list_of_numbers --> n_dot_product\n  n_vector_as_a_list_of_numbers --> n_query_key_value_projections\n  n_vector_as_a_list_of_numbers --> n_softmax\n  n_dot_product --> n_attention_weights\n  n_softmax --> n_attention_weights\n  n_query_key_value_projections --> n_attention_weights\n  n_attention_weights --> n_self_attention\n  n_self_attention --> n_multi_head_attention\n  n_self_attention --> n_positional_encoding\n  n_multi_head_attention --> n_transformer_block\n  n_positional_encoding --> n_transformer_block\n  n_transformer_block --> n_tool_calling\n  n_tool_calling --> n_react_loop\n\n  classDef mastered fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;\n  classDef solid fill:#e0f2fe,stroke:#0284c7,stroke-width:1px,color:#0c4a6e;\n  classDef shaky fill:#fef9c3,stroke:#ca8a04,stroke-width:1px,color:#713f12;\n  classDef weak fill:#ffedd5,stroke:#ea580c,stroke-width:1px,color:#7c2d12;\n  classDef gap fill:#fee2e2,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;\n  classDef frontier stroke-width:3px,stroke-dasharray:4 2;\n  class n_vector_as_a_list_of_numbers,n_dot_product,n_query_key_value_projections,n_softmax,n_attention_weights,n_self_attention,n_multi_head_attention,n_positional_encoding,n_transformer_block,n_tool_calling,n_react_loop gap;\n  class n_vector_as_a_list_of_numbers frontier;\n```"
+}
