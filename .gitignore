@@ -43,3 +43,6 @@ next-env.d.ts
 
 # learning pipeline: scratch state that shouldn't be shared
 learn/state/*.tmp
+
+# Obsidian vault state (per-machine editor config)
+.obsidian/
