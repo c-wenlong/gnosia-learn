@@ -24,3 +24,17 @@ ReAct interleaves reasoning traces with tool calls, so each observation can revi
 ## Prerequisites
 
 - [[tool-calling]]
+
+## Checks
+
+```check
+q: A plain tool-using agent already calls tools in a loop. What does ReAct add on top?
+a: An explicit reasoning trace emitted as tokens before each action, which stays in context and conditions the next choice.
+why: Catches treating ReAct as just 'an agent that uses tools'.
+```
+
+```check
+q: As a ReAct run gets long, what degrades first?
+a: Raw observations pile up in context and crowd out the reasoning and the original goal.
+why: Catches assuming the loop degrades on formatting or latency rather than context budget.
+```

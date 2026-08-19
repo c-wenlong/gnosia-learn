@@ -80,6 +80,16 @@ Now ask questions with the **AskUserQuestion** tool. Rules:
 - **4 options**, exactly one defensibly correct. Distractors must encode
   *specific plausible misconceptions*, not filler. A distractor nobody would
   pick teaches you nothing.
+- **Move the correct answer around.** Before sending, decide its position
+  deliberately and vary it across the session. If the answer keeps landing
+  first, the learner can score full marks by always picking the first option
+  and you have measured their pattern-matching, not their understanding.
+  Track the positions you have used; if the last two were both slot 1, put
+  the next one in slot 3 or 4.
+- **Do not let the correct option be the tell.** It should not be the
+  longest, the most hedged, the most technical, or the only one written in
+  your own voice. Write all four at the same length and register. A learner
+  who can spot the answer without knowing the topic has taught you nothing.
 - Ask **1–2 questions per tool call** so the learner keeps a rhythm.
 - Start broad (near the goal), then bisect. A correct answer means you can
   stop probing that concept's prerequisites — mastery of a dependent implies
@@ -89,6 +99,15 @@ Now ask questions with the **AskUserQuestion** tool. Rules:
   distinguishes X from Y"). Coverage improves sharply for no extra cost.
 - **Never reveal the answer during Probe.** Say "noted" and move on. Probing
   is measurement; explaining here contaminates it.
+
+If a positional or stylistic pattern does creep in, say so and retract the
+affected answers rather than banking them. Voiding keeps the record but drops
+the evidence from the model:
+
+```bash
+npm run learn -- void --session <session-id> --reason "<what made it unreliable>"
+npm run learn -- model --rebuild
+```
 
 Record every answer immediately:
 

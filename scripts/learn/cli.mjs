@@ -750,14 +750,58 @@ commands.session = async ({ values, positionals }) => {
   fail("usage: session start|log|close|list");
 };
 
+/**
+ * Retract a session's evidence without deleting it.
+ *
+ * Sometimes a session measures nothing real: the questions were leading, the
+ * answer was visible, the learner was guessing. Keeping that evidence poisons
+ * the model, but deleting lines from an append-only log destroys the record
+ * of what happened. So voiding appends a marker instead, and `model --rebuild`
+ * skips the voided observations while the history stays readable.
+ */
+commands.void = async ({ values }) => {
+  const session = values.session ?? values.id;
+  if (!session) fail("void requires --session");
+  if (!values.reason) fail("void requires --reason (why this evidence is unreliable)");
+
+  const events = await readEvents();
+  const affected = events.filter(
+    (e) => e.session === session && (e.type === "observation" || e.type === "review"),
+  );
+  if (affected.length === 0) {
+    fail(`no observations found for session "${session}"`);
+  }
+
+  await appendEvent({ type: "void", session, reason: values.reason });
+
+  const concepts = [...new Set(affected.map((e) => e.concept))];
+  if (values.json) {
+    return out({ session, voided: affected.length, concepts, reason: values.reason }, true);
+  }
+  out(
+    `Voided ${affected.length} observation(s) across ${concepts.length} concept(s).\n` +
+      `Run "model --rebuild" to drop them from the model.`,
+    false,
+  );
+};
+
 commands.model = async ({ values }) => {
   if (values.rebuild) {
     const events = await readEvents();
     const model = emptyModel();
     model.params = { ...DEFAULT_PARAMS };
 
+    const voided = new Set(
+      events.filter((e) => e.type === "void" && e.session).map((e) => e.session),
+    );
+
+    let skipped = 0;
     for (const event of events) {
       if (event.type !== "observation" && event.type !== "review") continue;
+      if (event.session && voided.has(event.session)) {
+        skipped += 1;
+        continue;
+      }
       const id = event.concept;
       if (!id) continue;
       const entry = ensureEntry(model, id);
@@ -774,7 +818,11 @@ commands.model = async ({ values }) => {
 
     await writeModel(model);
     const n = Object.keys(model.concepts).length;
-    return out(`Rebuilt model from ${events.length} events across ${n} concepts.`, false);
+    return out(
+      `Rebuilt model from ${events.length} events across ${n} concepts.` +
+        (skipped > 0 ? ` Skipped ${skipped} voided observation(s).` : ""),
+      false,
+    );
   }
 
   const model = await readModel();
@@ -904,7 +952,7 @@ commands.help = async () => {
   teach [--goal G]               the single next concept, with context
   review due|grade|forecast      spaced repetition
   session start|log|close|list   the session log
-  model [--rebuild]              mastery table; rebuild replays the event log
+  void --session S --reason R    retract a session's evidence as unreliable\n  model [--rebuild]              mastery table; rebuild replays the event log
   map                            regenerate learn/map.md
   index                          regenerate learn/state/index.json for the web hub
   doctor                         validate the graph
@@ -928,6 +976,7 @@ const OPTIONS = {
   question: { type: "string" },
   answer: { type: "string" },
   why: { type: "string" },
+  reason: { type: "string" },
   session: { type: "string" },
   id: { type: "string" },
   title: { type: "string" },
