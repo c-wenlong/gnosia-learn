@@ -1,6 +1,6 @@
 ---
 title: Knowledge Map
-generated: 2026-08-18T01:51:46.783Z
+generated: 2026-08-19T17:48:32.277Z
 concepts: 11
 mastered: 0
 ---
@@ -19,12 +19,15 @@ concept, given every answer you have given. 95% counts as mastered.
 The edge of your understanding — every prerequisite met, the concept itself
 not yet held. This is the only place teaching is efficient.
 
+- [[tool-calling]] — Tool calling · 25% (gap)
 - [[vector-as-a-list-of-numbers]] — Vector as a list of numbers · 25% (gap)
 
 ## Graph
 
 ```mermaid
 flowchart TD
+  n_tool_calling["Tool calling<br/><small>25%</small>"]
+  n_react_loop["ReAct loop<br/><small>25%</small>"]
   n_vector_as_a_list_of_numbers["Vector as a list of numbers<br/><small>25%</small>"]
   n_dot_product["Dot product<br/><small>25%</small>"]
   n_query_key_value_projections["Query key value projections<br/><small>25%</small>"]
@@ -34,8 +37,7 @@ flowchart TD
   n_multi_head_attention["Multi-head attention<br/><small>25%</small>"]
   n_positional_encoding["Positional encoding<br/><small>25%</small>"]
   n_transformer_block["Transformer block<br/><small>25%</small>"]
-  n_tool_calling["Tool calling<br/><small>25%</small>"]
-  n_react_loop["ReAct loop<br/><small>25%</small>"]
+  n_tool_calling --> n_react_loop
   n_vector_as_a_list_of_numbers --> n_dot_product
   n_vector_as_a_list_of_numbers --> n_query_key_value_projections
   n_vector_as_a_list_of_numbers --> n_softmax
@@ -47,8 +49,6 @@ flowchart TD
   n_self_attention --> n_positional_encoding
   n_multi_head_attention --> n_transformer_block
   n_positional_encoding --> n_transformer_block
-  n_transformer_block --> n_tool_calling
-  n_tool_calling --> n_react_loop
 
   classDef mastered fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
   classDef solid fill:#e0f2fe,stroke:#0284c7,stroke-width:1px,color:#0c4a6e;
@@ -56,8 +56,8 @@ flowchart TD
   classDef weak fill:#ffedd5,stroke:#ea580c,stroke-width:1px,color:#7c2d12;
   classDef gap fill:#fee2e2,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;
   classDef frontier stroke-width:3px,stroke-dasharray:4 2;
-  class n_vector_as_a_list_of_numbers,n_dot_product,n_query_key_value_projections,n_softmax,n_attention_weights,n_self_attention,n_multi_head_attention,n_positional_encoding,n_transformer_block,n_tool_calling,n_react_loop gap;
-  class n_vector_as_a_list_of_numbers frontier;
+  class n_tool_calling,n_react_loop,n_vector_as_a_list_of_numbers,n_dot_product,n_query_key_value_projections,n_softmax,n_attention_weights,n_self_attention,n_multi_head_attention,n_positional_encoding,n_transformer_block gap;
+  class n_tool_calling,n_vector_as_a_list_of_numbers frontier;
 ```
 
 ## Legend
