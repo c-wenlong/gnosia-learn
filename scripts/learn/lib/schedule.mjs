@@ -63,7 +63,11 @@ export function review(card, grade, options = {}) {
   const q = Math.max(0, Math.min(5, Math.round(grade)));
   const passed = q >= PASS_GRADE;
 
-  const ease = nextEase(card.ease ?? DEFAULT_EASE, q);
+  // SM-2 leaves the E-Factor untouched on a failed item: it restarts the
+  // interval sequence and nothing else. Penalising ease as well would
+  // punish a lapse twice and send a struggling card into a spiral.
+  const priorEase = card.ease ?? DEFAULT_EASE;
+  const ease = passed ? nextEase(priorEase, q) : priorEase;
   let repetitions = card.repetitions ?? 0;
   let intervalDays;
   let lapses = card.lapses ?? 0;
