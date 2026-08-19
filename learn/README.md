@@ -124,9 +124,11 @@ Two things happen here that are easy to skip and shouldn't be:
 frontier — with its prerequisite mastery attached.
 
 The tutor moves **one reasoning step at a time**, checks understanding, and
-records the answer. The step size targets roughly **85% success**: all
-correct means the steps are too small, half wrong means too big. Adjust the
-step, never the standard.
+records the answer. The step size targets roughly **85% success** — the optimal training
+accuracy found by [Wilson et al. (2019)](https://www.nature.com/articles/s41467-019-12552-4),
+whose result puts a number on the zone of proximal development. All correct
+means the steps are too small; half wrong means too big. Adjust the step,
+never the standard.
 
 Answers are classified into four cases, each with its own response:
 
@@ -236,7 +238,8 @@ Mastery is a probability p(L) updated on every answer. Four parameters:
 | `pG` | 0.20 | Answering right *without* mastery (guessing) |
 | `pS` | 0.10 | Answering wrong *despite* mastery (slipping) |
 
-Posterior after an observation:
+Posterior after an observation (matching the standard formulation, e.g.
+[pyBKT](https://arxiv.org/pdf/2105.00385)):
 
 ```
 correct:    p(L)(1−pS) / [ p(L)(1−pS) + (1−p(L))pG ]
@@ -252,12 +255,19 @@ The guess default assumes four-option multiple choice, nudged below chance
 
 ### SM-2 spaced repetition
 
-Grades 0–5; below 3 fails the card and resets its interval. Intervals go
-1 day, 6 days, then `previous × ease`, with ease updated by:
+Grades 0–5; below 3 fails the card. Intervals go 1 day, 6 days, then
+`previous × ease`, with ease updated on a pass by:
 
 ```
 EF' = EF + (0.1 − (5−q)(0.08 + (5−q)·0.02)),  floored at 1.3
 ```
+
+Implementation is checked against the published
+[SM-2 specification](https://super-memory.com/english/ol/sm2.htm), including
+the detail that is easy to get wrong: **a failed item restarts the interval
+sequence but its E-Factor is left untouched.** Penalising ease on a lapse as
+well would punish it twice and send a struggling card into a spiral. The
+conformance tests in `lib/schedule.test.mjs` lock this behaviour.
 
 **Why SM-2 and not FSRS:** FSRS is the better-calibrated modern scheduler
 and would be the right upgrade. SM-2 is here because it is ~40 lines with no
@@ -363,8 +373,15 @@ teach one reasoning step at a time with periodic checks, close — follows
 Eero Alvar's [How I Use AI to Learn Things](https://www.youtube.com/watch?v=kzcI5F4tGiU),
 which is the origin of this design.
 
-Algorithms: Bayesian Knowledge Tracing (Corbett & Anderson, 1994) and SM-2
-(Wozniak, 1987). Several patterns were taken from prior art surveyed while
+Algorithms, each verified against a primary source rather than memory:
+
+- **Bayesian Knowledge Tracing** — Corbett & Anderson (1994); update
+  equations cross-checked against [pyBKT](https://arxiv.org/pdf/2105.00385).
+- **SM-2** — Wozniak (1987), [published specification](https://super-memory.com/english/ol/sm2.htm).
+- **The 85% target** — Wilson et al., *The Eighty Five Percent Rule for
+  optimal learning*, [Nature Communications 10, 4646 (2019)](https://www.nature.com/articles/s41467-019-12552-4).
+
+Several patterns were taken from prior art surveyed while
 building this — the self-verifying diagram loop and the validation command
 from [anki-llm](https://github.com/raine/anki-llm), the lint-as-separate-pass
 idea from [claude-obsidian](https://github.com/AgriciDaniel/claude-obsidian),

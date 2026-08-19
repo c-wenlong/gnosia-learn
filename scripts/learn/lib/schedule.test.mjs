@@ -96,6 +96,40 @@ describe("review", () => {
   });
 });
 
+describe("SM-2 conformance", () => {
+  // Checked against the published SM-2 specification at
+  // https://super-memory.com/english/ol/sm2.htm
+  it("leaves the E-Factor untouched when an item fails", () => {
+    const passed = review(newCard("c"), 5, { fuzz: false });
+    const failed = review(passed, 1, { fuzz: false });
+    expect(failed.ease).toBe(passed.ease);
+    expect(failed.repetitions).toBe(0);
+    expect(failed.intervalDays).toBe(1);
+    expect(failed.lapses).toBe(1);
+  });
+
+  it("restarts the interval ladder after a lapse", () => {
+    let card = newCard("c");
+    for (const g of [5, 5, 5]) card = review(card, g, { fuzz: false });
+    const easeBeforeLapse = card.ease;
+
+    card = review(card, 1, { fuzz: false });
+    expect(card.intervalDays).toBe(1);
+    expect(card.ease).toBe(easeBeforeLapse);
+
+    card = review(card, 4, { fuzz: false });
+    expect(card.intervalDays).toBe(1);
+    card = review(card, 4, { fuzz: false });
+    expect(card.intervalDays).toBe(6);
+  });
+
+  it("floors the E-Factor at 1.3 no matter how many hard passes", () => {
+    let card = newCard("c");
+    for (let i = 0; i < 30; i += 1) card = review(card, 3, { fuzz: false });
+    expect(card.ease).toBe(MIN_EASE);
+  });
+});
+
 describe("dueCards", () => {
   const reviews = {
     cards: {
