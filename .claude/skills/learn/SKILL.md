@@ -111,8 +111,21 @@ Now ask questions with the **AskUserQuestion** tool. Rules:
 - Generate questions from several angles rather than one: definitional,
   applied ("given this case, what happens"), and contrastive ("what
   distinguishes X from Y"). Coverage improves sharply for no extra cost.
-- **Never reveal the answer during Probe.** Say "noted" and move on. Probing
-  is measurement; explaining here contaminates it.
+- **Reveal on a correct answer, withhold on a wrong one.** Explaining a
+  question they already got right costs nothing and makes the log worth
+  rereading, so pass `--answer` and `--explain`. Explaining a wrong one
+  teaches the concept you are about to descend into, which corrupts every
+  prerequisite question that follows. For those, log the question and what
+  they chose, and put `--explain "Held for the teaching phase."` so the gap
+  is visible without being filled.
+- **An explicit "I don't know" is better evidence than a guess**, because it
+  rules out a lucky hit entirely. Record it as incorrect, and put their exact
+  words in `--note`.
+- **A challenge to the question is not a wrong answer.** If they say the
+  question is unclear, badly framed, or irrelevant, do not call `observe`.
+  Answer the objection, fix whatever they were right about, and re-ask. Both
+  live sessions produced one of these, and both times the learner had found a
+  real defect.
 
 If a positional or stylistic pattern does creep in, say so and retract the
 affected answers rather than banking them. Voiding keeps the record but drops
@@ -146,6 +159,13 @@ and Obsidian will render it.
 `--source probe` deliberately skips the learning step in the model: being
 asked is not being taught.
 
+**Expect the edge to be lower than you think.** A session aimed at the
+transformer block found the real gap at the very bottom of the graph, in what
+a coordinate list actually denotes. The learner knew the block's structure and
+could not say what a vector was. Knowledge is not a tidy staircase, so descend
+until a prerequisite comes back clean rather than stopping at the first
+plausible resting place.
+
 **When to stop probing.** Stop when the frontier is stable — when you can
 name the concepts whose prerequisites are all met but which are not yet
 held. Typically 5–12 questions. Check:
@@ -156,6 +176,18 @@ npm run learn -- frontier --goal <goal-id> --json
 
 Then tell the learner what you found, plainly: what they hold, what is
 shaky, where the edge sits. This is useful to them on its own.
+
+**Two thresholds, doing different jobs.** A concept opens for teaching once
+every prerequisite is *ready* at 75%, and counts as finished at *mastered*,
+95%. So the frontier can move before anything is mastered, which is intended:
+a foundation only has to be solid enough to carry an explanation.
+
+**The prior is deliberately pessimistic.** Every untouched concept starts at
+25%, so even a foundation the learner obviously holds needs two correct
+answers to clear the ready bar. Rather than spending questions proving the
+obvious, ask them up front what they already know well, and probe those areas
+with one hard question instead of two easy ones. A single confident answer to
+a genuinely difficult question is worth more than several to easy ones.
 
 ## Phase 2 — Plan
 
@@ -199,10 +231,31 @@ For each step:
    Reference the prerequisite explicitly — "you already have X; this is what
    happens when you push X to Y". Prefer a worked micro-example over
    abstraction.
-2. **Visualise** when the idea is spatial, structural, or has moving parts.
+2. **Draw first, then explain.** If the step involves geometry, movement,
+   structure, or two things being compared, the diagram comes *before* the
+   prose, not after it as an illustration. Run this as a mechanical check
+   rather than a judgement call: the moment you catch yourself about to
+   describe a rotation, a flow, a before-and-after, or anything you would
+   normally gesture at with your hands, stop and draw it.
+
+   This rule exists because it was broken. A live session tried to teach
+   "coordinates depend on your choice of basis" by describing a rotation in
+   words. The learner's reply was that the question was badly phrased and
+   asked for a rendering. They were right, and the same step landed
+   immediately once there was a picture.
+
    Spawn the **diagram-maker** subagent; it writes an SVG into `learn/assets/`
-   and looks at its own output to check it before returning. Embed it in the
-   session log with `![[<filename>.svg]]`.
+   and looks at its own output before returning. Then do both of these:
+
+   - Embed it in the session log with `![[<filename>.svg]]`.
+   - **Render it inline for the learner**, so they see it in the conversation
+     without opening a file. Read the SVG back and pass it to the
+     `mcp__visualize__show_widget` tool. The widget container is 680 units
+     wide, so an 800-wide viewBox is scaled by 0.85: multiply every
+     `font-size` by about 1.18 first, or the labels land under the readable
+     floor. Sanity-check the geometry yourself before showing it, since the
+     subagent can return something plausible that is still wrong.
+
 3. **Check understanding** with AskUserQuestion before moving on. Then:
 
 ```bash
@@ -261,6 +314,11 @@ npm run learn -- index
    - *Coverage* — did you reach the planned concepts?
    - *Restraint* — did you avoid simply answering, or did you cave?
    - *Understanding* — did they demonstrate it, or did you assume it?
+   - *What you got wrong* — every step the learner had to push back on, and
+     what you changed. This one matters most and is the easiest to skip,
+     because the failures are yours. Both live sessions so far found a real
+     defect through the learner objecting rather than through the system
+     noticing.
 
    Be blunt. An inflated self-assessment poisons the next session's
    starting assumptions.
@@ -281,3 +339,12 @@ npm run learn -- index
   the model silently drifts out of calibration.
 - **Prefer their words.** When they explain something correctly in their own
   phrasing, write *that* into the note, not the textbook phrasing.
+- **When the learner pushes back, they are usually right.** Every defect
+  found in live use so far came from an objection, not from self-checking.
+  Treat "why are you asking me this" and "that was badly phrased" as
+  findings. Investigate before defending, and fix the system rather than
+  the sentence.
+- **Fix the graph when it is wrong, mid-session.** A bad prerequisite edge
+  will misroute every future session too. `concept edit <id> --requires …`
+  changes it in place without touching the note body. Say what you changed
+  and why, then carry on.
