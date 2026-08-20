@@ -159,3 +159,82 @@ describe("observe writes the session log", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("propagation", () => {
+  /** Diamond: `top` reaches `base` by two routes, through `left` and `right`. */
+  function diamond(dir) {
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Base"]);
+    run(dir, ["concept", "add", "--title", "Left", "--requires", "base"]);
+    run(dir, ["concept", "add", "--title", "Right", "--requires", "base"]);
+    run(dir, ["concept", "add", "--title", "Top", "--requires", "left,right"]);
+  }
+
+  it("credits a shared prerequisite once, not once per route", () => {
+    const dir = sandbox();
+    diamond(dir);
+    run(dir, ["observe", "--concept", "top", "--correct", "true", "--source", "probe"]);
+
+    const base = mastery(dir, "base").pL;
+    const left = mastery(dir, "left").pL;
+
+    // One hop: 0.25 + 0.4·(0.6−0.25) = 0.39. Two hops: 0.25 + 0.16·(0.6−0.25) = 0.306.
+    expect(left).toBeCloseTo(0.39, 6);
+    expect(base).toBeCloseTo(0.306, 6);
+
+    // Counted once per route, base would have compounded past its sibling.
+    expect(base).toBeLessThan(left);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not count propagation as a question the learner was asked", () => {
+    const dir = sandbox();
+    diamond(dir);
+    run(dir, ["observe", "--concept", "top", "--correct", "true", "--source", "probe"]);
+    expect(mastery(dir, "top").observations).toBe(1);
+    expect(mastery(dir, "base").observations).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not propagate a wrong answer", () => {
+    const dir = sandbox();
+    diamond(dir);
+    run(dir, ["observe", "--concept", "top", "--correct", "false", "--source", "probe"]);
+    expect(mastery(dir, "base")).toBeUndefined();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rebuilds to exactly the same model", () => {
+    const dir = sandbox();
+    diamond(dir);
+    for (const c of ["true", "true", "false", "true"]) {
+      run(dir, ["observe", "--concept", "top", "--correct", c, "--source", "probe"]);
+    }
+    const before = fs.readFileSync(path.join(dir, "learn", "state", "model.json"), "utf8");
+    run(dir, ["model", "--rebuild"]);
+    const after = fs.readFileSync(path.join(dir, "learn", "state", "model.json"), "utf8");
+
+    // lastSeen is excluded on purpose: a live observe stamps the wall clock,
+    // while a rebuild uses the event's own timestamp. The belief must match.
+    const beliefs = (t) =>
+      Object.fromEntries(
+        Object.entries(JSON.parse(t).concepts).map(([id, c]) => [
+          id,
+          { pL: c.pL, observations: c.observations, correct: c.correct },
+        ]),
+      );
+    expect(beliefs(after)).toEqual(beliefs(before));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("can be turned off per observation", () => {
+    const dir = sandbox();
+    diamond(dir);
+    run(dir, [
+      "observe", "--concept", "top", "--correct", "true",
+      "--source", "probe", "--noPropagate",
+    ]);
+    expect(mastery(dir, "base")).toBeUndefined();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

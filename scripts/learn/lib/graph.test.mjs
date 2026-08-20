@@ -8,6 +8,7 @@ import {
   planPath,
   summarize,
   topoSort,
+  prerequisiteDistances,
 } from "./graph.mjs";
 
 const concepts = [
@@ -193,5 +194,52 @@ describe("summarize", () => {
       learning: 1,
       untouched: 3,
     });
+  });
+});
+
+describe("prerequisiteDistances", () => {
+  // A diamond: two routes from `top` down to `base`.
+  const diamond = buildGraph([
+    { id: "base", requires: [] },
+    { id: "left", requires: ["base"] },
+    { id: "right", requires: ["base"] },
+    { id: "top", requires: ["left", "right"] },
+  ]);
+
+  it("returns each prerequisite exactly once, however many routes reach it", () => {
+    const d = prerequisiteDistances(diamond, "top");
+    expect([...d.keys()].sort()).toEqual(["base", "left", "right"]);
+    expect(d.size).toBe(3);
+  });
+
+  it("uses the shortest distance", () => {
+    const d = prerequisiteDistances(diamond, "top");
+    expect(d.get("left")).toBe(1);
+    expect(d.get("right")).toBe(1);
+    expect(d.get("base")).toBe(2);
+  });
+
+  it("takes the short route when routes differ in length", () => {
+    const skew = buildGraph([
+      { id: "base", requires: [] },
+      { id: "mid", requires: ["base"] },
+      { id: "top", requires: ["base", "mid"] },
+    ]);
+    expect(prerequisiteDistances(skew, "top").get("base")).toBe(1);
+  });
+
+  it("excludes the concept itself and ignores dangling prerequisites", () => {
+    const d = prerequisiteDistances(diamond, "top");
+    expect(d.has("top")).toBe(false);
+    const dangling = buildGraph([{ id: "a", requires: ["ghost"] }]);
+    expect(prerequisiteDistances(dangling, "a").size).toBe(0);
+  });
+
+  it("terminates on a cycle rather than looping forever", () => {
+    const cyclic = buildGraph([
+      { id: "a", requires: ["b"] },
+      { id: "b", requires: ["a"] },
+    ]);
+    expect([...prerequisiteDistances(cyclic, "a").keys()]).toEqual(["b"]);
   });
 });

@@ -276,6 +276,40 @@ by reading your own queue. For a personal knowledge base of a few hundred
 concepts the accuracy difference is dominated by whether you actually do the
 reviews. Swap `lib/schedule.mjs` if that stops being true.
 
+### Propagation
+
+A correct answer is evidence about the concept asked and about everything it
+rests on. Getting ReAct right says something real about tool calling.
+
+`prerequisiteDistances` walks the prerequisites breadth-first and returns each
+one **once**, at its shortest hop distance. That deduplication is load-bearing:
+`transformer-block` reaches `vector-as-a-list-of-numbers` by six separate
+routes, and BKT treats every update as independent evidence. Walking routes
+instead of the set would count one answer six times and promote a concept the
+learner was never asked about.
+
+Each prerequisite is then blended toward the full posterior, attenuated by
+distance:
+
+```
+p' = p + decay^hops · (posterior(p, correct) − p)     decay = 0.4
+```
+
+Two rules keep this honest:
+
+- **Only correct answers propagate.** A wrong answer may reflect something
+  specific to the concept asked, so inferring failure downward would punish
+  foundations that are probably fine.
+- **Indirect evidence cannot confer mastery.** Propagation is capped at 0.9,
+  below the 0.95 threshold. It can raise confidence to just short of mastered,
+  but the last step has to be earned by answering about the concept directly.
+  A belief already above the cap keeps what it earned.
+
+Propagation does not increment `observations`, which counts questions actually
+asked. Rebuilds recompute it from the *current* graph rather than replaying it
+from the event, so correcting a prerequisite and rebuilding re-derives history
+under the fixed structure.
+
 ### Frontier
 
 ```
@@ -351,6 +385,10 @@ it is written live.
 
 ## Known limits
 
+- **Propagation strength is hop count, not coupling.** Every edge is treated
+  as equally strong, because the graph carries no weights. A concept that
+  barely depends on its prerequisite propagates exactly as hard as one that
+  cannot exist without it.
 - **BKT assumes mastery never decays.** It cannot go down except through a
   wrong answer. Forgetting is modelled only by the review scheduler, and the
   two models do not talk to each other. A single decayed-mastery model would

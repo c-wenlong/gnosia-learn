@@ -28,6 +28,7 @@ import {
   MASTERY_THRESHOLD,
   expectedInfoGain,
   masteryLabel,
+  propagate,
   update as bktUpdate,
 } from "./lib/bkt.mjs";
 import {
@@ -37,6 +38,7 @@ import {
   frontier,
   masteryOf,
   planPath,
+  prerequisiteDistances,
   summarize,
   topoSort,
 } from "./lib/graph.mjs";
@@ -123,6 +125,32 @@ function ensureEntry(model, id) {
     };
   }
   return model.concepts[id];
+}
+
+/**
+ * Spread a correct answer to the concept's prerequisites.
+ *
+ * Only correct answers propagate. A wrong answer is weak evidence about
+ * prerequisites, since the learner may have failed for reasons specific to
+ * the concept asked, so inferring downward from failure would punish
+ * foundations that are probably fine.
+ *
+ * `observations` is deliberately not incremented: it counts questions the
+ * learner was actually asked, and propagation asks nothing.
+ */
+function propagateCorrect(model, graph, id) {
+  const touched = [];
+  if (!graph.nodes.has(id)) return touched;
+
+  for (const [prereq, hops] of prerequisiteDistances(graph, id)) {
+    const entry = ensureEntry(model, prereq);
+    const before = entry.pL;
+    const after = propagate(before, true, hops, { params: model.params });
+    if (after - before < 1e-9) continue;
+    entry.pL = after;
+    touched.push({ concept: prereq, hops, pLBefore: before, pLAfter: after });
+  }
+  return touched;
 }
 
 // ----------------------------------------------------------------- commands
@@ -417,6 +445,10 @@ commands.observe = async ({ values }) => {
   entry.observations += 1;
   if (correct) entry.correct += 1;
   entry.lastSeen = new Date().toISOString();
+
+  const propagated =
+    correct && !bool(values.noPropagate) ? propagateCorrect(model, graph, id) : [];
+
   await writeModel(model);
 
   const reviews = await readReviews();
@@ -435,6 +467,7 @@ commands.observe = async ({ values }) => {
     type: "observation",
     concept: id,
     correct,
+    propagated: propagated.map((x) => ({ concept: x.concept, hops: x.hops })),
     source,
     opportunity,
     grade,
@@ -475,12 +508,14 @@ commands.observe = async ({ values }) => {
     mastered: after >= MASTERY_THRESHOLD,
     due: reviews.cards[id]?.due ?? null,
     logged,
+    propagated,
   };
 
   if (values.json) return out(result, true);
   out(
     `${correct ? "✓" : "✗"} ${id}  ${pct(before)} → ${pct(after)}  (${masteryLabel(after)})` +
       (result.due ? `  next review ${result.due.slice(0, 10)}` : "") +
+      (propagated.length > 0 ? `  · ${propagated.length} prereq(s) nudged` : "") +
       (logged ? "  · logged" : ""),
     false,
   );
@@ -811,6 +846,7 @@ commands.void = async ({ values }) => {
 commands.model = async ({ values }) => {
   if (values.rebuild) {
     const events = await readEvents();
+    const graph = await loadGraph();
     const model = emptyModel();
     model.params = { ...DEFAULT_PARAMS };
 
@@ -837,6 +873,11 @@ commands.model = async ({ values }) => {
       entry.observations += 1;
       if (correct) entry.correct += 1;
       entry.lastSeen = event.at ?? null;
+
+      // Recomputed from the current graph rather than replayed from the
+      // event, so editing a prerequisite and rebuilding re-derives history
+      // under the corrected structure.
+      if (correct) propagateCorrect(model, graph, id);
     }
 
     await writeModel(model);
@@ -1001,6 +1042,7 @@ const OPTIONS = {
   grade: { type: "string" },
   opportunity: { type: "string" },
   schedule: { type: "boolean" },
+  noPropagate: { type: "boolean", default: false },
   question: { type: "string" },
   answer: { type: "string" },
   why: { type: "string" },
