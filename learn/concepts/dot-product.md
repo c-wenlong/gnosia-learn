@@ -31,3 +31,7 @@ The dot product of two vectors measures alignment, and is the sum of elementwise
 q: Why is the dot product zero for perpendicular vectors?
 a: Because it measures alignment; orthogonal directions have no shared component.
 ```
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 0/1 correct, 4%

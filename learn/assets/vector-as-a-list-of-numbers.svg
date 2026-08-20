@@ -1,0 +1,96 @@
+<svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <defs>
+    <marker id="vhead" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#c8442b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="500" fill="#f1efe9"/>
+
+  <text x="400" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#23262b">The same arrow, written in two different bases</text>
+
+  <!-- ============ PANEL A : standard axes ============ -->
+  <rect x="24" y="52" width="356" height="356" rx="10" fill="#e7e4dc" stroke="#d3cfc4"/>
+  <text x="202" y="78" text-anchor="middle" font-size="17" font-weight="600" fill="#2563a8">standard axes</text>
+
+  <!-- axes -->
+  <line x1="105" y1="335" x2="352" y2="335" stroke="#2563a8" stroke-width="2.2"/>
+  <line x1="185" y1="378" x2="185" y2="176" stroke="#2563a8" stroke-width="2.2"/>
+  <!-- unit ticks -->
+  <g stroke="#2563a8" stroke-width="1.6" opacity="0.75">
+    <line x1="143" y1="331" x2="143" y2="339"/>
+    <line x1="227" y1="331" x2="227" y2="339"/>
+    <line x1="269" y1="331" x2="269" y2="339"/>
+    <line x1="311" y1="331" x2="311" y2="339"/>
+    <line x1="181" y1="293" x2="189" y2="293"/>
+    <line x1="181" y1="251" x2="189" y2="251"/>
+    <line x1="181" y1="209" x2="189" y2="209"/>
+  </g>
+  <text x="348" y="360" text-anchor="middle" font-size="16" font-weight="600" fill="#2563a8">x</text>
+  <text x="163" y="184" text-anchor="middle" font-size="16" font-weight="600" fill="#2563a8">y</text>
+  <text x="172" y="356" text-anchor="middle" font-size="14" fill="#5c6067">0</text>
+
+  <!-- guides -->
+  <g stroke="#2563a8" stroke-width="1.8" stroke-dasharray="6 5" opacity="0.95">
+    <line x1="227" y1="209" x2="227" y2="335"/>
+    <line x1="227" y1="209" x2="185" y2="209"/>
+  </g>
+  <text x="227" y="360" text-anchor="middle" font-size="17" font-weight="700" fill="#2563a8">1</text>
+  <text x="169" y="215" text-anchor="end" font-size="17" font-weight="700" fill="#2563a8">3</text>
+
+  <!-- the arrow -->
+  <line x1="185" y1="335" x2="227" y2="209" stroke="#c8442b" stroke-width="3.5" marker-end="url(#vhead)"/>
+  <circle cx="185" cy="335" r="3.5" fill="#23262b"/>
+  <text x="240" y="199" font-size="18" font-style="italic" font-weight="700" fill="#c8442b">v</text>
+
+  <!-- readout -->
+  <text x="356" y="128" text-anchor="end" font-size="25" font-weight="700" fill="#23262b">[ 1, 3 ]</text>
+  <text x="356" y="153" text-anchor="end" font-size="15" fill="#5c6067">= 1 · x  +  3 · y</text>
+
+  <!-- ============ PANEL B : rotated axes ============ -->
+  <rect x="420" y="52" width="356" height="356" rx="10" fill="#e7e4dc" stroke="#d3cfc4"/>
+  <text x="598" y="78" text-anchor="middle" font-size="17" font-weight="600" fill="#6b3fa0">same page, axes turned 45°</text>
+
+  <!-- axes: u1 up-right, u2 up-left -->
+  <line x1="554" y1="362" x2="706" y2="210" stroke="#6b3fa0" stroke-width="2.2"/>
+  <line x1="608" y1="362" x2="489" y2="243" stroke="#6b3fa0" stroke-width="2.2"/>
+  <!-- unit ticks along u1 (spacing 29.7px each way) -->
+  <g stroke="#6b3fa0" stroke-width="1.6" opacity="0.75">
+    <line x1="599" y1="311" x2="608" y2="320"/>
+    <line x1="620" y1="290" x2="629" y2="299"/>
+    <line x1="641" y1="269" x2="650" y2="278"/>
+    <line x1="662" y1="248" x2="671" y2="257"/>
+    <line x1="562" y1="311" x2="553" y2="320"/>
+    <line x1="541" y1="290" x2="532" y2="299"/>
+    <line x1="520" y1="269" x2="511" y2="278"/>
+  </g>
+  <text x="724" y="204" text-anchor="middle" font-size="16" font-weight="600" fill="#6b3fa0">u</text>
+  <text x="474" y="236" text-anchor="middle" font-size="16" font-weight="600" fill="#6b3fa0">w</text>
+  <text x="581" y="382" text-anchor="middle" font-size="14" fill="#5c6067">0</text>
+
+  <!-- guides: perpendicular from tip onto each rotated axis -->
+  <g stroke="#6b3fa0" stroke-width="1.8" stroke-dasharray="6 5" opacity="0.95">
+    <line x1="623" y1="209" x2="665" y2="251"/>
+    <line x1="623" y1="209" x2="539" y2="293"/>
+  </g>
+  <text x="646" y="316" text-anchor="middle" font-size="17" font-weight="700" fill="#6b3fa0">2√2</text>
+  <text x="545" y="330" text-anchor="middle" font-size="17" font-weight="700" fill="#6b3fa0">√2</text>
+
+  <!-- the arrow: identical colour, identical place in the panel -->
+  <line x1="581" y1="335" x2="623" y2="209" stroke="#c8442b" stroke-width="3.5" marker-end="url(#vhead)"/>
+  <circle cx="581" cy="335" r="3.5" fill="#23262b"/>
+  <text x="636" y="199" font-size="18" font-style="italic" font-weight="700" fill="#c8442b">v</text>
+
+  <!-- readout -->
+  <text x="752" y="128" text-anchor="end" font-size="25" font-weight="700" fill="#23262b">[ 2√2, √2 ]</text>
+  <text x="752" y="153" text-anchor="end" font-size="15" fill="#5c6067">= 2√2 · u  +  √2 · w</text>
+
+  <!-- ============ the tie between the panels ============ -->
+  <line x1="240" y1="209" x2="610" y2="209" stroke="#8a8f98" stroke-width="1.6" stroke-dasharray="2 5"/>
+  <rect x="352" y="197" width="96" height="24" rx="6" fill="#f1efe9"/>
+  <text x="400" y="214" text-anchor="middle" font-size="14" font-weight="600" fill="#5c6067">same arrow</text>
+
+  <!-- ============ the point ============ -->
+  <text x="400" y="436" text-anchor="middle" font-size="18" font-weight="700" fill="#23262b">The arrow never moved. Only the axes did.</text>
+  <text x="400" y="462" text-anchor="middle" font-size="15" fill="#5c6067">Each list says how far to walk along its own axes. Both are exact; neither is an approximation.</text>
+</svg>

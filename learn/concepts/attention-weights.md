@@ -26,3 +26,7 @@ Attention weights are a softmax over scaled query-key dot products.
 - [[dot-product]]
 - [[softmax]]
 - [[query-key-value-projections]]
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 0/1 correct, 4%

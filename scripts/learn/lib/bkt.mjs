@@ -21,8 +21,19 @@ export const DEFAULT_PARAMS = Object.freeze({
   pS: 0.1,
 });
 
-/** p(L) at or above this counts as mastered. */
+/** p(L) at or above this counts as mastered: learned, and worth reviewing. */
 export const MASTERY_THRESHOLD = 0.95;
+
+/**
+ * p(L) at or above this counts as solid enough to build on.
+ *
+ * Deliberately lower than mastery, because the two ask different questions.
+ * "Have they finished with this?" needs high confidence. "Can they follow an
+ * explanation that rests on this?" does not. Gating teaching on mastery meant
+ * a learner had to answer every prerequisite to near-certainty before the
+ * system would teach them the one thing they actually came for.
+ */
+export const READY_THRESHOLD = 0.75;
 
 /** p(L) at or below this counts as a genuine gap rather than uncertainty. */
 export const GAP_THRESHOLD = 0.4;
@@ -140,6 +151,11 @@ export function propagate(prior, correct, hops, options = {}) {
 
 export function isMastered(pL) {
   return pL >= MASTERY_THRESHOLD;
+}
+
+/** Solid enough that a concept resting on it can be taught. */
+export function isReady(pL) {
+  return pL >= READY_THRESHOLD;
 }
 
 export function isGap(pL) {

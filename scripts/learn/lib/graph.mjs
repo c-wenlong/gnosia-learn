@@ -8,7 +8,12 @@
  * themselves mastered.
  */
 
-import { GAP_THRESHOLD, MASTERY_THRESHOLD, isMastered } from "./bkt.mjs";
+import {
+  GAP_THRESHOLD,
+  MASTERY_THRESHOLD,
+  isMastered,
+  isReady,
+} from "./bkt.mjs";
 
 /**
  * Index concepts by id, with both kinds of edge normalized.
@@ -241,8 +246,10 @@ export function frontier(graph, model, { goal = null } = {}) {
     const pL = masteryOf(model, id);
     if (isMastered(pL)) continue;
 
+    // Ready, not mastered: a prerequisite only has to be solid enough to
+    // support an explanation, otherwise nothing is ever teachable.
     const unmetPrereqs = node.requires.filter(
-      (dep) => graph.nodes.has(dep) && !isMastered(masteryOf(model, dep)),
+      (dep) => graph.nodes.has(dep) && !isReady(masteryOf(model, dep)),
     );
     if (unmetPrereqs.length > 0) continue;
 

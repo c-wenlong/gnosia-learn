@@ -31,3 +31,7 @@ Each token is projected into three roles: what it seeks, what it offers, and wha
 q: What distinct role does the value vector play, versus query and key?
 a: Query and key decide how much attention a pair gets; the value is what actually gets mixed into the output.
 ```
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 0/1 correct, 4%
