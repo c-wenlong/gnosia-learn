@@ -49,6 +49,7 @@ import {
 } from "./lib/schedule.mjs";
 import { buildIndex, renderMapDocument, renderMermaid } from "./lib/render.mjs";
 import { appendCheck, parseChecks, slugify } from "./lib/markdown.mjs";
+import { renderQuestion, renderResult } from "./lib/session-log.mjs";
 import {
   appendEvent,
   appendSession,
@@ -444,6 +445,26 @@ commands.observe = async ({ values }) => {
     session: values.session ?? null,
   });
 
+  // Recording evidence and writing the log are one act. Keeping them separate
+  // is how the first real session ended up with five observations and an empty
+  // log: the model updated, and the learner had nothing to read.
+  let logged = false;
+  if (values.session && values.question) {
+    const options = values.options ? String(values.options).split("|") : [];
+    const blocks = [
+      renderQuestion(values.question, options.map((o) => o.trim()).filter(Boolean)),
+      renderResult({
+        correct,
+        chosen: values.chosen ?? "",
+        answer: values.answer ?? "",
+        note: values.note ?? "",
+        explain: values.explain ?? "",
+      }),
+    ];
+    await appendSession(values.session, blocks.join("\n\n"));
+    logged = true;
+  }
+
   const result = {
     concept: id,
     correct,
@@ -453,12 +474,14 @@ commands.observe = async ({ values }) => {
     mastery: masteryLabel(after),
     mastered: after >= MASTERY_THRESHOLD,
     due: reviews.cards[id]?.due ?? null,
+    logged,
   };
 
   if (values.json) return out(result, true);
   out(
     `${correct ? "✓" : "✗"} ${id}  ${pct(before)} → ${pct(after)}  (${masteryLabel(after)})` +
-      (result.due ? `  next review ${result.due.slice(0, 10)}` : ""),
+      (result.due ? `  next review ${result.due.slice(0, 10)}` : "") +
+      (logged ? "  · logged" : ""),
     false,
   );
 };
@@ -946,7 +969,12 @@ commands.help = async () => {
   check list [--concept C]       stored verification questions
   probe [--goal G] [--limit N]   what to ask next, by information gain
   observe --concept C --correct true|false [--source probe|teach|review]
-                                 [--grade 0-5] [--question Q] [--session S]
+                                 [--grade 0-5] [--session S]
+                                 [--question Q] [--options "a|b|c|d"] [--chosen X]
+                                 [--answer A] [--note "learner's own words"]
+                                 [--explain "why the others are wrong"]
+                                 With --session and --question it also writes the
+                                 exchange into the session log as callouts.
   frontier [--goal G]            the edge of understanding
   plan --goal G [--mermaid]      ordered path from known to goal
   teach [--goal G]               the single next concept, with context
@@ -977,6 +1005,10 @@ const OPTIONS = {
   answer: { type: "string" },
   why: { type: "string" },
   reason: { type: "string" },
+  options: { type: "string" },
+  chosen: { type: "string" },
+  explain: { type: "string" },
+  note: { type: "string" },
   session: { type: "string" },
   id: { type: "string" },
   title: { type: "string" },
