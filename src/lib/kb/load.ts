@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   EMPTY_KB,
+  type KbEdge,
   type KbConcept,
   type KnowledgeBase,
   type MasteryLabel,
@@ -51,6 +52,7 @@ function normalizeConcept(raw: unknown): KbConcept | null {
     summary: asString(c.summary),
     tags: asStringArray(c.tags),
     requires: asStringArray(c.requires),
+    assumes: asStringArray(c.assumes),
     pL: Math.min(1, Math.max(0, asNumber(c.pL))),
     mastery: MASTERY_LABELS.includes(mastery) ? mastery : "gap",
     observations: asNumber(c.observations),
@@ -94,11 +96,18 @@ export function loadKnowledgeBase(): KnowledgeBase {
   const ids = new Set(concepts.map((c) => c.id));
   const edges = Array.isArray(data.edges)
     ? data.edges
-        .filter((e): e is { from: string; to: string } => {
+        .filter((e): e is KbEdge => {
           if (!e || typeof e !== "object") return false;
           const edge = e as Record<string, unknown>;
           return typeof edge.from === "string" && typeof edge.to === "string";
         })
+        .map(
+          (e): KbEdge => ({
+            from: e.from,
+            to: e.to,
+            kind: e.kind === "assumes" ? "assumes" : "requires",
+          }),
+        )
         .filter((e) => ids.has(e.from) && ids.has(e.to))
     : [];
 

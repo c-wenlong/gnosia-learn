@@ -11,6 +11,8 @@ export interface KbConcept {
   summary: string;
   tags: string[];
   requires: string[];
+  /** Background: affects ordering only, never gates or carries evidence. */
+  assumes: string[];
   /** p(L) from Bayesian Knowledge Tracing: probability the learner holds it. */
   pL: number;
   mastery: MasteryLabel;
@@ -26,9 +28,12 @@ export interface KbConcept {
   topics: string[];
 }
 
+export type EdgeKind = "requires" | "assumes";
+
 export interface KbEdge {
   from: string;
   to: string;
+  kind: EdgeKind;
 }
 
 export interface KbStats {

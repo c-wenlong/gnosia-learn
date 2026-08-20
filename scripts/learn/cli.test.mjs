@@ -238,3 +238,80 @@ describe("propagation", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("concept edit and assumes", () => {
+  function base(dir) {
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Background"]);
+    run(dir, ["concept", "add", "--title", "Foundation"]);
+    run(dir, ["concept", "add", "--title", "Goal", "--requires", "foundation"]);
+  }
+
+  function frontmatter(dir, id) {
+    const raw = fs.readFileSync(
+      path.join(dir, "learn", "concepts", `${id}.md`),
+      "utf8",
+    );
+    return raw.slice(0, raw.indexOf("---", 4));
+  }
+
+  it("changes an edge without touching the note body", () => {
+    const dir = sandbox();
+    base(dir);
+    const file = path.join(dir, "learn", "concepts", "goal.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8") + "\nHand-written prose.\n");
+
+    run(dir, ["concept", "edit", "goal", "--assumes", "background"]);
+
+    expect(fs.readFileSync(file, "utf8")).toContain("Hand-written prose.");
+    expect(frontmatter(dir, "goal")).toContain("assumes: [background]");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("clears a list when given an empty value", () => {
+    const dir = sandbox();
+    base(dir);
+    run(dir, ["concept", "edit", "goal", "--requires", ""]);
+    expect(frontmatter(dir, "goal")).toContain("requires: []");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses an edit that changes nothing", () => {
+    const dir = sandbox();
+    base(dir);
+    expect(() => run(dir, ["concept", "edit", "goal"])).toThrow();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("background does not gate teaching, a hard prerequisite does", () => {
+    const dir = sandbox();
+    base(dir);
+    run(dir, ["concept", "edit", "goal", "--assumes", "background"]);
+
+    // Nothing answered yet: the hard prerequisite keeps `goal` off the frontier.
+    let front = JSON.parse(run(dir, ["frontier", "--json"])).map((f) => f.id);
+    expect(front).not.toContain("goal");
+
+    // Master the hard prerequisite only, leaving background untouched.
+    for (let i = 0; i < 5; i += 1) {
+      run(dir, [
+        "observe", "--concept", "foundation", "--correct", "true",
+        "--source", "teach", "--noPropagate",
+      ]);
+    }
+    front = JSON.parse(run(dir, ["frontier", "--json"])).map((f) => f.id);
+    expect(front).toContain("goal");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("background does not receive propagated evidence", () => {
+    const dir = sandbox();
+    base(dir);
+    run(dir, ["concept", "edit", "goal", "--assumes", "background"]);
+    run(dir, ["observe", "--concept", "goal", "--correct", "true", "--source", "probe"]);
+
+    expect(mastery(dir, "foundation").pL).toBeGreaterThan(0.25);
+    expect(mastery(dir, "background")).toBeUndefined();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

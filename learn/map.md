@@ -1,6 +1,6 @@
 ---
 title: Knowledge Map
-generated: 2026-08-20T01:50:11.210Z
+generated: 2026-08-20T06:17:57.279Z
 concepts: 11
 mastered: 0
 ---
@@ -26,8 +26,6 @@ not yet held. This is the only place teaching is efficient.
 
 ```mermaid
 flowchart TD
-  n_tool_calling["Tool calling<br/><small>25%</small>"]
-  n_react_loop["ReAct loop<br/><small>25%</small>"]
   n_vector_as_a_list_of_numbers["Vector as a list of numbers<br/><small>25%</small>"]
   n_dot_product["Dot product<br/><small>25%</small>"]
   n_query_key_value_projections["Query key value projections<br/><small>25%</small>"]
@@ -37,7 +35,8 @@ flowchart TD
   n_multi_head_attention["Multi-head attention<br/><small>25%</small>"]
   n_positional_encoding["Positional encoding<br/><small>25%</small>"]
   n_transformer_block["Transformer block<br/><small>25%</small>"]
-  n_tool_calling --> n_react_loop
+  n_tool_calling["Tool calling<br/><small>25%</small>"]
+  n_react_loop["ReAct loop<br/><small>25%</small>"]
   n_vector_as_a_list_of_numbers --> n_dot_product
   n_vector_as_a_list_of_numbers --> n_query_key_value_projections
   n_vector_as_a_list_of_numbers --> n_softmax
@@ -49,6 +48,8 @@ flowchart TD
   n_self_attention --> n_positional_encoding
   n_multi_head_attention --> n_transformer_block
   n_positional_encoding --> n_transformer_block
+  n_transformer_block -.-> n_tool_calling
+  n_tool_calling --> n_react_loop
 
   classDef mastered fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
   classDef solid fill:#e0f2fe,stroke:#0284c7,stroke-width:1px,color:#0c4a6e;
@@ -56,7 +57,7 @@ flowchart TD
   classDef weak fill:#ffedd5,stroke:#ea580c,stroke-width:1px,color:#7c2d12;
   classDef gap fill:#fee2e2,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;
   classDef frontier stroke-width:3px,stroke-dasharray:4 2;
-  class n_tool_calling,n_react_loop,n_vector_as_a_list_of_numbers,n_dot_product,n_query_key_value_projections,n_softmax,n_attention_weights,n_self_attention,n_multi_head_attention,n_positional_encoding,n_transformer_block gap;
+  class n_vector_as_a_list_of_numbers,n_dot_product,n_query_key_value_projections,n_softmax,n_attention_weights,n_self_attention,n_multi_head_attention,n_positional_encoding,n_transformer_block,n_tool_calling,n_react_loop gap;
   class n_tool_calling,n_vector_as_a_list_of_numbers frontier;
 ```
 
@@ -70,4 +71,6 @@ flowchart TD
 | orange | weak | 40–55% |
 | red | gap | ≤ 40% |
 
-A dashed border marks a frontier concept.
+A dashed border marks a frontier concept. A solid arrow is a hard
+prerequisite that gates teaching and carries evidence; a dotted arrow is
+background that only affects ordering.

@@ -237,6 +237,7 @@ commands.concept = async ({ values, positionals }) => {
       title: values.title,
       summary: values.summary ?? "",
       requires: list(values.requires),
+      assumes: list(values.assumes),
       tags: list(values.tags),
       sources: list(values.sources),
       topics: list(values.topics),
@@ -264,6 +265,37 @@ commands.concept = async ({ values, positionals }) => {
     return;
   }
 
+  if (sub === "edit") {
+    const id = positionals[2] ?? values.id;
+    if (!id) fail("concept edit requires an id");
+    const concept = await readConcept(id);
+    if (!concept) fail(`no such concept: ${id}`);
+
+    // Only touch what was passed. An explicit empty string clears a list,
+    // which is how you drop a prerequisite without hand-editing frontmatter.
+    const patch = {};
+    for (const field of ["title", "summary"]) {
+      if (values[field] !== undefined) patch[field] = values[field];
+    }
+    for (const field of ["requires", "assumes", "tags", "topics", "sources"]) {
+      if (values[field] !== undefined) patch[field] = list(values[field]);
+    }
+    if (Object.keys(patch).length === 0) {
+      fail("concept edit needs at least one field to change");
+    }
+
+    // writeConcept drops body/path/id from the frontmatter itself.
+    await writeConcept({ ...concept, ...patch });
+
+    if (values.json) return out({ id, changed: Object.keys(patch), ...patch }, true);
+    return out(
+      `Updated ${id}: ${Object.entries(patch)
+        .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") || "(none)" : v}`)
+        .join("  ")}`,
+      false,
+    );
+  }
+
   if (sub === "list") {
     const graph = await loadGraph();
     const model = await readModel();
@@ -272,6 +304,7 @@ commands.concept = async ({ values, positionals }) => {
       title: node.title ?? node.id,
       pL: masteryOf(model, node.id),
       requires: node.requires,
+      assumes: node.assumes,
       tags: node.tags,
     }));
     rows.sort((a, b) => a.id.localeCompare(b.id));
@@ -284,7 +317,7 @@ commands.concept = async ({ values, positionals }) => {
           (r) =>
             `${bar(r.pL)} ${pct(r.pL)}  ${r.id.padEnd(28)} ${r.title}${
               r.requires.length ? `  ← ${r.requires.join(", ")}` : ""
-            }`,
+            }${r.assumes.length ? `  (assumes ${r.assumes.join(", ")})` : ""}`,
         )
         .join("\n"),
       false,
@@ -308,7 +341,7 @@ commands.concept = async ({ values, positionals }) => {
     return;
   }
 
-  fail("usage: concept add|list|show");
+  fail("usage: concept add|edit|list|show");
 };
 
 commands.check = async ({ values, positionals }) => {
@@ -1002,8 +1035,13 @@ commands.help = async () => {
     `learn — local learning pipeline
 
   status                         where you are
-  concept add --title T [--id I] [--requires a,b] [--tags x,y] [--summary S]
+  concept add --title T [--id I] [--requires a,b] [--assumes c] [--tags x,y]
+  concept edit <id> [--requires …] [--assumes …] [--title …] [--summary …]
   concept list|show <id>
+                                 requires = cannot be understood without it:
+                                   gates teaching, carries evidence
+                                 assumes  = useful background: orders the plan,
+                                   never blocks, never moves belief
   check add --concept C --question Q --answer A [--why W]
                                  (concept add also takes --topics <topic-id,…>
                                   to link a concept to course topics)
@@ -1056,6 +1094,7 @@ const OPTIONS = {
   title: { type: "string" },
   summary: { type: "string" },
   requires: { type: "string" },
+  assumes: { type: "string" },
   tags: { type: "string" },
   sources: { type: "string" },
   topics: { type: "string" },

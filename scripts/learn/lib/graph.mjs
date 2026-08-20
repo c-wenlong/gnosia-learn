@@ -10,27 +10,56 @@
 
 import { GAP_THRESHOLD, MASTERY_THRESHOLD, isMastered } from "./bkt.mjs";
 
-/** Index concepts by id, with normalized prerequisite lists. */
+/**
+ * Index concepts by id, with both kinds of edge normalized.
+ *
+ * `requires` is a hard prerequisite: the concept cannot be understood without
+ * it. It gates the frontier and carries evidence when an answer propagates.
+ *
+ * `assumes` is background: useful to have seen first, but not load-bearing.
+ * It affects ordering only. It never blocks teaching and never moves belief.
+ *
+ * The distinction exists because one relation was doing both jobs, and the
+ * strictest consumer won: declaring the transformer stack as background for
+ * tool calling made nine concepts mandatory before a reasoning loop could be
+ * taught.
+ */
 export function buildGraph(concepts) {
   const nodes = new Map();
   for (const concept of concepts) {
+    const requires = normalizeList(concept.requires);
+    const assumes = normalizeList(concept.assumes).filter(
+      (id) => !requires.includes(id),
+    );
     nodes.set(concept.id, {
       ...concept,
-      requires: normalizeList(concept.requires),
+      requires,
+      assumes,
+      /** Everything that should come earlier, whatever the reason. */
+      ordering: [...requires, ...assumes],
       tags: normalizeList(concept.tags),
       topics: normalizeList(concept.topics),
     });
   }
 
-  const dependents = new Map();
-  for (const [id, node] of nodes) {
-    for (const dep of node.requires) {
-      if (!dependents.has(dep)) dependents.set(dep, []);
-      dependents.get(dep).push(id);
+  const index = (key) => {
+    const map = new Map();
+    for (const [id, node] of nodes) {
+      for (const dep of node[key]) {
+        if (!map.has(dep)) map.set(dep, []);
+        map.get(dep).push(id);
+      }
     }
-  }
+    return map;
+  };
 
-  return { nodes, dependents };
+  return {
+    nodes,
+    /** Reverse index over hard prerequisites only. */
+    dependents: index("requires"),
+    /** Reverse index over everything that constrains ordering. */
+    orderDependents: index("ordering"),
+  };
 }
 
 function normalizeList(value) {
@@ -44,12 +73,15 @@ function normalizeList(value) {
   return [];
 }
 
-/** Prerequisites named by a concept but absent from the corpus. */
+/** Edges naming a concept that is absent from the corpus, of either kind. */
 export function danglingEdges(graph) {
   const out = [];
   for (const [id, node] of graph.nodes) {
     for (const dep of node.requires) {
-      if (!graph.nodes.has(dep)) out.push({ from: id, missing: dep });
+      if (!graph.nodes.has(dep)) out.push({ from: id, missing: dep, kind: "requires" });
+    }
+    for (const dep of node.assumes) {
+      if (!graph.nodes.has(dep)) out.push({ from: id, missing: dep, kind: "assumes" });
     }
   }
   return out;
@@ -75,7 +107,9 @@ export function findCycles(graph) {
       if (frame.index === 0) colour.set(frame.id, GREY);
 
       const node = graph.nodes.get(frame.id);
-      const deps = node ? node.requires : [];
+      // Ordering edges, so a cycle through background is caught too: it makes
+      // the teaching order undefined just as surely as a hard cycle does.
+      const deps = node ? node.ordering : [];
 
       if (frame.index >= deps.length) {
         colour.set(frame.id, BLACK);
@@ -120,7 +154,7 @@ export function topoSort(graph, ids = [...graph.nodes.keys()]) {
   const indegree = new Map();
 
   for (const id of subset) {
-    const deps = graph.nodes.get(id).requires.filter((d) => subset.has(d));
+    const deps = graph.nodes.get(id).ordering.filter((d) => subset.has(d));
     indegree.set(id, deps.length);
   }
 
@@ -130,7 +164,7 @@ export function topoSort(graph, ids = [...graph.nodes.keys()]) {
   while (ready.length > 0) {
     const id = ready.shift();
     order.push(id);
-    for (const dependent of graph.dependents.get(id) ?? []) {
+    for (const dependent of graph.orderDependents.get(id) ?? []) {
       if (!subset.has(dependent)) continue;
       const next = indegree.get(dependent) - 1;
       indegree.set(dependent, next);

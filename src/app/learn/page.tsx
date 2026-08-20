@@ -68,6 +68,7 @@ function ConceptRow({
       <p className="mt-1.5 font-mono text-[11px] text-[var(--muted)]">
         {concept.id}
         {concept.requires.length > 0 && ` ← ${concept.requires.join(", ")}`}
+        {concept.assumes.length > 0 && ` · assumes ${concept.assumes.join(", ")}`}
         {concept.observations > 0 &&
           ` · ${concept.correct}/${concept.observations} correct`}
         {concept.due && ` · review ${formatDate(concept.due)}`}
@@ -188,8 +189,9 @@ export default function LearnPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-semibold tracking-tight">Dependency graph</h2>
             <p className="text-sm text-[var(--muted)]">
-              Arrows point from a prerequisite to what it unlocks. Dashed borders
-              mark the frontier.
+              Solid arrows are hard prerequisites: they gate teaching and carry
+              evidence. Dotted arrows are background, which only affects
+              ordering. Dashed borders mark the frontier.
             </p>
             <ConceptGraph
               concepts={kb.concepts}
