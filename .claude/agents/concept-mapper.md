@@ -68,6 +68,7 @@ appears after its prerequisites:
     "id": "kebab-case-slug",
     "title": "Short claim-shaped title",
     "summary": "One sentence stating the idea itself, not what it is about.",
+    "domain": "algorithms",
     "requires": ["other-slug"],
     "assumes": ["background-slug"],
     "tags": ["topic-tag"],
@@ -78,7 +79,11 @@ appears after its prerequisites:
 
 Rules for the payload:
 
-- `id` is lowercase kebab-case and unique.
+- `id` is lowercase kebab-case and unique **across every domain**, since the id
+  is the filename and Obsidian resolves wikilinks by filename.
+- `domain` is the folder the note is filed under: a broad field of study, not a
+  sub-topic. Reuse a domain that already exists rather than coining a near
+  synonym. Finer grouping belongs in `tags`.
 - Every string in `requires` and `assumes` is either another `id` in this
   array or an id that already exists in the knowledge base (you will be given
   the existing list, so reuse those ids rather than creating near-duplicates).

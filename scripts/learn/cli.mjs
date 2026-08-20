@@ -62,7 +62,9 @@ import {
   appendSession,
   emptyModel,
   ensureDirs,
+  conceptCollisions,
   listConcepts,
+  listDomains,
   listSessions,
   readConcept,
   readEvents,
@@ -202,9 +204,15 @@ commands.status = async ({ values }) => {
     );
   }
 
+  const domains = (await listDomains())
+    .sort((a, b) => b.count - a.count)
+    .map((d) => `${d.domain ?? "unfiled"} ${d.count}`)
+    .join(" · ");
+
   const lines = [
     `Knowledge base: ${rel(KB)}`,
     `Concepts:  ${stats.total}  (${stats.mastered} mastered · ${stats.learning} learning · ${stats.untouched} untouched)`,
+    `Domains:   ${domains || "none"}`,
     `Reviews:   ${due.length} due now`,
     `Sessions:  ${sessions.length} logged`,
     ``,
@@ -264,7 +272,10 @@ commands.concept = async ({ values, positionals }) => {
     }
     const body = values.body ?? existing?.body ?? `${sections.join("\n\n")}\n`;
 
-    const file = await writeConcept({ ...concept, body });
+    const file = await writeConcept(
+      { ...concept, body },
+      { domain: values.domain ?? null },
+    );
     await ensureDirs();
     out(`Wrote ${rel(file)}`, false);
     return;
@@ -285,14 +296,22 @@ commands.concept = async ({ values, positionals }) => {
     for (const field of ["requires", "assumes", "tags", "topics", "sources"]) {
       if (values[field] !== undefined) patch[field] = list(values[field]);
     }
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && values.domain === undefined) {
       fail("concept edit needs at least one field to change");
     }
 
-    // writeConcept drops body/path/id from the frontmatter itself.
-    await writeConcept({ ...concept, ...patch });
+    // writeConcept drops body/path/id/domain from the frontmatter itself.
+    // Passing domain moves the file; omitting it leaves the note where it is.
+    const moved = values.domain !== undefined;
+    const file = await writeConcept(
+      { ...concept, ...patch },
+      moved ? { domain: values.domain || null } : {},
+    );
+    if (moved) patch.domain = values.domain || "(unfiled)";
 
-    if (values.json) return out({ id, changed: Object.keys(patch), ...patch }, true);
+    if (values.json) {
+      return out({ id, changed: Object.keys(patch), path: rel(file), ...patch }, true);
+    }
     return out(
       `Updated ${id}: ${Object.entries(patch)
         .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") || "(none)" : v}`)
@@ -311,22 +330,31 @@ commands.concept = async ({ values, positionals }) => {
       requires: node.requires,
       assumes: node.assumes,
       tags: node.tags,
+      domain: node.domain ?? null,
     }));
     rows.sort((a, b) => a.id.localeCompare(b.id));
 
     if (values.json) return out(rows, true);
     if (rows.length === 0) return out("No concepts yet.", false);
-    out(
-      rows
-        .map(
-          (r) =>
-            `${bar(r.pL)} ${pct(r.pL)}  ${r.id.padEnd(28)} ${r.title}${
-              r.requires.length ? `  ← ${r.requires.join(", ")}` : ""
-            }${r.assumes.length ? `  (assumes ${r.assumes.join(", ")})` : ""}`,
-        )
-        .join("\n"),
-      false,
-    );
+
+    const line = (r) =>
+      `  ${bar(r.pL)} ${pct(r.pL)}  ${r.id.padEnd(30)} ${r.title}${
+        r.requires.length ? `  ← ${r.requires.join(", ")}` : ""
+      }${r.assumes.length ? `  (assumes ${r.assumes.join(", ")})` : ""}`;
+
+    const grouped = new Map();
+    for (const r of rows) {
+      const key = r.domain ?? "(unfiled)";
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(r);
+    }
+
+    const blocks = [...grouped]
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .map(([domain, items]) =>
+        [`${domain}/  (${items.length})`, ...items.map(line)].join("\n"),
+      );
+    out(blocks.join("\n\n"), false);
     return;
   }
 
@@ -1022,6 +1050,26 @@ commands.doctor = async ({ values }) => {
   const model = await readModel();
   const problems = [];
 
+  // The id is the filename, and Obsidian resolves wikilinks the same way, so
+  // two notes sharing a basename would make both the link and the id ambiguous.
+  for (const { id, kept, ignored } of await conceptCollisions()) {
+    problems.push({
+      severity: "error",
+      kind: "duplicate-id",
+      message: `"${id}" exists in two folders; using ${rel(kept)}, ignoring ${rel(ignored)}`,
+    });
+  }
+
+  for (const node of graph.nodes.values()) {
+    if (!node.domain) {
+      problems.push({
+        severity: "warn",
+        kind: "unfiled",
+        message: `${node.id} sits at the root of concepts/ with no domain folder`,
+      });
+    }
+  }
+
   for (const { from, missing } of danglingEdges(graph)) {
     problems.push({
       severity: "error",
@@ -1081,8 +1129,10 @@ commands.help = async () => {
     `learn — local learning pipeline
 
   status                         where you are
-  concept add --title T [--id I] [--requires a,b] [--assumes c] [--tags x,y]
-  concept edit <id> [--requires …] [--assumes …] [--title …] [--summary …]
+  concept add --title T [--domain D] [--requires a,b] [--assumes c] [--tags x,y]
+  concept edit <id> [--domain D] [--requires …] [--assumes …] [--title …]
+                                 --domain files the note under concepts/<D>/;
+                                   the id stays the bare slug either way
   concept list|show <id>
                                  requires = cannot be understood without it:
                                    gates teaching, carries evidence
@@ -1142,6 +1192,7 @@ const OPTIONS = {
   summary: { type: "string" },
   requires: { type: "string" },
   assumes: { type: "string" },
+  domain: { type: "string" },
   tags: { type: "string" },
   sources: { type: "string" },
   topics: { type: "string" },

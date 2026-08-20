@@ -412,3 +412,115 @@ describe("session close links both ways", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("domain folders", () => {
+  function conceptFile(dir, domain, id) {
+    return domain
+      ? path.join(dir, "learn", "concepts", domain, `${id}.md`)
+      : path.join(dir, "learn", "concepts", `${id}.md`);
+  }
+
+  it("files a new concept under its domain", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax", "--domain", "transformers"]);
+    expect(fs.existsSync(conceptFile(dir, "transformers", "softmax"))).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("keeps the id as the bare slug, with no domain in frontmatter", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax", "--domain", "transformers"]);
+
+    const raw = fs.readFileSync(conceptFile(dir, "transformers", "softmax"), "utf8");
+    expect(raw).toContain("id: softmax");
+    expect(raw).not.toContain("domain:");
+
+    // The id, not the path, is what edges and wikilinks use.
+    const listed = JSON.parse(run(dir, ["concept", "list", "--json"]));
+    expect(listed[0].id).toBe("softmax");
+    expect(listed[0].domain).toBe("transformers");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("moves the file on --domain and leaves nothing behind", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax"]);
+    expect(fs.existsSync(conceptFile(dir, null, "softmax"))).toBe(true);
+
+    run(dir, ["concept", "edit", "softmax", "--domain", "transformers"]);
+    expect(fs.existsSync(conceptFile(dir, "transformers", "softmax"))).toBe(true);
+    expect(fs.existsSync(conceptFile(dir, null, "softmax"))).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("keeps edges working across a move", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Vectors", "--domain", "foundations"]);
+    run(dir, [
+      "concept", "add", "--title", "Softmax",
+      "--domain", "transformers", "--requires", "vectors",
+    ]);
+
+    // The prerequisite lives in a different folder; the edge is by id.
+    const plan = JSON.parse(run(dir, ["plan", "--goal", "softmax", "--json"]));
+    expect(plan.steps.map((s) => s.id)).toEqual(["vectors", "softmax"]);
+
+    run(dir, ["concept", "edit", "vectors", "--domain", "maths"]);
+    const after = JSON.parse(run(dir, ["plan", "--goal", "softmax", "--json"]));
+    expect(after.steps.map((s) => s.id)).toEqual(["vectors", "softmax"]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("preserves mastery across a move, since the id is the key", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax"]);
+    run(dir, ["observe", "--concept", "softmax", "--correct", "true", "--source", "probe"]);
+    const before = mastery(dir, "softmax").pL;
+
+    run(dir, ["concept", "edit", "softmax", "--domain", "transformers"]);
+    expect(mastery(dir, "softmax").pL).toBe(before);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reports a duplicate id across two folders as an error", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax", "--domain", "transformers"]);
+
+    // Hand-place a clashing basename in another folder.
+    const clash = conceptFile(dir, "maths", "softmax");
+    fs.mkdirSync(path.dirname(clash), { recursive: true });
+    fs.writeFileSync(clash, "---\nid: softmax\ntitle: Other\n---\n");
+
+    const report = JSON.parse(run(dir, ["doctor", "--json"]));
+    expect(report.ok).toBe(false);
+    expect(report.problems.some((p) => p.kind === "duplicate-id")).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("warns about a concept left at the root", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Softmax"]);
+    const report = JSON.parse(run(dir, ["doctor", "--json"]));
+    expect(report.problems.some((p) => p.kind === "unfiled")).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("ignores folders nested more than one level deep", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    const deep = path.join(dir, "learn", "concepts", "a", "b");
+    fs.mkdirSync(deep, { recursive: true });
+    fs.writeFileSync(path.join(deep, "buried.md"), "---\nid: buried\n---\n");
+
+    const listed = JSON.parse(run(dir, ["concept", "list", "--json"]));
+    expect(listed.map((c) => c.id)).not.toContain("buried");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

@@ -26,6 +26,8 @@ export interface KbConcept {
   openQuestions: string[];
   /** Course topic ids this concept supports, linking back to the hub. */
   topics: string[];
+  /** Folder the note lives in. Presentation only; the id stays flat. */
+  domain: string | null;
 }
 
 export type EdgeKind = "requires" | "assumes";

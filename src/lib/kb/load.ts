@@ -64,6 +64,7 @@ function normalizeConcept(raw: unknown): KbConcept | null {
     sources: asStringArray(c.sources),
     openQuestions: asStringArray(c.openQuestions),
     topics: asStringArray(c.topics),
+    domain: typeof c.domain === "string" && c.domain ? c.domain : null,
   };
 }
 

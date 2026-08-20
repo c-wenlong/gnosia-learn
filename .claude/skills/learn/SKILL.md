@@ -40,10 +40,14 @@ build the concept graph first. Spawn the **concept-mapper** subagent:
 Then create each concept it returns:
 
 ```bash
-npm run learn -- concept add --title "Covectors" \
+npm run learn -- concept add --title "Covectors" --domain geometry \
   --summary "A linear map from vectors to scalars." \
   --requires vector-space,linearity --tags differential-forms
 ```
+
+`--domain` files the note under `concepts/<domain>/`. Reuse an existing domain
+where one fits: run `concept list` to see them. The id stays the bare slug, so
+edges and wikilinks are unaffected by where a note lives.
 
 Validate before going further — a cycle makes the curriculum unlearnable:
 
