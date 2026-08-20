@@ -161,6 +161,33 @@ export function ancestors(graph, id) {
   return out;
 }
 
+/**
+ * Every prerequisite reachable from `id`, mapped to its shortest hop distance.
+ *
+ * Breadth-first, so each concept appears exactly once even when many routes
+ * reach it. That matters: `transformer-block` reaches `vector-as-a-list-of-numbers`
+ * by six separate paths, and BKT treats each update as independent evidence.
+ * Walking the routes rather than the set would count one answer six times and
+ * promote a concept the learner was never asked about.
+ */
+export function prerequisiteDistances(graph, id) {
+  const distances = new Map();
+  const seen = new Set([id]);
+  const queue = [[id, 0]];
+
+  while (queue.length > 0) {
+    const [current, depth] = queue.shift();
+    for (const dep of graph.nodes.get(current)?.requires ?? []) {
+      if (!graph.nodes.has(dep) || seen.has(dep)) continue;
+      seen.add(dep);
+      distances.set(dep, depth + 1);
+      queue.push([dep, depth + 1]);
+    }
+  }
+
+  return distances;
+}
+
 export function masteryOf(model, id) {
   const entry = model.concepts?.[id];
   return typeof entry?.pL === "number" ? entry.pL : (model.params?.pL0 ?? 0.25);

@@ -97,6 +97,47 @@ export function expectedInfoGain(pL, params = DEFAULT_PARAMS) {
   return Math.max(0, entropy(pL) - after);
 }
 
+/**
+ * How much of a direct update indirect evidence carries, per hop.
+ * 0.4 means an immediate prerequisite gets 40% of the movement, its own
+ * prerequisite 16%, and so on. Evidence thins fast with distance because a
+ * correct answer says a lot about what sits directly underneath it and very
+ * little about what sits five levels down.
+ */
+export const PROPAGATION_DECAY = 0.4;
+
+/**
+ * Indirect evidence can raise confidence but never confer mastery on its own.
+ * Without this ceiling, a long enough correct streak high in the graph would
+ * mark concepts mastered that the learner was never actually asked about.
+ */
+export const PROPAGATION_CEILING = 0.9;
+
+/**
+ * Update a prerequisite from evidence observed `hops` away.
+ *
+ * Blends toward the full posterior rather than applying it, so distance
+ * attenuates the movement. Returns the prior unchanged for hops < 1, since
+ * that is the direct case and belongs to `update`.
+ */
+export function propagate(prior, correct, hops, options = {}) {
+  const {
+    params = DEFAULT_PARAMS,
+    decay = PROPAGATION_DECAY,
+    ceiling = PROPAGATION_CEILING,
+  } = options;
+
+  if (!Number.isFinite(hops) || hops < 1) return clamp01(prior);
+
+  const p = clamp01(prior);
+  const full = posterior(p, correct, params);
+  const weight = Math.pow(decay, hops);
+  const blended = p + weight * (full - p);
+
+  // A concept already above the ceiling keeps its earned belief.
+  return clamp01(Math.min(blended, Math.max(p, ceiling)));
+}
+
 export function isMastered(pL) {
   return pL >= MASTERY_THRESHOLD;
 }

@@ -11,6 +11,8 @@ import {
   predictCorrect,
   transit,
   update,
+  propagate,
+  PROPAGATION_CEILING,
 } from "./bkt.mjs";
 
 describe("posterior", () => {
@@ -114,5 +116,36 @@ describe("masteryLabel", () => {
     expect(masteryLabel(0.6)).toBe("shaky");
     expect(masteryLabel(0.45)).toBe("weak");
     expect(masteryLabel(0.1)).toBe("gap");
+  });
+});
+
+describe("propagate", () => {
+  it("moves belief less than a direct answer would", () => {
+    const direct = update(0.25, true, { opportunity: false });
+    const oneHop = propagate(0.25, true, 1);
+    expect(oneHop).toBeGreaterThan(0.25);
+    expect(oneHop).toBeLessThan(direct);
+  });
+
+  it("thins with every hop", () => {
+    const [a, b, c] = [1, 2, 3].map((h) => propagate(0.25, true, h));
+    expect(a).toBeGreaterThan(b);
+    expect(b).toBeGreaterThan(c);
+    expect(c).toBeGreaterThan(0.25);
+  });
+
+  it("never confers mastery on its own", () => {
+    let pL = 0.25;
+    for (let i = 0; i < 200; i += 1) pL = propagate(pL, true, 1);
+    expect(pL).toBeLessThanOrEqual(PROPAGATION_CEILING);
+    expect(isMastered(pL)).toBe(false);
+  });
+
+  it("leaves a directly earned belief above the ceiling untouched", () => {
+    expect(propagate(0.97, true, 1)).toBeCloseTo(0.97, 12);
+  });
+
+  it("returns the prior for the direct case", () => {
+    expect(propagate(0.4, true, 0)).toBe(0.4);
   });
 });

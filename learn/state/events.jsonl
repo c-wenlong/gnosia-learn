@@ -6,3 +6,5 @@
 {"at":"2026-08-19T17:44:00.282Z","type":"observation","concept":"tool-calling","correct":true,"source":"probe","opportunity":false,"grade":4,"pLBefore":0.6,"pLAfter":0.8709677419354838,"question":"Where does the tool result go after the harness runs it?","answer":null,"session":"2026-08-19-react-agents"}
 {"at":"2026-08-19T17:44:39.899Z","type":"session-close","session":"2026-08-19-react-agents","concepts":["react-loop","tool-calling"]}
 {"at":"2026-08-19T17:47:18.892Z","type":"void","session":"2026-08-19-react-agents","reason":"Correct answer was option 1 in all 7 questions; position alone predicted it, so the answers measure nothing."}
+{"at":"2026-08-20T03:25:01.696Z","type":"observation","concept":"react-loop","correct":true,"source":"probe","opportunity":false,"grade":3,"pLBefore":0.25,"pLAfter":0.6,"question":"q","answer":"b","session":"smoke"}
+{"at":"2026-08-20T03:25:11.892Z","type":"void","session":"smoke","reason":"Smoke test of CLI flags, not a real answer."}
