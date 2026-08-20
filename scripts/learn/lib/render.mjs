@@ -57,10 +57,17 @@ export function renderMermaid(graph, model, options = {}) {
   }
 
   for (const id of ordered) {
-    for (const dep of graph.nodes.get(id).requires) {
+    const node = graph.nodes.get(id);
+    for (const dep of node.requires) {
       if (!graph.nodes.has(dep)) continue;
       if (scope && !scope.has(dep)) continue;
       lines.push(`  ${nodeId(dep)} --> ${nodeId(id)}`);
+    }
+    // Background reads as a dotted arrow: it orders the plan without gating it.
+    for (const dep of node.assumes ?? []) {
+      if (!graph.nodes.has(dep)) continue;
+      if (scope && !scope.has(dep)) continue;
+      lines.push(`  ${nodeId(dep)} -.-> ${nodeId(id)}`);
     }
   }
 
@@ -131,7 +138,9 @@ ${renderMermaid(graph, model, { highlight })}
 | orange | weak | 40–55% |
 | red | gap | ≤ 40% |
 
-A dashed border marks a frontier concept.
+A dashed border marks a frontier concept. A solid arrow is a hard
+prerequisite that gates teaching and carries evidence; a dotted arrow is
+background that only affects ordering.
 `;
 }
 
@@ -151,6 +160,7 @@ export function buildIndex(graph, model, reviews, frontierList) {
       summary: node.summary ?? "",
       tags: node.tags ?? [],
       requires: node.requires ?? [],
+      assumes: node.assumes ?? [],
       pL,
       mastery: masteryLabel(pL),
       observations: entry?.observations ?? 0,
@@ -173,11 +183,14 @@ export function buildIndex(graph, model, reviews, frontierList) {
     stats: summarize(graph, model),
     frontier: frontierList.map((f) => f.id),
     concepts,
-    edges: [...graph.nodes.values()].flatMap((node) =>
-      (node.requires ?? [])
+    edges: [...graph.nodes.values()].flatMap((node) => [
+      ...(node.requires ?? [])
         .filter((dep) => graph.nodes.has(dep))
-        .map((dep) => ({ from: dep, to: node.id })),
-    ),
+        .map((dep) => ({ from: dep, to: node.id, kind: "requires" })),
+      ...(node.assumes ?? [])
+        .filter((dep) => graph.nodes.has(dep))
+        .map((dep) => ({ from: dep, to: node.id, kind: "assumes" })),
+    ]),
     mermaid: renderMermaid(graph, model, {
       highlight: new Set(frontierList.map((f) => f.id)),
     }),

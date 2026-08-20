@@ -24,14 +24,21 @@ vectors and return scalars" beats "Introduction to covectors".
 
 ## Prerequisites
 
-`requires` means **strictly necessary to understand this concept at all** —
-not "traditionally taught earlier", not "related", not "helpful background".
-Over-declaring prerequisites is the common failure: it produces a graph
-where nothing is ever at the frontier and the learner is marched through
-material they did not need.
+There are two kinds, and picking the wrong one is the most damaging mistake
+you can make here.
+
+`requires` means **strictly necessary to understand this concept at all**.
+It blocks teaching until the learner has it, and evidence flows along it.
+
+`assumes` means helpful background: worth seeing first, but a smart person
+could follow without it. It affects ordering and nothing else.
 
 Ask of each edge: *could a smart person understand B without A?* If yes, it
-is not a prerequisite.
+is `assumes`, not `requires`. **When in doubt, choose `assumes`.**
+
+Over-declaring hard prerequisites is the common failure. One graph declared
+the whole transformer stack as required for tool calling, which forced nine
+concepts of model internals before a reasoning loop could be taught.
 
 The graph must be acyclic. Check your own output for cycles before returning.
 
@@ -62,6 +69,7 @@ appears after its prerequisites:
     "title": "Short claim-shaped title",
     "summary": "One sentence stating the idea itself, not what it is about.",
     "requires": ["other-slug"],
+    "assumes": ["background-slug"],
     "tags": ["topic-tag"],
     "sources": ["https://…"]
   }
@@ -71,9 +79,11 @@ appears after its prerequisites:
 Rules for the payload:
 
 - `id` is lowercase kebab-case and unique.
-- Every string in `requires` is either another `id` in this array or an id
-  that already exists in the knowledge base (you will be given the existing
-  list — reuse those ids rather than creating near-duplicates).
+- Every string in `requires` and `assumes` is either another `id` in this
+  array or an id that already exists in the knowledge base (you will be given
+  the existing list, so reuse those ids rather than creating near-duplicates).
+- `assumes` may be omitted or empty. Prefer it over `requires` whenever the
+  dependency is real but not strictly blocking.
 - `summary` states the content: "Attention weights are a softmax over
   query-key dot products", not "An overview of attention weights".
 - `sources` only where you actually consulted something.

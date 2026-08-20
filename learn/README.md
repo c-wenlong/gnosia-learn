@@ -163,7 +163,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | Command | Purpose |
 | --- | --- |
 | `status` | Where you are: counts, due reviews, frontier |
-| `concept add\|list\|show` | Define and inspect concepts |
+| `concept add\|edit\|list\|show` | Define and inspect concepts; `edit` changes edges without touching the note body |
 | `check add\|list` | Verification questions stored in the note |
 | `probe [--goal]` | What to ask next, by information gain |
 | `observe --concept --correct` | **The RL step.** Record one answer |
@@ -206,9 +206,28 @@ why: Catches treating the scale factor as arbitrary.
 ```
 ````
 
-`requires` means **strictly necessary to understand this at all** — not
-"traditionally taught earlier". Over-declaring prerequisites is the common
-failure: it produces a graph where nothing is ever at the frontier.
+### Two kinds of edge
+
+`requires` means the concept cannot be understood without the other one. It
+gates teaching, orders the plan, and carries evidence when an answer
+propagates.
+
+`assumes` means useful background. It orders the plan and nothing else: it
+never blocks teaching, and it never moves belief.
+
+| | Orders the plan | Gates the frontier | Carries evidence |
+| --- | --- | --- | --- |
+| `requires` | yes | yes | yes |
+| `assumes` | yes | no | no |
+
+The split exists because one relation was doing both jobs and the strictest
+reading won. Declaring the transformer stack as a prerequisite of tool calling
+made nine concepts mandatory before a reasoning loop could be taught, which is
+defensible as ordering and wrong as a gate. That edge is now `assumes`: the
+ordering knowledge is kept, the blocking is gone.
+
+When in doubt, use `assumes`. Over-declaring a hard prerequisite produces a
+graph where nothing is ever at the frontier.
 
 `topics` links a concept back to a course topic in the web hub, which is how
 the two halves of this repo connect.
@@ -385,10 +404,9 @@ it is written live.
 
 ## Known limits
 
-- **Propagation strength is hop count, not coupling.** Every edge is treated
-  as equally strong, because the graph carries no weights. A concept that
-  barely depends on its prerequisite propagates exactly as hard as one that
-  cannot exist without it.
+- **Propagation strength is hop count, not coupling.** Hard edges are all
+  treated as equally strong, because the graph carries no weights. Typing an
+  edge as `requires` or `assumes` is a two-way switch, not a dial.
 - **BKT assumes mastery never decays.** It cannot go down except through a
   wrong answer. Forgetting is modelled only by the review scheduler, and the
   two models do not talk to each other. A single decayed-mastery model would

@@ -29,6 +29,7 @@ const FILL: Record<MasteryLabel, { bg: string; border: string; text: string }> =
 function assignLayers(concepts: KbConcept[], edges: KbEdge[]): Map<string, number> {
   const incoming = new Map<string, string[]>();
   for (const c of concepts) incoming.set(c.id, []);
+  // Both kinds constrain layout: a background edge still means "comes before".
   for (const e of edges) incoming.get(e.to)?.push(e.from);
 
   const layer = new Map<string, number>();
@@ -127,13 +128,18 @@ export function ConceptGraph({
           const x2 = to.x + NODE_W / 2;
           const y2 = to.y;
           const mid = (y1 + y2) / 2;
+          // Background edges read as dotted: they order the plan without
+          // gating it, so they should not look like a hard dependency.
+          const background = e.kind === "assumes";
           return (
             <path
-              key={`${e.from}-${e.to}`}
+              key={`${e.from}-${e.to}-${e.kind}`}
               d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
               fill="none"
               stroke="#94a3b8"
-              strokeWidth={1.5}
+              strokeWidth={background ? 1 : 1.5}
+              strokeDasharray={background ? "4 4" : undefined}
+              opacity={background ? 0.6 : 1}
               markerEnd="url(#kb-arrow)"
             />
           );

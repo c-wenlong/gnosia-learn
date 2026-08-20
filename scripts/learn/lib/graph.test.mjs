@@ -102,7 +102,9 @@ describe("findCycles", () => {
 describe("danglingEdges", () => {
   it("reports prerequisites that do not exist", () => {
     const g = buildGraph([{ id: "a", requires: ["ghost"] }]);
-    expect(danglingEdges(g)).toEqual([{ from: "a", missing: "ghost" }]);
+    expect(danglingEdges(g)).toEqual([
+      { from: "a", missing: "ghost", kind: "requires" },
+    ]);
   });
 });
 
@@ -241,5 +243,59 @@ describe("prerequisiteDistances", () => {
       { id: "b", requires: ["a"] },
     ]);
     expect([...prerequisiteDistances(cyclic, "a").keys()]).toEqual(["b"]);
+  });
+});
+
+describe("assumes edges", () => {
+  // `top` cannot be understood without `hard`, and merely benefits from `soft`.
+  const g = buildGraph([
+    { id: "hard", requires: [] },
+    { id: "soft", requires: [] },
+    { id: "top", requires: ["hard"], assumes: ["soft"] },
+  ]);
+
+  it("keeps the two kinds separate", () => {
+    expect(g.nodes.get("top").requires).toEqual(["hard"]);
+    expect(g.nodes.get("top").assumes).toEqual(["soft"]);
+    expect(g.nodes.get("top").ordering).toEqual(["hard", "soft"]);
+  });
+
+  it("does not let background block the frontier", () => {
+    // `hard` mastered, `soft` untouched: `top` should still be teachable.
+    const model = { concepts: { hard: { pL: 0.99, observations: 3 } }, params: {} };
+    expect(frontier(g, model).map((f) => f.id)).toContain("top");
+  });
+
+  it("does let a hard prerequisite block the frontier", () => {
+    const model = { concepts: {}, params: {} };
+    expect(frontier(g, model).map((f) => f.id)).not.toContain("top");
+  });
+
+  it("does not carry evidence to background", () => {
+    const d = prerequisiteDistances(g, "top");
+    expect(d.has("hard")).toBe(true);
+    expect(d.has("soft")).toBe(false);
+  });
+
+  it("still constrains ordering", () => {
+    const { order } = topoSort(g);
+    expect(order.indexOf("soft")).toBeLessThan(order.indexOf("top"));
+  });
+
+  it("ignores a concept listed as both, keeping it hard", () => {
+    const both = buildGraph([
+      { id: "x", requires: [] },
+      { id: "y", requires: ["x"], assumes: ["x"] },
+    ]);
+    expect(both.nodes.get("y").requires).toEqual(["x"]);
+    expect(both.nodes.get("y").assumes).toEqual([]);
+  });
+
+  it("catches a cycle that runs through background", () => {
+    const cyclic = buildGraph([
+      { id: "a", requires: [], assumes: ["b"] },
+      { id: "b", requires: ["a"] },
+    ]);
+    expect(findCycles(cyclic).length).toBeGreaterThan(0);
   });
 });
