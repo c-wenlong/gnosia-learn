@@ -96,3 +96,66 @@ describe("void", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("observe writes the session log", () => {
+  it("appends the question and the result as Obsidian callouts", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Divergence"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "vector calculus"]);
+
+    run(dir, [
+      "observe", "--concept", "divergence", "--correct", "true",
+      "--source", "probe", "--session", "s1",
+      "--question", "What does $\\nabla \\cdot \\mathbf{F}$ measure?",
+      "--options", "Rate of change along itself|Circulation per unit area|Net flux through any closed surface|Net outward flux per unit volume",
+      "--chosen", "4. Net outward flux per unit volume",
+      "--answer", "4",
+      "--note", "it is a density, so per unit volume",
+      "--explain", "Circulation per unit area is curl, not divergence.",
+    ]);
+
+    const log = fs.readFileSync(path.join(dir, "learn", "sessions", "s1.md"), "utf8");
+    expect(log).toContain("> [!question] Quiz");
+    expect(log).toContain("> 4. Net outward flux per unit volume");
+    expect(log).toContain("> [!success] Correct");
+    expect(log).toContain("**In your words:** it is a density");
+    // LaTeX must survive untouched for Obsidian to render it.
+    expect(log).toContain("$\\nabla \\cdot \\mathbf{F}$");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("marks a wrong answer as a failure callout", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Curl"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "t"]);
+
+    run(dir, [
+      "observe", "--concept", "curl", "--correct", "false",
+      "--source", "probe", "--session", "s1",
+      "--question", "What does curl measure?",
+      "--options", "a|b",
+      "--chosen", "1. a",
+    ]);
+
+    const log = fs.readFileSync(path.join(dir, "learn", "sessions", "s1.md"), "utf8");
+    expect(log).toContain("> [!failure] Not quite");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not write to the log when no question is supplied", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Curl"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "t"]);
+    const before = fs.readFileSync(path.join(dir, "learn", "sessions", "s1.md"), "utf8");
+
+    run(dir, ["observe", "--concept", "curl", "--correct", "true", "--session", "s1"]);
+
+    const after = fs.readFileSync(path.join(dir, "learn", "sessions", "s1.md"), "utf8");
+    expect(after).toBe(before);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

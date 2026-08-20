@@ -59,8 +59,22 @@ Start the session log:
 npm run learn -- session start --topic "$ARGUMENTS" --goal <goal-concept-id> --json
 ```
 
-Keep the returned session id. Pass it to every `observe` call, and append
-narration to it as you go — the learner may have it open in an editor.
+Keep the returned session id.
+
+**The session log is the interface.** The learner has this file open in their
+editor while you work, and what appears there *is* the session for them. A log
+written at the end is a summary of something they already sat through, which is
+worth far less than watching it build.
+
+So: pass `--session <id>` to every single `observe` call, and give that call the
+question, the options, and the explanation. `observe` then writes the exchange
+into the log as Obsidian callouts at the same moment it records the evidence.
+Recording the answer and writing the log are one act, deliberately — keeping
+them separate is how a session ends with five observations and an empty file.
+
+Between questions, narrate with `session log`. Aim for the log to read as a
+standalone document afterwards: someone who was not there should be able to
+follow what was asked, what was answered, and why.
 
 ## Phase 1 — Probe
 
@@ -109,12 +123,25 @@ npm run learn -- void --session <session-id> --reason "<what made it unreliable>
 npm run learn -- model --rebuild
 ```
 
-Record every answer immediately:
+Record every answer immediately, with everything needed to reconstruct it:
 
 ```bash
 npm run learn -- observe --concept <id> --correct true|false \
-  --source probe --session <session-id> --question "<the question asked>"
+  --source probe --session <session-id> \
+  --question "<the question exactly as asked>" \
+  --options "<option 1>|<option 2>|<option 3>|<option 4>" \
+  --chosen "<what they picked>" --answer "<the correct one>" \
+  --note "<their own reasoning, in their words, if they gave any>" \
+  --explain "<why the distractors are wrong>"
 ```
+
+Fill in `--options` and `--explain` every time. They cost you nothing and they
+are what turns the log from a score sheet into something worth rereading. Use
+`--note` whenever the learner explains their thinking: their phrasing is more
+useful to them later than yours.
+
+LaTeX passes through untouched, so write maths as `$\nabla \cdot \mathbf{F}$`
+and Obsidian will render it.
 
 `--source probe` deliberately skips the learning step in the model: being
 asked is not being taught.
@@ -214,9 +241,13 @@ big. Adjust step size, not standards.
 Consolidate. Write the durable artefacts:
 
 1. **Fill in the concept notes** you taught — edit `learn/concepts/<id>.md`
-   directly. Write the idea, the worked example, and the failure modes in
-   the learner's own framing where you can. Link prerequisites with
-   `[[wikilinks]]`. These notes are what they will read in six months.
+   directly. `concept add` leaves empty headings (`## The idea`,
+   `## Worked example`, `## Failure modes`); a note still carrying blank
+   headings after a session is a failure of this phase, not a formatting
+   quirk. Write real prose under each, in the learner's own framing where
+   they gave you one. Link prerequisites with `[[wikilinks]]`. These notes
+   are what they will read in six months, and they are the only artefact
+   that outlives the model.
 2. **Record open questions** in each note — what stayed unresolved.
 3. Close the session and regenerate the derived artefacts:
 
