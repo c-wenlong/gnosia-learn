@@ -76,3 +76,7 @@ q: As a ReAct run gets long, what degrades first?
 a: Raw observations pile up in context and crowd out the reasoning and the original goal.
 why: Catches assuming the loop degrades on formatting or latency rather than context budget.
 ```
+
+## Sessions
+
+- [[2026-08-19-react-agents]] — 3/3 correct (voided: answer always in slot 1)

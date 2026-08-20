@@ -50,7 +50,12 @@ import {
   review as reviewCard,
 } from "./lib/schedule.mjs";
 import { buildIndex, renderMapDocument, renderMermaid } from "./lib/render.mjs";
-import { appendCheck, parseChecks, slugify } from "./lib/markdown.mjs";
+import {
+  appendCheck,
+  appendSessionLink,
+  parseChecks,
+  slugify,
+} from "./lib/markdown.mjs";
 import { renderQuestion, renderResult } from "./lib/session-log.mjs";
 import {
   appendEvent,
@@ -484,15 +489,22 @@ commands.observe = async ({ values }) => {
 
   await writeModel(model);
 
+  // Whether an answer teaches and whether it should come back for review are
+  // different questions, and tying both to `source` conflated them: a probe
+  // correctly skips the learning step, but that also meant a concept you
+  // already knew was never scheduled and would silently rot. Every answered
+  // question now earns a review slot, whatever the source.
   const reviews = await readReviews();
-  let card = reviews.cards[id] ?? newCard(id);
   const grade =
     values.grade !== undefined
       ? Number(values.grade)
       : gradeFromOutcome(correct, after);
-  if (source !== "probe" || bool(values.schedule)) {
-    card = reviewCard(card, grade);
-    reviews.cards[id] = card;
+  const scheduled = !bool(values.schedule, true) ? null : reviewCard(
+    reviews.cards[id] ?? newCard(id),
+    grade,
+  );
+  if (scheduled) {
+    reviews.cards[id] = scheduled;
     await writeReviews(reviews);
   }
 
@@ -539,7 +551,7 @@ commands.observe = async ({ values }) => {
     delta: after - before,
     mastery: masteryLabel(after),
     mastered: after >= MASTERY_THRESHOLD,
-    due: reviews.cards[id]?.due ?? null,
+    due: scheduled?.due ?? reviews.cards[id]?.due ?? null,
     logged,
     propagated,
   };
@@ -815,6 +827,31 @@ commands.session = async ({ values, positionals }) => {
     ];
 
     await appendSession(id, summaryLines.join("\n"));
+
+    // Link back from every concept the session touched, so the graph is
+    // navigable in both directions and a concept carries its own history.
+    const reviews = await readReviews();
+    const linked = [];
+    const unchecked = [];
+    for (const conceptId of touched) {
+      const concept = await readConcept(conceptId);
+      if (!concept) continue;
+
+      const answered = mine.filter((e) => e.concept === conceptId);
+      const right = answered.filter((e) => e.correct).length;
+      const detail = `${right}/${answered.length} correct, ${pct(masteryOf(model, conceptId)).trim()}`;
+      const body = appendSessionLink(concept.body, id, detail);
+      if (body !== concept.body) {
+        await writeConcept({ ...concept, body });
+        linked.push(conceptId);
+      }
+
+      // A scheduled concept with no stored check gives /review nothing to ask.
+      if (reviews.cards[conceptId] && parseChecks(concept.body).length === 0) {
+        unchecked.push(conceptId);
+      }
+    }
+
     await appendEvent({ type: "session-close", session: id, concepts: touched });
 
     const front = frontier(graph, model);
@@ -823,13 +860,22 @@ commands.session = async ({ values, positionals }) => {
       answered: mine.length,
       correct: mine.filter((e) => e.correct).length,
       concepts: touched,
+      linked,
+      unchecked,
       nextFrontier: front.slice(0, 3).map((f) => f.id),
     };
     if (values.json) return out(result, true);
-    return out(
+
+    const lines = [
       `Closed ${id}: ${result.answered} answered, ${touched.length} concepts touched.`,
-      false,
-    );
+      linked.length ? `Linked ${linked.length} concept note(s) back to this session.` : null,
+      unchecked.length
+        ? `WARNING: scheduled for review with no checks written: ${unchecked.join(", ")}\n` +
+          `  Add one each, or /review will have to improvise a question:\n` +
+          `  npm run learn -- check add --concept <id> --question "…" --answer "…"`
+        : null,
+    ].filter(Boolean);
+    return out(lines.join("\n"), false);
   }
 
   if (sub === "list") {
@@ -1048,6 +1094,7 @@ commands.help = async () => {
   check list [--concept C]       stored verification questions
   probe [--goal G] [--limit N]   what to ask next, by information gain
   observe --concept C --correct true|false [--source probe|teach|review]
+                                 [--schedule false] to skip the review slot
                                  [--grade 0-5] [--session S]
                                  [--question Q] [--options "a|b|c|d"] [--chosen X]
                                  [--answer A] [--note "learner's own words"]
@@ -1079,7 +1126,7 @@ const OPTIONS = {
   source: { type: "string" },
   grade: { type: "string" },
   opportunity: { type: "string" },
-  schedule: { type: "boolean" },
+  schedule: { type: "string" },
   noPropagate: { type: "boolean", default: false },
   question: { type: "string" },
   answer: { type: "string" },
