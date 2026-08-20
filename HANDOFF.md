@@ -50,12 +50,13 @@ Newest first. Everything is committed; nothing is in flight.
 | `c057673` | Add the Probe → Plan → Teach → Close pipeline |
 | `f8425d4` | Persist per-topic session recaps |
 
-**Two commits I did not write and have not reviewed:** `c98ebc5` and
-`d5bf583`. They appeared in the working tree mid-session, implement mastery
-propagation and the `requires`/`assumes` split, carry their own tests, and pass.
-Both are load-bearing now: propagation fires on every correct answer, and
-`assumes` is what stops the over-declared-prerequisite bug from recurring.
-Worth a read before this branch merges.
+**Two commits written in a parallel session:** `c98ebc5` and `d5bf583`. They
+appeared in the working tree mid-session, implement mastery propagation and the
+`requires`/`assumes` split, carry their own tests, and pass. Both are
+load-bearing now: propagation fires on every correct answer, and `assumes` is
+what stops the over-declared-prerequisite bug from recurring. Their author has
+since added the design record under "Why propagation is shaped the way it is"
+below; read that before reviewing the diffs.
 
 ---
 
@@ -88,6 +89,7 @@ observations remain in `events.jsonl` for audit and are skipped on rebuild.
 | Nothing enforces drawing spatial ideas | The tutor can explain a rotation in prose and only find out it failed when the learner complains | Rule added to the skill; no mechanism behind it |
 | The 0.25 prior is pessimistic | A foundation the learner obviously holds still needs two correct answers to clear the 75% ready bar | Mitigation in the skill: ask what they already know instead of proving it. A proper fix is per-concept priors or an `assert` command. |
 | BKT models no forgetting | Mastery only falls on a wrong answer. Decay lives entirely in the SM-2 scheduler and the two models never talk | Documented in learn/README.md |
+| Propagation ceiling (0.90) now sits above the readiness gate (0.75) | A prerequisite can be unlocked for teaching on indirect evidence alone, never having been asked about | Two commits set these independently. See "Why propagation is shaped the way it is" |
 
 ---
 
@@ -110,6 +112,56 @@ weak, since a tutor able to notice would not have made the mistake. If the
 pattern holds over a few more sessions, the real fix is an adversarial pass over
 a finished session log by a separate agent, rather than a self-check inside the
 loop.
+
+---
+
+## Why propagation is shaped the way it is
+
+Written by the author of `c98ebc5` and `d5bf583`, to answer the review note
+above. The reasoning is not obvious from the diffs.
+
+**Propagation walks a set, not the routes.** The graph is a DAG, and paths
+multiply: `transformer-block` reaches `vector-as-a-list-of-numbers` by **six**
+distinct routes, `self-attention` by three. BKT treats every update as
+independent evidence, so walking routes would apply six updates from one
+answer and carry a concept from 25% to mastered off a single question.
+`prerequisiteDistances` is breadth-first for exactly this reason: each
+prerequisite is returned once, at its shortest distance. Measured shape at the
+time of writing: 11 nodes, 12 edges, 1.09 edges per node, 6 levels deep, no
+transitively redundant edges.
+
+**Only correct answers propagate.** A wrong answer may be specific to the
+concept asked, so inferring failure downward would punish foundations that are
+probably fine.
+
+**The 0.9 ceiling was aimed at a 0.95 gate, and the gate has since moved.**
+When propagation was written the frontier required mastery, so capping indirect
+evidence below 0.95 guaranteed a concept could never be unlocked without being
+asked about directly. `d6c8532` lowered the gate to 0.75 readiness. Those two
+numbers now sit on the wrong sides of each other:
+
+| | Value | Consequence |
+| --- | --- | --- |
+| Propagation ceiling | 0.90 | indirect evidence stops here |
+| Readiness gate | 0.75 | teaching unlocks here |
+
+Verified: seven correct answers on a dependent lift a prerequisite to 0.90 and
+unblock a sibling that requires it, with the prerequisite never having been
+asked about. That may be the behaviour you want, since it is what stops the
+march through foundations the learner obviously holds. It is not what the
+ceiling was designed to guarantee, and nobody chose it deliberately. Decide
+which number is wrong before trusting the frontier on a deep graph.
+
+**Edge weights were considered and rejected for now.** Typing an edge is a
+switch, not a dial, so every hard edge propagates equally hard regardless of how
+tightly the two concepts actually couple. Weighted edges would fix that and were
+left unbuilt: the weights would have to come from `concept-mapper`, which has no
+real basis for choosing a number, and invented precision is worse than an honest
+switch.
+
+**`concept edit` exists now** (added in `d5bf583`, since migrating the
+transformer edge otherwise meant hand-editing frontmatter). It changes named
+fields and leaves the note body alone; an explicit empty value clears a list.
 
 ---
 
