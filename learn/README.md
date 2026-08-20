@@ -9,8 +9,8 @@ diff, and revert. Nothing important is trapped in a chat transcript.
 
 ```
 learn/
-  concepts/<id>.md      atomic concept notes — the durable knowledge
-  sessions/<id>.md      one log per session, appended live
+  concepts/<domain>/<id>.md   atomic concept notes — the durable knowledge
+  sessions/<id>.md            one log per session, appended live
   assets/<id>.svg       diagrams generated during teaching
   state/
     model.json          mastery per concept          (derived)
@@ -210,6 +210,43 @@ a: Without it, dot products grow with dimension and push softmax into
 why: Catches treating the scale factor as arbitrary.
 ```
 ````
+
+### Folders and ids
+
+Concepts sit one folder deep, grouped by domain:
+
+```
+concepts/
+  algorithms/     21
+  transformers/    7
+  agents/          2
+  foundations/     2
+```
+
+**The folder is presentation only. The id stays the bare slug.** Ids appear in
+every `requires:` edge, every `[[wikilink]]`, `reviews.json` and
+`events.jsonl`, so folding the folder into the id would break all of them and
+moving a note between domains would orphan its history. `concept edit --domain`
+moves the file and nothing else changes.
+
+The domain is read from the path rather than stored in frontmatter, so the two
+can never disagree. Nesting is one level: deeper folders are ignored by the
+scanner, because a shelf that needs its own filing system is not a shelf.
+
+Filenames must be unique across domains, since the id is the filename and
+Obsidian resolves wikilinks the same way. `doctor` reports a clash as an error
+and a note left at the root as a warning.
+
+Folders answer "where does this live". Tags stay for everything cross-cutting,
+which is most of it: 21 of 32 concepts carry more than one tag, usually a facet
+like `notation` or `proof` alongside their domain.
+
+**Sessions stay flat.** They are already indexed by the date in the filename and
+by two-way links to every concept they touched. A domain folder would add a
+third index that answers nothing the links do not, and it would have to be lossy:
+one session already spans two domains, touching 5 transformers concepts and 2
+foundations ones. If the folder ever gets crowded, group by year, since time is
+the one axis a session genuinely has one of.
 
 ### Two kinds of edge
 

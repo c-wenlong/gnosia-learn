@@ -171,6 +171,7 @@ export function buildIndex(graph, model, reviews, frontierList) {
       leech: Boolean(card?.leech),
       sources: node.sources ?? [],
       topics: node.topics ?? [],
+      domain: node.domain ?? null,
       openQuestions: node.openQuestions ?? [],
     };
   });

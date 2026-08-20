@@ -135,11 +135,20 @@ export default function LearnPage() {
   const frontier = new Set(kb.frontier);
   const due = dueConcepts(kb);
 
-  const ordered = [...kb.concepts].sort((a, b) => {
-    const aFront = frontier.has(a.id) ? 0 : 1;
-    const bFront = frontier.has(b.id) ? 0 : 1;
-    return aFront - bFront || a.pL - b.pL || a.title.localeCompare(b.title);
-  });
+  // Grouped by the folder the note lives in, biggest domain first, with the
+  // weakest concepts surfaced inside each group.
+  const groups = new Map<string, KbConcept[]>();
+  for (const concept of kb.concepts) {
+    const key = concept.domain ?? "unfiled";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(concept);
+  }
+  const byDomain = [...groups.entries()]
+    .map(([domain, items]) => {
+      items.sort((a, b) => a.pL - b.pL || a.title.localeCompare(b.title));
+      return [domain, items] as const;
+    })
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
 
   return (
     <article className="prose-docs space-y-8">
@@ -200,19 +209,26 @@ export default function LearnPage() {
             />
           </section>
 
-          <section className="space-y-3">
+          <section className="space-y-5">
             <h2 className="text-xl font-semibold tracking-tight">
               All concepts ({kb.concepts.length})
             </h2>
-            <ul className="space-y-2">
-              {ordered.map((concept) => (
-                <ConceptRow
-                  key={concept.id}
-                  concept={concept}
-                  onFrontier={frontier.has(concept.id)}
-                />
-              ))}
-            </ul>
+            {byDomain.map(([domain, items]) => (
+              <div key={domain} className="space-y-2">
+                <h3 className="font-mono text-sm text-[var(--muted)]">
+                  {domain}/ <span className="text-[var(--muted)]">({items.length})</span>
+                </h3>
+                <ul className="space-y-2">
+                  {items.map((concept) => (
+                    <ConceptRow
+                      key={concept.id}
+                      concept={concept}
+                      onFrontier={frontier.has(concept.id)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
           </section>
 
           <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--muted)]">
