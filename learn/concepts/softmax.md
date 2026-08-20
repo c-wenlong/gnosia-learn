@@ -32,3 +32,7 @@ q: Why exponentiate the scores before normalising, instead of dividing by the su
 a: Exponentiation forces every term positive and widens gaps, so the result is a valid, peaked distribution; raw division breaks on negative scores.
 why: Catches the belief that softmax is just normalisation.
 ```
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 1/1 correct, 61%

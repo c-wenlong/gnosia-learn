@@ -25,3 +25,7 @@ A transformer block is multi-head attention plus a feed-forward network, each wr
 
 - [[multi-head-attention]]
 - [[positional-encoding]]
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 1/1 correct, 60%

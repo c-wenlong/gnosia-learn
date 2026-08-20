@@ -24,3 +24,7 @@ Self-attention lets every token attend to every other token in the same sequence
 ## Prerequisites
 
 - [[attention-weights]]
+
+## Sessions
+
+- [[2026-08-20-transformer-block]] — 0/1 correct, 5%

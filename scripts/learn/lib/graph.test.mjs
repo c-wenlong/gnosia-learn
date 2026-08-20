@@ -299,3 +299,33 @@ describe("assumes edges", () => {
     expect(findCycles(cyclic).length).toBeGreaterThan(0);
   });
 });
+
+describe("frontier gates on ready, not mastery", () => {
+  // Regression: gating prerequisites at 95% meant a learner had to answer
+  // every foundation to near-certainty before the concept they came for
+  // became teachable. A live session jammed needing 8 extra correct answers.
+  const graph = buildGraph([
+    { id: "base", title: "Base" },
+    { id: "top", title: "Top", requires: ["base"] },
+  ]);
+  const modelWith = (pL) => ({
+    params: {},
+    concepts: { base: { pL, observations: 1, correct: 1 } },
+  });
+
+  it("opens a concept once its prerequisite is solid", () => {
+    const ids = frontier(graph, modelWith(0.8)).map((f) => f.id);
+    expect(ids).toContain("top");
+  });
+
+  it("still blocks while the prerequisite is shaky", () => {
+    const ids = frontier(graph, modelWith(0.6)).map((f) => f.id);
+    expect(ids).not.toContain("top");
+    expect(ids).toContain("base");
+  });
+
+  it("does not treat a ready prerequisite as finished", () => {
+    // 0.8 clears the teaching bar but must not count as mastered.
+    expect(summarize(graph, modelWith(0.8)).mastered).toBe(0);
+  });
+});

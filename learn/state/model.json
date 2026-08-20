@@ -6,6 +6,61 @@
     "pG": 0.2,
     "pS": 0.1
   },
-  "concepts": {},
-  "updatedAt": "2026-08-20T03:25:12.243Z"
+  "concepts": {
+    "transformer-block": {
+      "pL": 0.6,
+      "observations": 1,
+      "correct": 1,
+      "lastSeen": "2026-08-20T06:38:51.859Z"
+    },
+    "multi-head-attention": {
+      "pL": 0.39,
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null
+    },
+    "positional-encoding": {
+      "pL": 0.39,
+      "observations": 0,
+      "correct": 0,
+      "lastSeen": null
+    },
+    "self-attention": {
+      "pL": 0.05223625810856948,
+      "observations": 1,
+      "correct": 0,
+      "lastSeen": "2026-08-20T06:38:52.292Z"
+    },
+    "attention-weights": {
+      "pL": 0.04470557342611435,
+      "observations": 1,
+      "correct": 0,
+      "lastSeen": "2026-08-20T06:40:21.717Z"
+    },
+    "dot-product": {
+      "pL": 0.041853609340453325,
+      "observations": 1,
+      "correct": 0,
+      "lastSeen": "2026-08-20T06:46:45.816Z"
+    },
+    "softmax": {
+      "pL": 0.6112801359659247,
+      "observations": 1,
+      "correct": 1,
+      "lastSeen": "2026-08-20T06:40:22.085Z"
+    },
+    "query-key-value-projections": {
+      "pL": 0.041853609340453325,
+      "observations": 1,
+      "correct": 0,
+      "lastSeen": "2026-08-20T06:46:46.233Z"
+    },
+    "vector-as-a-list-of-numbers": {
+      "pL": 0.3775979764422301,
+      "observations": 2,
+      "correct": 1,
+      "lastSeen": "2026-08-20T07:13:59.908Z"
+    }
+  },
+  "updatedAt": "2026-08-20T07:13:59.909Z"
 }
