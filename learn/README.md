@@ -14,14 +14,19 @@ learn/
   assets/<id>.svg       diagrams generated during teaching
   state/
     model.json          mastery per concept          (derived)
-    reviews.json        spaced-repetition schedule   (derived)
+    reviews.json        spaced-repetition schedule   (NOT rebuildable)
     events.jsonl        every observation, appended  (SOURCE OF TRUTH)
     index.json          snapshot the web hub reads   (derived)
   map.md                mermaid knowledge map        (derived)
 ```
 
-Only `events.jsonl` and the notes are authoritative. Everything marked
-derived can be rebuilt: `npm run learn -- model --rebuild && npm run learn -- map && npm run learn -- index`.
+Everything marked derived can be rebuilt from `events.jsonl` and the notes:
+`npm run learn -- model --rebuild && npm run learn -- map && npm run learn -- index`.
+
+**`reviews.json` is the exception and is not backed up by anything.** Review
+events are appended to the log, but no command replays them, so deleting the
+file loses every scheduled review permanently. Treat it as authoritative until
+a rebuild path exists.
 
 ---
 
