@@ -67,3 +67,7 @@ q: What does the model itself produce on a tool call, and where does the result 
 a: Structured text naming the tool and its arguments. The harness executes it and appends the result back into context.
 why: Catches the belief that the model executes the function or makes the network call itself.
 ```
+
+## Sessions
+
+- [[2026-08-19-react-agents]] — 2/2 correct (voided: answer always in slot 1)

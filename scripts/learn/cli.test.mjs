@@ -315,3 +315,100 @@ describe("concept edit and assumes", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("review scheduling", () => {
+  it("schedules a probe answer, so a concept you already knew still comes back", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Widgets"]);
+    run(dir, [
+      "observe", "--concept", "widgets", "--correct", "true", "--source", "probe",
+    ]);
+
+    const reviews = JSON.parse(
+      fs.readFileSync(path.join(dir, "learn", "state", "reviews.json"), "utf8"),
+    );
+    expect(reviews.cards.widgets).toBeDefined();
+    expect(reviews.cards.widgets.due).toBeTruthy();
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("can be turned off explicitly", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Widgets"]);
+    run(dir, [
+      "observe", "--concept", "widgets", "--correct", "true",
+      "--source", "probe", "--schedule", "false",
+    ]);
+
+    const reviews = JSON.parse(
+      fs.readFileSync(path.join(dir, "learn", "state", "reviews.json"), "utf8"),
+    );
+    expect(reviews.cards.widgets).toBeUndefined();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("session close links both ways", () => {
+  it("writes a session link into every concept the session touched", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Widgets"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "t"]);
+    run(dir, [
+      "observe", "--concept", "widgets", "--correct", "true",
+      "--source", "probe", "--session", "s1",
+    ]);
+    run(dir, ["session", "close", "--id", "s1"]);
+
+    const note = fs.readFileSync(
+      path.join(dir, "learn", "concepts", "widgets.md"), "utf8",
+    );
+    expect(note).toContain("## Sessions");
+    expect(note).toContain("[[s1]]");
+
+    // and the session still names the concept, so the edge exists both ways
+    const log = fs.readFileSync(path.join(dir, "learn", "sessions", "s1.md"), "utf8");
+    expect(log).toContain("[[widgets]]");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not duplicate the link when a session is closed twice", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Widgets"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "t"]);
+    run(dir, [
+      "observe", "--concept", "widgets", "--correct", "true",
+      "--source", "probe", "--session", "s1",
+    ]);
+    run(dir, ["session", "close", "--id", "s1"]);
+    run(dir, ["session", "close", "--id", "s1"]);
+
+    const note = fs.readFileSync(
+      path.join(dir, "learn", "concepts", "widgets.md"), "utf8",
+    );
+    expect(note.match(/\[\[s1\]\]/g)).toHaveLength(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("warns when a scheduled concept has no checks to ask", () => {
+    const dir = sandbox();
+    run(dir, ["init"]);
+    run(dir, ["concept", "add", "--title", "Widgets"]);
+    run(dir, ["session", "start", "--id", "s1", "--topic", "t"]);
+    run(dir, [
+      "observe", "--concept", "widgets", "--correct", "true",
+      "--source", "probe", "--session", "s1",
+    ]);
+
+    const out = run(dir, ["session", "close", "--id", "s1"]);
+    expect(out).toContain("no checks written");
+    expect(out).toContain("widgets");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

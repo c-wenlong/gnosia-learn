@@ -164,6 +164,26 @@ export function appendCheck(body = "", check) {
   return `${body.replace(/\s+$/, "")}\n\n## Checks\n\n${block}\n`;
 }
 
+/**
+ * Record that a session touched this concept, under a `## Sessions` heading.
+ *
+ * Without this the graph is one-way: a session names the concepts it covered,
+ * but a concept shows no history of when it was studied. Obsidian resolves
+ * `[[note-name]]` across folders, so the bare session id links correctly from
+ * concepts/ to sessions/.
+ */
+export function appendSessionLink(body = "", sessionId, detail = "") {
+  const line = detail ? `- [[${sessionId}]] — ${detail}` : `- [[${sessionId}]]`;
+  if (body.includes(`[[${sessionId}]]`)) return body;
+
+  const heading = /^##\s+Sessions\s*$/m;
+  if (heading.test(body)) {
+    // Insert directly under the heading so the newest sits first.
+    return body.replace(heading, (m) => `${m}\n\n${line}`).replace(/\n{3,}/g, "\n\n");
+  }
+  return `${body.replace(/\s+$/, "")}\n\n## Sessions\n\n${line}\n`;
+}
+
 /** Filesystem- and Obsidian-safe slug. */
 export function slugify(value) {
   return String(value)

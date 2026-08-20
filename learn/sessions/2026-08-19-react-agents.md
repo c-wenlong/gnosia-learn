@@ -119,6 +119,11 @@ type: learning-session
 > tool call changes the model. Option 4 describes a memory system, which is a
 > thing you can build on top, but not what happens by default.
 
+## Concepts covered
+
+- [[react-loop]]
+- [[tool-calling]]
+
 ## What happened
 
 Five probe questions answered, five correct. Nothing was taught: the probe found
