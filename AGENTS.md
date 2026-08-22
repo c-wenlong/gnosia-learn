@@ -12,10 +12,11 @@ two on purpose:
 
 | Layer | Where | What |
 | --- | --- | --- |
-| Instructions | `learning` plugin, `references` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
+| Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code and data | this repo | The `learn` CLI in `scripts/learn/`, the knowledge base in `learn/`, the web view at `src/app/learn/` |
 
-The plugin lives at `~/.quiver/plugins/references/learning` and is installed
+The plugin lives at `~/.quiver/plugins/learning/learning` (marketplace, then
+plugin) and is installed
 globally, so `/learn` and `/review` are available in every project. They open by
 running `npm run learn -- status` and stop if it fails, since without the CLI
 nothing gets measured or written down.

@@ -407,8 +407,9 @@ The skill orients itself, builds the concept graph if the topic is new
 ### The Claude Code layer
 
 The instruction layer is **not in this repo**. It lives in the `learning`
-plugin under the `references` marketplace, at
-`~/.quiver/plugins/references/learning`, so `/learn` and `/review` work from
+plugin under the `learning` marketplace, at
+`~/.quiver/plugins/learning/learning` (marketplace, then plugin), so `/learn`
+and `/review` work from
 any project:
 
 | File in the plugin | Role |
@@ -427,6 +428,13 @@ records nothing.
 
 Do not copy these back into `.claude/`. A local copy would shadow the plugin
 and the two would drift.
+
+Plugins run from a cache copy rather than from the marketplace source, so after
+editing the plugin push the change through:
+
+```bash
+claude plugin update learning@learning
+```
 
 The interactive phases run in the **main conversation**, not in a subagent,
 because asking the user a question mid-turn requires a tool subagents do not
