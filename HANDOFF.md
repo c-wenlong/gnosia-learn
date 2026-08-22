@@ -19,7 +19,7 @@ restarting. Commit `f8425d4`.
 **The learning pipeline.** A Probe → Plan → Teach → Close loop that runs inside
 Claude Code against a local, file-backed knowledge base. Driven by a
 dependency-free Node CLI in [scripts/learn](scripts/learn), orchestrated by
-[.claude/skills/learn](.claude/skills/learn/SKILL.md), surfaced in the web app
+the `learning` plugin in the `references` marketplace, surfaced in the web app
 at `/learn`. Commit `c057673` and everything after it.
 
 ```bash

@@ -406,13 +406,27 @@ The skill orients itself, builds the concept graph if the topic is new
 
 ### The Claude Code layer
 
-| File | Role |
+The instruction layer is **not in this repo**. It lives in the `learning`
+plugin under the `references` marketplace, at
+`~/.quiver/plugins/references/learning`, so `/learn` and `/review` work from
+any project:
+
+| File in the plugin | Role |
 | --- | --- |
-| `.claude/skills/learn/SKILL.md` | The orchestrator — runs all four phases |
-| `.claude/skills/review/SKILL.md` | Spaced-repetition session |
-| `.claude/agents/concept-mapper.md` | Goal → concept DAG |
-| `.claude/agents/fact-checker.md` | Verify claims before teaching |
-| `.claude/agents/diagram-maker.md` | SVG that checks its own output |
+| `skills/learn/SKILL.md` | The orchestrator — runs all four phases |
+| `skills/review/SKILL.md` | Spaced-repetition session |
+| `agents/concept-mapper.md` | Goal → concept DAG |
+| `agents/fact-checker.md` | Verify claims before teaching |
+| `agents/diagram-maker.md` | SVG that checks its own output |
+
+The split is deliberate. The instructions are portable and belong to you; the
+CLI and the knowledge base belong to the project. Both skills open by running
+`npm run learn -- status` and stop if it fails, so invoking `/learn` in a
+project without the pipeline says so rather than improvising a session that
+records nothing.
+
+Do not copy these back into `.claude/`. A local copy would shadow the plugin
+and the two would drift.
 
 The interactive phases run in the **main conversation**, not in a subagent,
 because asking the user a question mid-turn requires a tool subagents do not
