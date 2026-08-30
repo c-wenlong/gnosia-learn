@@ -26,3 +26,27 @@ would shadow the plugin and the two would drift apart. Edit the plugin instead.
 
 Architecture, primitives and the honest list of known limits are in
 [learn/README.md](learn/README.md).
+
+## Asset generation: manimkc/
+
+`manimkc/` is a git **submodule** (its own repo,
+github.com/c-wenlong/manimkc) that renders narrated animation videos with
+manim: ManimGL as the primary flavour, a Manim Community port alongside it,
+and a TTS narration layer synced to the animations. It exists so the
+tutoring loop can produce assets beyond text and SVG when a concept has
+moving parts.
+
+Rules of engagement:
+
+- **Read `manimkc/AGENTS.md` before working in there.** It covers the GL vs
+  Community split, the no-LaTeX constraint, the shared scene library, the
+  narration cache and quota, and the render-then-look verification loop.
+  None of that is guessable from this repo.
+- **Commits inside `manimkc/` belong to that repo.** Commit and push there
+  first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
+  `git submodule update --init --recursive` (manim is a nested submodule)
+  plus the venv setup in its AGENTS.md before anything renders.
+- Rendered videos and the TTS cache are gitignored on both sides; deliverables
+  live in `manimkc/out/final/` locally.

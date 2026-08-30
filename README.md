@@ -1,6 +1,6 @@
 # Self-Learn · AY2026/27 Course Shortlist
 
-A personal learning workspace with two halves that feed each other:
+A personal learning workspace with three parts that feed each other:
 
 1. **The roadmap** — a docs-style hub over the NUS SoC AY2026/27 course
    shortlist. Track topic progress, attach notes and resources, launch
@@ -8,10 +8,15 @@ A personal learning workspace with two halves that feed each other:
 2. **The learning pipeline** — a local, file-backed tutoring loop that runs
    inside Claude Code. It measures what you know, plans a path from there,
    teaches one step at a time, and schedules what you will forget.
+3. **Asset generation** — tools that turn a concept into something richer
+   than text when text is not enough. First one in: `manimkc/`, a submodule
+   that renders narrated animation videos (Manim + TTS) from lecture
+   material.
 
 The roadmap says what is worth learning. The pipeline is how you actually
 learn it, and what you learn flows back into a knowledge base the hub
-renders. **[Full pipeline architecture →](learn/README.md)**
+renders. Asset generation is how a hard concept gets a form you can watch
+instead of reread. **[Full pipeline architecture →](learn/README.md)**
 
 ```
 /learn <anything>     in Claude Code — probe, plan, teach, close
@@ -118,6 +123,33 @@ npm run learn -- doctor      # validate the concept graph
 npm run learn -- help        # the full primitive surface
 ```
 
+## Asset generation (manimkc)
+
+The pipeline's diagrams and notes are text and SVG. Some concepts, the ones
+with moving parts, land better as a narrated video you can watch: a value
+travelling down a pipeline, a broadcast waking two waiting instructions.
+[`manimkc/`](https://github.com/c-wenlong/manimkc) is a git submodule that
+does exactly that.
+
+What it holds:
+
+- Programmatic animation via **ManimGL** (vendored as its own pinned
+  submodule) with a parallel **Manim Community** port for comparison.
+- A **narration layer**: a `voiceover()` context manager that syncs TTS
+  (ElevenLabs via Composio, or the offline macOS voice) to the animation,
+  with clip caching so re-renders cost no API quota.
+- A worked proof of the idea: a full CS4223 lecture (superscalar processors,
+  Tomasulo's algorithm) rendered as six silent topic videos plus two
+  narrated cuts.
+
+It is the first asset generator here, not the last. The intent is a family
+of tools the tutoring loop can reach for, so that "teach me X" can end in
+whatever form X actually needs: a diagram, a video with a voice over it, or
+something not built yet.
+
+The submodule is its own repo with its own venvs and build system; see
+[`manimkc/AGENTS.md`](manimkc/AGENTS.md) for how to render there.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
@@ -129,10 +161,15 @@ npm run learn -- help        # the full primitive surface
 ## Local development
 
 ```bash
+git clone --recursive https://github.com/c-wenlong/self-learn   # pulls manimkc too
 npm install
 cp .env.example .env.local   # set free provider keys for live agent chat
 npm run dev
 ```
+
+Already cloned without `--recursive`? Run `git submodule update --init` to
+fetch `manimkc/` (manim itself is a nested submodule; add `--recursive` to
+pull it as well).
 
 Open [http://localhost:3000](http://localhost:3000).
 
@@ -198,6 +235,7 @@ scripts/learn/            # The learning pipeline (plain Node ESM, no deps)
   agents/                 # concept-mapper · fact-checker · diagram-maker
 
 learn/                    # The knowledge base itself (see learn/README.md)
+manimkc/                  # Asset generation submodule: narrated manim videos
 ```
 
 ## Launch Agent (micro-learning)
