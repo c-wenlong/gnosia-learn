@@ -15,9 +15,10 @@ two on purpose:
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code and data | this repo | The `learn` CLI in `scripts/learn/`, the knowledge base in `learn/`, the web view at `src/app/learn/` |
 
-The plugin lives at `~/.quiver/plugins/learning/learning` (marketplace, then
-plugin) and is installed
-globally, so `/learn` and `/review` are available in every project. They open by
+The `/learn` and `/review` skills are not in this repo. They live in the
+`learning` plugin under the `learning` marketplace, at
+`~/.quiver/plugins/learning/learning` (marketplace, then plugin), installed
+globally, so they are available in every project. They open by
 running `npm run learn -- status` and stop if it fails, since without the CLI
 nothing gets measured or written down.
 
