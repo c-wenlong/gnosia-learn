@@ -271,3 +271,148 @@ should show the reader what it draws, and a README image has to live in the
 repo to render on GitHub. That is one file with a reason, not a loosening of
 D8: the working PNGs an agent makes while iterating are still scratch, and
 `out/`, `scratch/` and `*.local.png` are gitignored so they stay that way.
+
+## D22. A mermaid back edge is an arc on the outside face, not an elbow
+
+**Verdict:** `applyPlan` detects an edge whose target sits at an earlier rank
+and draws it as an `arc`, anchored on the same outside face of both shapes,
+with a bend that clears the widest shape on that side.
+
+**Why:** tldraw's elbow router only knows its two endpoints. A `look --> cli`
+back edge in a top-down flowchart routed straight up the middle of the diagram
+and through six boxes, which reads as a line pointing at nothing. Looping it
+out to one side is the only routing available without a real path finder, and
+the sign of the bend has to be computed as a dot product against the side you
+want, because a positive bend pushes the apex a quarter turn anticlockwise
+from the direction of travel.
+
+## D23. A repeat edge between the same pair gets `#n` and its own lane
+
+**Verdict:** when the importer meets the same pair a second time it passes
+`opts.id` as `arrow:<from>-><to>#2`, `#3` and so on, and offsets that repeat's
+`mid` by 0.15 per repeat.
+
+**Why:** D13 derives an arrow's id from the pair, which is what makes `connect`
+re-runnable, and says a second arrow between the same pair passes `opts.id`.
+This is what passes it. `connect` itself still has no automatic repeat
+handling, deliberately: an automatic suffix would make a re-run stack a new
+arrow every time, which is the behaviour D13 exists to prevent. The `mid`
+offset is what stops two repeats from landing on the same path and reading as
+one arrow.
+
+## D24. A labelled container gets 24 page units of headroom
+
+**Verdict:** `boxShapes` adds `CONTAINER_LABEL_HEADROOM`, 24 units, above the
+members when the container has a label, and nothing when it does not.
+
+**Why:** a container is a geo rectangle sent to back, and tldraw paints its
+label inside the top of that rectangle. With only the margin, the label lands
+on the topmost member, which is exactly the overlap the lint pass exists to
+catch, from the helper that is supposed to tidy a group up.
+
+## D25. `applyPlan` respaces the ranks after the shapes exist
+
+**Verdict:** shapes are created from the parser's positions, then a
+`respaceRanks` pass reads the real page bounds and reflows the bands and slots.
+
+**Why:** the parser sizes a box by counting characters, in node, with no text
+measurer. The real height only exists once tldraw has laid the label out and
+applied `growY`, and `getShapePageBounds` on a three-line label reported 122
+against a declared 64. Spacing computed before that is spacing computed against
+the wrong numbers, so the pass has to run after creation rather than instead of
+it.
+
+## D26. Mermaid's `id(text)` maps to geo `oval`
+
+**Verdict:** the parser records `rounded: true` on a plan node and `applyPlan`
+turns it into `oval`. `id(text)` and `id([text])` therefore render identically.
+
+**Why:** `GeoShapeGeoStyle` in tldraw 5 is a fixed enum with no rounded
+rectangle, and `TLGeoShapeProps` carries nothing to round a corner with. The
+capsule is the nearest silhouette tldraw owns and the only one that reads as
+"not a plain box". Keeping the hint in the plan rather than resolving it in the
+parser leaves the door open if tldraw ever grows the shape.
+
+## D27. SVG labels are `<foreignObject>` HTML, and that is accepted
+
+**Verdict:** exported SVGs carry their labels as HTML inside
+`<foreignObject>`, with no `<text>` or `<tspan>` anywhere. No post-processing
+converts them.
+
+**Why:** it is `getSvgString`'s own output, not a choice here, and the
+alternative is re-implementing tldraw's text layout in a post-pass that would
+drift from what the canvas shows. The cost is real and worth naming: a
+rasteriser without foreignObject support (librsvg, ImageMagick, older
+Inkscape) drops every label from a committed SVG. Every consumer this repo has
+is a browser, so the cost is not being paid today.
+
+## D28. `from-mermaid` probes for `helpers.mermaid` and exits 1 on a stale bundle
+
+**Verdict:** before it draws, the command runs a one-line snippet asking
+whether `helpers.mermaid` is a function, and raises an `EnvironmentError`
+naming the rebuild when it is not.
+
+**Why:** the bridge's capability check sees the bridge, and the helpers bag is
+one level below it, so a page bundle built before phase 2 answers every check
+and then fails inside the snippet as `helpers.mermaid is not a function` with
+exit 2. Exit 2 means the diagram threw, which sends the reader to the
+flowchart. This is an environment problem and carries the environment's code.
+
+## D29. The flowchart is JSON-encoded into the snippet
+
+**Verdict:** `from-mermaid` embeds the source as a JSON string literal and
+parses it back at runtime, rather than concatenating it into the program text.
+
+**Why:** a diagram is arbitrary text. One backtick, quote or backslash in a
+node label would end the literal and run the rest of the file as code, in a
+snippet that already has the full `editor` in scope. The encoding costs one
+`JSON.parse` and removes the class entirely.
+
+## D30. `api` extraction is scoped to `helpers/index.ts`
+
+**Verdict:** the reference is generated from exactly one file,
+`src/page/helpers/index.ts`, and from doc blocks sitting directly above a
+named function or an interface method and carrying an `@example`.
+
+**Why:** that file is where the bag is assembled, so scoping to it means the
+reference is the bag and cannot advertise a helper a snippet could not call.
+The three conditions are what keep it honest in the other direction: a block
+separated by a blank line documents the file or the section, and an entry with
+no example is not a line an agent can copy.
+
+## D31. Containers are built innermost first
+
+**Verdict:** `applyPlan` sorts the subgraphs by depth and creates the deepest
+ones first.
+
+**Why:** a container is sized to the page bounds of its members, and an outer
+subgraph's members include the inner containers. Building outermost first
+sizes the outer box against shapes that do not exist yet, and an outer block
+whose children are all subgraphs has no direct members at all, so it would get
+no container. Depth order is what makes nesting come out right without a
+second pass.
+
+## D32. Every verb refuses an export aimed at its own document
+
+**Verdict:** `run`, `shot`, `export` and `from-mermaid` all check each export
+target against the `.tldr` they were given and raise a `UsageError` when they
+match.
+
+**Why:** every write is atomic, so `run map.tldr --svg map.tldr` renames an
+SVG over the document and the drawing is gone with no error anywhere. It is a
+plausible typo, the loss is total, and the check is one path comparison per
+target. A shared guard rather than a check per verb, for the same reason
+`withCanvas` is shared: a rule each verb has to remember is a rule the fifth
+verb breaks.
+
+## D33. The CLI prints a snippet's stack unadjusted
+
+**Verdict:** the two-line `AsyncFunction` header offset stays in the stack the
+CLI prints. [CLI.md](CLI.md) and [ARCHITECTURE.md](ARCHITECTURE.md) tell the
+reader to subtract 2.
+
+**Why:** the offset is measured and constant, so documenting it is honest and
+cheap. Rewriting the stack means parsing V8's format, which differs by shape
+of frame and by Node version, and a rewriter that gets one frame wrong is
+worse than an offset that is written down. Adjusting it is a follow-up worth
+doing once something else needs to parse that stack.
