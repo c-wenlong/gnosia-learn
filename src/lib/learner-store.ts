@@ -1,0 +1,118 @@
+import { connection } from "next/server";
+import {
+  EMPTY_KNOWLEDGE_BASE,
+  readKnowledgeBase,
+  readLearnerSnapshot,
+  StateError,
+  type CatalogDatabase,
+  type KnowledgeBase,
+} from "@self-learn/catalog/state";
+import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
+
+/**
+ * The web app's door to the learner state store.
+ *
+ * **Server only.** Never import this from a `"use client"` module: it holds a
+ * Postgres pool. Components get the state through `LearnerProvider`, which a
+ * server component seeds from here, and change it through `/api/learner/*`.
+ *
+ * Three rules shape this file.
+ *
+ * **Nothing here runs at build time.** Every entry point calls `connection()`
+ * first, which tells Next this work belongs to a request. Vercel has no
+ * database yet, so a build that queried one would fail on every deploy —
+ * and a page that baked its answer in at build time would show a study session
+ * from whenever the last deploy happened, which is the bug `learn/state/
+ * index.json` had.
+ *
+ * **An unreachable database is a state, not a crash.** Reads degrade to empty
+ * and say so, exactly as `loadKnowledgeBase` already did for a missing
+ * snapshot file. The `reachable` flag travels with the data so the UI can tell
+ * "nothing recorded yet" from "could not ask".
+ *
+ * **Writes never degrade.** A mutation that cannot reach the database has to
+ * fail loudly and visibly. Swallowing it would leave the learner looking at an
+ * optimistic tick that no longer exists after a reload, which is worse than an
+ * error.
+ */
+
+/**
+ * One pool for the process, opened on first use.
+ *
+ * Next reuses the module across requests, so this is per server instance
+ * rather than per render. `max: 4` because page renders are concurrent and a
+ * single socket would serialise them; small because the app is one learner and
+ * a serverless platform multiplies instances, not queries.
+ */
+let pool: { db: CatalogDatabase; close: () => Promise<void> } | null = null;
+
+async function database(): Promise<CatalogDatabase> {
+  if (pool === null) {
+    // Imported lazily so the pool is never constructed during a build, even if
+    // something imports this module for its types.
+    const { connect } = await import("@self-learn/catalog/state");
+    const created = connect({ max: 4, connectionTimeoutMillis: 3_000 });
+    // An idle client that the server drops emits on the pool, and an
+    // unhandled 'error' event takes the whole process down. A dropped
+    // connection is normal operation for a database behind a proxy.
+    created.pool.on("error", (error: Error) => {
+      console.warn(`learner store: idle connection dropped — ${error.message}`);
+    });
+    pool = created;
+  }
+  return pool.db;
+}
+
+export interface Snapshot {
+  state: LearnerState;
+  /** False when the database could not be reached; `state` is then empty. */
+  reachable: boolean;
+}
+
+/** The learner's whole state, or an empty one when the database is down. */
+export async function loadLearnerSnapshot(): Promise<Snapshot> {
+  await connection();
+  try {
+    return { state: await readLearnerSnapshot(await database()), reachable: true };
+  } catch (error) {
+    warn("learner snapshot", error);
+    return { state: emptyLearnerState(), reachable: false };
+  }
+}
+
+export interface KnowledgeBaseSnapshot {
+  kb: KnowledgeBase;
+  reachable: boolean;
+}
+
+/** The concept graph with mastery and schedule, or an empty one. */
+export async function loadKnowledgeBase(): Promise<KnowledgeBaseSnapshot> {
+  await connection();
+  try {
+    return { kb: await readKnowledgeBase(await database()), reachable: true };
+  } catch (error) {
+    warn("knowledge base", error);
+    return { kb: EMPTY_KNOWLEDGE_BASE, reachable: false };
+  }
+}
+
+/**
+ * Run a write against the store. Unlike the reads, this throws: a mutation
+ * that could not be recorded must reach the caller so the UI can say so.
+ */
+export async function withLearnerStore<T>(
+  fn: (db: CatalogDatabase) => Promise<T>,
+): Promise<T> {
+  await connection();
+  return fn(await database());
+}
+
+/** True when the error is the data's fault rather than the database's. */
+export function isBadRequest(error: unknown): boolean {
+  return error instanceof StateError;
+}
+
+function warn(what: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`learner store: ${what} unavailable — ${message}`);
+}

@@ -16,7 +16,7 @@ export default function HomePage() {
         <p className="max-w-2xl text-base text-[var(--muted-strong)]">
           A docs-style study hub for the course shortlist. Track topic progress,
           jot per-topic notes, keep resource links, and jump between related
-          courses. Everything stays in this browser (localStorage).
+          courses. Progress, notes and recaps are stored in your own catalog.
         </p>
       </header>
 
