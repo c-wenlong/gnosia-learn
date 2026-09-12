@@ -1,0 +1,97 @@
+# Contributing to self-learn
+
+Thanks for your interest in contributing! self-learn is a Next.js study hub
+with a file-backed tutoring pipeline beside it. Both halves are meant to stay
+readable: plain files, no hidden state.
+
+## Getting started
+
+```bash
+git clone --recursive https://github.com/c-wenlong/self-learn.git
+cd self-learn
+npm ci
+cp .env.example .env.local
+npm run dev
+npm test
+```
+
+`.env.local` matters only for the agent chat, which needs at least one
+provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
+With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
+of the app works.
+
+> **Clone with `--recursive`.** `manimkc/` is a git submodule, and manim is a
+> submodule inside that. An existing clone catches up with
+> `git submodule update --init --recursive`. Without it the directory is empty,
+> and so is the `AGENTS.md` in it that explains the ManimGL versus Manim
+> Community split, the no-LaTeX constraint and the render loop.
+
+## Project layout
+
+| Directory | Role |
+| --- | --- |
+| `src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
+| `src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
+| `src/lib/` | `storage.ts` (localStorage), `learner-context.tsx`, `progress.ts`, `agent/` (prompts and providers), `kb/` (reads the pipeline snapshot) |
+| `src/data/courses/` | The curriculum: one file per course, lookups in `index.ts` |
+| `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
+| `learn/` | The knowledge base: `concepts/<domain>/`, `sessions/`, `state/`, `assets/` |
+| `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
+| `docs/`, `public/` | Long-form notes, and static assets including the social card |
+
+## What to contribute
+
+Course data under `src/data/courses/`, new verbs or flags in
+`scripts/learn/cli.mjs`, UI that makes progress and recaps easier to read, and
+bug fixes or docs. All welcome.
+
+## Guidelines
+
+1. **Justify any new runtime dependency in the PR body.** The `learn` CLI has
+   none, and the web app's four (`next`, `react`, `react-dom`,
+   `@tailwindcss/typography`) are the whole list.
+2. **`npm run build` has to pass, not just `npm run typecheck`.**
+   `next-env.d.ts` imports `./.next/types/routes.d.ts`, which only `next dev`
+   or `next build` generates, so route types are checked properly only once a
+   build has run.
+3. **The knowledge base under `learn/` is a real study record.** Its state
+   files are versioned on purpose; only `learn/state/*.tmp` is ignored. A code
+   PR should not carry changes to `learn/state/` or `learn/sessions/` unless
+   the knowledge base is what the PR is about.
+4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
+   `.env.example`. Provider keys are server-side only.
+5. **Never commit a dirty `manimkc/` pointer.** Commit and push inside the
+   submodule first, then commit the updated pointer here.
+6. **Do not copy the `/learn` and `/review` skills into `.claude/`.** They live
+   in the `learning` plugin, installed globally, so they work in every project.
+   A local copy would shadow the plugin and the two would drift apart.
+7. **Re-verify any doc that states a count or a path** when you change what it
+   describes. Several docs quote concept counts, course counts and layouts.
+8. **Add tests** for logic in `src/lib/`, `src/data/` or `scripts/learn/lib/`.
+   Components and pages are checked by the build and by looking at the app.
+9. **One concern per PR.** Easier to review and merge.
+
+## Pull request process
+
+1. Create a feature branch from `main`. Never commit to `main` directly.
+2. Run the full gate locally:
+   `npm run lint && npm run typecheck && npm test && npm run build`.
+3. Open a PR against `main` saying what changed and why.
+4. Wait for CI and for the Greptile review bot. Fix every CI failure and every
+   valid review comment; reply on the threads you disagree with rather than
+   leaving them open.
+5. Squash merge once CI is green and every review thread is resolved.
+
+## Reporting bugs
+
+Use the [bug report template](https://github.com/c-wenlong/self-learn/issues/new?template=bug_report.yml)
+and include your OS, Node version, browser and whether it was the live site or
+`npm run dev`; the exact command or route that failed with its full output; and
+steps to reproduce.
+
+## Questions?
+
+Read [README.md](README.md) for the tour, [ARCHITECTURE.md](ARCHITECTURE.md)
+for how the layers fit together, and [learn/README.md](learn/README.md) for the
+tutoring loop. Discussions are not enabled on this repo, so an
+[issue](https://github.com/c-wenlong/self-learn/issues) is the only channel.

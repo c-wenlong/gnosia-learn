@@ -1,0 +1,74 @@
+name: Bug report
+description: Report something that isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as you can.
+
+        Learner progress (checkboxes, notes, recaps) lives in your browser's
+        localStorage under `self-learn:v1`, so a bug that only reproduces for
+        you may depend on what is stored there.
+
+  - type: input
+    id: command
+    attributes:
+      label: Failing command or route
+      description: The exact command you ran or the page you were on.
+      placeholder: npm run learn -- status  /  /courses/cs2111
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: I opened /courses/cs2111 and …
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands, clicks and inputs that trigger the issue.
+      placeholder: |
+        1. Run `npm run dev`
+        2. Open `/courses/cs2111/foundations`
+        3. Tick a topic
+        4. See error …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version (`node --version`), browser, and whether this is the live site or a local `npm run dev`.
+      placeholder: macOS 15.6 / Node 22.14 / Chrome 140 / local dev
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / logs
+      description: Terminal output, browser console, or the network response. Redact any API keys or tokens before pasting.
+      render: shell
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`npm run learn -- doctor` output"
+      description: Optional, and only relevant to the learning pipeline. It validates the concept graph (cycles, dangling edges, orphans).
+      render: shell

@@ -1,6 +1,10 @@
 # Architecture of the AI Learning System
 
-Source: ["How could we use AI to learn better?"](https://www.youtube.com/watch?v=kzcI5F4tGiU)
+Source: Eero Alvar, ["How I Use AI to Learn Things"](https://www.youtube.com/watch?v=kzcI5F4tGiU)
+
+These are notes on the three-phase system described in that video. This repo
+implements a four-phase loop (Probe → Plan → Teach → Close), documented in
+[learn/README.md](../learn/README.md).
 
 ## 1. The diagnosis — why standard learning is lossy
 
