@@ -64,10 +64,12 @@ them instead of the first.
 ## Rules worth keeping
 
 **Topic ids are permanent.** Every learner's progress, notes and recaps are
-keyed by topic id in browser `localStorage`, which nothing migrates for you.
-Renaming `cs2111-m1-t1` silently orphans whatever that topic had recorded
-against it. Keep the `<course>-m<N>-t<N>` shape, and add new topics at the end
-of a module rather than renumbering.
+rows keyed by topic id in `progress` and `recap`, and nothing migrates them for
+you. Renaming `cs2111-m1-t1` does not orphan those rows quietly — it deletes
+them: `curriculum_item` is the parent of both tables with `ON DELETE CASCADE`,
+so the next `catalog index` prunes the old id and the tick and the recap go
+with it. Keep the `<course>-m<N>-t<N>` shape, and add new topics at the end of
+a module rather than renumbering.
 
 The same applies to concept links. A topic id also appears in the `topics:`
 frontmatter of concept notes under `learn/concepts/`, which is how the

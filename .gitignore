@@ -41,8 +41,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# learning pipeline: scratch state that shouldn't be shared
-learn/state/*.tmp
+# learning pipeline: `learn/state/` is gone. model.json, reviews.json,
+# events.jsonl and index.json are the mastery, review and event tables plus a
+# query; `npm run catalog -- backfill` moved them and verified the move.
+# Nothing writes the directory any more, and an entry pretending otherwise
+# would only suggest something still does.
 
 # Obsidian vault state (per-machine editor config)
 .obsidian/

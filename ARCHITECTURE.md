@@ -1,9 +1,11 @@
 # Architecture
 
 self-learn is two programs and a knowledge base sharing one repository. A
-Next.js app renders course roadmaps and progress in the browser; a Node CLI
-runs a Probe → Plan → Teach → Close tutoring loop over plain files on disk.
-They meet at exactly one file, and neither imports the other.
+Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan →
+Teach → Close tutoring loop over concept notes on disk. They used to meet at
+exactly one file and import nothing from each other. They now meet at one
+database — the learner state half of the catalog — and both reach it through
+the same store, which is the only module that writes it.
 
 ## The shape
 
@@ -16,10 +18,14 @@ Three layers plus two submodules. One layer is not in this repo at all.
          │                   │            │                │          │           │
          │  npm run learn    │            │                │          │           │
          └──────────────► scripts/learn  learn/           src/    manimkc/   tldrawkc/
-                          the CLI     the knowledge   the web app  submodule  submodule
-                              │           base             │           │           │
+                          the CLI     the notes and   the web app  submodule  submodule
+                              │        the sessions       │           │           │
                               └──writes───►  ◄────reads────┘           └─writes────┘
                                           learn/assets/
+                              │                            │
+                              └────► services/catalog ◄────┘
+                                     the catalog: content indexed from files,
+                                     learner state that lives only here
 ```
 
 | Layer | Where | What |
@@ -45,9 +51,9 @@ there is none.
 | --- | --- |
 | `src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `src/lib/` | `storage.ts`, `learner-context.tsx`, `progress.ts`, `curriculum.ts`, `types.ts` |
+| `src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
-| `src/lib/kb/` | `load.ts` and `types.ts`: the only place that reads `learn/` |
+| `src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
 | `src/data/content.ts` | Server-only view of `content/tags.yaml`: the cross-course themes |
 
@@ -61,35 +67,49 @@ tsconfigs.
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `content/` | Authored data: the topic vocabulary, the theme tags and the course YAML |
 
-`scripts/learn/` is the pipeline. Plain ESM, no build step, no runtime
-dependencies, so `node scripts/learn/cli.mjs` works on a clone with nothing
-installed.
+`scripts/learn/` is what is left of the pipeline once its state moved into
+Postgres: the maths, and the published entry point.
 
 | Module | Owns |
 | --- | --- |
-| `cli.mjs` | Dispatch and presentation for all 17 commands (`init`, `status`, `concept`, `check`, `probe`, `observe`, `frontier`, `plan`, `teach`, `review`, `session`, `void`, `model`, `map`, `index`, `doctor`, `help`) |
-| `lib/paths.mjs` | Every path under `learn/`; the single source of layout truth |
-| `lib/store.mjs` | Reading and writing state and concept notes, atomically (temp file plus rename) |
+| `cli.mjs` | A shim. Spawns `services/catalog/src/learn/cli.ts`, which is the command. It stays because `npm run learn` and the two skills name this path. |
 | `lib/bkt.mjs` | Bayesian Knowledge Tracing: the belief update, information gain, propagation |
 | `lib/graph.mjs` | The concept DAG: topological sort, cycles, ancestors, frontier, plan path |
 | `lib/schedule.mjs` | SM-2 spaced repetition |
 | `lib/markdown.mjs` | Frontmatter, wikilinks and `check` blocks, hand-rolled so no YAML parser is needed |
-| `lib/render.mjs` | The mermaid map and the JSON index the web app reads |
+| `lib/render.mjs` | The mermaid map, and `buildIndex` for `learn index --json` |
 | `lib/session-log.mjs` | Obsidian callout rendering for the live session log |
 
-`paths.mjs` is the bottom of this stack: it imports nothing from the project.
-`store.mjs` imports `paths`, `markdown` and `bkt`; `graph` imports `bkt`;
-`render` imports `bkt` and `graph`. `cli.mjs` is the only module that prints.
+These are pure: data in, data out, no filesystem and no connection. They keep
+their own conformance tests and are imported by the TypeScript CLI rather than
+rewritten, because a second implementation of a Bayesian update is a second
+thing to keep correct. `graph` imports `bkt`; `render` imports `bkt` and
+`graph`; nothing else imports anything.
+
+`lib/paths.mjs` and `lib/store.mjs` are gone. The file half of `store.mjs` is
+`services/catalog/src/learn/files.ts`, its state half is
+`services/catalog/src/state/`, and `paths.mjs` is
+`services/catalog/src/learn/paths.ts` with the four state-file constants
+removed.
+
+| Module | Owns |
+| --- | --- |
+| `services/catalog/src/learn/cli.ts` | Dispatch and presentation for all 17 commands (`init`, `status`, `concept`, `check`, `probe`, `observe`, `frontier`, `plan`, `teach`, `review`, `session`, `void`, `model`, `map`, `index`, `doctor`, `help`) |
+| `services/catalog/src/learn/files.ts` | Concept notes and session logs: the scanning rules that make an id a filename |
+| `services/catalog/src/learn/paths.ts` | Every path under `learn/`, and the `LEARN_ROOT` override the tests use |
+| `services/catalog/src/learn/replay.ts` | Rebuilding the schedule from the event log |
 
 `packages/` and `services/` are npm workspaces, added for the catalog. `src/`
-imports `packages/content` and nothing else from them: the web app is a reader
-of the same content files, not a client of the database.
+imports `packages/content` for the course files and
+`services/catalog/src/state/` for the learner state, and nothing else from
+either: it is a reader of the content files and a client of the state store,
+never of the database directly.
 
 | Workspace | Owns |
 | --- | --- |
 | `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types. Reads files, connects to nothing. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
-| `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), and `cli.ts` |
+| `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
 
 `packages/schema` and `packages/content` are the bottom of that stack: one
 imports `drizzle-orm`, the other `yaml`, and neither imports anything else of
@@ -118,18 +138,53 @@ module pair, so the shell is prerendered and only the chat is live.
 
 ## Learner state
 
-Everything the learner does in the browser lives in one localStorage entry:
-key `self-learn:v1`, schema version 2 (`CURRENT_STATE_VERSION` in
-`src/lib/types.ts`). Nothing is sent to a server and there is no account.
+The learner's ticks, notes, recaps and preferences are rows in Postgres, and
+`services/catalog/src/state/` is the only module that writes them. There is
+still no account: one `learner` row, id `local`, created on first use.
 
-`src/lib/storage.ts` owns the whole shape. Every mutation is a pure function
-from state to state (`toggleTopic`, `setNote`, `recordKnowledge`,
-`resetCourseProgress`, ...), which is what makes the module unit-testable
-without a DOM. `migrateState` brings any older persisted shape forward; v1 to
-v2 was purely additive (it added `knowledge`), so old progress survives.
+```
+  server component ──► loadLearnerSnapshot() ──► readLearnerSnapshot() ──► progress
+        │                (src/lib/learner-store.ts)   (the store)          recap
+        │  initialState                                                    preference
+        ▼
+  LearnerProvider ──► optimistic reducer ──► POST /api/learner/* ──► the store
+   (client)            (src/lib/storage.ts)
+```
 
-Recaps are the part that can grow without bound, so they are clamped on the
-way in by `KNOWLEDGE_LIMITS`:
+The root layout reads the snapshot and hands it to `LearnerProvider` as
+`initialState`, which is why every page is dynamic: a provider seeded with
+zeros and corrected after hydration is a progress bar that visibly jumps.
+Nothing reads the database at build time — every read calls `connection()`
+first — so `npm run build` succeeds with no database at all, which Vercel needs
+until the cloud one exists.
+
+`src/lib/storage.ts` still owns the pure reducers (`toggleTopic`, `setNote`,
+`recordKnowledge`, `resetCourseProgress`, ...). They are the optimistic half of
+every mutation: the reducer runs at the call site so a checkbox ticks
+immediately, and its output is also what the request body is built from, so
+what the UI shows and what the server is told cannot disagree. `loadState`,
+`saveState` and `migrateState` are gone with localStorage.
+
+| Route | Writes |
+| --- | --- |
+| `POST /api/learner/progress` | A tick, on or off |
+| `POST /api/learner/note` | The scratch note on one curriculum item |
+| `POST /api/learner/reset` | Clears a course's ticks and notes, bumps the epoch |
+| `POST /api/learner/recap` | Writes, replaces or clears one recap |
+| `POST /api/learner/preference` | Theme, last visited, the learner's own links |
+| `POST /api/learner/import` | The one-time carry-over of a browser's old document |
+
+Every one of them is `handler()` from `src/lib/learner-api.ts`: same-origin
+through the existing `agent/guard.ts` helpers, a rate limit, a bounded body,
+and validation. `/api/learner/preference` writes an allow-list of keys rather
+than any key, because an unauthenticated open jsonb store is not something
+"the learner owns their own row" excuses.
+
+Recaps are clamped by `KNOWLEDGE_LIMITS`, twice and from one definition in
+`@self-learn/schema/shared`: as CHECK constraints, so nothing can put an
+unbounded summary in the column whatever wrote it, and in application code, so
+a long recap is trimmed and saved rather than refused with a 23514 the learner
+reads as "save failed".
 
 | Limit | Value | Applies to |
 | --- | --- | --- |
@@ -137,18 +192,22 @@ way in by `KNOWLEDGE_LIMITS`:
 | `listItems` | 8 | Key points, misconceptions, open questions |
 | `itemChars` | 300 | Each item in those lists |
 
-`saveState` returns a result rather than throwing, because a full quota is a
-real failure mode the UI has to surface. `src/lib/learner-context.tsx` wraps
-all of this in a `useSyncExternalStore` subscription: one module-level
-snapshot, a listener set, and a `LearnerProvider` that hands components
-`state` plus named actions. The server snapshot is `defaultState()`, so the
-first render matches on both sides and hydration is quiet. `AppShell` (a
-client component) consumes the same context for the global progress bar and
-the theme toggle.
+**Failure is visible.** A read that cannot reach the database yields an empty
+snapshot and a `reachable: false` beside it, because a page showing zero
+progress and a page that could not ask look identical to a learner and are not
+the same thing. A write that fails leaves the optimistic value in place and
+raises a banner in `AppShell`: someone who has just typed three paragraphs into
+a note should not watch them vanish, and the text is still there to copy.
 
-Theme is the one piece of state read outside React: the root layout injects a
-tiny inline script that reads `self-learn:v1` and sets the `dark` class before
-first paint, so a dark-mode reload does not flash white.
+**Two things are not in the database.** The theme is a cookie the root layout
+reads while composing the document, because it has to be known before the first
+byte or a dark-mode reload flashes white; the `preference` row is the durable
+copy and the fallback when the cookie is missing. And on first mount the
+provider checks for the old `self-learn:v1` localStorage key, posts it to
+`/api/learner/import`, and removes it on success. The merge rules are in the
+store rather than the route: the database wins, and a curriculum item id the
+catalog no longer has is skipped and counted rather than costing the learner
+the rest of the document.
 
 ## The course data model
 
@@ -214,10 +273,18 @@ came from a browser.
 
 ## The learn CLI
 
-`cli.mjs` parses with `node:util`'s `parseArgs` in strict mode, dispatches on
-the first positional, and runs `ensureDirs()` before every command. Every
-command takes `--json`. Anything that carries evidence appends to the event
-log first and updates the caches after.
+`services/catalog/src/learn/cli.ts` parses with `node:util`'s `parseArgs` in
+strict mode, dispatches on the first positional, and runs `ensureDirs()` before
+every command. Every command takes `--json`, and the five shapes the `/learn`
+and `/review` skills parse are documented in
+[learn/README.md](learn/README.md#the-json-shapes) and pinned by golden tests.
+Anything that carries evidence appends to `event` first and updates the
+projections after.
+
+The connection is lazy. `concept add`, `check add` and `session log` touch only
+files, so they work with the database down; `status` — which both skills open
+with and stop on — does not, which is the intended gate. A session that cannot
+record anything should not start.
 
 `learn observe` is the step that matters: it records one answer, applies the
 Bayesian update, propagates the evidence to prerequisites, schedules the
@@ -233,28 +300,31 @@ learn/
   sessions/<id>.md             one log per session, appended live
   assets/<id>.tldr             the editable canvas a diagram was drawn on
   assets/<id>.svg              that canvas exported, embedded in the session log
-  state/
-    events.jsonl               every observation, append-only  (SOURCE OF TRUTH)
-    model.json                 mastery per concept             (derived)
-    reviews.json               the SM-2 schedule               (NOT rebuildable)
-    index.json                 the snapshot the web app reads  (derived)
   map.md                       the mermaid knowledge map       (derived)
 ```
+
+`learn/state/` was retired in bundle 5. `events.jsonl`, `model.json` and
+`reviews.json` are the `event`, `mastery` and `review` tables; `index.json` is
+a query. The mapping is in
+[services/catalog/LEARN.md](services/catalog/LEARN.md).
 
 Today that holds 32 concepts across four domains (algorithms 21, transformers
 7, agents 2, foundations 2) and three session logs.
 
 The folder is presentation only: a concept's id stays the bare slug, because
-ids appear in every `requires:` edge, every wikilink, `reviews.json` and
-`events.jsonl`. Moving a note between domains would otherwise orphan its whole
-history. The domain is read back from the path rather than stored in
-frontmatter, so the two can never disagree, and nesting is one level deep.
+ids appear in every `requires:` edge, every wikilink, and the `concept_slug`
+column of `event`, `mastery` and `review`. Moving a note between domains would
+otherwise orphan its whole history — which, now that the history is a foreign
+key, would be a constraint error rather than a silent loss. The domain is read
+back from the path rather than stored in frontmatter, so the two can never
+disagree, and nesting is one level deep.
 
-`events.jsonl` is the database. `model.json`, `index.json` and `map.md` are
-caches that `learn model --rebuild`, `learn index` and `learn map` re-derive
-from it, which is what makes changing a BKT parameter safe. `reviews.json` is
-the documented exception: review events are logged, but no command replays
-them, so deleting that file loses every scheduled review permanently.
+`event` is the database. `mastery`, `review` and `map.md` are projections that
+`learn model --rebuild`, `learn review rebuild` and `learn map` re-derive from
+it, which is what makes changing a BKT parameter safe. The schedule became
+rebuildable in bundle 5; before that, review grades were logged and nothing
+replayed them, so deleting `reviews.json` lost every scheduled review
+permanently.
 
 `assets/` is the one folder the CLI neither writes nor reads. Diagrams have
 always been written there by the `diagram-maker` subagent at a path it chose,
@@ -305,34 +375,35 @@ the detail in the published specification that is easiest to get wrong.
 
 ## How the layers talk
 
-One direction, one file, no imports across the boundary.
+One direction for content, one door for state.
 
 ```
-   /learn   /review                       the skills call the CLI, never the files
+   /learn   /review                      the skills call the CLI, never the files
         │
         │  npm run learn -- <command>
         ▼
-   scripts/learn/cli.mjs
-        │
-        │  reads and writes
-        ▼
-   learn/concepts   learn/sessions   learn/state   learn/map.md
-                                          │
-                                          │  learn index  writes state/index.json
-                                          ▼
-   src/lib/kb/load.ts     readFileSync, server-only, never writes
-        │
-        ▼
-   src/app/learn         renders stats, frontier, due reviews, the SVG graph
+   scripts/learn/cli.mjs ──spawns──► services/catalog/src/learn/cli.ts
+                                          │                    │
+                              reads/writes│                    │through
+                                          ▼                    ▼
+                            learn/concepts   learn/sessions   services/catalog/src/state/
+                            learn/map.md                              │
+                                                                      ▼
+                                                        event · mastery · review
+                                                        progress · recap · preference
+                                                                      ▲
+   src/app  ──► src/lib/learner-store.ts ──► @self-learn/catalog/state ┘
+       │              (the pool, the degradation)
+       └──► /api/learner/* ──► src/lib/learner-api.ts ──► the same store
 ```
 
-`loadKnowledgeBase()` reads `learn/state/index.json` relative to `process.cwd()`,
-normalizes every field, and drops any edge whose endpoints are not both present.
-A missing or malformed file yields `EMPTY_KB` rather than failing, because a
-fresh clone that has not run the pipeline is a legitimate state, not an error.
-`/learn` sets no dynamic marker, so the page is prerendered and the snapshot is
-baked in at build time: a pipeline run does not change the deployed page until
-the next deploy.
+Both halves reach the same tables through the same module. That is the change
+bundle 5 made: before it, the CLI owned files under `learn/state/` and the web
+app owned a localStorage document, and the two models of the same learner never
+spoke. `src/lib/kb/load.ts` is still the only place in `src/` that reads the
+concept graph, and it is a query now rather than a `readFileSync` of a snapshot
+— so a study session shows up on `/learn` immediately instead of at the next
+deploy.
 
 `ConceptGraph` renders the DAG as plain SVG with a longest-path layering. No
 graph library, and server-safe, so the whole graph ships as static markup.
@@ -356,28 +427,36 @@ value should cost a link preview rather than the whole app.
 
 ## Testing
 
-`npm test` runs vitest over both halves: `src/**/*.test.ts` and
-`scripts/**/*.test.mjs`, in the `node` environment, with `@` aliased to `src`.
-Eleven test files, split six and five.
+`npm test` runs vitest over `src/**/*.test.ts`, `scripts/**/*.test.mjs`,
+`services/**/*.test.ts` and `packages/**/*.test.ts`, in the `node` environment,
+with `@` aliased to `src`.
 
 | File | Covers |
 | --- | --- |
-| `src/lib/storage.test.ts` | Migration, clamping, every state mutation |
-| `src/lib/progress.test.ts` | Counting completed topics per module, course and globally |
-| `src/lib/agent/providers.test.ts` | Which providers resolve from which keys, and the fallback walk |
-| `src/lib/agent/prompt.test.ts` | The assembled system prompt, session context, and topic lookup |
-| `src/lib/agent/summary.test.ts` | Transcript formatting and parsing a recap back out |
+| `src/lib/storage.test.ts` | Clamping and every pure state reducer |
+| `src/lib/progress.test.ts` | Counting completed topics per module and course |
+| `src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
+| `src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
+| `src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
+| `src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
 | `src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
-| `scripts/learn/cli.test.mjs` | `void` retracting a session's evidence, and `observe` writing the session log |
-| `scripts/learn/lib/bkt.test.mjs` | Posterior, transit, entropy, information gain, propagation |
-| `scripts/learn/lib/graph.test.mjs` | Cycles, dangling edges, topological order, frontier, plan |
-| `scripts/learn/lib/schedule.test.mjs` | SM-2 conformance, including the ease-on-lapse rule |
-| `scripts/learn/lib/markdown.test.mjs` | Frontmatter round-trips, wikilinks, check blocks |
+| `services/catalog/test/state.test.ts` | The store: progress, recaps, preferences, the append-only log, replay, the import merge rules |
+| `services/catalog/test/learn-cli.test.ts` | The CLI end to end, with the five `--json` shapes pinned |
+| `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
+| `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
+| `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
+
+Anything touching Postgres creates and drops its own scratch database and skips
+itself, with a reason, when no server is reachable. CI runs a `postgres:17`
+service so they are a gate there.
 
 Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` by design.
 Components and pages are verified by `npm run build` and by looking at the
 running app, so counting their lines would only dilute the number that matters.
+The thresholds are deliberately not raised to meet the current number:
+`learner-api.ts` and `learner-store.ts` are in scope and are covered by suites
+that need a database, so the measured value now moves with the environment.
 
 ## The catalog
 
@@ -405,15 +484,18 @@ outlive its source without anything saying so.
 **The state half is the opposite.** `learner`, `event`, `mastery`, `review`,
 `progress`, `recap` and `preference` are the only copy of what a learner did.
 `event` is append-only, enforced by a trigger, and `mastery` and `review` are
-projections that can be rebuilt by replaying it. Bundle 5 backfills these from
-`learn/state/` and the browser's localStorage; until then they are empty.
+projections that can be rebuilt by replaying it. Bundle 5 filled them:
+`npm run catalog -- backfill` moved `learn/state/` in and asserted the result,
+and the web app's one-time import brings a browser's old localStorage document
+over on first mount.
 
 | Piece | Where | What |
 | --- | --- | --- |
 | Table shapes | `packages/schema/src/` | `content.ts`, `state.ts`, `operations.ts`. Connects to nothing. |
 | Migrations | `services/catalog/drizzle/` | Generated from the schema, applied by `catalog migrate`. |
 | Indexers | `services/catalog/src/index/` | One module per source, each a pure "read files, return rows" function, plus one shared writer. |
-| Read commands | `services/catalog/src/commands/` | `status`, `index`, `ls`, `show`, `path`, `search`, all with `--json`. |
+| Read commands | `services/catalog/src/commands/` | `status`, `index`, `backfill`, `ls`, `show`, `path`, `search`, all with `--json`. |
+| The learner store | `services/catalog/src/state/` | The only writer of the state tables. Imported by the `learn` CLI, the backfill and the web app. |
 
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
 `diagram:`, `session:`) and a set of tables. That ownership is what lets the
@@ -433,55 +515,58 @@ Postgres would put a staler one in front of the agent.
 
 ## Layering rules
 
-1. **`src/` never imports from `scripts/`.** The web app does not know the CLI
-   exists; the only mention is a comment in `src/lib/kb/load.ts` explaining who
-   writes the file it reads.
-2. **`scripts/` never imports from `src/`.** The pipeline runs on a clone with
-   nothing installed, so it cannot depend on TypeScript, on the `@` alias, or
-   on anything Next provides.
-3. **The CLI is the only writer of `learn/`, except `learn/assets/`.** Every
-   write goes through `lib/store.mjs`, which writes to a temp file and renames,
-   so an interrupted run cannot truncate state. The carve-out is `assets/`,
-   where the diagram agent has always written the file it names directly and
-   `tldrawkc/` now writes the `.tldr` and `.svg` pair. Nothing in `learn/state/`
-   or `learn/concepts/` has a second writer.
-4. **The web app reads `learn/` and never writes it.** `src/lib/kb/load.ts` is
-   the only file in `src/` that imports `node:fs`, and it only calls
-   `readFileSync`. Course content is read the same way, one layer out: through
-   `packages/content`, never with a `fs` call in `src/`.
-5. **A module that reads content says `import "server-only"`.**
-   `src/data/courses/index.ts` and `src/data/content.ts` both do. Without it a
-   `"use client"` import would compile, ship a YAML parser and every course
-   file to the browser, and only be noticed by whoever looked at a bundle
-   report. With it the build fails and prints the import chain. Client
+1. **`src/` imports the pipeline's *store*, and nothing else of it.** The web
+   app reaches learner state through `@self-learn/catalog/state`, the single
+   export that workspace publishes. It does not import the `learn` CLI, the
+   indexers or the migrations, and it never imports from `scripts/`. Before
+   bundle 5 the two halves met at one JSON file; they now meet at one module,
+   because two writers of the same tables with two ideas of what a recap may
+   contain is exactly the drift a shared store prevents.
+2. **`scripts/learn/lib/` imports nothing from the project.** Those six modules
+   are the maths: data in, data out, no filesystem and no connection. The
+   TypeScript CLI imports them; they import nothing back, which is what lets
+   the web app compute the frontier with the same `frontier()` the CLI does.
+3. **The CLI is the only writer of `learn/`, except `learn/assets/`.** The
+   carve-out is `assets/`, where the diagram agent has always written the file
+   it names directly and `tldrawkc/` now writes the `.tldr` and `.svg` pair.
+   Nothing in `learn/concepts/` has a second writer.
+4. **`services/catalog/src/state/` is the only writer of the state tables.**
+   The `learn` CLI, the backfill and the web app all go through it. It is where
+   "an event first, the projections after" is enforced, and where the clamps
+   live, so no caller can record evidence a different way.
+5. **A module that reads content or reaches the database says
+   `import "server-only"`.** `src/data/courses/index.ts`, `src/data/content.ts`
+   and `src/lib/learner-store.ts` all do. Without it a `"use client"` import
+   would compile — shipping a YAML parser, every course file, or a Postgres
+   driver to the browser — and would only be noticed by whoever looked at a
+   bundle report. With it the build fails and prints the import chain. Client
    components get resolved objects as props; pure arithmetic over a course they
-   already hold lives in `src/lib/curriculum.ts`.
-6. **Nothing in the pipeline outside `lib/paths.mjs` builds a path under
-   `learn/`.** One exception is live inside the pipeline: `cli.mjs` composes
-   `INDEX_FILE` from `STATE_DIR` as a template string instead of importing a
-   constant. `learn/assets/` is outside the rule entirely, for the same reason
-   as rule 3: the diagram agent picks `learn/assets/<concept-id>` and passes it
-   to `tldrawkc`, which is a command run from the repo root and knows nothing
-   about `paths.mjs`. Routing SVG bytes through `scripts/learn` to satisfy the
-   rule would buy nothing the rule exists for.
+   already hold lives in `src/lib/curriculum.ts`, and pure reducers over state
+   they already hold live in `src/lib/storage.ts`.
+6. **Nothing outside `src/learn/paths.ts` builds a path under `learn/`.**
+   `learn/assets/` is outside the rule entirely, for the same reason as rule 3:
+   the diagram agent picks `learn/assets/<concept-id>` and passes it to
+   `tldrawkc`, which is a command run from the repo root.
 7. **The skills never edit the knowledge base directly.** They go through
    `npm run learn -- <command>`, which is what keeps the event log complete.
-8. **`cli.mjs` is the only module in the pipeline that prints.** Everything
-   under `lib/` takes data and returns data.
+8. **`src/learn/cli.ts` is the only module in the pipeline that prints.**
+   Everything under `lib/` and `src/state/` takes data and returns data.
 9. **`packages/schema` connects to nothing.** It defines table shapes and
-   exports the types inferred from them. The pool, the connection string and
-   every query live in `services/catalog`, so the schema can be imported by the
-   web app without dragging a database driver into the browser bundle.
+   exports the types inferred from them. Its `./shared` subpath goes further
+   and imports nothing at all — that is what makes the recap limits and the
+   learner-state types safe in a `"use client"` module without dragging a
+   Postgres driver into the browser bundle.
 10. **The schema is the source of the SQL, never the other way round.** Change
-   `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
-   migration that has been applied is never edited: drizzle keys them by file
-   hash.
-11. **The web app never writes the catalog.** `src/` may read it, through
-    `packages/schema`'s types; today it reads the same content files the
-    catalog indexes, through `packages/content`. The only writer is
-    `npm run catalog -- index`, and the only thing it writes from is files in
-    git. A page that could write the content half would make a derived table
-    into a source of truth that no index run could reproduce.
+    `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
+    migration that has been applied is never edited: drizzle keys them by file
+    hash.
+11. **The web app never writes the *content* half.** It reads the course files
+    through `packages/content`, reads `concept`, `mastery` and `review` through
+    the store, and writes only `progress`, `recap` and `preference`. `event`,
+    `mastery` and `review` are written by the CLI, never by a page. The only
+    writer of the content tables is `npm run catalog -- index`, and the only
+    thing it writes from is files in git. A page that could write a derived
+    table would make it a source of truth no index run could reproduce.
 12. **An indexer reads files and returns rows; it never touches a connection.**
     `services/catalog/src/index/*.ts` export a pure `read(context)`, and
     `writer.ts` is the only module that issues SQL for them. That seam is why
@@ -490,3 +575,8 @@ Postgres would put a staler one in front of the agent.
     video whose topic does not resolve stops the index run with the file and the
     slug named. A skipped row is an asset that is silently absent from the
     catalog, which is the exact failure the catalog exists to catch.
+14. **Reads degrade, writes do not.** A page that cannot reach the database
+    renders empty and says so; a mutation that cannot reach it fails and is
+    shown as unsaved. An optimistic tick that silently never persisted is worse
+    than an error, and the study record is the one thing in this repo with no
+    second copy.

@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import path from "node:path";
 
+import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
 import { formatIndex, runIndexCommand } from "./commands/index-command";
 import { formatLs, parseKinds, runLs } from "./commands/ls";
 import { formatMigrate, runMigrate } from "./commands/migrate";
@@ -33,6 +34,10 @@ Commands:
   status                   Row counts, the migration head, and when each
                            source was last indexed.
   index                    Read the content trees and rewrite the derived rows.
+  backfill                 One-off: move learn/state/*.json into the state
+                           tables, then assert the rebuilt mastery equals
+                           model.json and the cards equal reviews.json.
+                           Idempotent; exits non-zero on any mismatch.
   ls [domain|collection]   Domains and courses, one domain's topics, or one
                            collection's tree. Titles and counts only.
   show <slug-or-id>        One topic, concept, collection, curriculum item or
@@ -50,6 +55,9 @@ Options:
                            sessions; they always run in dependency order.
   --manimkc-root PATH      index: the manimkc checkout to read.
                            Default: <repo>/manimkc.
+  --from PATH              backfill: the directory holding events.jsonl,
+                           model.json and reviews.json.
+                           Default: <repo>/${DEFAULT_STATE_DIR}.
   --kind a,b               ls: count only these asset kinds.
   -h, --help               Show this text.
 
@@ -58,12 +66,21 @@ Environment:
                 See services/catalog/.env.example.
 `;
 
-type Command = "migrate" | "status" | "index" | "ls" | "show" | "path" | "search";
+type Command =
+  | "migrate"
+  | "status"
+  | "index"
+  | "backfill"
+  | "ls"
+  | "show"
+  | "path"
+  | "search";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
   "status",
   "index",
+  "backfill",
   "ls",
   "show",
   "path",
@@ -88,6 +105,7 @@ export async function main(argv: string[]): Promise<number> {
         json: { type: "boolean", default: false },
         only: { type: "string" },
         "manimkc-root": { type: "string" },
+        from: { type: "string" },
         kind: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
@@ -132,6 +150,15 @@ export async function main(argv: string[]): Promise<number> {
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
+        break;
+      }
+      case "backfill": {
+        const result = await runBackfill({ from: values.from });
+        emit(result, formatBackfill(result));
+        // A mismatch is the whole point of the command, so it is an exit code
+        // and not just a paragraph: a script that pipes this into `--json`
+        // must not read "it printed something" as "it worked".
+        if (!result.ok) return 1;
         break;
       }
       case "ls": {

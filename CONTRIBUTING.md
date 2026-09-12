@@ -51,14 +51,14 @@ of the app works.
 | --- | --- |
 | `src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
 | `src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
-| `src/lib/` | `storage.ts` (localStorage), `learner-context.tsx`, `progress.ts`, `agent/` (prompts and providers), `kb/` (reads the pipeline snapshot) |
+| `src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `kb/` (the concept graph, from the catalog) |
 | `src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts` |
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
 | `packages/content/` | The reader both the app and the catalog parse `content/` with |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
-| `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
-| `learn/` | The knowledge base: `concepts/<domain>/`, `sessions/`, `state/`, `assets/` |
+| `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
+| `learn/` | The knowledge base's files: `concepts/<domain>/`, `sessions/`, `assets/`, `map.md`. The state is in Postgres |
 | `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
 | `tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo and `AGENTS.md`. Needs `npm ci && npm run build` inside it before the script runs |
 | `tldraw-integration/` | The brief `tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
@@ -79,10 +79,13 @@ bug fixes or docs. All welcome.
    `next-env.d.ts` imports `./.next/types/routes.d.ts`, which only `next dev`
    or `next build` generates, so route types are checked properly only once a
    build has run.
-3. **The knowledge base under `learn/` is a real study record.** Its state
-   files are versioned on purpose; only `learn/state/*.tmp` is ignored. A code
-   PR should not carry changes to `learn/state/` or `learn/sessions/` unless
-   the knowledge base is what the PR is about.
+3. **The knowledge base is a real study record, and half of it is not in git.**
+   The notes and the session logs under `learn/` are versioned on purpose; the
+   event log, the mastery model and the schedule are rows in Postgres and have
+   no second copy anywhere. A code PR should not carry changes to
+   `learn/concepts/` or `learn/sessions/` unless the knowledge base is what the
+   PR is about, and nothing in a PR should run `learn observe` against the real
+   database to try something out — the tests create and drop their own.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
 5. **Never commit a dirty `manimkc/` or `tldrawkc/` pointer.** Both submodules
