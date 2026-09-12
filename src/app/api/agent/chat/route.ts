@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  CHAT_RATE_LIMIT,
+  enforcePayloadBounds,
+  enforceRateLimit,
+  enforceSameOrigin,
+} from "@/lib/agent/guard";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 import { buildAgentSessionContext } from "@/lib/agent/prompt";
 import {
@@ -73,6 +79,11 @@ function sanitizeKnowledge(
 }
 
 export async function POST(req: Request) {
+  // Cheapest first, so a refused request never costs a provider call: the
+  // origin check needs no body at all.
+  const crossOrigin = enforceSameOrigin(req);
+  if (crossOrigin) return crossOrigin;
+
   let body: ChatBody;
   try {
     body = (await req.json()) as ChatBody;
@@ -88,6 +99,14 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  const tooLarge = enforcePayloadBounds(messages, learnerNote);
+  if (tooLarge) return tooLarge;
+
+  // Before the topic lookup on purpose: otherwise a caller could spin the
+  // limiter for free by varying the slugs and collecting 404s.
+  const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
 
   const found = findTopicBySlugs(courseSlug, moduleSlug, topicId);
   if (!found) {
