@@ -5,8 +5,10 @@
   "license": "MIT",
   "type": "module",
   "//": "No build step. The package is consumed only by other workspaces that run through tsx or vitest, both of which resolve the npm workspace symlink to its real path outside node_modules and transpile the TypeScript directly. Publishing is not a goal; if it ever is, add a build and point exports at dist/.",
+  "//exports": "Every key here must be \".\" or start with \"./\": Node rejects the whole package config otherwise, so a comment cannot live inside the exports object. ./shared is the constants and the plain types with no drizzle import, so a client component in src/ can take the recap bounds from the same definition the CHECK constraints are built from without pulling a Postgres driver into the browser bundle.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./shared": "./src/shared.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

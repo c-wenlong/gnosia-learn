@@ -7,6 +7,7 @@
  */
 
 export * from "./columns";
+export * from "./shared";
 export * from "./content";
 export * from "./operations";
 export * from "./state";

@@ -4,6 +4,10 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "//exports": "No build step, same as @self-learn/schema: the consumers are tsx, vitest and Next (which lists this package in transpilePackages), and all three compile the TypeScript directly. Only ./state is exported, because that is the only part the web app has any business importing — the indexers, the migrations and the CLI are the catalog's own, and a page reaching for them would be the layering violation ARCHITECTURE.md rule 10 exists to prevent.",
+  "exports": {
+    "./state": "./src/state/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",

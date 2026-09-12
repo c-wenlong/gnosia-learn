@@ -14,6 +14,14 @@ import {
 
 import { createdAt, instant, updatedAt } from "./columns";
 import { concept, curriculumItem } from "./content";
+import {
+  DEFAULT_P_L,
+  EVENT_TYPES,
+  KNOWLEDGE_LIMITS,
+  LOCAL_LEARNER_ID,
+  RECAP_SOURCES,
+  SCHEDULE_LIMITS,
+} from "./shared";
 
 /**
  * The state half. Unlike the content half these rows are the only copy of the
@@ -24,45 +32,15 @@ import { concept, curriculumItem } from "./content";
  * `src/lib/storage.ts` and the constants in `scripts/learn/lib/`.
  */
 
-/** Event types the `learn` CLI writes today (scripts/learn/cli.mjs). */
-export const EVENT_TYPES = [
-  "session-start",
-  "observation",
-  "review",
-  "session-close",
-  "void",
-] as const;
-export type EventType = (typeof EVENT_TYPES)[number];
-
-/** Where a recap came from. Mirrors `KnowledgeSource` in src/lib/types.ts. */
-export const RECAP_SOURCES = ["agent", "manual"] as const;
-export type RecapSource = (typeof RECAP_SOURCES)[number];
-
-/**
- * Limits copied from `KNOWLEDGE_LIMITS` in src/lib/storage.ts so the database
- * refuses what the web app already clamps. `itemChars` has no CHECK: a
- * per-element length test needs `jsonb_array_elements_text`, which is a
- * subquery, and CHECK constraints cannot contain one. That clamp stays in
- * application code, as it is today.
+/*
+ * The vocabularies and the numeric bounds live in `./shared`, which imports
+ * nothing, and reach consumers through `./index`'s `export * from "./shared"`.
+ * They are not re-exported here as well: two `export *` paths to the same name
+ * make it ambiguous, and ESM resolves an ambiguous star-export by dropping the
+ * name entirely rather than by erroring. The web app takes them from the
+ * `@self-learn/schema/shared` subpath instead, which is drizzle-free and
+ * therefore safe in a client component.
  */
-export const KNOWLEDGE_LIMITS = {
-  summaryChars: 1200,
-  listItems: 8,
-  itemChars: 300,
-} as const;
-
-/** Scheduler bounds, copied from scripts/learn/lib/schedule.mjs. */
-export const SCHEDULE_LIMITS = {
-  minEase: 1.3,
-  defaultEase: 2.5,
-  maxIntervalDays: 36500,
-} as const;
-
-/** BKT prior, copied from scripts/learn/lib/bkt.mjs (`DEFAULT_PARAMS.pL0`). */
-export const DEFAULT_P_L = 0.25;
-
-/** The default single learner. One row until auth exists; `id` is not a UUID so it stays readable. */
-export const LOCAL_LEARNER_ID = "local";
 
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
@@ -108,8 +86,20 @@ export const event = pgTable(
       .notNull()
       .references(() => learner.id, { onDelete: "restrict", onUpdate: "cascade" }),
     type: text("type").notNull(),
+    /**
+     * `restrict`, not `set null`. Forgetting what an event was about is exactly
+     * what an append-only log exists to prevent, and `set null` made that
+     * forgetting automatic: deleting a concept fired an UPDATE on `event`,
+     * which the append-only trigger then refused, so the real behaviour was
+     * "no concept with events can ever be pruned" delivered as a
+     * `restrict_violation` about a trigger nobody was thinking about. This says
+     * the same thing directly, with the foreign key's own name in the error,
+     * and `pruneEntity` in the indexer turns it into a sentence naming the
+     * slugs. `mastery` and `review` still cascade, because they are projections
+     * this log can rebuild.
+     */
     conceptSlug: text("concept_slug").references(() => concept.slug, {
-      onDelete: "set null",
+      onDelete: "restrict",
       onUpdate: "cascade",
     }),
     /** The `learn` CLI's session id, e.g. `2026-08-20-transformer-block`. Free text, no table yet. */
