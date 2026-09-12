@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
+import { COURSES_DIR, loadCourses } from "@self-learn/content";
 import type {
   NewAsset,
   NewAssetTopic,
@@ -9,10 +7,9 @@ import type {
   NewCurriculumItem,
   NewCurriculumItemTopic,
 } from "@self-learn/schema";
-import { parse } from "yaml";
 
+import { asIndexError } from "./content-errors";
 import { IndexError, IndexErrors } from "./errors";
-import { filesIn, relativeTo } from "./files";
 import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";
 
@@ -25,75 +22,22 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * ticks. That three-level shape is why `collection` self-references rather than
  * having separate course and module tables.
  *
- * **Where the shared topic comes in.** A module carries `topic: <slug>`, and
- * that slug is also listed under the topic's `maps.courses` in
- * `content/topics.yaml`. Two files stating the same fact is a drift risk, so
- * this indexer checks them against each other and refuses when they disagree,
- * rather than picking a winner. Every curriculum item inherits its module's
- * topic — an item is part of what the module teaches, and giving items their
- * own vocabulary entry would mean 300 more slugs to maintain for no query
- * anyone has asked for.
+ * **It does not parse YAML.** `@self-learn/content` does, and the web app reads
+ * the same function, so a course file means one thing in both places. What is
+ * left here is the mapping from courses to rows, plus the one check only the
+ * catalog can make: a module carries `topic: <slug>`, and that slug is also
+ * listed under the topic's `maps.courses` in `content/topics.yaml`. Two files
+ * stating the same fact is a drift risk, so this checks them against each other
+ * and refuses when they disagree, rather than picking a winner. Every
+ * curriculum item inherits its module's topic — an item is part of what the
+ * module teaches, and giving items their own vocabulary entry would mean 300
+ * more slugs to maintain for no query anyone has asked for.
  *
  * Curated resources become `link` assets: they have a URL and no bytes, which
  * is exactly what `asset`'s `num_nonnulls(path, url) = 1` check describes.
  */
 
-export const COURSES_DIR = "content/courses";
-
-interface YamlResource {
-  id?: unknown;
-  title?: unknown;
-  url?: unknown;
-  type?: unknown;
-}
-
-interface YamlTopic {
-  id?: unknown;
-  title?: unknown;
-  subtopics?: unknown;
-}
-
-interface YamlModule {
-  id?: unknown;
-  slug?: unknown;
-  title?: unknown;
-  order?: unknown;
-  topic?: unknown;
-  topics?: unknown;
-  resources?: unknown;
-}
-
-interface YamlCourse {
-  id?: unknown;
-  slug?: unknown;
-  code?: unknown;
-  title?: unknown;
-  credits?: unknown;
-  prereq?: unknown;
-  track?: unknown;
-  notes?: unknown;
-  inferred?: unknown;
-  tags?: unknown;
-  modules?: unknown;
-  capstone?: unknown;
-}
-
-function text(value: unknown, where: string, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new IndexError(`${where}: ${field} is required and must be a non-empty string`);
-  }
-  return value.trim();
-}
-
-function optionalText(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function stringList(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim())
-    : [];
-}
+export { COURSES_DIR };
 
 export const coursesIndexer: Indexer = {
   source: "courses",
@@ -102,11 +46,9 @@ export const coursesIndexer: Indexer = {
   root: () => COURSES_DIR,
 
   read: async ({ repoRoot, vocabulary }) => {
-    const directory = path.join(repoRoot, COURSES_DIR);
-    const files = await filesIn(directory, [".yaml", ".yml"]);
-    if (files.length === 0) {
-      throw new IndexError(`${COURSES_DIR}: no course YAML files found`);
-    }
+    const courses = asIndexError(() =>
+      loadCourses({ root: repoRoot, topics: vocabulary.entries }),
+    );
 
     const collections: NewCollection[] = [];
     const curriculumItems: NewCurriculumItem[] = [];
@@ -120,123 +62,96 @@ export const coursesIndexer: Indexer = {
     const seenModules = new Set<string>();
     let moduleCount = 0;
 
-    for (const file of files) {
-      const where = relativeTo(repoRoot, file);
-      const course = parse(await readFile(file, "utf8")) as YamlCourse | null;
-      if (course === null || typeof course !== "object") {
-        throw new IndexError(`${where}: expected a course mapping`);
-      }
-
-      const courseId = text(course.id, where, "id");
+    for (const course of courses) {
+      const where = `${COURSES_DIR}/${course.code.toLowerCase()}.yaml`;
       collections.push({
-        id: courseId,
+        id: course.id,
         kind: "course",
-        slug: text(course.slug, where, "slug"),
-        title: text(course.title, where, "title"),
+        slug: course.slug,
+        title: course.title,
         parentId: null,
-        position: 0,
+        position: course.order,
         // Everything the web app shows and no query joins on. It lives in
         // jsonb rather than as columns because the set differs per collection
         // kind and grows with the UI, not with the schema.
         metadata: {
-          code: text(course.code, where, "code"),
-          credits: typeof course.credits === "number" ? course.credits : null,
-          prereq: optionalText(course.prereq),
-          track: optionalText(course.track),
-          notes: optionalText(course.notes),
-          inferred: course.inferred === true,
-          tags: stringList(course.tags),
-          capstone: optionalText(course.capstone),
+          code: course.code,
+          credits: course.credits,
+          prereq: course.prereq ?? null,
+          track: course.track ?? null,
+          notes: course.notes ?? null,
+          inferred: course.inferred,
+          tags: course.tags,
+          capstone: course.capstone,
         },
       });
 
-      const modules = Array.isArray(course.modules) ? course.modules : [];
-      if (modules.length === 0) throw new IndexError(`${where}: course "${courseId}" has no modules`);
-
-      for (const [moduleIndex, rawModule] of modules.entries()) {
-        const mod = rawModule as YamlModule;
-        const at = `${where} module[${moduleIndex}]`;
-        const moduleId = text(mod.id, at, "id");
+      for (const mod of course.modules) {
         moduleCount += 1;
-        seenModules.add(moduleId);
+        seenModules.add(mod.id);
 
-        const order = typeof mod.order === "number" ? mod.order : moduleIndex + 1;
         collections.push({
-          id: moduleId,
+          id: mod.id,
           kind: "module",
-          slug: text(mod.slug, at, "slug"),
-          title: text(mod.title, at, "title"),
-          parentId: courseId,
-          position: order,
+          slug: mod.slug,
+          title: mod.title,
+          parentId: course.id,
+          position: mod.order,
           metadata: {},
         });
 
         // The module's shared-vocabulary topic, cross-checked against the
         // vocabulary's own mapping. Either file alone would be believable;
-        // disagreeing is the thing that must never pass silently.
-        const declared = optionalText(mod.topic);
-        const mapped = vocabulary.byCourseModule.get(moduleId) ?? null;
-        if (declared === null) {
-          problems.add(`${at}: module "${moduleId}" has no \`topic:\` slug`);
-          continue;
-        }
-        if (!vocabulary.bySlug.has(declared)) {
-          problems.add(
-            `${at}: module "${moduleId}" names topic "${declared}", which is not in ${VOCABULARY_FILE}`,
-          );
-          continue;
-        }
+        // disagreeing is the thing that must never pass silently. That the slug
+        // exists at all is already guaranteed by the reader.
+        const declared = mod.topic;
+        const mapped = vocabulary.byCourseModule.get(mod.id) ?? null;
         if (mapped === null) {
           problems.add(
-            `${VOCABULARY_FILE}: module "${moduleId}" is in no topic's maps.courses, but ` +
+            `${VOCABULARY_FILE}: module "${mod.id}" is in no topic's maps.courses, but ` +
               `${where} says its topic is "${declared}". Add it there.`,
           );
           continue;
         }
         if (mapped !== declared) {
           problems.add(
-            `module "${moduleId}" has two different topics: ${where} says "${declared}", ` +
+            `module "${mod.id}" has two different topics: ${where} says "${declared}", ` +
               `${VOCABULARY_FILE} maps it to "${mapped}". Fix one.`,
           );
           continue;
         }
 
         collectionItems.push({
-          collectionId: moduleId,
+          collectionId: mod.id,
           position: 0,
           topicSlug: declared,
           conceptSlug: null,
           assetId: null,
         });
 
-        for (const [topicIndex, rawTopic] of (Array.isArray(mod.topics) ? mod.topics : []).entries()) {
-          const item = rawTopic as YamlTopic;
-          const itemAt = `${at} topics[${topicIndex}]`;
-          const itemId = text(item.id, itemAt, "id");
+        for (const [topicIndex, item] of mod.topics.entries()) {
           curriculumItems.push({
-            id: itemId,
-            collectionId: moduleId,
+            id: item.id,
+            collectionId: mod.id,
             position: topicIndex + 1,
-            title: text(item.title, itemAt, "title"),
-            subtopics: stringList(item.subtopics),
+            title: item.title,
+            subtopics: item.subtopics,
           });
           // Every item inherits the module's topic: that is how a course row
           // reaches the videos and notes about the same subject.
-          curriculumItemTopics.push({ curriculumItemId: itemId, topicSlug: declared });
+          curriculumItemTopics.push({ curriculumItemId: item.id, topicSlug: declared });
         }
 
-        for (const rawResource of Array.isArray(mod.resources) ? mod.resources : []) {
-          const resource = rawResource as YamlResource;
-          const resourceId = text(resource.id, at, "resources[].id");
-          const id = `${ASSET_PREFIX.courses}${resourceId}`;
+        for (const resource of mod.resources) {
+          const id = `${ASSET_PREFIX.courses}${resource.id}`;
           assets.push({
             id,
             kind: "link",
             path: null,
-            url: text(resource.url, at, `resource "${resourceId}" url`),
+            url: resource.url,
             contentHash: null,
             bytes: null,
-            title: text(resource.title, at, `resource "${resourceId}" title`),
+            title: resource.title,
             sourceRepo: "self-learn",
           });
           assetTopics.push({ assetId: id, topicSlug: declared });
@@ -268,7 +183,7 @@ export const coursesIndexer: Indexer = {
     return {
       rows,
       notes: [
-        `${files.length} courses, ${moduleCount} modules, ${curriculumItems.length} curriculum items`,
+        `${courses.length} courses, ${moduleCount} modules, ${curriculumItems.length} curriculum items`,
         `${assets.length} curated links`,
       ],
     };

@@ -24,9 +24,8 @@ This project is continuously deployed and not versioned; entries are grouped by 
   `topic` row. Every module id and concept slug appears in exactly one entry,
   and `catalog index` refuses a mapping claimed by two topics.
 - **`content/courses/*.yaml`.** The ten courses as data, generated from the
-  TypeScript objects rather than transcribed, with `src/data/courses/parity.test.ts`
-  proving equality course by course. The web app still reads the TypeScript
-  until bundle 4.
+  TypeScript objects rather than transcribed. They are now the only copy: the
+  web app reads them too.
 - **Four read commands, all `--json` and all bounded.** `ls` gives domains,
   topics or a collection's tree as titles and counts; `show` gives one topic,
   concept, collection, curriculum item or asset with everything pointing at it;
@@ -67,9 +66,35 @@ This project is continuously deployed and not versioned; entries are grouped by 
   covered by the build rather than by unit tests.
 - **A README header card** with the banner, the badges and a one-line
   statement of what the project is.
+- **`packages/content`, one reader for `content/`.** `loadCourses`,
+  `loadTopics` and `loadTags`, plus the `Course`/`Module`/`Topic`/`Resource`/
+  `TagMeta` types, imported by both the web app and `catalog index`. The
+  validation the parity test used to do after the fact now happens on the way
+  in: unique course, module, topic and resource ids across every file, a
+  `topic:` that resolves against `content/topics.yaml`, required slugs, a real
+  boolean for `inferred`, a known resource type, and a filename that matches
+  the course code. Every refusal names the file, and unresolved topics are
+  reported together rather than one per run.
+- **`content/tags.yaml`.** The eight cross-course themes, moved out of
+  `src/data/tags.ts`.
 
 ### Changed
 
+- **The web app reads `content/`, and `src/` holds no course data.** The ten
+  `src/data/courses/*.ts` files and `src/data/tags.ts` are gone;
+  `src/data/courses/index.ts` is a thin `server-only` module over
+  `loadCourses()`, memoised per process, keeping the same exported lookups.
+  `server-only` means a `"use client"` module reaching course data fails the
+  build with the import chain printed instead of shipping a YAML parser and
+  the whole curriculum to the browser, so the sidebar and the header progress
+  bar take a nav projection as a prop from the root layout, and `TagChip` takes
+  the resolved theme rather than its id. Every one of the 135 routes renders
+  byte-identical text to before; the only markup difference is one fewer
+  client chunk.
+- **Courses carry an `order:`.** The shortlist's reading order used to be the
+  order of an array in `index.ts`. Sorting ten files by name is a different
+  sequence and nothing would have said so, so the key is authored, unique, and
+  checked.
 - `HANDOFF.md` moved out of the repository root into `docs/`, renamed with the
   date of the handoff it records.
 
@@ -90,6 +115,15 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Removed
 
+- **`src/data/courses/*.ts`, `src/data/tags.ts` and
+  `src/data/courses/parity.test.ts`.** The parity test existed to keep two
+  representations of the same courses in step; with one representation left
+  there is nothing for it to compare. Its curriculum invariants moved to
+  `packages/content/test/courses.test.ts`, where they assert on the files
+  rather than on a TypeScript literal.
+- **`globalProgress()` from `src/lib/progress.ts`.** It reached into the course
+  data to find every topic id, which a client component can no longer do.
+  `AppShell` calls `countsFromIds` over the ids the server layout handed it.
 - **The `deploy.yml` GitHub Actions workflow.** Vercel's Git integration has
   been deploying every push to `main` on its own (the deployment metadata
   says `source: git`, `githubCommitRef: main`), while the workflow failed on

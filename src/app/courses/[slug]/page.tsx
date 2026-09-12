@@ -6,6 +6,7 @@ import {
   getCourseTopicIds,
   getRelatedCourses,
 } from "@/data/courses";
+import { getTags } from "@/data/content";
 import { InferredBanner } from "@/components/InferredBanner";
 import { TagChip } from "@/components/TagChip";
 import { CourseProgressHeader } from "@/components/CourseProgressHeader";
@@ -65,8 +66,8 @@ export default async function CoursePage({
           <p className="text-base text-[var(--muted-strong)]">{course.notes}</p>
         )}
         <div className="flex flex-wrap gap-1.5">
-          {course.tags.map((t) => (
-            <TagChip key={t} id={t} />
+          {getTags(course.tags).map((t) => (
+            <TagChip key={t.id} tag={t} />
           ))}
         </div>
       </header>

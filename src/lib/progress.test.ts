@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { courses } from "@/data/courses";
+import { courses, getAllTopicIds } from "@/data/courses";
 import {
   countsFromIds,
   courseProgress,
   formatProgress,
-  globalProgress,
   moduleProgress,
 } from "@/lib/progress";
 
@@ -57,7 +56,7 @@ describe("curriculum progress helpers", () => {
   });
 
   it("computes global progress across the shortlist", () => {
-    const progress = globalProgress({ [topicId]: true });
+    const progress = countsFromIds(getAllTopicIds(), { [topicId]: true });
     expect(progress.total).toBeGreaterThan(course.modules.length);
     expect(progress.completed).toBe(1);
   });

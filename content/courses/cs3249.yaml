@@ -3,6 +3,7 @@ slug: cs3249
 code: CS3249
 title: Conversational User Interface
 credits: 4
+order: 10
 prereq: CS2103 (waiver for AY26/27); CS2111 from AY27/28
 track: HCI focus area
 notes: Builds on general UI/interaction design foundations, specializing into language-driven interfaces.

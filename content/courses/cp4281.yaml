@@ -3,6 +3,7 @@ slug: cp4281
 code: CP4281
 title: AI for Graphics
 credits: 4
+order: 3
 prereq: CS3241 (Computer Graphics), Linear Algebra, Calculus
 notes: Revisits core graphics problems through modern AI methods.
 inferred: false
