@@ -26,6 +26,8 @@ import {
   writeReviews,
   type ReviewCard,
 } from "../src/state";
+import { conceptsIndexer } from "../src/index/concepts";
+import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
 import { createScratchDatabase, probe, SQLSTATE, sqlstate, type Scratch } from "./scratch-database";
 import { CONCEPTS, fixtureGraph, ITEMS, seedContent } from "./state-fixture";
@@ -344,6 +346,35 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       await expect(
         upsertReview(scratch.db, card({ conceptId: "alpha", intervalDays: 0 })),
       ).rejects.toThrow(/must have been through the scheduler/);
+    });
+  });
+
+  describe("pruning a studied concept", () => {
+    it("refuses, and names the slug rather than the constraint", async () => {
+      await appendEvent(scratch.db, { type: "observation", concept: "gamma", correct: true });
+      await expect(
+        writeSource(
+          scratch.db,
+          conceptsIndexer,
+          // The indexer produced two of the three notes: `gamma` is gone from
+          // the tree, which is exactly the case the append-only log refuses.
+          {
+            concept: CONCEPTS.filter((slug) => slug !== "gamma").map((slug) => ({
+              slug,
+              title: slug,
+              path: `learn/concepts/fixtures/${slug}.md`,
+            })),
+          },
+          [],
+          "learn/concepts",
+        ),
+      ).rejects.toThrow(/the event log records answers about them: gamma/);
+
+      // And nothing was half-applied: the transaction rolled back.
+      const { rows } = await scratch.db.execute<{ n: number }>(
+        "select count(*)::int as n from concept",
+      );
+      expect(rows[0]?.n).toBe(CONCEPTS.length);
     });
   });
 

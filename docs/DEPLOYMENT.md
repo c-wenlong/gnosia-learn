@@ -103,6 +103,25 @@ broken one, and two things make it survivable:
   nothing was there to lose — but nothing new is recorded either, so the
   production app is read-only until this is set.
 
+**Setting it is also the moment the learner routes become writable by anyone.**
+`/api/learner/*` has no account to authenticate: the only check is the same
+`enforceSameOrigin` the agent routes use, and a forged `Origin` header walks
+straight through it. Today that costs nothing, because production has no
+database and there is nothing to write. Once it does, a stranger who guesses a
+curriculum item id can tick, untick and overwrite the study record, and those
+rows are the only copy. Two things go in before the connection string:
+
+```bash
+vercel firewall rules list                              # what exists
+# add a per-IP rate limit on /api/learner, the same shape as the agent rule
+vercel firewall publish --yes
+```
+
+and a `pg_dump` on a schedule, because the one bound that matters against a
+write nobody authorised is being able to put the rows back. Real
+authentication is the plan's answer (`#27`: "no localStorage except future
+auth") and is not in this bundle.
+
 When the cloud database arrives (Neon or Supabase from Vercel, or Postgres on
 the homeserver over Tailscale — the plan has not chosen):
 

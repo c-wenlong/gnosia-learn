@@ -31,6 +31,7 @@ import {
   toggleTopic,
 } from "@/lib/storage";
 import { writeThemeCookie } from "@/lib/theme-cookie";
+import { createWriteQueue } from "@/lib/write-queue";
 
 /**
  * The learner state, as components see it.
@@ -97,11 +98,24 @@ interface ApiResponse {
 const UNREACHABLE = "Not saved: the database is unreachable.";
 
 async function post(path: string, body: unknown): Promise<ApiResponse> {
-  const response = await fetch(`/api/learner/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/learner/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    // `fetch` rejects when the request never reached a server at all — offline,
+    // DNS, a dropped connection. That is the same thing to a learner as a 503,
+    // and it must be an answer rather than a rejection: the write queue behind
+    // this chains on the returned promise.
+    return {
+      ok: false,
+      error: `${UNREACHABLE} (${error instanceof Error ? error.message : "no response"})`,
+      code: "STORE_UNAVAILABLE",
+    };
+  }
   // A 500 from a route that threw before its handler ran has no JSON body, and
   // `response.json()` would then reject with a parse error the learner cannot
   // read. The status is the fallback.
@@ -153,20 +167,36 @@ export function LearnerProvider({
   }, [initialState]);
 
   /**
+   * Writes are ordered per target: see `createWriteQueue`. Without it two
+   * edits to the same note can reach the server in the wrong order, and only
+   * the last one to arrive is what Postgres keeps.
+   */
+  const queue = useRef(createWriteQueue<ApiResponse>());
+
+  /**
    * Apply the reducer, then write. `send` receives the reducer's output, so
    * what the UI shows and what the request describes cannot disagree.
+   *
+   * `key` names the thing being changed, not the route: two edits to the same
+   * note share a key and are ordered, while a tick on one item and a note on
+   * another do not and are not.
    */
   const commit = useCallback(
     (
+      key: string,
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
     ) => {
       const next = reduce(current.current);
       current.current = next;
       setState(next);
-      void send(next).then((response) => {
-        setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
-      });
+      queue.current.run(
+        key,
+        () => send(next),
+        (response) => {
+          setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
+        },
+      );
     },
     [],
   );
@@ -179,6 +209,7 @@ export function LearnerProvider({
       // nothing to be right about that even when the database is down.
       writeThemeCookie(theme);
       commit(
+        "preference:theme",
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
       );
@@ -189,6 +220,7 @@ export function LearnerProvider({
   const toggleTopicCompletion = useCallback(
     (topicId: string) => {
       commit(
+        `progress:${topicId}`,
         (previous) => toggleTopic(previous, topicId),
         (next) =>
           post("progress", {
@@ -203,6 +235,7 @@ export function LearnerProvider({
   const updateNote = useCallback(
     (topicId: string, note: string) => {
       commit(
+        `note:${topicId}`,
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
       );
@@ -213,6 +246,7 @@ export function LearnerProvider({
   const addResource = useCallback(
     (moduleId: string, resource: Omit<UserResource, "id">) => {
       commit(
+        "preference:userResources",
         (previous) => addUserResource(previous, moduleId, resource),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
       );
@@ -223,6 +257,7 @@ export function LearnerProvider({
   const removeResource = useCallback(
     (moduleId: string, resourceId: string) => {
       commit(
+        "preference:userResources",
         (previous) => removeUserResource(previous, moduleId, resourceId),
         (next) => post("preference", { key: "userResources", value: next.userResources }),
       );
@@ -233,6 +268,7 @@ export function LearnerProvider({
   const saveKnowledge = useCallback(
     (topicId: string, input: KnowledgeInput, options?: { countSession?: boolean }) => {
       commit(
+        `recap:${topicId}`,
         (previous) => recordKnowledge(previous, topicId, input, options),
         () =>
           post("recap", {
@@ -248,6 +284,7 @@ export function LearnerProvider({
   const forgetKnowledge = useCallback(
     (topicId: string) => {
       commit(
+        `recap:${topicId}`,
         (previous) => clearKnowledge(previous, topicId),
         () =>
           // An empty recap is how the store spells "delete this one", the same
@@ -268,6 +305,7 @@ export function LearnerProvider({
   const resetCourse = useCallback(
     (topicIds: string[]) => {
       commit(
+        "reset",
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
       );
@@ -278,6 +316,7 @@ export function LearnerProvider({
   const markVisited = useCallback(
     (courseSlug: string, moduleSlug?: string) => {
       commit(
+        "preference:lastVisited",
         (previous) => setLastVisited(previous, courseSlug, moduleSlug),
         (next) => post("preference", { key: "lastVisited", value: next.lastVisited }),
       );

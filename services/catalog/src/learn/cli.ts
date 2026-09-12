@@ -73,6 +73,8 @@ import {
   renderResult,
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
+import { LOCAL_LEARNER_ID } from "@self-learn/schema";
+
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { IndexError } from "../index/errors";
@@ -90,6 +92,7 @@ import {
   replayMastery,
   StateError,
   upsertReview,
+  withLearnerLock,
   writeModel,
   writeReviews,
   type BktParams,
@@ -696,63 +699,81 @@ commands.observe = async ({ values }, session) => {
   const now = new Date();
   const at = now.toISOString();
 
-  const model = await readModel(db);
-  const entry = ensureEntry(model, id);
-  const before = entry.pL;
-  const after = bktUpdate(before, correct, {
-    params: bktParams(model.params),
-    opportunity,
-  }) as number;
-
-  entry.pL = after;
-  entry.observations += 1;
-  if (correct) entry.correct += 1;
-  entry.lastSeen = at;
-
-  const propagated =
-    correct && !bool(values.noPropagate) ? propagateCorrect(model, graph, id) : [];
-
-  // Whether an answer teaches and whether it should come back for review are
-  // different questions, and tying both to `source` conflated them: a probe
-  // correctly skips the learning step, but that also meant a concept you
-  // already knew was never scheduled and would silently rot. Every answered
-  // question now earns a review slot, whatever the source.
-  const reviews = await readReviews(db);
-  const grade =
-    values.grade !== undefined ? Number(values.grade) : (gradeFromOutcome(correct, after) as number);
   const schedule = bool(values.schedule, true);
-  const scheduled: ReviewCard | null = !schedule
-    ? null
-    : (reviewCard(reviews.cards[id] ?? newCard(id, now), grade, { now }) as ReviewCard);
 
-  // The event first, then the projections. `event` is the only copy; `mastery`
-  // and `review` can be replayed from it, so a crash between the two costs a
-  // `model --rebuild` rather than the observation itself.
-  await appendEvent(db, {
-    at,
-    type: "observation",
-    concept: id,
-    correct,
-    propagated: propagated.map((x) => ({ concept: x.concept, hops: x.hops })),
-    source,
-    opportunity,
-    grade,
-    // New in bundle 5, and the reason the schedule is replayable: without it a
-    // rebuild cannot tell an answer that scheduled a card from one that was
-    // recorded with `--schedule false`.
-    scheduled: schedule,
-    pLBefore: before,
-    pLAfter: after,
-    question: values.question ?? null,
-    answer: values.answer ?? null,
-    session: values.session ?? null,
-  });
+  // Read, compute and write under a lock on the learner row. The whole thing
+  // is a read-modify-write on `mastery`: without the lock two concurrent
+  // `observe` calls both read the same prior and the second write silently
+  // discards the first, leaving two events in the log and one of them absent
+  // from the projection until somebody rebuilds.
+  const { before, after, propagated, due } = await withLearnerLock(
+    db,
+    LOCAL_LEARNER_ID,
+    async (tx) => {
+      const model = await readModel(tx);
+      const entry = ensureEntry(model, id);
+      const priorPL = entry.pL;
+      const nextPL = bktUpdate(priorPL, correct, {
+        params: bktParams(model.params),
+        opportunity,
+      }) as number;
 
-  await writeModel(db, model);
-  if (scheduled !== null) {
-    reviews.cards[id] = scheduled;
-    await upsertReview(db, scheduled);
-  }
+      entry.pL = nextPL;
+      entry.observations += 1;
+      if (correct) entry.correct += 1;
+      entry.lastSeen = at;
+
+      const spread =
+        correct && !bool(values.noPropagate) ? propagateCorrect(model, graph, id) : [];
+
+      // Whether an answer teaches and whether it should come back for review
+      // are different questions, and tying both to `source` conflated them: a
+      // probe correctly skips the learning step, but that also meant a concept
+      // you already knew was never scheduled and would silently rot. Every
+      // answered question now earns a review slot, whatever the source.
+      const reviews = await readReviews(tx);
+      const nextGrade =
+        values.grade !== undefined
+          ? Number(values.grade)
+          : (gradeFromOutcome(correct, nextPL) as number);
+      const card: ReviewCard | null = !schedule
+        ? null
+        : (reviewCard(reviews.cards[id] ?? newCard(id, now), nextGrade, { now }) as ReviewCard);
+
+      // The event first, then the projections. `event` is the only copy;
+      // `mastery` and `review` can be replayed from it, so a failure between
+      // the two costs a `model --rebuild` rather than the observation itself.
+      await appendEvent(tx, {
+        at,
+        type: "observation",
+        concept: id,
+        correct,
+        propagated: spread.map((x) => ({ concept: x.concept, hops: x.hops })),
+        source,
+        opportunity,
+        grade: nextGrade,
+        // New in bundle 5, and the reason the schedule is replayable: without
+        // it a rebuild cannot tell an answer that scheduled a card from one
+        // that was recorded with `--schedule false`.
+        scheduled: schedule,
+        pLBefore: priorPL,
+        pLAfter: nextPL,
+        question: values.question ?? null,
+        answer: values.answer ?? null,
+        session: values.session ?? null,
+      });
+
+      await writeModel(tx, model);
+      if (card !== null) await upsertReview(tx, card);
+
+      return {
+        before: priorPL,
+        after: nextPL,
+        propagated: spread,
+        due: card?.due ?? reviews.cards[id]?.due ?? null,
+      };
+    },
+  );
 
   // Recording evidence and writing the log are one act. Keeping them separate
   // is how the first real session ended up with five observations and an empty
@@ -785,7 +806,7 @@ commands.observe = async ({ values }, session) => {
     delta: after - before,
     mastery: masteryLabel(after),
     mastered: after >= MASTERY_THRESHOLD,
-    due: scheduled?.due ?? reviews.cards[id]?.due ?? null,
+    due,
     logged,
     propagated,
   };
@@ -949,26 +970,36 @@ commands.review = async ({ values, positionals }, session) => {
 
     const now = new Date();
     const at = now.toISOString();
-    const card = reviewCard(reviews.cards[id] ?? newCard(id, now), grade, { now }) as ReviewCard;
 
-    const model = await readModel(db);
-    const entry = ensureEntry(model, id);
-    const before = entry.pL;
-    entry.pL = bktUpdate(before, grade >= 3, { params: bktParams(model.params) }) as number;
-    entry.observations += 1;
-    if (grade >= 3) entry.correct += 1;
-    entry.lastSeen = at;
+    // Same lock as `observe`, for the same reason: this reads the card and the
+    // model, computes from both, and writes them back.
+    const { card, pL } = await withLearnerLock(db, LOCAL_LEARNER_ID, async (tx) => {
+      const current = await readReviews(tx);
+      const next = reviewCard(current.cards[id] ?? newCard(id, now), grade, {
+        now,
+      }) as ReviewCard;
 
-    await appendEvent(db, {
-      at,
-      type: "review",
-      concept: id,
-      grade,
-      pLBefore: before,
-      pLAfter: entry.pL,
+      const model = await readModel(tx);
+      const entry = ensureEntry(model, id);
+      const before = entry.pL;
+      entry.pL = bktUpdate(before, grade >= 3, { params: bktParams(model.params) }) as number;
+      entry.observations += 1;
+      if (grade >= 3) entry.correct += 1;
+      entry.lastSeen = at;
+
+      await appendEvent(tx, {
+        at,
+        type: "review",
+        concept: id,
+        grade,
+        pLBefore: before,
+        pLAfter: entry.pL,
+      });
+      await upsertReview(tx, next);
+      await writeModel(tx, model);
+
+      return { card: next, pL: entry.pL };
     });
-    await upsertReview(db, card);
-    await writeModel(db, model);
 
     const result = {
       concept: id,
@@ -978,7 +1009,7 @@ commands.review = async ({ values, positionals }, session) => {
       ease: Number(card.ease.toFixed(2)),
       lapses: card.lapses,
       leech: card.leech,
-      pL: entry.pL,
+      pL,
     };
     if (values.json) return out(result, true);
     return out(
@@ -1186,7 +1217,8 @@ commands.void = async ({ values }, session) => {
   }
   out(
     `Voided ${affected.length} observation(s) across ${concepts.length} concept(s).\n` +
-      `Run "model --rebuild" to drop them from the model.`,
+      `Run "model --rebuild" and "review rebuild" to drop them from the model and\n` +
+      `the schedule. Both are projections of the log, and voiding only marks it.`,
     false,
   );
 };
@@ -1515,11 +1547,14 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const name = parsed.positionals[0] ?? "status";
-  const command = commands[name];
-  if (command === undefined) {
+  // `Object.hasOwn`, not a truthiness check on the lookup. `commands` is a
+  // plain object, so `commands["constructor"]` is `Object` rather than
+  // undefined, and the guard below would hand the parsed arguments to it.
+  if (!Object.hasOwn(commands, name)) {
     process.stderr.write(`learn: unknown command "${name}". Run "learn help".\n`);
     return 1;
   }
+  const command = commands[name] as Command;
 
   const session = new Session();
   try {

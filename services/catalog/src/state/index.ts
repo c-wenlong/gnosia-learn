@@ -30,7 +30,7 @@
 export { connect, withDatabase, type CatalogDatabase, type Connection } from "../db";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
-export { ensureLearner } from "./learner";
+export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
 export {
   appendEvent,
   readEvents,
@@ -68,6 +68,7 @@ export {
   assertKnownItems,
   countCompleted,
   readProgress,
+  resetCourse,
   resetProgress,
   setNote,
   setProgress,

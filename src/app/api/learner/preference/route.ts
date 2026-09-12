@@ -27,7 +27,11 @@ export const POST = handler(
   "preference",
   (body) => {
     const key = body.key;
-    if (typeof key !== "string" || !(key in WRITABLE)) {
+    // `Object.hasOwn`, not `key in WRITABLE`. `in` walks the prototype chain,
+    // so "constructor" and "toString" would pass the allow-list and then be
+    // persisted as preference keys — with `Object` itself standing in as the
+    // validator for the first of them.
+    if (typeof key !== "string" || !Object.hasOwn(WRITABLE, key)) {
       throw new BadRequest(`"key" must be one of ${Object.keys(WRITABLE).join(", ")}.`);
     }
     const validate = WRITABLE[key as keyof typeof WRITABLE];

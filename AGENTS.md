@@ -242,6 +242,12 @@ not have to be worked out again.
   first — so `npm run build` succeeds with no database, which is what Vercel
   has today. Verify both after touching the layout: build with `DATABASE_URL`
   pointed at a dead port, then serve it and load a page.
+- **Never edit an applied migration, including its comments.** drizzle keys
+  migrations by the sha256 of the whole file, so rewording a comment in
+  `services/catalog/drizzle/*.sql` makes it look unapplied and
+  `npm run learn -- doctor` starts reporting the database as behind. Bundle 5
+  did this to itself once, tidying a comment in 0004. Corrections go in
+  `SCHEMA.md` or in the schema source, never in the SQL.
 - **Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` on
   purpose.** `src/app` and `src/components` are view code and untested by
   design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear

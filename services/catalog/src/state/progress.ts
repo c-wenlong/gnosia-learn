@@ -1,9 +1,11 @@
 import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@self-learn/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
+import { PREFERENCE_KEYS } from "@self-learn/schema";
+
 import type { CatalogDatabase } from "../db";
 import { StateError } from "./errors";
-import { ensureLearner } from "./learner";
+import { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
 
 /**
  * The checklist: a tick and a scratch note per curriculum item.
@@ -145,6 +147,26 @@ export async function resetProgress(
       ),
     );
   return result.rowCount ?? 0;
+}
+
+/**
+ * A reset is one act: the ticks and notes go, and the epoch moves.
+ *
+ * One transaction, because the two halves fail differently and the difference
+ * matters. If the delete commits and the epoch write does not, the caller sees
+ * "not saved" over a deletion that already happened — and the components
+ * holding draft state for those items never remount, so the page keeps showing
+ * text for rows that no longer exist.
+ */
+export async function resetCourse(
+  db: CatalogDatabase,
+  curriculumItemIds: string[],
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<{ cleared: number; epoch: number }> {
+  return withLearnerLock(db, learnerId, async (tx) => ({
+    cleared: await resetProgress(tx, curriculumItemIds, learnerId),
+    epoch: await bumpEpoch(tx, PREFERENCE_KEYS.epoch, learnerId),
+  }));
 }
 
 /** How many items are ticked. Cheaper than pulling the whole map to count it. */

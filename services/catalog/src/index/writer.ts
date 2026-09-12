@@ -1,6 +1,7 @@
 import {
   asset,
   assetConcept,
+  event,
   assetDerivation,
   assetTopic,
   collection,
@@ -376,6 +377,42 @@ async function pruneEntity(
   if (stale.length === 0) return [];
 
   const keys = stale.map((row) => row.key);
+  if (name === "concept") await assertNoEvidence(tx, keys);
   await tx.delete(table).where(inArray(column, keys));
   return keys;
+}
+
+/**
+ * Refuse to prune a concept the learner has been observed on, and say which.
+ *
+ * `event.concept_slug` is `ON DELETE RESTRICT`, so the delete below would fail
+ * anyway — with `insert or update on table "event" violates foreign key
+ * constraint "event_concept_slug_concept_slug_fk"`, which names neither the
+ * concept nor the thing to do about it. Checking first turns that into a
+ * sentence, and it is the one refusal in this file that is not about a typo:
+ * the note really is gone from the tree, and the answer is that an event is
+ * the record of something that happened and forgetting what it was about is
+ * exactly what an append-only log exists to prevent.
+ *
+ * `mastery` and `review` are not checked. They cascade, and they are
+ * projections this log rebuilds.
+ */
+async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<void> {
+  const observed = await tx
+    .selectDistinct({ slug: event.conceptSlug })
+    .from(event)
+    .where(inArray(event.conceptSlug, slugs));
+  const blocked = observed
+    .map((row) => row.slug)
+    .filter((slug): slug is string => slug !== null)
+    .sort();
+  if (blocked.length === 0) return;
+
+  throw new IndexError(
+    `these concept notes are gone from learn/concepts/, but the event log records ` +
+      `answers about them: ${blocked.join(", ")}. The log is append-only, so the ` +
+      `catalog cannot forget what those events were about. Put the note back (an ` +
+      `empty stub is enough), or rename the concept by moving its events first — ` +
+      `deleting the study record is not something an index run will do for you.`,
+  );
 }

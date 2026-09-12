@@ -156,6 +156,16 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     expect(after.epoch).toBe(1);
   });
 
+  it("moves the epoch on every reset, one increment at a time", async () => {
+    // Incremented in SQL rather than read and written back, so two resets
+    // cannot read the same number and write the same increment.
+    for (const expected of [1, 2, 3]) {
+      const { body } = await call("reset", { curriculumItemIds: [ITEMS[0]] });
+      expect(body.result).toMatchObject({ epoch: expected });
+    }
+    expect((await snapshot()).epoch).toBe(3);
+  });
+
   describe("preference", () => {
     it("writes the keys on the list", async () => {
       expect((await call("preference", { key: "theme", value: "dark" })).status).toBe(200);
@@ -169,6 +179,18 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect(params.status).toBe(400);
       const anything = await call("preference", { key: "../../etc/passwd", value: "x" });
       expect(anything.status).toBe(400);
+    });
+
+    it("refuses a key inherited from Object.prototype", async () => {
+      // `key in WRITABLE` would pass these, and for "constructor" the
+      // inherited `Object` would then stand in as the validator.
+      for (const key of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+        expect((await call("preference", { key, value: "x" })).status).toBe(400);
+      }
+      const { rows } = await scratch.db.execute<{ n: number }>(
+        "select count(*)::int as n from preference",
+      );
+      expect(rows[0]?.n).toBe(0);
     });
 
     it("refuses a resource URL that is not http(s)", async () => {
