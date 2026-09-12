@@ -1,0 +1,28 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0.5%
+        # Coverage tracking is new here. Report the number, never block a
+        # merge on it. Drop this once the baseline has settled.
+        informational: true
+    patch:
+      default:
+        target: 80%
+        threshold: 0%
+        # Informational, like the project status above. The hard coverage
+        # gate is the thresholds block in vitest.config.ts, which fails the
+        # test step itself. Codecov reports; it never blocks a merge.
+        informational: true
+
+# Untested by design: React components and App Router pages are verified by
+# `npm run build` and by looking at the running app, not by unit tests.
+ignore:
+  - "**/*.test.*"
+  - "src/app/**"
+  - "src/components/**"
+
+comment:
+  layout: "diff, flags, files"
+  require_changes: true

@@ -1,0 +1,45 @@
+# Dependabot configuration.
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# Two ecosystems. `npm` watches package.json and package-lock.json: this is a
+# deployed Next.js app, so a lockfile bump is a real deploy and wants a real
+# pull request. `github-actions` watches .github/workflows/.
+#
+# Development dependencies are grouped into one pull request. A tooling bump
+# (eslint, vitest, typescript, types) is verified by the same CI run whether
+# it arrives alone or with five others, so one PR a week beats five.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "chore"
+
+  - package-ecosystem: "github-actions"
+    # "/" means .github/workflows/, not the repository root.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # One pull request for all action bumps rather than one per action.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "ci"
