@@ -16,6 +16,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
+| [tldraw-integration/](tldraw-integration/README.md) | The brief for `tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
 
 ## The learning pipeline
 
@@ -93,6 +94,12 @@ not have to be worked out again.
   Without those entries a local `npm run lint` walks the submodule's Python
   virtualenvs and reports 100k+ findings from code this repo does not own.
   If lint output ever balloons, check that block first.
+- **`tldrawkc/` is excluded twice, and both are load-bearing.** It is in the
+  same ESLint ignore block, and also in `tsconfig.json`'s `exclude`, because
+  unlike manimkc it is TypeScript: `"**/*.ts"` in the `include` list would
+  otherwise typecheck a submodule this repo does not own against Next's
+  compiler options, and `npm run typecheck` fails on it. Lint and typecheck
+  the tool inside `tldrawkc/` with its own config.
 - **Only bump the `manimkc/` pointer to a commit that is already pushed.**
   Check `git diff --submodule=log manimkc` before `git add manimkc`; staging a
   dirty or unpushed submodule leaves a pointer nobody else can resolve.

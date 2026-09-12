@@ -30,5 +30,6 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "//": "tldrawkc is a git submodule with its own repo, its own tsconfigs and its own toolchain. Without this exclude, `**/*.ts` above walks it and typechecks TypeScript this repo does not own against the wrong compiler options. It is ignored in eslint.config.mjs for the same reason. manimkc needs no entry because it is Python.",
+  "exclude": ["node_modules", "tldrawkc"]
 }
