@@ -14,7 +14,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, test and PR conventions |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
 | [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel, secrets, the deploy workflow |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 
 ## The learning pipeline
