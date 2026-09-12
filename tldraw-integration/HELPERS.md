@@ -19,14 +19,17 @@ tool know the other.
 
 ## Shapes
 
-### `helpers.box(id, label, opts)`
+### `helpers.box(key, label, opts)`
 
-Creates a labelled geo shape and returns its id. `id` is a plain string; the
-helper calls `createShapeId(id)` so ids are stable and readable
-(`shape:query`, not `shape:8f3a...`). Creating an id that already exists
-updates that shape instead of throwing, so snippets can be re-run.
+Creates a labelled geo shape and returns its id. The first argument is a
+shape *key*, which is what the code calls it (`ShapeKey = string | TLShapeId`)
+and what `api` prints: a plain slug like `'query'`, or a real `shape:` id.
+The helper calls `createShapeId` on it so ids are stable and readable
+(`shape:query`, not `shape:8f3a...`). Creating a key that already exists
+updates that shape instead of throwing, so snippets can be re-run. Every other
+helper takes keys in the same sense, `connect`'s two endpoints included.
 
-`createShapeId(id)` is literally `` `shape:${id}` ``, with no check for a
+`createShapeId(key)` is literally `` `shape:${key}` ``, with no check for a
 prefix that is already there, so feeding it a real id would give
 `shape:shape:query`. The helpers strip the prefix first and accept either form.
 
@@ -183,7 +186,10 @@ Draws a labelled container behind a set of shapes with a margin (default
 mermaid subgraphs. The container is a geo rectangle, sent to back, not a
 frame, so the enclosed shapes keep page coordinates. It carries
 `meta.container = true`, which is how the lint pass knows to exempt it from
-`overlapping-shapes` and `empty-label`.
+`overlapping-shapes`, `empty-label` and `arrow-crosses-shape`. The third is
+the one phase 3 added: an arrow that enters or leaves a group has to cross
+the box drawn round it, so a container that counted as something to run
+through would fire on every edge into a subgraph.
 
 ### `helpers.translate(ids, dx, dy)`
 
@@ -266,11 +272,13 @@ without a second CLI round trip.
 
 ### `helpers.getLints()`
 
-Returns `Lint[]`, the same array the bridge's `lints()` returns. Rules in v1:
+Returns `Lint[]`, the same array the bridge's `lints()` returns. Seven rules,
+six from v1 and `arrow-crosses-shape` added in phase 3:
 
 | Rule | Fires when |
 | --- | --- |
 | `friendless-arrow` | An arrow has no binding at one or both ends and no `meta.lintIgnore` |
+| `arrow-crosses-shape` | An arrow's rendered path runs more than 4 page units inside a geo or note shape that is neither of the two it connects. Containers (`meta.container = true`) and the arrow's own parent are exempt |
 | `overlapping-text` | Two text-bearing shapes' label boxes intersect |
 | `overlapping-shapes` | Two geo shapes intersect by more than 10 percent of the smaller one's area. Shapes with `meta.container = true` (from `boxShapes`) are skipped on both sides of the pair. |
 | `off-page` | A shape sits further than `OFF_PAGE_LIMIT` (10000 page units) from the origin in any direction, positive or negative |
@@ -279,6 +287,19 @@ Returns `Lint[]`, the same array the bridge's `lints()` returns. Rules in v1:
 
 Three of those rows were written from a guess and are corrected here against
 what the code measures.
+
+`arrow-crosses-shape` is about depth, not length: the shape's outline is
+eroded by 4 page units and the arrow's path is tested against what is left.
+4 is tldraw's own stroke width for a size `m` shape, rounded up, so an arrow
+that merely touches a box stays silent and one that disappears behind it does
+not. The test runs against the rendered outline rather than the page box,
+because a diamond's box has four empty corners an arrow can pass through
+without touching the shape, and a concave outline (`star`, `cloud`, `heart`)
+is sampled rather than eroded so a working diagram is never failed on
+geometry the rule cannot model. `meta.lintIgnore: ['arrow-crosses-shape']` on
+either the arrow or the shape is the opt-out, and it is the right answer for a
+marker an arrow is meant to run through, such as a dot at the origin of a set
+of axes.
 
 `off-page` is not about clipping. Nothing clips at a large coordinate:
 `toImage` and `getSvgString` both framed a box at x = 200000 correctly. What

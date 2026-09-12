@@ -30,8 +30,8 @@ artefacts; a fresh clone runs `git submodule update --init tldrawkc`, then
 
 ## The one seam: `learn/assets/`
 
-Today the `diagram-maker` subagent writes `learn/assets/<concept-id>.svg`
-by hand and the session log embeds it as `![[<concept-id>.svg]]`. The tool
+The `diagram-maker` subagent used to write `learn/assets/<concept-id>.svg`
+by hand, and the session log embeds it as `![[<concept-id>.svg]]`. The tool
 keeps that contract exactly and adds one file:
 
 | Path | Before | After |
@@ -41,8 +41,8 @@ keeps that contract exactly and adds one file:
 | session log embed | `![[<id>.svg]]` | unchanged |
 | `/learn` page | does not render assets | unchanged |
 
-Two root layering rules need a documented carve-out for `learn/assets/`
-when phase 3 lands, rather than routing SVG bytes through `scripts/learn`:
+Two root layering rules carry a documented carve-out for `learn/assets/`,
+written in phase 3 rather than routing SVG bytes through `scripts/learn`:
 rule 3, "the CLI is the only writer of `learn/`", and rule 5, "nothing
 outside `lib/paths.mjs` builds a path under `learn/`". Both are about
 `learn/state/` and `learn/concepts/`; `learn/assets/` has always been
@@ -65,9 +65,10 @@ than deleted so the table still reads as the whole list of seams.
 | `.gitmodules` | the new submodule | done, phase 0 |
 | `eslint.config.mjs` | add `tldrawkc/**` to the ignore block that already lists `manimkc/` and `coverage/`, or lint will walk its `node_modules` | done, phase 0 |
 | `tsconfig.json` | add `tldrawkc` to `exclude`. Not in the original list, and needed: unlike manimkc the submodule is TypeScript, so `"**/*.ts"` in `include` typechecks it against Next's compiler options and `npm run typecheck` fails | done, phase 0 |
-| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` | phase 3 |
-| `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. | phase 3. Phase 0 added only a row for `tldraw-integration/` in the documents table and the two-excludes gotcha |
-| `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 | phase 3 |
+| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` | done, phase 3 |
+| `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. | done, phase 3, plus a gotcha for `npm run canvas` needing `--silent` before `--json`. Phase 0 had added only a row for `tldraw-integration/` in the documents table and the two-excludes gotcha |
+| `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 | done, phase 3 |
+| `CONTRIBUTING.md` | a `tldrawkc/` row in the project layout table, and guideline 5 widened to both submodules | done, phase 3. Not in the original list; phase 0's row above covered only the build note |
 | `README.md`, `CONTRIBUTING.md` | say that `npm run canvas` needs `npm ci && npm run build` inside the submodule, because the compiled CLI is not committed | done, phase 0 |
 | `.github/workflows/ci.yml` | nothing. CI already skips submodules and the tool has its own CI. | n/a |
 | `vitest.config.ts` | nothing. The tool's tests run in its repo. | n/a |
@@ -76,13 +77,21 @@ than deleted so the table still reads as the whole list of seams.
 
 | Where | Change |
 | --- | --- |
-| `~/.quiver/plugins/learning/learning/agents/diagram-maker.md` | Replace the "write SVG, read it back" loop with the [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) loop. Keep the "what makes a teaching diagram work" section. `Bash` is already in its tool list, so it needs no new tools. |
-| `~/.quiver/plugins/learning/learning/skills/learn/SKILL.md` | Where it says "spawn diagram-maker; it writes an SVG into learn/assets", add "and a .tldr beside it". |
+| `~/.quiver/plugins/learning/learning/agents/diagram-maker.md` | Replace the "write SVG, read it back" loop with the [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) loop. Keep the "what makes a teaching diagram work" section. `Bash` is already in its tool list, so it needs no new tools. Done: quiver-hub PR #2. |
+| `~/.quiver/plugins/learning/learning/skills/learn/SKILL.md` | Where it says "spawn diagram-maker; it writes an SVG into learn/assets", add "and a .tldr beside it". Done: same PR. |
 
 The plugin is global and shared across projects, so the agent should check
 `npm run canvas -- doctor` and fall back to the hand-written SVG path when
 the tool is not installed in the current repo. That keeps `/learn` working
 in a project that has not adopted the submodule.
+
+**Every content edit to the plugin needs a version bump.** Claude Code reads
+the plugin from a cache under `~/.claude`, not from the marketplace checkout,
+and `claude plugin update` refreshes that cache by comparing the version in
+`.claude-plugin/plugin.json` against the installed one. An edit that leaves
+the version alone is an edit nobody's session ever sees. PR #2 bumped
+`learning` from 0.2.0 to 0.2.2 for exactly this reason, and every follow-up
+has to keep bumping.
 
 ## manimkc
 
@@ -115,8 +124,9 @@ Keep `src/` as the encyclopedia. Reasons, from reading it:
 - Nothing in `src/` talks to manimkc either. manimkc's server is a JSON job
   API with no UI, and finished videos go to Seafile, not to a URL the app
   could embed. A video panel is new work on both sides.
-- The tool's own `serve` command already gives a human a live view of a
-  canvas. That covers "let me watch and nudge" without a second app.
+- The tool's own `serve` command (phase 4, specified but not built) is the
+  answer to "let me watch and nudge" without a second app. Until it lands,
+  the `.tldr` opens in the tldraw offline desktop app.
 
 If a combined local studio becomes worth it after real use, build it as
 its own small app (phase 6), local only, reading `learn/assets/` and
