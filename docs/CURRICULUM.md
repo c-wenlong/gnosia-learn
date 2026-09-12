@@ -4,6 +4,29 @@ Course data is typed TypeScript, not a CMS. One file per course under
 `src/data/courses/`, aggregated in `index.ts`, with the shared `Course`,
 `Module` and `Topic` types in `src/lib/types`.
 
+## Where the course data lives
+
+Two representations today, and they are kept identical by a test.
+
+| File | Status |
+| --- | --- |
+| `src/data/courses/<code>.ts` | What the web app loads. Authoritative until bundle 4. |
+| `content/courses/<code>.yaml` | The same data, plus a `topic:` slug per module. Read by `catalog index`. |
+
+`src/data/courses/parity.test.ts` loads each YAML file, strips the added
+`topic` keys and asserts deep equality against the TypeScript export. **Edit
+both, in the same commit**, or that test fails.
+
+**This flips once bundle 4 lands** ([#22](https://github.com/c-wenlong/self-learn/issues/22)):
+`content/courses/*.yaml` becomes the single authoritative source, the
+TypeScript files go away, and the web app reads the catalog. Until then the
+TypeScript is what ships and the YAML is a second copy that must not drift.
+
+Each module's `topic:` is a slug from `content/topics.yaml`, the shared topic
+vocabulary. It is a lookup key, not free text, and `catalog index` refuses to
+run when the two files disagree about which topic a module belongs to. Add or
+rename a topic there, never here.
+
 ## Adding or changing a course
 
 1. Write or edit `src/data/courses/<code>.ts`, exporting a `Course` object.
