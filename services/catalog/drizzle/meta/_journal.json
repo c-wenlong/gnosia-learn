@@ -15,6 +15,20 @@
       "when": 1789244652451,
       "tag": "0001_event_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789245594353,
+      "tag": "0002_topic_aliases_and_index_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789245595353,
+      "tag": "0003_append_only_per_row",
+      "breakpoints": true
     }
   ]
 }

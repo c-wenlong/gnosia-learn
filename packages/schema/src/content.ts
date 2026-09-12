@@ -72,6 +72,15 @@ export const topic = pgTable(
     /** Top-level bucket, e.g. `algorithms`, `networking`. Mirrors manimkc's first path segment. */
     domain: text("domain").notNull(),
     summary: text("summary"),
+    /**
+     * Other names for the same subject, so `catalog search tomasulo` finds
+     * "Tomasulo's algorithm" and `catalog search "common data bus"` finds it
+     * too. jsonb rather than text[] because every other list column in this
+     * schema is jsonb (`subtopics`, `key_points`) and one array representation
+     * is easier to reason about than two; the search is
+     * `jsonb_array_elements_text(...) ilike ...` either way.
+     */
+    aliases: jsonb("aliases").notNull().default(sql`'[]'::jsonb`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -8,6 +8,7 @@
 
 export * from "./columns";
 export * from "./content";
+export * from "./operations";
 export * from "./state";
 
 import {
@@ -24,6 +25,7 @@ import {
   curriculumItemTopic,
   topic,
 } from "./content";
+import { indexRun } from "./operations";
 import {
   event,
   learner,
@@ -59,6 +61,7 @@ export const tables = {
   progress,
   recap,
   preference,
+  indexRun,
 } as const;
 
 export type TableName = keyof typeof tables;
@@ -78,6 +81,13 @@ export const CONTENT_TABLES = [
   "curriculumItemTopic",
   "conceptCurriculumItem",
 ] as const satisfies readonly TableName[];
+
+/**
+ * Neither derived from files nor the only copy of anything a learner did: what
+ * the indexers recorded about their own runs. Counted apart so a status line
+ * cannot read it as either.
+ */
+export const OPERATIONAL_TABLES = ["indexRun"] as const satisfies readonly TableName[];
 
 export const STATE_TABLES = [
   "learner",
@@ -131,3 +141,6 @@ export type Recap = typeof recap.$inferSelect;
 export type NewRecap = typeof recap.$inferInsert;
 export type Preference = typeof preference.$inferSelect;
 export type NewPreference = typeof preference.$inferInsert;
+
+export type IndexRun = typeof indexRun.$inferSelect;
+export type NewIndexRun = typeof indexRun.$inferInsert;
