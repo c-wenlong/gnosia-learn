@@ -1,0 +1,556 @@
+import {
+  asset,
+  assetConcept,
+  assetDerivation,
+  assetTopic,
+  collection,
+  collectionItem,
+  concept,
+  conceptCurriculumItem,
+  conceptPrerequisite,
+  curriculumItem,
+  curriculumItemTopic,
+  mastery,
+  topic,
+} from "@self-learn/schema";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+
+import { withDatabase } from "../db";
+
+/**
+ * `catalog show <slug-or-id>` — one entity and everything that points at it.
+ *
+ * **Paths, never bodies.** Every asset comes back with its path and nothing
+ * else about its contents. An agent that needs the words in a note reads the
+ * file; this command's job is to tell it which file, out of several hundred,
+ * that is. Returning the text here would make the cheap layer expensive and
+ * would put a second, staler copy of every note in the database.
+ *
+ * The argument is resolved against topics, then concepts, then collections,
+ * then curriculum items, then assets. Those namespaces do not collide today; if
+ * one ever does, the other matches come back under `alternatives` rather than
+ * being silently dropped.
+ */
+
+export type ShowResult =
+  | ShowTopic
+  | ShowConcept
+  | ShowCollection
+  | ShowCurriculumItem
+  | ShowAsset;
+
+export interface AssetRef {
+  id: string;
+  kind: string;
+  path: string | null;
+  url: string | null;
+  bytes: number | null;
+  title: string | null;
+  sourceRepo: string;
+}
+
+export interface ShowTopic {
+  type: "topic";
+  slug: string;
+  title: string;
+  domain: string;
+  summary: string | null;
+  aliases: string[];
+  concepts: { slug: string; title: string; path: string }[];
+  curriculumItems: { id: string; title: string; collectionId: string }[];
+  /** Assets about this topic, grouped by kind so the shape is obvious at a glance. */
+  assets: Record<string, AssetRef[]>;
+  alternatives?: string[];
+}
+
+export interface ShowConcept {
+  type: "concept";
+  slug: string;
+  title: string;
+  summary: string | null;
+  topicSlug: string | null;
+  path: string;
+  /** What this concept depends on. */
+  requires: { slug: string; title: string; kind: string }[];
+  /** What depends on this concept. The reverse edge, which the graph needs as much. */
+  requiredBy: { slug: string; title: string; kind: string }[];
+  curriculumItems: { id: string; title: string }[];
+  mastery: { pL: number; observations: number; correct: number; lastSeen: string | null } | null;
+  assets: Record<string, AssetRef[]>;
+  alternatives?: string[];
+}
+
+export interface ShowCollection {
+  type: "collection";
+  id: string;
+  kind: string;
+  slug: string;
+  title: string;
+  parentId: string | null;
+  metadata: unknown;
+  topicSlug: string | null;
+  children: { id: string; kind: string; title: string }[];
+  curriculumItems: { id: string; title: string; subtopics: string[] }[];
+  assets: Record<string, AssetRef[]>;
+  alternatives?: string[];
+}
+
+export interface ShowCurriculumItem {
+  type: "curriculumItem";
+  id: string;
+  title: string;
+  collectionId: string;
+  subtopics: string[];
+  topics: string[];
+  concepts: { slug: string; title: string }[];
+  alternatives?: string[];
+}
+
+export interface ShowAsset {
+  type: "asset";
+  id: string;
+  kind: string;
+  path: string | null;
+  url: string | null;
+  contentHash: string | null;
+  bytes: number | null;
+  title: string | null;
+  sourceRepo: string;
+  topics: string[];
+  concepts: string[];
+  /** Assets this one was produced from, and assets produced from it. */
+  derivedFrom: AssetRef[];
+  derivedInto: AssetRef[];
+  alternatives?: string[];
+}
+
+export class NotFound extends Error {
+  constructor(target: string) {
+    super(
+      `nothing in the catalog is called "${target}". ` +
+        `Try \`catalog search ${target}\`, or \`catalog ls\` for what exists.`,
+    );
+    this.name = "NotFound";
+  }
+}
+
+type Db = Parameters<Parameters<typeof withDatabase<ShowResult>>[0]>[0]["db"];
+
+/** Group an asset list by kind, dropping empty groups so the JSON stays small. */
+function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
+  const out: Record<string, AssetRef[]> = {};
+  for (const row of rows) (out[row.kind] ??= []).push(row);
+  return out;
+}
+
+const ASSET_COLUMNS = {
+  id: asset.id,
+  kind: asset.kind,
+  path: asset.path,
+  url: asset.url,
+  bytes: asset.bytes,
+  title: asset.title,
+  sourceRepo: asset.sourceRepo,
+} as const;
+
+export async function runShow(target: string): Promise<ShowResult> {
+  return withDatabase(async ({ db }) => {
+    const first =
+      (await showTopic(db, target)) ??
+      (await showConcept(db, target)) ??
+      (await showCollection(db, target)) ??
+      (await showCurriculumItem(db, target)) ??
+      (await showAsset(db, target));
+    if (first === null) throw new NotFound(target);
+
+    // Namespaces do not collide today. When one does, saying so beats picking.
+    const others = await otherTypes(db, target, first.type);
+    if (others.length > 0) first.alternatives = others;
+    return first;
+  });
+}
+
+async function otherTypes(db: Db, target: string, found: string): Promise<string[]> {
+  const checks: [string, () => Promise<boolean>][] = [
+    ["topic", async () => (await db.select({ x: topic.slug }).from(topic).where(eq(topic.slug, target)).limit(1)).length > 0],
+    ["concept", async () => (await db.select({ x: concept.slug }).from(concept).where(eq(concept.slug, target)).limit(1)).length > 0],
+    ["collection", async () => (await db.select({ x: collection.id }).from(collection).where(eq(collection.id, target)).limit(1)).length > 0],
+    ["curriculumItem", async () => (await db.select({ x: curriculumItem.id }).from(curriculumItem).where(eq(curriculumItem.id, target)).limit(1)).length > 0],
+    ["asset", async () => (await db.select({ x: asset.id }).from(asset).where(eq(asset.id, target)).limit(1)).length > 0],
+  ];
+  const out: string[] = [];
+  for (const [name, check] of checks) {
+    if (name !== found && (await check())) out.push(name);
+  }
+  return out;
+}
+
+async function assetsForTopic(db: Db, slug: string): Promise<AssetRef[]> {
+  return db
+    .select(ASSET_COLUMNS)
+    .from(assetTopic)
+    .innerJoin(asset, eq(asset.id, assetTopic.assetId))
+    .where(eq(assetTopic.topicSlug, slug))
+    .orderBy(asc(asset.kind), asc(asset.id));
+}
+
+async function assetsForConcept(db: Db, slug: string): Promise<AssetRef[]> {
+  return db
+    .select(ASSET_COLUMNS)
+    .from(assetConcept)
+    .innerJoin(asset, eq(asset.id, assetConcept.assetId))
+    .where(eq(assetConcept.conceptSlug, slug))
+    .orderBy(asc(asset.kind), asc(asset.id));
+}
+
+async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
+  const found = (await db.select().from(topic).where(eq(topic.slug, slug)).limit(1))[0];
+  if (found === undefined) return null;
+
+  const concepts = await db
+    .select({ slug: concept.slug, title: concept.title, path: concept.path })
+    .from(concept)
+    .where(eq(concept.topicSlug, slug))
+    .orderBy(asc(concept.slug));
+
+  const items = await db
+    .select({
+      id: curriculumItem.id,
+      title: curriculumItem.title,
+      collectionId: curriculumItem.collectionId,
+    })
+    .from(curriculumItemTopic)
+    .innerJoin(curriculumItem, eq(curriculumItem.id, curriculumItemTopic.curriculumItemId))
+    .where(eq(curriculumItemTopic.topicSlug, slug))
+    .orderBy(asc(curriculumItem.id));
+
+  return {
+    type: "topic",
+    slug: found.slug,
+    title: found.title,
+    domain: found.domain,
+    summary: found.summary,
+    aliases: Array.isArray(found.aliases) ? (found.aliases as string[]) : [],
+    concepts,
+    curriculumItems: items,
+    assets: byKind(await assetsForTopic(db, slug)),
+  };
+}
+
+async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
+  const found = (await db.select().from(concept).where(eq(concept.slug, slug)).limit(1))[0];
+  if (found === undefined) return null;
+
+  const requires = await db
+    .select({
+      slug: concept.slug,
+      title: concept.title,
+      kind: conceptPrerequisite.kind,
+    })
+    .from(conceptPrerequisite)
+    .innerJoin(concept, eq(concept.slug, conceptPrerequisite.prerequisiteSlug))
+    .where(eq(conceptPrerequisite.conceptSlug, slug))
+    .orderBy(asc(conceptPrerequisite.kind), asc(concept.slug));
+
+  const requiredBy = await db
+    .select({
+      slug: concept.slug,
+      title: concept.title,
+      kind: conceptPrerequisite.kind,
+    })
+    .from(conceptPrerequisite)
+    .innerJoin(concept, eq(concept.slug, conceptPrerequisite.conceptSlug))
+    .where(eq(conceptPrerequisite.prerequisiteSlug, slug))
+    .orderBy(asc(conceptPrerequisite.kind), asc(concept.slug));
+
+  const items = await db
+    .select({ id: curriculumItem.id, title: curriculumItem.title })
+    .from(conceptCurriculumItem)
+    .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
+    .where(eq(conceptCurriculumItem.conceptSlug, slug))
+    .orderBy(asc(curriculumItem.id));
+
+  // There is one learner until authentication exists, so the first row is the
+  // belief. This is read, never written, by the catalog CLI.
+  const belief = (
+    await db
+      .select({
+        pL: mastery.pL,
+        observations: mastery.observations,
+        correct: mastery.correct,
+        lastSeen: mastery.lastSeen,
+      })
+      .from(mastery)
+      .where(eq(mastery.conceptSlug, slug))
+      .limit(1)
+  )[0];
+
+  return {
+    type: "concept",
+    slug: found.slug,
+    title: found.title,
+    summary: found.summary,
+    topicSlug: found.topicSlug,
+    path: found.path,
+    requires,
+    requiredBy,
+    curriculumItems: items,
+    mastery:
+      belief === undefined
+        ? null
+        : {
+            pL: belief.pL,
+            observations: belief.observations,
+            correct: belief.correct,
+            lastSeen: belief.lastSeen?.toISOString() ?? null,
+          },
+    assets: byKind(await assetsForConcept(db, slug)),
+  };
+}
+
+async function showCollection(db: Db, id: string): Promise<ShowCollection | null> {
+  const found = (await db.select().from(collection).where(eq(collection.id, id)).limit(1))[0];
+  if (found === undefined) return null;
+
+  const children = await db
+    .select({ id: collection.id, kind: collection.kind, title: collection.title })
+    .from(collection)
+    .where(eq(collection.parentId, id))
+    .orderBy(asc(collection.position), asc(collection.id));
+
+  const items = await db
+    .select({
+      id: curriculumItem.id,
+      title: curriculumItem.title,
+      subtopics: curriculumItem.subtopics,
+    })
+    .from(curriculumItem)
+    .where(eq(curriculumItem.collectionId, id))
+    .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
+
+  const topicRow = (
+    await db
+      .select({ topicSlug: collectionItem.topicSlug })
+      .from(collectionItem)
+      .where(and(eq(collectionItem.collectionId, id), isNotNull(collectionItem.topicSlug)))
+      .limit(1)
+  )[0];
+
+  const assets = await db
+    .select(ASSET_COLUMNS)
+    .from(collectionItem)
+    .innerJoin(asset, eq(asset.id, collectionItem.assetId))
+    .where(eq(collectionItem.collectionId, id))
+    .orderBy(asc(asset.kind), asc(asset.id));
+
+  return {
+    type: "collection",
+    id: found.id,
+    kind: found.kind,
+    slug: found.slug,
+    title: found.title,
+    parentId: found.parentId,
+    metadata: found.metadata,
+    topicSlug: topicRow?.topicSlug ?? null,
+    children,
+    curriculumItems: items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      subtopics: Array.isArray(i.subtopics) ? (i.subtopics as string[]) : [],
+    })),
+    assets: byKind(assets),
+  };
+}
+
+async function showCurriculumItem(db: Db, id: string): Promise<ShowCurriculumItem | null> {
+  const found = (
+    await db.select().from(curriculumItem).where(eq(curriculumItem.id, id)).limit(1)
+  )[0];
+  if (found === undefined) return null;
+
+  const topics = await db
+    .select({ slug: curriculumItemTopic.topicSlug })
+    .from(curriculumItemTopic)
+    .where(eq(curriculumItemTopic.curriculumItemId, id))
+    .orderBy(asc(curriculumItemTopic.topicSlug));
+
+  const concepts = await db
+    .select({ slug: concept.slug, title: concept.title })
+    .from(conceptCurriculumItem)
+    .innerJoin(concept, eq(concept.slug, conceptCurriculumItem.conceptSlug))
+    .where(eq(conceptCurriculumItem.curriculumItemId, id))
+    .orderBy(asc(concept.slug));
+
+  return {
+    type: "curriculumItem",
+    id: found.id,
+    title: found.title,
+    collectionId: found.collectionId,
+    subtopics: Array.isArray(found.subtopics) ? (found.subtopics as string[]) : [],
+    topics: topics.map((t) => t.slug),
+    concepts,
+  };
+}
+
+async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
+  const found = (await db.select().from(asset).where(eq(asset.id, id)).limit(1))[0];
+  if (found === undefined) return null;
+
+  const topics = await db
+    .select({ slug: assetTopic.topicSlug })
+    .from(assetTopic)
+    .where(eq(assetTopic.assetId, id))
+    .orderBy(asc(assetTopic.topicSlug));
+
+  const concepts = await db
+    .select({ slug: assetConcept.conceptSlug })
+    .from(assetConcept)
+    .where(eq(assetConcept.assetId, id))
+    .orderBy(asc(assetConcept.conceptSlug));
+
+  const sourceIds = (
+    await db
+      .select({ id: assetDerivation.sourceAssetId })
+      .from(assetDerivation)
+      .where(eq(assetDerivation.assetId, id))
+  ).map((r) => r.id);
+
+  const derivedIds = (
+    await db
+      .select({ id: assetDerivation.assetId })
+      .from(assetDerivation)
+      .where(eq(assetDerivation.sourceAssetId, id))
+  ).map((r) => r.id);
+
+  const lookup = async (ids: string[]): Promise<AssetRef[]> =>
+    ids.length === 0
+      ? []
+      : db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
+
+  return {
+    type: "asset",
+    id: found.id,
+    kind: found.kind,
+    path: found.path,
+    url: found.url,
+    contentHash: found.contentHash,
+    bytes: found.bytes,
+    title: found.title,
+    sourceRepo: found.sourceRepo,
+    topics: topics.map((t) => t.slug),
+    concepts: concepts.map((c) => c.slug),
+    derivedFrom: await lookup(sourceIds),
+    derivedInto: await lookup(derivedIds),
+  };
+}
+
+function assetLines(assets: Record<string, AssetRef[]>, indent = "  "): string[] {
+  const lines: string[] = [];
+  for (const [kind, rows] of Object.entries(assets)) {
+    lines.push(`${indent}${kind} (${rows.length})`);
+    for (const row of rows) lines.push(`${indent}  ${row.path ?? row.url ?? row.id}`);
+  }
+  return lines;
+}
+
+export function formatShow(result: ShowResult): string {
+  const lines: string[] = [];
+  const note = (label: string, value: string | null) => {
+    if (value !== null && value !== "") lines.push(`${label.padEnd(9)} ${value}`);
+  };
+
+  if (result.type === "topic") {
+    lines.push(`topic     ${result.slug}`);
+    note("title", result.title);
+    note("domain", result.domain);
+    note("summary", result.summary);
+    if (result.aliases.length > 0) note("aliases", result.aliases.join(", "));
+    if (result.concepts.length > 0) {
+      lines.push("", `concepts (${result.concepts.length})`);
+      for (const c of result.concepts) lines.push(`  ${c.slug}  ${c.path}`);
+    }
+    if (result.curriculumItems.length > 0) {
+      lines.push("", `curriculum items (${result.curriculumItems.length})`);
+      for (const i of result.curriculumItems) lines.push(`  ${i.id}  ${i.title}`);
+    }
+    const assets = assetLines(result.assets);
+    if (assets.length > 0) lines.push("", "assets", ...assets);
+  } else if (result.type === "concept") {
+    lines.push(`concept   ${result.slug}`);
+    note("title", result.title);
+    note("summary", result.summary);
+    note("topic", result.topicSlug);
+    note("path", result.path);
+    if (result.mastery !== null) {
+      note(
+        "mastery",
+        `p(L) ${result.mastery.pL.toFixed(2)}, ${result.mastery.correct}/${result.mastery.observations} correct`,
+      );
+    }
+    if (result.requires.length > 0) {
+      lines.push("", "requires");
+      for (const p of result.requires) lines.push(`  ${p.kind.padEnd(8)} ${p.slug}`);
+    }
+    if (result.requiredBy.length > 0) {
+      lines.push("", "required by");
+      for (const p of result.requiredBy) lines.push(`  ${p.kind.padEnd(8)} ${p.slug}`);
+    }
+    if (result.curriculumItems.length > 0) {
+      lines.push("", "curriculum items");
+      for (const i of result.curriculumItems) lines.push(`  ${i.id}  ${i.title}`);
+    }
+    const assets = assetLines(result.assets);
+    if (assets.length > 0) lines.push("", "assets", ...assets);
+  } else if (result.type === "collection") {
+    lines.push(`${result.kind.padEnd(9)} ${result.id}`);
+    note("title", result.title);
+    note("parent", result.parentId);
+    note("topic", result.topicSlug);
+    if (result.children.length > 0) {
+      lines.push("", `children (${result.children.length})`);
+      for (const c of result.children) lines.push(`  ${c.id}  ${c.title}`);
+    }
+    if (result.curriculumItems.length > 0) {
+      lines.push("", `curriculum items (${result.curriculumItems.length})`);
+      for (const i of result.curriculumItems) lines.push(`  ${i.id}  ${i.title}`);
+    }
+    const assets = assetLines(result.assets);
+    if (assets.length > 0) lines.push("", "assets", ...assets);
+  } else if (result.type === "curriculumItem") {
+    lines.push(`item      ${result.id}`);
+    note("title", result.title);
+    note("module", result.collectionId);
+    if (result.topics.length > 0) note("topics", result.topics.join(", "));
+    if (result.subtopics.length > 0) {
+      lines.push("", "subtopics");
+      for (const s of result.subtopics) lines.push(`  ${s}`);
+    }
+    if (result.concepts.length > 0) {
+      lines.push("", "concepts");
+      for (const c of result.concepts) lines.push(`  ${c.slug}  ${c.title}`);
+    }
+  } else {
+    lines.push(`asset     ${result.id}`);
+    note("kind", result.kind);
+    note("title", result.title);
+    note("path", result.path ?? result.url);
+    note("repo", result.sourceRepo);
+    note("bytes", result.bytes === null ? null : String(result.bytes));
+    note("sha256", result.contentHash);
+    if (result.topics.length > 0) note("topics", result.topics.join(", "));
+    if (result.concepts.length > 0) note("concepts", result.concepts.join(", "));
+    if (result.derivedFrom.length > 0) {
+      lines.push("", "derived from");
+      for (const a of result.derivedFrom) lines.push(`  ${a.path ?? a.url ?? a.id}`);
+    }
+    if (result.derivedInto.length > 0) {
+      lines.push("", "source of");
+      for (const a of result.derivedInto) lines.push(`  ${a.path ?? a.url ?? a.id}`);
+    }
+  }
+
+  if (result.alternatives !== undefined && result.alternatives.length > 0) {
+    lines.push("", `also names a ${result.alternatives.join(" and a ")} with the same id`);
+  }
+  return lines.join("\n");
+}
