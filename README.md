@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/banner.png" alt="Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book" width="800">
+</p>
+
 # Self-Learn · AY2026/27 Course Shortlist
 
 A personal learning workspace with three parts that feed each other:

@@ -14,13 +14,35 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Social images are absolute URLs, so they need a base. On Vercel the
+// production domain is injected; locally we fall back to the dev server.
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Self-Learn · AY2026/27 Shortlist",
     template: "%s · Self-Learn",
   },
   description:
     "Docs-style self-study hub for the SoC AY2026/27 course shortlist, with progress, notes, and resources.",
+  // Declared by hand rather than via the app/opengraph-image.png file
+  // convention: under Turbopack that convention ignores the documented
+  // opengraph-image.alt.txt sidecar, so the card ships with no alt text.
+  openGraph: {
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({
