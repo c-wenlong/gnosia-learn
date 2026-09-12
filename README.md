@@ -96,7 +96,7 @@ Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is require
 
 Four phases, driven by a dependency-free Node CLI. **Probe** ranks concepts by expected information gain, so it binary-searches the edge of your understanding instead of marching through a syllabus; being asked does not count as being taught. **Plan** returns a topologically ordered path from what you hold to the goal, with mastered prerequisites dropped and claims fact-checked before anything is taught. **Teach** hands back one concept at a time at the frontier, with a check after each step. **Close** writes the concept notes, stores the checks, logs the session, and schedules the reviews.
 
-Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. `learn/state/events.jsonl` is the source of truth, an append-only record of every answer with its before and after belief, so everything else can be rebuilt and the model parameters are safe to change.
+Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. `learn/state/events.jsonl` is the source of truth, an append-only record of every answer with its before and after belief, so the mastery model and the indexes can be rebuilt and the model parameters are safe to change. The one exception is `learn/state/reviews.json`: the SM-2 schedule has no rebuild path and is authoritative, so it is never safe to delete.
 
 ```bash
 npm run learn -- status      # where you are
@@ -120,7 +120,8 @@ flowchart LR
     end
     subgraph KB["learn/ (plain files)"]
         EV[("events.jsonl<br/>source of truth")]
-        DER["model.json · reviews.json<br/>concepts/ · sessions/ · map.md"]
+        DER["model.json · concepts/<br/>sessions/ · map.md<br/>(rebuildable)"]
+        REV[("reviews.json<br/>authoritative, no rebuild")]
         IDX["state/index.json"]
     end
     WEB["/learn page"]
@@ -128,8 +129,10 @@ flowchart LR
     SK --> C
     C --> LIB
     LIB --> EV
+    LIB --> REV
     EV --> DER
     DER --> IDX
+    REV --> IDX
     IDX --> WEB
 ```
 

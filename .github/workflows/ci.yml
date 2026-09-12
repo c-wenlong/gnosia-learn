@@ -118,7 +118,13 @@ jobs:
         # step entirely while the secret is absent, and fail_ci_if_error covers
         # the case where the token is set but the upload fails anyway.
         if: steps.codecov.outputs.configured == 'true'
-        uses: codecov/codecov-action@v7
+        # Pinned to a commit, not a tag, because this is the one third-party
+        # action in the job and it is handed a repository secret. A tag can be
+        # repointed by whoever controls the upstream repo; a SHA cannot. The
+        # first-party actions above stay on their major tag: GitHub owns them
+        # and they see no secret. Dependabot (github-actions ecosystem) keeps
+        # this SHA current and rewrites the version comment alongside it.
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
