@@ -38,19 +38,40 @@ and D12 added, in [DECISIONS.md](DECISIONS.md).
 
 Goal: an agent can draw and see.
 
-- [x] `src/page/main.tsx` mounts `<Tldraw>` with `hideUi` in headless mode; fonts copied into the bundle and referenced relatively (done in phase 0; still owes a rendered check that the label is Shantell Sans and not a system fallback, because that failure is silent)
-- [ ] `src/page/bridge.ts`: `load`, `exec`, `save`, `shot`, `lints` (friendless-arrow only for now)
-- [ ] `src/lib/browser.ts`: resolve Chromium per [DECISIONS.md](DECISIONS.md) D9, launch, open page, wait for bridge, close in `finally`
-- [ ] `src/lib/server.ts`: static server for `dist/page` on 127.0.0.1 and a random port
-- [ ] `run` with `--code`, `--eval`, `--shot`, `--create`, `--no-save`; exit codes 0, 1, 2, 3
-- [ ] `shot`, `new`
-- [ ] `helpers.box`, `helpers.text`, `helpers.connect` (with anchors, `kind`, `mid`, `label`), `helpers.plainText`, `helpers.getLints`
-- [ ] Rollback on throw via `editor.markHistoryStoppingPoint` and `editor.bailToMark`
-- [ ] `setPage` on the bridge (`ping` landed in phase 0)
-- [ ] e2e: three boxes and two arrows from a snippet, PNG written and larger than 10 kB, four bindings present, exit 0
-- [ ] `doctor` gains the page-load and failed-requests checks
+- [x] `src/page/main.tsx` mounts `<Tldraw>` with `hideUi` in headless mode; fonts copied into the bundle and referenced relatively (done in phase 0; the rendered check it owed is paid, see the note below)
+- [x] `src/page/bridge.ts`: `load`, `exec`, `save`, `shot`, `lints` (friendless-arrow only for now)
+- [x] `src/lib/browser.ts`: resolve Chromium per [DECISIONS.md](DECISIONS.md) D9, launch, open page, wait for bridge, close in `finally`
+- [x] `src/lib/server.ts`: static server for `dist/page` on 127.0.0.1 and a random port
+- [x] `run` with `--code`, `--eval`, `--shot`, `--create`, `--no-save`; exit codes 0, 1, 2, 3
+- [x] `shot`, `new`
+- [x] `helpers.box`, `helpers.text`, `helpers.connect` (with anchors, `kind`, `mid`, `label`), `helpers.plainText`, `helpers.getLints`
+- [x] Rollback on throw via `editor.markHistoryStoppingPoint` and `editor.bailToMark`
+- [x] `setPage` on the bridge (`ping` landed in phase 0)
+- [x] e2e: three boxes and two arrows from a snippet, PNG written and larger than 10 kB, four bindings present, exit 0
+- [x] `doctor` gains the page-load and failed-requests checks
 
 Done when: the example snippet in [HELPERS.md](HELPERS.md) runs, the PNG shows four boxes with bound arrows and legible labels, and CI runs the e2e suite with `npx playwright install chromium --with-deps`.
+
+**Done 2026-09-13, PR #2.** Verified from self-learn:
+`npm run canvas -- run /tmp/loop.tldr --code /tmp/loop.js --shot /tmp/loop.png
+--create` exits 0 with 8 shapes and no lints, the PNG shows four boxes with
+bound arrows and no overlaps, and `npm run canvas -- doctor` passes all six
+checks. The rendered font check phase 0 owed is paid: the labels come out in
+Shantell Sans, and `document.fonts` reports `tldraw_draw`, `tldraw_sans`,
+`tldraw_serif` and `tldraw_mono` loaded with zero failed requests. The PNG is
+committed once as `tldrawkc/docs/example-loop.png` for the tool's README (D21).
+
+Phase 1 also went past the checklist where it was cheap: `helpers/geometry.ts`
+and `helpers/keys.ts` are pure and unit tested in node, the failed-request log
+counts 400-and-worse responses as well as `requestfailed` (D15), and the
+end-to-end suite is split between a stand-in bridge page and the real bundle
+(D18). Nine decisions came out of it, D13 to D21. The doc corrections it forced
+are in [ARCHITECTURE.md](ARCHITECTURE.md) (the `load`, `shot` and `exec` bridge
+rows, `MAX_SHOT_EDGE`, the fonts section, layering rule 8),
+[CLI.md](CLI.md) (positional arity, absolute paths, the `shot` and `new` JSON
+shapes, the `doctor` rows) and [HELPERS.md](HELPERS.md) (`connect`'s ids,
+bindings and anchors, `box`'s height and parent coordinates, and the example's
+gaps).
 
 ## Phase 2. Read, export, import
 
