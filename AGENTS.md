@@ -226,13 +226,16 @@ not have to be worked out again.
   [learn/README.md](learn/README.md#the-json-shapes), and pinned by golden
   tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
   breaking change to the plugin, not a refactor.
-- **The web app imports `@self-learn/catalog/state`, and Next has to be told.**
-  Both workspaces ship raw TypeScript with no build step, so
-  `transpilePackages` in `next.config.ts` lists them; `pg` picks a driver at
-  runtime, so `serverExternalPackages` keeps it out of the bundle. A client
-  component must take the shared constants from `@self-learn/schema/shared`,
-  which imports nothing — importing them from `@self-learn/schema` would drag
-  drizzle into the browser bundle.
+- **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
+  `serverExternalPackages: ["pg"]` in `next.config.ts` is load-bearing: the
+  driver resolves its optional native binding through a runtime `require` no
+  bundler can follow. `transpilePackages` is deliberately *not* there —
+  Turbopack transpiles workspace packages on its own, verified by removing an
+  entry and building. A client component must take the shared constants from
+  `@self-learn/schema/shared`, which imports nothing; taking them from
+  `@self-learn/schema` would drag drizzle into the browser bundle, and
+  `src/lib/learner-store.ts` carries `import "server-only"` so that mistake
+  fails the build rather than shipping a Postgres driver.
 - **Every page is dynamic, and that is the point.** The root layout reads the
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
   reads the database at build time either — every read calls `connection()`
