@@ -62,12 +62,21 @@ it down to fit, and shrinks the font rather than overflowing.
 ### `helpers.remove(ids)` and `helpers.clear()`
 
 Delete by id, or delete every shape on the current page. `clear` is refused
-unless the current page held nothing when `exec` started, or it is called as
-`helpers.clear({ force: true })`. That is what "the snippet did not create the
-document" had to become in practice: the bridge records emptiness per page in
-`beginExec()` before each snippet, so re-running a snippet against a document
-it drew still counts as created, and switching to a page full of someone
-else's work does not inherit the permission.
+unless the current page held nothing when this `exec` started, or it is called
+as `helpers.clear({ force: true })`.
+
+That is what "the snippet did not create the document" had to become in
+practice. The bridge records which pages were empty in `beginExec()`, once,
+before the snippet runs, so the permission is per page and per `exec`: a
+snippet that draws a page and then clears it to start over still passes,
+because the check reads the state at the start rather than the state now, and
+`editor.setCurrentPage` onto a page full of someone else's work does not
+inherit the permission from the page the snippet did create.
+
+Commands are stateless (D2), so the permission does not survive one. A second
+`run` against a saved document loads a page with shapes on it, that page was
+not empty when its `exec` started, and `clear()` is refused. Wiping a document
+a previous command wrote needs `{ force: true }`, which is the point.
 
 ### `helpers.plainText(shape)`
 
