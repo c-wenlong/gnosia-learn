@@ -16,10 +16,27 @@ updates:
       interval: "weekly"
       day: "monday"
     groups:
+      # react and react-dom pin each other to the exact same version, and the
+      # @types packages track them. Bumping any one alone fails npm ci with
+      # ERESOLVE, so they always travel as one pull request.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      # Minor and patch only. A major bump of a tool (eslint, vitest, a
+      # @types package jumping several Node versions) can need code or config
+      # changes and deserves its own pull request, where it can fail or pass on
+      # its own. @vitest/coverage-v8 in particular requires an exact vitest
+      # version match, so a major of one without the other can never install.
       development-dependencies:
         dependency-type: "development"
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
