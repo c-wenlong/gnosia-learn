@@ -53,12 +53,14 @@ updates:
           - "patch"
     # @types/node tracks the Node runtime, not the newest publish. This repo
     # runs Node 22 (engines in package.json, node-version in ci.yml), so a
-    # major past 22 would describe APIs the runtime does not have. Raise the
-    # floor here when the runtime itself moves.
+    # major past 22 would describe APIs the runtime does not have. This pins
+    # the ceiling rather than ignoring every major, so 22.x patches and minors
+    # still arrive. Raise both this and the devDependency range together when
+    # the runtime itself moves.
     ignore:
       - dependency-name: "@types/node"
-        update-types:
-          - "version-update:semver-major"
+        versions:
+          - ">=23"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
