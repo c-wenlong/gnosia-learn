@@ -72,8 +72,47 @@ Rules of engagement:
   topic), `lint`, `preview`, `build`. Run it from any checkout, or install with
   `uv tool install -e tools/cli`.
 - The end-to-end process is the `manimkc-video` skill, which lives in the
-  submodule and is symlinked into `.claude/skills/manimkc-video`. That symlink
-  and `launch.json` are the only things `.claude/` holds here.
+  submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
+  `.claude/` holds here is either `launch.json` or a symlink into a submodule:
+  that skill and `tldrawkc-diagram`.
+
+## Diagrams: tldrawkc/
+
+`tldrawkc/` is the second git **submodule** (its own repo,
+github.com/c-wenlong/tldrawkc). It draws teaching diagrams on a real tldraw
+canvas in headless Chromium, screenshots them so the agent can look, lints
+them, and exports a self-contained SVG. It exists because hand-written SVG
+shipped overlapping text and arrows pointing at nothing often enough that
+reading the markup back was not catching it.
+
+Rules of engagement:
+
+- **Read `tldrawkc/AGENTS.md` before working in there.** It covers the Node
+  to browser bridge, why every shape is built inside a live `Editor` rather
+  than in Node, the helper bag a snippet may call, and the seven lint rules.
+  None of that is guessable from this repo.
+- **Commits inside `tldrawkc/` belong to that repo.** Commit and push there
+  first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- Its `node_modules/` and `dist/` are local artefacts, and `dist/` is what
+  `npm run canvas` actually executes. A fresh clone needs
+  `git submodule update --init tldrawkc` plus `npm ci && npm run build`
+  inside it before any diagram command runs. Start with
+  `npm run --silent canvas -- doctor`, which checks node, the page bundle,
+  Chromium and the page itself.
+- **Drive it through the CLI, not by hand.** From this repo that is
+  `npm run --silent canvas -- <verb>`: `doctor`, `api` (every helper with a
+  real usage line), `new`, `run` (a snippet plus `--shot`), `shot`,
+  `inspect`, `export`, `from-mermaid`. `serve` is specified but not built.
+  Exit code 3 means lints remain, and it is deliberate: a diagram is not
+  finished until `inspect` exits 0.
+- Outputs go to `learn/assets/<concept-id>.tldr` and
+  `learn/assets/<concept-id>.svg`, and **both are committed**: the `.tldr` is
+  the editable source the next session extends, the `.svg` is what the
+  session log embeds as `![[<concept-id>.svg]]`. Iteration PNGs go to the
+  scratchpad and are never committed.
+- The end-to-end process is the `tldrawkc-diagram` skill, which lives in the
+  submodule and is symlinked into `.claude/skills/tldrawkc-diagram`.
 
 ## Gotchas
 
@@ -100,9 +139,16 @@ not have to be worked out again.
   otherwise typecheck a submodule this repo does not own against Next's
   compiler options, and `npm run typecheck` fails on it. Lint and typecheck
   the tool inside `tldrawkc/` with its own config.
-- **Only bump the `manimkc/` pointer to a commit that is already pushed.**
-  Check `git diff --submodule=log manimkc` before `git add manimkc`; staging a
-  dirty or unpushed submodule leaves a pointer nobody else can resolve.
+- **`npm run canvas` needs `--silent`, or `--json` is unparseable.** npm
+  prints a two-line banner (`> self-learn@0.1.0 canvas` and the resolved
+  command) on stdout before the tool writes anything, so
+  `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
+  `npm run --silent canvas -- ...` suppresses it. The same applies to
+  `npm run learn`.
+- **Only bump a submodule pointer to a commit that is already pushed.**
+  Check `git diff --submodule=log manimkc` (or `tldrawkc`) before
+  `git add`; staging a dirty or unpushed submodule leaves a pointer nobody
+  else can resolve.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
   output: `npm run build` then

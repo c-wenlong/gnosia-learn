@@ -107,19 +107,17 @@ decisions came out of it, D22 to D33. The doc corrections it forced are in
 section) and [CLI.md](CLI.md) (`api`, the `export` and `from-mermaid` JSON
 shapes, `inspect` on an empty page, and the self-overwrite rule).
 
-## Known gaps after phase 2
+## Known gaps after phase 3
 
-Not a phase. What phase 2 shipped without, written down so it is found
-deliberately rather than in a diagram that looks wrong.
+Not a phase. What is still missing, written down so it is found deliberately
+rather than in a diagram that looks wrong. Two entries that stood here after
+phase 2 are gone because phase 3 closed them: no lint caught an arrow crossing
+a shape (`arrow-crosses-shape`, tldrawkc PR #5) and a snippet's stack printed
+two lines too high (D34, same PR).
 
-- **No lint catches an arrow crossing a shape.** The learn-map canvas passes
-  with zero lints while long arrows run straight through boxes. The six rules
-  are all about shapes against shapes, or a label against its own box.
 - **A diamond's label can exceed its outline without a lint.**
   `unreadable-label` compares against the shape's width, and a diamond's
   usable width at the label's height is a fraction of that.
-- **A snippet's stack line numbers print two too high** (D33). The offset is
-  documented, not applied.
 - **No exported SVG has been opened in a browser.** They were checked by
   grepping the file and by rendering the same canvas to PNG.
 - **`RL` and `BT` have never been looked at rendered.** All five directions
@@ -128,19 +126,70 @@ deliberately rather than in a diagram that looks wrong.
   multi-page document.** Every document this phase touched had one page.
 - **Rendering on Linux has never been eyeballed.** CI runs the end-to-end
   suite there and asserts sizes and labels; nobody has looked at the output.
+- **An exported SVG is about 440 kB, whatever the diagram.** `export --svg`
+  inlines both fonts it uses as base64, so the vector diagram went from a
+  5 kB hand-written file to 444 kB, of which 220 kB is font. Self-contained
+  was the point (D26), but it is a per-repo cost that compounds one diagram
+  at a time and needs a decision: keep it, subset the fonts, or link them.
+- **The agent cannot read its own export.** An SVG that size is refused by
+  the Read tool, which counts the file at roughly 194000 tokens against a
+  25000 cap, and the export is one enormous line so paging through it with
+  `offset` buys nothing. The loop already looks at the PNG instead, but
+  "check the SVG you shipped" is not a step that exists.
+- **The hand-drawn font has no square-root glyph.** In `font: 'draw'`
+  (Shantell Sans) a square-root sign renders as a plain `v` with no bar, which
+  reads as a variable. Every maths label needs `font: 'sans'`, and nothing
+  warns.
+- **`helpers.stub` takes no options at all.** The signature is
+  `stub(key, x, y, dx, dy)`: no colour, no size, no dash, no arrowhead. A
+  teaching diagram is mostly decorative marks (axes, ticks, dashed guides,
+  each in the colour of the thing it belongs to), so the vector redraw ended
+  up hand-rolling a `line()` that builds a raw arrow shape with
+  `meta.lintIgnore` set, which is exactly what the helper bag exists to avoid.
+  `stub` wants the same `{ color, size, dash, head }` bag `connect` already
+  has.
+- **No helper sizes two containers alike.** Two side-by-side panels that
+  should read as a matched pair have to be given identical `w` and `h` by
+  hand, and `boxShapes` sizes each to its own contents.
+- **No helper places a label against a group.** "Centre this text under those
+  four shapes" is arithmetic on `describe()` output every time; `row`,
+  `column` and `grid` move shapes but nothing positions one shape relative to
+  the bounds of several.
 
 ## Phase 3. Skill and integration into self-learn
 
 Goal: the tutoring loop uses it.
 
-- [ ] `.claude/skills/tldrawkc-diagram/SKILL.md` in the tool repo, from [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md); symlink it into `self-learn/.claude/skills/`
-- [ ] Update the `diagram-maker` agent in the `learning` plugin (`~/.quiver/plugins/learning/learning/agents/diagram-maker.md`) to run the loop through `npm run canvas` and write both `.tldr` and `.svg` to `learn/assets/`
-- [ ] Root `AGENTS.md` in self-learn: a section on `tldrawkc/` modelled on the `manimkc/` one (submodule rules, drive it through the CLI, where outputs go)
-- [ ] `ARCHITECTURE.md` in self-learn: add the submodule to the layer table and `learn/assets/<id>.tldr` to the knowledge-base layout
-- [ ] Redraw one existing diagram (`learn/assets/vector-as-a-list-of-numbers.svg`) with the tool and commit the `.tldr` beside it
-- [ ] Bump the submodule pointer only to a pushed commit, per the root AGENTS.md rule
+- [x] `.claude/skills/tldrawkc-diagram/SKILL.md` in the tool repo, from [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md); symlink it into `self-learn/.claude/skills/`
+- [x] Update the `diagram-maker` agent in the `learning` plugin (`~/.quiver/plugins/learning/learning/agents/diagram-maker.md`) to run the loop through `npm run canvas` and write both `.tldr` and `.svg` to `learn/assets/`
+- [x] Root `AGENTS.md` in self-learn: a section on `tldrawkc/` modelled on the `manimkc/` one (submodule rules, drive it through the CLI, where outputs go)
+- [x] `ARCHITECTURE.md` in self-learn: add the submodule to the layer table and `learn/assets/<id>.tldr` to the knowledge-base layout
+- [x] Redraw one existing diagram (`learn/assets/vector-as-a-list-of-numbers.svg`) with the tool and commit the `.tldr` beside it
+- [x] Bump the submodule pointer only to a pushed commit, per the root AGENTS.md rule
 
 Done when: a `/learn` session that reaches the Teach phase produces a diagram through the tool, the session log embeds the SVG, and `git status` shows a `.tldr` next to it.
+
+**Done 2026-09-13, self-learn PR #PRNUM.** The skill landed in the tool repo as
+tldrawkc PR #4 and is symlinked in beside `manimkc-video`, so `.claude/` here
+still holds nothing but `launch.json` and two symlinks. The plugin change
+landed separately in quiver-hub PR #2, which also bumped the `learning`
+plugin from 0.2.0 to 0.2.2; a follow-up carries it to 0.2.3. The vector
+diagram was redrawn from scratch in four passes and came back with six
+`arrow-crosses-shape` findings, every one of them the axes and the vector
+running through the 16-unit origin dot they are drawn from. A fifth pass set
+`meta.lintIgnore: ['arrow-crosses-shape']` on the two dots, the documented
+opt-out, and `inspect` now exits 0 with 43 shapes and no lints of any rule.
+
+Phase 3 also shipped the lint that gap list asked for. `arrow-crosses-shape`
+and the snippet stack rewrite are tldrawkc PR #5, not part of the checklist
+above, and both came out of drawing this one diagram: the first pass routed
+an arrow through a box and nothing said so, and a snippet that threw pointed
+at the wrong line. Three doc corrections came out of phase 3, in
+[AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) (every command example ran as a bare
+`tldrawkc`, which is not how a host repo invokes it, and `serve` was written
+as if it existed), [HELPERS.md](HELPERS.md) (the lint table and the container
+exemption both predate the seventh rule) and [DECISIONS.md](DECISIONS.md)
+(D33 was superseded, D34 and D35 added).
 
 ## Phase 4. The human view
 
