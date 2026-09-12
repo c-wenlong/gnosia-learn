@@ -14,10 +14,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, test and PR conventions |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
 | [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
+| [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The catalog: every table, why the links are typed, how `event` stays append-only, how to run migrations |
+| [content/README.md](content/README.md) | The three content folders, and the rules for editing the topic vocabulary |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [tldraw-integration/](tldraw-integration/README.md) | The brief for `tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
-| [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The relational schema: entities, why the links are typed, how `event` stays append-only |
 
 ## The learning pipeline
 
@@ -150,6 +151,18 @@ not have to be worked out again.
   Check `git diff --submodule=log manimkc` (or `tldrawkc`) before
   `git add`; staging a dirty or unpushed submodule leaves a pointer nobody
   else can resolve.
+- **The `event` append-only trigger is `FOR EACH ROW`, and must stay that way.**
+  As `FOR EACH STATEMENT` (how migration `0001` first wrote it) it fired on the
+  `ON DELETE SET NULL` that Postgres runs against `event.concept_slug` whenever
+  any concept is deleted — even with `event` completely empty. The effect was
+  that no `concept` row could ever be deleted, which breaks the indexers.
+  Migration `0003_append_only_per_row` fixes it and
+  `services/catalog/test/schema.test.ts` guards it.
+- **A catalog indexer must never `continue` past an unresolved slug.** The rule
+  is refuse, with the file and the slug named; `IndexErrors` collects them so
+  one run reports all of them. A skipped row is an asset that is silently
+  missing from the catalog, and the audit in #27 recorded that happening once
+  already.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
   output: `npm run build` then

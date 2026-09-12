@@ -74,6 +74,7 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 src/              app/ (pages + agent API routes) · components/ · data/ · lib/
 scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
 learn/            The knowledge base itself (see learn/README.md)
+content/          Authored data: topics.yaml, the shared vocabulary, and courses/
 packages/schema/  Drizzle tables: the single source of the catalog's row shapes
 services/catalog/ Migrations, the database connection and the catalog CLI
 .claude/          launch.json, plus skills/manimkc-video symlinked from the submodule
@@ -81,9 +82,12 @@ services/catalog/ Migrations, the database connection and the catalog CLI
 
 The catalog is the join the three trees never had: one `topic` vocabulary every
 asset points at, typed link tables with foreign keys at both ends, and an
-append-only `event` log the learner state is replayed from. It is empty until
-the indexers land; the design is in
-[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
+append-only `event` log the learner state is replayed from. `npm run catalog --
+index` fills it from `content/`, `learn/` and `manimkc topics --json`, and
+agents read it back in layers with `ls`, `show`, `path` and `search`, every one
+of them `--json` and bounded. The design is in
+[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md), the content it indexes
+in [content/README.md](content/README.md).
 
 `.claude/` holds no learning skills. `/learn`, `/review` and the three subagents live in the globally installed `learning` plugin, so they work in every project; see [AGENTS.md](AGENTS.md) for why copying them back here would be a mistake.
 
@@ -196,7 +200,7 @@ Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
-| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `status`. Needs `createdb self_learn` against a local Postgres 17 |
+| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `index`, `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
 
 Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
 

@@ -14,6 +14,13 @@ the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables | Files in git. Every row is rebuildable by re-running the indexers. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. |
+| Operational | `index_run` | Neither. One row per source saying when it was last read and what it produced. |
+
+`index_run` is the third thing because it is neither of the first two: it is not
+derived *from* files, and it is not the only copy of anything a learner did.
+Without it, "is the manimkc half of this database stale?" has no answer short of
+re-indexing and diffing, because a table full of rows from a three-week-old
+checkout looks exactly like a fresh one.
 
 Losing the content half costs an index run. Losing the state half loses the
 study record, which is why `event` is append-only and why the derived state
@@ -25,7 +32,7 @@ tables can always be recomputed rather than restored.
 
 | Table | Purpose |
 | --- | --- |
-| `topic` | The shared vocabulary. Slug PK, title, domain, summary. The required join for every asset. |
+| `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
 | `concept` | One authored note under `learn/concepts/`. Carries prerequisites and mastery. Optional enrichment under a topic. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
@@ -49,6 +56,12 @@ tables can always be recomputed rather than restored.
 | `progress` | A ticked checklist row, plus the learner's note on it. |
 | `recap` | The durable "what I learnt" record per checklist row. |
 | `preference` | Theme, epoch, last visited. Key/value, because these change with the UI. |
+
+### Operational
+
+| Table | Purpose |
+| --- | --- |
+| `index_run` | One row per source: when it last ran, what it read, and what it wrote. Overwritten each run. |
 
 ## Decisions
 
@@ -138,6 +151,16 @@ would not.
 The correction path is a new row, not an edit: the `learn` CLI already writes a
 `void` event with a reason, and the trigger's hint says so.
 
+The triggers are `FOR EACH ROW`, and `0003_append_only_per_row` exists because
+they were not. As `FOR EACH STATEMENT` a trigger fires on the statement whether
+or not it touches a row, and `event.concept_slug` is a foreign key with `ON
+DELETE SET NULL`: deleting any concept makes Postgres run `UPDATE ONLY event SET
+concept_slug = NULL WHERE $1 = concept_slug`, which tripped the guard even
+against a completely empty `event`. No `concept` row could be deleted at all,
+which is incompatible with an indexer whose contract is that a derived row goes
+when its file does. Per-row keeps the guarantee exactly — every event row
+actually being changed still raises — and drops the false positive.
+
 `event` carries no `updated_at`. A column that can never change would only
 invite someone to try.
 
@@ -206,6 +229,7 @@ erDiagram
         text title
         text domain
         text summary
+        jsonb aliases
     }
     concept {
         text slug PK
@@ -351,13 +375,87 @@ erDiagram
 The dotted lines are not foreign keys. They say that `mastery` and `review` are
 computed from `event` and can be thrown away and rebuilt.
 
+## Filling it
+
+`npm run catalog -- index` reads the content trees and rewrites the derived
+rows. Six sources, run in the order the foreign keys require regardless of how
+`--only` names them:
+
+| Source | Reads | Produces |
+| --- | --- | --- |
+| `topics` | `content/topics.yaml` | `topic` |
+| `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `curriculum_item_topic`, `link` assets |
+| `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `concept_curriculum_item`, `note` assets |
+| `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
+| `diagrams` | `learn/assets/*.svg`, `*.tldr` | `diagram_svg`, `diagram_source` assets |
+| `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
+
+`courses` runs before `concepts` because a note's `topics:` frontmatter names
+curriculum items, and everything runs after `topics` because every other source
+resolves a slug from the shared vocabulary.
+
+### Refuse, never skip
+
+An unresolved reference stops the run and names the file and the slug. A skipped
+row is an asset that is silently absent from the catalog, with nothing anywhere
+saying so — which is the failure the audit in
+[#27](https://github.com/c-wenlong/self-learn/issues/27) already recorded once,
+when a rendered video outlived its source and nothing flagged it. Errors are
+collected per source and reported together, so one run fixes one edit rather
+than thirty runs fixing thirty.
+
+Two facts stated in two files are checked against each other rather than
+resolved by precedence: a module's `topic:` against the vocabulary's
+`maps.courses`, and a manimkc `topic.yml`'s optional `topic:` against
+`maps.manimkc`. When they disagree, neither is knowably right, so the run stops.
+
+The one exception is `sessions`. A session log is prose, and its wikilinks point
+at other sessions and at notes nobody has written; a link that names no concept
+is counted, not refused.
+
+### Upsert, then prune
+
+Each source writes in one transaction: clear the link rows it owns, upsert its
+entities, delete the entities it no longer produces, insert the links. Two
+things make that safe.
+
+**Entities are upserted, never replaced.** `concept` and `curriculum_item` are
+the target of `ON DELETE CASCADE` foreign keys from `mastery`, `review`,
+`progress` and `recap`, so deleting and reinserting a row would destroy the
+learner's record of it and put an identical-looking row back. The upsert's SET
+clause is built from the table's columns rather than the supplied keys, so a
+field deleted from a file becomes null instead of living on as the last value
+anyone wrote.
+
+**Each source owns a namespace.** Every asset id begins with its source's prefix
+— `note:`, `link:`, `manimkc:`, `diagram:`, `session:` — and the writer refuses
+an id outside it. That prefix is how a prune knows which rows it may delete, so
+one indexer can never remove another's.
+
+Because deletions cascade, `index` prints the keys it removed rather than a
+count.
+
 ## Working on it
 
 ```bash
 createdb self_learn                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
-npm run catalog -- status --json       # row counts and the migration head
+npm run catalog -- status --json       # row counts, migration head, source freshness
+npm run catalog -- index               # fill it from content/ and learn/
 ```
+
+Reading it back, cheapest first. Every command takes `--json`.
+
+```bash
+npm run catalog -- ls                          # domains and courses, with counts
+npm run catalog -- ls algorithms               # one domain's topics
+npm run catalog -- show master-theorem         # one entity, and its paths
+npm run catalog -- path big-o-witness-definition master-theorem
+npm run catalog -- search "common data bus"    # titles and aliases, top 20
+```
+
+`show` returns paths, never bodies. The database says which file to read; git
+holds the words.
 
 After changing anything in `packages/schema/src/`:
 
@@ -372,12 +470,20 @@ an edit makes the migration look unapplied everywhere it has already run.
 
 ## Still open
 
-- The `topic` table is empty until `content/topics.yaml` lands with the second
-  half of bundle 3. `concept.topic_slug` is nullable for that reason and should
-  be tightened once every note resolves.
-- `event.session_id` is free text. Sessions are files under `learn/sessions/`
-  today, so there is nothing to reference; they become assets of kind `session`
-  when the indexers land, and the column can become a foreign key then.
+- `concept.topic_slug` is still nullable, though every one of the 32 notes now
+  resolves through `maps.concepts` and the end-to-end test asserts none is null.
+  Tightening it to `NOT NULL` is a one-line migration and is deliberately not in
+  this bundle: the constraint should land after bundle 4 has exercised the
+  column, not on the same day the indexer that fills it does.
+- `event.session_id` is free text. Sessions are now assets of kind `session`,
+  so the column could become a foreign key to `asset(id)` — left alone until
+  bundle 5, which is what will actually write events referencing one.
+- A concept with recorded events cannot be deleted: the `ON DELETE SET NULL` on
+  `event.concept_slug` trips the append-only trigger, correctly, because
+  forgetting what an event was about is exactly what that table exists to
+  prevent. A concept with `mastery` but no events, on the other hand, is
+  cascade-deleted silently. That asymmetry is real and is bundle 5's to settle,
+  when there is state to settle it against.
 - `learner` holds one row by convention, not by constraint. A `CHECK (id =
   'local')` would enforce it and would have to be dropped the day authentication
   arrives, so the convention is documented instead.
