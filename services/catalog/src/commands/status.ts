@@ -79,9 +79,13 @@ export async function runStatus(): Promise<StatusResult> {
     const rows: Record<string, number> = {};
     const totals = { content: 0, state: 0, operational: 0 };
 
-    if (migrations.head === null) {
-      // Nothing is applied, so no table exists yet. Counting would just be a
-      // pile of "relation does not exist" errors; report zero tables instead.
+    if (migrations.head === null || migrations.pending.length > 0) {
+      // Two cases, one answer: nothing applied, so no table exists; or some
+      // applied and some not, so the tables that exist are not the tables this
+      // code knows about. `index_run` arrives in 0002, so a database stopped at
+      // 0000 or 0001 has a non-null head and no such table, and counting would
+      // fail with "relation does not exist" instead of saying the obvious
+      // thing, which is that migrations are outstanding.
       return {
         database: redactUrl(url),
         migrations: {
@@ -139,7 +143,12 @@ export function formatStatus(result: StatusResult): string {
   ];
   const names = Object.keys(result.rows);
   if (names.length === 0) {
-    lines.push("No tables yet. Run `npm run catalog -- migrate`.");
+    lines.push(
+      result.migrations.head === null
+        ? "No tables yet. Run `npm run catalog -- migrate`."
+        : "Migrations are outstanding, so the tables are not what this build expects. " +
+            "Run `npm run catalog -- migrate`.",
+    );
     return lines.join("\n");
   }
   const width = Math.max(...names.map((n) => n.length));

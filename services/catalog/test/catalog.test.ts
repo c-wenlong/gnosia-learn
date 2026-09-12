@@ -1,3 +1,7 @@
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { collection, concept, curriculumItem, topic } from "@self-learn/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -10,7 +14,7 @@ import { runShow, type ShowConcept, type ShowTopic } from "../src/commands/show"
 import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { hasManimkcCli } from "../src/index/manimkc";
-import { applyMigrations } from "../src/migrations";
+import { applyMigrations, MIGRATIONS_FOLDER } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -33,6 +37,32 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 const reachable = await probe();
 const withManimkc = hasManimkcCli(REPO_ROOT);
+
+/**
+ * A migrations folder holding only the first two migrations, so a scratch
+ * database can be left deliberately behind. `index_run` arrives in 0002, which
+ * is what makes "head is set but this table does not exist" reachable at all.
+ */
+async function partialMigrations(count = 2): Promise<string> {
+  const folder = await mkdtemp(path.join(tmpdir(), "catalog-partial-"));
+  await mkdir(path.join(folder, "meta"), { recursive: true });
+  const journal = JSON.parse(
+    await readFile(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
+  ) as { entries: { tag: string }[] };
+  const kept = journal.entries.slice(0, count);
+  for (const entry of kept) {
+    await copyFile(
+      path.join(MIGRATIONS_FOLDER, `${entry.tag}.sql`),
+      path.join(folder, `${entry.tag}.sql`),
+    );
+  }
+  await writeFile(
+    path.join(folder, "meta", "_journal.json"),
+    JSON.stringify({ ...journal, entries: kept }),
+    "utf8",
+  );
+  return folder;
+}
 
 /** What `content/` and `learn/` hold today. Update deliberately. */
 const EXPECTED = {
@@ -137,6 +167,29 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(bySource.get("topics")?.counts).toMatchObject({ topic: EXPECTED.topics });
       if (!withManimkc) expect(bySource.get("manimkc")?.lastIndexedAt).toBeNull();
     });
+
+    it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
+      // `index_run` arrives in 0002, so a database stopped at 0000 or 0001 has
+      // a non-null head and no such table. Counting there used to throw
+      // "relation does not exist" rather than saying the obvious thing.
+      const partial = await createScratchDatabase();
+      const saved = process.env["DATABASE_URL"];
+      try {
+        await applyMigrations(partial.db, { folder: await partialMigrations() });
+        const url = new URL(saved ?? "postgres://localhost:5432/self_learn");
+        url.pathname = `/${partial.name}`;
+        process.env["DATABASE_URL"] = url.toString();
+
+        const status = await runStatus();
+        expect(status.migrations.head).not.toBeNull();
+        expect(status.migrations.pending.length).toBeGreaterThan(0);
+        expect(status.rows).toEqual({});
+        expect(status.sources.every((s) => s.lastIndexedAt === null)).toBe(true);
+      } finally {
+        if (saved !== undefined) process.env["DATABASE_URL"] = saved;
+        await partial.drop();
+      }
+    }, 60_000);
   });
 
   describe("ls", () => {
@@ -167,6 +220,9 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(result.children).toHaveLength(7);
       expect(result.children[0]?.topicSlug).toBe("search-algorithms");
       expect(result.children[0]?.curriculumItems.length).toBeGreaterThan(0);
+      // Modules contain curriculum items, which are not collections, so there
+      // is nothing a level further down to omit.
+      expect(result.children.every((c) => c.children === 0)).toBe(true);
     });
 
     it("refuses a target that is neither a domain nor a collection", async () => {

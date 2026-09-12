@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { conceptsIndexer } from "../src/index/concepts";
+import { withDependents } from "../src/index/run";
 import { coursesIndexer } from "../src/index/courses";
 import { diagramsIndexer } from "../src/index/diagrams";
 import { IndexError } from "../src/index/errors";
@@ -513,5 +514,38 @@ describe("manimkc", () => {
       new Map([["alpha", {}]]),
     );
     expect(notes.join("\n")).toContain("ORPHAN out/networking/gone");
+  });
+});
+
+describe("source selection", () => {
+  /**
+   * Pruning cascades, so running a source without the sources that point at
+   * what it owns leaves rows silently unlinked. These assert the expansion
+   * rather than the graph, because the graph is the thing likely to be edited.
+   */
+  it("pulls in everything downstream of the vocabulary", () => {
+    expect([...withDependents(["topics"])].sort()).toEqual([
+      "concepts",
+      "courses",
+      "diagrams",
+      "manimkc",
+      "sessions",
+      "topics",
+    ]);
+  });
+
+  it("pulls concepts, and what points at concepts, in behind courses", () => {
+    expect([...withDependents(["courses"])].sort()).toEqual([
+      "concepts",
+      "courses",
+      "diagrams",
+      "sessions",
+    ]);
+  });
+
+  it("leaves the cheap cases cheap: nothing points at what manimkc owns", () => {
+    expect([...withDependents(["manimkc"])]).toEqual(["manimkc"]);
+    expect([...withDependents(["diagrams"])]).toEqual(["diagrams"]);
+    expect([...withDependents(["sessions"])]).toEqual(["sessions"]);
   });
 });

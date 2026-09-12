@@ -39,6 +39,10 @@ This project is continuously deployed and not versioned; entries are grouped by 
   "is the manimkc half of this database stale" has an answer that is not
   "re-index and diff".
 - **`topic.aliases`**, so `search "common data bus"` finds Tomasulo's algorithm.
+- **`index --only` expands to the sources downstream of what it names**, and
+  says which it added. Pruning a topic cascades into the links every other
+  source owns, so running one source alone could leave the rest silently
+  unlinked.
 - **Open-source hygiene files.** MIT `LICENSE`, `CONTRIBUTING.md`,
   `SECURITY.md`, `ARCHITECTURE.md` and this changelog. `ARCHITECTURE.md` is
   written from the code rather than the README: the three layers, the
@@ -102,6 +106,16 @@ This project is continuously deployed and not versioned; entries are grouped by 
   makes both triggers `FOR EACH ROW`, which keeps the guarantee and drops the
   false positive. It was invisible until the indexers became the first thing to
   try deleting a concept.
+- `catalog status` failed against a partially migrated database instead of
+  reporting the outstanding migrations: `head` is non-null at 0000 or 0001 but
+  `index_run` does not exist until 0002, so the row counts threw "relation does
+  not exist".
+- `catalog show <concept>` read mastery filtered by concept alone and took the
+  first row, which would have returned another learner's belief once there is
+  more than one. Now scoped to the learner explicitly.
+- `catalog ls <collection>` reported only direct children, so a deeper level
+  would have been silently absent. It stays one level deep, deliberately, but
+  now counts what is below each child and names the command to see it.
 - Documentation audit: counts, paths and command names that had drifted from
   the code they describe.
 

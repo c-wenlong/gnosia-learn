@@ -392,7 +392,9 @@ projections that can be rebuilt by replaying it. Bundle 5 backfills these from
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
 `diagram:`, `session:`) and a set of tables. That ownership is what lets the
 writer prune safely: a source may delete only rows it could have produced, so
-one indexer can never remove another's.
+one indexer can never remove another's. `--only` expands to include everything
+downstream of what it names, because a prune cascades and a half-run index is
+worse than none: it looks complete and answers with fewer rows.
 
 ### How agents read it
 

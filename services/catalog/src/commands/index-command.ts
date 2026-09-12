@@ -19,6 +19,8 @@ export interface IndexResult {
   repoRoot: string;
   manimkcRoot: string;
   sources: SourceWrite[];
+  /** Sources `--only` did not name but that had to run, and why they had to. */
+  addedForSafety: string[];
   totals: { written: number; deleted: number };
 }
 
@@ -39,6 +41,7 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
       repoRoot: result.repoRoot,
       manimkcRoot: result.manimkcRoot,
       sources: result.sources,
+      addedForSafety: result.addedForSafety,
       totals: result.totals,
     };
   });
@@ -46,6 +49,13 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
 
 export function formatIndex(result: IndexResult): string {
   const lines = [`database     ${result.database}`, `manimkc root ${result.manimkcRoot}`, ""];
+  if (result.addedForSafety.length > 0) {
+    lines.push(
+      `also running ${result.addedForSafety.join(", ")}: they point at rows the ` +
+        `selected sources may prune, and a prune cascades.`,
+      "",
+    );
+  }
 
   for (const source of result.sources) {
     lines.push(

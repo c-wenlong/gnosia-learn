@@ -394,6 +394,16 @@ rows. Six sources, run in the order the foreign keys require regardless of how
 curriculum items, and everything runs after `topics` because every other source
 resolves a slug from the shared vocabulary.
 
+**`--only` selects downstream too.** Pruning a `topic` cascades: the
+`asset_topic`, `curriculum_item_topic` and `collection_item` rows pointing at it
+are deleted and `concept.topic_slug` is set to null. So `--only topics` after a
+slug is renamed would leave every other source silently unlinked, and nothing
+would say so until a `show` that used to return videos stopped. Selecting a
+source therefore selects everything that points at what it owns, and the run
+reports what it added. `--only topics` is a full run, which is the honest
+answer, and `--only manimkc` stays cheap because nothing points at what manimkc
+owns.
+
 ### Refuse, never skip
 
 An unresolved reference stops the run and names the file and the slug. A skipped

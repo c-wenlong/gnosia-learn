@@ -10,6 +10,7 @@ import {
   conceptPrerequisite,
   curriculumItem,
   curriculumItemTopic,
+  LOCAL_LEARNER_ID,
   mastery,
   topic,
 } from "@self-learn/schema";
@@ -75,6 +76,7 @@ export interface ShowConcept {
   /** What depends on this concept. The reverse edge, which the graph needs as much. */
   requiredBy: { slug: string; title: string; kind: string }[];
   curriculumItems: { id: string; title: string }[];
+  /** The local learner's belief, or null. Other learners are not reachable from this CLI yet. */
   mastery: { pL: number; observations: number; correct: number; lastSeen: string | null } | null;
   assets: Record<string, AssetRef[]>;
   alternatives?: string[];
@@ -270,8 +272,10 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
     .where(eq(conceptCurriculumItem.conceptSlug, slug))
     .orderBy(asc(curriculumItem.id));
 
-  // There is one learner until authentication exists, so the first row is the
-  // belief. This is read, never written, by the catalog CLI.
+  // Mastery is per learner and per concept, so it is selected by both. There
+  // is one learner until authentication exists, but filtering on the concept
+  // alone and taking the first row would start returning somebody else's
+  // belief the day there are two. Read here, never written.
   const belief = (
     await db
       .select({
@@ -281,7 +285,7 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
         lastSeen: mastery.lastSeen,
       })
       .from(mastery)
-      .where(eq(mastery.conceptSlug, slug))
+      .where(and(eq(mastery.conceptSlug, slug), eq(mastery.learnerId, LOCAL_LEARNER_ID)))
       .limit(1)
   )[0];
 

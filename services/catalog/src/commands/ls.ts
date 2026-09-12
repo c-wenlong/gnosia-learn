@@ -64,6 +64,13 @@ export interface LsCollection {
     title: string;
     topicSlug: string | null;
     curriculumItems: { id: string; title: string; subtopics: number }[];
+    /**
+     * How many collections hang below this child. `ls` shows one level, so a
+     * grandchild is reported as a count with an id to run `ls` on rather than
+     * being silently absent. Zero for every collection today: courses contain
+     * modules and modules contain curriculum items, which are not collections.
+     */
+    children: number;
   }[];
   /** Items authored directly on this collection, when it is itself a module. */
   curriculumItems: { id: string; title: string; subtopics: number }[];
@@ -231,6 +238,17 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
     .where(and(inArray(collectionItem.collectionId, ids), isNotNull(collectionItem.topicSlug)));
   const topicOf = new Map(topics.map((r) => [r.collectionId, r.topicSlug]));
 
+  // One level down only, deliberately: `ls` is the bounded layer and recursing
+  // an arbitrarily deep tree is exactly what it must not do. Counting each
+  // child's own children is what keeps that bound honest — a deeper level shows
+  // up as a number instead of vanishing.
+  const grandchildren = await db
+    .select({ parentId: collection.parentId, n: count() })
+    .from(collection)
+    .where(inArray(collection.parentId, children.map((c) => c.id)))
+    .groupBy(collection.parentId);
+  const belowChild = new Map(grandchildren.map((r) => [r.parentId, r.n]));
+
   const itemsOf = (collectionId: string) =>
     items
       .filter((i) => i.collectionId === collectionId)
@@ -252,6 +270,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
       title: child.title,
       topicSlug: topicOf.get(child.id) ?? null,
       curriculumItems: itemsOf(child.id),
+      children: belowChild.get(child.id) ?? 0,
     })),
     curriculumItems: itemsOf(row.id),
   };
@@ -298,6 +317,9 @@ export function formatLs(result: LsResult): string {
     lines.push(`  ${child.id}  ${child.title}${child.topicSlug ? `  → ${child.topicSlug}` : ""}`);
     for (const item of child.curriculumItems) {
       lines.push(`    ${item.id}  ${item.title}  (${item.subtopics} subtopics)`);
+    }
+    if (child.children > 0) {
+      lines.push(`    ${child.children} more collection(s) below: catalog ls ${child.id}`);
     }
   }
   return lines.join("\n");
