@@ -179,11 +179,12 @@ export function LearnerProvider({
    *
    * `key` names the thing being changed, not the route: two edits to the same
    * note share a key and are ordered, while a tick on one item and a note on
-   * another do not and are not.
+   * another do not and are not. Several keys make the write a barrier over all
+   * of them, which is how a reset waits for the writes it is about to delete.
    */
   const commit = useCallback(
     (
-      key: string,
+      key: string | readonly string[],
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
     ) => {
@@ -305,7 +306,10 @@ export function LearnerProvider({
   const resetCourse = useCallback(
     (topicIds: string[]) => {
       commit(
-        "reset",
+        // A barrier over every row the reset deletes. Without it a note still
+        // in flight for one of these topics could land after the delete and
+        // recreate the row, while the page went on showing it as cleared.
+        topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
       );

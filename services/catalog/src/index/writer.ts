@@ -18,8 +18,12 @@ import { and, getTableColumns, getTableName, inArray, notInArray, sql, type SQL 
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
 import type { CatalogDatabase } from "../db";
+import { sqlstate } from "../state/errors";
 import { IndexError } from "./errors";
 import type { Indexer, SourceRows } from "./source";
+
+/** Postgres SQLSTATE for a foreign key violation. */
+const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
  * Turning one source's rows into SQL, in one transaction.
@@ -378,7 +382,17 @@ async function pruneEntity(
 
   const keys = stale.map((row) => row.key);
   if (name === "concept") await assertNoEvidence(tx, keys);
-  await tx.delete(table).where(inArray(column, keys));
+  try {
+    await tx.delete(table).where(inArray(column, keys));
+  } catch (error) {
+    // The lock in `assertNoEvidence` closes the window this catches, so
+    // reaching it means something took a path that check did not cover. Better
+    // the sentence than the constraint either way.
+    if (name === "concept" && sqlstate(error) === FOREIGN_KEY_VIOLATION) {
+      throw evidenceError(keys);
+    }
+    throw error;
+  }
   return keys;
 }
 
@@ -398,6 +412,13 @@ async function pruneEntity(
  * projections this log rebuilds.
  */
 async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<void> {
+  // Lock the candidates first, or the check is a read that a concurrent
+  // `learn observe` can invalidate before the delete runs. Inserting an event
+  // takes a FOR KEY SHARE lock on the concept it references, which conflicts
+  // with FOR UPDATE, so this either waits for that insert to commit — and then
+  // sees its event — or holds the row until this transaction ends.
+  await tx.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, slugs)).for("update");
+
   const observed = await tx
     .selectDistinct({ slug: event.conceptSlug })
     .from(event)
@@ -408,9 +429,13 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
     .sort();
   if (blocked.length === 0) return;
 
-  throw new IndexError(
+  throw evidenceError(blocked);
+}
+
+function evidenceError(slugs: string[]): IndexError {
+  return new IndexError(
     `these concept notes are gone from learn/concepts/, but the event log records ` +
-      `answers about them: ${blocked.join(", ")}. The log is append-only, so the ` +
+      `answers about them: ${slugs.join(", ")}. The log is append-only, so the ` +
       `catalog cannot forget what those events were about. Put the note back (an ` +
       `empty stub is enough), or rename the concept by moving its events first — ` +
       `deleting the study record is not something an index run will do for you.`,

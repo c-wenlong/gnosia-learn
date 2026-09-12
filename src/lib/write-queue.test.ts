@@ -85,3 +85,45 @@ describe("createWriteQueue", () => {
     expect(queue.pending).toBe(0);
   });
 });
+
+describe("createWriteQueue as a barrier", () => {
+  it("waits for every named key, then holds all of them", async () => {
+    const queue = createWriteQueue<string>();
+    const blocked = deferred<string>();
+    const order: string[] = [];
+
+    queue.run("progress:a", () => {
+      order.push("note-a-start");
+      return blocked.promise;
+    }, () => {});
+    queue.run(["progress:a", "progress:b"], () => {
+      order.push("reset-start");
+      return Promise.resolve("reset");
+    }, () => {});
+    queue.run("progress:b", () => {
+      order.push("after-b-start");
+      return Promise.resolve("b");
+    }, () => {});
+
+    await flush();
+    // The reset has not started, because `progress:a` is still in flight — and
+    // neither has the later write on `progress:b`, because the reset now holds
+    // that key too.
+    expect(order).toEqual(["note-a-start"]);
+
+    blocked.resolve("a");
+    await flush();
+    expect(order).toEqual(["note-a-start", "reset-start", "after-b-start"]);
+  });
+
+  it("reports a barrier once, not once per key", async () => {
+    const queue = createWriteQueue<string>();
+    const settled: string[] = [];
+
+    queue.run(["x", "y", "z"], () => Promise.resolve("done"), (r) => settled.push(r));
+    await flush();
+
+    expect(settled).toEqual(["done"]);
+    expect(queue.pending).toBe(0);
+  });
+});
