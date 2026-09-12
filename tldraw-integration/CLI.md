@@ -102,6 +102,13 @@ Output (`--json`):
 
 Every path in `--json` output is the resolved absolute path, never the one
 that was typed. An agent's cwd and the reader's are not reliably the same.
+The one exception is `api`, whose `path` names a source file rather than a
+file the command wrote.
+
+Every verb that exports refuses an export path equal to its own document.
+`run --svg map.tldr` would otherwise hand the atomic rename an SVG under the
+document's name and destroy the drawing, and the same holds for `--shot`,
+`--png`, `shot -o` and `from-mermaid`.
 
 `result` is whatever the snippet returned, JSON-serialised. A snippet that
 throws is rolled back, the file is left as it was, and the command exits 2
@@ -137,13 +144,32 @@ shapes occupy.
 
 Prints what is on the canvas, for the agent to read before editing. Human
 mode prints one line per shape; `--json` prints the bridge's `inspect()`
-structure exactly as defined in [ARCHITECTURE.md](ARCHITECTURE.md). Exits 3
-when lints are present, like `run`.
+structure exactly as defined in [ARCHITECTURE.md](ARCHITECTURE.md), with
+`bounds` set to `null` on an empty page, since there is no union of no
+shapes. Exits 3 when lints are present, like `run`. It loads and reads and
+never writes the file: a read that rewrites what it read is a trap.
 
 ### `export <file.tldr> (--svg <out.svg> | --png <out.png>) [--ids ...]`
 
 The final export step. `--svg` is what gets committed next to notes;
-`--png` is `shot` under a name that reads as intentional.
+`--png` is `shot` under a name that reads as intentional. It loads and
+exports and never writes the `.tldr`, so the only thing that can fail is the
+export.
+
+Output (`--json`):
+
+```json
+{
+  "file": "/home/you/self-learn/learn/assets/map.tldr",
+  "svg": { "path": "/home/you/self-learn/learn/assets/map.svg", "width": 2322, "height": 2394 },
+  "png": null,
+  "ms": 611
+}
+```
+
+`svg` and `png` are each an object or `null`, depending on which was asked
+for. `width` and `height` are pixels for the PNG and the SVG's own viewport
+for the SVG.
 
 ### `from-mermaid <file.tldr> --source <diagram.mmd> [--append] [--shot <out.png>]`
 
@@ -154,6 +180,34 @@ to tldraw geo shapes: `[text]` rectangle, `(text)` rounded rectangle,
 `{text}` diamond, `([text])` oval, `((text))` ellipse. Edge labels become arrow
 labels. Subgraphs become `helpers.boxShapes` containers. Anything the parser
 does not understand is reported, not silently dropped.
+
+Output (`--json`):
+
+```json
+{
+  "file": "/home/you/self-learn/learn/assets/map.tldr",
+  "nodes": { "mermaidId": "shape:id" },
+  "edges": ["shape:arrow:a->b"],
+  "containers": ["shape:container:render"],
+  "unsupported": ["classDef mastered fill:#dcfce7"],
+  "shapeCount": 102,
+  "lints": [],
+  "shot": "/home/you/out/map.png",
+  "ms": 921
+}
+```
+
+Without `--append` the file is claimed with an exclusive write, not merely
+checked for first. The early existence check is only there to answer fast,
+and it cannot cover a file created while the page was starting up.
+Overwriting a canvas someone has since fixed by hand is the one unrecoverable
+mistake available here.
+
+A page bundle whose helpers bag has no `mermaid()` is exit **1**, not 2. The
+command probes for it before it draws, because the bridge's own capability
+check cannot see one level down into the bag, and without the probe a stale
+build fails inside the snippet as `helpers.mermaid is not a function`, which
+reads like the diagram's fault.
 
 The point of this command is migration: every diagram this repo has today
 is mermaid, and the agent should be able to lift one onto the canvas and
@@ -167,10 +221,43 @@ is printed either way. Keeps running until SIGINT. See "Serve mode" in [ARCHITEC
 
 ### `api`
 
-Prints the helper reference from [HELPERS.md](HELPERS.md) with one usage
-line per function, generated from JSDoc in `src/page/helpers/`, so the docs
-and the code cannot drift. `manimkc api` does the same job for the same
-reason.
+Prints the helper reference with one usage line per function, generated from
+JSDoc so the docs and the code cannot drift. `manimkc api` does the same job
+for the same reason.
+
+The extraction reads exactly one file, `src/page/helpers/index.ts`, as text at
+build time, and `npm run build:api` writes the result to `dist/api.json`,
+which the command prints. That file is where the bag is assembled, so the
+reference is the bag and cannot list a helper a snippet could not call.
+Reading the page's sources from Node is fine; importing them would break
+layering rule 1, which is why `src/lib/api.ts` is a parser.
+
+An entry appears when three things hold: the `/** ... */` block sits directly
+above the declaration with no blank line between them, the declaration is a
+named function or an interface method signature, and the block carries an
+`@example`. Without an example the entry is dropped, because the point of the
+reference is a line an agent can copy.
+
+Output (`--json`) is a bare array, not an object:
+
+```json
+[
+  {
+    "name": "connect",
+    "kind": "function",
+    "path": "src/page/helpers/index.ts",
+    "signature": "connect(fromKey, toKey, opts = {})",
+    "summary": "Draw a bound arrow between two shapes and return its id.",
+    "examples": ["helpers.connect('agent', 'page', { label: 'exec' })"],
+    "params": ["fromKey the shape the arrow leaves"]
+  }
+]
+```
+
+`path` is relative to the package root, and it is the one exception to D19.
+Every other path under `--json` names a file the command wrote, where the
+reader's cwd is unknown; this one names a source file inside the tool's own
+checkout, and relative is the form that stays true across checkouts.
 
 ### `help`
 

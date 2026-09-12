@@ -138,7 +138,7 @@ returns JSON-safe values so the same surface can back a future MCP entry.
 | `setPage(name)` | page name or `null` for the first page | `{ page }` | Every verb that takes `--page` calls this first. Unknown name is an error. |
 | `exec(source)` | JavaScript source | `{ result, lints, shapeCount }` | Wrapped in `new AsyncFunction('editor', 'helpers', 'tldraw', source)`. Before running: `const mark = editor.markHistoryStoppingPoint('exec')`. A thrown error calls `editor.bailToMark(mark)` and rejects. (`editor.mark` was removed in tldraw v4 and is still absent in v5.) The `AsyncFunction` constructor prepends a two-line header, so a snippet's stack line numbers are two higher than the source: line 4 of a snippet reports as `<anonymous>:6`. The offset was measured and is constant. The CLI prints that stack unadjusted, so subtract 2 when reading it. |
 | `save()` | none | string | `await serializeTldrawJson(editor)`; it returns a promise. Assets inlined as data URLs. |
-| `shot(opts)` | `{ ids?, padding?, pixelRatio?, background? }` | `{ pngBase64, width, height, bounds }` | `editor.toImage(ids, { format: 'png', padding, pixelRatio, background })` resolves `{ blob, width, height }`; the bridge reads the blob into base64. `background` is a boolean (paint the page background or leave it transparent), default `true`. Defaults: all shapes on the current page, padding 32, pixelRatio 2. Those two numbers are tldrawkc's, not tldraw's: `toImage`'s own `padding` defaults to `'auto'`, which trims to the visual content bounds and captures overflow like thick strokes and arrowheads. A number is fixed padding with no trimming, and anything past it is clipped. The bridge passes a number because the CLI exposes `--padding`. |
+| `shot(opts)` | `{ ids?, padding?, pixelRatio?, background? }` | `{ pngBase64, width, height, bounds }` | `editor.toImage(ids, { format: 'png', padding, pixelRatio, background })` resolves `{ blob, width, height }`; the bridge reads the blob into base64. `background` is a boolean (paint the page background or leave it transparent), default `true`. Defaults: all shapes on the current page, padding 32, pixelRatio 2. Those two numbers are tldrawkc's, not tldraw's: `toImage`'s own `padding` defaults to `'auto'`, which trims to the visual content bounds and captures overflow like thick strokes and arrowheads. A number is fixed padding with no trimming, and anything past it is clipped. The bridge passes a number because the CLI exposes `--padding`. `width` and `height` are the PNG's pixel dimensions, read out of the file's own IHDR chunk at bytes 16 and 20. `toImage`'s own `width` and `height` are page units, the framed region before the pixel ratio, and multiplying them back does not reproduce the file either: 1288.5024 units at ratio 2 rasterised to 2576 pixels, not the 2577 the arithmetic predicts. [CLI.md](CLI.md) promises pixels and the file is the only thing a caller can check against. |
 | `svg(opts)` | `{ ids?, padding?, background? }` | `{ svg, width, height }` | `editor.getSvgString`. tldraw inlines the fonts it can load, which is why the bundle's fonts must resolve from a relative URL with no network. |
 | `inspect()` | none | see below | The "read the canvas" step. This table is the single definition; [CLI.md](CLI.md) prints it unchanged. |
 | `lints()` | none | `Lint[]` | Same pass `exec` runs; exposed so `inspect` can report without mutating. `helpers.getLints()` returns the same bare array. |
@@ -195,8 +195,18 @@ here is a Playwright `requestfailed` event **or** any response with a status of
 the request succeeded and the answer was "no". Counting only `requestfailed`
 would miss the one case the check exists for. `getSvgString`
 inlines the fonts it managed to load into the SVG on its own (there is no
-option to ask for it), which keeps [learn/assets](INTEGRATION.md)
-self-contained the way the current hand-written SVGs are. If a font failed to
+option to ask for it), as `@font-face` blocks whose `src` is a
+`data:font/woff2;base64,` URL, which keeps [learn/assets](INTEGRATION.md)
+self-contained the way the current hand-written SVGs are.
+
+What it does **not** do is put labels in `<text>`. Measured on the exported
+learn map: 32 `<foreignObject>` elements holding ordinary HTML, and zero
+`<text>` and zero `<tspan>`. The label text is still there as a plain string,
+so grepping an exported SVG for a label works, but anything that walks
+`<text>` nodes finds nothing, and a rasteriser with no foreignObject support
+(librsvg, ImageMagick, older Inkscape) drops every label from a committed
+SVG. Browsers render it correctly, which is what the embeds in `learn/` and
+the deployed site use. If a font failed to
 load, the export silently falls back to a system font, so the failed-requests
 check in `doctor` is the guard. `doctor`'s `fonts` check, as built, awaits
 `document.fonts.ready` before reading the request log (tldraw kicks its woff2
