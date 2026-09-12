@@ -179,7 +179,7 @@ Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never
 
 Eleven Vitest files cover the two halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself.
 
-`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every push and pull request, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on pushes to the default branch; a `deploy.yml` workflow also exists but needs a valid `VERCEL_TOKEN` before it will run. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every push and pull request, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on every push to the default branch; there is no deploy workflow to maintain. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Contributing
 
