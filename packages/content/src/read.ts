@@ -1,0 +1,83 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+import { ContentError } from "./errors";
+
+/**
+ * Reading is synchronous on purpose.
+ *
+ * The web app's entry point is a module-level `export const courses`, evaluated
+ * once per server process, and `generateStaticParams` is called for it before
+ * anything can await. An async loader would push a promise through every one of
+ * those call sites to save microseconds on a read that happens once. The
+ * catalog's indexers are async but call this from inside an async function, so
+ * they lose nothing.
+ */
+
+/** Every reader takes the repo root, defaulting to where the process started. */
+export interface LoadOptions {
+  /** Repository root. Defaults to `process.cwd()`. */
+  root?: string;
+}
+
+export function repoRoot(options?: LoadOptions): string {
+  return options?.root ?? process.cwd();
+}
+
+export function readYamlFile(absolute: string, where: string): string {
+  try {
+    return readFileSync(absolute, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new ContentError(`${where} does not exist`);
+    }
+    throw error;
+  }
+}
+
+/** Files with one of `extensions` directly inside `directory`, sorted by name. */
+export function filesIn(
+  directory: string,
+  extensions: readonly string[],
+  where: string,
+): string[] {
+  let entries;
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new ContentError(`${where} does not exist`);
+    }
+    throw error;
+  }
+  return entries
+    .filter((e) => e.isFile() && extensions.includes(path.extname(e.name)))
+    .map((e) => path.join(directory, e.name))
+    .sort();
+}
+
+export function requireText(value: unknown, where: string, field: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ContentError(`${where}: ${field} is required and must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+export function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+export function stringList(value: unknown, where: string, field: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ContentError(`${where}: ${field} must be a list`);
+  }
+  return value.map((item, i) => {
+    if (typeof item !== "string" || item.trim() === "") {
+      throw new ContentError(`${where}: ${field}[${i}] must be a non-empty string`);
+    }
+    return item.trim();
+  });
+}
+
+export const KEBAB_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;

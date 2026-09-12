@@ -3,6 +3,7 @@ slug: cp4284
 code: CP4284
 title: LLM Reasoning Agents
 credits: 4
+order: 6
 prereq: 120 units only
 notes: Strongest overlap with agent internals, tool use, and transformer architecture.
 inferred: false

@@ -3,6 +3,7 @@ slug: cs2111
 code: CS2111
 title: Human-Centred Computing
 credits: 4
+order: 1
 prereq: CS1010
 track: HCI focus area primary
 notes: Foundational intro to designing computing systems around human needs.

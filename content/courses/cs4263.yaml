@@ -3,6 +3,7 @@ slug: cs4263
 code: CS4263
 title: Artificial Intelligence Principles
 credits: 4
+order: 2
 track: AI focus area, project-heavy
 notes: Core AI methodology with emphasis on design, integration, and independent inquiry.
 inferred: true

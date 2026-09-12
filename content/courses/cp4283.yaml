@@ -3,6 +3,7 @@ slug: cp4283
 code: CP4283
 title: Deep Generative Models
 credits: 4
+order: 5
 prereq: 120 units, Foundations of Machine Learning
 notes: Traces the "chain of ideas" in generative modeling — each model as an answer to the last one's weaknesses.
 inferred: false

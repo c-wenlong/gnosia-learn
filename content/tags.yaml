@@ -1,0 +1,37 @@
+# Cross-course themes. `id` is what a course file's `tags:` names, so it is a
+# permanent key: renaming one silently unlinks every course that used it, and
+# related-course links are computed from shared tags.
+# Order is the order the home page renders the theme chips in.
+
+tags:
+  - id: hci
+    label: HCI
+    description: Human–computer interaction and interface design
+
+  - id: agentic-ai
+    label: Agentic AI
+    description: Tool-using agents, orchestration, and agentic workflows
+
+  - id: transformers
+    label: Transformers
+    description: Attention architectures and transformer-based generation
+
+  - id: generative-models
+    label: Generative Models
+    description: VAEs, GANs, diffusion, neural graphics generation
+
+  - id: graphics
+    label: Graphics
+    description: Rendering, geometry, and 3D scene representation
+
+  - id: classical-ai
+    label: Classical AI
+    description: Search, planning, logic, and sequential decisions
+
+  - id: recommenders
+    label: Recommenders
+    description: Recommendation systems and personalization
+
+  - id: product
+    label: Product
+    description: Product thinking, shipping, and digital markets

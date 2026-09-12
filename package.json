@@ -24,10 +24,12 @@
     "catalog": "tsx services/catalog/src/cli.ts"
   },
   "dependencies": {
+    "@self-learn/content": "*",
     "@tailwindcss/typography": "^0.5.20",
     "next": "16.3.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
