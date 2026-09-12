@@ -24,6 +24,7 @@ The same values are needed in two places, for two different reasons.
 | `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade | GitHub Actions and Vercel |
 | `GEMINI_API_KEY` | Provider 2 | GitHub Actions and Vercel |
 | `OPENROUTER_API_KEY` | Provider 3 | GitHub Actions and Vercel |
+| `CODECOV_TOKEN` | Codecov **upload** token, from the repo's Configuration page on app.codecov.io | GitHub Actions only |
 
 The three provider keys are needed in the Vercel project's **Settings →
 Environment Variables** (Production, and Preview if you want previews to run
@@ -31,6 +32,15 @@ live chat) because the serverless routes read them at request time. They are
 needed in GitHub Actions only for builds that the workflow produces itself.
 `.vercel/` is gitignored and should stay that way; only the ids go into
 secrets.
+
+Codecov has two tokens and they are not interchangeable. The upload token above
+is a secret: CI uses it to send `coverage/lcov.info` and nothing else may see
+it. The **graph token** that appears in the README badge URL
+(`badge.svg?token=…`) is a different, read-only value that only unlocks badge
+and graph SVGs for a private repo. Codecov generates it for exactly this
+purpose, so it is fine in a public file. Both come from **Configuration** on
+the repo's Codecov page: the upload token under General, the graph token under
+Badges & Graphs.
 
 Setting them from the command line:
 
@@ -41,6 +51,7 @@ gh secret set VERCEL_PROJECT_ID --body "prj_…"
 gh secret set NVIDIA_API_KEY --body "$NVIDIA_API_KEY"
 gh secret set GEMINI_API_KEY --body "$GEMINI_API_KEY"
 gh secret set OPENROUTER_API_KEY --body "$OPENROUTER_API_KEY"
+gh secret set CODECOV_TOKEN --body "$CODECOV_TOKEN"
 ```
 
 `NEXT_PUBLIC_SITE_URL` is optional in production: Vercel supplies the
