@@ -6,17 +6,22 @@
   "engines": {
     "node": ">=22"
   },
+  "workspaces": [
+    "services/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "learn": "node scripts/learn/cli.mjs",
-    "canvas": "node tldrawkc/dist/cli/index.js"
+    "canvas": "node tldrawkc/dist/cli/index.js",
+    "catalog": "tsx services/catalog/src/cli.ts"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",
@@ -35,6 +40,7 @@
     "eslint-config-next": "16.3.4",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

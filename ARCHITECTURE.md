@@ -71,6 +71,20 @@ installed.
 `store.mjs` imports `paths`, `markdown` and `bkt`; `graph` imports `bkt`;
 `render` imports `bkt` and `graph`. `cli.mjs` is the only module that prints.
 
+`packages/` and `services/` are npm workspaces, added for the catalog. They are
+the third stack in the repo and, like the pipeline, `src/` does not import from
+them yet.
+
+| Workspace | Owns |
+| --- | --- |
+| `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
+| `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), and `cli.ts` |
+
+`packages/schema` is the bottom of that stack: it imports `drizzle-orm` and
+nothing of ours. `services/catalog` imports it, owns the only connection string
+in the repo, and is the only thing that talks to Postgres. The design and the
+entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
+
 ## The web app: routes
 
 Five pages, a 404, and two API handlers. Pages are server components; the
@@ -359,3 +373,12 @@ running app, so counting their lines would only dilute the number that matters.
    `npm run learn -- <command>`, which is what keeps the event log complete.
 7. **`cli.mjs` is the only module in the pipeline that prints.** Everything
    under `lib/` takes data and returns data.
+8. **`packages/schema` connects to nothing.** It defines table shapes and
+   exports the types inferred from them. The pool, the connection string and
+   every query live in `services/catalog`, so the schema can be imported by the
+   web app in bundle 4 without dragging a database driver into the browser
+   bundle.
+9. **The schema is the source of the SQL, never the other way round.** Change
+   `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
+   migration that has been applied is never edited: drizzle keys them by file
+   hash.

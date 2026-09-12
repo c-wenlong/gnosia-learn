@@ -17,6 +17,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [tldraw-integration/](tldraw-integration/README.md) | The brief for `tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
+| [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The relational schema: entities, why the links are typed, how `event` stays append-only |
 
 ## The learning pipeline
 
@@ -153,6 +154,23 @@ not have to be worked out again.
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
   output: `npm run build` then
   `node node_modules/next/dist/bin/next start -p <port>`.
+- **`packages/*` and `services/*` are npm workspaces, and each needs three
+  things.** An entry in the root `tsconfig.json` `exclude` (its `**/*.ts`
+  include would otherwise typecheck Node-only code against the Next app's DOM
+  and JSX options), its own `tsconfig.json`, and a `typecheck` script so the
+  root `npm run typecheck` picks it up through `--workspaces`. They are NOT
+  eslint-ignored: unlike the two submodules they are ours, and the root config
+  lints them correctly.
+- **The catalog needs a database before its tests do anything.**
+  `createdb self_learn` against the Homebrew Postgres 17, then
+  `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
+  skip themselves with a named reason and `npm test` still passes, so a green
+  local run is not proof the schema is sound. CI runs a `postgres:17` service
+  and is where they are a real gate.
+- **Never edit a migration under `services/catalog/drizzle/` once it has been
+  applied.** drizzle keys applied migrations by the sha256 of the file, so an
+  edit makes it look unapplied on every database that already ran it. Change
+  `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`.
 - **Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` on
   purpose.** `src/app` and `src/components` are view code and untested by
   design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear

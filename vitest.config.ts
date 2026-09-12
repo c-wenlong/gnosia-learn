@@ -6,7 +6,17 @@ export default defineConfig({
     environment: "node",
     // src/ holds the web app (TypeScript); scripts/ holds the learning
     // pipeline (plain ESM, no build step). Both are covered by `npm test`.
-    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
+    include: [
+      "src/**/*.test.ts",
+      "scripts/**/*.test.mjs",
+      "services/**/*.test.ts",
+      "packages/**/*.test.ts",
+    ],
+    // services/catalog's tests create and drop a scratch database and apply
+    // every migration to it. That is slower than the in-process suites, and on
+    // a cold Postgres the first connection can take a while.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
     clearMocks: true,
     coverage: {
       provider: "v8",
@@ -29,6 +39,11 @@ export default defineConfig({
       // points under what the suite measures today, so a run goes red when
       // coverage drops rather than every time it fails to climb. Raise these
       // when the real number moves up.
+      // services/ and packages/ are deliberately absent. The catalog service is
+      // covered by tests that need a real Postgres, so its number would swing
+      // between a laptop with the database up and one without, and a coverage
+      // floor that moves with the environment is not a floor. The schema
+      // package is declarations, with nothing to execute.
       // Measured 2026-09-12: statements 58, branches 54, functions 51, lines 60.
       thresholds: {
         statements: 55,

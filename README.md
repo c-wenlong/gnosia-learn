@@ -57,8 +57,9 @@ Knowing what is worth learning and actually learning it are two different proble
 | Roadmap | `src/` | Next.js hub over the AY2026/27 shortlist: progress, notes, resources, tutoring sessions, topic recaps |
 | Learning pipeline | `scripts/learn/`, `learn/` | Probe → Plan → Teach → Close loop with a file-backed knowledge base |
 | Asset generation | `manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
+| Catalog | `packages/schema/`, `services/catalog/` | Postgres index over the three content trees, and the `catalog` CLI agents read |
 
-Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state lives in browser `localStorage` (`self-learn:v1`, schema v2); there are no accounts and no backend database.
+Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state lives in browser `localStorage` (`self-learn:v1`, schema v2); there are no accounts, and the Postgres tables that will hold it exist but are not wired up until bundle 5.
 
 | Surface | Purpose |
 | --- | --- |
@@ -70,11 +71,19 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 
 ```
-src/             app/ (pages + agent API routes) · components/ · data/ · lib/
-scripts/learn/   Pipeline CLI: bkt · graph · schedule · markdown · store · render
-learn/           The knowledge base itself (see learn/README.md)
-.claude/         launch.json, plus skills/manimkc-video symlinked from the submodule
+src/              app/ (pages + agent API routes) · components/ · data/ · lib/
+scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
+learn/            The knowledge base itself (see learn/README.md)
+packages/schema/  Drizzle tables: the single source of the catalog's row shapes
+services/catalog/ Migrations, the database connection and the catalog CLI
+.claude/          launch.json, plus skills/manimkc-video symlinked from the submodule
 ```
+
+The catalog is the join the three trees never had: one `topic` vocabulary every
+asset points at, typed link tables with foreign keys at both ends, and an
+append-only `event` log the learner state is replayed from. It is empty until
+the indexers land; the design is in
+[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 `.claude/` holds no learning skills. `/learn`, `/review` and the three subagents live in the globally installed `learning` plugin, so they work in every project; see [AGENTS.md](AGENTS.md) for why copying them back here would be a mistake.
 
@@ -187,10 +196,11 @@ Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
+| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `status`. Needs `createdb self_learn` against a local Postgres 17 |
 
-Eleven Vitest files cover the two halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself.
+Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
 
-`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every push and pull request, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on every push to the default branch; there is no deploy workflow to maintain. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every push and pull request, against a `postgres:17` service container, then uploads the lcov report to Codecov. Production deploys go through Vercel's Git integration on every push to the default branch; there is no deploy workflow to maintain. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Contributing
 
