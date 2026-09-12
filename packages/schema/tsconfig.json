@@ -1,0 +1,17 @@
+{
+  "//": "Its own tsconfig, and the root one excludes `packages` and `services`. The root config is the Next app's: DOM libs, JSX, bundler resolution, an `@/*` path alias into src/. None of that is right for a Node-only library, and `**/*.ts` in the root `include` would otherwise typecheck this package against it. Same reasoning as the `tldrawkc` exclude, different cause: that one is a submodule, this one is ours but is not the web app.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts"]
+}

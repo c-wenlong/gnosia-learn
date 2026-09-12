@@ -31,5 +31,6 @@
     "**/*.mts"
   ],
   "//": "tldrawkc is a git submodule with its own repo, its own tsconfigs and its own toolchain. Without this exclude, `**/*.ts` above walks it and typechecks TypeScript this repo does not own against the wrong compiler options. It is ignored in eslint.config.mjs for the same reason. manimkc needs no entry because it is Python.",
-  "exclude": ["node_modules", "tldrawkc"]
+  "//workspaces": "packages/ and services/ are ours, but they are not the web app: Node-only code with no DOM, no JSX and no `@/*` alias. This config is the Next app's, so `**/*.ts` above would typecheck them against the wrong libs. Each carries its own tsconfig instead, and `npm run typecheck` runs them through `--workspaces` after this one. A new workspace needs an entry here and its own tsconfig, or it is silently checked twice under the wrong options.",
+  "exclude": ["node_modules", "tldrawkc", "packages", "services"]
 }

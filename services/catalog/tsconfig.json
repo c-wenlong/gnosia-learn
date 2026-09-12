@@ -1,0 +1,18 @@
+{
+  "//": "Its own tsconfig, and the root one excludes `packages` and `services`. See packages/schema/tsconfig.json for the reasoning: the root config is the Next app's, and `**/*.ts` in its `include` would otherwise typecheck this service against DOM libs and JSX.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "drizzle.config.ts"]
+}

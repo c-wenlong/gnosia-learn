@@ -9,6 +9,40 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **The catalog's indexers and read commands.** `npm run catalog -- index`
+  fills Postgres from six sources: `content/topics.yaml`, `content/courses/`,
+  `learn/concepts/`, `manimkc topics --json`, `learn/assets/` and
+  `learn/sessions/`. Each is a pure "read files, return rows" module behind one
+  shared writer that upserts in a single transaction per source and prunes what
+  the source no longer produces. An unresolved topic or concept slug stops the
+  run with the file and the slug named, and every unresolved reference in a
+  source is reported at once rather than one per run.
+- **`content/topics.yaml`, the shared topic vocabulary.** 81 topics across 22
+  domains, each with aliases and the manimkc folders, course modules and
+  concept notes it covers. It is the join the three content trees never had:
+  every video, note, diagram, session and curriculum item now points at the same
+  `topic` row. Every module id and concept slug appears in exactly one entry,
+  and `catalog index` refuses a mapping claimed by two topics.
+- **`content/courses/*.yaml`.** The ten courses as data, generated from the
+  TypeScript objects rather than transcribed, with `src/data/courses/parity.test.ts`
+  proving equality course by course. The web app still reads the TypeScript
+  until bundle 4.
+- **Four read commands, all `--json` and all bounded.** `ls` gives domains,
+  topics or a collection's tree as titles and counts; `show` gives one topic,
+  concept, collection, curriculum item or asset with everything pointing at it;
+  `path` gives the prerequisite chain between two concepts in learning order,
+  and says so when the arguments are the wrong way round; `search` covers topic
+  titles and aliases, concept titles and asset titles, top 20. `show` returns
+  paths, never bodies — the database says which file to read, git holds the
+  words.
+- **`status` grew a `sources` block**, backed by a new `index_run` table, so
+  "is the manimkc half of this database stale" has an answer that is not
+  "re-index and diff".
+- **`topic.aliases`**, so `search "common data bus"` finds Tomasulo's algorithm.
+- **`index --only` expands to the sources downstream of what it names**, and
+  says which it added. Pruning a topic cascades into the links every other
+  source owns, so running one source alone could leave the rest silently
+  unlinked.
 - **Open-source hygiene files.** MIT `LICENSE`, `CONTRIBUTING.md`,
   `SECURITY.md`, `ARCHITECTURE.md` and this changelog. `ARCHITECTURE.md` is
   written from the code rather than the README: the three layers, the
@@ -65,6 +99,23 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Fixed
 
+- **`concept` rows could never be deleted.** The `event` append-only guard was
+  written `FOR EACH STATEMENT`, so it fired on the `ON DELETE SET NULL` that
+  Postgres runs against `event.concept_slug` whenever any concept is deleted —
+  even with `event` completely empty. Migration `0003_append_only_per_row`
+  makes both triggers `FOR EACH ROW`, which keeps the guarantee and drops the
+  false positive. It was invisible until the indexers became the first thing to
+  try deleting a concept.
+- `catalog status` failed against a partially migrated database instead of
+  reporting the outstanding migrations: `head` is non-null at 0000 or 0001 but
+  `index_run` does not exist until 0002, so the row counts threw "relation does
+  not exist".
+- `catalog show <concept>` read mastery filtered by concept alone and took the
+  first row, which would have returned another learner's belief once there is
+  more than one. Now scoped to the learner explicitly.
+- `catalog ls <collection>` reported only direct children, so a deeper level
+  would have been silently absent. It stays one level deep, deliberately, but
+  now counts what is below each child and names the command to see it.
 - Documentation audit: counts, paths and command names that had drifted from
   the code they describe.
 
