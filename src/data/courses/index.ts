@@ -1,27 +1,28 @@
-import type { Course, Module, Topic } from "@/lib/types";
-import { cp4281 } from "./cp4281";
-import { cp4282 } from "./cp4282";
-import { cp4283 } from "./cp4283";
-import { cp4284 } from "./cp4284";
-import { cp4285 } from "./cp4285";
-import { cs2111 } from "./cs2111";
-import { cs3216 } from "./cs3216";
-import { cs3227 } from "./cs3227";
-import { cs3249 } from "./cs3249";
-import { cs4263 } from "./cs4263";
+import "server-only";
 
-export const courses: Course[] = [
-  cs2111,
-  cs4263,
-  cp4281,
-  cp4282,
-  cp4283,
-  cp4284,
-  cp4285,
-  cs3216,
-  cs3227,
-  cs3249,
-];
+import { loadCourses } from "@self-learn/content";
+
+import type { Course, Module, Topic } from "@/lib/types";
+
+/**
+ * The app's view of `content/courses/*.yaml`.
+ *
+ * Ten TypeScript files used to live here and a parity test kept them in step
+ * with the YAML. Now there is one representation, read by one parser that the
+ * catalog indexer also uses, so "what does this course file mean" has a single
+ * answer.
+ *
+ * **Server only.** `loadCourses()` reads the filesystem, and `server-only`
+ * makes a `"use client"` module that reaches it fail at build time rather than
+ * shipping a YAML parser and every course file to the browser. Client
+ * components take the course, module and topic they need as props; the pure
+ * helpers they still want are in `@/lib/curriculum`.
+ *
+ * Read once per process. Course files do not change while the server is up,
+ * and a Next build resolves `generateStaticParams` for every route from this
+ * array.
+ */
+export const courses: Course[] = loadCourses();
 
 export function getCourse(slug: string): Course | undefined {
   return courses.find((c) => c.slug === slug);

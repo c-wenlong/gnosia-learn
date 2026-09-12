@@ -56,6 +56,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // `src/data/courses` and `src/data/content` import "server-only" so a
+      // client component that reaches them fails the Next build. Next resolves
+      // that specifier itself; vitest does not, and the npm package's default
+      // entry throws on import by design. Point it at the package's own
+      // react-server build, which is the empty module Next would have used.
+      "server-only": path.resolve(__dirname, "./node_modules/server-only/empty.js"),
     },
   },
 });

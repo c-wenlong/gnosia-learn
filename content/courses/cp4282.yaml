@@ -3,6 +3,7 @@ slug: cp4282
 code: CP4282
 title: Gaussian Splatting
 credits: 4
+order: 4
 prereq: 120 units, CS3241, Linear Algebra, Calculus
 notes: Mathematical foundations through state-of-the-art 3D Gaussian Splatting research.
 inferred: false

@@ -3,6 +3,7 @@ slug: cs3216
 code: CS3216
 title: Software Product Engineering for Digital Markets
 credits: 5
+order: 8
 prereq: CS2103/CS2103T/CS2113/CS2113T
 notes: Separate application process, not normal CourseReg. Team-based product course built around generative + agentic AI tooling (Pydantic, LangGraph).
 inferred: false

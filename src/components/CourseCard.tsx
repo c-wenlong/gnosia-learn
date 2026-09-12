@@ -1,13 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import type { Course } from "@/lib/types";
+import type { Course, TagMeta } from "@/lib/types";
 import { TagChip } from "@/components/TagChip";
 import { ProgressBar } from "@/components/ProgressBar";
 import { courseProgress } from "@/lib/progress";
 import { useLearner } from "@/lib/learner-context";
 
-export function CourseCard({ course }: { course: Course }) {
+/**
+ * `tags` is the resolved metadata for `course.tags`, handed in by the server
+ * page: the theme list lives in `content/tags.yaml` and this is a client
+ * component, so it cannot look them up itself.
+ */
+export function CourseCard({
+  course,
+  tags,
+}: {
+  course: Course;
+  tags: TagMeta[];
+}) {
   const { state } = useLearner();
   const progress = courseProgress(course, state.completed);
 
@@ -42,8 +53,8 @@ export function CourseCard({ course }: { course: Course }) {
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {course.tags.map((t) => (
-          <TagChip key={t} id={t} size="sm" />
+        {tags.map((t) => (
+          <TagChip key={t.id} tag={t} size="sm" />
         ))}
       </div>
       <div className="mt-4">

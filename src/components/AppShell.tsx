@@ -1,20 +1,33 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ProgressBar } from "@/components/ProgressBar";
 import { useLearner } from "@/lib/learner-context";
-import { globalProgress } from "@/lib/progress";
+import { countsFromIds } from "@/lib/progress";
+import { navTopicIds, type CourseNavEntry } from "@/lib/curriculum";
 
-export function AppShell({ children }: { children: ReactNode }) {
+/**
+ * `nav` comes from the root layout, which is a server component and the only
+ * thing allowed to read `content/`. It carries the whole-shortlist topic ids
+ * the header's progress bar counts, as well as the sidebar's list.
+ */
+export function AppShell({
+  nav,
+  children,
+}: {
+  nav: CourseNavEntry[];
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const { state, ready } = useLearner();
-  const progress = globalProgress(state.completed);
+  const allTopicIds = useMemo(() => navTopicIds(nav), [nav]);
+  const progress = countsFromIds(allTopicIds, state.completed);
 
   return (
     <div className="flex min-h-full bg-[var(--background)] text-[var(--foreground)]">
-      <Sidebar open={open} onClose={() => setOpen(false)} />
+      <Sidebar nav={nav} open={open} onClose={() => setOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--header-bg)] px-4 py-2.5 backdrop-blur">
           <button
