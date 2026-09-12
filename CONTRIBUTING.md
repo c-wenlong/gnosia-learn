@@ -26,6 +26,14 @@ of the app works.
 > and so is the `AGENTS.md` in it that explains the ManimGL versus Manim
 > Community split, the no-LaTeX constraint and the render loop.
 
+> **`npm run canvas` needs a build first.** `tldrawkc/` is a second submodule,
+> and the script runs `tldrawkc/dist/cli/index.js`, which is build output and
+> is not committed. So:
+> `git submodule update --init tldrawkc && (cd tldrawkc && npm ci && npm run build)`.
+> Only diagram work needs it. Its own conventions are in
+> [`tldrawkc/AGENTS.md`](tldrawkc/AGENTS.md); the brief it was built from is in
+> [tldraw-integration/](tldraw-integration/README.md).
+
 ## Project layout
 
 | Directory | Role |
@@ -37,6 +45,8 @@ of the app works.
 | `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
 | `learn/` | The knowledge base: `concepts/<domain>/`, `sessions/`, `state/`, `assets/` |
 | `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
+| `tldrawkc/` | Submodule for the tldraw diagram CLI, with its own repo and `AGENTS.md` |
+| `tldraw-integration/` | The brief `tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
 | `docs/`, `public/` | Long-form notes, and static assets including the social card |
 
 ## What to contribute
@@ -60,8 +70,8 @@ bug fixes or docs. All welcome.
    the knowledge base is what the PR is about.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
-5. **Never commit a dirty `manimkc/` pointer.** Commit and push inside the
-   submodule first, then commit the updated pointer here.
+5. **Never commit a dirty `manimkc/` or `tldrawkc/` pointer.** Commit and push
+   inside the submodule first, then commit the updated pointer here.
 6. **Do not copy the `/learn` and `/review` skills into `.claude/`.** They live
    in the `learning` plugin, installed globally, so they work in every project.
    A local copy would shadow the plugin and the two would drift apart.
