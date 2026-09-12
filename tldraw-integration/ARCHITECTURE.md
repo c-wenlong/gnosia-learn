@@ -134,11 +134,11 @@ returns JSON-safe values so the same surface can back a future MCP entry.
 | Function | Input | Output | Notes |
 | --- | --- | --- | --- |
 | `ping()` | none | `{ ok: true, version }` | Answers once the editor has mounted. `doctor` and `browser.ts` wait on it. |
-| `load(tldrJson)` | `.tldr` file contents as a string, or `null` for a fresh document | `{ pages, shapeCount }` | `parseTldrawJsonFile({ json, schema: editor.store.schema })` returns a detached store with migrations applied; the bridge then calls `loadSnapshot(editor.store, { document: parsed.value.getStoreSnapshot() })`. That second step is what puts the records into the mounted editor. |
+| `load(tldrJson)` | `.tldr` file contents as a string, or `null` for a fresh document | `{ pages, shapeCount }` | `parseTldrawJsonFile({ json, schema: editor.store.schema })` returns a `Result<TLStore, TldrawFileParseError>`, so `parsed.value` is a detached `TLStore` with migrations applied, not a file object. The bridge then calls `loadSnapshot(editor.store, { document: parsed.value.getStoreSnapshot("document") })`. That second step is what puts the records into the mounted editor. Pass the scope explicitly: it defaults to `document` today, and `"all"` would pull session records into a snapshot meant only for `loadSnapshot`. |
 | `setPage(name)` | page name or `null` for the first page | `{ page }` | Every verb that takes `--page` calls this first. Unknown name is an error. |
-| `exec(source)` | JavaScript source | `{ result, lints, shapeCount }` | Wrapped in `new AsyncFunction('editor', 'helpers', 'tldraw', source)`. Before running: `const mark = editor.markHistoryStoppingPoint('exec')`. A thrown error calls `editor.bailToMark(mark)` and rejects. (`editor.mark` was removed in tldraw v4 and is still absent in v5.) |
+| `exec(source)` | JavaScript source | `{ result, lints, shapeCount }` | Wrapped in `new AsyncFunction('editor', 'helpers', 'tldraw', source)`. Before running: `const mark = editor.markHistoryStoppingPoint('exec')`. A thrown error calls `editor.bailToMark(mark)` and rejects. (`editor.mark` was removed in tldraw v4 and is still absent in v5.) The `AsyncFunction` constructor prepends a two-line header, so a snippet's stack line numbers are two higher than the source: line 4 of a snippet reports as `<anonymous>:6`. The offset was measured and is constant. The CLI prints that stack unadjusted, so subtract 2 when reading it. |
 | `save()` | none | string | `await serializeTldrawJson(editor)`; it returns a promise. Assets inlined as data URLs. |
-| `shot(opts)` | `{ ids?, padding?, pixelRatio?, background? }` | `{ pngBase64, width, height, bounds }` | `editor.toImage(ids, { format: 'png', padding, pixelRatio, background })` resolves `{ blob, width, height }`; the bridge reads the blob into base64. `background` is a boolean (paint the page background or leave it transparent), default `true`. Defaults: all shapes on the current page, padding 32, pixelRatio 2. |
+| `shot(opts)` | `{ ids?, padding?, pixelRatio?, background? }` | `{ pngBase64, width, height, bounds }` | `editor.toImage(ids, { format: 'png', padding, pixelRatio, background })` resolves `{ blob, width, height }`; the bridge reads the blob into base64. `background` is a boolean (paint the page background or leave it transparent), default `true`. Defaults: all shapes on the current page, padding 32, pixelRatio 2. Those two numbers are tldrawkc's, not tldraw's: `toImage`'s own `padding` defaults to `'auto'`, which trims to the visual content bounds and captures overflow like thick strokes and arrowheads. A number is fixed padding with no trimming, and anything past it is clipped. The bridge passes a number because the CLI exposes `--padding`. |
 | `svg(opts)` | `{ ids?, padding?, background? }` | `{ svg, width, height }` | `editor.getSvgString`. tldraw inlines the fonts it can load, which is why the bundle's fonts must resolve from a relative URL with no network. |
 | `inspect()` | none | see below | The "read the canvas" step. This table is the single definition; [CLI.md](CLI.md) prints it unchanged. |
 | `lints()` | none | `Lint[]` | Same pass `exec` runs; exposed so `inspect` can report without mutating. `helpers.getLints()` returns the same bare array. |
@@ -189,14 +189,22 @@ the Vite config those URLs are relative, so `toImage` and `getSvgString` never
 wait on a network fetch. Sixteen `.woff2` files in `dist/page/assets/` after a
 build is the check that it worked.
 
-`doctor` verifies the page loads with no failed requests. `getSvgString`
+`doctor` verifies the page loads with no failed requests. A **failed request**
+here is a Playwright `requestfailed` event **or** any response with a status of
+400 or worse, because a missing font is a 404 rather than a transport failure:
+the request succeeded and the answer was "no". Counting only `requestfailed`
+would miss the one case the check exists for. `getSvgString`
 inlines the fonts it managed to load into the SVG on its own (there is no
 option to ask for it), which keeps [learn/assets](INTEGRATION.md)
 self-contained the way the current hand-written SVGs are. If a font failed to
 load, the export silently falls back to a system font, so the failed-requests
-check in `doctor` is the guard, and phase 1 owes a rendered check on top of
-it: screenshot a one-box fixture and confirm the label is Shantell Sans, not a
-fallback.
+check in `doctor` is the guard. `doctor`'s `fonts` check, as built, awaits
+`document.fonts.ready` before reading the request log (tldraw kicks its woff2
+fetches off during mount and carries on, so a snapshot taken when the bridge
+answers `ping` can miss the 404), and then fails when no `tldraw_*` font family
+came back loaded. Phase 1 also owed a rendered check on top of it, and paid it:
+the example snippet was screenshotted and looked at, and the labels are
+Shantell Sans, not a fallback.
 
 ## Files this tool writes
 
@@ -233,7 +241,7 @@ whole collaboration story; there is no sync server and none is planned. See
 | --- | --- | --- |
 | `DEFAULT_PADDING` | 32 px | `page/bridge.ts` |
 | `DEFAULT_PIXEL_RATIO` | 2 | `page/bridge.ts` |
-| `MAX_SHOT_EDGE` | 4096 px, pixelRatio is reduced to stay under it | `page/bridge.ts` |
+| `MAX_SHOT_EDGE` | 4096 px, a hard ceiling: pixelRatio is reduced to stay under it, with no floor on the reduction | `page/bridge.ts` |
 | `BRIDGE_TIMEOUT_MS` | 15000 | `lib/browser.ts` |
 | `EXEC_TIMEOUT_MS` | 30000 | `lib/browser.ts` |
 | `MIRROR_POLL_MS` | 1000 | `page/mirror.tsx` |
@@ -257,4 +265,4 @@ whole collaboration story; there is no sync server and none is planned. See
 5. **Every file write is atomic** and goes through `src/lib/files.ts`.
 6. **Every meaningful connection is a bound arrow.** `helpers.connect` is the only way snippets should draw one; the lint pass flags raw arrows with a free end.
 7. **A command never leaves a browser running.** `run`, `shot`, `inspect`, `export`, `from-mermaid`, `new` and `doctor` close Chromium in a `finally`. `serve` is the one long-lived command and exits on SIGINT.
-8. **No network access at runtime.** The page bundle is self-contained, fonts included. `doctor` fails on any request that leaves 127.0.0.1.
+8. **No network access at runtime.** The page bundle is self-contained, fonts included. `doctor` fails on any request that leaves 127.0.0.1, and on any failed request, which means a `requestfailed` event or a response with status 400 or worse.
