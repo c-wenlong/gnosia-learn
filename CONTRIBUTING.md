@@ -45,7 +45,7 @@ of the app works.
 | `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
 | `learn/` | The knowledge base: `concepts/<domain>/`, `sessions/`, `state/`, `assets/` |
 | `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
-| `tldrawkc/` | Submodule for the tldraw diagram CLI, with its own repo and `AGENTS.md` |
+| `tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo and `AGENTS.md`. Needs `npm ci && npm run build` inside it before the script runs |
 | `tldraw-integration/` | The brief `tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
 | `docs/`, `public/` | Long-form notes, and static assets including the social card |
 
@@ -70,8 +70,11 @@ bug fixes or docs. All welcome.
    the knowledge base is what the PR is about.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
-5. **Never commit a dirty `manimkc/` or `tldrawkc/` pointer.** Commit and push
-   inside the submodule first, then commit the updated pointer here.
+5. **Never commit a dirty `manimkc/` or `tldrawkc/` pointer.** Both submodules
+   follow the same rule: commit and push inside the submodule first, then
+   commit the updated pointer here, and only ever to a commit that is already
+   on the submodule's remote. `git diff --submodule=log <name>` before
+   `git add <name>` says which commit you are about to pin.
 6. **Do not copy the `/learn` and `/review` skills into `.claude/`.** They live
    in the `learning` plugin, installed globally, so they work in every project.
    A local copy would shadow the plugin and the two would drift apart.
