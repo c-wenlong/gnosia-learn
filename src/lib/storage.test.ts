@@ -4,7 +4,6 @@ import {
   clearKnowledge,
   defaultState,
   KNOWLEDGE_LIMITS,
-  migrateState,
   recordKnowledge,
   removeUserResource,
   resetCourseProgress,
@@ -13,7 +12,7 @@ import {
   setTheme,
   toggleTopic,
 } from "@/lib/storage";
-import { CURRENT_STATE_VERSION, type KnowledgeInput } from "@/lib/types";
+import type { KnowledgeInput } from "@/lib/types";
 
 const sampleKnowledge = (
   overrides: Partial<KnowledgeInput> = {},
@@ -29,7 +28,6 @@ const sampleKnowledge = (
 describe("learner state reducers", () => {
   it("starts from a clean default state", () => {
     const state = defaultState();
-    expect(state.version).toBe(CURRENT_STATE_VERSION);
     expect(state.theme).toBe("light");
     expect(state.completed).toEqual({});
     expect(state.notes).toEqual({});
@@ -168,37 +166,13 @@ describe("topic knowledge", () => {
   });
 });
 
-describe("state migration", () => {
-  it("upgrades a v1 payload without losing progress", () => {
-    const migrated = migrateState({
-      version: 1,
-      theme: "dark",
-      completed: { t1: true },
-      notes: { t1: "old note" },
-      userResources: {},
-      epoch: 3,
-    } as never);
-
-    expect(migrated.version).toBe(CURRENT_STATE_VERSION);
-    expect(migrated.completed).toEqual({ t1: true });
-    expect(migrated.notes["t1"]).toBe("old note");
-    expect(migrated.theme).toBe("dark");
-    expect(migrated.epoch).toBe(3);
-    expect(migrated.knowledge).toEqual({});
-  });
-
-  it("drops malformed knowledge entries on load", () => {
-    const migrated = migrateState({
-      knowledge: {
-        good: { summary: "kept", keyPoints: ["a"], sessions: 2 },
-        empty: { summary: "   ", keyPoints: [] },
-        junk: "not an object",
-      },
-    } as never);
-
-    expect(Object.keys(migrated.knowledge)).toEqual(["good"]);
-    expect(migrated.knowledge["good"].sessions).toBe(2);
-    expect(migrated.knowledge["good"].topicId).toBe("good");
-    expect(migrated.knowledge["good"].source).toBe("agent");
-  });
-});
+/*
+ * The `state migration` suite that used to live here is gone with the code it
+ * tested. `migrateState` brought an older localStorage document up to the
+ * current version on every load; there is no localStorage document any more,
+ * and the one-time carry-over of an old one is `importLegacyState` in
+ * services/catalog/src/state/import.ts, tested against a real database in
+ * services/catalog/test/state.test.ts. The defensive parsing those two cases
+ * covered — a malformed knowledge entry, a v1 payload with no `knowledge` key
+ * — is covered there, against the shape that actually arrives.
+ */

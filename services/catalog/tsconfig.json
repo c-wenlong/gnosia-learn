@@ -1,4 +1,5 @@
 {
+  "//allowJs": "src/learn/ imports the pipeline's pure modules (bkt, graph, schedule, markdown, render, session-log) straight from scripts/learn/lib/*.mjs rather than reimplementing the maths in TypeScript. They are plain ESM with no types, so allowJs lets TypeScript read them and infer. checkJs stays off: those files have their own test suites and are not this config's to check.",
   "//": "Its own tsconfig, and the root one excludes `packages` and `services`. See packages/schema/tsconfig.json for the reasoning: the root config is the Next app's, and `**/*.ts` in its `include` would otherwise typecheck this service against DOM libs and JSX.",
   "compilerOptions": {
     "target": "ES2023",
@@ -12,7 +13,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "allowJs": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "drizzle.config.ts"]
 }

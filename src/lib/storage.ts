@@ -1,151 +1,45 @@
 import {
-  CURRENT_STATE_VERSION,
+  clampKnowledgeList,
+  clampSummary,
+  KNOWLEDGE_LIMITS,
+} from "@self-learn/schema/shared";
+import {
+  emptyLearnerState,
   type KnowledgeInput,
   type LearnerState,
   type ThemeMode,
-  type TopicKnowledge,
   type UserResource,
 } from "@/lib/types";
 
-export const STORAGE_KEY = "self-learn:v1";
-
-/** Bounds so one runaway session can't fill the localStorage quota. */
-export const KNOWLEDGE_LIMITS = {
-  summaryChars: 1200,
-  listItems: 8,
-  itemChars: 300,
-} as const;
-
-export const defaultState = (): LearnerState => ({
-  version: CURRENT_STATE_VERSION,
-  theme: "light",
-  completed: {},
-  notes: {},
-  userResources: {},
-  knowledge: {},
-  epoch: 0,
-});
-
-function isBrowser(): boolean {
-  return typeof window !== "undefined";
-}
-
-function clampList(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-  return values
-    .filter((v): v is string => typeof v === "string")
-    .map((v) => v.trim().slice(0, KNOWLEDGE_LIMITS.itemChars))
-    .filter(Boolean)
-    .slice(0, KNOWLEDGE_LIMITS.listItems);
-}
-
-function normalizeKnowledge(raw: unknown): Record<string, TopicKnowledge> {
-  if (!raw || typeof raw !== "object") return {};
-  const out: Record<string, TopicKnowledge> = {};
-  for (const [topicId, value] of Object.entries(
-    raw as Record<string, unknown>,
-  )) {
-    if (!value || typeof value !== "object") continue;
-    const entry = value as Partial<TopicKnowledge>;
-    const summary =
-      typeof entry.summary === "string"
-        ? entry.summary.trim().slice(0, KNOWLEDGE_LIMITS.summaryChars)
-        : "";
-    const keyPoints = clampList(entry.keyPoints);
-    const misconceptions = clampList(entry.misconceptions);
-    const openQuestions = clampList(entry.openQuestions);
-    if (
-      !summary &&
-      keyPoints.length === 0 &&
-      misconceptions.length === 0 &&
-      openQuestions.length === 0
-    ) {
-      continue;
-    }
-    out[topicId] = {
-      topicId,
-      summary,
-      keyPoints,
-      misconceptions,
-      openQuestions,
-      source: entry.source === "manual" ? "manual" : "agent",
-      updatedAt:
-        typeof entry.updatedAt === "string"
-          ? entry.updatedAt
-          : new Date(0).toISOString(),
-      sessions:
-        typeof entry.sessions === "number" && entry.sessions > 0
-          ? Math.floor(entry.sessions)
-          : 1,
-    };
-  }
-  return out;
-}
-
 /**
- * Bring any previously persisted shape up to the current version.
- * v1 → v2 is purely additive (knowledge), so old progress carries over.
+ * Pure state transitions for the learner state.
+ *
+ * What this module used to be: the localStorage layer. `loadState`,
+ * `saveState` and `migrateState` read and wrote `self-learn:v1`, and the
+ * reducers below existed to keep that testable without a DOM.
+ *
+ * What it is now: only the reducers. Postgres holds the state, the provider
+ * applies these optimistically and posts the change to `/api/learner/*`, and
+ * the server applies the equivalent write. They earn their place because the
+ * optimistic half of every mutation still has to happen somewhere, and a UI
+ * that waited for a round trip before ticking a checkbox would feel broken.
+ *
+ * The clamps come from `@self-learn/schema/shared`, which is the same
+ * definition the `recap` table's CHECK constraints are generated from. Two
+ * copies of `summaryChars` would eventually disagree, and the way that shows
+ * up is a save the learner watches succeed and then fail.
  */
-export function migrateState(parsed: Partial<LearnerState>): LearnerState {
-  return {
-    ...defaultState(),
-    ...parsed,
-    version: CURRENT_STATE_VERSION,
-    completed: parsed.completed ?? {},
-    notes: parsed.notes ?? {},
-    userResources: parsed.userResources ?? {},
-    knowledge: normalizeKnowledge(parsed.knowledge),
-    epoch: typeof parsed.epoch === "number" ? parsed.epoch : 0,
-    theme: parsed.theme === "dark" ? "dark" : "light",
-  };
-}
 
-export function loadState(): LearnerState {
-  if (!isBrowser()) return defaultState();
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    return migrateState(JSON.parse(raw) as Partial<LearnerState>);
-  } catch {
-    return defaultState();
-  }
-}
+export { KNOWLEDGE_LIMITS };
 
-export type SaveResult = { ok: true } | { ok: false; error: string };
-
-/**
- * Persist state. Knowledge records grow the payload, so a full quota is a
- * real failure mode the UI has to surface rather than silently swallow.
- */
-export function saveState(state: LearnerState): SaveResult {
-  if (!isBrowser()) return { ok: true };
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    return { ok: true };
-  } catch (err) {
-    const quota =
-      err instanceof DOMException &&
-      (err.name === "QuotaExceededError" ||
-        err.name === "NS_ERROR_DOM_QUOTA_REACHED");
-    return {
-      ok: false,
-      error: quota
-        ? "Browser storage is full — export your recaps, then clear old ones to keep saving."
-        : err instanceof Error
-          ? err.message
-          : "Could not write to browser storage.",
-    };
-  }
-}
+/** Kept as `defaultState` so existing call sites read the same. */
+export const defaultState = emptyLearnerState;
 
 export function setTheme(state: LearnerState, theme: ThemeMode): LearnerState {
   return { ...state, theme };
 }
 
-export function toggleTopic(
-  state: LearnerState,
-  topicId: string,
-): LearnerState {
+export function toggleTopic(state: LearnerState, topicId: string): LearnerState {
   const completed = { ...state.completed };
   if (completed[topicId]) {
     delete completed[topicId];
@@ -191,9 +85,7 @@ export function removeUserResource(
   moduleId: string,
   resourceId: string,
 ): LearnerState {
-  const list = (state.userResources[moduleId] ?? []).filter(
-    (r) => r.id !== resourceId,
-  );
+  const list = (state.userResources[moduleId] ?? []).filter((r) => r.id !== resourceId);
   const userResources = { ...state.userResources };
   if (list.length === 0) {
     delete userResources[moduleId];
@@ -213,10 +105,10 @@ export function recordKnowledge(
   input: KnowledgeInput,
   options?: { countSession?: boolean },
 ): LearnerState {
-  const summary = input.summary.trim().slice(0, KNOWLEDGE_LIMITS.summaryChars);
-  const keyPoints = clampList(input.keyPoints);
-  const misconceptions = clampList(input.misconceptions);
-  const openQuestions = clampList(input.openQuestions);
+  const summary = clampSummary(input.summary);
+  const keyPoints = clampKnowledgeList(input.keyPoints);
+  const misconceptions = clampKnowledgeList(input.misconceptions);
+  const openQuestions = clampKnowledgeList(input.openQuestions);
   const knowledge = { ...state.knowledge };
 
   if (
@@ -230,8 +122,7 @@ export function recordKnowledge(
   }
 
   const previous = state.knowledge[topicId];
-  const sessions =
-    (previous?.sessions ?? 0) + (options?.countSession === false ? 0 : 1);
+  const sessions = (previous?.sessions ?? 0) + (options?.countSession === false ? 0 : 1);
 
   knowledge[topicId] = {
     topicId,
@@ -246,10 +137,7 @@ export function recordKnowledge(
   return { ...state, knowledge };
 }
 
-export function clearKnowledge(
-  state: LearnerState,
-  topicId: string,
-): LearnerState {
+export function clearKnowledge(state: LearnerState, topicId: string): LearnerState {
   if (!state.knowledge[topicId]) return state;
   const knowledge = { ...state.knowledge };
   delete knowledge[topicId];
@@ -281,10 +169,6 @@ export function setLastVisited(
 ): LearnerState {
   return {
     ...state,
-    lastVisited: {
-      courseSlug,
-      moduleSlug,
-      at: new Date().toISOString(),
-    },
+    lastVisited: { courseSlug, moduleSlug, at: new Date().toISOString() },
   };
 }

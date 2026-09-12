@@ -57,6 +57,7 @@ roughly N times. `--duration` needs Pro or Enterprise.
 
 | Name | Purpose | Where it is needed |
 | --- | --- | --- |
+| `DATABASE_URL` | Postgres holding the learner state and the catalog | Vercel (once a cloud database exists), CI, locally |
 | `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade | Vercel |
 | `GEMINI_API_KEY` | Provider 2 | Vercel |
 | `OPENROUTER_API_KEY` | Provider 3 | Vercel |
@@ -83,6 +84,57 @@ and graph SVGs for a private repo. Codecov generates it for exactly this
 purpose, so it is fine in a public file. Both come from **Configuration** on
 the repo's Codecov page: the upload token under General, the graph token under
 Badges & Graphs.
+
+## The database
+
+`DATABASE_URL` points at the Postgres holding the catalog. It defaults to
+`postgres://localhost:5432/self_learn`, which is the Homebrew install a laptop
+uses and needs no configuration; CI sets it to its `postgres:17` service.
+
+**Production has no database yet.** That is a deliberate state and not a
+broken one, and two things make it survivable:
+
+- `npm run build` never touches it. Every read calls `connection()` first, so
+  it belongs to a request rather than to the build, and a deploy succeeds with
+  the variable unset.
+- Every read degrades. A page renders with an empty learner snapshot and says
+  the database is unreachable rather than failing; a write comes back 503 with
+  `STORE_UNAVAILABLE` and the UI shows "not saved". Nothing is lost, because
+  nothing was there to lose — but nothing new is recorded either, so the
+  production app is read-only until this is set.
+
+**Setting it is also the moment the learner routes become writable by anyone.**
+`/api/learner/*` has no account to authenticate: the only check is the same
+`enforceSameOrigin` the agent routes use, and a forged `Origin` header walks
+straight through it. Today that costs nothing, because production has no
+database and there is nothing to write. Once it does, a stranger who guesses a
+curriculum item id can tick, untick and overwrite the study record, and those
+rows are the only copy. Two things go in before the connection string:
+
+```bash
+vercel firewall rules list                              # what exists
+# add a per-IP rate limit on /api/learner, the same shape as the agent rule
+vercel firewall publish --yes
+```
+
+and a `pg_dump` on a schedule, because the one bound that matters against a
+write nobody authorised is being able to put the rows back. Real
+authentication is the plan's answer (`#27`: "no localStorage except future
+auth") and is not in this bundle.
+
+When the cloud database arrives (Neon or Supabase from Vercel, or Postgres on
+the homeserver over Tailscale — the plan has not chosen):
+
+```bash
+pg_dump self_learn > self_learn.sql          # the local database, both halves
+psql "$CLOUD_URL" < self_learn.sql
+vercel env add DATABASE_URL production       # then redeploy
+npm run catalog -- migrate                   # against the cloud URL
+```
+
+The dump carries the append-only trigger with the schema, so the guarantee
+survives the move. Migrations are keyed by file hash, so `migrate` against a
+restored dump is a no-op rather than a replay.
 
 `NEXT_PUBLIC_SITE_URL` is optional in production: Vercel supplies the
 deployment domain, and the app falls back to `http://localhost:3000` locally.
