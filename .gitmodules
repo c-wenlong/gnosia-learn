@@ -1,3 +1,6 @@
 [submodule "manimkc"]
 	path = manimkc
 	url = https://github.com/c-wenlong/manimkc.git
+[submodule "tldrawkc"]
+	path = tldrawkc
+	url = https://github.com/c-wenlong/tldrawkc.git

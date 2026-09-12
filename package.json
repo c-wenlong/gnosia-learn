@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "learn": "node scripts/learn/cli.mjs"
+    "learn": "node scripts/learn/cli.mjs",
+    "canvas": "node tldrawkc/dist/cli/index.js"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.20",

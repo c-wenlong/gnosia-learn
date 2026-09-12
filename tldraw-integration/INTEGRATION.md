@@ -1,0 +1,118 @@
+# Integration with self-learn
+
+How the tool fits this repository specifically. The general design is in
+[ARCHITECTURE.md](ARCHITECTURE.md); this file is about seams.
+
+## Where it lives
+
+```mermaid
+flowchart LR
+    subgraph selflearn[self-learn]
+        SKILLS[.claude/skills/tldrawkc-diagram -> symlink]
+        SCRIPTS[scripts/learn: the pipeline CLI]
+        LEARN[learn/assets/*.tldr and *.svg]
+        SRC[src/: the web app, reads learn/ only]
+        MK[manimkc/: submodule, videos]
+        TK[tldrawkc/: submodule, diagrams]
+    end
+    PLUGIN[learning plugin, global<br/>diagram-maker agent] -- "npm run canvas" --> TK
+    TK -- writes --> LEARN
+    SCRIPTS -- "session-log embeds ![[x.svg]]" --> LEARN
+    SRC -- reads --> LEARN
+    SKILLS --> TK
+```
+
+`tldrawkc/` is a submodule beside `manimkc/`, with the same rules from the
+root AGENTS.md: commit and push inside it first, then bump the pointer
+here, never to an unpushed commit. Its `node_modules` and `dist` are local
+artefacts; a fresh clone runs `git submodule update --init tldrawkc`, then
+`npm ci && npm run build` inside it, then `npm run canvas -- doctor`.
+
+## The one seam: `learn/assets/`
+
+Today the `diagram-maker` subagent writes `learn/assets/<concept-id>.svg`
+by hand and the session log embeds it as `![[<concept-id>.svg]]`. The tool
+keeps that contract exactly and adds one file:
+
+| Path | Before | After |
+| --- | --- | --- |
+| `learn/assets/<id>.svg` | hand-written SVG, viewed via Read, fixed by editing markup | exported by `tldrawkc export --svg`, fonts inlined, self-contained |
+| `learn/assets/<id>.tldr` | did not exist | the editable source, committed beside the SVG |
+| session log embed | `![[<id>.svg]]` | unchanged |
+| `/learn` page | does not render assets | unchanged |
+
+Two root layering rules need a documented carve-out for `learn/assets/`
+when phase 3 lands, rather than routing SVG bytes through `scripts/learn`:
+rule 3, "the CLI is the only writer of `learn/`", and rule 5, "nothing
+outside `lib/paths.mjs` builds a path under `learn/`". Both are about
+`learn/state/` and `learn/concepts/`; `learn/assets/` has always been
+written by the diagram agent directly at a path the agent chose, and the
+tool keeps that behaviour.
+
+`learn/map.md` stays mermaid. It is a derived cache that `learn map`
+rebuilds from `events.jsonl`, not a teaching diagram, and the web app reads
+its string from `index.json` without rendering it.
+
+## Changes to make in self-learn (phase 3)
+
+| File | Change |
+| --- | --- |
+| `package.json` | `"canvas": "node tldrawkc/dist/cli/index.js"` |
+| `.gitmodules` | the new submodule |
+| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` |
+| `eslint.config.mjs` | add `tldrawkc/**` to the ignore block that already lists `manimkc/` and `coverage/`, or lint will walk its `node_modules` |
+| `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. |
+| `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 |
+| `.github/workflows/ci.yml` | nothing. CI already skips submodules and the tool has its own CI. |
+| `vitest.config.ts` | nothing. The tool's tests run in its repo. |
+
+## Changes outside self-learn
+
+| Where | Change |
+| --- | --- |
+| `~/.quiver/plugins/learning/learning/agents/diagram-maker.md` | Replace the "write SVG, read it back" loop with the [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) loop. Keep the "what makes a teaching diagram work" section. `Bash` is already in its tool list, so it needs no new tools. |
+| `~/.quiver/plugins/learning/learning/skills/learn/SKILL.md` | Where it says "spawn diagram-maker; it writes an SVG into learn/assets", add "and a .tldr beside it". |
+
+The plugin is global and shared across projects, so the agent should check
+`npm run canvas -- doctor` and fall back to the hand-written SVG path when
+the tool is not installed in the current repo. That keeps `/learn` working
+in a project that has not adopted the submodule.
+
+## manimkc
+
+No coupling in v1. They are siblings: both are submodules, both are driven
+by a CLI from a skill, both have a "render a preview, look at it, iterate"
+loop, and both write into paths the agent chooses. The parallels worth
+copying from manimkc into the tool repo:
+
+| manimkc | tldrawkc |
+| --- | --- |
+| `manimkc doctor` | `tldrawkc doctor` |
+| `manimkc api` prints every `lib/` helper with a usage line | `tldrawkc api` prints every helper from JSDoc |
+| `manimkc preview` renders 480p contact sheets the agent must look at | `tldrawkc run --shot` writes a PNG the agent must look at |
+| `manimkc lint` domain checks | the lint pass and exit code 3 |
+| `AGENTS.md` as the single source of truth, `CLAUDE.md` is `@AGENTS.md` | same |
+| "Verdict (recorded so it isn't relitigated)" callouts in `server/DESIGN.md` | [DECISIONS.md](DECISIONS.md) |
+
+If a diagram should appear inside a manimkc video, the path is `export
+--svg` then manim's SVG import, which is a manimkc concern and out of scope
+here.
+
+## The frontend question, answered
+
+Keep `src/` as the encyclopedia. Reasons, from reading it:
+
+- It deploys to Vercel as a server-rendered Next app. A tool that needs a
+  local Chromium and local file writes cannot run there, and shipping
+  tldraw in that bundle would add a large dependency to a site that today
+  has one static SVG component.
+- Nothing in `src/` talks to manimkc either. manimkc's server is a JSON job
+  API with no UI, and finished videos go to Seafile, not to a URL the app
+  could embed. A video panel is new work on both sides.
+- The tool's own `serve` command already gives a human a live view of a
+  canvas. That covers "let me watch and nudge" without a second app.
+
+If a combined local studio becomes worth it after real use, build it as
+its own small app (phase 6), local only, reading `learn/assets/` and
+talking to `localhost:8090`. That is a different project with a different
+deployment story and should not be designed on the back of this one.

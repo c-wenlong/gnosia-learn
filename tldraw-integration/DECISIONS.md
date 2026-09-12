@@ -1,0 +1,161 @@
+# Decisions
+
+Recorded so they are not relitigated. Each has a verdict and the reason.
+Reopen one only with new information, and update this file when you do.
+
+## D1. The browser owns all drawing logic; Node only drives it
+
+**Verdict:** every shape, binding, layout, lint and export is computed
+inside a real tldraw `Editor` in Chromium. Node never constructs records.
+
+**Why:** there is no supported headless `Editor` (see
+[PRIOR-ART.md](PRIOR-ART.md)). Building records in Node with
+`@tldraw/store` is possible but throws away bound-arrow geometry, elbow
+routing and text measurement, which are exactly the features that made the
+ERD in this design session look right. And screenshots need a browser
+anyway, so a browser is already a hard dependency.
+
+## D2. Stateless commands, no daemon
+
+**Verdict:** every command launches Chromium, does one job, saves and
+exits. State lives only in the `.tldr` file.
+
+**Why:** a daemon needs a state file, a port, a token, idle timeouts and a
+story for stale processes, and every one of those is a bug an agent will
+hit. One to two seconds of startup per command is cheap next to the model's
+own turn time. A warm-browser cache is a roadmap item if latency turns out
+to matter.
+
+## D3. No sync server, no collaboration
+
+**Verdict:** `@tldraw/sync` is not used. The human view is a page that
+polls a file and saves back to it.
+
+**Why:** the use case is one agent drawing and one person occasionally
+looking or nudging. `TLSocketRoom.updateStore`, the server-side write path a
+CLI would need, is deprecated with no replacement. Two writers on one file
+with last-write-wins is enough, and it is honest about what it is.
+
+## D4. Its own repo, wired in as a submodule
+
+**Verdict:** `tldrawkc` is a separate repository (`c-wenlong/tldrawkc`,
+name pending) added to self-learn at `tldrawkc/`, exactly as `manimkc/` is.
+Not a folder inside `manimkc`, not a folder inside `src/`.
+
+**Why:** it is a TypeScript and browser project; manimkc is Python and
+manim. Sharing a repo would mean two toolchains, two CIs and two AGENTS.md
+in one place. And the stated goal is to open-source it as a tool for
+agents, which needs its own README, license and issue tracker. The
+submodule pattern already works in this repo, including the symlinked skill
+and the "commit inside the submodule first" rule in the root AGENTS.md.
+
+## D5. Snippets are JavaScript, not a fixed command vocabulary
+
+**Verdict:** `run --code` takes JavaScript with `editor`, `helpers` and
+`tldraw` in scope. The helpers are the recommended vocabulary, not the only
+one.
+
+**Why:** the agents using this are Claude Code sessions that write code
+well. A closed vocabulary would need extending every time a diagram wanted
+something new, and the escape hatch to `editor` is what let the ERD get
+right-angle lanes and custom anchors. The trade-off is that a snippet can
+do anything the page can, so the page must never have filesystem or
+network access of its own (layering rule 2 in
+[ARCHITECTURE.md](ARCHITECTURE.md)).
+
+## D6. MCP entry deferred
+
+**Verdict:** not in v1. The library API is JSON in, JSON out so an MCP
+wrapper is a thin later addition (roadmap phase 5).
+
+**Why:** the consumer today is Claude Code, which runs shell commands and
+reads files natively; a skill plus a CLI is the same pattern manimkc uses
+and it works. MCP earns its place when a second client appears (Claude
+Desktop, Cursor, an n8n flow) or when open-source users ask for it, which
+[joelhooks/tldraw-agent](https://github.com/joelhooks/tldraw-agent) suggests
+they will. Building it first would be building for a user we do not have.
+
+## D7. No new frontend in self-learn for now
+
+**Verdict:** `src/` stays the course encyclopedia. The tool's human view is
+`tldrawkc serve`, a local page the tool itself serves. A combined local
+"studio" that also shows manimkc jobs and videos is a separate, later
+project (roadmap phase 6), and if it happens it lives in its own small app,
+not in `src/`.
+
+**Why:** `src/` deploys to Vercel. A headless-browser tool with local file
+access has no business in that build, and the app's only visual component
+today is a static SVG graph, so there is nothing to reuse. manimkc's server
+is a JSON job API with no UI and publishes videos to Seafile, so a video
+panel would be new integration work on both sides. Ship the diagram tool
+first; decide on a studio once both tools have a few weeks of real use.
+
+## D8. Exports are SVG for notes, PNG for looking
+
+**Verdict:** the committed artefact next to a concept note stays an SVG,
+embedded with `![[name.svg]]` as today. PNGs are for the agent's eyes and
+are not committed. The `.tldr` source is committed alongside the SVG.
+
+**Why:** everything downstream (Obsidian embeds, the `/learn` page, the
+session log renderer) already handles SVG. Committing the `.tldr` is what
+makes a diagram editable next time instead of redrawn.
+
+## D9. `playwright-core` with a resolved Chromium, not bundled `playwright`
+
+**Verdict:** depend on `playwright-core` and resolve a browser in this
+order: `--chromium`, `TLDRAWKC_CHROMIUM`, Playwright's own registry if the
+user ran `npx playwright install chromium`, then installed Chrome or
+Chromium apps.
+
+**Why:** `playwright-core` ships no browser of its own, so nothing is
+downloaded at install time inside a submodule. Most machines already have a
+Chrome; CI installs one explicitly. `doctor` tells the user which one was
+picked.
+
+**Corrected 2026-09-13 (phase 0).** This decision originally said the full
+`playwright` package "downloads browsers on install". That was true once and
+is not true of current versions: `playwright@1.63.0`'s published
+`package.json` has no `scripts` block at all, so there is no `postinstall` and
+no download. The verdict stands on the other reason, which is the one that
+mattered: `playwright-core` is the driver without the browser, and the browser
+should come from the machine. See D11 for what changed as a result.
+
+## D10. Lints fail the command
+
+**Verdict:** `run` exits 3 when lints remain, even though the file was
+saved. `--allow-lints` plus `meta.lintIgnore` is the opt-out.
+
+**Why:** the failure modes of hand-written SVG in this repo were overlaps
+and arrows pointing at nothing. Making those a non-zero exit is the
+cheapest way to make an agent look again.
+
+## D11. `playwright` is a devDependency, pinned to the `playwright-core` version
+
+**Verdict:** `playwright-core` stays the one runtime dependency. `playwright`
+is added as a devDependency at the **exact same version**, and the two are
+bumped together or not at all. The resolution order in D9 is unchanged.
+
+**Why:** `playwright` no longer has an install script (checked by unpacking
+the 1.63.0 tarball, not by reading the docs), so it costs nothing at
+`npm install` time. What it buys is that `npx playwright install chromium
+--with-deps` in CI resolves the local copy and fetches exactly the browser
+revision `playwright-core` expects, instead of whatever version the registry
+serves that day. A driver and a browser from different Playwright releases
+fail at launch with a protocol mismatch, and that failure reads as "the
+browser is broken" rather than "the versions drifted". Pinning is the cheapest
+way to never debug it.
+
+## D12. The design docs stay in self-learn until phase 3
+
+**Verdict:** for phases 0 to 2, `self-learn/tldraw-integration/` is the source
+of truth for the brief. `tldrawkc`'s own `README.md` and `AGENTS.md` link back
+to it rather than carrying a copy. Moving or splitting them is a phase 3 or
+later concern.
+
+**Why:** self-learn is where the tool is consumed, where the roadmap is
+ticked, and where the decision to build it was made, so that is where someone
+goes looking. Two copies would drift the way a local skill copy drifts from
+the plugin it shadows, which is a trap this repo already names in its root
+`AGENTS.md`. Phase 3 is when `tldrawkc` grows outward-facing docs of its own
+(a skill, a published README for people who are not us), and that is the right
+moment to decide what moves, what stays, and what becomes a link.

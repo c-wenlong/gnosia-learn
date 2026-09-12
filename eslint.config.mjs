@@ -18,6 +18,10 @@ const eslintConfig = defineConfig([
     // this, a local `npm run lint` walks its virtualenvs and reports 100k+
     // findings from third-party site-packages.
     "manimkc/**",
+    // Same reason, different toolchain: a git submodule with its own repo,
+    // its own flat ESLint config and its own TypeScript projects. Linting it
+    // from here would use the wrong config and walk its build output.
+    "tldrawkc/**",
   ]),
 ]);
 
