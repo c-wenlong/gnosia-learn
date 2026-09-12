@@ -1,9 +1,14 @@
+import { courseTopicIds, moduleTopicIds } from "@/lib/curriculum";
 import type { Course, Module, ProgressCounts } from "@/lib/types";
-import {
-  getAllTopicIds,
-  getCourseTopicIds,
-  getModuleTopicIds,
-} from "@/data/courses";
+
+/**
+ * Progress arithmetic over a course a caller already holds.
+ *
+ * Every one of these runs inside a `"use client"` component, so nothing here
+ * may reach `@/data/courses`: that module reads the filesystem. Whole-shortlist
+ * progress is `countsFromIds(navTopicIds(nav), completed)` in `AppShell`, where
+ * the server layout has already handed down the ids.
+ */
 
 export function countsFromIds(
   topicIds: string[],
@@ -22,20 +27,14 @@ export function moduleProgress(
   module: Module,
   completed: Record<string, true>,
 ): ProgressCounts {
-  return countsFromIds(getModuleTopicIds(module), completed);
+  return countsFromIds(moduleTopicIds(module), completed);
 }
 
 export function courseProgress(
   course: Course,
   completed: Record<string, true>,
 ): ProgressCounts {
-  return countsFromIds(getCourseTopicIds(course), completed);
-}
-
-export function globalProgress(
-  completed: Record<string, true>,
-): ProgressCounts {
-  return countsFromIds(getAllTopicIds(), completed);
+  return countsFromIds(courseTopicIds(course), completed);
 }
 
 export function formatProgress(p: ProgressCounts): string {

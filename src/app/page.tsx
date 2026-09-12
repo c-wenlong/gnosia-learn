@@ -1,6 +1,6 @@
 import { courses } from "@/data/courses";
+import { getTags, tags } from "@/data/content";
 import { CourseCard } from "@/components/CourseCard";
-import { TAGS } from "@/data/tags";
 import { TagChip } from "@/components/TagChip";
 
 export default function HomePage() {
@@ -25,8 +25,8 @@ export default function HomePage() {
           Cross-course themes
         </h2>
         <div className="flex flex-wrap gap-2">
-          {TAGS.map((t) => (
-            <TagChip key={t.id} id={t.id} />
+          {tags.map((t) => (
+            <TagChip key={t.id} tag={t} />
           ))}
         </div>
       </section>
@@ -38,7 +38,11 @@ export default function HomePage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-1">
           {courses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseCard
+              key={course.id}
+              course={course}
+              tags={getTags(course.tags)}
+            />
           ))}
         </div>
       </section>
