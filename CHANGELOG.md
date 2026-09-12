@@ -20,8 +20,11 @@ This project is continuously deployed and not versioned; entries are grouped by 
   (`lint`, `typecheck`, `test`, `build`, no secrets, no dirty submodule
   pointer), a template config that routes vulnerabilities to the security
   policy instead of a public issue, and a Dependabot config watching npm and
-  GitHub Actions weekly with development dependencies grouped into one pull
-  request.
+  GitHub Actions monthly, with version-locked families grouped so a bump
+  cannot arrive unable to install, and `@types/node` majors ignored while the
+  runtime is Node 22.
+- `@types/node` moved from `^20` to `^22`, matching the Node 22 the `engines`
+  field and CI already required.
 - **Coverage reporting.** `npm run test:coverage` runs vitest with v8
   coverage scoped to `src/lib`, `src/data` and `scripts/learn`, and CI uploads
   the lcov report to Codecov. `codecov.yml` keeps the project status
