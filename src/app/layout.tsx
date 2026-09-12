@@ -14,16 +14,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Social images are absolute URLs, so they need a base. On Vercel the
-// production domain is injected; locally we fall back to the dev server.
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
+const LOCAL_SITE_URL = "http://localhost:3000";
+
+/**
+ * Absolute base that social image URLs resolve against.
+ *
+ * Set `NEXT_PUBLIC_SITE_URL` to the canonical origin, with or without a
+ * scheme ("example.com" and "https://example.com" both work). On Vercel the
+ * production domain is injected instead. Anything unusable falls back to the
+ * dev server rather than throwing: a bad value should cost a link preview,
+ * not the whole app, since this runs while the root layout loads.
+ */
+function resolveSiteUrl(): URL {
+  const configured =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+
+  if (!configured) return new URL(LOCAL_SITE_URL);
+
+  const withScheme = /^https?:\/\//i.test(configured)
+    ? configured
+    : `https://${configured}`;
+
+  try {
+    return new URL(withScheme);
+  } catch {
+    console.warn(
+      `Ignoring unparseable site URL ${JSON.stringify(configured)}; ` +
+        `social images will resolve against ${LOCAL_SITE_URL}.`,
+    );
+    return new URL(LOCAL_SITE_URL);
+  }
+}
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: resolveSiteUrl(),
   title: {
     default: "Self-Learn · AY2026/27 Shortlist",
     template: "%s · Self-Learn",
