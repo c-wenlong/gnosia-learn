@@ -15,6 +15,17 @@ npm run dev
 npm test
 ```
 
+The catalog is optional for the web app and required for its own tests:
+
+```bash
+createdb self_learn            # Homebrew Postgres 17, already running
+npm run catalog -- migrate
+npm run catalog -- status
+```
+
+Without a reachable Postgres the catalog tests skip themselves with a reason
+and `npm test` still passes.
+
 `.env.local` matters only for the agent chat, which needs at least one
 provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
@@ -42,6 +53,8 @@ of the app works.
 | `src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
 | `src/lib/` | `storage.ts` (localStorage), `learner-context.tsx`, `progress.ts`, `agent/` (prompts and providers), `kb/` (reads the pipeline snapshot) |
 | `src/data/courses/` | The curriculum: one file per course, lookups in `index.ts` |
+| `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
+| `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
 | `learn/` | The knowledge base: `concepts/<domain>/`, `sessions/`, `state/`, `assets/` |
 | `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |

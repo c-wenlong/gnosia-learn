@@ -37,6 +37,38 @@ jobs:
     # npm cache and tight enough that a hung step does not sit there for hours.
     timeout-minutes: 15
 
+    # The catalog schema is mostly constraints, and no fake enforces a foreign
+    # key, so its tests run against a real Postgres. Without this service they
+    # skip themselves with a reason and the run stays green while checking
+    # nothing, which is fine on a laptop and not fine here.
+    #
+    # The tag matches compose.yaml and the Homebrew install developers use, so
+    # a migration cannot pass in one place and fail in another on a version
+    # difference. The credentials are the container's own and reach nothing.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: catalog
+          POSTGRES_PASSWORD: catalog
+          POSTGRES_DB: self_learn
+        ports:
+          - 5432:5432
+        # Without a health check the job starts npm ci against a container that
+        # is still initialising, and the test step fails with a connection error
+        # that looks like a code problem.
+        options: >-
+          --health-cmd "pg_isready -U catalog -d self_learn"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Every step sees it, but only the test step uses it. The schema tests
+      # create and drop a scratch database per run against this server, so they
+      # never depend on, or leave anything in, self_learn itself.
+      DATABASE_URL: postgres://catalog:catalog@localhost:5432/self_learn
+
     steps:
       - name: Checkout
         # Submodules are deliberately NOT fetched. manimkc/ renders animation
@@ -82,6 +114,10 @@ jobs:
         # exits non-zero when coverage drops. The gate lives in the repo's own
         # tooling, not in Codecov, so it fails the same way on a laptop as it
         # does here.
+        #
+        # services/ and packages/ are outside that coverage scope on purpose:
+        # the catalog tests need the Postgres service above, so their number
+        # would move with the environment rather than with the code.
         run: npm run test:coverage
 
       - name: Production build

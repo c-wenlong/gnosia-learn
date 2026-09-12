@@ -22,6 +22,11 @@ const eslintConfig = defineConfig([
     // its own flat ESLint config and its own TypeScript projects. Linting it
     // from here would use the wrong config and walk its build output.
     "tldrawkc/**",
+    // packages/** and services/** are deliberately NOT here. They are npm
+    // workspaces in this repo, written in the same TypeScript by the same
+    // people, so this config lints them correctly and should. (tsconfig.json
+    // does exclude them, for the opposite reason: type-checking, unlike
+    // linting, needs the Node-only libs their own tsconfigs set.)
   ]),
 ]);
 

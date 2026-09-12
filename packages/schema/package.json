@@ -1,0 +1,21 @@
+{
+  "name": "@self-learn/schema",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "//": "No build step. The package is consumed only by other workspaces that run through tsx or vitest, both of which resolve the npm workspace symlink to its real path outside node_modules and transpile the TypeScript directly. Publishing is not a goal; if it ever is, add a build and point exports at dist/.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

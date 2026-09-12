@@ -51,6 +51,15 @@ there is none.
 | `src/data/courses/` | One file per course plus `index.ts`, which holds every lookup helper |
 | `src/data/tags.ts` | The cross-course theme tags |
 
+`packages/` and `services/` are npm workspaces, Node-only, with their own
+tsconfigs.
+
+| Directory | Owns |
+| --- | --- |
+| `packages/schema/` | Every table shape, and the row types inferred from them |
+| `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
+| `content/` | Authored data the catalog indexes: the topic vocabulary and the course YAML |
+
 `scripts/learn/` is the pipeline. Plain ESM, no build step, no runtime
 dependencies, so `node scripts/learn/cli.mjs` works on a clone with nothing
 installed.
@@ -70,6 +79,20 @@ installed.
 `paths.mjs` is the bottom of this stack: it imports nothing from the project.
 `store.mjs` imports `paths`, `markdown` and `bkt`; `graph` imports `bkt`;
 `render` imports `bkt` and `graph`. `cli.mjs` is the only module that prints.
+
+`packages/` and `services/` are npm workspaces, added for the catalog. They are
+the third stack in the repo and, like the pipeline, `src/` does not import from
+them yet.
+
+| Workspace | Owns |
+| --- | --- |
+| `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
+| `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), and `cli.ts` |
+
+`packages/schema` is the bottom of that stack: it imports `drizzle-orm` and
+nothing of ours. `services/catalog` imports it, owns the only connection string
+in the repo, and is the only thing that talks to Postgres. The design and the
+entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
@@ -330,6 +353,58 @@ Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` by design.
 Components and pages are verified by `npm run build` and by looking at the
 running app, so counting their lines would only dilute the number that matters.
 
+## The catalog
+
+`services/catalog/` and `packages/schema/` are a derived index over the content
+trees, in Postgres 17. Full reasoning in
+[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md); the shape of it is:
+
+```
+   content/topics.yaml ─┐
+   content/courses/*.yaml ─┤
+   learn/concepts/*.md ─┼──► catalog index ──► Postgres ──► catalog ls / show / path / search
+   learn/assets/* ──────┤       (indexers)      (derived)          (agents read here)
+   learn/sessions/*.md ─┤
+   manimkc topics --json ┘
+```
+
+**Everything in the content half is derived.** `topic`, `concept`,
+`collection`, `curriculum_item`, `asset` and the seven link tables are rebuilt
+from files in git by `npm run catalog -- index`. Drop the database and one index
+run restores it exactly. Nothing is authored in Postgres, which is why the
+indexers may delete: a row the source no longer produces is not history, it is a
+stale row, and the whole point of the catalog is that a rendered video cannot
+outlive its source without anything saying so.
+
+**The state half is the opposite.** `learner`, `event`, `mastery`, `review`,
+`progress`, `recap` and `preference` are the only copy of what a learner did.
+`event` is append-only, enforced by a trigger, and `mastery` and `review` are
+projections that can be rebuilt by replaying it. Bundle 5 backfills these from
+`learn/state/` and the browser's localStorage; until then they are empty.
+
+| Piece | Where | What |
+| --- | --- | --- |
+| Table shapes | `packages/schema/src/` | `content.ts`, `state.ts`, `operations.ts`. Connects to nothing. |
+| Migrations | `services/catalog/drizzle/` | Generated from the schema, applied by `catalog migrate`. |
+| Indexers | `services/catalog/src/index/` | One module per source, each a pure "read files, return rows" function, plus one shared writer. |
+| Read commands | `services/catalog/src/commands/` | `status`, `index`, `ls`, `show`, `path`, `search`, all with `--json`. |
+
+Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
+`diagram:`, `session:`) and a set of tables. That ownership is what lets the
+writer prune safely: a source may delete only rows it could have produced, so
+one indexer can never remove another's. `--only` expands to include everything
+downstream of what it names, because a prune cascades and a half-run index is
+worse than none: it looks complete and answers with fewer rows.
+
+### How agents read it
+
+The command surface is deliberately layered, and no layer returns a whole tree.
+An agent runs `status` to see what exists and how fresh it is, `ls` to get
+titles and counts, `show` for one entity, and then reads the file at the path
+`show` gave it. `show` never returns a body: the database holds paths and
+metadata, git holds the words, and keeping a second copy of every note in
+Postgres would put a staler one in front of the agent.
+
 ## Layering rules
 
 1. **`src/` never imports from `scripts/`.** The web app does not know the CLI
@@ -359,3 +434,25 @@ running app, so counting their lines would only dilute the number that matters.
    `npm run learn -- <command>`, which is what keeps the event log complete.
 7. **`cli.mjs` is the only module in the pipeline that prints.** Everything
    under `lib/` takes data and returns data.
+8. **`packages/schema` connects to nothing.** It defines table shapes and
+   exports the types inferred from them. The pool, the connection string and
+   every query live in `services/catalog`, so the schema can be imported by the
+   web app in bundle 4 without dragging a database driver into the browser
+   bundle.
+9. **The schema is the source of the SQL, never the other way round.** Change
+   `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
+   migration that has been applied is never edited: drizzle keys them by file
+   hash.
+10. **The web app never writes the catalog.** `src/` may read it from bundle 4
+    onward, through `packages/schema`'s types. The only writer is
+    `npm run catalog -- index`, and the only thing it writes from is files in
+    git. A page that could write the content half would make a derived table
+    into a source of truth that no index run could reproduce.
+11. **An indexer reads files and returns rows; it never touches a connection.**
+    `services/catalog/src/index/*.ts` export a pure `read(context)`, and
+    `writer.ts` is the only module that issues SQL for them. That seam is why
+    the indexer tests need no Postgres and the writer tests need no files.
+12. **An unresolved reference is a refusal, never a skip.** A concept, module or
+    video whose topic does not resolve stops the index run with the file and the
+    slug named. A skipped row is an asset that is silently absent from the
+    catalog, which is the exact failure the catalog exists to catch.
