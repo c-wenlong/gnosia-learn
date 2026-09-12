@@ -7,26 +7,28 @@ They meet at exactly one file, and neither imports the other.
 
 ## The shape
 
-Three layers plus a submodule. One layer is not in this repo at all.
+Three layers plus two submodules. One layer is not in this repo at all.
 
 ```
    learning plugin                    this repo
    (installed globally)
-     /learn   /review        ┌────────────┬────────────────┬──────────┐
-         │                   │            │                │          │
-         │  npm run learn    │            │                │          │
-         └──────────────► scripts/learn  learn/           src/    manimkc/
-                          the CLI     the knowledge   the web app  submodule
-                              │           base             │
-                              └──writes───►  ◄────reads────┘
+     /learn   /review        ┌────────────┬────────────────┬──────────┬───────────┐
+         │                   │            │                │          │           │
+         │  npm run learn    │            │                │          │           │
+         └──────────────► scripts/learn  learn/           src/    manimkc/   tldrawkc/
+                          the CLI     the knowledge   the web app  submodule  submodule
+                              │           base             │           │           │
+                              └──writes───►  ◄────reads────┘           └─writes────┘
+                                          learn/assets/
 ```
 
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code | `scripts/learn/`, `src/` | The pipeline CLI and the web app |
-| Data | `learn/` | Concept notes, session logs, the event log and its derived caches |
+| Data | `learn/` | Concept notes, session logs, diagram assets, the event log and its derived caches |
 | Assets | `manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
+| Assets | `tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports SVG into `learn/assets/` |
 
 The instruction layer lives at `~/.quiver/plugins/learning/learning` so the
 skills work from any project, not just this one. Both skills open by running
@@ -181,7 +183,8 @@ running.
 learn/
   concepts/<domain>/<id>.md    atomic concept notes, the durable knowledge
   sessions/<id>.md             one log per session, appended live
-  assets/<id>.svg              diagrams generated during teaching
+  assets/<id>.tldr             the editable canvas a diagram was drawn on
+  assets/<id>.svg              that canvas exported, embedded in the session log
   state/
     events.jsonl               every observation, append-only  (SOURCE OF TRUTH)
     model.json                 mastery per concept             (derived)
@@ -204,6 +207,14 @@ caches that `learn model --rebuild`, `learn index` and `learn map` re-derive
 from it, which is what makes changing a BKT parameter safe. `reviews.json` is
 the documented exception: review events are logged, but no command replays
 them, so deleting that file loses every scheduled review permanently.
+
+`assets/` is the one folder the CLI neither writes nor reads. Diagrams have
+always been written there by the `diagram-maker` subagent at a path it chose,
+and `tldrawkc/` keeps that behaviour: it writes the pair and the session log
+embeds the SVG by name. The `.tldr` is committed beside the `.svg` so the next
+session can open the canvas and extend it instead of redrawing. An exported
+SVG is self-contained, which means the two fonts it uses are inlined as
+base64 and a small diagram lands around 440 kB.
 
 ## The numbers
 
@@ -327,15 +338,23 @@ running app, so counting their lines would only dilute the number that matters.
 2. **`scripts/` never imports from `src/`.** The pipeline runs on a clone with
    nothing installed, so it cannot depend on TypeScript, on the `@` alias, or
    on anything Next provides.
-3. **The CLI is the only writer of `learn/`.** Every write goes through
-   `lib/store.mjs`, which writes to a temp file and renames, so an interrupted
-   run cannot truncate state.
+3. **The CLI is the only writer of `learn/`, except `learn/assets/`.** Every
+   write goes through `lib/store.mjs`, which writes to a temp file and renames,
+   so an interrupted run cannot truncate state. The carve-out is `assets/`,
+   where the diagram agent has always written the file it names directly and
+   `tldrawkc/` now writes the `.tldr` and `.svg` pair. Nothing in `learn/state/`
+   or `learn/concepts/` has a second writer.
 4. **The web app reads `learn/` and never writes it.** `src/lib/kb/load.ts` is
    the only file in `src/` that imports `node:fs`, and it only calls
    `readFileSync`.
-5. **Nothing outside `lib/paths.mjs` builds a path under `learn/`.** One
-   exception is live: `cli.mjs` composes `INDEX_FILE` from `STATE_DIR` as a
-   template string instead of importing a constant.
+5. **Nothing in the pipeline outside `lib/paths.mjs` builds a path under
+   `learn/`.** One exception is live inside the pipeline: `cli.mjs` composes
+   `INDEX_FILE` from `STATE_DIR` as a template string instead of importing a
+   constant. `learn/assets/` is outside the rule entirely, for the same reason
+   as rule 3: the diagram agent picks `learn/assets/<concept-id>` and passes it
+   to `tldrawkc`, which is a command run from the repo root and knows nothing
+   about `paths.mjs`. Routing SVG bytes through `scripts/learn` to satisfy the
+   rule would buy nothing the rule exists for.
 6. **The skills never edit the knowledge base directly.** They go through
    `npm run learn -- <command>`, which is what keeps the event log complete.
 7. **`cli.mjs` is the only module in the pipeline that prints.** Everything

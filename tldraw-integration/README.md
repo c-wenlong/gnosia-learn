@@ -13,13 +13,13 @@ this one as a submodule at `tldrawkc/` in phase 0.
 
 | Document | What it settles | Read when |
 | --- | --- | --- |
-| [DECISIONS.md](DECISIONS.md) | The thirty-three calls already made and why. Browser owns drawing, stateless commands, no sync, own repo as a submodule, MCP deferred, no new frontend, where these docs live, the calls phase 1 forced (derived arrow ids, precise bindings, typed errors, one browser opener), and the ones phase 2 forced: arc back edges, `#n` repeat lanes, a respacing pass after `growY`, foreignObject labels, a scoped `api` reader, and no export aimed at its own document. | First. Do not reopen these without new facts. |
+| [DECISIONS.md](DECISIONS.md) | The thirty-five calls already made and why. Browser owns drawing, stateless commands, no sync, own repo as a submodule, MCP deferred, no new frontend, where these docs live, the calls phase 1 forced (derived arrow ids, precise bindings, typed errors, one browser opener), the ones phase 2 forced (arc back edges, `#n` repeat lanes, a respacing pass after `growY`, foreignObject labels, a scoped `api` reader, no export aimed at its own document), and the two phase 3 forced: a rewritten snippet stack, which supersedes D33, and the 4-unit tolerance on `arrow-crosses-shape`. | First. Do not reopen these without new facts. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Package layout, the Node to page bridge, one command end to end, file formats, layering rules. | Before writing any code. |
 | [CLI.md](CLI.md) | Every command, flag, JSON output and exit code. | While building `src/cli` and `src/lib`. |
 | [HELPERS.md](HELPERS.md) | The `helpers` bag a snippet can call, with an example. | While building `src/page/helpers`. |
 | [ROADMAP.md](ROADMAP.md) | Seven phases (0 to 6) with checklists; phases 0 to 4 each have a definition of done, 5 and 6 are optional. | To pick up the next item. Tick items in the PR that completes them. |
-| [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) | The draw, shot, look, fix loop as a skill draft; where files go in this repo. | Phase 3, and whenever writing agent-facing docs. |
-| [INTEGRATION.md](INTEGRATION.md) | The seams with `learn/assets/`, the `diagram-maker` agent, manimkc, and why `src/` stays untouched. | Phase 3. |
+| [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) | The draw, shot, look, fix loop, and where files go in this repo. It was the draft of the `tldrawkc-diagram` skill, which now exists in the tool repo; it keeps the reasoning and the corrections its own examples needed. | Whenever writing agent-facing docs. |
+| [INTEGRATION.md](INTEGRATION.md) | The seams with `learn/assets/`, the `diagram-maker` agent, manimkc, and why `src/` stays untouched. Every row is now done. | Before changing anything at a seam. |
 | [PRIOR-ART.md](PRIOR-ART.md) | What the tldraw docs actually support, existing tools, and what was ruled out. Sources for every claim. | When something in the design seems arbitrary. |
 
 ## The one-paragraph version

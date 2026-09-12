@@ -1,10 +1,30 @@
 # How an agent uses it
 
-This is the draft of the skill that will live in the tool repo as
-`.claude/skills/tldrawkc-diagram/SKILL.md` and be symlinked into
-`self-learn/.claude/skills/`, the same way `manimkc-video` is today. It is
-also the brief for updating the `diagram-maker` subagent in the `learning`
-plugin, which currently writes SVG by hand and reads it back.
+This was the draft of the skill. The skill itself now exists, in the tool repo
+at `tldrawkc/.claude/skills/tldrawkc-diagram/SKILL.md` (tldrawkc PR #4),
+symlinked into `self-learn/.claude/skills/tldrawkc-diagram` the same way
+`manimkc-video` is. It was also the brief for the `diagram-maker` subagent in
+the `learning` plugin, which used to write SVG by hand and read it back and
+now runs this loop (quiver-hub PR #2). Read the skill for the current wording;
+what follows is the reasoning behind it, kept because the skill is deliberately
+shorter.
+
+## How the commands are actually invoked
+
+Every example below is written as a bare `tldrawkc`, which is the tool
+installed on `PATH` or run as `node dist/cli/index.js` inside its own repo.
+**From a host repo it is `npm run --silent canvas -- <verb>`**, and `--silent`
+is not optional: without it npm prints a two-line banner on stdout before the
+tool writes anything, and `--json` output cannot be parsed.
+
+Four details the examples get wrong or leave out:
+
+| Written here | What the CLI does |
+| --- | --- |
+| `--code <snippet>` | takes a path, or `-` to read stdin. Inline source is a separate flag, `--eval <source>`, and the two are mutually exclusive |
+| `tldrawkc shot x.tldr` | writes the PNG to a temp file unless `-o, --output <out.png>` says where |
+| `tldrawkc api` | takes no file and no helper name; it prints every helper from its JSDoc and nothing else. It does not list the lint rules, so the rule names come from [HELPERS.md](HELPERS.md) or a failing `inspect` |
+| `tldrawkc serve` | is phase 4 and not built. The command exists and says so |
 
 ## The loop
 
@@ -46,9 +66,9 @@ screenshot. Exit code 3 exists so this cannot be skipped by accident.
 | Iteration screenshots | `/tmp` or the scratchpad, never `learn/` | no |
 | Snippets | scratchpad | no, unless the snippet is worth keeping as a fixture |
 
-The `.tldr` next to the `.svg` is what makes the diagram editable later: a
-human can `tldrawkc serve` it and drag things, and the next session's agent
-can `inspect` it and extend it rather than redraw.
+The `.tldr` next to the `.svg` is what makes the diagram editable later: the
+next session's agent can `inspect` it and extend it rather than redraw, and
+once `serve` lands in phase 4 a human can open it and drag things.
 
 ## Starting from mermaid
 
@@ -91,7 +111,9 @@ changes with the tool:
 
 ## For a human watching
 
-`tldrawkc serve learn/assets/x.tldr` opens the canvas in a normal browser
-tab and reloads when the agent writes the file, keeping the human's camera.
-Cmd+S in that tab saves hand edits back to the same file. The agent's next
-`inspect` sees them.
+Phase 4, not built yet. The plan: `tldrawkc serve learn/assets/x.tldr` opens
+the canvas in a normal browser tab and reloads when the agent writes the file,
+keeping the human's camera. Cmd+S in that tab saves hand edits back to the
+same file, and the agent's next `inspect` sees them. Until then the `.tldr` is
+still the editable record, just without a viewer: it opens in the tldraw
+offline desktop app.

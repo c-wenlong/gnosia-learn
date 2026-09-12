@@ -407,6 +407,9 @@ verb breaks.
 
 ## D33. The CLI prints a snippet's stack unadjusted
 
+**Superseded by D34 in tldrawkc PR #5.** The stack is now rewritten. Kept for
+the reasoning, which held until the follow-up it named arrived.
+
 **Verdict:** the two-line `AsyncFunction` header offset stays in the stack the
 CLI prints. [CLI.md](CLI.md) and [ARCHITECTURE.md](ARCHITECTURE.md) tell the
 reader to subtract 2.
@@ -416,3 +419,47 @@ cheap. Rewriting the stack means parsing V8's format, which differs by shape
 of frame and by Node version, and a rewriter that gets one frame wrong is
 worse than an offset that is written down. Adjusting it is a follow-up worth
 doing once something else needs to parse that stack.
+
+## D34. A snippet's stack is rewritten to its own line numbers
+
+**Verdict:** the snippet source is tagged with a trailing
+`//# sourceURL=snippet.js` comment, and every `snippet.js:LINE:COLUMN` frame
+in the thrown stack has `SNIPPET_LINE_OFFSET` (2) subtracted from its line
+before the CLI prints it. Supersedes D33.
+
+**Why:** D33's objection was that rewriting a stack means parsing V8's format
+and that a rewriter which gets one frame wrong is worse than a documented
+offset. Naming the script removes that risk instead of taking it. Without a
+`sourceURL`, every frame in a compiled `AsyncFunction` reads `<anonymous>`,
+including the ones playwright's own injected script contributes, so there is
+nothing to match on; with it, only the snippet's frames say `snippet.js` and
+the regex cannot touch a frame it does not own. The rewrite is a number
+substitution inside frames the snippet owns, not a re-parse of the stack.
+
+What forced it: drawing the vector diagram meant a dozen snippet passes, and
+a thrown error pointing two lines away from the real one costs a round trip
+every time. "Subtract 2" written in a doc is a rule the reader applies wrong
+once and then stops trusting the number at all.
+
+## D35. `arrow-crosses-shape` uses a tolerance of 4 page units
+
+**Verdict:** an arrow has to run more than 4 page units inside a shape's
+eroded outline before the rule fires. `ARROW_CROSSING_TOLERANCE = 4`.
+
+**Why:** it comes from stroke width, not from taste. tldraw draws a size `m`
+shape at 3.5 page units, so an arrow's own half stroke plus the box outline's
+half stroke is 3.5 units of overlap before a reader sees anything other than
+two lines meeting. 4 is that rounded up, and the spare half unit also absorbs
+the error in sampling an arc: the rule walks a curve as a polyline, and a
+chord can cut a corner the curve itself clears.
+
+It is a threshold on depth, not on length. An arrow that grazes a long box
+edge for 200 units stays silent; one that dives 5 units into a small box
+fires, because disappearing behind a shape is the failure, and how far it
+travels while hidden is not what a reader notices.
+
+The opt-out matters as much as the number. A marker an arrow is drawn from,
+such as a dot at the origin of a pair of axes, is crossed by every axis and
+every vector by design, and no tolerance distinguishes that from an arrow
+routed over a box. `meta.lintIgnore: ['arrow-crosses-shape']` on the marker is
+the answer, and the vector diagram is the first place it was needed.
