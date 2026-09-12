@@ -77,16 +77,57 @@ gaps).
 
 Goal: the agent can read the canvas, ship an SVG, and start from mermaid.
 
-- [ ] `inspect` with the JSON shape in [CLI.md](CLI.md); `helpers.describe`
-- [ ] `export --svg` with fonts inlined; `export --png`
-- [ ] Remaining lints: `overlapping-text`, `overlapping-shapes`, `off-page`, `empty-label`, `unreadable-label`
-- [ ] `helpers.boxShapes` (with `meta.container`), `row`, `column`, `grid`, `translate`, `attribute`, `stub`, `note`, `fitCamera`, `remove`, `clear`
-- [ ] `parseMermaid` (pure) and `applyPlan`, exposed as `helpers.mermaid` and `from-mermaid`: flowchart and graph, all five directions, the five node shapes, edge labels, subgraphs, and an `unsupported` list for everything else
-- [ ] `api` prints the helper reference from JSDoc
-- [ ] e2e: `from-mermaid` on a fixture with 8 nodes, 9 edges and one subgraph produces 9 bound arrows, zero lints after layout, and an SVG containing every label
-- [ ] Unit: `parseMermaid` against fixtures, asserting the `Plan` (ranks, slots, geo per node, subgraph membership), including a deliberately broken line landing in `unsupported`
+- [x] `inspect` with the JSON shape in [CLI.md](CLI.md); `helpers.describe`
+- [x] `export --svg` with fonts inlined; `export --png`
+- [x] Remaining lints: `overlapping-text`, `overlapping-shapes`, `off-page`, `empty-label`, `unreadable-label`
+- [x] `helpers.boxShapes` (with `meta.container`), `row`, `column`, `grid`, `translate`, `attribute`, `stub`, `note`, `fitCamera`, `remove`, `clear`
+- [x] `parseMermaid` (pure) and `applyPlan`, exposed as `helpers.mermaid` and `from-mermaid`: flowchart and graph, all five directions, the five node shapes, edge labels, subgraphs, and an `unsupported` list for everything else
+- [x] `api` prints the helper reference from JSDoc
+- [x] e2e: `from-mermaid` on a fixture with 8 nodes, 9 edges and one subgraph produces 9 bound arrows, zero lints after layout, and an SVG containing every label
+- [x] Unit: `parseMermaid` against fixtures, asserting the `Plan` (ranks, slots, geo per node, subgraph membership), including a deliberately broken line landing in `unsupported`
 
 Done when: `learn/map.md`'s flowchart, lifted with `from-mermaid`, renders as a readable canvas with no friendless arrows.
+
+**Done 2026-09-13, PR #3.** Verified from self-learn against `learn/map.md`'s
+own flowchart, lifted to `/tmp/map.mmd` by script: `from-mermaid` exits 0 with
+32 nodes, 70 edges, 102 shapes and nine declined styling lines; `inspect`
+reports 70 bound arrows and zero lints of any rule, `friendless-arrow`
+included; the exported SVG carries all 32 node titles. The phase 1 loop still
+exits 0 under the full six-rule lint set, `doctor` passes all six checks, and
+`api` lists 18 helpers.
+
+Phase 2 also went past the checklist where it was cheap: all six lint rules
+are pure functions over a shape list, the parser lives in a file that imports
+no editor so the unit suite runs it in node, and the end-to-end suite covers
+the CLI's own exit codes for a stale bundle and a self-aimed export. Twelve
+decisions came out of it, D22 to D33. The doc corrections it forced are in
+[HELPERS.md](HELPERS.md) (the Import section, three lint rows, `attribute`,
+`note`, `clear`, and `connect`'s repeat and back edges),
+[ARCHITECTURE.md](ARCHITECTURE.md) (the `shot` bridge row and the fonts
+section) and [CLI.md](CLI.md) (`api`, the `export` and `from-mermaid` JSON
+shapes, `inspect` on an empty page, and the self-overwrite rule).
+
+## Known gaps after phase 2
+
+Not a phase. What phase 2 shipped without, written down so it is found
+deliberately rather than in a diagram that looks wrong.
+
+- **No lint catches an arrow crossing a shape.** The learn-map canvas passes
+  with zero lints while long arrows run straight through boxes. The six rules
+  are all about shapes against shapes, or a label against its own box.
+- **A diamond's label can exceed its outline without a lint.**
+  `unreadable-label` compares against the shape's width, and a diamond's
+  usable width at the label's height is a fraction of that.
+- **A snippet's stack line numbers print two too high** (D33). The offset is
+  documented, not applied.
+- **No exported SVG has been opened in a browser.** They were checked by
+  grepping the file and by rendering the same canvas to PNG.
+- **`RL` and `BT` have never been looked at rendered.** All five directions
+  are covered by unit fixtures over the `Plan`, not by a picture.
+- **`--page`, `--allow-lints` and `meta.lintIgnore` are unexercised on a real
+  multi-page document.** Every document this phase touched had one page.
+- **Rendering on Linux has never been eyeballed.** CI runs the end-to-end
+  suite there and asserts sizes and labels; nobody has looked at the output.
 
 ## Phase 3. Skill and integration into self-learn
 
