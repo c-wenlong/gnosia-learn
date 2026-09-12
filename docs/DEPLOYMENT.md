@@ -24,7 +24,7 @@ The same values are needed in two places, for two different reasons.
 | `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade | GitHub Actions and Vercel |
 | `GEMINI_API_KEY` | Provider 2 | GitHub Actions and Vercel |
 | `OPENROUTER_API_KEY` | Provider 3 | GitHub Actions and Vercel |
-| `CODECOV_TOKEN` | Codecov **upload** token, from the repo's Configuration page on app.codecov.io | GitHub Actions only |
+| `CODECOV_TOKEN` | Codecov **upload** token, from the repo's Configuration page on app.codecov.io | GitHub Actions only (optional) |
 
 The three provider keys are needed in the Vercel project's **Settings →
 Environment Variables** (Production, and Preview if you want previews to run
