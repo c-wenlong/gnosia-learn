@@ -1,19 +1,26 @@
 # Authored content
 
-Three folders hold the content this repo authors. The catalog in
+Three files and two folders hold the content this repo authors. The catalog in
 [`services/catalog/`](../services/catalog/SCHEMA.md) reads all three and derives
 a Postgres index from them; nothing here is generated, and nothing here is
 written by the catalog.
 
+Everything under `content/` is parsed by one reader,
+[`packages/content`](../packages/content/src/index.ts), which the web app and
+the catalog both import. That is deliberate: while the courses existed as both
+YAML here and TypeScript literals in `src/`, only a parity test stood between
+the two, and a parity test can notice drift but not prevent it.
+
 | Folder | What it holds | Read by |
 | --- | --- | --- |
-| [`content/topics.yaml`](topics.yaml) | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases and the videos, course modules and concept notes it covers. | `catalog index` |
-| [`content/courses/`](courses/README.md) | One YAML file per course: modules, curriculum items, subtopics and curated resources. | `catalog index`, and the web app from bundle 4 |
+| [`content/topics.yaml`](topics.yaml) | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases and the videos, course modules and concept notes it covers. | `catalog index`, the web app |
+| [`content/courses/`](courses/README.md) | One YAML file per course: modules, curriculum items, subtopics and curated resources. | `catalog index`, the web app |
+| [`content/tags.yaml`](tags.yaml) | The cross-course themes a course's `tags:` names, and how related courses find each other. | The web app |
 | [`learn/`](../learn/README.md) | The knowledge base: concept notes under `learn/concepts/`, diagrams under `learn/assets/`, session logs under `learn/sessions/`, learner state under `learn/state/`. | `catalog index`, the `learn` CLI |
 
 `learn/` has not moved and is not going to move in this bundle. It is listed
-here because "where is the authored content" has three answers, and finding
-only two of them is how a source gets missed.
+here because "where is the authored content" has more than one answer, and
+finding only some of them is how a source gets missed.
 
 ## topics.yaml
 

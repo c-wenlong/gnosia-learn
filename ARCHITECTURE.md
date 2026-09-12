@@ -45,20 +45,21 @@ there is none.
 | --- | --- |
 | `src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `src/lib/` | `storage.ts`, `learner-context.tsx`, `progress.ts`, `types.ts` |
+| `src/lib/` | `storage.ts`, `learner-context.tsx`, `progress.ts`, `curriculum.ts`, `types.ts` |
 | `src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `src/lib/kb/` | `load.ts` and `types.ts`: the only place that reads `learn/` |
-| `src/data/courses/` | One file per course plus `index.ts`, which holds every lookup helper |
-| `src/data/tags.ts` | The cross-course theme tags |
+| `src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
+| `src/data/content.ts` | Server-only view of `content/tags.yaml`: the cross-course themes |
 
 `packages/` and `services/` are npm workspaces, Node-only, with their own
 tsconfigs.
 
 | Directory | Owns |
 | --- | --- |
+| `packages/content/` | The reader for `content/`: `loadCourses`, `loadTopics`, `loadTags`, and the `Course` types |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
-| `content/` | Authored data the catalog indexes: the topic vocabulary and the course YAML |
+| `content/` | Authored data: the topic vocabulary, the theme tags and the course YAML |
 
 `scripts/learn/` is the pipeline. Plain ESM, no build step, no runtime
 dependencies, so `node scripts/learn/cli.mjs` works on a clone with nothing
@@ -80,18 +81,20 @@ installed.
 `store.mjs` imports `paths`, `markdown` and `bkt`; `graph` imports `bkt`;
 `render` imports `bkt` and `graph`. `cli.mjs` is the only module that prints.
 
-`packages/` and `services/` are npm workspaces, added for the catalog. They are
-the third stack in the repo and, like the pipeline, `src/` does not import from
-them yet.
+`packages/` and `services/` are npm workspaces, added for the catalog. `src/`
+imports `packages/content` and nothing else from them: the web app is a reader
+of the same content files, not a client of the database.
 
 | Workspace | Owns |
 | --- | --- |
+| `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types. Reads files, connects to nothing. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
 | `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), and `cli.ts` |
 
-`packages/schema` is the bottom of that stack: it imports `drizzle-orm` and
-nothing of ours. `services/catalog` imports it, owns the only connection string
-in the repo, and is the only thing that talks to Postgres. The design and the
+`packages/schema` and `packages/content` are the bottom of that stack: one
+imports `drizzle-orm`, the other `yaml`, and neither imports anything else of
+ours. `services/catalog` imports both, owns the only connection string in the
+repo, and is the only thing that talks to Postgres. The design and the
 entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
@@ -149,18 +152,40 @@ first paint, so a dark-mode reload does not flash white.
 
 ## The course data model
 
-Ten courses, one TypeScript file each, assembled in `src/data/courses/index.ts`.
-A course holds modules, a module holds topics, a topic holds resources. Every
-lookup (`getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
-`getRelatedCourses`, `totalTopicCount`) lives in that one file, so no component
-walks the structure by hand.
+Ten courses, one YAML file each under `content/courses/`, read by
+`loadCourses()` in `packages/content`. A course holds modules, a module holds
+topics, a topic holds subtopics and the module holds curated resources. The
+same function is what `catalog index` parses courses with, so the page and the
+row cannot disagree about what a file means; before this there were TypeScript
+literals on one side, a private `YamlCourse` interface on the other, and a
+parity test that could only notice drift after it happened.
+
+`src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
+one `loadCourses()` at module scope (read once per process), and the lookups
+pages call — `getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
+`getRelatedCourses`, `totalTopicCount`. `src/data/content.ts` is the same shape
+over `content/tags.yaml`.
+
+**Server only, and enforced.** `server-only` makes a `"use client"` module that
+reaches either of them fail the build with the import chain printed, rather
+than shipping a YAML parser and every course file to the browser. So client
+components take what they need as props: the module page resolves the course,
+module and topic and hands them to `TopicChecklist` and `AgentSession`; the
+root layout projects the shortlist into `CourseNavEntry[]` for the sidebar. The
+arithmetic those components still do lives in `src/lib/curriculum.ts` and
+`src/lib/progress.ts`, which are pure functions over a course the caller
+already holds.
 
 Each course carries an `inferred` flag. `true` means the syllabus was
 reconstructed from the course announcement and the standard treatment of the
 subject rather than read off an official document. Three of the ten are
-inferred, and `src/data/courses/index.test.ts` pins exactly which. A page with
-`inferred` renders `InferredBanner`, and the agent prompt is told to flag
-uncertainty for those courses.
+inferred, and `packages/content/test/courses.test.ts` pins exactly which. A
+page with `inferred` renders `InferredBanner`, and the agent prompt is told to
+flag uncertainty for those courses.
+
+Courses also carry an `order:`, which is the order the home page and the
+sidebar render in. It is authored because the shortlist is curated: sorting ten
+files by name gives a different sequence and nothing would say so.
 
 ## The agent chat API
 
@@ -342,7 +367,8 @@ Eleven test files, split six and five.
 | `src/lib/agent/providers.test.ts` | Which providers resolve from which keys, and the fallback walk |
 | `src/lib/agent/prompt.test.ts` | The assembled system prompt, session context, and topic lookup |
 | `src/lib/agent/summary.test.ts` | Transcript formatting and parsing a recap back out |
-| `src/data/courses/index.test.ts` | Course data invariants, including which syllabi are inferred |
+| `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
+| `src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
 | `scripts/learn/cli.test.mjs` | `void` retracting a session's evidence, and `observe` writing the session log |
 | `scripts/learn/lib/bkt.test.mjs` | Posterior, transit, entropy, information gain, propagation |
 | `scripts/learn/lib/graph.test.mjs` | Cycles, dangling edges, topological order, frontier, plan |
@@ -421,8 +447,16 @@ Postgres would put a staler one in front of the agent.
    or `learn/concepts/` has a second writer.
 4. **The web app reads `learn/` and never writes it.** `src/lib/kb/load.ts` is
    the only file in `src/` that imports `node:fs`, and it only calls
-   `readFileSync`.
-5. **Nothing in the pipeline outside `lib/paths.mjs` builds a path under
+   `readFileSync`. Course content is read the same way, one layer out: through
+   `packages/content`, never with a `fs` call in `src/`.
+5. **A module that reads content says `import "server-only"`.**
+   `src/data/courses/index.ts` and `src/data/content.ts` both do. Without it a
+   `"use client"` import would compile, ship a YAML parser and every course
+   file to the browser, and only be noticed by whoever looked at a bundle
+   report. With it the build fails and prints the import chain. Client
+   components get resolved objects as props; pure arithmetic over a course they
+   already hold lives in `src/lib/curriculum.ts`.
+6. **Nothing in the pipeline outside `lib/paths.mjs` builds a path under
    `learn/`.** One exception is live inside the pipeline: `cli.mjs` composes
    `INDEX_FILE` from `STATE_DIR` as a template string instead of importing a
    constant. `learn/assets/` is outside the rule entirely, for the same reason
@@ -430,29 +464,29 @@ Postgres would put a staler one in front of the agent.
    to `tldrawkc`, which is a command run from the repo root and knows nothing
    about `paths.mjs`. Routing SVG bytes through `scripts/learn` to satisfy the
    rule would buy nothing the rule exists for.
-6. **The skills never edit the knowledge base directly.** They go through
+7. **The skills never edit the knowledge base directly.** They go through
    `npm run learn -- <command>`, which is what keeps the event log complete.
-7. **`cli.mjs` is the only module in the pipeline that prints.** Everything
+8. **`cli.mjs` is the only module in the pipeline that prints.** Everything
    under `lib/` takes data and returns data.
-8. **`packages/schema` connects to nothing.** It defines table shapes and
+9. **`packages/schema` connects to nothing.** It defines table shapes and
    exports the types inferred from them. The pool, the connection string and
    every query live in `services/catalog`, so the schema can be imported by the
-   web app in bundle 4 without dragging a database driver into the browser
-   bundle.
-9. **The schema is the source of the SQL, never the other way round.** Change
+   web app without dragging a database driver into the browser bundle.
+10. **The schema is the source of the SQL, never the other way round.** Change
    `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
    migration that has been applied is never edited: drizzle keys them by file
    hash.
-10. **The web app never writes the catalog.** `src/` may read it from bundle 4
-    onward, through `packages/schema`'s types. The only writer is
+11. **The web app never writes the catalog.** `src/` may read it, through
+    `packages/schema`'s types; today it reads the same content files the
+    catalog indexes, through `packages/content`. The only writer is
     `npm run catalog -- index`, and the only thing it writes from is files in
     git. A page that could write the content half would make a derived table
     into a source of truth that no index run could reproduce.
-11. **An indexer reads files and returns rows; it never touches a connection.**
+12. **An indexer reads files and returns rows; it never touches a connection.**
     `services/catalog/src/index/*.ts` export a pure `read(context)`, and
     `writer.ts` is the only module that issues SQL for them. That seam is why
     the indexer tests need no Postgres and the writer tests need no files.
-12. **An unresolved reference is a refusal, never a skip.** A concept, module or
+13. **An unresolved reference is a refusal, never a skip.** A concept, module or
     video whose topic does not resolve stops the index run with the file and the
     slug named. A skipped row is an asset that is silently absent from the
     catalog, which is the exact failure the catalog exists to catch.

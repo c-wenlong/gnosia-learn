@@ -16,6 +16,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The catalog: every table, why the links are typed, how `event` stays append-only, how to run migrations |
 | [content/README.md](content/README.md) | The three content folders, and the rules for editing the topic vocabulary |
+| [content/courses/README.md](content/courses/README.md) | The course YAML: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [tldraw-integration/](tldraw-integration/README.md) | The brief for `tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
@@ -163,6 +164,25 @@ not have to be worked out again.
   one run reports all of them. A skipped row is an asset that is silently
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
+- **Course content is read at runtime, not imported, so file tracing needs a
+  hand.** `packages/content` calls `readFileSync(path.join(process.cwd(), …))`,
+  which Next cannot trace: it follows `import` statements. Most routes are
+  prerendered and never look again, but the session page and the two agent
+  routes are server-rendered on demand, and without
+  `outputFileTracingIncludes` in `next.config.ts` they deploy without the
+  course files and 500 in production while every build and every static
+  preview looks fine.
+- **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
+  with Turbopack, which transpiles npm workspace packages automatically
+  (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
+  Adding one would be cargo cult. The package ships raw TypeScript with
+  `exports` pointing at `src/index.ts`, same as `packages/schema`.
+- **`server-only` is aliased in `vitest.config.ts`, and has to be.**
+  `src/data/courses/index.ts` and `src/data/content.ts` import it so a
+  `"use client"` module reaching them fails the build. Next resolves that
+  specifier itself; vitest does not, and the npm package's default entry throws
+  on import by design, so every test touching course data would die. The alias
+  points at the package's own `empty.js`, which is the module Next substitutes.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
   output: `npm run build` then

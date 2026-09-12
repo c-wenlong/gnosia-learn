@@ -52,7 +52,9 @@ of the app works.
 | `src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
 | `src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
 | `src/lib/` | `storage.ts` (localStorage), `learner-context.tsx`, `progress.ts`, `agent/` (prompts and providers), `kb/` (reads the pipeline snapshot) |
-| `src/data/courses/` | The curriculum: one file per course, lookups in `index.ts` |
+| `src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts` |
+| `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
+| `packages/content/` | The reader both the app and the catalog parse `content/` with |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline CLI: plain Node ESM, no build step, no dependencies |
@@ -64,7 +66,7 @@ of the app works.
 
 ## What to contribute
 
-Course data under `src/data/courses/`, new verbs or flags in
+Course data under `content/courses/`, new verbs or flags in
 `scripts/learn/cli.mjs`, UI that makes progress and recaps easier to read, and
 bug fixes or docs. All welcome.
 
@@ -93,7 +95,8 @@ bug fixes or docs. All welcome.
    A local copy would shadow the plugin and the two would drift apart.
 7. **Re-verify any doc that states a count or a path** when you change what it
    describes. Several docs quote concept counts, course counts and layouts.
-8. **Add tests** for logic in `src/lib/`, `src/data/` or `scripts/learn/lib/`.
+8. **Add tests** for logic in `src/lib/`, `src/data/`, `packages/content/` or
+   `scripts/learn/lib/`.
    Components and pages are checked by the build and by looking at the app.
 9. **One concern per PR.** Easier to review and merge.
 
