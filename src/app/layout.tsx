@@ -14,13 +14,60 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const LOCAL_SITE_URL = "http://localhost:3000";
+
+/**
+ * Absolute base that social image URLs resolve against.
+ *
+ * Set `NEXT_PUBLIC_SITE_URL` to the canonical origin, with or without a
+ * scheme ("example.com" and "https://example.com" both work). On Vercel the
+ * production domain is injected instead. Anything unusable falls back to the
+ * dev server rather than throwing: a bad value should cost a link preview,
+ * not the whole app, since this runs while the root layout loads.
+ */
+function resolveSiteUrl(): URL {
+  const configured =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+
+  if (!configured) return new URL(LOCAL_SITE_URL);
+
+  const withScheme = /^https?:\/\//i.test(configured)
+    ? configured
+    : `https://${configured}`;
+
+  try {
+    return new URL(withScheme);
+  } catch {
+    console.warn(
+      `Ignoring unparseable site URL ${JSON.stringify(configured)}; ` +
+        `social images will resolve against ${LOCAL_SITE_URL}.`,
+    );
+    return new URL(LOCAL_SITE_URL);
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: resolveSiteUrl(),
   title: {
     default: "Self-Learn · AY2026/27 Shortlist",
     template: "%s · Self-Learn",
   },
   description:
     "Docs-style self-study hub for the SoC AY2026/27 course shortlist, with progress, notes, and resources.",
+  // Declared by hand rather than via the app/opengraph-image.png file
+  // convention: under Turbopack that convention ignores the documented
+  // opengraph-image.alt.txt sidecar, so the card ships with no alt text.
+  openGraph: {
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({
