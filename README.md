@@ -120,7 +120,8 @@ flowchart LR
     end
     subgraph KB["learn/ (plain files)"]
         EV[("events.jsonl<br/>source of truth")]
-        DER["model.json · concepts/<br/>sessions/ · map.md<br/>(rebuildable)"]
+        REC["concepts/ · sessions/<br/>(written during Close, not derived)"]
+        DER["model.json · map.md<br/>(derived, rebuildable from events)"]
         REV[("reviews.json<br/>authoritative, no rebuild")]
         IDX["state/index.json"]
     end
@@ -128,9 +129,11 @@ flowchart LR
     SK --> AG
     SK --> C
     C --> LIB
+    C --> REC
     LIB --> EV
     LIB --> REV
     EV --> DER
+    REC --> IDX
     DER --> IDX
     REV --> IDX
     IDX --> WEB
