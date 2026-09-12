@@ -2,6 +2,7 @@ import { LOCAL_LEARNER_ID, preference } from "@self-learn/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { StateError } from "./errors";
 import { ensureLearner } from "./learner";
 
 /**
@@ -44,9 +45,13 @@ export async function readPreferences(
 }
 
 /**
- * Set one preference. `null` is a value, not a clear — `clearPreference` is the
- * way to remove one, so "the learner chose null" and "the learner never chose"
- * stay distinguishable.
+ * Set one preference.
+ *
+ * `value` cannot be `null` or `undefined`. The column is `jsonb not null`, and
+ * the driver would send a JavaScript `null` as SQL NULL rather than as the JSON
+ * value `null`, so it is refused here with a sentence instead of arriving as a
+ * 23502. Removing a preference is `clearPreference`, which keeps "the learner
+ * never chose" and "the learner chose nothing" from collapsing into one row.
  */
 export async function writePreference(
   db: CatalogDatabase,
@@ -54,6 +59,11 @@ export async function writePreference(
   value: unknown,
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<void> {
+  if (value === null || value === undefined) {
+    throw new StateError(
+      `preference "${key}" cannot be set to ${String(value)}. Use clearPreference to remove it.`,
+    );
+  }
   await ensureLearner(db, learnerId);
   await db
     .insert(preference)

@@ -69,9 +69,14 @@ export interface Snapshot {
   reachable: boolean;
 }
 
-/** The learner's whole state, or an empty one when the database is down. */
-export async function loadLearnerSnapshot(): Promise<Snapshot> {
-  await connection();
+/**
+ * The read, without the request marker.
+ *
+ * Split out because `connection()` throws outside a request scope, which is
+ * every context that is not a render: a route handler, and a test. The
+ * degradation is the interesting part and this is the function that has it.
+ */
+export async function readSnapshot(): Promise<Snapshot> {
   try {
     return { state: await readLearnerSnapshot(await database()), reachable: true };
   } catch (error) {
@@ -80,20 +85,31 @@ export async function loadLearnerSnapshot(): Promise<Snapshot> {
   }
 }
 
+/** The learner's whole state, or an empty one when the database is down. */
+export async function loadLearnerSnapshot(): Promise<Snapshot> {
+  await connection();
+  return readSnapshot();
+}
+
 export interface KnowledgeBaseSnapshot {
   kb: KnowledgeBase;
   reachable: boolean;
 }
 
-/** The concept graph with mastery and schedule, or an empty one. */
-export async function loadKnowledgeBase(): Promise<KnowledgeBaseSnapshot> {
-  await connection();
+/** As `readSnapshot`, for the concept graph. */
+export async function readKb(): Promise<KnowledgeBaseSnapshot> {
   try {
     return { kb: await readKnowledgeBase(await database()), reachable: true };
   } catch (error) {
     warn("knowledge base", error);
     return { kb: EMPTY_KNOWLEDGE_BASE, reachable: false };
   }
+}
+
+/** The concept graph with mastery and schedule, or an empty one. */
+export async function loadKnowledgeBase(): Promise<KnowledgeBaseSnapshot> {
+  await connection();
+  return readKb();
 }
 
 /**
@@ -103,7 +119,8 @@ export async function loadKnowledgeBase(): Promise<KnowledgeBaseSnapshot> {
 export async function withLearnerStore<T>(
   fn: (db: CatalogDatabase) => Promise<T>,
 ): Promise<T> {
-  await connection();
+  // No `connection()`: a route handler is always request-time by definition,
+  // and calling it there throws for being outside a render's request scope.
   return fn(await database());
 }
 
