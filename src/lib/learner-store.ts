@@ -1,3 +1,5 @@
+import "server-only";
+
 import { connection } from "next/server";
 import {
   EMPTY_KNOWLEDGE_BASE,
@@ -12,9 +14,11 @@ import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared"
 /**
  * The web app's door to the learner state store.
  *
- * **Server only.** Never import this from a `"use client"` module: it holds a
- * Postgres pool. Components get the state through `LearnerProvider`, which a
- * server component seeds from here, and change it through `/api/learner/*`.
+ * **Server only**, and `import "server-only"` enforces it: this holds a
+ * Postgres pool, and a `"use client"` import would otherwise compile and ship
+ * a database driver to the browser. Components get the state through
+ * `LearnerProvider`, which a server component seeds from here, and change it
+ * through `/api/learner/*`.
  *
  * Three rules shape this file.
  *

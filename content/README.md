@@ -16,7 +16,7 @@ the two, and a parity test can notice drift but not prevent it.
 | [`content/topics.yaml`](topics.yaml) | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases and the videos, course modules and concept notes it covers. | `catalog index`, the web app |
 | [`content/courses/`](courses/README.md) | One YAML file per course: modules, curriculum items, subtopics and curated resources. | `catalog index`, the web app |
 | [`content/tags.yaml`](tags.yaml) | The cross-course themes a course's `tags:` names, and how related courses find each other. | `catalog index`, the web app |
-| [`learn/`](../learn/README.md) | The knowledge base: concept notes under `learn/concepts/`, diagrams under `learn/assets/`, session logs under `learn/sessions/`, learner state under `learn/state/`. | `catalog index`, the `learn` CLI |
+| [`learn/`](../learn/README.md) | The knowledge base: concept notes under `learn/concepts/`, diagrams under `learn/assets/`, session logs under `learn/sessions/`. The learner state that used to sit beside them is in Postgres. | `catalog index`, the `learn` CLI |
 
 `learn/` has not moved and is not going to move in this bundle. It is listed
 here because "where is the authored content" has more than one answer, and

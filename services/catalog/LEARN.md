@@ -1,0 +1,118 @@
+# The learn pipeline on tables
+
+`learn/state/` is gone. This is what each file became, why, and what to do if
+something looks wrong.
+
+The pipeline itself is documented in [`learn/README.md`](../../learn/README.md);
+the schema is [`SCHEMA.md`](SCHEMA.md). This file is only the move.
+
+## File to table
+
+| Was | Is | Rebuildable |
+| --- | --- | --- |
+| `learn/state/events.jsonl` | `event` | No. The only copy. Append-only, enforced by a trigger. |
+| `learn/state/model.json` — `concepts` | `mastery` | Yes: `learn model --rebuild` replays `event`. |
+| `learn/state/model.json` — `params` | `preference`, key `bktParams` | No, but it is four numbers with defaults. |
+| `learn/state/reviews.json` — `cards` | `review` | Yes, since bundle 5: `learn review rebuild`. |
+| `learn/state/reviews.json` — `cards[].history` | *(nothing)* | Every entry is an `event` of type `observation` or `review`. |
+| `learn/state/index.json` | *(nothing)* | A query. `readKnowledgeBase` in `src/state/knowledge-base.ts`. |
+| `learn/concepts/**`, `learn/sessions/**`, `learn/map.md`, `learn/assets/**` | still files | Authored, or generated from files. |
+
+The split is the same one the whole catalog runs on: what a person or an agent
+*wrote* stays in git, where it can be read, diffed and reverted; what the loop
+*observed* goes in Postgres, where it can be joined and constrained.
+
+## The three fields that moved shape
+
+**`history` has no column.** A card carried its last twenty grades, and every
+one of those grades was already an event — `observe` writes an `observation`
+and `review grade` writes a `review`, both with the grade in the payload. A
+second copy would be a second version of the truth, and the first time one was
+written without the other they would disagree with no way to tell which was
+right. Nothing ever read it for behaviour: `schedule.mjs` appends to it, and
+`dueCards`, `forecast` and every `--json` output ignore it.
+
+**`params` is a preference, not a column on every row.** It is one global
+setting shared by every concept. A column would have said otherwise.
+
+**`index.json` is a query.** It was a snapshot the pipeline wrote and the Next
+build baked in, which meant a study session did not reach `/learn` until the
+next deploy. `readKnowledgeBase` reads the same fields out of `concept`,
+`concept_prerequisite`, `mastery` and `review`, so the page is current by
+construction. Three fields did not survive, because the tables do not hold them
+and the page never rendered them: `tags`, `sources` and `openQuestions`.
+`generatedAt` became `indexedAt`, which is a fact the database knows — when the
+`concepts` source last ran.
+
+## What the CLI does now
+
+Every command name and every `--json` shape is unchanged; the shapes are listed
+in [`learn/README.md`](../../learn/README.md#the-json-shapes) and pinned by
+`test/learn-cli.test.ts`. What changed underneath:
+
+- `scripts/learn/cli.mjs` is a shim. It spawns `src/learn/cli.ts`, which is the
+  command. The entry point stays because the `/learn` and `/review` skills, and
+  `npm run learn`, name it.
+- The pure modules under `scripts/learn/lib/` have not moved and are imported
+  rather than rewritten. They are the definition of the BKT update, the concept
+  DAG and SM-2, and they keep their own tests.
+- `learn index` re-reads the notes into the catalog instead of writing
+  `state/index.json`. It refuses if a note is in no topic's `maps.concepts` in
+  `content/topics.yaml`, which is the same refusal `catalog index` gives: a note
+  with no topic cannot be reached from a course or a video about the same
+  subject, and it cannot carry mastery either, because `mastery.concept_slug`
+  is a foreign key.
+- `learn review rebuild` is new. `learn/README.md` used to say outright that
+  `reviews.json` "is not backed up by anything"; it is now, and exactly rather
+  than approximately, because `observe` and `review grade` take one clock for
+  the card, the model and the event, and an observation records whether it
+  scheduled.
+- `observe --force` can no longer record evidence about a concept the catalog
+  has never seen. There is nowhere to put it.
+
+## If something looks wrong
+
+```bash
+npm run catalog -- status              # migrations, row counts, source freshness
+npm run learn -- doctor                # the graph, and whether the store is reachable
+npm run learn -- model --rebuild       # recompute mastery from the log
+npm run learn -- review rebuild        # recompute the schedule from the log
+```
+
+A wrong number in `mastery` or `review` is a bug to recompute. A wrong row in
+`event` is not: the correction is a new row. `learn void --session S --reason R`
+retracts a session's evidence, and the next rebuild skips it while the history
+stays readable.
+
+## The backfill
+
+```bash
+npm run catalog -- backfill --from learn/state
+```
+
+Ran once, on 2026-09-13, against the real files. It is idempotent and still
+runnable against any `state/` directory, which is what makes an old checkout
+recoverable.
+
+It replays `events.jsonl` in order with its own timestamps, loads
+`reviews.json` into `review`, synthesises a `review` event for any `history`
+entry the log does not already account for, rebuilds `mastery` from the log,
+and then **asserts** that the rebuilt model equals `model.json` per concept
+within 1e-6 and every card equals `reviews.json`. It prints a per-concept diff
+and exits non-zero on any mismatch.
+
+Two details worth keeping in mind if it is ever run again.
+
+**Synthesis is matched, not blind.** Almost every `history` entry is already an
+`observation` event, because `observe` schedules a card as well as updating the
+model. Writing a `review` event for every entry regardless would double the
+evidence and the mastery assertion would fail — which is how that was found.
+Entries are matched one-to-one against events by concept, grade and instant,
+and only the unmatched ones are written.
+
+**`lastSeen` drifts by a few milliseconds and that is expected.** Before this
+bundle, `observe` called `new Date()` separately for the model's `lastSeen` and
+for the event's `at`. A replay takes `lastSeen` from the event, so every
+historical concept is 2–4ms later than `model.json` said. The assertion
+tolerates 5 seconds and reports the drift rather than hiding it. Anything
+larger is a real mismatch and fails.

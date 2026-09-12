@@ -13,7 +13,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the code is shaped and why |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, test and PR conventions |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
-| [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
+| [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, the `--json` shapes, known limits |
+| [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The tables, and why each one is shaped that way |
+| [services/catalog/LEARN.md](services/catalog/LEARN.md) | What each `learn/state/*` file became, and how to recover |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The catalog: every table, why the links are typed, how `event` stays append-only, how to run migrations |
 | [content/README.md](content/README.md) | The three content folders, and the rules for editing the topic vocabulary |
 | [content/courses/README.md](content/courses/README.md) | The course YAML: the shape of a file and what the reader refuses |
@@ -29,7 +31,7 @@ two on purpose:
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
-| Code and data | this repo | The `learn` CLI in `scripts/learn/`, the knowledge base in `learn/`, the web view at `src/app/learn/` |
+| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes in `learn/`, the learner state in Postgres, the web view at `src/app/learn/` |
 
 The `/learn` and `/review` skills are not in this repo. They live in the
 `learning` plugin under the `learning` marketplace, at
@@ -204,6 +206,39 @@ not have to be worked out again.
   applied.** drizzle keys applied migrations by the sha256 of the file, so an
   edit makes it look unapplied on every database that already ran it. Change
   `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`.
+- **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
+  `model.json` and `reviews.json` are the `event`, `mastery` and `review`
+  tables; `index.json` is a query. `npm run learn -- status` fails when the
+  database is down, which is deliberate — both skills open with it and stop.
+  `concept add`, `check add` and `session log` still work without it, because
+  they only touch files. The file-to-table mapping is
+  [services/catalog/LEARN.md](services/catalog/LEARN.md).
+- **A new note cannot carry evidence until it is indexed.**
+  `mastery.concept_slug` and `event.concept_slug` are foreign keys, so
+  `learn observe` on a note that no index run has taken in refuses, `--force`
+  included. `learn index` refuses in turn if the note is in no topic's
+  `maps.concepts` in `content/topics.yaml`. The order is: write the note, add
+  the mapping, `npm run learn -- index`, then observe. `concept add` prints the
+  reminder at the point the note is written.
+- **The `--json` shapes are a contract with a plugin outside this repo.**
+  `status`, `frontier`, `plan`, `observe` and `review due` are parsed by
+  `/learn` and `/review`, documented in
+  [learn/README.md](learn/README.md#the-json-shapes), and pinned by golden
+  tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
+  breaking change to the plugin, not a refactor.
+- **The web app imports `@self-learn/catalog/state`, and Next has to be told.**
+  Both workspaces ship raw TypeScript with no build step, so
+  `transpilePackages` in `next.config.ts` lists them; `pg` picks a driver at
+  runtime, so `serverExternalPackages` keeps it out of the bundle. A client
+  component must take the shared constants from `@self-learn/schema/shared`,
+  which imports nothing — importing them from `@self-learn/schema` would drag
+  drizzle into the browser bundle.
+- **Every page is dynamic, and that is the point.** The root layout reads the
+  theme cookie and the learner snapshot, so nothing is prerendered. Nothing
+  reads the database at build time either — every read calls `connection()`
+  first — so `npm run build` succeeds with no database, which is what Vercel
+  has today. Verify both after touching the layout: build with `DATABASE_URL`
+  pointed at a dead port, then serve it and load a page.
 - **Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` on
   purpose.** `src/app` and `src/components` are view code and untested by
   design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear

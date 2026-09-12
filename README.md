@@ -59,7 +59,7 @@ Knowing what is worth learning and actually learning it are two different proble
 | Asset generation | `manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
 | Catalog | `packages/schema/`, `services/catalog/` | Postgres index over the three content trees, and the `catalog` CLI agents read |
 
-Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state lives in browser `localStorage` (`self-learn:v1`, schema v2); there are no accounts, and the Postgres tables that will hold it exist but are not wired up until bundle 5.
+Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are still no accounts, just one learner row. A browser that used the old `localStorage` document imports it once, automatically, on first load.
 
 | Surface | Purpose |
 | --- | --- |
@@ -119,7 +119,7 @@ Skip it if you are not drawing diagrams; nothing else in the repo depends on it.
 
 Four phases, driven by a dependency-free Node CLI. **Probe** ranks concepts by expected information gain, so it binary-searches the edge of your understanding instead of marching through a syllabus; being asked does not count as being taught. **Plan** returns a topologically ordered path from what you hold to the goal, with mastered prerequisites dropped and claims fact-checked before anything is taught. **Teach** hands back one concept at a time at the frontier, with a check after each step. **Close** writes the concept notes, stores the checks, logs the session, and schedules the reviews.
 
-Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. `learn/state/events.jsonl` is the source of truth, an append-only record of every answer with its before and after belief, so the mastery model and the indexes can be rebuilt and the model parameters are safe to change. The one exception is `learn/state/reviews.json`: the SM-2 schedule has no rebuild path and is authoritative, so it is never safe to delete.
+Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. The `event` table is the source of truth, an append-only record of every answer with its before and after belief — append-only enforced by a trigger, not by convention — so the mastery model and the schedule are both projections that can be thrown away and replayed, and the model parameters are safe to change. Concept notes, session logs and the map stay plain files in git.
 
 ```bash
 npm run learn -- status      # where you are
@@ -137,29 +137,32 @@ flowchart LR
         SK["/learn · /review"]
         AG["concept-mapper<br/>fact-checker<br/>diagram-maker"]
     end
-    subgraph CODE["scripts/learn (this repo)"]
-        C["learn CLI"]
+    subgraph CODE["the learn CLI (this repo)"]
+        C["17 commands"]
         LIB["bkt · graph<br/>schedule"]
+        ST["the learner store"]
     end
-    subgraph KB["learn/ (plain files)"]
-        EV[("events.jsonl<br/>source of truth")]
-        REC["concepts/ · sessions/<br/>(written during Close, not derived)"]
-        DER["model.json · map.md<br/>(derived, rebuildable from events)"]
-        REV[("reviews.json<br/>authoritative, no rebuild")]
-        IDX["state/index.json"]
+    subgraph KB["learn/ (plain files, in git)"]
+        REC["concepts/ · sessions/<br/>(authored during Close)"]
+        MAP["map.md<br/>(derived)"]
     end
-    WEB["/learn page"]
+    subgraph PG["postgres"]
+        EV[("event<br/>source of truth, append-only")]
+        DER["mastery · review<br/>(projections, replayable)"]
+        STA["progress · recap · preference<br/>(the web hub's state)"]
+    end
+    WEB["/learn page · course pages"]
     SK --> AG
     SK --> C
     C --> LIB
     C --> REC
-    LIB --> EV
-    LIB --> REV
+    C --> MAP
+    C --> ST
+    ST --> EV
     EV --> DER
-    REC --> IDX
-    DER --> IDX
-    REV --> IDX
-    IDX --> WEB
+    WEB --> ST
+    ST --> STA
+    DER --> WEB
 ```
 
 ## Configuration
@@ -168,10 +171,10 @@ flowchart LR
 | --- | --- | --- |
 | `learn/concepts/<domain>/<id>.md` | Atomic concept notes, Obsidian-compatible and wikilinked | tracked |
 | `learn/sessions/*.md`, `learn/assets/*.svg` | One log per session, written live; diagrams generated while teaching | tracked |
-| `learn/state/events.jsonl` | Append-only trajectory, the source of truth | tracked |
-| `learn/state/model.json`, `index.json`, `map.md` | Derived, rebuildable from the event log | tracked |
-| `learn/state/reviews.json` | SM-2 schedule; no rebuild path exists, so treat it as authoritative | tracked |
-| `.env.local`, `learn/state/*.tmp` | Provider keys; scratch from atomic writes | gitignored |
+| `learn/map.md` | The mermaid knowledge map, regenerated by `learn map` | tracked |
+| `event`, `mastery`, `review` (Postgres) | The trajectory and its projections. `event` is the only copy | not in git |
+| `progress`, `recap`, `preference` (Postgres) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
+| `.env.local` | Provider keys and `DATABASE_URL` | gitignored |
 | `manimkc/out/`, `manimkc/cache/` | Rendered videos and the TTS cache | gitignored |
 
 Tutoring chat tries three free providers in order and falls through on errors and rate limits. Every variable is optional: with no keys the site still works, and Launch Agent falls back to **Copy system prompt** and **Copy terminal launch pack**.
