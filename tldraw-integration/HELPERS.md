@@ -26,17 +26,25 @@ helper calls `createShapeId(id)` so ids are stable and readable
 (`shape:query`, not `shape:8f3a...`). Creating an id that already exists
 updates that shape instead of throwing, so snippets can be re-run.
 
+`createShapeId(id)` is literally `` `shape:${id}` ``, with no check for a
+prefix that is already there, so feeding it a real id would give
+`shape:shape:query`. The helpers strip the prefix first and accept either form.
+
 | Option | Default | Notes |
 | --- | --- | --- |
 | `x`, `y` | required unless `after` or `below` is given | Page coordinates of the top-left corner |
-| `w`, `h` | 180 x 64 | |
+| `w`, `h` | 180 x 64 | `h` is a minimum, not the height: tldraw grows a geo shape with `growY` when its label wraps. Read `getShapePageBounds` when placing something against a box, never `props.h` |
 | `geo` | `rectangle` | Any tldraw geo: `rectangle`, `ellipse`, `oval`, `diamond`, `cloud`, `hexagon`, `triangle`, `star`, ... (`oval` is the capsule shape; there is no `pill`) |
 | `color`, `fill` | `black`, `none` | tldraw style values |
 | `font`, `size` | `draw`, `m` | |
 | `align`, `verticalAlign` | `middle`, `middle` | A long label wants `verticalAlign: 'start'` and a taller box, not a separate text shape |
-| `after: otherId, gap` | | Place to the right of another shape, same y |
-| `below: otherId, gap` | | Place under another shape, same x |
-| `parent` | page | A frame or group id |
+| `after: otherId, gap` | gap 120 | Place to the right of another shape, same y |
+| `below: otherId, gap` | gap 120 | Place under another shape, same x |
+| `parent` | page | A frame or group id. The coordinates given are page coordinates, as everywhere else in this API; the helper converts them into the parent's space, because tldraw reads a child's `x` and `y` there |
+
+`DEFAULT_GAP` for `after` and `below` is 120 page units. A tighter gap is legal
+and sometimes right, but at 60 or less tldraw has almost no line to draw a
+label on and the result reads as a word floating between two boxes.
 
 ### `helpers.text(id, str, opts)`
 
@@ -79,9 +87,38 @@ their shapes when moved.
 | `labelPosition` | 0.5 | 0..1 along the arrow |
 | `color`, `size`, `dash` | `black`, `s`, `draw` | |
 
-Anchors are set with `isPrecise: true` so the arrow lands where asked rather
-than snapping to the centre. The elbow router is tldraw's own; the helper's
-job is anchors, mid point and binding, not path maths.
+The arrow's id is derived from the pair, `shape:arrow:<from>-><to>`, which is
+what makes `connect` idempotent: re-running a snippet updates the same arrow
+instead of stacking a second one on it. A shape id containing `->` is refused
+rather than encoded, because `a->b` to `c` and `a` to `b->c` would derive the
+same arrow id and the second call would silently steal the first one's arrow.
+`opts.id` names a second arrow between the same pair.
+
+The binding's props also include `snap`, an `ElbowArrowSnap` (`center`,
+`edge-point`, `edge` or `none`) that the validator requires.
+`ArrowBindingUtil.getDefaultProps()` supplies it, so the helper passes a
+partial `props` and does not set it. The same goes for `isExact`.
+
+The arrow schema's own default `kind` is `arc`, not `elbow`, so `connect` sets
+`kind` on every arrow rather than relying on the shape default. Elbow routing
+reads `props.elbowMidPoint` (that is what `mid` sets); `bend` is an arc-only
+field and the two are separate.
+
+Every binding is `isPrecise: true`, auto ends included, because an imprecise
+binding ignores `normalizedAnchor` and aims the terminal at the shape's centre.
+Two boxes whose centres differ (any row where one label wrapped and grew its
+box) then get a short dog-leg that the arrow label sits on top of, and it reads
+as a broken arrow. `opts.precise: false` hands the entry point back to tldraw's
+router for the rare case that wants it.
+
+An end the caller did not name gets its anchor from the band where the two
+shapes' extents overlap: one page-space line is run down that band and both
+anchors are put on it, so the arrow is straight whenever a straight arrow is
+possible. Shapes that do not overlap at all fall back to the plain side
+midpoint, where a bend is unavoidable anyway.
+
+The elbow router is tldraw's own; the helper's job is anchors, mid point and
+binding, not path maths.
 
 ### `helpers.attribute(ownerId, label, side, opts)`
 
@@ -194,9 +231,9 @@ The three-box loop from this design session, written against this API:
 
 ```js
 helpers.box('agent', 'agent cli', { x: 60, y: 60, w: 170, h: 64 })
-helpers.box('page', 'headless page', { after: 'agent', gap: 80, w: 190, h: 64 })
+helpers.box('page', 'headless page', { after: 'agent', gap: 120, w: 190, h: 64 })
 helpers.box('png', 'screenshot png', { below: 'page', gap: 90, w: 190, h: 64 })
-helpers.box('tab', 'browser tab', { after: 'page', gap: 60, w: 170, h: 64 })
+helpers.box('tab', 'browser tab', { after: 'page', gap: 140, w: 170, h: 64 })
 
 helpers.connect('agent', 'page', { label: 'exec' })
 helpers.connect('page', 'png', { label: 'toImage' })
@@ -205,6 +242,10 @@ helpers.connect('page', 'tab', { label: 'mirror', dash: 'dashed' })
 
 return helpers.getLints()
 ```
+
+The gaps are 120 and 140 because a labelled arrow needs room: at the 80 and 60
+this example used to carry, the `mirror` label covers the whole gap and lands
+on both box outlines.
 
 Followed by `tldrawkc shot loop.tldr`, a look at the PNG, and a second
 snippet that nudges whatever is off.

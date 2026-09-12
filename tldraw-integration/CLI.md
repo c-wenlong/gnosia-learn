@@ -16,6 +16,12 @@ tldrawkc <command> [file] [options]
 working directory. A missing file is an error for every command except
 `new`, `run --create` and `from-mermaid`.
 
+Positional arity is checked, not tolerated. `run`, `shot` and `new` take
+exactly one file; `doctor` and `help` take none. A stray positional is a usage
+error and exit 1, because it is almost always a quoting mistake
+(`--eval helpers.box(...)` without quotes, say) and ignoring it would run
+something other than what was typed.
+
 Global options:
 
 | Option | Default | What |
@@ -42,14 +48,29 @@ fails.
 | node | `process.versions.node` >= 22 |
 | page bundle | `dist/page/index.html` exists and is newer than `src/page/**` (warns, not fails, when stale) |
 | chromium | An executable resolves and `--version` runs |
-| page load | The page opens and the bridge answers `ping` with no failed network requests |
-| fonts | `shot` on a one-box fixture renders with tldraw's draw font (checked by comparing to a known-good hash range, or simply by "no failed font requests") |
+| page load | The page opens and the bridge answers `ping` with no failed network requests and nothing fetched from outside 127.0.0.1. A failed request is a `requestfailed` event or any response with status 400 or worse, because a missing font is a 404 |
+| fonts | As built: the check awaits `document.fonts.ready`, then fails when a font request failed, when the bundle holds no font files, or when no `tldraw_*` font family came back loaded, which is what "labels render in a system font" looks like from Node |
 | write access | A temp file can be written and renamed in the cwd |
 
 ### `new <file.tldr>`
 
 Creates an empty document. Refuses to overwrite. `--from <other.tldr>`
 copies a starting point. Prints the path.
+
+It goes through the browser (`load(null)`, then `save()`) rather than writing
+a hand-built envelope, so the file carries the schema version and migration
+state of the installed tldraw. The write is exclusive, so the refusal to
+overwrite holds even when something else creates the file while the page is
+starting up.
+
+Output (`--json`):
+
+```json
+{
+  "file": "/home/you/self-learn/learn/assets/attention.tldr",
+  "ms": 780
+}
+```
 
 ### `run <file.tldr> --code <snippet.js> [--shot <out.png>] [--svg <out.svg>] [--create]`
 
@@ -69,26 +90,48 @@ Output (`--json`):
 
 ```json
 {
-  "file": "learn/assets/attention.tldr",
+  "file": "/home/you/self-learn/learn/assets/attention.tldr",
   "result": { "created": ["shape:q", "shape:k", "shape:v"] },
   "shapeCount": 7,
   "lints": [],
-  "shot": "out/attention.png",
+  "shot": "/home/you/self-learn/out/attention.png",
   "svg": null,
   "ms": 1840
 }
 ```
 
+Every path in `--json` output is the resolved absolute path, never the one
+that was typed. An agent's cwd and the reader's are not reliably the same.
+
 `result` is whatever the snippet returned, JSON-serialised. A snippet that
 throws is rolled back, the file is left as it was, and the command exits 2
-with the error and the offending line on stderr.
+with the error and the offending line on stderr. The line numbers in that
+stack are two higher than the snippet's own, because of the `AsyncFunction`
+header; see the `exec` row in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-### `shot <file.tldr> [-o <out.png>] [--ids a,b,c]`
+### `shot <file.tldr> [-o|--output <out.png>] [--ids a,b,c]`
 
 Screenshot without running anything. Without `-o` the PNG goes to the
 system temp directory as `tldrawkc-<basename>-<timestamp>.png` and the path
 is printed; it never lands next to the source, because PNGs are for looking
-at, not committing. `--ids` frames only those shapes.
+at, not committing. `--output` is the long form of `-o`. `--ids` frames only
+those shapes.
+
+Output (`--json`):
+
+```json
+{
+  "file": "/home/you/self-learn/learn/assets/attention.tldr",
+  "shot": "/tmp/tldrawkc-attention-2026-09-13T04-12-08-991Z.png",
+  "width": 1904,
+  "height": 764,
+  "bounds": { "x": 60, "y": 60, "w": 920, "h": 350 },
+  "ms": 910
+}
+```
+
+`width` and `height` are the PNG's pixels; `bounds` is the page-space box the
+shapes occupy.
 
 ### `inspect <file.tldr>`
 
