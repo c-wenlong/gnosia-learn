@@ -54,7 +54,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       const { rows } = await scratch.db.execute<{ n: number }>(
         sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
       );
-      expect(rows[0]?.n).toBe(19);
+      expect(rows[0]?.n).toBe(20);
     });
 
     it("is idempotent", async () => {
@@ -206,6 +206,30 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
         sql`select count(*)::int as n from ${event}`,
       );
       expect(rows[0]?.n).toBe(1);
+    });
+
+    it("does not block deleting an unrelated concept", async () => {
+      // Regression for 0003. The guard used to be `FOR EACH STATEMENT`, so the
+      // referential `UPDATE ONLY event SET concept_slug = NULL` that Postgres
+      // runs when any concept is deleted tripped it even when the statement
+      // matched no event at all. Every concept row was permanently
+      // undeletable, which breaks the indexers' contract that a derived row
+      // goes when the file it came from does.
+      //
+      // This runs with an event already in the table, so it proves the guard
+      // still distinguishes "no event is affected" from "the log is empty".
+      await scratch.db.insert(concept).values({
+        slug: "deletable",
+        title: "Deletable",
+        path: "learn/concepts/algorithms/deletable.md",
+      });
+
+      await expect(
+        scratch.db.delete(concept).where(eq(concept.slug, "deletable")),
+      ).resolves.toBeDefined();
+
+      const left = await scratch.db.select().from(concept).where(eq(concept.slug, "deletable"));
+      expect(left).toEqual([]);
     });
   });
 });
