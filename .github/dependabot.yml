@@ -7,14 +7,20 @@
 #
 # Development dependencies are grouped into one pull request. A tooling bump
 # (eslint, vitest, typescript, types) is verified by the same CI run whether
-# it arrives alone or with five others, so one PR a week beats five.
+# it arrives alone or with five others, so one PR beats five.
+#
+# Both ecosystems run MONTHLY, not weekly. This is a one-maintainer project and
+# routine version churn is not worth a queue of pull requests every Monday.
+# Security is not on this schedule: Dependabot *alerts* are a separate feature
+# and still open a pull request as soon as an advisory affects the lockfile, so
+# a slower cadence here delays cosmetic bumps and nothing urgent. `next` is the
+# package that matters for that, since this app is deployed from `main`.
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
       # react and react-dom pin each other to the exact same version, and the
       # @types packages track them. Bumping any one alone fails npm ci with
@@ -45,6 +51,14 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # @types/node tracks the Node runtime, not the newest publish. This repo
+    # runs Node 22 (engines in package.json, node-version in ci.yml), so a
+    # major past 22 would describe APIs the runtime does not have. Raise the
+    # floor here when the runtime itself moves.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -56,8 +70,7 @@ updates:
     # "/" means .github/workflows/, not the repository root.
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     # One pull request for all action bumps rather than one per action.
     groups:
       github-actions:
