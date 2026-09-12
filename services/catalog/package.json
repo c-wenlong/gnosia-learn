@@ -12,7 +12,8 @@
   "dependencies": {
     "@self-learn/schema": "*",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/pg": "^8.15.6",

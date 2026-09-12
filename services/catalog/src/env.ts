@@ -8,6 +8,9 @@ export const SERVICE_ROOT = path.resolve(
   "..",
 );
 
+/** The repository root: two levels above services/catalog/. */
+export const REPO_ROOT = path.resolve(SERVICE_ROOT, "..", "..");
+
 /**
  * Local Postgres, the Homebrew install, database `self_learn`. Documented in
  * services/catalog/.env.example. Daily development needs no configuration at
