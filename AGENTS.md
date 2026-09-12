@@ -5,6 +5,18 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <!-- END:nextjs-agent-rules -->
 
 
+## Project documents
+
+| Document | What it covers |
+| --- | --- |
+| [README.md](README.md) | The front door: what this is, install, the surfaces |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the code is shaped and why |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, test and PR conventions |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
+| [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, known limits |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Vercel, secrets, the deploy workflow |
+| [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
+
 ## The learning pipeline
 
 This repo holds a Probe → Plan → Teach → Close tutoring loop. It is split in
@@ -52,3 +64,44 @@ Rules of engagement:
 - Rendered videos and the TTS cache are gitignored on both sides; deliverables
   live locally under `manimkc/out/`, which mirrors `manimkc/topics/`
   (`out/<domain>/<subdomain>/<topic>/<name>.mp4`).
+- **Drive it through its CLI, not by hand.** `manimkc/tools/cli/manimkc` is
+  stdlib-only Python, so it still runs when a venv is broken:
+  `doctor` (venvs, ffmpeg, narration backend, output dirs), `api` (the palette
+  and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
+  topic), `lint`, `preview`, `build`. Run it from any checkout, or install with
+  `uv tool install -e tools/cli`.
+- The end-to-end process is the `manimkc-video` skill, which lives in the
+  submodule and is symlinked into `.claude/skills/manimkc-video`. That symlink
+  and `launch.json` are the only things `.claude/` holds here.
+
+## Gotchas
+
+Traps that cost time once already. Each names the file, so the reasoning does
+not have to be worked out again.
+
+- **The OG image is declared by hand in `src/app/layout.tsx`.** Next 16 builds
+  with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
+  sidecar, so the file convention would ship a social card with no alt text.
+  `metadata.openGraph.images` carries the alt instead. Do not "simplify" it
+  back to the convention.
+- **`??` does not fall through on an empty string.** `NEXT_PUBLIC_SITE_URL=""`
+  once crashed the build through `new URL("")`. `resolveSiteUrl()` in
+  `src/app/layout.tsx` now trims, defaults a missing scheme to `https://`, and
+  falls back to localhost when parsing fails, because a bad value should cost a
+  link preview and not the whole app.
+- **`manimkc/` and `coverage/` are lint-ignored in `eslint.config.mjs`.**
+  Without those entries a local `npm run lint` walks the submodule's Python
+  virtualenvs and reports 100k+ findings from code this repo does not own.
+  If lint output ever balloons, check that block first.
+- **Only bump the `manimkc/` pointer to a commit that is already pushed.**
+  Check `git diff --submodule=log manimkc` before `git add manimkc`; staging a
+  dirty or unpushed submodule leaves a pointer nobody else can resolve.
+- **`npm run dev` fails in the desktop preview harness** with
+  `EPERM: uv_cwd`. To look at the app, build first and serve the production
+  output: `npm run build` then
+  `node node_modules/next/dist/bin/next start -p <port>`.
+- **Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` on
+  purpose.** `src/app` and `src/components` are view code and untested by
+  design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
+  at all. A low overall percentage is not a regression signal; the thresholds
+  in `vitest.config.ts` are.
