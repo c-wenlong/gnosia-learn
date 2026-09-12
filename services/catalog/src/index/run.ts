@@ -1,6 +1,13 @@
 import path from "node:path";
 
-import { concept, curriculumItem, INDEX_SOURCES, type IndexSource } from "@self-learn/schema";
+import {
+  concept,
+  curriculumItem,
+  indexRun,
+  INDEX_SOURCES,
+  type IndexSource,
+} from "@self-learn/schema";
+import { eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { REPO_ROOT } from "../env";
@@ -8,7 +15,7 @@ import { conceptsIndexer } from "./concepts";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
-import { manimkcIndexer } from "./manimkc";
+import { hasManimkcCli, manimkcIndexer } from "./manimkc";
 import { sessionsIndexer } from "./sessions";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
@@ -79,6 +86,8 @@ export interface RunResult {
   sources: SourceWrite[];
   /** Sources `--only` did not name but that had to run anyway. */
   addedForSafety: IndexSource[];
+  /** Sources that could not run in this checkout, and were safe to leave out. */
+  skipped: { source: IndexSource; reason: string }[];
   totals: { written: number; deleted: number };
 }
 
@@ -162,8 +171,46 @@ export async function runIndex(
     },
   };
 
-  const sources: SourceWrite[] = [];
+  // manimkc is the only optional source: its reader lives in a submodule that a
+  // fresh clone and CI deliberately do not fetch. Leaving it out is safe only
+  // when it has never been indexed, because otherwise pruning a topic cascades
+  // through its asset_topic rows and nothing puts them back. So: refuse when it
+  // was asked for, refuse when it has rows to lose, and otherwise drop it with
+  // a note rather than making a submodule a hard dependency of indexing
+  // anything at all.
+  const skipped: { source: IndexSource; reason: string }[] = [];
+  const runnable: Indexer[] = [];
   for (const indexer of selected) {
+    if (indexer.source !== "manimkc" || hasManimkcCli(repoRoot)) {
+      runnable.push(indexer);
+      continue;
+    }
+    // `--only manimkc` is asking for it; a default full run is not. Without
+    // that distinction `catalog index` on a clone with no submodule fails
+    // outright instead of indexing the five sources it can.
+    const asked = options.only?.includes("manimkc") ?? false;
+    const indexed = await db
+      .select({ source: indexRun.source })
+      .from(indexRun)
+      .where(eq(indexRun.source, "manimkc"))
+      .limit(1);
+    if (asked || indexed.length > 0) {
+      throw new IndexError(
+        `the manimkc submodule is not initialised, so \`manimkc topics --json\` cannot run` +
+          (asked
+            ? ""
+            : `, and it has rows in this database that pruning a topic would orphan`) +
+          `. Run \`git submodule update --init manimkc\`, or point --manimkc-root at a checkout.`,
+      );
+    }
+    skipped.push({
+      source: "manimkc",
+      reason: "the submodule is not initialised, and it has never been indexed here",
+    });
+  }
+
+  const sources: SourceWrite[] = [];
+  for (const indexer of runnable) {
     const { rows, notes = [] } = await indexer.read(context);
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context));
     sources.push(write);
@@ -185,7 +232,10 @@ export async function runIndex(
     manimkcRoot,
     sources,
     // Sorted into run order, so the reported list reads the way it ran.
-    addedForSafety: INDEXERS.map((i) => i.source).filter((s) => addedForSafety.includes(s)),
+    addedForSafety: INDEXERS.map((i) => i.source).filter(
+      (s) => addedForSafety.includes(s) && !skipped.some((k) => k.source === s),
+    ),
+    skipped,
     totals: {
       written: sources.reduce((a, s) => a + s.totalWritten, 0),
       deleted: sources.reduce((a, s) => a + s.totalDeleted, 0),

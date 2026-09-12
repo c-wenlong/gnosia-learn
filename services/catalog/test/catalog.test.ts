@@ -88,11 +88,9 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
 
-    await runIndexCommand({
-      only: withManimkc
-        ? undefined
-        : ["topics", "courses", "concepts", "diagrams", "sessions"],
-    });
+    // No `only`: the runner drops manimkc by itself when the submodule is not
+    // checked out, which is how CI runs and is the path worth exercising.
+    await runIndexCommand({});
   }, 120_000);
 
   afterAll(async () => {
@@ -102,6 +100,29 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("index", () => {
+    it("runs manimkc, or skips it with a reason when the submodule is absent", async () => {
+      const result = await runIndexCommand({});
+      const ran = result.sources.map((s) => s.source);
+      if (withManimkc) {
+        expect(ran).toContain("manimkc");
+        expect(result.skipped).toEqual([]);
+      } else {
+        expect(ran).not.toContain("manimkc");
+        expect(result.skipped).toEqual([
+          { source: "manimkc", reason: expect.stringContaining("never been indexed") },
+        ]);
+      }
+    });
+
+    it("refuses --only manimkc when the submodule is absent", async () => {
+      if (withManimkc) return;
+      // Asked for explicitly, so dropping it silently would answer a different
+      // question than the one put to it.
+      await expect(runIndexCommand({ only: ["manimkc"] })).rejects.toThrow(
+        /submodule is not initialised/,
+      );
+    });
+
     it("indexes the whole shared vocabulary", async () => {
       const rows = await scratch.db.select().from(topic);
       expect(rows).toHaveLength(EXPECTED.topics);
@@ -148,9 +169,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("is idempotent: a second run changes nothing", async () => {
-      const second = await runIndexCommand({
-        only: withManimkc ? undefined : ["topics", "courses", "concepts", "diagrams", "sessions"],
-      });
+      const second = await runIndexCommand({});
       expect(second.totals.deleted).toBe(0);
       expect(await scratch.db.select().from(topic)).toHaveLength(EXPECTED.topics);
       expect(await scratch.db.select().from(concept)).toHaveLength(EXPECTED.concepts);

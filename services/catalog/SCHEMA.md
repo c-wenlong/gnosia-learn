@@ -404,6 +404,13 @@ reports what it added. `--only topics` is a full run, which is the honest
 answer, and `--only manimkc` stays cheap because nothing points at what manimkc
 owns.
 
+manimkc is the one optional source: its reader lives in a submodule that a
+fresh clone and CI deliberately do not fetch. A default run drops it with a
+note when the submodule is absent *and* it has never been indexed here, because
+then there is nothing to leave stale. It refuses when `--only manimkc` asked for
+it, and refuses when it does have rows, since pruning a topic would cascade
+through its `asset_topic` links and nothing would put them back.
+
 ### Refuse, never skip
 
 An unresolved reference stops the run and names the file and the slug. A skipped

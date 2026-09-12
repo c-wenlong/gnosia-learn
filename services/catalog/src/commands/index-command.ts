@@ -21,6 +21,8 @@ export interface IndexResult {
   sources: SourceWrite[];
   /** Sources `--only` did not name but that had to run, and why they had to. */
   addedForSafety: string[];
+  /** Sources that could not run in this checkout, and why leaving them out was safe. */
+  skipped: { source: string; reason: string }[];
   totals: { written: number; deleted: number };
 }
 
@@ -42,6 +44,7 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
       manimkcRoot: result.manimkcRoot,
       sources: result.sources,
       addedForSafety: result.addedForSafety,
+      skipped: result.skipped,
       totals: result.totals,
     };
   });
@@ -49,6 +52,9 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
 
 export function formatIndex(result: IndexResult): string {
   const lines = [`database     ${result.database}`, `manimkc root ${result.manimkcRoot}`, ""];
+  for (const skip of result.skipped) {
+    lines.push(`skipping ${skip.source}: ${skip.reason}.`, "");
+  }
   if (result.addedForSafety.length > 0) {
     lines.push(
       `also running ${result.addedForSafety.join(", ")}: they point at rows the ` +
