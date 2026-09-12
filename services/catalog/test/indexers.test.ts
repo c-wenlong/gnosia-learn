@@ -9,7 +9,7 @@ import { buildRows, type TopicsReport } from "../src/index/manimkc";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
 import { loadVocabulary } from "../src/index/vocabulary";
-import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
+import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 
 /**
  * The indexers on their own: files in, rows out, no database.
@@ -106,6 +106,7 @@ describe("courses", () => {
   it("reads collections, curriculum items and link assets", async () => {
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"] }]));
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
     const { rows } = await coursesIndexer.read(await fixture.context());
@@ -157,6 +158,7 @@ describe("courses", () => {
   it("refuses a module whose topic is not in the vocabulary", async () => {
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "beta", courses: ["xx1000-m1"] }]));
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
     await expect(coursesIndexer.read(await fixture.context())).rejects.toThrow(
@@ -170,6 +172,7 @@ describe("courses", () => {
       "content/topics.yaml",
       topicsYaml([{ slug: "alpha" }, { slug: "beta", courses: ["xx1000-m1"] }]),
     );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
     await expect(coursesIndexer.read(await fixture.context())).rejects.toThrow(
@@ -183,6 +186,7 @@ describe("courses", () => {
       "content/topics.yaml",
       topicsYaml([{ slug: "alpha", courses: ["xx1000-m1", "xx1000-m9"] }]),
     );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
     await expect(coursesIndexer.read(await fixture.context())).rejects.toThrow(

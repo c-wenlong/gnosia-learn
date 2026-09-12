@@ -48,11 +48,15 @@ rendering something wrong:
 | Refusal | Why it matters |
 | --- | --- |
 | A duplicated course, module, topic or resource id | Ids are permanent keys; two things sharing one silently merge whatever they had recorded |
+| Two modules of one course sharing a slug | They are the same URL, so the second module is unreachable and its link renders the first |
 | A module whose `topic:` is missing or not in `content/topics.yaml` | A course row nothing else can join to |
 | A missing `id`, `slug`, `code`, `title`, `credits`, `order`, `capstone` | A route that 404s, or a page with a hole in it |
 | `inferred` absent, or written as a string | A reconstructed syllabus presented as an official one |
 | Two courses claiming one `order` | An ambiguous sidebar |
 | A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
+| A tag that is not in `content/tags.yaml` | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
+| A module with no `topics:` | A page with an empty section and nothing to tick |
+| `modules:`, `topics:` or `resources:` written as anything but a list of mappings | The tempting `Array.isArray(x) ? x : []` would render and index the module as if the author had meant to delete its content |
 
 Unresolved topics are collected and reported together, so one run names all of
 them instead of the first.

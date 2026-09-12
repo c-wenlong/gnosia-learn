@@ -32,6 +32,16 @@ export function topicsYaml(slugs: string[]): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function tagsYaml(ids: string[]): string {
+  const lines = ["tags:"];
+  for (const id of ids) {
+    lines.push(`  - id: ${id}`);
+    lines.push(`    label: ${id}`);
+    lines.push(`    description: the ${id} theme`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function courseYaml(overrides: Record<string, unknown> = {}): string {
   const course = {
     id: "xx1000",

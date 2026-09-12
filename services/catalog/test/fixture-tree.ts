@@ -47,6 +47,20 @@ export async function makeFixture(): Promise<Fixture> {
   };
 }
 
+/**
+ * A minimal `content/tags.yaml`. The course reader checks every course tag
+ * against it, so a tree with course files needs one.
+ */
+export function tagsYaml(ids: string[]): string {
+  const lines = ["tags:"];
+  for (const id of ids) {
+    lines.push(`  - id: ${id}`);
+    lines.push(`    label: ${id}`);
+    lines.push(`    description: the ${id} theme`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 /** A minimal `content/topics.yaml` covering whatever the test needs. */
 export function topicsYaml(
   entries: {

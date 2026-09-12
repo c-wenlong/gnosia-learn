@@ -67,6 +67,33 @@ export function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
+/**
+ * A list of mappings, or a refusal.
+ *
+ * `Array.isArray(x) ? x : []` is the tempting shape and the wrong one: it turns
+ * `topics: {}` into a module with no checklist rows, rendered and indexed as if
+ * that were what the author wrote. A malformed collection has to be an error,
+ * because the alternative is content that disappears without a word.
+ */
+export function mappingList(
+  value: unknown,
+  where: string,
+  field: string,
+): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ContentError(
+      `${where}: ${field} must be a list, not ${typeof value}`,
+    );
+  }
+  return value.map((item, i) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      throw new ContentError(`${where}: ${field}[${i}] must be a mapping`);
+    }
+    return item as Record<string, unknown>;
+  });
+}
+
 export function stringList(value: unknown, where: string, field: string): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {

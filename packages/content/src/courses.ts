@@ -5,6 +5,7 @@ import { parse } from "yaml";
 import { ContentError } from "./errors";
 import {
   filesIn,
+  mappingList,
   optionalText,
   readYamlFile,
   repoRoot,
@@ -12,8 +13,17 @@ import {
   stringList,
   type LoadOptions,
 } from "./read";
+import { loadTags } from "./tags";
 import { loadTopics } from "./topics";
-import type { Course, Module, Resource, ResourceType, Topic, TopicEntry } from "./types";
+import type {
+  Course,
+  Module,
+  Resource,
+  ResourceType,
+  TagMeta,
+  Topic,
+  TopicEntry,
+} from "./types";
 
 /**
  * `content/courses/*.yaml`: one file per course, and the only parser of them.
@@ -80,6 +90,8 @@ export interface LoadCoursesOptions extends LoadOptions {
    * has; the web app has not, and gets it loaded here.
    */
   topics?: readonly TopicEntry[];
+  /** The theme list, likewise. Loaded from `content/tags.yaml` when absent. */
+  tags?: readonly TagMeta[];
 }
 
 /**
@@ -170,6 +182,11 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
   const vocabulary = new Set(
     (options?.topics ?? loadTopics({ root })).map((entry) => entry.slug),
   );
+  // Tags are checked here rather than by a test over today's files, because a
+  // typo is not a cosmetic problem: the chip falls back to the raw id and, more
+  // quietly, the course drops out of every related-course list for the theme it
+  // meant to name.
+  const themes = new Set((options?.tags ?? loadTags({ root })).map((tag) => tag.id));
 
   const problems = new Problems();
   const courseIds = new Map<string, string>();
@@ -203,12 +220,14 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
     }
     orders.set(order, where);
 
-    const rawModules = Array.isArray(parsed.modules) ? parsed.modules : [];
+    const rawModules = mappingList(parsed.modules, where, "modules");
     if (rawModules.length === 0) {
       throw new ContentError(`${where}: course "${id}" has no modules`);
     }
 
     const modules: Module[] = [];
+    /** Module slugs are the second URL segment, so they collide per course, not globally. */
+    const moduleSlugs = new Map<string, string>();
     for (const [i, rawModule] of rawModules.entries()) {
       const mod = rawModule as RawModule;
       const at = `${where} module[${i}]`;
@@ -224,19 +243,28 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
         );
       }
 
-      const topics = (Array.isArray(mod.topics) ? mod.topics : []).map((raw) =>
+      const topics = mappingList(mod.topics, at, "topics").map((raw) =>
         readTopic(raw as RawTopic, at),
       );
+      if (topics.length === 0) {
+        throw new ContentError(
+          `${at}: module "${moduleId}" has no topics. A module with no ` +
+            `checklist rows is a page with an empty section and nothing to tick.`,
+        );
+      }
       for (const topic of topics) claim(topicIds, "topic", topic.id, at);
 
-      const resources = (Array.isArray(mod.resources) ? mod.resources : []).map((raw) =>
+      const resources = mappingList(mod.resources, at, "resources").map((raw) =>
         readResource(raw as RawResource, at),
       );
       for (const resource of resources) claim(resourceIds, "resource", resource.id, at);
 
+      const moduleSlug = requireText(mod.slug, at, "slug");
+      claim(moduleSlugs, "module slug", moduleSlug, at);
+
       modules.push({
         id: moduleId,
-        slug: requireText(mod.slug, at, "slug"),
+        slug: moduleSlug,
         title: requireText(mod.title, at, "title"),
         order: requireInteger(mod.order, at, "order"),
         topic: topicSlug ?? "",
@@ -279,6 +307,14 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
     if (track !== undefined) course.track = track;
     const notes = optionalText(parsed.notes);
     if (notes !== undefined) course.notes = notes;
+
+    for (const tag of course.tags) {
+      if (!themes.has(tag)) {
+        problems.add(
+          `${where}: course "${code}" is tagged "${tag}", which is not in content/tags.yaml`,
+        );
+      }
+    }
 
     courses.push(course);
   }

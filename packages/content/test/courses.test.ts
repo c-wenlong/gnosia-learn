@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { loadCourses, loadTags, loadTopics } from "../src/index";
-import { courseYaml, makeFixture, topicsYaml, type Fixture } from "./fixture";
+import { courseYaml, makeFixture, tagsYaml, topicsYaml, type Fixture } from "./fixture";
 
 /**
  * Two halves.
@@ -22,9 +22,14 @@ afterEach(() => {
   fixture = undefined;
 });
 
-function tree(courses: Record<string, string>, slugs = ["alpha"]): string {
+function tree(
+  courses: Record<string, string>,
+  slugs = ["alpha"],
+  tags = ["testing"],
+): string {
   fixture = makeFixture();
   fixture.write("content/topics.yaml", topicsYaml(slugs));
+  fixture.write("content/tags.yaml", tagsYaml(tags));
   for (const [name, body] of Object.entries(courses)) {
     fixture.write(`content/courses/${name}`, body);
   }
@@ -98,6 +103,7 @@ describe("the real curriculum", () => {
   });
 
   it("only uses tags that content/tags.yaml defines", () => {
+    // Enforced by the reader; asserted here so the guarantee is visible.
     const known = new Set(loadTags().map((t) => t.id));
     for (const course of courses) {
       for (const tag of course.tags) {
@@ -219,9 +225,77 @@ describe("loadCourses refuses", () => {
     expect(() => loadCourses({ root })).toThrow(/type "podcast" is not one of/);
   });
 
+  it("a tag that content/tags.yaml does not define", () => {
+    const root = tree({ "xx1000.yaml": courseYaml() }, ["alpha"], ["something-else"]);
+    expect(() => loadCourses({ root })).toThrow(
+      /is tagged "testing", which is not in content\/tags\.yaml/,
+    );
+  });
+
+  it("a collection that is a mapping rather than a list", () => {
+    const course = JSON.parse(courseYaml()) as { modules: Record<string, unknown>[] };
+    course.modules[0]!.topics = {};
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/topics must be a list, not object/);
+  });
+
+  it("a null entry inside a collection", () => {
+    const course = JSON.parse(courseYaml()) as { modules: unknown[] };
+    course.modules.push(null);
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/modules\[1\] must be a mapping/);
+  });
+
+  it("a module with no topics at all", () => {
+    const course = JSON.parse(courseYaml()) as { modules: Record<string, unknown>[] };
+    course.modules[0]!.topics = [];
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/has no topics/);
+  });
+
+  it("two modules of one course sharing a slug", () => {
+    const course = JSON.parse(courseYaml()) as { modules: Record<string, unknown>[] };
+    course.modules.push({
+      ...course.modules[0],
+      id: "xx1000-m2",
+      order: 2,
+      topics: [{ id: "xx1000-m2-t1", title: "Another", subtopics: [] }],
+      resources: [],
+    });
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(
+      /module slug id "m1-first" is already used in/,
+    );
+  });
+
+  it("but allows two courses to share a module slug", () => {
+    const root = tree({
+      "xx1000.yaml": courseYaml(),
+      "xx2000.yaml": courseYaml({
+        id: "xx2000",
+        slug: "xx2000",
+        code: "XX2000",
+        order: 2,
+        modules: [
+          {
+            id: "xx2000-m1",
+            slug: "m1-first",
+            title: "First",
+            order: 1,
+            topic: "alpha",
+            topics: [{ id: "xx2000-m1-t1", title: "An item", subtopics: [] }],
+            resources: [],
+          },
+        ],
+      }),
+    });
+    expect(loadCourses({ root })).toHaveLength(2);
+  });
+
   it("a directory with no course files", () => {
     const f = (fixture = makeFixture());
     f.write("content/topics.yaml", topicsYaml(["alpha"]));
+    f.write("content/tags.yaml", tagsYaml(["testing"]));
     f.write("content/courses/README.md", "# not a course\n");
     expect(() => loadCourses({ root: f.root })).toThrow(/no course YAML files found/);
   });
