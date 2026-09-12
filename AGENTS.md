@@ -50,4 +50,5 @@ Rules of engagement:
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
 - Rendered videos and the TTS cache are gitignored on both sides; deliverables
-  live in `manimkc/out/final/` locally.
+  live locally under `manimkc/out/`, which mirrors `manimkc/topics/`
+  (`out/<domain>/<subdomain>/<topic>/<name>.mp4`).
