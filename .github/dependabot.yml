@@ -25,6 +25,14 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      # vitest and @vitest/coverage-v8 require each other at the exact same
+      # version, so a major of either on its own can never install. This
+      # group has no update-types limit: it takes majors too, together.
+      # Groups match in order, so it sits above the wildcard below.
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       # Minor and patch only. A major bump of a tool (eslint, vitest, a
       # @types package jumping several Node versions) can need code or config
       # changes and deserves its own pull request, where it can fail or pass on
