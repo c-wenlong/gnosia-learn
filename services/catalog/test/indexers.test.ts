@@ -81,6 +81,7 @@ slug: xx1000
 code: XX1000
 title: Test Course
 credits: 4
+order: 1
 inferred: false
 tags: [testing]
 capstone: Build something
