@@ -32,6 +32,27 @@ commit SHA and branch in its metadata. If production ever stops updating after
 a merge, check the project's **Settings → Git** on vercel.com first: the repo
 connection is the whole pipeline.
 
+## Bounding the agent routes
+
+`/api/agent/chat` and `/api/agent/summarize` spend provider quota for whoever
+calls them, and the app has no accounts to authenticate against. The in-code
+ceilings in `src/lib/agent/guard.ts` are a floor that works everywhere; the
+real per-IP bound is a Vercel WAF rate-limit rule, which lives on the platform
+and not in this repo:
+
+```bash
+vercel firewall rules list                              # what exists
+vercel firewall rules inspect "Rate limit agent API" --expand
+vercel firewall diff                                    # staged, not yet live
+vercel firewall publish --yes                           # make it live
+```
+
+Rule changes stage as drafts and do nothing until published. Roll a new one
+out as `--rate-limit-action log` first, read the real traffic at
+**Firewall → Traffic** filtered by the rule id, then tighten to `rate_limit`.
+Counters are per region, so N regions can collectively exceed the number by
+roughly N times. `--duration` needs Pro or Enterprise.
+
 ## Secrets and environment variables
 
 | Name | Purpose | Where it is needed |
