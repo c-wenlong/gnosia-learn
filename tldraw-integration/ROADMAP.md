@@ -169,7 +169,7 @@ Goal: the tutoring loop uses it.
 
 Done when: a `/learn` session that reaches the Teach phase produces a diagram through the tool, the session log embeds the SVG, and `git status` shows a `.tldr` next to it.
 
-**Done 2026-09-13, self-learn PR #PRNUM.** The skill landed in the tool repo as
+**Done 2026-09-13, self-learn PR #30.** The skill landed in the tool repo as
 tldrawkc PR #4 and is symlinked in beside `manimkc-video`, so `.claude/` here
 still holds nothing but `launch.json` and two symlinks. The plugin change
 landed separately in quiver-hub PR #2, which also bumped the `learning`
