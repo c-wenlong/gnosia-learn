@@ -92,6 +92,16 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `manimkc/` and the manim clone nested inside it.
 
+The diagram tool in `tldrawkc/` needs one extra step, because `npm run canvas` runs a compiled CLI that is not committed:
+
+```bash
+git submodule update --init tldrawkc
+(cd tldrawkc && npm ci && npm run build)
+npm run canvas -- doctor       # says which Chromium it found
+```
+
+Skip it if you are not drawing diagrams; nothing else in the repo depends on it.
+
 ## The learning pipeline
 
 Four phases, driven by a dependency-free Node CLI. **Probe** ranks concepts by expected information gain, so it binary-searches the edge of your understanding instead of marching through a syllabus; being asked does not count as being taught. **Plan** returns a topologically ordered path from what you hold to the goal, with mastered prerequisites dropped and claims fact-checked before anything is taught. **Teach** hands back one concept at a time at the frontier, with a check after each step. **Close** writes the concept notes, stores the checks, logs the session, and schedules the reviews.
@@ -176,6 +186,7 @@ Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
+| `npm run canvas -- <cmd>` | The `tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
 
 Eleven Vitest files cover the two halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself.
 

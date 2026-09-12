@@ -5,7 +5,7 @@ tells the agent where the brief is, what to build first, and what not to
 touch. Run it from the self-learn checkout so the relative paths resolve.
 
 ```
-Build tldrawkc, a command line tool that lets a coding agent draw diagrams on a real tldraw canvas, screenshot them, look, iterate, and export SVG. The full brief is in /Users/kaichen/Desktop/Personal/Internal/Projects/self-learn/tldraw-integration/. Read README.md there first, then DECISIONS.md, then ARCHITECTURE.md, CLI.md and HELPERS.md in full before writing any code. ROADMAP.md is the work list; tick items in the PR that completes them.
+Build tldrawkc, a command line tool that lets a coding agent draw diagrams on a real tldraw canvas, screenshot them, look, iterate, and export SVG. The full brief is in tldraw-integration/ in this checkout of self-learn. Read README.md there first, then DECISIONS.md, then ARCHITECTURE.md, CLI.md and HELPERS.md in full before writing any code. ROADMAP.md is the work list; tick items in the PR that completes them.
 
 Scope for this session: phases 0, 1 and 2 of ROADMAP.md, in order, one PR per phase. Stop after phase 2 and report. Phase 3 touches self-learn and the global learning plugin and is a separate session.
 
@@ -33,5 +33,5 @@ Report back per merged PR in the short tagged format, and finish with a list of 
 A second prompt, for the session that wires it into the tutoring loop:
 
 ```
-Phase 3 of /Users/kaichen/Desktop/Personal/Internal/Projects/self-learn/tldraw-integration/ROADMAP.md. Read INTEGRATION.md and AGENT-WORKFLOW.md there, then the root AGENTS.md and ARCHITECTURE.md of self-learn. Do every item in the phase 3 checklist, including the diagram-maker agent in ~/.quiver/plugins/learning/learning/agents/diagram-maker.md, which is outside this repo. Verify by running a /learn session that reaches the Teach phase and produces a diagram through npm run canvas, with a .tldr and .svg committed beside each other in learn/assets/. One PR in self-learn, one commit in the plugin; report in the tagged format.
+Phase 3 of tldraw-integration/ROADMAP.md in this checkout of self-learn. Read INTEGRATION.md and AGENT-WORKFLOW.md there, then the root AGENTS.md and ARCHITECTURE.md of self-learn. Do every item in the phase 3 checklist, including the diagram-maker agent in ~/.quiver/plugins/learning/learning/agents/diagram-maker.md, which is outside this repo. Verify by running a /learn session that reaches the Teach phase and produces a diagram through npm run canvas, with a .tldr and .svg committed beside each other in learn/assets/. One PR in self-learn, one commit in the plugin; report in the tagged format.
 ```

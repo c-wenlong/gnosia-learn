@@ -55,16 +55,22 @@ its string from `index.json` without rendering it.
 
 ## Changes to make in self-learn (phase 3)
 
-| File | Change |
-| --- | --- |
-| `package.json` | `"canvas": "node tldrawkc/dist/cli/index.js"` |
-| `.gitmodules` | the new submodule |
-| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` |
-| `eslint.config.mjs` | add `tldrawkc/**` to the ignore block that already lists `manimkc/` and `coverage/`, or lint will walk its `node_modules` |
-| `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. |
-| `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 |
-| `.github/workflows/ci.yml` | nothing. CI already skips submodules and the tool has its own CI. |
-| `vitest.config.ts` | nothing. The tool's tests run in its repo. |
+The first four rows landed early, in phase 0, because the submodule had to
+work before anything could be built against it. They are listed as done rather
+than deleted so the table still reads as the whole list of seams.
+
+| File | Change | Status |
+| --- | --- | --- |
+| `package.json` | `"canvas": "node tldrawkc/dist/cli/index.js"` | done, phase 0 |
+| `.gitmodules` | the new submodule | done, phase 0 |
+| `eslint.config.mjs` | add `tldrawkc/**` to the ignore block that already lists `manimkc/` and `coverage/`, or lint will walk its `node_modules` | done, phase 0 |
+| `tsconfig.json` | add `tldrawkc` to `exclude`. Not in the original list, and needed: unlike manimkc the submodule is TypeScript, so `"**/*.ts"` in `include` typechecks it against Next's compiler options and `npm run typecheck` fails | done, phase 0 |
+| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` | phase 3 |
+| `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. | phase 3. Phase 0 added only a row for `tldraw-integration/` in the documents table and the two-excludes gotcha |
+| `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 | phase 3 |
+| `README.md`, `CONTRIBUTING.md` | say that `npm run canvas` needs `npm ci && npm run build` inside the submodule, because the compiled CLI is not committed | done, phase 0 |
+| `.github/workflows/ci.yml` | nothing. CI already skips submodules and the tool has its own CI. | n/a |
+| `vitest.config.ts` | nothing. The tool's tests run in its repo. | n/a |
 
 ## Changes outside self-learn
 
