@@ -36,6 +36,15 @@ This project is continuously deployed and not versioned; entries are grouped by 
 - `HANDOFF.md` moved out of the repository root into `docs/`, renamed with the
   date of the handoff it records.
 
+### Removed
+
+- **The `deploy.yml` GitHub Actions workflow.** Vercel's Git integration has
+  been deploying every push to `main` on its own (the deployment metadata
+  says `source: git`, `githubCommitRef: main`), while the workflow failed on
+  every run with an invalid `VERCEL_TOKEN`. Fixing the token would only have
+  deployed each commit twice. With it gone, the only GitHub secret the repo
+  needs is the optional `CODECOV_TOKEN`.
+
 ### Fixed
 
 - Documentation audit: counts, paths and command names that had drifted from
