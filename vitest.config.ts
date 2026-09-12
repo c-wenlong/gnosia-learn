@@ -45,6 +45,14 @@ export default defineConfig({
       // floor that moves with the environment is not a floor. The schema
       // package is declarations, with nothing to execute.
       // Measured 2026-09-12: statements 58, branches 54, functions 51, lines 60.
+      // Measured 2026-09-13 with Postgres up: statements 71, branches 64,
+      // functions 64, lines 74. The floors deliberately do not move to meet
+      // that. Two files now in scope — src/lib/learner-api.ts and
+      // src/lib/learner-store.ts — are exercised by suites that need a real
+      // database and skip themselves without one, so the measured number moves
+      // with the environment even though the code did not. A floor that only
+      // holds on a laptop with Postgres running is not a floor. The numbers
+      // below still clear a run with the database down.
       thresholds: {
         statements: 55,
         branches: 50,

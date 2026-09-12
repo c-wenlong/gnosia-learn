@@ -19,17 +19,23 @@ export interface ConnectOptions {
   options?: string;
   /** Fail fast rather than hanging when nothing is listening. */
   connectionTimeoutMillis?: number;
+  /**
+   * Pool size. One is right for the CLI, which is a short-lived process doing
+   * one thing; the web app is a long-lived server answering concurrent
+   * requests and would serialise every page render behind a single socket.
+   */
+  max?: number;
 }
 
 /**
- * One pool per process. The CLI is short-lived, so `max: 1` keeps the
- * connection count honest and makes a forgotten `close()` obvious instead of
- * silently leaking a handful of sockets.
+ * One pool per process. The CLI is short-lived, so the default `max: 1` keeps
+ * the connection count honest and makes a forgotten `close()` obvious instead
+ * of silently leaking a handful of sockets. A long-lived caller passes `max`.
  */
 export function connect(options: ConnectOptions = {}): Connection {
   const pool = new pg.Pool({
     connectionString: options.url ?? databaseUrl(),
-    max: 1,
+    max: options.max ?? 1,
     options: options.options,
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? 5_000,
   });

@@ -105,14 +105,30 @@ function TopicLinks({ topicIds }: { topicIds: string[] }) {
   );
 }
 
+function Unreachable() {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <h2 className="text-lg font-semibold">Knowledge base unavailable</h2>
+      <p className="mt-2 text-sm text-[var(--muted-strong)]">
+        The database could not be reached, so this page has nothing to show.
+        Nothing has been lost — this is a view, and the concepts, the mastery
+        model and the schedule are all still where they were.
+      </p>
+      <pre className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3 text-xs leading-relaxed">
+        {`npm run catalog -- status`}
+      </pre>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <h2 className="text-lg font-semibold">No concepts yet</h2>
       <p className="mt-2 text-sm text-[var(--muted-strong)]">
-        The knowledge base is empty, or the snapshot has not been generated.
-        This page is a view over <code>learn/state/index.json</code> — the
-        pipeline writes it, the site reads it.
+        The knowledge base is empty. This page is a view over the{" "}
+        <code>concept</code>, <code>mastery</code> and <code>review</code>{" "}
+        tables — the pipeline writes them, the site reads them.
       </p>
       <p className="mt-3 text-sm text-[var(--muted-strong)]">
         Start a session in Claude Code with{" "}
@@ -130,8 +146,13 @@ npm run learn -- index`}
   );
 }
 
-export default function LearnPage() {
-  const kb = loadKnowledgeBase();
+/**
+ * Dynamic, because it reads the database. It used to be prerendered over a
+ * snapshot file, which meant a study session did not reach this page until the
+ * next deploy.
+ */
+export default async function LearnPage() {
+  const { kb, reachable } = await loadKnowledgeBase();
   const frontier = new Set(kb.frontier);
   const due = dueConcepts(kb);
 
@@ -166,7 +187,11 @@ export default function LearnPage() {
       </header>
 
       {kb.concepts.length === 0 ? (
-        <EmptyState />
+        reachable ? (
+          <EmptyState />
+        ) : (
+          <Unreachable />
+        )
       ) : (
         <>
           <section className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -232,7 +257,7 @@ export default function LearnPage() {
           </section>
 
           <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--muted)]">
-            Snapshot generated {formatDate(kb.generatedAt)}. Notes live in{" "}
+            Notes last indexed {formatDate(kb.indexedAt)}. They live in{" "}
             <code>learn/concepts/</code>; the map in <code>learn/map.md</code>.{" "}
             <Link href="/" className="text-[var(--accent-strong)] hover:underline">
               Back to courses

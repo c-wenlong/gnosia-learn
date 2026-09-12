@@ -13,7 +13,7 @@ the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues
 | Half | Tables | Source of truth |
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables | Files in git. Every row is rebuildable by re-running the indexers. |
-| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. |
+| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run` | Neither. One row per source saying when it was last read and what it produced. |
 
 `index_run` is the third thing because it is neither of the first two: it is not
@@ -175,9 +175,9 @@ version of the truth.
 The whole content half is derived too, from files in git. Nothing in this
 database is authored here.
 
-`progress`, `recap` and `preference` are *not* derived. They are the only copy,
-and bundle 5 backfills them from `learn/state/*.json` and the browser's
-localStorage. Their column names mirror `src/lib/types.ts` and the limits in
+`progress`, `recap` and `preference` are *not* derived. They are the only copy.
+Bundle 5 filled them: `catalog backfill` from `learn/state/*.json`, and
+`/api/learner/import` from a browser's localStorage on first mount. Their column names mirror `src/lib/types.ts` and the limits in
 `src/lib/storage.ts` (`KNOWLEDGE_LIMITS`: 1200-character summaries, 8-item
 lists) so that backfill is a straight copy. The per-item 300-character clamp has
 no check constraint: testing each element needs `jsonb_array_elements_text`,
@@ -492,15 +492,21 @@ an edit makes the migration look unapplied everywhere it has already run.
   Tightening it to `NOT NULL` is a one-line migration and is deliberately not in
   this bundle: the constraint should land after bundle 4 has exercised the
   column, not on the same day the indexer that fills it does.
-- `event.session_id` is free text. Sessions are now assets of kind `session`,
-  so the column could become a foreign key to `asset(id)` — left alone until
-  bundle 5, which is what will actually write events referencing one.
-- A concept with recorded events cannot be deleted: the `ON DELETE SET NULL` on
-  `event.concept_slug` trips the append-only trigger, correctly, because
-  forgetting what an event was about is exactly what that table exists to
-  prevent. A concept with `mastery` but no events, on the other hand, is
-  cascade-deleted silently. That asymmetry is real and is bundle 5's to settle,
-  when there is state to settle it against.
+- `event.session_id` is still free text. Sessions are assets of kind `session`,
+  so the column could become a foreign key to `asset(id)`. Bundle 5 did not do
+  it: `session start` writes the event before the session log exists as a file,
+  so the asset it would reference has not been indexed yet, and making the
+  foreign key work would mean either indexing mid-command or writing the event
+  at close. Both are bigger than the guarantee is worth today.
+- **Settled in bundle 5: a studied concept cannot be deleted.**
+  `event.concept_slug` is now `ON DELETE RESTRICT` (migration 0004). Under
+  `SET NULL` the delete fired an UPDATE that the append-only trigger refused,
+  so the rule was already this — it just arrived as an error about a trigger.
+  `mastery` and `review` still cascade, because they are projections this log
+  rebuilds; `progress` and `recap` cascade from `curriculum_item`, which is a
+  real remaining sharp edge: deleting a curriculum item from the course YAML
+  silently takes the learner's tick and recap with it, and nothing rebuilds
+  those.
 - `learner` holds one row by convention, not by constraint. A `CHECK (id =
   'local')` would enforce it and would have to be dropped the day authentication
   arrives, so the convention is documented instead.

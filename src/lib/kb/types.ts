@@ -1,75 +1,28 @@
 /**
- * Shape of `learn/state/index.json`, the snapshot the pipeline writes for
- * the web hub. Regenerate it with `npm run learn -- index`.
+ * The knowledge base as the web hub reads it.
+ *
+ * This used to describe `learn/state/index.json`, a snapshot the pipeline
+ * wrote and the build baked in. The snapshot is gone: the shapes are now
+ * whatever `readKnowledgeBase` returns from the `concept`, `mastery` and
+ * `review` tables, and they are declared alongside that query in
+ * `services/catalog/src/state/knowledge-base.ts` so the query and its type
+ * cannot drift.
+ *
+ * Three fields the file had are not here, because the tables do not hold them
+ * and the page never rendered them: `tags` and `sources` (frontmatter the
+ * catalog does not index), and `openQuestions` (which was always empty — the
+ * indexer never produced it). `generatedAt` became `indexedAt`, which is a
+ * fact the database actually knows: when the concepts source last ran.
  */
+export type {
+  KbConcept,
+  KbEdge,
+  KnowledgeBase,
+  MasteryLabel,
+} from "@self-learn/catalog/state";
+export { EMPTY_KNOWLEDGE_BASE } from "@self-learn/catalog/state";
 
-export type MasteryLabel = "mastered" | "solid" | "shaky" | "weak" | "gap";
+import type { MasteryLabel } from "@self-learn/catalog/state";
 
-export interface KbConcept {
-  id: string;
-  title: string;
-  summary: string;
-  tags: string[];
-  requires: string[];
-  /** Background: affects ordering only, never gates or carries evidence. */
-  assumes: string[];
-  /** p(L) from Bayesian Knowledge Tracing: probability the learner holds it. */
-  pL: number;
-  mastery: MasteryLabel;
-  observations: number;
-  correct: number;
-  lastSeen: string | null;
-  due: string | null;
-  lapses: number;
-  leech: boolean;
-  sources: string[];
-  openQuestions: string[];
-  /** Course topic ids this concept supports, linking back to the hub. */
-  topics: string[];
-  /** Folder the note lives in. Presentation only; the id stays flat. */
-  domain: string | null;
-}
-
-export type EdgeKind = "requires" | "assumes";
-
-export interface KbEdge {
-  from: string;
-  to: string;
-  kind: EdgeKind;
-}
-
-export interface KbStats {
-  total: number;
-  mastered: number;
-  learning: number;
-  untouched: number;
-}
-
-export interface KnowledgeBase {
-  version: number;
-  generatedAt: string | null;
-  stats: KbStats;
-  /** Concept ids at the edge of understanding. */
-  frontier: string[];
-  concepts: KbConcept[];
-  edges: KbEdge[];
-  mermaid: string;
-}
-
-export const EMPTY_KB: KnowledgeBase = {
-  version: 1,
-  generatedAt: null,
-  stats: { total: 0, mastered: 0, learning: 0, untouched: 0 },
-  frontier: [],
-  concepts: [],
-  edges: [],
-  mermaid: "",
-};
-
-export const MASTERY_ORDER: MasteryLabel[] = [
-  "gap",
-  "weak",
-  "shaky",
-  "solid",
-  "mastered",
-];
+/** Weakest first, for anything that wants to order by how well it is held. */
+export const MASTERY_ORDER: MasteryLabel[] = ["gap", "weak", "shaky", "solid", "mastered"];

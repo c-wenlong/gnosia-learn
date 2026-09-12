@@ -4,29 +4,41 @@ A local, file-backed tutoring loop that runs inside Claude Code. It measures
 what you know, plans a path from there, teaches one step at a time, and
 schedules what you will forget.
 
-Everything it knows lives in this directory as plain files you can read,
-diff, and revert. Nothing important is trapped in a chat transcript.
+Nothing important is trapped in a chat transcript. What it knows is split in
+two, along one line: what somebody *wrote* is a file in git, and what the loop
+*observed* is a row in Postgres.
 
 ```
 learn/
   concepts/<domain>/<id>.md   atomic concept notes — the durable knowledge
   sessions/<id>.md            one log per session, appended live
-  assets/<id>.svg       diagrams generated during teaching
-  state/
-    model.json          mastery per concept          (derived)
-    reviews.json        spaced-repetition schedule   (NOT rebuildable)
-    events.jsonl        every observation, appended  (SOURCE OF TRUTH)
-    index.json          snapshot the web hub reads   (derived)
-  map.md                mermaid knowledge map        (derived)
+  assets/<id>.svg             diagrams generated during teaching
+  map.md                      mermaid knowledge map        (derived)
+
+postgres  (DATABASE_URL, default postgres://localhost:5432/self_learn)
+  event      every observation, appended     (SOURCE OF TRUTH, append-only)
+  mastery    p(L) per concept                (derived)
+  review     spaced-repetition schedule      (derived)
+  progress   the web hub's ticks and notes
+  recap      the web hub's "what I learnt" records
+  preference theme, epoch, last visited, BKT parameters
 ```
 
-Everything marked derived can be rebuilt from `events.jsonl` and the notes:
-`npm run learn -- model --rebuild && npm run learn -- map && npm run learn -- index`.
+Everything marked derived can be rebuilt:
 
-**`reviews.json` is the exception and is not backed up by anything.** Review
-events are appended to the log, but no command replays them, so deleting the
-file loses every scheduled review permanently. Treat it as authoritative until
-a rebuild path exists.
+```bash
+npm run learn -- model --rebuild   # mastery, from the event log
+npm run learn -- review rebuild    # the schedule, from the same log
+npm run learn -- map               # map.md, from the notes and the mastery
+npm run learn -- index             # the notes back into the catalog
+```
+
+`learn/state/` used to hold `model.json`, `reviews.json`, `events.jsonl` and
+`index.json`. It was retired in bundle 5; the mapping, and why each file became
+what it did, is in
+[services/catalog/LEARN.md](../services/catalog/LEARN.md). The move was one
+command that asserted its own result, and it is still runnable against any old
+checkout's `state/` directory.
 
 ---
 
@@ -60,13 +72,13 @@ map cleanly, and the mapping is what makes the design decisions fall out.
 
 | RL concept | Here | Where it lives |
 | --- | --- | --- |
-| **State** | Mastery p(L) over every concept, plus the prerequisite DAG | `state/model.json`, `concepts/*.md` |
+| **State** | Mastery p(L) over every concept, plus the prerequisite DAG | `mastery` table, `concepts/*.md` |
 | **Action** | Which concept to teach or ask about next | `learn teach`, `learn probe` |
 | **Observation** | The learner's answer, right or wrong | `learn observe` |
-| **Reward** | Correctness, valued highest near the target difficulty | mastery delta in `events.jsonl` |
+| **Reward** | Correctness, valued highest near the target difficulty | `pLBefore`/`pLAfter` in the `event` payload |
 | **Transition** | Bayesian update of belief, then the learning step | `lib/bkt.mjs` |
 | **Policy** | Teach the weakest concept at the frontier | `lib/graph.mjs` → `frontier()` |
-| **Trajectory** | Append-only log of every step | `state/events.jsonl` |
+| **Trajectory** | Append-only log of every step | `event` table |
 | **Episode** | One session | `sessions/*.md` |
 
 The learner is the environment; the tutor is the agent. What is being
@@ -176,11 +188,12 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `frontier [--goal]` | The edge of understanding |
 | `plan --goal [--mermaid]` | Ordered path from known to goal |
 | `teach [--goal]` | The single next concept, with context |
-| `review due\|grade\|forecast` | Spaced repetition |
+| `review due\|grade\|forecast\|rebuild` | Spaced repetition |
 | `session start\|log\|close\|list` | The session log |
 | `void --session S --reason R` | Retract a session's evidence as unreliable |
 | `model [--rebuild]` | Mastery table; rebuild replays the event log |
-| `map` / `index` | Regenerate `map.md` / `state/index.json` |
+| `review rebuild` | Replay the log into the schedule |
+| `map` / `index` | Regenerate `map.md` / re-read the notes into the catalog |
 | `doctor` | Validate the graph — cycles, dangling edges, orphans |
 
 ### The three data structures
@@ -226,9 +239,11 @@ concepts/
 ```
 
 **The folder is presentation only. The id stays the bare slug.** Ids appear in
-every `requires:` edge, every `[[wikilink]]`, `reviews.json` and
-`events.jsonl`, so folding the folder into the id would break all of them and
-moving a note between domains would orphan its history. `concept edit --domain`
+every `requires:` edge, every `[[wikilink]]`, and the `concept_slug` column of
+`event`, `mastery` and `review`, so folding the folder into the id would break
+all of them and moving a note between domains would orphan its history —
+which, now that the history is a foreign key, would be a constraint error
+rather than a silent loss. `concept edit --domain`
 moves the file and nothing else changes.
 
 The domain is read from the path rather than stored in frontmatter, so the two
@@ -276,15 +291,23 @@ graph where nothing is ever at the frontier.
 `topics` links a concept back to a course topic in the web hub, which is how
 the two halves of this repo connect.
 
-**Event** — one line of the trajectory, append-only:
+**Event** — one row of the trajectory, append-only. `at`, `type`,
+`concept_slug` and `session_id` are columns; everything type-specific is in a
+`payload` jsonb, which is what the old JSONL line held at the top level:
 
 ```json
 {"at":"2026-08-18T01:45:58Z","type":"observation","concept":"softmax",
- "correct":true,"source":"probe","opportunity":false,
+ "correct":true,"source":"probe","opportunity":false,"scheduled":true,
  "pLBefore":0.25,"pLAfter":0.6,"session":"2026-08-18-react-agents"}
 ```
 
-**Learner model** — derived from the events, cached for speed.
+Append-only is enforced by a trigger, not by discipline. An UPDATE or a DELETE
+raises. The correction path is a new row: `learn void --session S --reason R`
+retracts a session's evidence, and the next rebuild skips it while the history
+stays readable.
+
+**Learner model** — derived from the events. A wrong number there is a bug to
+recompute, never data to recover.
 
 ---
 
@@ -313,8 +336,10 @@ then the learning step `p(L') = post + (1−post)·pT`, applied only when the
 item was a teaching opportunity. Mastery threshold is 0.95.
 
 The guess default assumes four-option multiple choice, nudged below chance
-(0.25) because good distractors beat random picking. Tune these in
-`state/model.json` and rebuild — the event log makes that non-destructive.
+(0.25) because good distractors beat random picking. Tune them in the
+`preference` row keyed `bktParams` and rebuild — the event log makes that
+non-destructive, and a rebuild now keeps the tuned values rather than resetting
+them to the defaults.
 
 ### SM-2 spaced repetition
 
@@ -406,13 +431,91 @@ because a cycle makes the curriculum unlearnable.
 
 ---
 
+## The JSON shapes
+
+Add `--json` to any command. Five of those shapes are a contract: the `/learn`
+and `/review` skills live in a plugin outside this repo and parse them, so they
+are pinned by golden tests in
+[`services/catalog/test/learn-cli.test.ts`](../services/catalog/test/learn-cli.test.ts)
+and any change to them is a breaking change to the plugin.
+
+`status` — what both skills open with, and stop on if it fails:
+
+```json
+{
+  "stats": { "total": 32, "mastered": 0, "learning": 11, "untouched": 21 },
+  "due": 11,
+  "frontier": [{ "id": "…", "title": "…", "pL": 0.04, "requires": [] }],
+  "sessions": 3
+}
+```
+
+`frontier` — the `frontier` array above, on its own, unbounded:
+
+```json
+[{ "id": "…", "title": "…", "pL": 0.04, "requires": ["…"] }]
+```
+
+`plan --goal <id>`:
+
+```json
+{
+  "goal": "transformer-block",
+  "steps": [
+    { "id": "…", "title": "…", "pL": 0.38, "mastered": false, "gap": true, "requires": ["…"] }
+  ],
+  "incomplete": false,
+  "skipped": 0
+}
+```
+
+`observe --concept C --correct true|false` — the RL step:
+
+```json
+{
+  "concept": "softmax",
+  "correct": true,
+  "pLBefore": 0.25,
+  "pLAfter": 0.6,
+  "delta": 0.35,
+  "mastery": "shaky",
+  "mastered": false,
+  "due": "2026-08-21T06:40:22.087Z",
+  "logged": false,
+  "propagated": [{ "concept": "…", "hops": 1, "pLBefore": 0.25, "pLAfter": 0.39 }]
+}
+```
+
+`review due` — each card with the checks stored in its note, so a review has
+something concrete to ask:
+
+```json
+[
+  {
+    "id": "softmax",
+    "title": "Softmax",
+    "due": "2026-08-21T06:40:22.087Z",
+    "intervalDays": 1,
+    "lapses": 0,
+    "leech": false,
+    "checks": [{ "id": "c1", "question": "…", "answer": "…", "why": "…", "source": "" }]
+  }
+]
+```
+
 ## Setup
 
-Nothing to install — plain Node ESM, zero dependencies.
-
 ```bash
-npm run learn -- init
+createdb self_learn                    # once, against the Homebrew Postgres 17
+npm run catalog -- migrate             # apply every outstanding migration
+npm run learn -- init                  # create learn/, check the store
 ```
+
+`DATABASE_URL` defaults to `postgres://localhost:5432/self_learn`; see
+[services/catalog/.env.example](../services/catalog/.env.example). Notes,
+checks, sessions and `map.md` are still plain files, so `concept add`,
+`check add` and `session log` work with the database down. Anything that
+touches mastery or the schedule does not, and says so.
 
 Then in Claude Code:
 
@@ -474,9 +577,10 @@ it is written live.
 
 ## Design decisions worth knowing
 
-- **The event log is the database.** Files under `state/` other than
-  `events.jsonl` are caches. This is what makes parameter changes safe and
-  the model auditable.
+- **The event log is the database.** `mastery` and `review` are projections of
+  it. This is what makes parameter changes safe and the model auditable, and it
+  is why `event` is append-only at the database level rather than by
+  convention.
 - **Probing does not teach.** `--source probe` skips the transit step.
   Without this distinction, measuring would inflate what it measures.
 - **Checks live in the note, not a side table.** The thing that asserts a
@@ -484,10 +588,14 @@ it is written live.
   in any editor.
 - **Reviews survive progress resets.** Clearing progress means "study this
   again", not "forget what I concluded".
-- **Writes are atomic** (temp file + rename), so an interrupted run cannot
-  truncate state.
-- **No runtime dependencies.** The pipeline is plain Node; the graph renderer
-  in the web hub is hand-rolled SVG rather than a graph library.
+- **Evidence is an event first.** Every command that records something appends
+  to `event` and updates the projections after, in that order. A crash between
+  the two costs a rebuild, not the observation.
+- **The maths is one implementation.** `lib/bkt.mjs`, `lib/graph.mjs` and
+  `lib/schedule.mjs` are imported by the TypeScript CLI rather than restated in
+  it, and they keep their own conformance tests. The web hub computes the
+  frontier by calling the same `frontier()` the CLI does, so the two cannot
+  disagree about where teaching should happen.
 
 ## Known limits
 
@@ -505,6 +613,11 @@ it is written live.
 - **Concept quality is unverified.** `doctor` checks graph structure — cycles,
   dangling edges, orphans — not whether a concept is genuinely atomic or its
   prerequisites are genuinely necessary.
+- **A studied concept cannot be deleted.** `event.concept_slug` is `ON DELETE
+  RESTRICT`, so a note with recorded evidence cannot be pruned from the catalog
+  while that evidence exists. That is the append-only rule doing its job, and
+  it means renaming a concept id is a data migration rather than a file
+  rename.
 - **Self-assessment is self-reported.** LLM judgments of teaching quality
   agree with human raters weakly; treat the Close-phase scores as a trend,
   never a gate.

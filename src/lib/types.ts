@@ -18,61 +18,29 @@ export type {
   Topic,
 } from "@self-learn/content";
 
-export interface UserResource {
-  id: string;
-  title: string;
-  url: string;
-}
-
-export type ThemeMode = "light" | "dark";
-
-/** Where a knowledge record came from. */
-export type KnowledgeSource = "agent" | "manual";
-
 /**
- * Durable record of what the learner actually established about a topic.
- * Survives progress resets — this is the "remind me what I learnt" layer.
+ * The learner-state shapes are declared in `@self-learn/schema/shared` and
+ * re-exported here.
+ *
+ * They used to be written out below, when learner state was a localStorage
+ * document this file alone described. It is rows in Postgres now, and the
+ * store in `services/catalog/src/state/` builds the same object the components
+ * consume, so one definition has to serve both. `shared` is the module that
+ * imports nothing, which is what makes it safe in a client component.
+ *
+ * Components keep importing from `@/lib/types`, so nothing below the provider
+ * had to change.
  */
-export interface TopicKnowledge {
-  topicId: string;
-  /** Short prose recap, written from the learner's own conclusions. */
-  summary: string;
-  keyPoints: string[];
-  misconceptions: string[];
-  openQuestions: string[];
-  source: KnowledgeSource;
-  updatedAt: string;
-  /** How many agent sessions have been folded into this record. */
-  sessions: number;
-}
-
-/** Fields a summariser (or the learner) supplies; the rest is derived. */
-export interface KnowledgeInput {
-  summary: string;
-  keyPoints: string[];
-  misconceptions: string[];
-  openQuestions: string[];
-  source: KnowledgeSource;
-}
-
-export const CURRENT_STATE_VERSION = 2;
-
-export interface LearnerState {
-  version: typeof CURRENT_STATE_VERSION;
-  theme: ThemeMode;
-  completed: Record<string, true>;
-  notes: Record<string, string>;
-  userResources: Record<string, UserResource[]>;
-  /** Per-topic session recaps, keyed by topic id. */
-  knowledge: Record<string, TopicKnowledge>;
-  /** Bumps when progress is reset so local UI state can remount. */
-  epoch: number;
-  lastVisited?: {
-    courseSlug: string;
-    moduleSlug?: string;
-    at: string;
-  };
-}
+export type {
+  KnowledgeInput,
+  KnowledgeSource,
+  LastVisited,
+  LearnerState,
+  ThemeMode,
+  TopicKnowledge,
+  UserResource,
+} from "@self-learn/schema/shared";
+export { emptyLearnerState, LEGACY_STORAGE_KEY } from "@self-learn/schema/shared";
 
 export interface ProgressCounts {
   completed: number;

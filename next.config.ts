@@ -4,20 +4,28 @@ const nextConfig: NextConfig = {
   /**
    * Course data is read from `content/` at runtime, not imported.
    *
-   * Most routes are prerendered and never look at the files again, but the
-   * session page and the two agent routes are server-rendered on demand and
-   * call into `@/data/courses` per request. File tracing follows `import`
-   * statements, and `readFileSync(path.join(process.cwd(), …))` is not one, so
-   * without this the deployed bundle ships without the course files and those
-   * three routes fail in production while every build and every preview of a
-   * static page looks fine.
+   * File tracing follows `import` statements, and
+   * `readFileSync(path.join(process.cwd(), …))` is not one, so without this the
+   * deployed bundle ships without the course files and every page that reads a
+   * course fails in production while the build looks fine.
    *
-   * `@self-learn/content` itself needs no `transpilePackages` entry: Turbopack
-   * transpiles workspace packages on its own.
+   * Neither `@self-learn/content` nor `@self-learn/catalog` needs a
+   * `transpilePackages` entry, even though both ship raw TypeScript with no
+   * build step: Turbopack transpiles workspace packages on its own. Verified
+   * by removing the entry and building.
    */
   outputFileTracingIncludes: {
     "/*": ["content/**/*.yaml"],
   },
+
+  /**
+   * `pg` reaches the learner state, and it is a Node driver: it resolves its
+   * optional native binding (`pg-native`) and its Cloudflare socket shim
+   * through runtime `require`s that no bundler can follow. Left external, it
+   * is required from `node_modules` the ordinary way and behaves the same on a
+   * laptop and on Vercel.
+   */
+  serverExternalPackages: ["pg"],
 };
 
 export default nextConfig;

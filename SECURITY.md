@@ -34,7 +34,7 @@ target to promise. Reports are acknowledged as soon as I see them.
   session leaves the deployment.
 
   There is no user identity to authenticate: the app has no accounts, learner
-  state is localStorage only, and the caller is a browser component, so any
+  state has no account behind it, and the caller is a browser component, so any
   credential it carried would be readable in the JS bundle. What bounds the
   cost of an anonymous call instead lives in `src/lib/agent/guard.ts`: a
   same-origin check (403), payload ceilings counting both the messages and the
@@ -43,11 +43,22 @@ target to promise. Reports are acknowledged as soon as I see them.
   header and the limiter is per-instance and per-region, so the real per-IP
   bound is a Vercel WAF rate-limit rule on `/api/agent`, which is configured
   on the platform rather than in this repo.
-- **`learn/` is personal study data.** Concept notes, session logs and the
-  event log in `learn/state/` record what a real person got right and wrong.
-  It is committed on purpose, which means anyone who can read the repo can
-  read the study history.
-- **Learner progress stays in the browser.** Checkboxes, notes and recaps live
-  in localStorage under `self-learn:v1` and are never sent to a server, except
-  that a recap is included in the request body when the agent needs it as
-  context for a session.
+- **The knowledge base is personal study data.** Concept notes and session logs
+  record what a real person got right and wrong, and they are committed on
+  purpose, which means anyone who can read the repo can read the study history.
+  The event log, the mastery model and the schedule are not committed: they are
+  rows in the learner's own Postgres, which also means they have no backup
+  beyond that machine.
+- **Learner progress is written by unauthenticated routes.** Checkboxes, notes
+  and recaps go through `POST /api/learner/*`, which are bounded the same way
+  the agent routes are and by the same helpers: same-origin (403), a bounded
+  body (400), a per-IP window (429). There is no account to check, so on a
+  deployment reachable by anyone those bounds are all that stands between a
+  stranger and the learner's checkboxes. They are enough because the blast
+  radius is a tick and a note on someone's study hub; they would not be enough
+  for anything else, and adding authentication is what would change that.
+  `preference` takes an allow-list of keys rather than any key, so the route is
+  not an open jsonb store, and a stored resource URL must be `http(s)` so it
+  cannot come back out as a `javascript:` href.
+- **A recap leaves the deployment only when the agent needs it.** It is
+  included in the request body as context for a session, and nowhere else.

@@ -59,6 +59,8 @@ export async function probe(): Promise<Reachability> {
 
 export interface Scratch extends Connection {
   name: string;
+  /** The connection string, for a test that spawns a process of its own. */
+  url: string;
   drop: () => Promise<void>;
 }
 
@@ -83,6 +85,7 @@ export async function createScratchDatabase(): Promise<Scratch> {
   return {
     ...connection,
     name,
+    url: url.toString(),
     drop: async () => {
       await connection.close();
       const cleanup = new pg.Client({ connectionString: maintenanceUrl() });
