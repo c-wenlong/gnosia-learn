@@ -13,7 +13,7 @@ this one as a submodule at `tldrawkc/` in phase 0.
 
 | Document | What it settles | Read when |
 | --- | --- | --- |
-| [DECISIONS.md](DECISIONS.md) | The twelve calls already made and why. Browser owns drawing, stateless commands, no sync, own repo as a submodule, MCP deferred, no new frontend, and where these docs live. | First. Do not reopen these without new facts. |
+| [DECISIONS.md](DECISIONS.md) | The twenty-one calls already made and why. Browser owns drawing, stateless commands, no sync, own repo as a submodule, MCP deferred, no new frontend, where these docs live, and the calls phase 1 forced: derived arrow ids, precise bindings, typed errors, one browser opener. | First. Do not reopen these without new facts. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Package layout, the Node to page bridge, one command end to end, file formats, layering rules. | Before writing any code. |
 | [CLI.md](CLI.md) | Every command, flag, JSON output and exit code. | While building `src/cli` and `src/lib`. |
 | [HELPERS.md](HELPERS.md) | The `helpers` bag a snippet can call, with an example. | While building `src/page/helpers`. |
