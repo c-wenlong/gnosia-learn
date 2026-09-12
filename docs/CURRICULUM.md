@@ -1,43 +1,65 @@
 # Editing the curriculum
 
-Course data is typed TypeScript, not a CMS. One file per course under
-`src/data/courses/`, aggregated in `index.ts`, with the shared `Course`,
-`Module` and `Topic` types in `src/lib/types`.
+Course content is data, not code. One YAML file per course under
+`content/courses/`, read by `loadCourses()` in
+[packages/content](../packages/content/src/courses.ts) — the same function the
+web app and `catalog index` both go through, so a course file means one thing
+everywhere.
 
 ## Where the course data lives
 
-Two representations today, and they are kept identical by a test.
-
-| File | Status |
+| File | Holds |
 | --- | --- |
-| `src/data/courses/<code>.ts` | What the web app loads. Authoritative until bundle 4. |
-| `content/courses/<code>.yaml` | The same data, plus a `topic:` slug per module. Read by `catalog index`. |
+| `content/courses/<code>.yaml` | One course: modules, curriculum items, subtopics, curated resources |
+| `content/topics.yaml` | The shared topic vocabulary each module's `topic:` names |
+| `content/tags.yaml` | The cross-course themes each course's `tags:` names |
 
-`src/data/courses/parity.test.ts` loads each YAML file, strips the added
-`topic` keys and asserts deep equality against the TypeScript export. **Edit
-both, in the same commit**, or that test fails.
-
-**This flips once bundle 4 lands** ([#22](https://github.com/c-wenlong/self-learn/issues/22)):
-`content/courses/*.yaml` becomes the single authoritative source, the
-TypeScript files go away, and the web app reads the catalog. Until then the
-TypeScript is what ships and the YAML is a second copy that must not drift.
-
-Each module's `topic:` is a slug from `content/topics.yaml`, the shared topic
-vocabulary. It is a lookup key, not free text, and `catalog index` refuses to
-run when the two files disagree about which topic a module belongs to. Add or
-rename a topic there, never here.
+There is no TypeScript copy. `src/data/courses/index.ts` is a thin server-only
+module over the reader, holding the lookups pages call (`getCourse`,
+`getModule`, `findTopic`, `getCourseTopicIds`, `getRelatedCourses`,
+`totalTopicCount`) and nothing else.
 
 ## Adding or changing a course
 
-1. Write or edit `src/data/courses/<code>.ts`, exporting a `Course` object.
-2. Import it in `src/data/courses/index.ts` and add it to the `courses` array.
-   Array order is the order the catalog and sidebar render in.
-3. Cross-course themes come from `src/data/tags.ts`. Reuse an existing tag
-   before inventing one; tags are how related courses find each other.
-4. Run `npm run test`. `src/data/courses/index.test.ts` checks curriculum
-   integrity: the shortlist is complete, topic ids are unique, `inferred` is
-   set only on the courses that are genuinely inferred, slugs resolve, and
-   related courses are reachable through shared tags.
+1. Write or edit `content/courses/<code>.yaml`, named after the course code in
+   lowercase. The reader refuses a file whose name and `code:` disagree.
+2. Give it an `order:`. That is the order the home page and the sidebar render
+   in, and it has to be unique across the shortlist. Sorting by filename is not
+   the reading order, which is why the key is authored rather than derived.
+3. Point each module's `topic:` at a slug from `content/topics.yaml`. It is a
+   lookup key, not free text: add or rename a topic there, never here. If the
+   module is new, also add its id to that topic's `maps.courses`. `catalog
+   index` refuses to run when the two files disagree in either direction.
+4. Use an existing entry from `content/tags.yaml` before inventing a theme;
+   tags are how related courses find each other.
+5. Run `npm test`. `packages/content/test/courses.test.ts` checks the
+   curriculum integrity: the shortlist is complete, topic ids are unique across
+   every file, `inferred` is set only on the courses that are genuinely
+   inferred, every module names a real topic, every tag resolves.
+6. Run `npm run catalog -- index --only courses` to refresh the database from
+   the edited files. Without it the catalog keeps serving the last indexed
+   state, and nothing says so.
+
+## What the reader refuses
+
+All of these fail the read with the file name in the message, rather than
+rendering something wrong:
+
+| Refusal | Why it matters |
+| --- | --- |
+| A duplicated course, module, topic or resource id | Ids are permanent keys; two things sharing one silently merge whatever they had recorded |
+| Two modules of one course sharing a slug | They are the same URL, so the second module is unreachable and its link renders the first |
+| A module whose `topic:` is missing or not in `content/topics.yaml` | A course row nothing else can join to |
+| A missing `id`, `slug`, `code`, `title`, `credits`, `order`, `capstone` | A route that 404s, or a page with a hole in it |
+| `inferred` absent, or written as a string | A reconstructed syllabus presented as an official one |
+| Two courses claiming one `order` | An ambiguous sidebar |
+| A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
+| A tag that is not in `content/tags.yaml` | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
+| A module with no `topics:` | A page with an empty section and nothing to tick |
+| `modules:`, `topics:` or `resources:` written as anything but a list of mappings | The tempting `Array.isArray(x) ? x : []` would render and index the module as if the author had meant to delete its content |
+
+Unresolved topics are collected and reported together, so one run names all of
+them instead of the first.
 
 ## Rules worth keeping
 

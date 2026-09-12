@@ -1,34 +1,24 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
-import { parse } from "yaml";
+import { loadTopics, TOPICS_FILE, type TopicEntry } from "@self-learn/content";
 
 import { IndexError } from "./errors";
+import { asIndexError } from "./content-errors";
 
 /**
  * `content/topics.yaml`: the shared topic vocabulary, and the three lookup
  * tables every other indexer resolves against.
  *
- * The file is authored, so it is validated hard on the way in. A slug that
- * appears twice, a manimkc path claimed by two topics, a module id claimed by
- * two topics — each of those would otherwise produce a catalog where the same
- * video is filed under two subjects depending on which row won the upsert.
+ * Reading and shape-checking the file is `@self-learn/content`'s job, because
+ * the web app reads the same file and two parsers of one file is how two
+ * consumers come to disagree about it. What stays here is the part only the
+ * catalog needs: the reverse indexes, and the rule that each source id belongs
+ * to exactly one topic. A manimkc path or a module id claimed by two topics
+ * would otherwise produce a catalog where the same video is filed under two
+ * subjects depending on which row won the upsert.
  */
 
-export const VOCABULARY_FILE = "content/topics.yaml";
+export { TOPICS_FILE as VOCABULARY_FILE };
 
-export interface VocabularyEntry {
-  slug: string;
-  title: string;
-  domain: string;
-  summary: string | null;
-  aliases: string[];
-  maps: {
-    manimkc: string[];
-    courses: string[];
-    concepts: string[];
-  };
-}
+export type VocabularyEntry = TopicEntry;
 
 export interface Vocabulary {
   /** Where it was read from, repo-relative. Used in every error message. */
@@ -41,37 +31,6 @@ export interface Vocabulary {
   byCourseModule: Map<string, string>;
   /** Concept note id to topic slug. */
   byConcept: Map<string, string>;
-}
-
-const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-interface RawEntry {
-  slug?: unknown;
-  title?: unknown;
-  domain?: unknown;
-  summary?: unknown;
-  aliases?: unknown;
-  maps?: { manimkc?: unknown; courses?: unknown; concepts?: unknown };
-}
-
-function stringList(value: unknown, where: string, field: string): string[] {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) {
-    throw new IndexError(`${where}: ${field} must be a list`);
-  }
-  return value.map((item, i) => {
-    if (typeof item !== "string" || item.trim() === "") {
-      throw new IndexError(`${where}: ${field}[${i}] must be a non-empty string`);
-    }
-    return item.trim();
-  });
-}
-
-function requireString(value: unknown, where: string, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new IndexError(`${where}: ${field} is required and must be a non-empty string`);
-  }
-  return value.trim();
 }
 
 /**
@@ -97,76 +56,27 @@ function claim(
 }
 
 export async function loadVocabulary(repoRoot: string): Promise<Vocabulary> {
-  const absolute = path.join(repoRoot, VOCABULARY_FILE);
-  let raw: string;
-  try {
-    raw = await readFile(absolute, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new IndexError(
-        `${VOCABULARY_FILE} does not exist. The shared topic vocabulary is the ` +
-          `required join for every other source; nothing can be indexed without it.`,
-      );
-    }
-    throw error;
-  }
+  const entries = asIndexError(() => loadTopics({ root: repoRoot }));
 
-  const parsed = parse(raw) as { topics?: unknown } | null;
-  const list = parsed?.topics;
-  if (!Array.isArray(list)) {
-    throw new IndexError(`${VOCABULARY_FILE}: expected a top-level "topics:" list`);
-  }
-
-  const entries: VocabularyEntry[] = [];
   const bySlug = new Map<string, VocabularyEntry>();
   const byManimkcPath = new Map<string, string>();
   const byCourseModule = new Map<string, string>();
   const byConcept = new Map<string, string>();
 
-  for (const [i, item] of list.entries()) {
-    const rawEntry = item as RawEntry;
-    const where = `${VOCABULARY_FILE} topics[${i}]`;
-    const slug = requireString(rawEntry.slug, where, "slug");
-    if (!SLUG_RE.test(slug)) {
-      throw new IndexError(`${where}: slug "${slug}" is not kebab-case`);
-    }
-    if (bySlug.has(slug)) {
-      throw new IndexError(`${VOCABULARY_FILE}: topic slug "${slug}" appears twice`);
-    }
-
-    const at = `${VOCABULARY_FILE} topic "${slug}"`;
-    const summary = typeof rawEntry.summary === "string" ? rawEntry.summary.trim() : "";
-    const entry: VocabularyEntry = {
-      slug,
-      title: requireString(rawEntry.title, at, "title"),
-      domain: requireString(rawEntry.domain, at, "domain"),
-      summary: summary === "" ? null : summary,
-      aliases: stringList(rawEntry.aliases, at, "aliases"),
-      maps: {
-        manimkc: stringList(rawEntry.maps?.manimkc, at, "maps.manimkc"),
-        courses: stringList(rawEntry.maps?.courses, at, "maps.courses"),
-        concepts: stringList(rawEntry.maps?.concepts, at, "maps.concepts"),
-      },
-    };
-
-    entries.push(entry);
-    bySlug.set(slug, entry);
+  for (const entry of entries) {
+    bySlug.set(entry.slug, entry);
     for (const p of entry.maps.manimkc) {
-      claim(byManimkcPath, p, slug, VOCABULARY_FILE, "manimkc topic");
+      claim(byManimkcPath, p, entry.slug, TOPICS_FILE, "manimkc topic");
     }
     for (const m of entry.maps.courses) {
-      claim(byCourseModule, m, slug, VOCABULARY_FILE, "course module");
+      claim(byCourseModule, m, entry.slug, TOPICS_FILE, "course module");
     }
     for (const c of entry.maps.concepts) {
-      claim(byConcept, c, slug, VOCABULARY_FILE, "concept");
+      claim(byConcept, c, entry.slug, TOPICS_FILE, "concept");
     }
   }
 
-  if (entries.length === 0) {
-    throw new IndexError(`${VOCABULARY_FILE}: the vocabulary is empty`);
-  }
-
-  return { file: VOCABULARY_FILE, entries, bySlug, byManimkcPath, byCourseModule, byConcept };
+  return { file: TOPICS_FILE, entries, bySlug, byManimkcPath, byCourseModule, byConcept };
 }
 
 /**
@@ -183,7 +93,7 @@ export function requireTopic(
   const slug = lookup.get(key);
   if (slug === undefined) {
     throw new IndexError(
-      `${context.file}: ${context.kind} "${key}" has no topic in ${VOCABULARY_FILE}. ` +
+      `${context.file}: ${context.kind} "${key}" has no topic in ${TOPICS_FILE}. ` +
         (context.hint ??
           `Add it to a topic's maps, or remove it. Refusing to index a source ` +
             `with no subject, because nothing would ever find it.`),

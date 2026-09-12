@@ -3,6 +3,7 @@ slug: cs3227
 code: CS3227
 title: Agentic Software Engineering
 credits: 4
+order: 9
 prereq: CS2103
 notes: Transition from AI-assisted coding to agentic software engineering.
 inferred: true

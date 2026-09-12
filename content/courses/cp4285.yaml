@@ -3,6 +3,7 @@ slug: cp4285
 code: CP4285
 title: Modern Recommendation Systems
 credits: 4
+order: 7
 prereq: CS2109S (or equivalent) or instructor's approval
 notes: Classical methods through modern neural approaches, with a strong ethics thread.
 inferred: false

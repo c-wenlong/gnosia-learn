@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
+import { courses } from "@/data/courses";
+import { toCourseNav } from "@/lib/curriculum";
 import { LearnerProvider } from "@/lib/learner-context";
 import "./globals.css";
 
@@ -70,6 +72,11 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * The sidebar and the header progress bar are client components, and the
+ * course files are on disk. The layout is the one place that can read both, so
+ * it resolves the nav here and hands it down.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -90,7 +97,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full">
         <LearnerProvider>
-          <AppShell>{children}</AppShell>
+          <AppShell nav={toCourseNav(courses)}>{children}</AppShell>
         </LearnerProvider>
       </body>
     </html>

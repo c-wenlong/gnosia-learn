@@ -1,51 +1,22 @@
-export type ResourceType = "paper" | "docs" | "video" | "book" | "other";
-
-export type TagId =
-  | "hci"
-  | "agentic-ai"
-  | "transformers"
-  | "generative-models"
-  | "graphics"
-  | "classical-ai"
-  | "recommenders"
-  | "product";
-
-export interface Resource {
-  id: string;
-  title: string;
-  url: string;
-  type: ResourceType;
-}
-
-export interface Topic {
-  id: string;
-  title: string;
-  subtopics: string[];
-}
-
-export interface Module {
-  id: string;
-  slug: string;
-  title: string;
-  order: number;
-  topics: Topic[];
-  resources: Resource[];
-}
-
-export interface Course {
-  id: string;
-  slug: string;
-  code: string;
-  title: string;
-  credits: number;
-  prereq?: string;
-  track?: string;
-  notes?: string;
-  inferred: boolean;
-  tags: TagId[];
-  modules: Module[];
-  capstone: string;
-}
+/**
+ * Course content types come from `@self-learn/content`, which is also what
+ * parses `content/`. They are re-exported here so every `@/lib/types` import
+ * keeps working and there is still one place to look for "what shape is a
+ * Course" — but the declaration lives with the parser, because a type the
+ * parser does not produce is a lie that compiles.
+ *
+ * `export type` is erased at build time, so a `"use client"` module importing
+ * these does not pull the filesystem reader into the browser bundle.
+ */
+export type {
+  Course,
+  Module,
+  Resource,
+  ResourceType,
+  TagId,
+  TagMeta,
+  Topic,
+} from "@self-learn/content";
 
 export interface UserResource {
   id: string;
@@ -107,10 +78,4 @@ export interface ProgressCounts {
   completed: number;
   total: number;
   percent: number;
-}
-
-export interface TagMeta {
-  id: TagId;
-  label: string;
-  description: string;
 }

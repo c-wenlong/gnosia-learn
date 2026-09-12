@@ -2,10 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { courses } from "@/data/courses";
-import { courseProgress, formatProgress, moduleProgress } from "@/lib/progress";
+import {
+  navCourseTopicIds,
+  type CourseNavEntry,
+} from "@/lib/curriculum";
+import { countsFromIds, formatProgress } from "@/lib/progress";
 import { useLearner } from "@/lib/learner-context";
-import type { Course } from "@/lib/types";
+
+/**
+ * The course list arrives as a prop from the root layout, which is a server
+ * component. It used to be imported: `@/data/courses` reads `content/` and this
+ * is a client module, so the whole catalog would have had to ship to the
+ * browser to render a nav. `CourseNavEntry` is the projection of a course that
+ * this nav actually renders.
+ */
 
 function NavLink({
   href,
@@ -34,12 +44,12 @@ function NavLink({
   );
 }
 
-function CourseNav({ course }: { course: Course }) {
+function CourseNav({ course }: { course: CourseNavEntry }) {
   const pathname = usePathname();
   const { state } = useLearner();
   const base = `/courses/${course.slug}`;
   const onCourse = pathname === base || pathname.startsWith(`${base}/`);
-  const progress = courseProgress(course, state.completed);
+  const progress = countsFromIds(navCourseTopicIds(course), state.completed);
 
   return (
     <div className="mb-3">
@@ -58,7 +68,7 @@ function CourseNav({ course }: { course: Course }) {
         <div className="mt-0.5 space-y-0.5 border-l border-[var(--border)] ml-2">
           {course.modules.map((m) => {
             const href = `${base}/${m.slug}`;
-            const mp = moduleProgress(m, state.completed);
+            const mp = countsFromIds(m.topicIds, state.completed);
             return (
               <NavLink key={m.id} href={href} active={pathname === href} indent>
                 <span className="flex items-center justify-between gap-2">
@@ -79,9 +89,11 @@ function CourseNav({ course }: { course: Course }) {
 }
 
 export function Sidebar({
+  nav,
   open,
   onClose,
 }: {
+  nav: CourseNavEntry[];
   open: boolean;
   onClose: () => void;
 }) {
@@ -131,7 +143,7 @@ export function Sidebar({
           <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             Courses
           </p>
-          {courses.map((course) => (
+          {nav.map((course) => (
             <div key={course.id} onClick={onClose}>
               <CourseNav course={course} />
             </div>
