@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  enforcePayloadBounds,
+  enforceRateLimit,
+  enforceSameOrigin,
+  SUMMARIZE_RATE_LIMIT,
+} from "@/lib/agent/guard";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 import {
   buildSummarySystemPrompt,
@@ -22,6 +28,11 @@ interface SummarizeBody {
 }
 
 export async function POST(req: Request) {
+  // Cheapest first, so a refused request never costs a provider call: the
+  // origin check needs no body at all.
+  const crossOrigin = enforceSameOrigin(req);
+  if (crossOrigin) return crossOrigin;
+
   let body: SummarizeBody;
   try {
     body = (await req.json()) as SummarizeBody;
@@ -36,6 +47,14 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  const tooLarge = enforcePayloadBounds(messages);
+  if (tooLarge) return tooLarge;
+
+  // Before the topic lookup on purpose: otherwise a caller could spin the
+  // limiter for free by varying the slugs and collecting 404s.
+  const rateLimited = enforceRateLimit(req, "summarize", SUMMARIZE_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
 
   const turns = messages.filter(
     (m) =>

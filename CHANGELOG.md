@@ -39,6 +39,21 @@ This project is continuously deployed and not versioned; entries are grouped by 
 - `HANDOFF.md` moved out of the repository root into `docs/`, renamed with the
   date of the handoff it records.
 
+### Security
+
+- **Bounded what an anonymous call to the agent routes can cost.** Both
+  `/api/agent/*` routes spend the owner's provider quota and the app has no
+  user accounts, so there was nothing stopping anyone with the URL from
+  driving them. `src/lib/agent/guard.ts` adds three cheap ceilings, checked
+  cheapest first so a refused request never reaches a provider: a same-origin
+  comparison of the request's own `Origin` and `Host` (403), a payload ceiling
+  of 40 messages and 24000 characters (413), and a per-IP fixed window of 20
+  requests a minute for chat and 6 for summarize (429, with `Retry-After`).
+  The character budget counts the learner note, which reaches the system
+  prompt unclamped, and measures non-string message content by its serialised
+  length, since the chat route forwards content of any shape. Each limit is
+  documented with what it does not stop.
+
 ### Removed
 
 - **The `deploy.yml` GitHub Actions workflow.** Vercel's Git integration has

@@ -31,8 +31,18 @@ target to promise. Reports are acknowledged as soon as I see them.
 - **The agent routes proxy to third parties.** `POST /api/agent/chat` and
   `POST /api/agent/summarize` forward the conversation to whichever provider
   answers first, using the server's own key. Anything a learner types into a
-  session leaves the deployment. The routes are unauthenticated, so a public
-  deploy is also a public way to spend those keys.
+  session leaves the deployment.
+
+  There is no user identity to authenticate: the app has no accounts, learner
+  state is localStorage only, and the caller is a browser component, so any
+  credential it carried would be readable in the JS bundle. What bounds the
+  cost of an anonymous call instead lives in `src/lib/agent/guard.ts`: a
+  same-origin check (403), payload ceilings counting both the messages and the
+  learner note (413), and a per-IP fixed window (429). Read the comments there
+  for what each one does not stop. The origin check is spoofable with a forged
+  header and the limiter is per-instance and per-region, so the real per-IP
+  bound is a Vercel WAF rate-limit rule on `/api/agent`, which is configured
+  on the platform rather than in this repo.
 - **`learn/` is personal study data.** Concept notes, session logs and the
   event log in `learn/state/` record what a real person got right and wrong.
   It is committed on purpose, which means anyone who can read the repo can
