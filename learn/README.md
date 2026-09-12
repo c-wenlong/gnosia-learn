@@ -167,6 +167,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 
 | Command | Purpose |
 | --- | --- |
+| `init` | Create the `learn/` tree on a fresh checkout |
 | `status` | Where you are: counts, due reviews, frontier |
 | `concept add\|edit\|list\|show` | Define and inspect concepts; `edit` changes edges without touching the note body |
 | `check add\|list` | Verification questions stored in the note |
@@ -177,6 +178,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `teach [--goal]` | The single next concept, with context |
 | `review due\|grade\|forecast` | Spaced repetition |
 | `session start\|log\|close\|list` | The session log |
+| `void --session S --reason R` | Retract a session's evidence as unreliable |
 | `model [--rebuild]` | Mastery table; rebuild replays the event log |
 | `map` / `index` | Regenerate `map.md` / `state/index.json` |
 | `doctor` | Validate the graph — cycles, dangling edges, orphans |
@@ -331,8 +333,9 @@ well would punish it twice and send a struggling card into a spiral. The
 conformance tests in `lib/schedule.test.mjs` lock this behaviour.
 
 **Why SM-2 and not FSRS:** FSRS is the better-calibrated modern scheduler
-and would be the right upgrade. SM-2 is here because it is ~40 lines with no
-trained parameter vector, no Python dependency, and behaviour you can predict
+and would be the right upgrade. SM-2 is here because `lib/schedule.mjs` is
+under 150 lines with no trained parameter vector, no Python dependency, and
+behaviour you can predict
 by reading your own queue. For a personal knowledge base of a few hundred
 concepts the accuracy difference is dominated by whether you actually do the
 reviews. Swap `lib/schedule.mjs` if that stops being true.
@@ -362,9 +365,21 @@ Two rules keep this honest:
   specific to the concept asked, so inferring failure downward would punish
   foundations that are probably fine.
 - **Indirect evidence cannot confer mastery.** Propagation is capped at 0.9,
-  below the 0.95 threshold. It can raise confidence to just short of mastered,
-  but the last step has to be earned by answering about the concept directly.
-  A belief already above the cap keeps what it earned.
+  below the 0.95 mastery threshold, so the last step has to be earned by
+  answering about the concept directly. A belief already above the cap keeps
+  what it earned.
+
+**Known open issue: the ceiling no longer gates teaching.** The 0.9 cap was
+chosen when the frontier required mastery, which made it a guarantee that a
+concept could never be unlocked without being asked about. The frontier now
+gates on readiness at 0.75, which sits *below* the cap, so a prerequisite can
+reach 0.9 on indirect evidence alone and unblock a dependent it was never
+questioned on. Seven correct answers on a dependent are enough. That may well
+be the behaviour you want, since it is what stops the march through
+foundations the learner obviously holds, but nobody chose it deliberately and
+it is not what the ceiling was designed to guarantee. Decide which of the two
+numbers is wrong before trusting the frontier on a deep graph. Background:
+[docs/HANDOFF-2026-08-20.md](../docs/HANDOFF-2026-08-20.md).
 
 Propagation does not increment `observations`, which counts questions actually
 asked. Rebuilds recompute it from the *current* graph rather than replaying it
@@ -374,11 +389,19 @@ under the fixed structure.
 ### Frontier
 
 ```
-frontier = { c : ¬mastered(c) ∧ ∀p ∈ requires(c). mastered(p) }
+frontier = { c : ¬mastered(c) ∧ ∀p ∈ requires(c). ready(p) }
+
+ready(p)    ⟺  p(L) ≥ READY_THRESHOLD    = 0.75
+mastered(c) ⟺  p(L) ≥ MASTERY_THRESHOLD  = 0.95
 ```
 
+A prerequisite only has to be **ready**, not mastered. Requiring mastery all
+the way down means nothing is ever teachable on a graph of any depth: a
+prerequisite solid enough to support an explanation is the real bar. Both
+thresholds are defined in `lib/bkt.mjs`.
+
 Sorted weakest-first. This is the entire teaching policy, and it is why the
-dependency graph has to be right — `doctor` refuses to let a cycle through,
+dependency graph has to be right: `doctor` refuses to let a cycle through,
 because a cycle makes the curriculum unlearnable.
 
 ---
