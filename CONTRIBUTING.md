@@ -47,8 +47,8 @@ of the app works.
 > build output and is not committed. So:
 > `git submodule update --init tools/tldrawkc && (cd tools/tldrawkc && npm ci && npm run build)`.
 > Only diagram work needs it. Its own conventions are in
-> [`tools/tldrawkc/AGENTS.md`](tools/tldrawkc/AGENTS.md); the brief it was built
-> from is in [tldraw-integration/](tldraw-integration/README.md).
+> [`tools/tldrawkc/AGENTS.md`](tools/tldrawkc/AGENTS.md); the design docs it was
+> built from are in [`tools/tldrawkc/docs/`](tools/tldrawkc/docs/README.md).
 
 ## Project layout
 
@@ -72,8 +72,7 @@ there.
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `learn/` | The knowledge base's files: `concepts/<domain>/`, `sessions/`, `assets/`, `map.md`. The state is in Postgres |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
-| `tools/tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo and `AGENTS.md`. Needs `npm ci && npm run build` inside it before the script runs |
-| `tldraw-integration/` | The brief `tools/tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
+| `tools/tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo, `AGENTS.md` and design docs in [`docs/`](tools/tldrawkc/docs/README.md). Needs `npm ci && npm run build` inside it before the script runs |
 | `docs/`, `apps/web/public/` | Long-form notes, and static assets including the social card |
 
 ## What to contribute
