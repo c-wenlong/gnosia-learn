@@ -1,4 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "//installCommand": "Root Directory is apps/web, and npm run inside a workspace scopes the install to that workspace: the root devDependencies (vitest, eslint, tsx) never arrive. Installing from the repo root gives the same tree `npm ci` gives a clone.",
+  "installCommand": "cd ../.. && npm ci"
 }

@@ -31,5 +31,6 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", ".next"]
+  "//exclude": "Test files are vitest's, not next build's. `next build` type-checks everything this file includes, and on Vercel the workspace-scoped install has no vitest, so a test file here fails the deploy. tsconfig.typecheck.json adds them back for `npm run typecheck`.",
+  "exclude": ["node_modules", ".next", "**/*.test.ts", "**/*.test.tsx", "src/test/**"]
 }

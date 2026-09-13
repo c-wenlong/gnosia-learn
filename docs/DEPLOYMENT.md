@@ -35,12 +35,19 @@ without it the build cannot see them at all.
 this side: it widens the file trace from `apps/web/` to the repository root, so
 those files are carried into the deployment.
 
-`apps/web/vercel.json` names the framework and nothing else. The `npm ci` and
-`npm run build` overrides it used to carry are gone on purpose: with a Root
-Directory set, Vercel detects the npm workspace above it and installs from the
-repository root, which is the only place the lockfile is. An `installCommand`
-of `npm ci` pinned to the Root Directory would run where there is no
-`package-lock.json`.
+`apps/web/vercel.json` names the framework and one override:
+`installCommand: cd ../.. && npm ci`. Without it Vercel runs `npm ci` inside
+`apps/web`, and npm, finding itself inside a workspace, scopes the install to
+that workspace: the app and the packages it depends on arrive, the root
+devDependencies (vitest, eslint, tsx) do not. The first deploy after the move
+failed exactly that way, with `next build` type-checking a test file that
+imports `vitest`. Installing from the repository root, where the lockfile is,
+gives the deploy the same tree a clone gets. The `buildCommand` override is
+gone: `next build` in the Root Directory is the default.
+
+Test files are also excluded from `apps/web/tsconfig.json`, which is the config
+`next build` type-checks with; `tsconfig.typecheck.json` adds them back for
+`npm run typecheck`. A deploy should never depend on a test-only package.
 
 ## How a deploy happens
 
