@@ -20,8 +20,8 @@ coverage:
 # `npm run build` and by looking at the running app, not by unit tests.
 ignore:
   - "**/*.test.*"
-  - "src/app/**"
-  - "src/components/**"
+  - "apps/web/src/app/**"
+  - "apps/web/src/components/**"
 
 comment:
   layout: "diff, flags, files"

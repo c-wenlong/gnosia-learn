@@ -14,8 +14,8 @@ everywhere.
 | `content/topics.yaml` | The shared topic vocabulary each module's `topic:` names |
 | `content/tags.yaml` | The cross-course themes each course's `tags:` names |
 
-There is no TypeScript copy. `src/data/courses/index.ts` is a thin server-only
-module over the reader, holding the lookups pages call (`getCourse`,
+There is no TypeScript copy. `apps/web/src/data/courses/index.ts` is a thin
+server-only module over the reader, holding the lookups pages call (`getCourse`,
 `getModule`, `findTopic`, `getCourseTopicIds`, `getRelatedCourses`,
 `totalTopicCount`) and nothing else.
 

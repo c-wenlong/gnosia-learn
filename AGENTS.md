@@ -21,7 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [content/courses/README.md](content/courses/README.md) | The course YAML: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
-| [tldraw-integration/](tldraw-integration/README.md) | The brief for `tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
+| [tldraw-integration/](tldraw-integration/README.md) | The brief for `tools/tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
 
 ## The learning pipeline
 
@@ -31,7 +31,7 @@ two on purpose:
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
-| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes in `learn/`, the learner state in Postgres, the web view at `src/app/learn/` |
+| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes in `learn/`, the learner state in Postgres, the web view at `apps/web/src/app/learn/` |
 
 The `/learn` and `/review` skills are not in this repo. They live in the
 `learning` plugin under the `learning` marketplace, at
@@ -46,9 +46,9 @@ would shadow the plugin and the two would drift apart. Edit the plugin instead.
 Architecture, primitives and the honest list of known limits are in
 [learn/README.md](learn/README.md).
 
-## Asset generation: manimkc/
+## Asset generation: tools/manimkc/
 
-`manimkc/` is a git **submodule** (its own repo,
+`tools/manimkc/` is a git **submodule** (its own repo,
 github.com/c-wenlong/manimkc) that renders narrated animation videos with
 manim: ManimGL as the primary flavour, a Manim Community port alongside it,
 and a TTS narration layer synced to the animations. It exists so the
@@ -57,20 +57,20 @@ moving parts.
 
 Rules of engagement:
 
-- **Read `manimkc/AGENTS.md` before working in there.** It covers the GL vs
+- **Read `tools/manimkc/AGENTS.md` before working in there.** It covers the GL vs
   Community split, the no-LaTeX constraint, the shared scene library, the
   narration cache and quota, and the render-then-look verification loop.
   None of that is guessable from this repo.
-- **Commits inside `manimkc/` belong to that repo.** Commit and push there
+- **Commits inside `tools/manimkc/` belong to that repo.** Commit and push there
   first, then commit the updated submodule pointer here. Never commit a
   dirty submodule pointer.
 - Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
 - Rendered videos and the TTS cache are gitignored on both sides; deliverables
-  live locally under `manimkc/out/`, which mirrors `manimkc/topics/`
+  live locally under `tools/manimkc/out/`, which mirrors `tools/manimkc/topics/`
   (`out/<domain>/<subdomain>/<topic>/<name>.mp4`).
-- **Drive it through its CLI, not by hand.** `manimkc/tools/cli/manimkc` is
+- **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
   `doctor` (venvs, ffmpeg, narration backend, output dirs), `api` (the palette
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
@@ -81,9 +81,9 @@ Rules of engagement:
   `.claude/` holds here is either `launch.json` or a symlink into a submodule:
   that skill and `tldrawkc-diagram`.
 
-## Diagrams: tldrawkc/
+## Diagrams: tools/tldrawkc/
 
-`tldrawkc/` is the second git **submodule** (its own repo,
+`tools/tldrawkc/` is the second git **submodule** (its own repo,
 github.com/c-wenlong/tldrawkc). It draws teaching diagrams on a real tldraw
 canvas in headless Chromium, screenshots them so the agent can look, lints
 them, and exports a self-contained SVG. It exists because hand-written SVG
@@ -92,16 +92,16 @@ reading the markup back was not catching it.
 
 Rules of engagement:
 
-- **Read `tldrawkc/AGENTS.md` before working in there.** It covers the Node
+- **Read `tools/tldrawkc/AGENTS.md` before working in there.** It covers the Node
   to browser bridge, why every shape is built inside a live `Editor` rather
   than in Node, the helper bag a snippet may call, and the eight lint rules.
   None of that is guessable from this repo.
-- **Commits inside `tldrawkc/` belong to that repo.** Commit and push there
+- **Commits inside `tools/tldrawkc/` belong to that repo.** Commit and push there
   first, then commit the updated submodule pointer here. Never commit a
   dirty submodule pointer.
 - Its `node_modules/` and `dist/` are local artefacts, and `dist/` is what
   `npm run canvas` actually executes. A fresh clone needs
-  `git submodule update --init tldrawkc` plus `npm ci && npm run build`
+  `git submodule update --init tools/tldrawkc` plus `npm ci && npm run build`
   inside it before any diagram command runs. Start with
   `npm run --silent canvas -- doctor`, which checks node, the page bundle,
   Chromium and the page itself.
@@ -130,26 +130,33 @@ Rules of engagement:
 Traps that cost time once already. Each names the file, so the reasoning does
 not have to be worked out again.
 
-- **The OG image is declared by hand in `src/app/layout.tsx`.** Next 16 builds
+- **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
   with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
   sidecar, so the file convention would ship a social card with no alt text.
   `metadata.openGraph.images` carries the alt instead. Do not "simplify" it
   back to the convention.
 - **`??` does not fall through on an empty string.** `NEXT_PUBLIC_SITE_URL=""`
   once crashed the build through `new URL("")`. `resolveSiteUrl()` in
-  `src/app/layout.tsx` now trims, defaults a missing scheme to `https://`, and
+  `apps/web/src/app/layout.tsx` now trims, defaults a missing scheme to
+  `https://`, and
   falls back to localhost when parsing fails, because a bad value should cost a
   link preview and not the whole app.
-- **`manimkc/` and `coverage/` are lint-ignored in `eslint.config.mjs`.**
-  Without those entries a local `npm run lint` walks the submodule's Python
-  virtualenvs and reports 100k+ findings from code this repo does not own.
-  If lint output ever balloons, check that block first.
-- **`tldrawkc/` is excluded twice, and both are load-bearing.** It is in the
-  same ESLint ignore block, and also in `tsconfig.json`'s `exclude`, because
-  unlike manimkc it is TypeScript: `"**/*.ts"` in the `include` list would
-  otherwise typecheck a submodule this repo does not own against Next's
-  compiler options, and `npm run typecheck` fails on it. Lint and typecheck
-  the tool inside `tldrawkc/` with its own config.
+- **Both submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
+  ESLint walks the whole tree from the repo root, so without those entries a
+  local `npm run lint` walks manimkc's Python virtualenvs and reports 100k+
+  findings from code this repo does not own, and lints tldrawkc's TypeScript
+  against the wrong config. If lint output ever
+  balloons, check that block first. Lint and typecheck either tool inside its
+  own directory, with its own config.
+- **`eslint.config.mjs` sets `settings.next.rootDir` to `apps/web/`.** Next is
+  not installed at the repo root any more, and without it
+  `@next/eslint-plugin-next` cannot find the app directory: the rules that need
+  to know where the routes live stop checking anything and say nothing.
+- **The tsconfig exclusion for `tldrawkc` is gone, and that is correct.** The
+  root config used to be the app's, with `"**/*.ts"` walking into a submodule
+  this repo does not own. It is now a small file whose `include` is flat
+  (`*.ts`), and the app's config lives in `apps/web/` where it cannot reach
+  `tools/` at all. Do not re-add an exclude for a directory nothing includes.
 - **`npm run canvas` needs `--silent`, or `--json` is unparseable.** npm
   prints a two-line banner (`> self-learn@0.1.0 canvas` and the resolved
   command) on stdout before the tool writes anything, so
@@ -160,8 +167,15 @@ not have to be worked out again.
   `export x.tldr --svg` fails with "argument missing"; the call is
   `export x.tldr --svg x.svg`. Re-exporting in place after a `meta set` is
   the usual reason to run it, and passing the same path back is correct.
+- **The two submodules moved to `tools/`, so an existing clone needs a sync.**
+  `git pull` rewrites `.gitmodules` but not `.git/config`, so the next
+  `git submodule update` still looks at the old path and quietly does nothing.
+  After pulling this change, run
+  `git submodule sync --recursive && git submodule update --init`, then delete
+  the empty `manimkc/` and `tldrawkc/` directories git leaves at the root. A
+  fresh clone needs none of this.
 - **Only bump a submodule pointer to a commit that is already pushed.**
-  Check `git diff --submodule=log manimkc` (or `tldrawkc`) before
+  Check `git diff --submodule=log tools/manimkc` (or `tools/tldrawkc`) before
   `git add`; staging a dirty or unpushed submodule leaves a pointer nobody
   else can resolve.
 - **The `event` append-only trigger is `FOR EACH ROW`, and must stay that way.**
@@ -177,35 +191,44 @@ not have to be worked out again.
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
 - **Course content is read at runtime, not imported, so file tracing needs a
-  hand.** `packages/content` calls `readFileSync(path.join(process.cwd(), …))`,
-  which Next cannot trace: it follows `import` statements. Most routes are
+  hand.** `packages/content` calls `readFileSync(path.join(root, …))`, which
+  Next cannot trace: it follows `import` statements. Most routes are
   prerendered and never look again, but the session page and the two agent
   routes are server-rendered on demand, and without
-  `outputFileTracingIncludes` in `next.config.ts` they deploy without the
-  course files and 500 in production while every build and every static
-  preview looks fine.
+  `outputFileTracingIncludes` in `apps/web/next.config.ts` they deploy without
+  the course files and 500 in production while every build and every static
+  preview looks fine. Since the move, that entry needs `outputFileTracingRoot`
+  beside it: tracing starts at `apps/web/`, so `content/` is outside the world
+  unless the root is widened to the repo.
+- **The app does not run from the repo root, so it cannot default to
+  `process.cwd()`.** `@self-learn/content` does, which was right while the app
+  *was* the root. `apps/web/src/data/repo-root.ts` walks up to the directory
+  holding `content/courses` and every reader in the app is handed it. A new
+  reader that calls `loadCourses()` with no `root` will work on a laptop
+  running vitest from the repo root and fail in `next build`.
 - **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
   Adding one would be cargo cult. The package ships raw TypeScript with
   `exports` pointing at `src/index.ts`, same as `packages/schema`.
 - **`server-only` is aliased in `vitest.config.ts`, and has to be.**
-  `src/data/courses/index.ts` and `src/data/content.ts` import it so a
+  `apps/web/src/data/courses/index.ts` and `apps/web/src/data/content.ts`
+  import it so a
   `"use client"` module reaching them fails the build. Next resolves that
   specifier itself; vitest does not, and the npm package's default entry throws
   on import by design, so every test touching course data would die. The alias
   points at the package's own `empty.js`, which is the module Next substitutes.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
-  output: `npm run build` then
-  `node node_modules/next/dist/bin/next start -p <port>`.
-- **`packages/*` and `services/*` are npm workspaces, and each needs three
-  things.** An entry in the root `tsconfig.json` `exclude` (its `**/*.ts`
-  include would otherwise typecheck Node-only code against the Next app's DOM
-  and JSX options), its own `tsconfig.json`, and a `typecheck` script so the
-  root `npm run typecheck` picks it up through `--workspaces`. They are NOT
-  eslint-ignored: unlike the two submodules they are ours, and the root config
-  lints them correctly.
+  output: `npm run build` then, from `apps/web/`,
+  `node ../../node_modules/next/dist/bin/next start -p <port>`.
+- **`apps/*`, `packages/*` and `services/*` are npm workspaces, and each needs
+  two things.** Its own `tsconfig.json`, because a single set of compiler
+  options cannot serve DOM-and-JSX app code and Node-only libraries, and a
+  `typecheck` script so the root `npm run typecheck` picks it up through
+  `--workspaces`. Miss either and the workspace is never type-checked at all.
+  They are NOT eslint-ignored: unlike the two submodules they are ours, and the
+  root config lints them correctly.
 - **The catalog needs a database before its tests do anything.**
   `createdb self_learn` against the Homebrew Postgres 17, then
   `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
@@ -237,14 +260,15 @@ not have to be worked out again.
   tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
   breaking change to the plugin, not a refactor.
 - **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
-  `serverExternalPackages: ["pg"]` in `next.config.ts` is load-bearing: the
+  `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
+  load-bearing: the
   driver resolves its optional native binding through a runtime `require` no
   bundler can follow. `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
   `@self-learn/schema/shared`, which imports nothing; taking them from
   `@self-learn/schema` would drag drizzle into the browser bundle, and
-  `src/lib/learner-store.ts` carries `import "server-only"` so that mistake
+  `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
   fails the build rather than shipping a Postgres driver.
 - **Every page is dynamic, and that is the point.** The root layout reads the
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
@@ -258,8 +282,8 @@ not have to be worked out again.
   `npm run learn -- doctor` starts reporting the database as behind. Bundle 5
   did this to itself once, tidying a comment in 0004. Corrections go in
   `SCHEMA.md` or in the schema source, never in the SQL.
-- **Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` on
-  purpose.** `src/app` and `src/components` are view code and untested by
-  design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
+- **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
+  `scripts/learn` on purpose.** `apps/web/src/app` and
+  `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
   at all. A low overall percentage is not a regression signal; the thresholds
   in `vitest.config.ts` are.

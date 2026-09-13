@@ -180,8 +180,8 @@ database is authored here.
 
 `progress`, `recap` and `preference` are *not* derived. They are the only copy.
 Bundle 5 filled them: `catalog backfill` from `learn/state/*.json`, and
-`/api/learner/import` from a browser's localStorage on first mount. Their column names mirror `src/lib/types.ts` and the limits in
-`src/lib/storage.ts` (`KNOWLEDGE_LIMITS`: 1200-character summaries, 8-item
+`/api/learner/import` from a browser's localStorage on first mount. Their column names mirror `apps/web/src/lib/types.ts` and the limits in
+`apps/web/src/lib/storage.ts` (`KNOWLEDGE_LIMITS`: 1200-character summaries, 8-item
 lists) so that backfill is a straight copy. The per-item 300-character clamp has
 no check constraint: testing each element needs `jsonb_array_elements_text`,
 which is a subquery, and a `CHECK` cannot contain one. That clamp stays in
@@ -413,7 +413,7 @@ manimkc owns is `mirrors`, whose rows cascade away with the asset they name, so
 that pair runs together and nothing else has to.
 
 `manimkc` and `mirrors` are the optional sources. Both read
-`manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and
+`tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and
 CI deliberately do not fetch. A default run drops one with a note when the
 submodule is absent *and* that source has never been indexed here, because then
 there is nothing to leave stale. It refuses when `--only` asked for it, and

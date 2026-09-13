@@ -13,7 +13,7 @@ import { VOCABULARY_FILE } from "./vocabulary";
 /**
  * manimkc's videos and their transcript sidecars, via `manimkc topics --json`.
  *
- * Nothing here walks `manimkc/topics/` or `manimkc/out/` itself. The conventions
+ * Nothing here walks the checkout's `topics/` or `out/` itself. The conventions
  * that map a topic folder to its output directory, decide which directories
  * under `out/` are deliverables rather than intermediates, and name the three
  * sidecars are all manimkc's, they have changed before, and re-deriving them
@@ -21,8 +21,8 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * command exists precisely so a catalogue outside that repo does not have to.
  *
  * **Which CLI runs.** The one in the submodule this repo pins,
- * `manimkc/tools/cli/manimkc`, always — with `--root` pointing at whichever
- * checkout is being indexed. When `--manimkc-root` is left at its default the
+ * `tools/manimkc/tools/cli/manimkc`, always — with `--root` pointing at
+ * whichever checkout is being indexed. When `--manimkc-root` is left at its default the
  * two are the same directory and the distinction does not arise. When it is
  * not, the pinned reader is the right one: it is the version whose JSON this
  * indexer was written and tested against, while the checkout being pointed at
@@ -38,6 +38,9 @@ import { VOCABULARY_FILE } from "./vocabulary";
  */
 
 const run = promisify(execFile);
+
+/** The submodule, relative to the repo root. */
+export const MANIMKC_DIR = path.join("tools", "manimkc");
 
 /** Relative to the manimkc root. Same path in the submodule and in any checkout. */
 export const MANIMKC_CLI = path.join("tools", "cli", "manimkc");
@@ -88,7 +91,7 @@ export interface TopicsReport {
 
 /** Is there a manimkc CLI to run? The e2e test skips rather than fails when not. */
 export function hasManimkcCli(repoRoot: string): boolean {
-  return existsSync(path.join(repoRoot, "manimkc", MANIMKC_CLI));
+  return existsSync(path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI));
 }
 
 /**
@@ -99,11 +102,11 @@ export async function readTopicsReport(
   repoRoot: string,
   manimkcRoot: string,
 ): Promise<TopicsReport> {
-  const cli = path.join(repoRoot, "manimkc", MANIMKC_CLI);
+  const cli = path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI);
   if (!existsSync(cli)) {
     throw new IndexError(
-      `${path.join("manimkc", MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
-        `initialised; run \`git submodule update --init manimkc\`.`,
+      `${path.join(MANIMKC_DIR, MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
+        `initialised; run \`git submodule update --init ${MANIMKC_DIR}\`.`,
     );
   }
   if (!existsSync(manimkcRoot)) {

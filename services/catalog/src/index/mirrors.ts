@@ -12,7 +12,7 @@ import {
 } from "@self-learn/schema";
 
 import { IndexError } from "./errors";
-import { MANIMKC_CLI } from "./manimkc";
+import { MANIMKC_CLI, MANIMKC_DIR } from "./manimkc";
 import type { Indexer, SourceResult } from "./source";
 
 /**
@@ -87,11 +87,11 @@ export async function readMirrorsReport(
   repoRoot: string,
   manimkcRoot: string,
 ): Promise<MirrorsReport> {
-  const cli = path.join(repoRoot, "manimkc", MANIMKC_CLI);
+  const cli = path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI);
   if (!existsSync(cli)) {
     throw new IndexError(
-      `${path.join("manimkc", MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
-        `initialised; run \`git submodule update --init manimkc\`.`,
+      `${path.join(MANIMKC_DIR, MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
+        `initialised; run \`git submodule update --init ${MANIMKC_DIR}\`.`,
     );
   }
   if (!existsSync(manimkcRoot)) {

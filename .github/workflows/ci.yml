@@ -71,12 +71,12 @@ jobs:
 
     steps:
       - name: Checkout
-        # Submodules are deliberately NOT fetched. manimkc/ renders animation
-        # videos and is not needed to lint, typecheck, test or build the web
-        # app. It is also expensive: it carries a nested manim submodule that
-        # is large to clone. (eslint.config.mjs ignores manimkc/** too, so a
-        # checkout would not pollute lint, but there is still no reason to
-        # pay for it.)
+        # Submodules are deliberately NOT fetched. tools/manimkc renders
+        # animation videos and tools/tldrawkc draws diagrams; neither is needed
+        # to lint, typecheck, test or build the web app. manimkc is also
+        # expensive: it carries a nested manim submodule that is large to
+        # clone. (eslint.config.mjs ignores tools/** for both, so a checkout
+        # would not pollute lint, but there is still no reason to pay for it.)
         uses: actions/checkout@v7
 
       - name: Setup Node.js
@@ -107,9 +107,10 @@ jobs:
       - name: Tests with coverage
         # test:coverage rather than test, so the suite runs once and produces
         # the lcov report in the same pass instead of being executed twice.
-        # Coverage is scoped in vitest.config.ts to src/lib, src/data and
-        # scripts/learn: src/app and src/components are view code and are
-        # untested by design, so leaving them out keeps the percentage honest.
+        # Coverage is scoped in vitest.config.ts to apps/web/src/lib,
+        # apps/web/src/data and scripts/learn: the app's routes and components
+        # are view code and are untested by design, so leaving them out keeps
+        # the percentage honest.
         # The hard gate is the thresholds block in that same config, which
         # exits non-zero when coverage drops. The gate lives in the repo's own
         # tooling, not in Codecov, so it fails the same way on a laptop as it

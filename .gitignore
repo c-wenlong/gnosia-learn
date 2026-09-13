@@ -13,8 +13,8 @@
 # testing
 /coverage
 
-# next.js
-/.next/
+# next.js (the app lives in apps/web, so these are not anchored to the root)
+.next/
 /out/
 
 # production

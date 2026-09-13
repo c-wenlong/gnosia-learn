@@ -17,7 +17,7 @@ import { conceptsIndexer } from "./concepts";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
-import { hasManimkcCli, manimkcIndexer } from "./manimkc";
+import { hasManimkcCli, MANIMKC_DIR, manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
 import type { IndexContext, Indexer } from "./source";
@@ -94,7 +94,7 @@ const NEEDS_MANIMKC_CLI = new Set<IndexSource>(
 
 /** Where the manimkc checkout is unless `--manimkc-root` says otherwise. */
 export function defaultManimkcRoot(repoRoot = REPO_ROOT): string {
-  return path.join(repoRoot, "manimkc");
+  return path.join(repoRoot, MANIMKC_DIR);
 }
 
 export interface RunOptions {
@@ -219,9 +219,9 @@ export async function runIndex(
     },
   };
 
-  // The two optional sources: their reader is `manimkc/tools/cli/manimkc`,
-  // which lives in a submodule that a fresh clone and CI deliberately do not
-  // fetch. Leaving one out is safe only when it has never been indexed, because
+  // The two optional sources: their reader is the manimkc CLI at
+  // `tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh
+  // clone and CI deliberately do not fetch. Leaving one out is safe only when it has never been indexed, because
   // otherwise pruning a topic cascades through its asset_topic and mirror rows
   // and nothing puts them back. So: refuse when it was asked for, refuse when
   // it has rows to lose, and otherwise drop it with a note rather than making a
@@ -250,7 +250,7 @@ export async function runIndex(
           (asked
             ? ""
             : `, and ${source} has rows in this database that pruning would orphan`) +
-          `. Run \`git submodule update --init manimkc\`, or point --manimkc-root at a checkout.`,
+          `. Run \`git submodule update --init ${MANIMKC_DIR}\`, or point --manimkc-root at a checkout.`,
       );
     }
     skipped.push({

@@ -1,36 +1,19 @@
 {
+  "//": "Not the web app's config any more. That one moved to apps/web/tsconfig.json along with the app, taking the DOM libs, the JSX and the `@/*` alias with it. What is left here is the root's own tooling — vitest.config.ts and anything that lands beside it — so `include` is deliberately flat: `*.ts`, not `**/*.ts`. Nothing under apps/, packages/, services/ or tools/ is reachable from this file.",
+  "//workspaces": "Every workspace carries its own tsconfig, and `npm run typecheck` runs this one and then all of them through `--workspaces --if-present`. A new workspace needs a tsconfig and a typecheck script, or it is not checked at all.",
+  "//tools": "There is no `exclude` for tools/manimkc or tools/tldrawkc. There used to be one for the tldrawkc submodule, because the root config's `**/*.ts` walked into it and typechecked a repo we do not own against the wrong compiler options. A flat `include` cannot reach it, so the exclude would now be defending against nothing. eslint.config.mjs still ignores both, because ESLint does walk the whole tree from here.",
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    "target": "ES2023",
+    "lib": ["ES2023"],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "resolveJsonModule": true
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "//": "tldrawkc is a git submodule with its own repo, its own tsconfigs and its own toolchain. Without this exclude, `**/*.ts` above walks it and typechecks TypeScript this repo does not own against the wrong compiler options. It is ignored in eslint.config.mjs for the same reason. manimkc needs no entry because it is Python.",
-  "//workspaces": "packages/ and services/ are ours, but they are not the web app: Node-only code with no DOM, no JSX and no `@/*` alias. This config is the Next app's, so `**/*.ts` above would typecheck them against the wrong libs. Each carries its own tsconfig instead, and `npm run typecheck` runs them through `--workspaces` after this one. A new workspace needs an entry here and its own tsconfig, or it is silently checked twice under the wrong options.",
-  "exclude": ["node_modules", "tldrawkc", "packages", "services"]
+  "include": ["*.ts", "*.mts"],
+  "exclude": ["node_modules"]
 }
