@@ -73,6 +73,7 @@ import {
   renderResult,
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
+import { ContentError, TOPICS_FILE } from "@self-learn/content";
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
 import { connect, type CatalogDatabase, type Connection } from "../db";
@@ -112,6 +113,7 @@ import {
 } from "./files";
 import { kbDir, mapFile, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
+import { checkMapping, mapConceptToTopic, VocabularyEditError } from "./vocabulary-edit";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
 class CliError extends Error {}
@@ -402,6 +404,25 @@ commands.concept = async ({ values, positionals }, session) => {
     const id = values.id ? slugify(values.id) : slugify(values.title);
     if (!id) fail("could not derive an id from --title; pass --id");
 
+    // `--topic` is checked here, before a byte is written. The whole point of
+    // the flag is that a session never leaves a note the vocabulary has never
+    // heard of, and writing the note first and then discovering the slug was a
+    // typo would produce exactly that.
+    const topicSlug = values.topic?.trim();
+    if (values.topic !== undefined && !topicSlug) {
+      fail("concept add --topic needs a topic slug");
+    }
+    if (topicSlug !== undefined) {
+      try {
+        checkMapping(repoRoot(), topicSlug, id);
+      } catch (error) {
+        if (error instanceof VocabularyEditError || error instanceof ContentError) {
+          fail(error.message);
+        }
+        throw error;
+      }
+    }
+
     const existing = await readConcept(id);
     if (existing !== null && !values.force) {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);
@@ -438,17 +459,47 @@ commands.concept = async ({ values, positionals }, session) => {
       { domain: values.domain === undefined ? null : values.domain || null },
     );
     await ensureDirs();
-    out(`Wrote ${rel(file)}`, false);
 
     // A note is not in the catalog until it is indexed, and it cannot be
-    // indexed until the vocabulary maps it to a topic. Saying so here is much
-    // cheaper than finding out at the first `observe`, which is the next thing
-    // a session does and which cannot record evidence about a concept the
-    // catalog has never heard of.
-    if (!(await isIndexed(session, id))) {
+    // indexed until the vocabulary maps it to a topic. `--topic` does both, so
+    // the note a session just wrote can carry evidence at the very next
+    // `observe`. Without it the note is a file and nothing else, which is
+    // worth saying loudly here rather than at the first refusal.
+    let indexed = false;
+    if (topicSlug !== undefined) {
+      try {
+        await mapConceptToTopic(repoRoot(), topicSlug, id);
+        await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
+      } catch (error) {
+        if (
+          error instanceof VocabularyEditError ||
+          error instanceof ContentError ||
+          error instanceof IndexError
+        ) {
+          fail(`${rel(file)} was written, but it is not in the catalog: ${error.message}`);
+        }
+        throw error;
+      }
+      indexed = true;
+    } else {
+      indexed = await isIndexed(session, id);
+    }
+
+    if (values.json) {
+      return out({ id, path: rel(file), topic: topicSlug ?? null, indexed }, true);
+    }
+
+    out(`Wrote ${rel(file)}`, false);
+    if (topicSlug !== undefined) {
+      out(`Mapped "${id}" to topic "${topicSlug}" in ${TOPICS_FILE} and indexed it.`, false);
+    } else if (!indexed) {
       out(
-        `Not in the catalog yet. Add "${id}" to a topic's maps.concepts in ` +
-          `content/topics.yaml, then: npm run learn -- index`,
+        `Not in the catalog yet, so nothing can record mastery about it.\n` +
+          `  Re-run with --topic <slug> to add "${id}" to that topic's maps.concepts in ` +
+          `${TOPICS_FILE} and index it in one step.\n` +
+          `  Pick the slug with: npm run --silent catalog -- search <term> --json\n` +
+          `  By hand: add "${id}" to one topic's maps.concepts in ${TOPICS_FILE}, ` +
+          `then run: npm run learn -- index`,
         false,
       );
     }
@@ -1453,7 +1504,13 @@ commands.help = async () => {
     `learn — local learning pipeline
 
   status                         where you are
-  concept add --title T [--domain D] [--requires a,b] [--assumes c] [--tags x,y]
+  concept add --title T [--topic S] [--domain D] [--requires a,b] [--assumes c]
+              [--tags x,y]
+                                 --topic is a slug from content/topics.yaml: it
+                                   adds the new id to that topic's maps.concepts
+                                   and indexes the note, so it can carry mastery
+                                   straight away. Without it the note is a file
+                                   and nothing else.
   concept edit <id> [--domain D] [--requires …] [--assumes …] [--title …]
                                  --domain files the note under concepts/<D>/;
                                    the id stays the bare slug either way
@@ -1463,8 +1520,10 @@ commands.help = async () => {
                                  assumes  = useful background: orders the plan,
                                    never blocks, never moves belief
   check add --concept C --question Q --answer A [--why W]
-                                 (concept add also takes --topics <topic-id,…>
-                                  to link a concept to course topics)
+                                 (concept add also takes --topics <item-id,…>,
+                                  which is a different thing: those are
+                                  curriculum *item* ids like cp4284-m1-t1, not
+                                  the vocabulary slug --topic takes)
   check list [--concept C]       stored verification questions
   probe [--goal G] [--limit N]   what to ask next, by information gain
   observe --concept C --correct true|false [--source probe|teach|review]
