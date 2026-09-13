@@ -12,6 +12,7 @@ import {
   curriculumItemTopic,
   LOCAL_LEARNER_ID,
   mastery,
+  mirror,
   topic,
 } from "@self-learn/schema";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
@@ -108,6 +109,18 @@ export interface ShowCurriculumItem {
   alternatives?: string[];
 }
 
+/** One destination's verdict on this asset, straight off the `mirror` table. */
+export interface MirrorRef {
+  destination: string;
+  root: string;
+  status: string;
+  /** Which test the verdict rests on: sha256, bytes, size+mtime, or none. */
+  compared: string;
+  bytes: number | null;
+  mtime: string | null;
+  checkedAt: string;
+}
+
 export interface ShowAsset {
   type: "asset";
   id: string;
@@ -123,6 +136,11 @@ export interface ShowAsset {
   /** Assets this one was produced from, and assets produced from it. */
   derivedFrom: AssetRef[];
   derivedInto: AssetRef[];
+  /**
+   * Where copies of this file have reached. Empty for anything no mirror is
+   * expected to carry, which is everything outside manimkc's deliverables.
+   */
+  mirrors: MirrorRef[];
   alternatives?: string[];
 }
 
@@ -431,6 +449,20 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
       ? []
       : db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
 
+  const mirrors = await db
+    .select({
+      destination: mirror.destination,
+      root: mirror.root,
+      status: mirror.status,
+      compared: mirror.compared,
+      bytes: mirror.bytes,
+      mtime: mirror.mtime,
+      checkedAt: mirror.checkedAt,
+    })
+    .from(mirror)
+    .where(eq(mirror.assetId, id))
+    .orderBy(asc(mirror.destination));
+
   return {
     type: "asset",
     id: found.id,
@@ -445,6 +477,11 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     concepts: concepts.map((c) => c.slug),
     derivedFrom: await lookup(sourceIds),
     derivedInto: await lookup(derivedIds),
+    mirrors: mirrors.map((row) => ({
+      ...row,
+      mtime: row.mtime?.toISOString() ?? null,
+      checkedAt: row.checkedAt.toISOString(),
+    })),
   };
 }
 
@@ -550,6 +587,16 @@ export function formatShow(result: ShowResult): string {
     if (result.derivedInto.length > 0) {
       lines.push("", "source of");
       for (const a of result.derivedInto) lines.push(`  ${a.path ?? a.url ?? a.id}`);
+    }
+    if (result.mirrors.length > 0) {
+      lines.push("", "mirrors");
+      const width = Math.max(...result.mirrors.map((m) => m.destination.length));
+      for (const m of result.mirrors) {
+        lines.push(
+          `  ${m.destination.padEnd(width)}  ${m.status.padEnd(7)} by ${m.compared.padEnd(10)} ` +
+            `checked ${m.checkedAt}`,
+        );
+      }
     }
   }
 

@@ -7,9 +7,10 @@ import {
   learner,
   LOCAL_LEARNER_ID,
   mastery,
+  mirror,
   topic,
 } from "@self-learn/schema";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { IndexError } from "../src/index/errors";
@@ -57,6 +58,7 @@ describe.skipIf(!reachable.ok)("writer", () => {
     // Content only. The learner row is seeded once and outlives every case, so
     // the "does a reindex destroy mastery" test has something to destroy.
     await scratch.db.delete(mastery);
+    await scratch.db.delete(mirror);
     await scratch.db.delete(assetTopic);
     await scratch.db.delete(conceptPrerequisite);
     await scratch.db.delete(asset);
@@ -219,6 +221,94 @@ describe.skipIf(!reachable.ok)("writer", () => {
         ],
       }),
     ).rejects.toThrow(IndexError);
+  });
+
+  describe("mirror rows", () => {
+    /** The source that writes them owns no tables and mints no asset ids. */
+    const mirrors = fakeIndexer({
+      source: "mirrors",
+      owns: [],
+      assetPrefix: undefined,
+      root: () => "/checkout/manimkc",
+    });
+
+    const video = {
+      id: "manimkc:out/a/one.mp4",
+      kind: "video" as const,
+      path: "out/a/one.mp4",
+      sourceRepo: "manimkc" as const,
+    };
+
+    const row = (destination: string, status: string, at: string) => ({
+      assetId: video.id,
+      destination,
+      root: `/mnt/${destination}`,
+      status,
+      compared: "sha256",
+      bytes: 10,
+      mtime: new Date(at),
+      checkedAt: new Date(at),
+    });
+
+    beforeEach(async () => {
+      await scratch.db.insert(asset).values(video);
+    });
+
+    const audit = (destinations: string[], rows: ReturnType<typeof row>[]) =>
+      writeSource(scratch.db, mirrors, { mirror: rows }, [], "/checkout/manimkc", {
+        scope: { mirrorDestinations: destinations },
+        metadata: { destinations },
+      });
+
+    it("leaves an unaudited destination's rows exactly where they were", async () => {
+      await audit(
+        ["drive", "seafile"],
+        [row("drive", "present", "2026-09-01T00:00:00Z"), row("seafile", "stale", "2026-09-01T00:00:00Z")],
+      );
+
+      // The next run cannot reach Seafile. Clearing its row would turn "I did
+      // not look" into "there is nothing there".
+      await audit(["drive"], [row("drive", "stale", "2026-09-13T00:00:00Z")]);
+
+      const rows = await scratch.db.select().from(mirror).orderBy(asc(mirror.destination));
+      expect(rows.map((r) => [r.destination, r.status, r.checkedAt.toISOString()])).toEqual([
+        ["drive", "stale", "2026-09-13T00:00:00.000Z"],
+        ["seafile", "stale", "2026-09-01T00:00:00.000Z"],
+      ]);
+    });
+
+    it("drops a file the audited destination stopped reporting", async () => {
+      const other = { ...video, id: "manimkc:out/a/two.mp4", path: "out/a/two.mp4" };
+      await scratch.db.insert(asset).values(other);
+      await audit(
+        ["drive"],
+        [
+          row("drive", "present", "2026-09-01T00:00:00Z"),
+          { ...row("drive", "present", "2026-09-01T00:00:00Z"), assetId: other.id },
+        ],
+      );
+      expect(await scratch.db.select().from(mirror)).toHaveLength(2);
+
+      await audit(["drive"], [row("drive", "present", "2026-09-13T00:00:00Z")]);
+      const rows = await scratch.db.select().from(mirror);
+      expect(rows.map((r) => r.assetId)).toEqual([video.id]);
+    });
+
+    it("refuses a row for a destination the run did not declare it audited", async () => {
+      // Such a row would be inserted once and then never cleared again, because
+      // the delete is scoped by destination and nothing would ever name it.
+      await expect(audit(["drive"], [row("seafile", "present", "2026-09-13T00:00:00Z")])).rejects.toThrow(
+        /did not declare it audited/,
+      );
+    });
+
+    it("keeps what the run saw on index_run.metadata", async () => {
+      await audit(["drive"], [row("drive", "present", "2026-09-13T00:00:00Z")]);
+      const run = (
+        await scratch.db.select().from(indexRun).where(eq(indexRun.source, "mirrors"))
+      )[0];
+      expect(run?.metadata).toEqual({ destinations: ["drive"] });
+    });
   });
 
   it("records the run, and overwrites it on the next one", async () => {

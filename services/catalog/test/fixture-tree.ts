@@ -41,6 +41,7 @@ export async function makeFixture(): Promise<Fixture> {
       vocabulary: await loadVocabulary(root),
       knownConcepts: async () => new Set<string>(),
       knownCurriculumItems: async () => new Set<string>(),
+      knownAssets: async () => new Map<string, string>(),
       ...overrides,
     }),
     cleanup: () => rm(root, { recursive: true, force: true }),

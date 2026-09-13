@@ -26,7 +26,7 @@ import {
   curriculumItemTopic,
   topic,
 } from "./content";
-import { indexRun } from "./operations";
+import { indexRun, mirror } from "./operations";
 import {
   event,
   learner,
@@ -63,6 +63,7 @@ export const tables = {
   recap,
   preference,
   indexRun,
+  mirror,
 } as const;
 
 export type TableName = keyof typeof tables;
@@ -85,10 +86,10 @@ export const CONTENT_TABLES = [
 
 /**
  * Neither derived from files nor the only copy of anything a learner did: what
- * the indexers recorded about their own runs. Counted apart so a status line
- * cannot read it as either.
+ * the indexers recorded, about their own runs and about the mirrors they
+ * audited. Counted apart so a status line cannot read it as either.
  */
-export const OPERATIONAL_TABLES = ["indexRun"] as const satisfies readonly TableName[];
+export const OPERATIONAL_TABLES = ["indexRun", "mirror"] as const satisfies readonly TableName[];
 
 export const STATE_TABLES = [
   "learner",
@@ -145,3 +146,5 @@ export type NewPreference = typeof preference.$inferInsert;
 
 export type IndexRun = typeof indexRun.$inferSelect;
 export type NewIndexRun = typeof indexRun.$inferInsert;
+export type Mirror = typeof mirror.$inferSelect;
+export type NewMirror = typeof mirror.$inferInsert;

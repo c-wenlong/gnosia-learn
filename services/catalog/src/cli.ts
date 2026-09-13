@@ -31,8 +31,9 @@ Usage: npm run catalog -- <command> [options]
 
 Commands:
   migrate                  Apply every outstanding migration. Idempotent.
-  status                   Row counts, the migration head, and when each
-                           source was last indexed.
+  status                   Row counts, the migration head, when each source
+                           was last indexed, and mirror coverage per
+                           destination.
   index                    Read the content trees and rewrite the derived rows.
   backfill                 One-off: move learn/state/*.json into the state
                            tables, then assert the rebuilt mastery equals
@@ -52,8 +53,11 @@ Options:
   --json                   Machine-readable output. Supported by every command.
   --only a,b               index: run only these sources. Known sources are
                            topics, courses, concepts, manimkc, diagrams,
-                           sessions; they always run in dependency order.
-  --manimkc-root PATH      index: the manimkc checkout to read.
+                           sessions, mirrors; they always run in dependency
+                           order, and selecting one selects everything
+                           downstream of it.
+  --manimkc-root PATH      index: the manimkc checkout to read, for both the
+                           manimkc source and the mirror ledger beside it.
                            Default: <repo>/manimkc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.

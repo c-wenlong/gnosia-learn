@@ -1,11 +1,13 @@
 import path from "node:path";
 
 import {
+  asset,
   concept,
   curriculumItem,
   indexRun,
   INDEX_SOURCES,
   type IndexSource,
+  type SourceRepo,
 } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
 
@@ -16,6 +18,7 @@ import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
 import { hasManimkcCli, manimkcIndexer } from "./manimkc";
+import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
@@ -53,9 +56,13 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   courses: ["concepts", "diagrams", "sessions"],
   // Diagrams and sessions link to concepts by slug.
   concepts: ["diagrams", "sessions"],
-  manimkc: [],
+  // `mirror` rows hang off manimkc's asset rows and cascade when one is
+  // pruned, so re-reading manimkc alone would silently empty the ledger for a
+  // renamed video. `topics` reaches mirrors through here, transitively.
+  manimkc: ["mirrors"],
   diagrams: [],
   sessions: [],
+  mirrors: [],
 };
 
 /** Every indexer, in the order they must run. */
@@ -66,7 +73,24 @@ export const INDEXERS: readonly Indexer[] = [
   manimkcIndexer,
   diagramsIndexer,
   sessionsIndexer,
+  // Last: it reads no content tree, only the ledger and the asset rows manimkc
+  // wrote a moment ago in a transaction that has already committed.
+  mirrorsIndexer,
 ];
+
+/**
+ * Sources whose reader is the manimkc CLI, and the command each one runs. Both
+ * are unrunnable without the submodule, and both are optional for the same
+ * reason: a clone that never fetched it should still index everything else.
+ */
+const MANIMKC_COMMAND = {
+  manimkc: "manimkc topics --json",
+  mirrors: "manimkc mirrors --json",
+} as const satisfies Partial<Record<IndexSource, string>>;
+
+const NEEDS_MANIMKC_CLI = new Set<IndexSource>(
+  Object.keys(MANIMKC_COMMAND) as (keyof typeof MANIMKC_COMMAND)[],
+);
 
 /** Where the manimkc checkout is unless `--manimkc-root` says otherwise. */
 export function defaultManimkcRoot(repoRoot = REPO_ROOT): string {
@@ -146,6 +170,7 @@ export async function runIndex(
 
   let conceptCache: Promise<ReadonlySet<string>> | null = null;
   let curriculumCache: Promise<ReadonlySet<string>> | null = null;
+  const assetCache = new Map<SourceRepo, Promise<ReadonlyMap<string, string>>>();
 
   const context: IndexContext = {
     repoRoot,
@@ -169,50 +194,78 @@ export async function runIndex(
             .then((rows) => new Set(rows.map((r) => r.id)));
       return curriculumCache;
     },
+    // Straight from the database rather than from what a source produced in
+    // memory. The only caller runs after `manimkc`, whose transaction has
+    // committed by then, so the rows are already there and reading them keeps
+    // `--only mirrors` working without re-reading a whole manimkc checkout.
+    knownAssets: (sourceRepo) => {
+      let cached = assetCache.get(sourceRepo);
+      if (cached === undefined) {
+        cached = db
+          .select({ id: asset.id, path: asset.path })
+          .from(asset)
+          .where(eq(asset.sourceRepo, sourceRepo))
+          .then(
+            (rows) =>
+              new Map(
+                rows
+                  .filter((r): r is { id: string; path: string } => r.path !== null)
+                  .map((r) => [r.path, r.id]),
+              ),
+          );
+        assetCache.set(sourceRepo, cached);
+      }
+      return cached;
+    },
   };
 
-  // manimkc is the only optional source: its reader lives in a submodule that a
-  // fresh clone and CI deliberately do not fetch. Leaving it out is safe only
-  // when it has never been indexed, because otherwise pruning a topic cascades
-  // through its asset_topic rows and nothing puts them back. So: refuse when it
-  // was asked for, refuse when it has rows to lose, and otherwise drop it with
-  // a note rather than making a submodule a hard dependency of indexing
-  // anything at all.
+  // The two optional sources: their reader is `manimkc/tools/cli/manimkc`,
+  // which lives in a submodule that a fresh clone and CI deliberately do not
+  // fetch. Leaving one out is safe only when it has never been indexed, because
+  // otherwise pruning a topic cascades through its asset_topic and mirror rows
+  // and nothing puts them back. So: refuse when it was asked for, refuse when
+  // it has rows to lose, and otherwise drop it with a note rather than making a
+  // submodule a hard dependency of indexing anything at all.
   const skipped: { source: IndexSource; reason: string }[] = [];
   const runnable: Indexer[] = [];
+  const haveCli = hasManimkcCli(repoRoot);
   for (const indexer of selected) {
-    if (indexer.source !== "manimkc" || hasManimkcCli(repoRoot)) {
+    if (!NEEDS_MANIMKC_CLI.has(indexer.source) || haveCli) {
       runnable.push(indexer);
       continue;
     }
     // `--only manimkc` is asking for it; a default full run is not. Without
     // that distinction `catalog index` on a clone with no submodule fails
-    // outright instead of indexing the five sources it can.
-    const asked = options.only?.includes("manimkc") ?? false;
+    // outright instead of indexing the sources it can.
+    const source = indexer.source as keyof typeof MANIMKC_COMMAND;
+    const asked = options.only?.includes(source) ?? false;
     const indexed = await db
       .select({ source: indexRun.source })
       .from(indexRun)
-      .where(eq(indexRun.source, "manimkc"))
+      .where(eq(indexRun.source, source))
       .limit(1);
     if (asked || indexed.length > 0) {
       throw new IndexError(
-        `the manimkc submodule is not initialised, so \`manimkc topics --json\` cannot run` +
+        `the manimkc submodule is not initialised, so \`${MANIMKC_COMMAND[source]}\` cannot run` +
           (asked
             ? ""
-            : `, and it has rows in this database that pruning a topic would orphan`) +
+            : `, and ${source} has rows in this database that pruning would orphan`) +
           `. Run \`git submodule update --init manimkc\`, or point --manimkc-root at a checkout.`,
       );
     }
     skipped.push({
-      source: "manimkc",
-      reason: "the submodule is not initialised, and it has never been indexed here",
+      source,
+      reason: "the manimkc submodule is not initialised, and it has never been indexed here",
     });
   }
 
   const sources: SourceWrite[] = [];
   for (const indexer of runnable) {
-    const { rows, notes = [] } = await indexer.read(context);
-    const write = await writeSource(db, indexer, rows, notes, indexer.root(context));
+    const { rows, notes = [], scope, metadata } = await indexer.read(context);
+    const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
+      scope,
+      metadata,
+    });
     sources.push(write);
 
     if (indexer.source === "courses") {

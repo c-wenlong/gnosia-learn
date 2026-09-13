@@ -12,6 +12,7 @@ import {
   curriculumItem,
   curriculumItemTopic,
   indexRun,
+  mirror,
   topic,
 } from "@self-learn/schema";
 import { and, getTableColumns, getTableName, inArray, notInArray, sql, type SQL } from "drizzle-orm";
@@ -20,7 +21,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 import { IndexError } from "./errors";
-import type { Indexer, SourceRows } from "./source";
+import type { Indexer, ReplaceScope, SourceRows } from "./source";
 
 /** Postgres SQLSTATE for a foreign key violation. */
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -97,6 +98,7 @@ const LINK_ORDER = [
   "assetDerivation",
   "curriculumItemTopic",
   "conceptCurriculumItem",
+  "mirror",
 ] as const;
 type LinkName = (typeof LINK_ORDER)[number];
 
@@ -120,6 +122,7 @@ const TABLES = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
+  mirror,
 } as const satisfies Record<keyof SourceRows, PgTable>;
 
 /** Conflict targets for the entity upserts, matching each table's primary key. */
@@ -218,8 +221,10 @@ export async function writeSource(
   rows: SourceRows,
   notes: string[],
   root: string,
+  options: { scope?: ReplaceScope; metadata?: Record<string, unknown> } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
+  assertInScope(rows, options.scope);
 
   const startedAt = new Date();
   const written: Record<string, number> = {};
@@ -235,7 +240,7 @@ export async function writeSource(
     //    were so step 4 can report the net change rather than the churn.
     const clearedLinks: Partial<Record<LinkName, number>> = {};
     for (const name of LINK_ORDER) {
-      const scope = linkScope(indexer, name);
+      const scope = linkScope(indexer, name, options.scope);
       if (scope === null) continue;
       const result = await tx.delete(TABLES[name]).where(scope ?? sql`true`);
       clearedLinks[name] = result.rowCount ?? 0;
@@ -287,6 +292,7 @@ export async function writeSource(
       written: sum(written),
       deleted: sum(deleted),
       counts: written,
+      metadata: options.metadata ?? {},
     };
     await tx
       .insert(indexRun)
@@ -341,12 +347,45 @@ function assertNamespaced(indexer: Indexer, rows: SourceRows): void {
  * (it is the only writer), a predicate for the ones hanging off its own assets,
  * `null` for none — this source does not write here.
  */
-function linkScope(indexer: Indexer, name: LinkName): SQL | undefined | null {
+function linkScope(
+  indexer: Indexer,
+  name: LinkName,
+  replace: ReplaceScope | undefined,
+): SQL | undefined | null {
+  // `mirror` is nobody's outright: rows for a destination this run could not
+  // reach are not stale, they are unaudited, and deleting them would turn "I
+  // did not look" into "there is nothing there". So only the named
+  // destinations are cleared, and a run that named none clears nothing.
+  if (name === "mirror") {
+    const destinations = replace?.mirrorDestinations;
+    if (destinations === undefined || destinations.length === 0) return null;
+    return inArray(mirror.destination, [...destinations]);
+  }
   if ((indexer.owns as readonly string[]).includes(name)) return undefined;
   const prefix = indexer.assetPrefix;
   if (prefix === undefined || !ASSET_LINKED.has(name)) return null;
   const assetId = (TABLES[name] as unknown as Record<string, unknown>)["assetId"];
   return inNamespace(assetId, prefix);
+}
+
+/**
+ * Every `mirror` row must belong to a destination the run declared it audited.
+ * Without this a source could insert a row for a destination it never cleared,
+ * which would then survive every future run: the delete is scoped by
+ * destination, so nothing would ever be able to reach it again.
+ */
+function assertInScope(rows: SourceRows, replace: ReplaceScope | undefined): void {
+  const produced = rows.mirror ?? [];
+  if (produced.length === 0) return;
+  const declared = new Set(replace?.mirrorDestinations ?? []);
+  for (const row of produced) {
+    if (declared.has(row.destination)) continue;
+    throw new IndexError(
+      `a mirror row was produced for destination "${row.destination}", which the run did ` +
+        `not declare it audited. Rows outside the declared scope are never cleared, so ` +
+        `this one could never be corrected.`,
+    );
+  }
 }
 
 /**

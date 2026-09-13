@@ -61,7 +61,8 @@ tables can always be recomputed rather than restored.
 
 | Table | Purpose |
 | --- | --- |
-| `index_run` | One row per source: when it last ran, what it read, and what it wrote. Overwritten each run. |
+| `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
+| `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
 
 ## Decisions
 
@@ -130,7 +131,9 @@ is refused rather than being a silent no-op for every consumer.
 Kind columns are `text` plus a `CHECK`, not a Postgres `ENUM`. Both enforce the
 same thing; the check is a one-line drop-and-add in a migration, while widening
 an enum has awkward transaction rules and narrowing one is impossible. These
-vocabularies are expected to grow — bundle 6 adds asset kinds.
+vocabularies do grow: bundle 6 added `mirrors` to `index_run.source` and two
+new vocabularies of its own, each a two-statement change in
+`0005_mirror_ledger.sql`.
 
 ### Append-only is a trigger, not a revoked privilege
 
@@ -199,7 +202,8 @@ primary key and a unique constraint but never for a foreign key, and an
 unindexed one turns every parent delete into a sequential scan of the child.
 On top of those: `event(at)` for the log read in time order, `review(due)` for
 "what is due today", `topic(domain)`, `asset(kind)` and `asset(content_hash)`
-for the drift check in bundle 6.
+for the drift check, and `mirror(status)` for the count `catalog status`
+reports per destination.
 
 ## The content half
 
@@ -378,7 +382,7 @@ computed from `event` and can be thrown away and rebuilt.
 ## Filling it
 
 `npm run catalog -- index` reads the content trees and rewrites the derived
-rows. Six sources, run in the order the foreign keys require regardless of how
+rows. Seven sources, run in the order the foreign keys require regardless of how
 `--only` names them:
 
 | Source | Reads | Produces |
@@ -387,12 +391,15 @@ rows. Six sources, run in the order the foreign keys require regardless of how
 | `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `curriculum_item_topic`, `link` assets |
 | `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `concept_curriculum_item`, `note` assets |
 | `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
-| `diagrams` | `learn/assets/*.svg`, `*.tldr` | `diagram_svg`, `diagram_source` assets |
+| `diagrams` | `tldrawkc list learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
 | `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
+| `mirrors` | `manimkc mirrors --json` | `mirror` |
 
 `courses` runs before `concepts` because a note's `topics:` frontmatter names
 curriculum items, and everything runs after `topics` because every other source
-resolves a slug from the shared vocabulary.
+resolves a slug from the shared vocabulary. `mirrors` runs last: it reads no
+content tree, only a ledger joined onto asset rows `manimkc` has already
+written.
 
 **`--only` selects downstream too.** Pruning a `topic` cascades: the
 `asset_topic`, `curriculum_item_topic` and `collection_item` rows pointing at it
@@ -401,15 +408,49 @@ slug is renamed would leave every other source silently unlinked, and nothing
 would say so until a `show` that used to return videos stopped. Selecting a
 source therefore selects everything that points at what it owns, and the run
 reports what it added. `--only topics` is a full run, which is the honest
-answer, and `--only manimkc` stays cheap because nothing points at what manimkc
-owns.
+answer, and `--only manimkc` stays cheap: the only thing pointing at what
+manimkc owns is `mirrors`, whose rows cascade away with the asset they name, so
+that pair runs together and nothing else has to.
 
-manimkc is the one optional source: its reader lives in a submodule that a
-fresh clone and CI deliberately do not fetch. A default run drops it with a
-note when the submodule is absent *and* it has never been indexed here, because
-then there is nothing to leave stale. It refuses when `--only manimkc` asked for
-it, and refuses when it does have rows, since pruning a topic would cascade
-through its `asset_topic` links and nothing would put them back.
+`manimkc` and `mirrors` are the optional sources. Both read
+`manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and
+CI deliberately do not fetch. A default run drops one with a note when the
+submodule is absent *and* that source has never been indexed here, because then
+there is nothing to leave stale. It refuses when `--only` asked for it, and
+refuses when it does have rows to lose.
+
+### The diagram metadata rule
+
+A `.tldr` carries `meta.tldrawkc` on its tldraw document record, written by
+`tldrawkc meta set` or by `tldrawkc new`, and that object is where the diagrams
+source gets the topic and the concepts. A `.tldr` with no topic there is
+refused by name. The filename stem used to carry that job and was never more
+than a guess: a stem matching no concept was filed nowhere and nothing said so.
+
+The metadata is read through `tldrawkc list <dir> --json` when the submodule is
+built, and by parsing the `.tldr` JSON directly when it is not, since a fresh
+clone has the files and not the build. `services/catalog/test/tldr.test.ts`
+asserts the two readers agree on the same directory.
+
+The one thing still filed by its stem is an SVG with no `.tldr` beside it. It
+has no editable source, so there is nothing to stamp and refusing it would
+refuse work that cannot be fixed; each one is reported as a warning instead.
+
+### The mirror ledger
+
+`mirror` holds what one audit saw, not what is true now. `manimkc mirrors
+--json` owns the comparison, because it owns the mirror layout, the hash cache,
+and the fact that a Google Drive placeholder will not open and has to be judged
+by size and mtime; `compared` records which of those tests the verdict rests on,
+so a `present` reached by sha256 is distinguishable from the weaker one. The
+join between the two reports is the repo-relative deliverable path, unrewritten
+on either side. Videos never enter the database as bytes.
+
+A destination the run could not reach writes nothing and deletes nothing, so its
+rows keep the older `checked_at` that says when they were last true. That is why
+`mirror` is not cleared and rewritten like the other link tables: a run declares
+which destinations it audited, the writer clears only those, and
+`index_run.metadata` records what the run actually saw.
 
 ### Refuse, never skip
 
@@ -445,9 +486,12 @@ field deleted from a file becomes null instead of living on as the last value
 anyone wrote.
 
 **Each source owns a namespace.** Every asset id begins with its source's prefix
-— `note:`, `link:`, `manimkc:`, `diagram:`, `session:` — and the writer refuses
-an id outside it. That prefix is how a prune knows which rows it may delete, so
-one indexer can never remove another's.
+(`note:`, `link:`, `manimkc:`, `diagram:`, `session:`) and the writer refuses an
+id outside it. That prefix is how a prune knows which rows it may delete, so one
+indexer can never remove another's. `mirrors` mints no asset ids at all: it
+writes `mirror` rows against ids the `manimkc` source already wrote, and the
+writer refuses a `mirror` row for a destination the run did not declare it
+audited, because such a row would never be cleared again.
 
 Because deletions cascade, `index` prints the keys it removed rather than a
 count.
