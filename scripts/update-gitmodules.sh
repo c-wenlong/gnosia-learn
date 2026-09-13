@@ -103,6 +103,10 @@ while IFS= read -r line; do
     # submodule checkout or git config is ever touched.
     current="$(git -C "$root" rev-parse "HEAD:$path")"
     target="$(git ls-remote "$url" "refs/heads/$branch" | cut -f1)"
+    if [[ -z "$target" ]]; then
+      echo "$name: branch '$branch' not found on $url" >&2
+      exit 1
+    fi
     current_ref="$(ref_for_commit "" "$current")"
   fi
 
