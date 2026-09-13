@@ -310,12 +310,13 @@ value should cost a link preview rather than the whole app.
 
 `npm test` runs vitest over both halves: `src/**/*.test.ts` and
 `scripts/**/*.test.mjs`, in the `node` environment, with `@` aliased to `src`.
-Eleven test files, split six and five.
+Twelve test files, split seven and five.
 
 | File | Covers |
 | --- | --- |
 | `src/lib/storage.test.ts` | Migration, clamping, every state mutation |
 | `src/lib/progress.test.ts` | Counting completed topics per module, course and globally |
+| `src/lib/agent/guard.test.ts` | Same-origin checks, payload bounds and per-IP rate limiting on the agent routes |
 | `src/lib/agent/providers.test.ts` | Which providers resolve from which keys, and the fallback walk |
 | `src/lib/agent/prompt.test.ts` | The assembled system prompt, session context, and topic lookup |
 | `src/lib/agent/summary.test.ts` | Transcript formatting and parsing a recap back out |
