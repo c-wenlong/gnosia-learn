@@ -8,6 +8,39 @@ nothing to trigger by hand.
 
 - **Production alias:** https://self-learn-one.vercel.app
 - **Project:** `kaichen/self-learn`, linked to `https://github.com/c-wenlong/self-learn`
+- **Root Directory:** `apps/web`, with **Include source files outside of the
+  Root Directory in the Build Step** on
+
+## Root Directory: the one setting this repo cannot set for itself
+
+The Next app used to be the repository root. It is `apps/web/` now, one
+workspace beside `packages/`, `services/` and the two submodules under
+`tools/`, and Vercel has to be told:
+
+1. **Settings → Build and Deployment → Root Directory** → `apps/web`
+2. In the same panel, turn on **Include source files outside of the Root
+   Directory in the Build Step**
+
+Both are account settings, held in the Vercel project and not in git, so a pull
+request cannot change them. Until the first is set, Vercel keeps building from
+the repository root, finds no `next.config.ts` and no `app/` there, and the
+deployment check on every PR is red while lint, typecheck, test and build are
+green. That is the expected state between merging the re-layout and flipping
+the switch, not a regression to debug.
+
+The second setting is not optional. The app reads `content/*.yaml` at request
+time and imports three workspace packages, all of which sit above `apps/web/`;
+without it the build cannot see them at all.
+`outputFileTracingRoot` in `apps/web/next.config.ts` is the matching half on
+this side: it widens the file trace from `apps/web/` to the repository root, so
+those files are carried into the deployment.
+
+`apps/web/vercel.json` names the framework and nothing else. The `npm ci` and
+`npm run build` overrides it used to carry are gone on purpose: with a Root
+Directory set, Vercel detects the npm workspace above it and installs from the
+repository root, which is the only place the lockfile is. An `installCommand`
+of `npm ci` pinned to the Root Directory would run where there is no
+`package-lock.json`.
 
 ## How a deploy happens
 
@@ -36,7 +69,7 @@ connection is the whole pipeline.
 
 `/api/agent/chat` and `/api/agent/summarize` spend provider quota for whoever
 calls them, and the app has no accounts to authenticate against. The in-code
-ceilings in `src/lib/agent/guard.ts` are a floor that works everywhere; the
+ceilings in `apps/web/src/lib/agent/guard.ts` are a floor that works everywhere; the
 real per-IP bound is a Vercel WAF rate-limit rule, which lives on the platform
 and not in this repo:
 
@@ -154,5 +187,8 @@ vercel link
 vercel --prod
 ```
 
-`vercel link` writes `.vercel/project.json`, which is where the org and project
-ids come from. That directory is gitignored and should stay that way.
+Run both from `apps/web/`, not from the repository root: `vercel` deploys the
+directory it is invoked in, and the project's Root Directory only applies to
+builds the Git integration starts. `vercel link` writes
+`apps/web/.vercel/project.json`, which is where the org and project ids come
+from. That directory is gitignored and should stay that way.

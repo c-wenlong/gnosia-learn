@@ -15,7 +15,7 @@ the schema is [`SCHEMA.md`](SCHEMA.md). This file is only the move.
 | `learn/state/model.json` — `params` | `preference`, key `bktParams` | No, but it is four numbers with defaults. |
 | `learn/state/reviews.json` — `cards` | `review` | Yes, since bundle 5: `learn review rebuild`. |
 | `learn/state/reviews.json` — `cards[].history` | *(nothing)* | Every entry is an `event` of type `observation` or `review`. |
-| `learn/state/index.json` | *(nothing)* | A query. `readKnowledgeBase` in `src/state/knowledge-base.ts`. |
+| `learn/state/index.json` | *(nothing)* | A query. `readKnowledgeBase` in `services/catalog/src/state/knowledge-base.ts`. |
 | `learn/concepts/**`, `learn/sessions/**`, `learn/map.md`, `learn/assets/**` | still files | Authored, or generated from files. |
 
 The split is the same one the whole catalog runs on: what a person or an agent
@@ -50,7 +50,7 @@ Every command name and every `--json` shape is unchanged; the shapes are listed
 in [`learn/README.md`](../../learn/README.md#the-json-shapes) and pinned by
 `test/learn-cli.test.ts`. What changed underneath:
 
-- `scripts/learn/cli.mjs` is a shim. It spawns `src/learn/cli.ts`, which is the
+- `scripts/learn/cli.mjs` is a shim. It spawns `services/catalog/src/learn/cli.ts`, which is the
   command. The entry point stays because the `/learn` and `/review` skills, and
   `npm run learn`, name it.
 - The pure modules under `scripts/learn/lib/` have not moved and are imported
