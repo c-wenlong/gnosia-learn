@@ -181,7 +181,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | --- | --- |
 | `init` | Create the `learn/` tree on a fresh checkout |
 | `status` | Where you are: counts, due reviews, frontier |
-| `concept add\|edit\|list\|show` | Define and inspect concepts; `edit` changes edges without touching the note body |
+| `concept add\|edit\|list\|show` | Define and inspect concepts; `add --topic <slug>` files the new note under a vocabulary topic and indexes it; `edit` changes edges without touching the note body |
 | `check add\|list` | Verification questions stored in the note |
 | `probe [--goal]` | What to ask next, by information gain |
 | `observe --concept --correct` | **The RL step.** Record one answer |
@@ -195,6 +195,44 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `review rebuild` | Replay the log into the schedule |
 | `map` / `index` | Regenerate `map.md` / re-read the notes into the catalog |
 | `doctor` | Validate the graph — cycles, dangling edges, orphans |
+
+### A new concept needs a topic
+
+A note is a file until the vocabulary claims it. `concept.topic_slug` is a
+foreign key, so a note in no topic's `maps.concepts` in
+[`content/topics.yaml`](../content/topics.yaml) cannot be indexed, and a concept
+that is not indexed cannot carry mastery: `observe` refuses it outright.
+
+`--topic` closes that gap in one call.
+
+```bash
+npm run --silent catalog -- search "master theorem" --json   # find the slug
+npm run learn -- concept add --title "Master Theorem" --domain algorithms \
+  --topic recurrence-relations --requires comparing-growth-rates
+```
+
+It checks the slug against the vocabulary *before* writing anything, appends the
+new id to that topic's `maps.concepts`, and runs the concepts indexer, so the
+note is queryable at the next command. `--json` reports
+`{ id, path, topic, indexed }`.
+
+The edit is textual, one line of the YAML, so the file keeps its comments,
+section banners and ordering and the diff stays reviewable. It is checked
+afterwards by re-reading the file through the real parser: if the slug did not
+land under the topic that was asked for, the original text goes back and the
+command fails.
+
+Two refusals, both before the write: a slug that is in no topic, and a concept
+another topic already claims. Each source id belongs to exactly one topic, which
+is what makes a query for "everything about this subject" answerable.
+
+Without `--topic` the note is still written and the command says which edit is
+missing. Do not hand-edit `content/topics.yaml` from inside a tutoring session:
+the flag exists so a session never has to.
+
+Note the singular. `--topic` is one vocabulary slug; `--topics` is a
+comma-separated list of curriculum *item* ids like `cp4284-m1-t1`, which is a
+different link with a confusingly similar name.
 
 ### The three data structures
 
