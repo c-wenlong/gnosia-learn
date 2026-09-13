@@ -94,7 +94,7 @@ Rules of engagement:
 
 - **Read `tldrawkc/AGENTS.md` before working in there.** It covers the Node
   to browser bridge, why every shape is built inside a live `Editor` rather
-  than in Node, the helper bag a snippet may call, and the seven lint rules.
+  than in Node, the helper bag a snippet may call, and the eight lint rules.
   None of that is guessable from this repo.
 - **Commits inside `tldrawkc/` belong to that repo.** Commit and push there
   first, then commit the updated submodule pointer here. Never commit a
@@ -108,14 +108,20 @@ Rules of engagement:
 - **Drive it through the CLI, not by hand.** From this repo that is
   `npm run --silent canvas -- <verb>`: `doctor`, `api` (every helper with a
   real usage line), `new`, `run` (a snippet plus `--shot`), `shot`,
-  `inspect`, `export`, `from-mermaid`. `serve` is specified but not built.
-  Exit code 3 means lints remain, and it is deliberate: a diagram is not
-  finished until `inspect` exits 0.
+  `inspect`, `export`, `from-mermaid`, `list`, `meta set`. `serve` is
+  specified but not built. Exit code 3 means lints remain, and it is
+  deliberate: a diagram is not finished until `inspect` exits 0.
 - Outputs go to `learn/assets/<concept-id>.tldr` and
   `learn/assets/<concept-id>.svg`, and **both are committed**: the `.tldr` is
   the editable source the next session extends, the `.svg` is what the
   session log embeds as `![[<concept-id>.svg]]`. Iteration PNGs go to the
   scratchpad and are never committed.
+- **Every `.tldr` needs a topic, or `catalog index` refuses it by name.** The
+  topic and concepts live in `meta.tldrawkc` on the document record, written
+  by `new --topic ...` or backfilled with
+  `npm run --silent canvas -- meta set <file> --topic <slug>`, and the slug
+  must exist in `content/topics.yaml`. Re-export the SVG afterwards, since
+  `export --svg` stamps the title and topic onto it.
 - The end-to-end process is the `tldrawkc-diagram` skill, which lives in the
   submodule and is symlinked into `.claude/skills/tldrawkc-diagram`.
 
@@ -150,6 +156,10 @@ not have to be worked out again.
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
   `npm run learn`.
+- **`canvas export --svg` takes the output path, it is not a flag.**
+  `export x.tldr --svg` fails with "argument missing"; the call is
+  `export x.tldr --svg x.svg`. Re-exporting in place after a `meta set` is
+  the usual reason to run it, and passing the same path back is correct.
 - **Only bump a submodule pointer to a commit that is already pushed.**
   Check `git diff --submodule=log manimkc` (or `tldrawkc`) before
   `git add`; staging a dirty or unpushed submodule leaves a pointer nobody

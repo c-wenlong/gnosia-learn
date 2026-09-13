@@ -11,7 +11,9 @@ import type {
   NewConceptPrerequisite,
   NewCurriculumItem,
   NewCurriculumItemTopic,
+  NewMirror,
   NewTopic,
+  SourceRepo,
 } from "@self-learn/schema";
 
 import type { Vocabulary } from "./vocabulary";
@@ -45,6 +47,13 @@ export interface IndexContext {
    */
   knownConcepts: () => Promise<ReadonlySet<string>>;
   knownCurriculumItems: () => Promise<ReadonlySet<string>>;
+  /**
+   * Asset ids by repo-relative path, for one source repository. `mirrors` is
+   * the only caller: it joins a ledger onto asset rows the `manimkc` source
+   * wrote earlier in the same run, and it owns none of them. Memoised by the
+   * runner alongside the other two.
+   */
+  knownAssets: (sourceRepo: SourceRepo) => Promise<ReadonlyMap<string, string>>;
 }
 
 /** Rows produced by one source, keyed by the table they belong in. */
@@ -61,6 +70,7 @@ export interface SourceRows {
   assetDerivation?: NewAssetDerivation[];
   curriculumItemTopic?: NewCurriculumItemTopic[];
   conceptCurriculumItem?: NewConceptCurriculumItem[];
+  mirror?: NewMirror[];
 }
 
 /**
@@ -73,8 +83,27 @@ export interface SourceNotes {
   notes?: string[];
 }
 
+/**
+ * Tables replaced within a scope narrower than "everything this source owns".
+ *
+ * Only `mirror` needs one. A run that could not reach Google Drive has nothing
+ * to say about Drive, and clearing its rows would turn "I did not look" into
+ * "there is nothing there". So the run names the destinations it actually
+ * audited, and the writer clears only those.
+ */
+export interface ReplaceScope {
+  /** Destination slugs whose `mirror` rows this run may replace. */
+  mirrorDestinations?: readonly string[];
+}
+
 export interface SourceResult extends SourceNotes {
   rows: SourceRows;
+  scope?: ReplaceScope;
+  /**
+   * Anything about the run worth keeping that is not a row or a count. Stored
+   * on `index_run.metadata`, and overwritten every run like the rest of it.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**

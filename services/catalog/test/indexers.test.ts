@@ -6,6 +6,7 @@ import { coursesIndexer } from "../src/index/courses";
 import { diagramsIndexer } from "../src/index/diagrams";
 import { IndexError } from "../src/index/errors";
 import { buildRows, type TopicsReport } from "../src/index/manimkc";
+import { buildMirrorRows, type MirrorsReport } from "../src/index/mirrors";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
 import { loadVocabulary } from "../src/index/vocabulary";
@@ -306,34 +307,135 @@ describe("concepts", () => {
   });
 });
 
-describe("diagrams", () => {
-  it("links an svg to its .tldr source and to the matching concept", async () => {
-    fixture = await makeFixture();
-    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]));
-    await fixture.write("learn/assets/dot-product.svg", "<svg></svg>");
-    await fixture.write("learn/assets/dot-product.tldr", "{}");
-    await fixture.write("learn/assets/orphan.svg", "<svg></svg>");
+/** A `.tldr` carrying whatever `meta.tldrawkc` the case needs, or none. */
+function tldr(meta?: Record<string, unknown>): string {
+  return JSON.stringify({
+    tldrawFileFormatVersion: 1,
+    schema: { schemaVersion: 2, sequences: {} },
+    records: [
+      { id: "shape:one", typeName: "shape", type: "geo", meta: {} },
+      {
+        id: "document:document",
+        typeName: "document",
+        gridSize: 10,
+        name: "",
+        meta: meta === undefined ? {} : { tldrawkc: { kc: 1, ...meta } },
+      },
+    ],
+  });
+}
 
-    const { rows } = await diagramsIndexer.read(
+describe("diagrams", () => {
+  it("takes the topic and concepts from the .tldr's metadata, and shares them with its svg", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/anything.svg", "<svg></svg>");
+    await fixture.write(
+      "learn/assets/anything.tldr",
+      tldr({ topic: "alpha", concepts: ["dot-product"], title: "The dot product" }),
+    );
+
+    const { rows, notes } = await diagramsIndexer.read(
       await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
     );
 
-    expect(rows.asset?.map((a) => [a.id, a.kind])).toEqual([
-      ["diagram:learn/assets/dot-product.svg", "diagram_svg"],
-      ["diagram:learn/assets/dot-product.tldr", "diagram_source"],
-      ["diagram:learn/assets/orphan.svg", "diagram_svg"],
+    // The filename says nothing about the subject any more. It was `stem`
+    // before this bundle, and a stem matching no concept was filed nowhere.
+    expect(rows.asset?.map((a) => [a.id, a.kind, a.title])).toEqual([
+      ["diagram:learn/assets/anything.svg", "diagram_svg", "The dot product"],
+      ["diagram:learn/assets/anything.tldr", "diagram_source", "The dot product"],
     ]);
+    expect(rows.assetTopic).toEqual([
+      { assetId: "diagram:learn/assets/anything.svg", topicSlug: "alpha" },
+      { assetId: "diagram:learn/assets/anything.tldr", topicSlug: "alpha" },
+    ]);
+    expect(rows.assetConcept?.map((r) => r.conceptSlug)).toEqual(["dot-product", "dot-product"]);
     expect(rows.assetDerivation).toEqual([
       {
-        assetId: "diagram:learn/assets/dot-product.svg",
-        sourceAssetId: "diagram:learn/assets/dot-product.tldr",
+        assetId: "diagram:learn/assets/anything.svg",
+        sourceAssetId: "diagram:learn/assets/anything.tldr",
       },
     ]);
-    // Both files matching the concept get the link; the orphan gets neither
-    // that nor a topic, and is not an error.
-    expect(rows.assetConcept).toHaveLength(2);
-    expect(rows.assetTopic).toHaveLength(2);
-    expect(rows.assetConcept?.every((r) => r.conceptSlug === "dot-product")).toBe(true);
+    expect(notes?.[0]).toContain("1 stamped .tldr");
+  });
+
+  it("refuses a .tldr with no topic, and names the file", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/unstamped.tldr", tldr());
+    await fixture.write("learn/assets/no-topic.tldr", tldr({ title: "Untitled" }));
+
+    const failure = diagramsIndexer.read(await fixture.context());
+    await expect(failure).rejects.toThrow(IndexError);
+    await expect(failure).rejects.toThrow(/learn\/assets\/no-topic\.tldr names no topic/);
+    await expect(failure).rejects.toThrow(
+      /learn\/assets\/unstamped\.tldr carries no tldrawkc metadata/,
+    );
+    // Both, in one run. Fixing one refusal per run is thirty edits, not one.
+    await expect(failure).rejects.toThrow(/2 unresolved references/);
+  });
+
+  it("refuses a topic that is not in the vocabulary", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/wrong.tldr", tldr({ topic: "not-a-topic" }));
+    await expect(diagramsIndexer.read(await fixture.context())).rejects.toThrow(
+      /names topic "not-a-topic", which is not in/,
+    );
+  });
+
+  it("refuses a concept with no note, rather than leaving it to the foreign key", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/x.tldr", tldr({ topic: "alpha", concepts: ["ghost"] }));
+    await expect(diagramsIndexer.read(await fixture.context())).rejects.toThrow(
+      /names concept "ghost", which has no note/,
+    );
+  });
+
+  it("files a legacy svg with no .tldr by its filename, and warns that it guessed", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/dot-product.svg", "<svg></svg>");
+    await fixture.write("learn/assets/scribble.svg", "<svg></svg>");
+
+    const { rows, notes } = await diagramsIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
+    );
+
+    // There is nothing to stamp: an SVG has no editable source, so refusing it
+    // would refuse work that cannot be fixed.
+    expect(rows.asset).toHaveLength(2);
+    expect(rows.assetConcept).toEqual([
+      { assetId: "diagram:learn/assets/dot-product.svg", conceptSlug: "dot-product" },
+    ]);
+    expect(rows.assetTopic).toEqual([
+      { assetId: "diagram:learn/assets/dot-product.svg", topicSlug: "alpha" },
+    ]);
+    expect(rows.assetDerivation).toEqual([]);
+    expect(notes?.join("\n")).toContain("WARNING learn/assets/dot-product.svg");
+    expect(notes?.join("\n")).toContain("WARNING learn/assets/scribble.svg");
+  });
+
+  it("notes a concept the vocabulary files under a different topic", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha" }, { slug: "beta", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/x.tldr", tldr({ topic: "alpha", concepts: ["dot-product"] }));
+
+    const { rows, notes } = await diagramsIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
+    );
+    expect(rows.assetTopic).toEqual([{ assetId: "diagram:learn/assets/x.tldr", topicSlug: "alpha" }]);
+    expect(notes?.join("\n")).toContain('puts under "beta"');
   });
 
   it("is an empty result when there are no diagrams", async () => {
@@ -341,6 +443,157 @@ describe("diagrams", () => {
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
     const { rows } = await diagramsIndexer.read(await fixture.context());
     expect(rows.asset).toEqual([]);
+  });
+});
+
+/**
+ * A ledger shaped like `manimkc mirrors --json`, trimmed to the fields the
+ * indexer reads. Captured from the real command's output on 2026-09-13.
+ */
+const LEDGER: MirrorsReport = {
+  destinations: {
+    drive: {
+      root: "/Users/x/Google Drive/My Drive",
+      target: "/Users/x/Google Drive/My Drive/manimkc",
+      reachable: true,
+      checked: "2026-09-13T00:02:57Z",
+      files: {
+        "out/a/one/one.mp4": {
+          bytes: 100,
+          sha256: "aa",
+          mtime: 1_789_000_000,
+          status: "present",
+          compared: "sha256",
+        },
+        "out/a/two/two.mp4": {
+          bytes: 90,
+          sha256: null,
+          mtime: 1_789_000_100,
+          status: "stale",
+          compared: "bytes",
+        },
+        "out/a/three/three.mp4": {
+          bytes: null,
+          sha256: null,
+          mtime: null,
+          status: "missing",
+          compared: null,
+        },
+        "out/a/one/one.vtt": {
+          bytes: null,
+          sha256: null,
+          mtime: null,
+          status: "unknown",
+          compared: null,
+        },
+        "out/a/ghost/ghost.mp4": {
+          bytes: 5,
+          sha256: "bb",
+          mtime: 1_789_000_200,
+          status: "present",
+          compared: "sha256",
+        },
+      },
+    },
+    seafile: {
+      root: "/Users/x/Seafile/manimkc-mirror",
+      target: "/Users/x/Seafile/manimkc-mirror/manimkc",
+      reachable: false,
+      checked: "2026-09-13T00:03:11Z",
+      files: {},
+    },
+  },
+};
+
+/** Every path in the ledger the catalog has an asset for. `ghost` is not one. */
+const MANIMKC_ASSETS = new Map([
+  ["out/a/one/one.mp4", "manimkc:out/a/one/one.mp4"],
+  ["out/a/two/two.mp4", "manimkc:out/a/two/two.mp4"],
+  ["out/a/three/three.mp4", "manimkc:out/a/three/three.mp4"],
+  ["out/a/one/one.vtt", "manimkc:out/a/one/one.vtt"],
+]);
+
+describe("mirrors", () => {
+  it("turns the ledger into one row per audited file", () => {
+    const { rows } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
+    expect(
+      rows.mirror?.map((r) => [r.assetId, r.destination, r.status, r.compared, r.bytes]),
+    ).toEqual([
+      ["manimkc:out/a/one/one.mp4", "drive", "present", "sha256", 100],
+      ["manimkc:out/a/two/two.mp4", "drive", "stale", "bytes", 90],
+      ["manimkc:out/a/three/three.mp4", "drive", "missing", "none", null],
+      ["manimkc:out/a/one/one.vtt", "drive", "unknown", "none", null],
+    ]);
+    // The ledger's mtime is a float of epoch seconds; the column is an instant.
+    expect(rows.mirror?.[0]?.mtime?.toISOString()).toBe(
+      new Date(1_789_000_000 * 1000).toISOString(),
+    );
+    expect(rows.mirror?.[0]?.checkedAt.toISOString()).toBe("2026-09-13T00:02:57.000Z");
+  });
+
+  it("leaves an unreachable destination out of the replace scope entirely", () => {
+    const result = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
+    // Not "seafile has nothing". Seafile was not looked at, so its rows must
+    // survive, and the writer only clears the destinations named here.
+    expect(result.scope?.mirrorDestinations).toEqual(["drive"]);
+    expect(result.rows.mirror?.some((r) => r.destination === "seafile")).toBe(false);
+    expect(result.notes?.join("\n")).toContain("seafile");
+    expect(result.notes?.join("\n")).toContain("left as the last audit wrote them");
+  });
+
+  it("records what each destination was, in index_run metadata", () => {
+    const { metadata } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
+    expect(metadata?.["destinations"]).toEqual([
+      {
+        destination: "drive",
+        root: "/Users/x/Google Drive/My Drive",
+        reachable: true,
+        checked: "2026-09-13T00:02:57Z",
+        files: 4,
+      },
+      {
+        destination: "seafile",
+        root: "/Users/x/Seafile/manimkc-mirror",
+        reachable: false,
+        checked: null,
+        files: 0,
+      },
+    ]);
+  });
+
+  it("skips a ledger path with no asset, and says how many", () => {
+    const { rows, notes } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
+    expect(rows.mirror?.some((r) => r.assetId.includes("ghost"))).toBe(false);
+    expect(notes?.join("\n")).toContain("1 ledger path(s) match no manimkc asset");
+    expect(notes?.join("\n")).toContain("out/a/ghost/ghost.mp4");
+  });
+
+  it("says so when the checkout has no destinations configured", () => {
+    const { rows, notes, scope } = buildMirrorRows({ destinations: {} }, MANIMKC_ASSETS);
+    expect(rows.mirror).toEqual([]);
+    expect(scope?.mirrorDestinations).toEqual([]);
+    expect(notes?.join("\n")).toContain("no destinations configured");
+  });
+
+  it("reads an unrecognised status or comparison as the safe answer", () => {
+    // A ledger from a newer manimkc, or a hand-edited one. The column has a
+    // CHECK, so a value straight through would fail the whole transaction.
+    const { rows } = buildMirrorRows(
+      {
+        destinations: {
+          drive: {
+            root: "/x",
+            reachable: true,
+            checked: "2026-09-13T00:00:00Z",
+            files: {
+              "out/a/one/one.mp4": { bytes: 1, status: "partial", compared: "vibes", mtime: 1 },
+            },
+          },
+        },
+      },
+      MANIMKC_ASSETS,
+    );
+    expect(rows.mirror?.[0]).toMatchObject({ status: "unknown", compared: "none" });
   });
 });
 
@@ -534,6 +787,7 @@ describe("source selection", () => {
       "courses",
       "diagrams",
       "manimkc",
+      "mirrors",
       "sessions",
       "topics",
     ]);
@@ -548,9 +802,15 @@ describe("source selection", () => {
     ]);
   });
 
-  it("leaves the cheap cases cheap: nothing points at what manimkc owns", () => {
-    expect([...withDependents(["manimkc"])]).toEqual(["manimkc"]);
+  it("pulls mirrors in behind manimkc, whose assets its rows hang off", () => {
+    // A mirror row cascades away with the asset it points at, so re-reading
+    // manimkc alone after a rename would silently empty the ledger for it.
+    expect([...withDependents(["manimkc"])]).toEqual(["manimkc", "mirrors"]);
+  });
+
+  it("leaves the cheap cases cheap: nothing points at what these own", () => {
     expect([...withDependents(["diagrams"])]).toEqual(["diagrams"]);
     expect([...withDependents(["sessions"])]).toEqual(["sessions"]);
+    expect([...withDependents(["mirrors"])]).toEqual(["mirrors"]);
   });
 });

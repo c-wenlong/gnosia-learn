@@ -334,6 +334,13 @@ session can open the canvas and extend it instead of redrawing. An exported
 SVG is self-contained, which means the two fonts it uses are inlined as
 base64 and a small diagram lands around 440 kB.
 
+A `.tldr` also carries what it is about, in `meta.tldrawkc` on its tldraw
+document record: the topic slug, the concepts, a title and what prompted it.
+That is what the catalog files a diagram by, and `tldrawkc export --svg` copies
+the title and topic onto the SVG so the export can say what it is when it turns
+up on its own. Stamp one with `npm run canvas -- meta set <file> --topic <slug>`,
+which needs no browser.
+
 ## The numbers
 
 Every constant below is defined once, in the file named.
@@ -465,12 +472,13 @@ trees, in Postgres 17. Full reasoning in
 [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md); the shape of it is:
 
 ```
-   content/topics.yaml ─┐
+   content/topics.yaml ────┐
    content/courses/*.yaml ─┤
-   learn/concepts/*.md ─┼──► catalog index ──► Postgres ──► catalog ls / show / path / search
-   learn/assets/* ──────┤       (indexers)      (derived)          (agents read here)
-   learn/sessions/*.md ─┤
-   manimkc topics --json ┘
+   learn/concepts/*.md ────┼──► catalog index ──► Postgres ──► catalog ls / show / path / search
+   learn/sessions/*.md ────┤       (indexers)      (derived)          (agents read here)
+   tldrawkc list  ─────────┤
+   manimkc topics --json ──┤
+   manimkc mirrors --json ─┘
 ```
 
 **Everything in the content half is derived.** `topic`, `concept`,
@@ -480,6 +488,21 @@ run restores it exactly. Nothing is authored in Postgres, which is why the
 indexers may delete: a row the source no longer produces is not history, it is a
 stale row, and the whole point of the catalog is that a rendered video cannot
 outlive its source without anything saying so.
+
+**Assets are rows about files, never the files.** An `asset` row holds a path,
+a size and a hash; a 13 MB video, a 450 kB SVG and the words of a note stay in
+git and are read from there. What the catalog adds is the joins those files
+cannot carry: which topic an asset is about, which `.tldr` an SVG came out of,
+and, through `mirror`, whether the copy on Google Drive or Seafile is the same
+file as the one here. A `.tldr` says which topic it is about in its own
+metadata, which `tldrawkc list --json` reads back, so the filename is a
+filename again.
+
+**Mirror rows are observations, not content.** `mirror` and `index_run` are the
+operational half: what an indexer saw, rather than what the trees hold. A
+destination the audit could not reach keeps its old rows and its old
+`checked_at`, and the run records which ones it could actually see, so a stale
+count is never read as a fresh one.
 
 **The state half is the opposite.** `learner`, `event`, `mastery`, `review`,
 `progress`, `recap` and `preference` are the only copy of what a learner did.
@@ -498,7 +521,9 @@ over on first mount.
 | The learner store | `services/catalog/src/state/` | The only writer of the state tables. Imported by the `learn` CLI, the backfill and the web app. |
 
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
-`diagram:`, `session:`) and a set of tables. That ownership is what lets the
+`diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
+neither: it writes `mirror` rows against ids `manimkc` produced, and is scoped
+by the destinations it declares it audited instead. That ownership is what lets the
 writer prune safely: a source may delete only rows it could have produced, so
 one indexer can never remove another's. `--only` expands to include everything
 downstream of what it names, because a prune cascades and a half-run index is
