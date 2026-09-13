@@ -28,8 +28,9 @@ import {
  * data, with one exception: `mastery` and `review` are derived and can be
  * rebuilt by replaying `event` from the beginning. Bundle 5 backfills all of
  * this from `learn/state/*.json` and the browser's localStorage, so the column
- * names below deliberately mirror `src/lib/types.ts`, the `KNOWLEDGE_LIMITS` in
- * `src/lib/storage.ts` and the constants in `scripts/learn/lib/`.
+ * names below deliberately mirror `apps/web/src/lib/types.ts`, the
+ * `KNOWLEDGE_LIMITS` in `apps/web/src/lib/storage.ts` and the constants in
+ * `scripts/learn/lib/`.
  */
 
 /*
@@ -189,8 +190,8 @@ export const review = pgTable(
 
 /**
  * A ticked checklist row. Mirrors `LearnerState.completed` and
- * `LearnerState.notes` from src/lib/types.ts, which are two maps keyed by the
- * same curriculum item id and so are one table here. `completedAt` is nullable
+ * `LearnerState.notes` from `apps/web/src/lib/types.ts`, which are two maps
+ * keyed by the same curriculum item id and so are one table here. `completedAt` is nullable
  * because a note without a tick is a real state the web app already allows.
  */
 export const progress = pgTable(
@@ -215,7 +216,8 @@ export const progress = pgTable(
 
 /**
  * The durable "remind me what I learnt" record. One-for-one with
- * `TopicKnowledge` in src/lib/types.ts, down to the `sessions` counter.
+ * `TopicKnowledge` in `apps/web/src/lib/types.ts`, down to the `sessions`
+ * counter.
  */
 export const recap = pgTable(
   "recap",

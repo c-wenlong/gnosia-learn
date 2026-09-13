@@ -2,6 +2,7 @@ import "server-only";
 
 import { loadTags } from "@self-learn/content";
 
+import { REPO_ROOT } from "@/data/repo-root";
 import type { TagMeta } from "@/lib/types";
 
 /**
@@ -13,7 +14,7 @@ import type { TagMeta } from "@/lib/types";
  *
  * Read once per process.
  */
-export const tags: TagMeta[] = loadTags();
+export const tags: TagMeta[] = loadTags({ root: REPO_ROOT });
 
 /**
  * The theme with this id. An unknown id still renders: the chip falls back to

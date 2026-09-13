@@ -11,9 +11,9 @@ flowchart LR
         SKILLS[.claude/skills/tldrawkc-diagram -> symlink]
         SCRIPTS[scripts/learn: the pipeline CLI]
         LEARN[learn/assets/*.tldr and *.svg]
-        SRC[src/: the web app, reads learn/ only]
-        MK[manimkc/: submodule, videos]
-        TK[tldrawkc/: submodule, diagrams]
+        SRC[apps/web: the web app, reads learn/ only]
+        MK[tools/manimkc: submodule, videos]
+        TK[tools/tldrawkc: submodule, diagrams]
     end
     PLUGIN[learning plugin, global<br/>diagram-maker agent] -- "npm run canvas" --> TK
     TK -- writes --> LEARN
@@ -22,11 +22,11 @@ flowchart LR
     SKILLS --> TK
 ```
 
-`tldrawkc/` is a submodule beside `manimkc/`, with the same rules from the
-root AGENTS.md: commit and push inside it first, then bump the pointer
+`tools/tldrawkc/` is a submodule beside `tools/manimkc/`, with the same rules
+from the root AGENTS.md: commit and push inside it first, then bump the pointer
 here, never to an unpushed commit. Its `node_modules` and `dist` are local
-artefacts; a fresh clone runs `git submodule update --init tldrawkc`, then
-`npm ci && npm run build` inside it, then `npm run canvas -- doctor`.
+artefacts; a fresh clone runs `git submodule update --init tools/tldrawkc`,
+then `npm ci && npm run build` inside it, then `npm run canvas -- doctor`.
 
 ## The one seam: `learn/assets/`
 
@@ -67,14 +67,14 @@ than deleted so the table still reads as the whole list of seams.
 
 | File | Change | Status |
 | --- | --- | --- |
-| `package.json` | `"canvas": "node tldrawkc/dist/cli/index.js"` | done, phase 0 |
+| `package.json` | `"canvas": "node tools/tldrawkc/dist/cli/index.js"` (`tldrawkc/dist/...` until the submodules moved under `tools/`) | done, phase 0 |
 | `.gitmodules` | the new submodule | done, phase 0 |
-| `eslint.config.mjs` | add `tldrawkc/**` to the ignore block that already lists `manimkc/` and `coverage/`, or lint will walk its `node_modules` | done, phase 0 |
-| `tsconfig.json` | add `tldrawkc` to `exclude`. Not in the original list, and needed: unlike manimkc the submodule is TypeScript, so `"**/*.ts"` in `include` typechecks it against Next's compiler options and `npm run typecheck` fails | done, phase 0 |
-| `.claude/skills/tldrawkc-diagram` | symlink to `../../tldrawkc/.claude/skills/tldrawkc-diagram` | done, phase 3 |
+| `eslint.config.mjs` | add the submodule to the ignore block that already lists manimkc and `coverage/`, or lint will walk its `node_modules` | done, phase 0 |
+| `tsconfig.json` | add `tldrawkc` to `exclude`. Not in the original list, and needed: unlike manimkc the submodule is TypeScript, so `"**/*.ts"` in `include` typechecks it against Next's compiler options and `npm run typecheck` fails | done, phase 0; later undone, because the root tsconfig stopped being the app's and no longer walks the tree |
+| `.claude/skills/tldrawkc-diagram` | symlink to `../../tools/tldrawkc/.claude/skills/tldrawkc-diagram` | done, phase 3 |
 | `AGENTS.md` | a "Diagrams: tldrawkc/" section mirroring the manimkc one: read its AGENTS.md first, drive it through the CLI, outputs go to `learn/assets/`, commit inside the submodule first. Also amend the sentence in the manimkc section that says the `manimkc-video` symlink and `launch.json` are "the only things `.claude/` holds here", since a second symlink now exists. | done, phase 3, plus a gotcha for `npm run canvas` needing `--silent` before `--json`. Phase 0 had added only a row for `tldraw-integration/` in the documents table and the two-excludes gotcha |
 | `ARCHITECTURE.md` | add the submodule to "The shape", `assets/<id>.tldr` to the on-disk layout, and the `learn/assets/` carve-out to layering rules 3 and 5 | done, phase 3 |
-| `CONTRIBUTING.md` | a `tldrawkc/` row in the project layout table, and guideline 5 widened to both submodules | done, phase 3. Not in the original list; phase 0's row above covered only the build note |
+| `CONTRIBUTING.md` | a submodule row in the project layout table, and guideline 5 widened to both submodules | done, phase 3. Not in the original list; phase 0's row above covered only the build note |
 | `README.md`, `CONTRIBUTING.md` | say that `npm run canvas` needs `npm ci && npm run build` inside the submodule, because the compiled CLI is not committed | done, phase 0 |
 | `.github/workflows/ci.yml` | nothing. CI already skips submodules and the tool has its own CI. | n/a |
 | `vitest.config.ts` | nothing. The tool's tests run in its repo. | n/a |

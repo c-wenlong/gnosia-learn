@@ -1,0 +1,31 @@
+{
+  "name": "@self-learn/web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "//": "The Next app. It used to be the repo root, which made `src/` look like the whole project rather than one workspace beside the catalog service and the content library. The root package.json keeps the shared toolchain (ESLint, vitest, TypeScript) and delegates dev/build/start here.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+  },
+  "//dependencies": "@self-learn/catalog and @self-learn/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
+  "dependencies": {
+    "@self-learn/catalog": "*",
+    "@self-learn/content": "*",
+    "@self-learn/schema": "*",
+    "@tailwindcss/typography": "^0.5.20",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

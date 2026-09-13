@@ -2,6 +2,7 @@ import "server-only";
 
 import { loadCourses } from "@self-learn/content";
 
+import { REPO_ROOT } from "@/data/repo-root";
 import type { Course, Module, Topic } from "@/lib/types";
 
 /**
@@ -22,7 +23,7 @@ import type { Course, Module, Topic } from "@/lib/types";
  * and a Next build resolves `generateStaticParams` for every route from this
  * array.
  */
-export const courses: Course[] = loadCourses();
+export const courses: Course[] = loadCourses({ root: REPO_ROOT });
 
 export function getCourse(slug: string): Course | undefined {
   return courses.find((c) => c.slug === slug);

@@ -416,7 +416,7 @@ paired with `meta.lintIgnore` on those shapes.
 The repo root `package.json` gets one script, mirroring `npm run learn`:
 
 ```json
-"canvas": "node tldrawkc/dist/cli/index.js"
+"canvas": "node tools/tldrawkc/dist/cli/index.js"
 ```
 
 so the skill can say `npm run canvas -- run learn/assets/x.tldr --code

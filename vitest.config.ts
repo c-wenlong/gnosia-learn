@@ -4,10 +4,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    // src/ holds the web app (TypeScript); scripts/ holds the learning
+    // apps/web holds the Next app (TypeScript); scripts/ holds the learning
     // pipeline (plain ESM, no build step). Both are covered by `npm test`.
+    // tools/ is deliberately absent: the two submodules run their own suites
+    // in their own repos.
     include: [
-      "src/**/*.test.ts",
+      "apps/**/*.test.ts",
       "scripts/**/*.test.mjs",
       "services/**/*.test.ts",
       "packages/**/*.test.ts",
@@ -22,12 +24,13 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov", "html"],
       reportsDirectory: "./coverage",
-      // The scope is deliberate. src/app and src/components are view code and
-      // are untested on purpose, so leaving them out keeps the number honest:
-      // it measures the logic that is meant to be tested, not the whole tree.
+      // The scope is deliberate. apps/web/src/app and apps/web/src/components
+      // are view code and are untested on purpose, so leaving them out keeps
+      // the number honest: it measures the logic that is meant to be tested,
+      // not the whole tree.
       // vitest 4 dropped coverage.all, so a file not matched here does not
       // show up at all. That is what we want.
-      include: ["src/lib/**", "src/data/**", "scripts/learn/**"],
+      include: ["apps/web/src/lib/**", "apps/web/src/data/**", "scripts/learn/**"],
       // cli.mjs is the process entrypoint. cli.test.mjs exercises it by
       // spawning `node cli.mjs ...` with execFileSync, and v8 coverage only
       // sees the test runner's own process, so the file would read as 0%
@@ -47,12 +50,12 @@ export default defineConfig({
       // Measured 2026-09-12: statements 58, branches 54, functions 51, lines 60.
       // Measured 2026-09-13 with Postgres up: statements 71, branches 64,
       // functions 64, lines 74. The floors deliberately do not move to meet
-      // that. Two files now in scope — src/lib/learner-api.ts and
-      // src/lib/learner-store.ts — are exercised by suites that need a real
-      // database and skip themselves without one, so the measured number moves
-      // with the environment even though the code did not. A floor that only
-      // holds on a laptop with Postgres running is not a floor. The numbers
-      // below still clear a run with the database down.
+      // that. Two files now in scope — apps/web/src/lib/learner-api.ts and
+      // apps/web/src/lib/learner-store.ts — are exercised by suites that need
+      // a real database and skip themselves without one, so the measured
+      // number moves with the environment even though the code did not. A
+      // floor that only holds on a laptop with Postgres running is not a
+      // floor. The numbers below still clear a run with the database down.
       thresholds: {
         statements: 55,
         branches: 50,
@@ -63,12 +66,13 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      // `src/data/courses` and `src/data/content` import "server-only" so a
-      // client component that reaches them fails the Next build. Next resolves
-      // that specifier itself; vitest does not, and the npm package's default
-      // entry throws on import by design. Point it at the package's own
-      // react-server build, which is the empty module Next would have used.
+      "@": path.resolve(__dirname, "./apps/web/src"),
+      // `apps/web/src/data/courses` and `apps/web/src/data/content` import
+      // "server-only", so a client component that reaches them fails the Next
+      // build. Next resolves that specifier itself; vitest does not, and the
+      // npm package's default entry throws on import by design. Point it at
+      // the package's own react-server build, which is the empty module Next
+      // would have used.
       "server-only": path.resolve(__dirname, "./node_modules/server-only/empty.js"),
     },
   },

@@ -31,38 +31,50 @@ provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
 
-> **Clone with `--recursive`.** `manimkc/` is a git submodule, and manim is a
-> submodule inside that. An existing clone catches up with
+> **Clone with `--recursive`.** `tools/manimkc/` is a git submodule, and manim
+> is a submodule inside that. An existing clone catches up with
 > `git submodule update --init --recursive`. Without it the directory is empty,
 > and so is the `AGENTS.md` in it that explains the ManimGL versus Manim
 > Community split, the no-LaTeX constraint and the render loop.
 
-> **`npm run canvas` needs a build first.** `tldrawkc/` is a second submodule,
-> and the script runs `tldrawkc/dist/cli/index.js`, which is build output and
-> is not committed. So:
-> `git submodule update --init tldrawkc && (cd tldrawkc && npm ci && npm run build)`.
+> **A clone from before the re-layout needs a sync.** Both submodules moved
+> from the repo root into `tools/`. Pull, then
+> `git submodule sync --recursive && git submodule update --init`, and delete
+> the empty `manimkc/` and `tldrawkc/` directories git leaves behind.
+
+> **`npm run canvas` needs a build first.** `tools/tldrawkc/` is the second
+> submodule, and the script runs `tools/tldrawkc/dist/cli/index.js`, which is
+> build output and is not committed. So:
+> `git submodule update --init tools/tldrawkc && (cd tools/tldrawkc && npm ci && npm run build)`.
 > Only diagram work needs it. Its own conventions are in
-> [`tldrawkc/AGENTS.md`](tldrawkc/AGENTS.md); the brief it was built from is in
-> [tldraw-integration/](tldraw-integration/README.md).
+> [`tools/tldrawkc/AGENTS.md`](tools/tldrawkc/AGENTS.md); the brief it was built
+> from is in [tldraw-integration/](tldraw-integration/README.md).
 
 ## Project layout
 
+Four homes for code: `apps/` is deployed, `packages/` is imported, `services/`
+owns a connection or a command surface, `tools/` belongs to another repo. The
+first three are npm workspaces, so one `npm ci` at the root installs
+everything and `npm run lint`, `typecheck`, `test` and `build` all run from
+there.
+
 | Directory | Role |
 | --- | --- |
-| `src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
-| `src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
-| `src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `kb/` (the concept graph, from the catalog) |
-| `src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts` |
+| `apps/web/` | The Next.js app, and the only workspace with a `next.config.ts`, a `public/` and a `vercel.json` |
+| `apps/web/src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
+| `apps/web/src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `kb/` (the concept graph, from the catalog) |
+| `apps/web/src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts`, the repo root in `repo-root.ts` |
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
 | `packages/content/` | The reader both the app and the catalog parse `content/` with |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `learn/` | The knowledge base's files: `concepts/<domain>/`, `sessions/`, `assets/`, `map.md`. The state is in Postgres |
-| `manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
-| `tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo and `AGENTS.md`. Needs `npm ci && npm run build` inside it before the script runs |
-| `tldraw-integration/` | The brief `tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
-| `docs/`, `public/` | Long-form notes, and static assets including the social card |
+| `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
+| `tools/tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo and `AGENTS.md`. Needs `npm ci && npm run build` inside it before the script runs |
+| `tldraw-integration/` | The brief `tools/tldrawkc/` is built from: decisions, architecture, CLI, helpers, roadmap |
+| `docs/`, `apps/web/public/` | Long-form notes, and static assets including the social card |
 
 ## What to contribute
 
@@ -88,7 +100,7 @@ bug fixes or docs. All welcome.
    database to try something out — the tests create and drop their own.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
-5. **Never commit a dirty `manimkc/` or `tldrawkc/` pointer.** Both submodules
+5. **Never commit a dirty `tools/manimkc/` or `tools/tldrawkc/` pointer.** Both submodules
    follow the same rule: commit and push inside the submodule first, then
    commit the updated pointer here, and only ever to a commit that is already
    on the submodule's remote. `git diff --submodule=log <name>` before
@@ -98,16 +110,17 @@ bug fixes or docs. All welcome.
    A local copy would shadow the plugin and the two would drift apart.
 7. **Re-verify any doc that states a count or a path** when you change what it
    describes. Several docs quote concept counts, course counts and layouts.
-8. **Add tests** for logic in `src/lib/`, `src/data/`, `packages/content/` or
-   `scripts/learn/lib/`.
+8. **Add tests** for logic in `apps/web/src/lib/`, `apps/web/src/data/`,
+   `packages/content/` or `scripts/learn/lib/`.
    Components and pages are checked by the build and by looking at the app.
 9. **One concern per PR.** Easier to review and merge.
 
 ## Pull request process
 
 1. Create a feature branch from `main`. Never commit to `main` directly.
-2. Run the full gate locally:
-   `npm run lint && npm run typecheck && npm test && npm run build`.
+2. Run the full gate locally, from the repo root:
+   `npm run lint && npm run typecheck && npm test && npm run build`. All four
+   span every workspace; none of them needs a `cd` into `apps/web`.
 3. Open a PR against `main` saying what changed and why.
 4. Wait for CI and for the Greptile review bot. Fix every CI failure and every
    valid review comment; reply on the threads you disagree with rather than
