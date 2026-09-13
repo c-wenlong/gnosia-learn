@@ -133,10 +133,15 @@ Rules of engagement:
 - **Drive it through the CLI, not by hand.** From this repo that is
   `npm run --silent canvas -- <verb>`: `doctor`, `api` (every helper with a
   real usage line), `new`, `run` (a snippet plus `--shot`), `shot`,
-  `inspect`, `export`, `from-mermaid`, `list`, `meta set`, and `serve`, which
-  mirrors a document in a real browser tab for a human to watch. Exit code 3
-  means lints remain, and it is deliberate: a diagram is not finished until
-  `inspect` exits 0.
+  `inspect`, `export`, `verify`, `from-mermaid`, `list`, `meta set`, and
+  `serve`, which mirrors a document in a real browser tab for a human to
+  watch. Exit code 3 means lints remain, and it is deliberate: a diagram is
+  not finished until `inspect` exits 0.
+- **The loop does not end at `export`.** Run `verify <file.svg>` on what got
+  committed: it renders the SVG back to a PNG and checks it is
+  self-contained, its fonts applied, its text visible and its declared size
+  honest, then Read the PNG it wrote to confirm the diagram actually looks
+  right before calling the diagram done.
 - Outputs go to `learn/assets/<concept-id>.tldr` and
   `learn/assets/<concept-id>.svg`, and **both are committed**: the `.tldr` is
   the editable source the next session extends, the `.svg` is what the
