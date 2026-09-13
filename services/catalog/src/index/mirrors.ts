@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import path from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -12,7 +11,7 @@ import {
 } from "@self-learn/schema";
 
 import { IndexError } from "./errors";
-import { MANIMKC_CLI, MANIMKC_DIR } from "./manimkc";
+import { manimkcCliPath, missingCli } from "./manimkc";
 import type { Indexer, SourceResult } from "./source";
 
 /**
@@ -105,13 +104,8 @@ export async function readMirrorsReport(
   repoRoot: string,
   manimkcRoot: string,
 ): Promise<MirrorsReport> {
-  const cli = path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI);
-  if (!existsSync(cli)) {
-    throw new IndexError(
-      `${path.join(MANIMKC_DIR, MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
-        `initialised; run \`git submodule update --init ${MANIMKC_DIR}\`.`,
-    );
-  }
+  const cli = manimkcCliPath(repoRoot);
+  if (!existsSync(cli)) throw missingCli(repoRoot);
   if (!existsSync(manimkcRoot)) {
     throw new IndexError(`--manimkc-root ${manimkcRoot} does not exist`);
   }

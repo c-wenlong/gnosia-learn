@@ -84,6 +84,15 @@ Rules of engagement:
   are unchanged and remain the catalog's `asset.path` and the mirror ledger's
   join key. `--manimkc-root` still names the *checkout*, which is a different
   thing from where its output lands.
+- **`MANIMKC_ROOT` and `MANIMKC_HOME` are different questions, and the catalog
+  only answers one of them.** `MANIMKC_ROOT` is the checkout, the same variable
+  and the same meaning manimkc's own CLI gives it, and
+  `services/catalog/src/env.ts` reads it as the default for `--manimkc-root`
+  and as where the pinned CLI runs from. `MANIMKC_HOME` is the data root and
+  nothing in this repo reads it: the indexers take that from each report's
+  `outRoot`. `TLDRAWKC_ROOT` is the same idea for the other submodule, read by
+  `npm run canvas` as well so the two cannot run different builds. All three
+  default to the paths in `.gitmodules`, so a clone configures nothing.
 - **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
   `doctor` (venvs, ffmpeg, narration backend, output dirs), `home` (the data
