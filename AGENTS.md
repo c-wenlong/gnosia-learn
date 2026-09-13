@@ -21,7 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [content/courses/README.md](content/courses/README.md) | The course YAML: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
-| [tldraw-integration/](tldraw-integration/README.md) | The brief for `tools/tldrawkc/`: decisions, architecture, CLI, helpers, phase roadmap |
+| [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 
 ## The learning pipeline
 
@@ -109,8 +109,9 @@ Rules of engagement:
 
 - **Read `tools/tldrawkc/AGENTS.md` before working in there.** It covers the Node
   to browser bridge, why every shape is built inside a live `Editor` rather
-  than in Node, the helper bag a snippet may call, and the eight lint rules.
-  None of that is guessable from this repo.
+  than in Node, the helper bag a snippet may call, and the nine lint rules.
+  None of that is guessable from this repo. The design docs behind it are in
+  [`tools/tldrawkc/docs/`](tools/tldrawkc/docs/README.md).
 - **Commits inside `tools/tldrawkc/` belong to that repo.** Commit and push there
   first, then commit the updated submodule pointer here. Never commit a
   dirty submodule pointer.
@@ -123,14 +124,19 @@ Rules of engagement:
 - **Drive it through the CLI, not by hand.** From this repo that is
   `npm run --silent canvas -- <verb>`: `doctor`, `api` (every helper with a
   real usage line), `new`, `run` (a snippet plus `--shot`), `shot`,
-  `inspect`, `export`, `from-mermaid`, `list`, `meta set`. `serve` is
-  specified but not built. Exit code 3 means lints remain, and it is
-  deliberate: a diagram is not finished until `inspect` exits 0.
+  `inspect`, `export`, `from-mermaid`, `list`, `meta set`, and `serve`, which
+  mirrors a document in a real browser tab for a human to watch. Exit code 3
+  means lints remain, and it is deliberate: a diagram is not finished until
+  `inspect` exits 0.
 - Outputs go to `learn/assets/<concept-id>.tldr` and
   `learn/assets/<concept-id>.svg`, and **both are committed**: the `.tldr` is
   the editable source the next session extends, the `.svg` is what the
   session log embeds as `![[<concept-id>.svg]]`. Iteration PNGs go to the
   scratchpad and are never committed.
+- **`learn/map.md` stays mermaid, and is not a job for this tool.** It is a
+  derived cache that `learn map` rebuilds from the event log, and the web app
+  reads its string out of the index without rendering it. Only teaching
+  diagrams go on the canvas.
 - **Every `.tldr` needs a topic, or `catalog index` refuses it by name.** The
   topic and concepts live in `meta.tldrawkc` on the document record, written
   by `new --topic ...` or backfilled with
@@ -139,6 +145,16 @@ Rules of engagement:
   `export --svg` stamps the title and topic onto it.
 - The end-to-end process is the `tldrawkc-diagram` skill, which lives in the
   submodule and is symlinked into `.claude/skills/tldrawkc-diagram`.
+- **The `diagram-maker` agent drives the same CLI, and falls back when it is
+  missing.** The `learning` plugin is global and shared across projects, so
+  the agent checks `npm run --silent canvas -- doctor` first and reverts to
+  the old hand-written SVG path when that fails. That keeps `/learn` working
+  in a project that never adopted the submodule.
+- **Every content edit to the plugin needs a version bump.** Claude Code
+  reads the plugin from a cache under `~/.claude`, and `claude plugin update`
+  refreshes it by comparing the version in `.claude-plugin/plugin.json`
+  against the installed one. An edit that leaves the version alone is an edit
+  nobody's session ever sees.
 
 ## Gotchas
 
