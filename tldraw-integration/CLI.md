@@ -63,14 +63,32 @@ state of the installed tldraw. The write is exclusive, so the refusal to
 overwrite holds even when something else creates the file while the page is
 starting up.
 
+| Option | What |
+| --- | --- |
+| `--title <text>` | document metadata: a human title |
+| `--topic <slug>` | document metadata: one vocabulary slug |
+| `--concept <slug>` | document metadata: a concept slug, repeatable |
+| `--source <text>` | document metadata: what prompted this diagram |
+
+The four are optional and independent: a `new` with none of them still draws.
+Passing any of them stamps `meta.tldrawkc` on the fresh document the same way
+`meta set` would afterwards; see "What a diagram is about" below.
+
 Output (`--json`):
 
 ```json
 {
   "file": "/home/you/self-learn/learn/assets/attention.tldr",
+  "meta": { "kc": 1, "title": "Attention", "topic": "attention-and-transformers",
+            "concepts": [], "source": "", "created": "2026-09-13T04:12:08.991Z" },
   "ms": 780
 }
 ```
+
+`meta` is `null` when none of the four flags were given and `--from` did not
+copy an existing document with metadata already on it; otherwise it is what
+landed on the document record, so a caller does not have to run `inspect`
+straight after `new` to find out.
 
 ### `run <file.tldr> --code <snippet.js> [--shot <out.png>] [--svg <out.svg>] [--create]`
 
@@ -146,8 +164,11 @@ Prints what is on the canvas, for the agent to read before editing. Human
 mode prints one line per shape; `--json` prints the bridge's `inspect()`
 structure exactly as defined in [ARCHITECTURE.md](ARCHITECTURE.md), with
 `bounds` set to `null` on an empty page, since there is no union of no
-shapes. Exits 3 when lints are present, like `run`. It loads and reads and
-never writes the file: a read that rewrites what it read is a trap.
+shapes. The structure carries a `meta` key alongside `shapes`, `bindings` and
+`lints`: the document metadata described under "What a diagram is about"
+below, or `null` when the document has none. Exits 3 when lints are present,
+like `run`. It loads and reads and never writes the file: a read that
+rewrites what it read is a trap.
 
 ### `export <file.tldr> (--svg <out.svg> | --png <out.png>) [--ids ...]`
 
@@ -170,6 +191,11 @@ Output (`--json`):
 `svg` and `png` are each an object or `null`, depending on which was asked
 for. `width` and `height` are pixels for the PNG and the SVG's own viewport
 for the SVG.
+
+`--svg` stamps the document's metadata onto the file it writes: the title as
+a `<title>` element and the topic as `data-kc-topic` on the root `<svg>`. A
+document with neither a title nor a topic exports untouched. See "What a
+diagram is about" below.
 
 ### `from-mermaid <file.tldr> --source <diagram.mmd> [--append] [--shot <out.png>]`
 
@@ -212,6 +238,105 @@ reads like the diagram's fault.
 The point of this command is migration: every diagram this repo has today
 is mermaid, and the agent should be able to lift one onto the canvas and
 then fix it by hand.
+
+### What a diagram is about
+
+`new` and `meta set` can stamp a small versioned object on the document
+record, under `meta.tldrawkc`:
+
+```json
+{ "kc": 1,
+  "title": "A vector as a list of numbers",
+  "topic": "vector-and-linear-algebra-basics",
+  "concepts": ["vector-as-a-list-of-numbers"],
+  "source": "learn/concepts/linear-algebra/vector-as-a-list-of-numbers.md",
+  "created": "2026-09-13T10:00:00.000Z" }
+```
+
+`topic` is one slug from whatever vocabulary the host repo keeps (in
+self-learn, `content/topics.yaml`); `concepts` are concept ids under it.
+`source` is free text, not a checked path: a session id, a note path,
+whatever prompted the diagram. `kc` is the schema version this build writes;
+a reader keeps a version it does not recognise, a writer refuses one, so an
+older `tldrawkc` never folds a patch into a newer object and silently drops
+what that version added. Nothing here is required: a document with none of it
+still draws, exports and loads, and `meta` reads back `null`.
+
+### `list [dir]`
+
+Every `.tldr` under a directory, no browser. Defaults to `learn/assets`.
+Cheap enough to run on every index, which running a browser per file would
+not be.
+
+Human mode is a table, topic first:
+
+```
+topic                            shapes  svg  path
+vector-and-linear-algebra-basics     43  yes  vector-as-a-list-of-numbers.tldr
+(none)                               12  no   scratch.tldr
+2 diagrams, 1 with a topic, 0 unreadable
+```
+
+Output (`--json`):
+
+```json
+{
+  "dir": "/home/you/self-learn/learn/assets",
+  "diagrams": [
+    {
+      "path": "/home/you/self-learn/learn/assets/vector-as-a-list-of-numbers.tldr",
+      "relative": "vector-as-a-list-of-numbers.tldr",
+      "name": "vector-as-a-list-of-numbers",
+      "meta": { "kc": 1, "title": "A vector as a list of numbers",
+                "topic": "vector-and-linear-algebra-basics",
+                "concepts": ["vector-as-a-list-of-numbers"],
+                "source": "learn/concepts/foundations/vector-as-a-list-of-numbers.md",
+                "created": "2026-09-12T23:51:55.236Z" },
+      "shapes": 43,
+      "svg": { "path": "/home/you/self-learn/learn/assets/vector-as-a-list-of-numbers.svg", "exists": true },
+      "png": { "path": "/home/you/self-learn/learn/assets/vector-as-a-list-of-numbers.png", "exists": false },
+      "modified": "2026-09-12T23:51:55.237Z"
+    }
+  ],
+  "errors": [],
+  "ms": 1
+}
+```
+
+Sorted by path. `meta` is `null` for a diagram that carries none. A `.tldr`
+that will not parse goes in `errors` with its path and a message, never
+thrown past: one corrupt file in a directory of thirty should not cost the
+answer for the other twenty-nine.
+
+### `meta set <file.tldr> [--title <text>] [--topic <slug>] [--concept <slug>] [--source <text>]`
+
+Backfills metadata on an existing document with no browser: for the diagrams
+drawn before this command existed, and for scripted bulk edits where opening
+Chromium once per file would be the slow part. At least one flag is required;
+`meta set` with none is a usage error rather than a no-op that looks like it
+worked.
+
+Idempotent: `created` is written once and preserved on every later call, so
+an identical second call reports `changed: false` and leaves the file's bytes
+untouched.
+
+Output (`--json`):
+
+```json
+{
+  "file": "/home/you/self-learn/learn/assets/vector-as-a-list-of-numbers.tldr",
+  "meta": { "kc": 1, "title": "A vector as a list of numbers",
+            "topic": "vector-and-linear-algebra-basics",
+            "concepts": ["vector-as-a-list-of-numbers"],
+            "source": "learn/concepts/foundations/vector-as-a-list-of-numbers.md",
+            "created": "2026-09-12T23:51:55.236Z" },
+  "changed": false,
+  "ms": 1
+}
+```
+
+The human summary is `wrote <file>` or `unchanged <file>`, then one line of
+the metadata as written.
 
 ### `serve <file.tldr> [--port <n>] [--no-open]`
 

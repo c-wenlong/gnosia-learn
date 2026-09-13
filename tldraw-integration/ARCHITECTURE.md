@@ -33,7 +33,7 @@ flowchart TB
 | Layer | Where | What |
 | --- | --- | --- |
 | Entry points | `src/cli/` | Argument parsing and printing. The only module that prints. |
-| Orchestration | `src/lib/` | Launches Chromium, serves the page, calls the bridge, writes files. Takes data, returns data. |
+| Orchestration | `src/lib/` | Launches Chromium, serves the page, calls the bridge, writes files. Takes data, returns data. `list` and `meta set` are the two verbs that never open a browser at all; see "Document metadata" below. |
 | Drawing | `src/page/` | A Vite app: `<Tldraw>`, the `helpers` bag, the mermaid importer, the lint pass, and the `window.__tldrawkc` bridge. Built into `dist/page/`. |
 | Optional entry | `src/mcp/` | Deferred. A thin wrapper over `src/lib/` exposing the same verbs as MCP tools. See [DECISIONS.md](DECISIONS.md). |
 
@@ -59,7 +59,9 @@ tldrawkc/
     cli/index.ts          parseArgs dispatch, --json, exit codes
     lib/
       index.ts            public API re-exports (openCanvas, runSnippet, ...)
-      canvas.ts           one function per verb: run, shot, inspect, export, fromMermaid, serve
+      canvas.ts           one function per verb that needs a browser: run, shot, inspect, export, fromMermaid, serve
+      meta.ts             the document metadata: shape, .tldr JSON surgery, meta set, the SVG stamp. No browser
+      list.ts             list: a directory of .tldr files as data. No browser
       browser.ts          launch or connect Chromium, open the page, wait for the bridge
       server.ts           static server for dist/page plus /api/* for serve mode
       files.ts            atomic write (temp + rename), base64 to png, svg text
@@ -159,17 +161,57 @@ returns JSON-safe values so the same surface can back a future MCP entry.
   ],
   "lints": [
     { "rule": "friendless-arrow", "shapeIds": ["shape:a2"], "message": "arrow shape:a2 has no binding at its end" }
-  ]
+  ],
+  "meta": { "kc": 1, "title": "", "topic": "", "concepts": [], "source": "", "created": "" }
 }
 ```
 
 `geo` is present only for geo shapes; `text` is the label's plain text or
-`null`; `bounds` is the union of all shapes on the page.
+`null`; `bounds` is the union of all shapes on the page. `meta` is `null` on a
+document that carries none; see "Document metadata" below.
 
 The snippet is trusted local code. It runs with the same power as the
 tldraw offline app's `/exec`: full `editor`, the `helpers` bag from
 [HELPERS.md](HELPERS.md), and the `tldraw` module for `createShapeId`,
 `toRichText` and friends.
+
+## Document metadata
+
+What a diagram is about lives on the tldraw **document record**
+(`document:document`), under one key in its `meta` bag, `meta.tldrawkc`. Not a
+sidecar file: the object travels inside the `.tldr` itself, so a diagram and
+what it is filed under can never drift apart by one of the two being copied
+or renamed without the other. `editor.getDocumentSettings()` and
+`updateDocumentSettings()` reach it from the page, and it is a plain JSON
+record, which is what lets `list` and `meta set` read and write it with no
+Chromium at all.
+
+The rules exist twice, once in `src/lib/meta.ts` (node, no `tldraw` import)
+and once in `src/page/helpers/meta.ts` (the page, backing `helpers.meta`),
+because layering rule 1 forbids the node side from importing anything under
+`src/page/` and the page has to be able to amend the bag mid-snippet. A test
+runs both over the same table of cases so a change to one that the other
+does not make is a red test, not a silent drift.
+
+`list [dir]` is the reason the split matters in practice. A catalog of every
+`.tldr` in `learn/assets/` has to run on every index, and opening a browser
+per file to read six strings out of JSON would make that cost scale with the
+number of diagrams. `src/lib/list.ts` instead reads each file as text, parses
+the envelope, and pulls `meta.tldrawkc` straight off the document record
+alongside the shape count and the neighbouring `.svg`/`.png`. A file that
+will not parse is reported in `errors` rather than thrown past, so one
+corrupt diagram does not cost the listing for the rest of the directory.
+
+`kc` is the schema version this build writes, not a copy of the key. A reader
+keeps a version it does not recognise; a writer refuses one, because this
+build knows exactly six fields and folding a patch into a newer object would
+drop whatever that version added and then stamp the result as version 1,
+which is silent data loss in a file whose whole point is to be read by
+something else later. `export --svg` copies `title` and `topic` onto the file
+it writes, as a `<title>` element and `data-kc-topic` on the root `<svg>`, so
+the derived file can still say what it is about once it is sitting on its own
+in a browser tab or a notes folder, away from the `.tldr` that is its source
+of truth.
 
 ## Fonts and offline rendering
 
