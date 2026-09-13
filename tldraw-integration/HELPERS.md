@@ -262,6 +262,27 @@ flowcharts on one canvas need distinct ids or separate pages.
 The layout is deliberately simple. The agent is expected to look at the
 result and nudge.
 
+## Metadata
+
+### `helpers.meta(patch)`
+
+Read or amend what this diagram is about: the same `{ kc, title, topic,
+concepts, source, created }` object `inspect --json` reports under `meta`
+and `list` reports per file. See "What a diagram is about" in
+[CLI.md](CLI.md) for the shape and why it lives on the document record.
+
+With no argument it reads and returns the object, or `null` when the
+document carries none. With a patch it merges into whatever is already
+there, so a snippet can add a concept mid-session without restating the
+title, and it lands on the document record straight away, no `save()`
+required first. `created` is written once and then left alone regardless of
+what a later patch says.
+
+```js
+helpers.meta({ topic: 'dot-product', concepts: ['vector-as-a-list-of-numbers'] })
+const topic = helpers.meta()?.topic ?? '(none)'
+```
+
 ## Reading and checking
 
 ### `helpers.describe()`
@@ -272,8 +293,9 @@ without a second CLI round trip.
 
 ### `helpers.getLints()`
 
-Returns `Lint[]`, the same array the bridge's `lints()` returns. Seven rules,
-six from v1 and `arrow-crosses-shape` added in phase 3:
+Returns `Lint[]`, the same array the bridge's `lints()` returns. Eight rules,
+six from v1, `arrow-crosses-shape` added in phase 3, and `missing-topic`
+added alongside document metadata:
 
 | Rule | Fires when |
 | --- | --- |
@@ -284,9 +306,18 @@ six from v1 and `arrow-crosses-shape` added in phase 3:
 | `off-page` | A shape sits further than `OFF_PAGE_LIMIT` (10000 page units) from the origin in any direction, positive or negative |
 | `empty-label` | A geo shape has no text and no fill and is not a container, so it renders as an unexplained outline |
 | `unreadable-label` | The widest unbreakable run of a label is wider than the room the shape gives it |
+| `missing-topic` | The document names no topic, so a catalog cannot file it |
 
 Three of those rows were written from a guess and are corrected here against
 what the code measures.
+
+`missing-topic` is the one rule at `severity: 'warn'` rather than the
+implicit `error`. It prints, and `helpers.getLints()` still returns it, but
+`hasBlockingLints` ignores anything at `warn`, so it never turns into exit
+code 3 on its own. Every `.tldr` drawn before metadata existed has no topic,
+and a lint that failed all of them at once would be this tool breaking work
+that was already fine; the rule exists so a catalog can say "not filed yet"
+rather than to gate a diagram that draws correctly.
 
 `arrow-crosses-shape` is about depth, not length: the shape's outline is
 eroded by 4 page units and the arrow's path is tested against what is left.

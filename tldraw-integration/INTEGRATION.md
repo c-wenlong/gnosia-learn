@@ -53,6 +53,12 @@ tool keeps that behaviour.
 rebuilds from `events.jsonl`, not a teaching diagram, and the web app reads
 its string from `index.json` without rendering it.
 
+The `.tldr`'s own metadata is the other half of this seam: `--topic` on
+`new` and `meta set` takes a slug from `content/topics.yaml`, so a diagram
+under `learn/assets/` names the same topic the rest of the pipeline already
+uses, and `tldrawkc list learn/assets` is a directory-wide check for which
+diagrams still have none.
+
 ## Changes to make in self-learn (phase 3)
 
 The first four rows landed early, in phase 0, because the submodule had to

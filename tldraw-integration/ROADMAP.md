@@ -191,6 +191,26 @@ as if it existed), [HELPERS.md](HELPERS.md) (the lint table and the container
 exemption both predate the seventh rule) and [DECISIONS.md](DECISIONS.md)
 (D33 was superseded, D34 and D35 added).
 
+Redrawing the vector diagram also surfaced the gap the checklist above never
+named: a directory of `.tldr` files with nothing on any of them saying what
+they were about, and no command to look over the directory at all. tldrawkc
+PR #6 (commit `a653920`) closes it: `new` and `meta set` can stamp
+`{ kc, title, topic, concepts, source, created }` on the document record,
+`helpers.meta` reads and amends it from a snippet, `inspect --json` and
+`export --svg` both surface it, and `list [dir]` walks `learn/assets/` (or
+any directory) and reports every `.tldr`'s metadata, shape count and
+neighbouring `.svg`/`.png` with no browser. The eighth lint rule,
+`missing-topic`, is a warning rather than an error for the reason `D36` in
+[DECISIONS.md](DECISIONS.md) gives: every diagram this repo already has,
+`vector-as-a-list-of-numbers.tldr` included, was drawn before metadata
+existed, and a rule that failed them all on sight would be the tool breaking
+work that already reads correctly. Doc corrections from this PR are in
+[CLI.md](CLI.md) (`list`, `meta set`, and the metadata additions to `new`,
+`inspect` and `export`), [ARCHITECTURE.md](ARCHITECTURE.md) (the "Document
+metadata" section and `lib/meta.ts`, `lib/list.ts` in the layout),
+[HELPERS.md](HELPERS.md) (`helpers.meta` and the eighth lint row) and
+[DECISIONS.md](DECISIONS.md) (D36).
+
 ## Phase 4. The human view
 
 Goal: someone can watch and nudge.

@@ -463,3 +463,40 @@ such as a dot at the origin of a pair of axes, is crossed by every axis and
 every vector by design, and no tolerance distinguishes that from an arrow
 routed over a box. `meta.lintIgnore: ['arrow-crosses-shape']` on the marker is
 the answer, and the vector diagram is the first place it was needed.
+
+## D36. Document metadata is a versioned object on the document record, not a sidecar file
+
+**Verdict:** what a diagram is about, `{ kc, title, topic, concepts, source,
+created }`, is stored under `meta.tldrawkc` on the tldraw `document:document`
+record, inside the `.tldr` itself. There is no `.meta.json`, no front matter,
+no second file next to the drawing. `kc` is a schema version: a reader keeps
+a version it does not recognise, a writer refuses one, so an older build can
+never fold a patch into a newer object and quietly drop what that version
+added.
+
+**Why:** a sidecar file is a second thing that can go missing, get renamed
+independently of the diagram, or be copied without its partner, and every one
+of those is a silent way to lose what a drawing is about. tldraw already
+ships a `meta` bag on every record for exactly this purpose, JSON in, JSON
+out, migrated by nothing because it is opaque to tldraw's own schema, so
+using it costs no new file format and no new parser. It also means `list`
+and `meta set` can read and write the metadata with `readText`/`writeText`
+over the existing `.tldr`, no browser, which is the reason a catalog over a
+directory of diagrams can run on every index instead of once per file per
+Chromium launch.
+
+The versioning matters because this is a file meant to be read by something
+else later, possibly a future build of this same tool. Six fields is what
+version 1 knows; a version 2 that added a seventh and represented it as a
+plain merge would silently discard that seventh field whenever a version-1
+writer touched the file again, and nothing downstream would notice until the
+data was already gone. Refusing to write a version it does not know is the
+one guard that catches that before it happens.
+
+What forced it: `list` exists because a diagram nothing can file is a diagram
+nobody finds again, and a directory of thirty `.tldr` files with no way to
+say what any of them are about was exactly that problem. `missing-topic`
+(the eighth lint rule, see [HELPERS.md](HELPERS.md)) is a warning rather than
+an error for the same reason this decision keeps the metadata optional:
+every diagram drawn before this shipped has none, and failing all of them at
+once would be the tool breaking work that was already fine.

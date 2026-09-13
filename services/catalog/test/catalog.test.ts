@@ -2,7 +2,15 @@ import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { collection, concept, curriculumItem, topic } from "@self-learn/schema";
+import {
+  asset,
+  collection,
+  concept,
+  curriculumItem,
+  indexRun,
+  mirror,
+  topic,
+} from "@self-learn/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -10,7 +18,7 @@ import { runIndexCommand } from "../src/commands/index-command";
 import { runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
 import { runSearch } from "../src/commands/search";
-import { runShow, type ShowConcept, type ShowTopic } from "../src/commands/show";
+import { runShow, type ShowAsset, type ShowConcept, type ShowTopic } from "../src/commands/show";
 import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { hasManimkcCli } from "../src/index/manimkc";
@@ -100,26 +108,33 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("index", () => {
-    it("runs manimkc, or skips it with a reason when the submodule is absent", async () => {
+    it("runs the two manimkc sources, or skips both with a reason", async () => {
       const result = await runIndexCommand({});
       const ran = result.sources.map((s) => s.source);
+      // `mirrors` reads the same CLI out of the same submodule, so it is
+      // absent for exactly the same reason `manimkc` is and never on its own.
       if (withManimkc) {
-        expect(ran).toContain("manimkc");
+        expect(ran).toEqual(expect.arrayContaining(["manimkc", "mirrors"]));
         expect(result.skipped).toEqual([]);
       } else {
         expect(ran).not.toContain("manimkc");
+        expect(ran).not.toContain("mirrors");
         expect(result.skipped).toEqual([
           { source: "manimkc", reason: expect.stringContaining("never been indexed") },
+          { source: "mirrors", reason: expect.stringContaining("never been indexed") },
         ]);
       }
     });
 
-    it("refuses --only manimkc when the submodule is absent", async () => {
+    it("refuses --only manimkc or --only mirrors when the submodule is absent", async () => {
       if (withManimkc) return;
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
       await expect(runIndexCommand({ only: ["manimkc"] })).rejects.toThrow(
-        /submodule is not initialised/,
+        /submodule is not initialised.*manimkc topics --json/s,
+      );
+      await expect(runIndexCommand({ only: ["mirrors"] })).rejects.toThrow(
+        /submodule is not initialised.*manimkc mirrors --json/s,
       );
     });
 
@@ -184,7 +199,10 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         expect(bySource.get(source)?.lastIndexedAt, source).not.toBeNull();
       }
       expect(bySource.get("topics")?.counts).toMatchObject({ topic: EXPECTED.topics });
-      if (!withManimkc) expect(bySource.get("manimkc")?.lastIndexedAt).toBeNull();
+      if (!withManimkc) {
+        expect(bySource.get("manimkc")?.lastIndexedAt).toBeNull();
+        expect(bySource.get("mirrors")?.lastIndexedAt).toBeNull();
+      }
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
@@ -282,6 +300,19 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(serialised).not.toContain("## Worked example");
     });
 
+    it("files the one diagram by what its .tldr says, not by its filename", async () => {
+      const svg = (await runShow(
+        "diagram:learn/assets/vector-as-a-list-of-numbers.svg",
+      )) as ShowAsset;
+      expect(svg.topics).toEqual(["vector-and-linear-algebra-basics"]);
+      expect(svg.concepts).toEqual(["vector-as-a-list-of-numbers"]);
+      expect(svg.title).toBe("A vector as a list of numbers");
+      // The SVG was exported from the .tldr, and says so.
+      expect(svg.derivedFrom.map((a) => a.path)).toEqual([
+        "learn/assets/vector-as-a-list-of-numbers.tldr",
+      ]);
+    });
+
     it("reports a target that does not exist", async () => {
       await expect(runShow("no-such-slug")).rejects.toThrow(/nothing in the catalog is called/);
     });
@@ -328,6 +359,134 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     it("returns nothing for a term that matches nothing", async () => {
       expect((await runSearch("zzzzz-no-such-thing")).hits).toEqual([]);
     });
+  });
+});
+
+/**
+ * The mirror ledger, read back through `status` and `show`.
+ *
+ * Its own database, and rows inserted directly rather than through an index
+ * run. The real ledger describes whichever videos happen to be rendered and
+ * whichever cloud drives happen to be mounted, so an assertion on it would be
+ * an assertion on a laptop. What is worth pinning down is the shape both
+ * commands return, and that "nothing audited" and "audited and empty" do not
+ * look the same.
+ */
+describe.skipIf(!reachable.ok)("mirror coverage", () => {
+  let scratch: Scratch;
+  let previousUrl: string | undefined;
+
+  const VIDEO = "manimkc:out/a/one/one.mp4";
+  const checked = new Date("2026-09-13T00:02:57Z");
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    previousUrl = process.env["DATABASE_URL"];
+    const url = new URL(previousUrl ?? "postgres://localhost:5432/self_learn");
+    url.pathname = `/${scratch.name}`;
+    process.env["DATABASE_URL"] = url.toString();
+  }, 60_000);
+
+  afterAll(async () => {
+    if (previousUrl === undefined) delete process.env["DATABASE_URL"];
+    else process.env["DATABASE_URL"] = previousUrl;
+    await scratch?.drop();
+  });
+
+  it("reports no destinations before anything has been audited", async () => {
+    expect((await runStatus()).mirrors).toEqual({});
+  });
+
+  it("counts each status per destination, and dates the audit", async () => {
+    await scratch.db.insert(asset).values([
+      { id: VIDEO, kind: "video", path: "out/a/one/one.mp4", sourceRepo: "manimkc" },
+      { id: "manimkc:out/a/two/two.mp4", kind: "video", path: "out/a/two/two.mp4", sourceRepo: "manimkc" },
+      { id: "manimkc:out/a/one/one.vtt", kind: "captions", path: "out/a/one/one.vtt", sourceRepo: "manimkc" },
+    ]);
+    await scratch.db.insert(mirror).values([
+      { assetId: VIDEO, destination: "drive", root: "/mnt/drive", status: "present", compared: "sha256", bytes: 10, mtime: checked, checkedAt: checked },
+      { assetId: "manimkc:out/a/two/two.mp4", destination: "drive", root: "/mnt/drive", status: "stale", compared: "bytes", bytes: 9, checkedAt: checked },
+      { assetId: "manimkc:out/a/one/one.vtt", destination: "drive", root: "/mnt/drive", status: "unknown", compared: "none", checkedAt: checked },
+      { assetId: VIDEO, destination: "seafile", root: "/mnt/seafile", status: "present", compared: "size+mtime", bytes: 10, mtime: checked, checkedAt: new Date("2026-09-06T00:00:00Z") },
+    ]);
+
+    const status = await runStatus();
+    expect(status.mirrors).toEqual({
+      drive: { present: 1, stale: 1, missing: 0, unknown: 1, checked: "2026-09-13T00:02:57.000Z" },
+      seafile: { present: 1, stale: 0, missing: 0, unknown: 0, checked: "2026-09-06T00:00:00.000Z" },
+    });
+    // An older stamp is the point of reporting one: those counts were true a
+    // week ago and nothing has confirmed them since.
+    expect(status.rows["mirror"]).toBe(4);
+  });
+
+  it("lists an asset's mirror rows under show, with the test each rests on", async () => {
+    const result = (await runShow(VIDEO)) as ShowAsset;
+    expect(result.type).toBe("asset");
+    expect(result.mirrors).toEqual([
+      {
+        destination: "drive",
+        root: "/mnt/drive",
+        status: "present",
+        compared: "sha256",
+        bytes: 10,
+        mtime: "2026-09-13T00:02:57.000Z",
+        checkedAt: "2026-09-13T00:02:57.000Z",
+      },
+      {
+        destination: "seafile",
+        root: "/mnt/seafile",
+        status: "present",
+        compared: "size+mtime",
+        bytes: 10,
+        mtime: "2026-09-13T00:02:57.000Z",
+        checkedAt: "2026-09-06T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("keeps a reachable destination that matched nothing, so it does not read as never audited", async () => {
+    // The ledger listed only files this catalog has no asset for, so the audit
+    // succeeded and wrote no rows. Reading the table alone would drop the
+    // destination entirely and say the opposite of what happened.
+    const at = new Date("2026-09-13T01:00:00Z");
+    await scratch.db.insert(indexRun).values({
+      source: "mirrors",
+      sourceRoot: "/checkout/manimkc",
+      startedAt: at,
+      finishedAt: at,
+      metadata: {
+        destinations: [
+          { destination: "drive", root: "/mnt/drive", reachable: true, checked: "2026-09-13T01:00:00Z", files: 3 },
+          { destination: "usb", root: "/mnt/usb", reachable: true, checked: "2026-09-13T01:00:00Z", files: 0 },
+          { destination: "seafile", root: "/mnt/seafile", reachable: false, checked: null, files: 0 },
+        ],
+      },
+    });
+
+    const { mirrors } = await runStatus();
+    expect(mirrors["usb"]).toEqual({
+      present: 0,
+      stale: 0,
+      missing: 0,
+      unknown: 0,
+      checked: "2026-09-13T01:00:00.000Z",
+    });
+    // Seafile was not reached, and its rows carry their own older stamp.
+    expect(mirrors["seafile"]?.checked).toBe("2026-09-06T00:00:00.000Z");
+    expect(mirrors["drive"]?.present).toBe(1);
+  });
+
+  it("returns no mirrors for an asset no mirror carries", async () => {
+    await scratch.db.insert(asset).values({
+      id: "note:learn/concepts/x/a.md",
+      kind: "note",
+      path: "learn/concepts/x/a.md",
+      sourceRepo: "self-learn",
+    });
+    const result = (await runShow("note:learn/concepts/x/a.md")) as ShowAsset;
+    expect(result.mirrors).toEqual([]);
   });
 });
 
