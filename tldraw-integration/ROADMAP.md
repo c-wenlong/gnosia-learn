@@ -113,7 +113,10 @@ Not a phase. What is still missing, written down so it is found deliberately
 rather than in a diagram that looks wrong. Two entries that stood here after
 phase 2 are gone because phase 3 closed them: no lint caught an arrow crossing
 a shape (`arrow-crosses-shape`, tldrawkc PR #5) and a snippet's stack printed
-two lines too high (D34, same PR).
+two lines too high (D34, same PR). Three more are gone with tldrawkc PR #8,
+which added `line`, `alignContainers` and the `matchSize`, `minW` and `minH`
+options to `boxShapes`, gave `stub` the options it always accepted, and taught
+`text` and `note` to place themselves against the bounds of other shapes.
 
 - **A diamond's label can exceed its outline without a lint.**
   `unreadable-label` compares against the shape's width, and a diamond's
@@ -126,11 +129,15 @@ two lines too high (D34, same PR).
   multi-page document.** Every document this phase touched had one page.
 - **Rendering on Linux has never been eyeballed.** CI runs the end-to-end
   suite there and asserts sizes and labels; nobody has looked at the output.
-- **An exported SVG is about 440 kB, whatever the diagram.** `export --svg`
-  inlines both fonts it uses as base64, so the vector diagram went from a
-  5 kB hand-written file to 444 kB, of which 220 kB is font. Self-contained
-  was the point (D26), but it is a per-repo cost that compounds one diagram
-  at a time and needs a decision: keep it, subset the fonts, or link them.
+- **An exported SVG is about 440 kB, whatever the diagram, and that is
+  accepted for now.** `export --svg` inlines both fonts it uses as base64, so
+  the vector diagram went from a 5 kB hand-written file to 444 kB, of which
+  220 kB is font. The hand-drawn font is kept, and so is the cost: fonts
+  cannot be shared across SVGs, because Obsidian, GitHub and the session log
+  all render an SVG as an image, and a browser fetches no external resource
+  for an SVG in an image tag. The open follow-up is subsetting the fonts at
+  export to the glyphs the diagram actually uses, which should bring each SVG
+  to roughly 20 to 40 kB.
 - **The agent cannot read its own export.** An SVG that size is refused by
   the Read tool, which counts the file at roughly 194000 tokens against a
   25000 cap, and the export is one enormous line so paging through it with
@@ -140,21 +147,6 @@ two lines too high (D34, same PR).
   (Shantell Sans) a square-root sign renders as a plain `v` with no bar, which
   reads as a variable. Every maths label needs `font: 'sans'`, and nothing
   warns.
-- **`helpers.stub` takes no options at all.** The signature is
-  `stub(key, x, y, dx, dy)`: no colour, no size, no dash, no arrowhead. A
-  teaching diagram is mostly decorative marks (axes, ticks, dashed guides,
-  each in the colour of the thing it belongs to), so the vector redraw ended
-  up hand-rolling a `line()` that builds a raw arrow shape with
-  `meta.lintIgnore` set, which is exactly what the helper bag exists to avoid.
-  `stub` wants the same `{ color, size, dash, head }` bag `connect` already
-  has.
-- **No helper sizes two containers alike.** Two side-by-side panels that
-  should read as a matched pair have to be given identical `w` and `h` by
-  hand, and `boxShapes` sizes each to its own contents.
-- **No helper places a label against a group.** "Centre this text under those
-  four shapes" is arithmetic on `describe()` output every time; `row`,
-  `column` and `grid` move shapes but nothing positions one shape relative to
-  the bounds of several.
 
 ## Phase 3. Skill and integration into self-learn
 
