@@ -8,8 +8,8 @@ written by the catalog.
 Everything under `content/` is parsed by one reader,
 [`packages/content`](../packages/content/src/index.ts), which the web app and
 the catalog both import. That is deliberate: while the courses existed as both
-YAML here and TypeScript literals in `src/`, only a parity test stood between
-the two, and a parity test can notice drift but not prevent it.
+YAML here and TypeScript literals in the web app, only a parity test stood
+between the two, and a parity test can notice drift but not prevent it.
 
 | Folder | What it holds | Read by |
 | --- | --- | --- |

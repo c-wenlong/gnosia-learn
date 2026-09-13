@@ -7,7 +7,12 @@ hand-written SVG and mermaid for teaching diagrams.
 
 `tldrawkc` was a working name chosen to sit beside `manimkc`. It stuck: the
 repo is [c-wenlong/tldrawkc](https://github.com/c-wenlong/tldrawkc), added to
-this one as a submodule at `tldrawkc/` in phase 0.
+this one as a submodule in phase 0.
+
+> **Paths in these documents are as they were written.** Both submodules moved
+> to `tools/` afterwards, so a `tldrawkc/` or `manimkc/` in a path below is
+> `tools/tldrawkc/` or `tools/manimkc/` today, and the web app's `src/` is
+> `apps/web/src/`. The reasoning is unchanged; only the directories moved.
 
 ## Read in this order
 
@@ -19,7 +24,7 @@ this one as a submodule at `tldrawkc/` in phase 0.
 | [HELPERS.md](HELPERS.md) | The `helpers` bag a snippet can call, with an example. | While building `src/page/helpers`. |
 | [ROADMAP.md](ROADMAP.md) | Seven phases (0 to 6) with checklists; phases 0 to 4 each have a definition of done, 5 and 6 are optional. | To pick up the next item. Tick items in the PR that completes them. |
 | [AGENT-WORKFLOW.md](AGENT-WORKFLOW.md) | The draw, shot, look, fix loop, and where files go in this repo. It was the draft of the `tldrawkc-diagram` skill, which now exists in the tool repo; it keeps the reasoning and the corrections its own examples needed. | Whenever writing agent-facing docs. |
-| [INTEGRATION.md](INTEGRATION.md) | The seams with `learn/assets/`, the `diagram-maker` agent, manimkc, and why `src/` stays untouched. Every row is now done. | Before changing anything at a seam. |
+| [INTEGRATION.md](INTEGRATION.md) | The seams with `learn/assets/`, the `diagram-maker` agent, manimkc, and why the web app stays untouched. Every row is now done. | Before changing anything at a seam. |
 | [PRIOR-ART.md](PRIOR-ART.md) | What the tldraw docs actually support, existing tools, and what was ruled out. Sources for every claim. | When something in the design seems arbitrary. |
 
 ## The one-paragraph version

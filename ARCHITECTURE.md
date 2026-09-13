@@ -14,16 +14,16 @@ Three layers plus two submodules. One layer is not in this repo at all.
 ```
    learning plugin                    this repo
    (installed globally)
-     /learn   /review        ┌────────────┬────────────────┬──────────┬───────────┐
-         │                   │            │                │          │           │
-         │  npm run learn    │            │                │          │           │
-         └──────────────► scripts/learn  learn/           src/    manimkc/   tldrawkc/
-                          the CLI     the notes and   the web app  submodule  submodule
-                              │        the sessions       │           │           │
-                              └──writes───►  ◄────reads────┘           └─writes────┘
+     /learn   /review        ┌────────────┬──────────────┬──────────────┬──────────────────┐
+         │                   │            │              │              │                  │
+         │  npm run learn    │            │              │              │                  │
+         └──────────────► scripts/learn  learn/      apps/web/   tools/manimkc/  tools/tldrawkc/
+                          the CLI     the notes and  the web app    submodule       submodule
+                              │        the sessions      │              │                  │
+                              └──writes───►  ◄───reads───┘              └────writes────────┘
                                           learn/assets/
-                              │                            │
-                              └────► services/catalog ◄────┘
+                              │                           │
+                              └────► services/catalog ◄───┘
                                      the catalog: content indexed from files,
                                      learner state that lives only here
 ```
@@ -31,10 +31,10 @@ Three layers plus two submodules. One layer is not in this repo at all.
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
-| Code | `scripts/learn/`, `src/` | The pipeline CLI and the web app |
+| Code | `scripts/learn/`, `apps/web/` | The pipeline CLI and the web app |
 | Data | `learn/` | Concept notes, session logs, diagram assets, the event log and its derived caches |
-| Assets | `manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
-| Assets | `tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports SVG into `learn/assets/` |
+| Assets | `tools/manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
+| Assets | `tools/tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports SVG into `learn/assets/` |
 
 The instruction layer lives at `~/.quiver/plugins/learning/learning` so the
 skills work from any project, not just this one. Both skills open by running
@@ -45,17 +45,34 @@ there is none.
 
 ## The layout
 
-`src/` is the web app. Nothing under it knows the CLI exists.
+Four top-level homes for code, and the rule that tells them apart: `apps/` is
+what gets deployed, `packages/` is what several things import, `services/` is
+what owns a connection or a command surface, and `tools/` is what belongs to
+another repo.
+
+| Directory | What lives there | npm workspace |
+| --- | --- | --- |
+| `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@self-learn/web` |
+| `packages/content/`, `packages/schema/` | The content reader and the table shapes | yes |
+| `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
+| `scripts/learn/` | The pipeline's pure maths, and the `npm run learn` entry point | no |
+| `content/`, `learn/` | Authored data and the knowledge base. Files, not code. | no |
+| `tools/manimkc/`, `tools/tldrawkc/` | Git submodules with their own repos, lockfiles and toolchains | no, deliberately |
+
+`tools/` is outside the workspaces list on purpose: listing it would make
+`npm ci` at the root try to install two trees this repo does not own.
+
+`apps/web/` is the web app. Nothing under it knows the CLI exists.
 
 | Directory | Owns |
 | --- | --- |
-| `src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
-| `src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
-| `src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
-| `src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
-| `src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
-| `src/data/content.ts` | Server-only view of `content/tags.yaml`: the cross-course themes |
+| `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
+| `apps/web/src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
+| `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
+| `apps/web/src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
+| `apps/web/src/data/content.ts` | Server-only view of `content/tags.yaml`: the cross-course themes |
 
 `packages/` and `services/` are npm workspaces, Node-only, with their own
 tsconfigs.
@@ -99,8 +116,8 @@ removed.
 | `services/catalog/src/learn/paths.ts` | Every path under `learn/`, and the `LEARN_ROOT` override the tests use |
 | `services/catalog/src/learn/replay.ts` | Rebuilding the schedule from the event log |
 
-`packages/` and `services/` are npm workspaces, added for the catalog. `src/`
-imports `packages/content` for the course files and
+`packages/` and `services/` are npm workspaces, added for the catalog.
+`apps/web/` imports `packages/content` for the course files and
 `services/catalog/src/state/` for the learner state, and nothing else from
 either: it is a reader of the content files and a client of the state store,
 never of the database directly.
@@ -144,11 +161,11 @@ still no account: one `learner` row, id `local`, created on first use.
 
 ```
   server component ──► loadLearnerSnapshot() ──► readLearnerSnapshot() ──► progress
-        │                (src/lib/learner-store.ts)   (the store)          recap
+        │                (apps/web/src/lib/learner-store.ts)   (the store)          recap
         │  initialState                                                    preference
         ▼
   LearnerProvider ──► optimistic reducer ──► POST /api/learner/* ──► the store
-   (client)            (src/lib/storage.ts)
+   (client)            (apps/web/src/lib/storage.ts)
 ```
 
 The root layout reads the snapshot and hands it to `LearnerProvider` as
@@ -158,7 +175,7 @@ Nothing reads the database at build time — every read calls `connection()`
 first — so `npm run build` succeeds with no database at all, which Vercel needs
 until the cloud one exists.
 
-`src/lib/storage.ts` still owns the pure reducers (`toggleTopic`, `setNote`,
+`apps/web/src/lib/storage.ts` still owns the pure reducers (`toggleTopic`, `setNote`,
 `recordKnowledge`, `resetCourseProgress`, ...). They are the optimistic half of
 every mutation: the reducer runs at the call site so a checkbox ticks
 immediately, and its output is also what the request body is built from, so
@@ -174,7 +191,7 @@ what the UI shows and what the server is told cannot disagree. `loadState`,
 | `POST /api/learner/preference` | Theme, last visited, the learner's own links |
 | `POST /api/learner/import` | The one-time carry-over of a browser's old document |
 
-Every one of them is `handler()` from `src/lib/learner-api.ts`: same-origin
+Every one of them is `handler()` from `apps/web/src/lib/learner-api.ts`: same-origin
 through the existing `agent/guard.ts` helpers, a rate limit, a bounded body,
 and validation. `/api/learner/preference` writes an allow-list of keys rather
 than any key, because an unauthenticated open jsonb store is not something
@@ -219,10 +236,10 @@ row cannot disagree about what a file means; before this there were TypeScript
 literals on one side, a private `YamlCourse` interface on the other, and a
 parity test that could only notice drift after it happened.
 
-`src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
+`apps/web/src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
 one `loadCourses()` at module scope (read once per process), and the lookups
 pages call — `getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
-`getRelatedCourses`, `totalTopicCount`. `src/data/content.ts` is the same shape
+`getRelatedCourses`, `totalTopicCount`. `apps/web/src/data/content.ts` is the same shape
 over `content/tags.yaml`.
 
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
@@ -231,8 +248,8 @@ than shipping a YAML parser and every course file to the browser. So client
 components take what they need as props: the module page resolves the course,
 module and topic and hands them to `TopicChecklist` and `AgentSession`; the
 root layout projects the shortlist into `CourseNavEntry[]` for the sidebar. The
-arithmetic those components still do lives in `src/lib/curriculum.ts` and
-`src/lib/progress.ts`, which are pure functions over a course the caller
+arithmetic those components still do lives in `apps/web/src/lib/curriculum.ts` and
+`apps/web/src/lib/progress.ts`, which are pure functions over a course the caller
 already holds.
 
 Each course carries an `inferred` flag. `true` means the syllabus was
@@ -248,7 +265,7 @@ files by name gives a different sequence and nothing would say so.
 
 ## The agent chat API
 
-Both routes run on the Node runtime and share `src/lib/agent/providers.ts`,
+Both routes run on the Node runtime and share `apps/web/src/lib/agent/providers.ts`,
 which is the whole networking layer. Three OpenAI-compatible providers are
 tried in a fixed order, and a provider is only in the list when its key is set:
 
@@ -328,7 +345,7 @@ permanently.
 
 `assets/` is the one folder the CLI neither writes nor reads. Diagrams have
 always been written there by the `diagram-maker` subagent at a path it chose,
-and `tldrawkc/` keeps that behaviour: it writes the pair and the session log
+and `tools/tldrawkc/` keeps that behaviour: it writes the pair and the session log
 embeds the SVG by name. The `.tldr` is committed beside the `.svg` so the next
 session can open the canvas and extend it instead of redrawing. An exported
 SVG is self-contained, which means the two fonts it uses are inlined as
@@ -399,16 +416,16 @@ One direction for content, one door for state.
                                                         event · mastery · review
                                                         progress · recap · preference
                                                                       ▲
-   src/app  ──► src/lib/learner-store.ts ──► @self-learn/catalog/state ┘
+   apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @self-learn/catalog/state ┘
        │              (the pool, the degradation)
-       └──► /api/learner/* ──► src/lib/learner-api.ts ──► the same store
+       └──► /api/learner/* ──► apps/web/src/lib/learner-api.ts ──► the same store
 ```
 
 Both halves reach the same tables through the same module. That is the change
 bundle 5 made: before it, the CLI owned files under `learn/state/` and the web
 app owned a localStorage document, and the two models of the same learner never
-spoke. `src/lib/kb/load.ts` is still the only place in `src/` that reads the
-concept graph, and it is a query now rather than a `readFileSync` of a snapshot
+spoke. `apps/web/src/lib/kb/load.ts` is still the only place in the app that
+reads the concept graph, and it is a query now rather than a `readFileSync` of a snapshot
 — so a study session shows up on `/learn` immediately instead of at the next
 deploy.
 
@@ -417,13 +434,13 @@ graph library, and server-safe, so the whole graph ships as static markup.
 
 ## Metadata and assets
 
-`src/app/icon.png` and `src/app/apple-icon.png` use the Next file conventions,
-so the favicon and the touch icon need no markup.
+`apps/web/src/app/icon.png` and `apps/web/src/app/apple-icon.png` use the Next
+file conventions, so the favicon and the touch icon need no markup.
 
-The social card does not. `public/opengraph-image.png` is declared by hand in
-`src/app/layout.tsx` because under Turbopack the `app/opengraph-image.png`
-convention ignores the documented `opengraph-image.alt.txt` sidecar, and the
-card would ship with no alt text.
+The social card does not. `apps/web/public/opengraph-image.png` is declared by
+hand in `apps/web/src/app/layout.tsx` because under Turbopack the
+`app/opengraph-image.png` convention ignores the documented
+`opengraph-image.alt.txt` sidecar, and the card would ship with no alt text.
 
 `resolveSiteUrl()` in the same file computes `metadataBase`: it prefers
 `NEXT_PUBLIC_SITE_URL`, falls back to Vercel's injected
@@ -434,20 +451,21 @@ value should cost a link preview rather than the whole app.
 
 ## Testing
 
-`npm test` runs vitest over `src/**/*.test.ts`, `scripts/**/*.test.mjs`,
+`npm test` runs vitest over `apps/**/*.test.ts`, `scripts/**/*.test.mjs`,
 `services/**/*.test.ts` and `packages/**/*.test.ts`, in the `node` environment,
-with `@` aliased to `src`.
+with `@` aliased to `apps/web/src`. One config at the root covers every
+workspace, so `npm test` from the repo root is the whole suite.
 
 | File | Covers |
 | --- | --- |
-| `src/lib/storage.test.ts` | Clamping and every pure state reducer |
-| `src/lib/progress.test.ts` | Counting completed topics per module and course |
-| `src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
-| `src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
-| `src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
-| `src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
+| `apps/web/src/lib/storage.test.ts` | Clamping and every pure state reducer |
+| `apps/web/src/lib/progress.test.ts` | Counting completed topics per module and course |
+| `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
+| `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
+| `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
+| `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
-| `src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
+| `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
 | `services/catalog/test/state.test.ts` | The store: progress, recaps, preferences, the append-only log, replay, the import merge rules |
 | `services/catalog/test/learn-cli.test.ts` | The CLI end to end, with the five `--json` shapes pinned |
 | `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
@@ -458,9 +476,10 @@ Anything touching Postgres creates and drops its own scratch database and skips
 itself, with a reason, when no server is reachable. CI runs a `postgres:17`
 service so they are a gate there.
 
-Coverage is scoped to `src/lib`, `src/data` and `scripts/learn` by design.
-Components and pages are verified by `npm run build` and by looking at the
-running app, so counting their lines would only dilute the number that matters.
+Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
+`scripts/learn` by design. Components and pages are verified by
+`npm run build` and by looking at the running app, so counting their lines
+would only dilute the number that matters.
 The thresholds are deliberately not raised to meet the current number:
 `learner-api.ts` and `learner-store.ts` are in scope and are covered by suites
 that need a database, so the measured value now moves with the environment.
@@ -540,7 +559,7 @@ Postgres would put a staler one in front of the agent.
 
 ## Layering rules
 
-1. **`src/` imports the pipeline's *store*, and nothing else of it.** The web
+1. **`apps/web/` imports the pipeline's *store*, and nothing else of it.** The web
    app reaches learner state through `@self-learn/catalog/state`, the single
    export that workspace publishes. It does not import the `learn` CLI, the
    indexers or the migrations, and it never imports from `scripts/`. Before
@@ -553,21 +572,21 @@ Postgres would put a staler one in front of the agent.
    the web app compute the frontier with the same `frontier()` the CLI does.
 3. **The CLI is the only writer of `learn/`, except `learn/assets/`.** The
    carve-out is `assets/`, where the diagram agent has always written the file
-   it names directly and `tldrawkc/` now writes the `.tldr` and `.svg` pair.
+   it names directly and `tools/tldrawkc/` now writes the `.tldr` and `.svg` pair.
    Nothing in `learn/concepts/` has a second writer.
 4. **`services/catalog/src/state/` is the only writer of the state tables.**
    The `learn` CLI, the backfill and the web app all go through it. It is where
    "an event first, the projections after" is enforced, and where the clamps
    live, so no caller can record evidence a different way.
 5. **A module that reads content or reaches the database says
-   `import "server-only"`.** `src/data/courses/index.ts`, `src/data/content.ts`
-   and `src/lib/learner-store.ts` all do. Without it a `"use client"` import
+   `import "server-only"`.** `apps/web/src/data/courses/index.ts`, `apps/web/src/data/content.ts`
+   and `apps/web/src/lib/learner-store.ts` all do. Without it a `"use client"` import
    would compile — shipping a YAML parser, every course file, or a Postgres
    driver to the browser — and would only be noticed by whoever looked at a
    bundle report. With it the build fails and prints the import chain. Client
    components get resolved objects as props; pure arithmetic over a course they
-   already hold lives in `src/lib/curriculum.ts`, and pure reducers over state
-   they already hold live in `src/lib/storage.ts`.
+   already hold lives in `apps/web/src/lib/curriculum.ts`, and pure reducers over state
+   they already hold live in `apps/web/src/lib/storage.ts`.
 6. **Nothing outside `src/learn/paths.ts` builds a path under `learn/`.**
    `learn/assets/` is outside the rule entirely, for the same reason as rule 3:
    the diagram agent picks `learn/assets/<concept-id>` and passes it to

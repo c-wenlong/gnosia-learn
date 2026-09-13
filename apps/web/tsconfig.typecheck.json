@@ -1,0 +1,8 @@
+{
+  "//": "The app plus its test files, for `npm run typecheck`. next build uses tsconfig.json, which leaves the tests out on purpose (see its //exclude note).",
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

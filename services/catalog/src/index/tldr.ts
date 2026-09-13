@@ -17,11 +17,11 @@ import { filesIn, relativeTo } from "./files";
  *
  * **Two readers, one shape, and why both exist.** `tldrawkc list <dir> --json`
  * is the tool's own answer and the one to prefer: if the metadata's shape ever
- * moves, the command moves with it. But `tldrawkc/dist` is a build inside a
- * submodule, and a fresh clone and CI deliberately have neither, while the
- * `.tldr` itself is JSON that is already in the tree. So the fallback parses
- * the file directly, and `tldr.test.ts` asserts the two agree on a real
- * document rather than trusting that they do.
+ * moves, the command moves with it. But `tools/tldrawkc/dist` is a build
+ * inside a submodule, and a fresh clone and CI deliberately have neither,
+ * while the `.tldr` itself is JSON that is already in the tree. So the
+ * fallback parses the file directly, and `tldr.test.ts` asserts the two agree
+ * on a real document rather than trusting that they do.
  *
  * The fallback reads, and never writes. Writing metadata stays tldrawkc's, both
  * because `created` has a rule (written once, preserved) and because a writer
@@ -32,7 +32,7 @@ import { filesIn, relativeTo } from "./files";
 const run = promisify(execFile);
 
 /** Relative to the repo root. The same path `npm run canvas` invokes. */
-export const CANVAS_CLI = path.join("tldrawkc", "dist", "cli", "index.js");
+export const CANVAS_CLI = path.join("tools", "tldrawkc", "dist", "cli", "index.js");
 
 /** The metadata schema version this reader was written against. */
 export const KC_SCHEMA = 1;

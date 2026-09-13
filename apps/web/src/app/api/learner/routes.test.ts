@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { applyMigrations } from "../../../../services/catalog/src/migrations";
+import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
   createScratchDatabase,
   probe,
   type Scratch,
-} from "../../../../services/catalog/test/scratch-database";
-import { ITEMS, seedContent } from "../../../../services/catalog/test/state-fixture";
+} from "../../../../../../services/catalog/test/scratch-database";
+import { ITEMS, seedContent } from "../../../../../../services/catalog/test/state-fixture";
 
 /**
  * The `/api/learner/*` handlers, against a scratch database.

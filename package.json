@@ -6,42 +6,33 @@
   "engines": {
     "node": ">=22"
   },
+  "//workspaces": "apps/ is the deployable surfaces (today: the Next app), packages/ the libraries they share, services/ the long-lived processes and CLIs. tools/ is deliberately absent: manimkc and tldrawkc are git submodules with their own repos, lockfiles and toolchains, and listing them here would make npm try to install them as part of this tree.",
   "workspaces": [
+    "apps/*",
     "services/*",
     "packages/*"
   ],
+  "//scripts": "The web app's own scripts live in apps/web/package.json; the four below delegate to them so `npm run dev` from the repo root still does the obvious thing. lint, typecheck and test stay here because they span every workspace: one ESLint config and one vitest config cover the whole tree, and typecheck fans out through --workspaces.",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "npm run dev --workspace @self-learn/web",
+    "build": "npm run build --workspace @self-learn/web",
+    "start": "npm run start --workspace @self-learn/web",
     "lint": "eslint",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "learn": "node scripts/learn/cli.mjs",
-    "canvas": "node tldrawkc/dist/cli/index.js",
+    "canvas": "node tools/tldrawkc/dist/cli/index.js",
     "catalog": "tsx services/catalog/src/cli.ts"
   },
-  "dependencies": {
-    "@self-learn/content": "*",
-    "@tailwindcss/typography": "^0.5.20",
-    "next": "16.3.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
-  },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.2",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4",
     "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^4.1.10",

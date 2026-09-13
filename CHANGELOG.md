@@ -80,6 +80,19 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Changed
 
+- **The repository is laid out around the catalog.** The Next app moved from
+  the root into `apps/web/`, with its own `package.json` (`@self-learn/web`),
+  its `public/`, `next.config.ts` and `vercel.json`; the two submodules moved
+  from the root into `tools/manimkc/` and `tools/tldrawkc/`. Four homes for
+  code, and a rule that tells them apart: `apps/` is deployed, `packages/` is
+  imported, `services/` owns a connection or a command surface, `tools/`
+  belongs to another repo. Nothing behavioural changed. The root keeps one
+  ESLint config, one vitest config and the delegating `dev`, `build`, `start`,
+  `learn`, `catalog` and `canvas` scripts, so every command still runs from
+  the repo root. An existing clone needs
+  `git submodule sync --recursive && git submodule update --init` once,
+  because both submodule paths moved, and the Vercel project needs its Root
+  Directory set to `apps/web` with "include files outside the root" on.
 - **The web app reads `content/`, and `src/` holds no course data.** The ten
   `src/data/courses/*.ts` files and `src/data/tags.ts` are gone;
   `src/data/courses/index.ts` is a thin `server-only` module over

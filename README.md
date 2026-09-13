@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/banner.png" alt="Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book" width="800">
+  <img src="apps/web/public/banner.png" alt="Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book" width="800">
 </p>
 
 <h1 align="center">
@@ -34,7 +34,7 @@ Self-Learn
 
 Behind the hub sits a file-backed tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it learns about you lands in `learn/` as plain Markdown and JSON you can read, diff, and revert.
 
-A third part, the `manimkc/` submodule, renders narrated animations for concepts that text and SVG cannot carry.
+A third part, the `tools/manimkc/` submodule, renders narrated animations for concepts that text and SVG cannot carry.
 
 ```
 /learn <anything>     in Claude Code: probe, plan, teach, close
@@ -42,7 +42,7 @@ A third part, the `manimkc/` submodule, renders narrated animations for concepts
 ```
 
 <p align="center">
-  <img src="public/screenshot.png" alt="The Self-Learn course catalog: a sidebar of ten NUS courses beside progress bars and per-course cards" width="900"><br>
+  <img src="apps/web/public/screenshot.png" alt="The Self-Learn course catalog: a sidebar of ten NUS courses beside progress bars and per-course cards" width="900"><br>
   <em>The course catalog, live at <a href="https://self-learn-one.vercel.app">self-learn-one.vercel.app</a>.</em>
 </p>
 
@@ -54,9 +54,10 @@ Knowing what is worth learning and actually learning it are two different proble
 
 | Part | Where | What it does |
 | --- | --- | --- |
-| Roadmap | `src/` | Next.js hub over the AY2026/27 shortlist: progress, notes, resources, tutoring sessions, topic recaps |
+| Roadmap | `apps/web/` | Next.js hub over the AY2026/27 shortlist: progress, notes, resources, tutoring sessions, topic recaps |
 | Learning pipeline | `scripts/learn/`, `learn/` | Probe → Plan → Teach → Close loop with a file-backed knowledge base |
-| Asset generation | `manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
+| Asset generation | `tools/manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
+| Diagrams | `tools/tldrawkc/` (submodule) | Teaching diagrams drawn on a real tldraw canvas and exported as SVG |
 | Catalog | `packages/schema/`, `services/catalog/` | Postgres index over the three content trees, and the `catalog` CLI agents read |
 
 Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are still no accounts, just one learner row. A browser that used the old `localStorage` document imports it once, automatically, on first load.
@@ -71,14 +72,22 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 
 ```
-src/              app/ (pages + agent API routes) · components/ · data/ · lib/
-scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
-learn/            The knowledge base itself (see learn/README.md)
-content/          Authored data: topics.yaml, the shared vocabulary, and courses/
+apps/web/         The Next.js app: src/app · src/components · src/data · src/lib · public/
+packages/content/ One reader for content/, shared by the app and the indexers
 packages/schema/  Drizzle tables: the single source of the catalog's row shapes
 services/catalog/ Migrations, the database connection and the catalog CLI
-.claude/          launch.json, plus skills/manimkc-video symlinked from the submodule
+scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
+content/          Authored data: topics.yaml, the shared vocabulary, and courses/
+learn/            The knowledge base itself (see learn/README.md)
+tools/manimkc/    Submodule: narrated manim videos
+tools/tldrawkc/   Submodule: tldraw diagrams
+.claude/          launch.json, plus the two skills symlinked from the submodules
 ```
+
+Three of those are npm workspaces (`apps/*`, `packages/*`, `services/*`), so
+one `npm ci` at the root installs the lot and `npm run lint`, `typecheck` and
+`test` cover all of them from there. `tools/` is not a workspace: both
+submodules carry their own lockfiles and toolchains.
 
 The catalog is the join the three trees never had: one `topic` vocabulary every
 asset points at, typed link tables with foreign keys at both ends, and an
@@ -91,25 +100,25 @@ in [content/README.md](content/README.md).
 
 `.claude/` holds no learning skills. `/learn`, `/review` and the three subagents live in the globally installed `learning` plugin, so they work in every project; see [AGENTS.md](AGENTS.md) for why copying them back here would be a mistake.
 
-`manimkc/` is its own repo with its own venvs and build system. It currently holds 28 topics across 15 domains, filed as `topics/<domain>/<topic>/` and mirrored into `out/`. Narration syncs TTS to the animation through a `voiceover()` context manager with six backends (`local`, `soprano`, `kokoro`, `chatterbox`, `elevenlabs`, `sarvam`), defaulting to the offline `local` voice, with clip caching so re-renders cost no API quota. Agents drive it through `manimkc/tools/cli/manimkc` and the `manimkc-video` skill; read [`manimkc/AGENTS.md`](manimkc/AGENTS.md) before working in there.
+`tools/manimkc/` is its own repo with its own venvs and build system. It currently holds 28 topics across 15 domains, filed as `topics/<domain>/<topic>/` and mirrored into `out/`. Narration syncs TTS to the animation through a `voiceover()` context manager with six backends (`local`, `soprano`, `kokoro`, `chatterbox`, `elevenlabs`, `sarvam`), defaulting to the offline `local` voice, with clip caching so re-renders cost no API quota. Agents drive it through `tools/manimkc/tools/cli/manimkc` and the `manimkc-video` skill; read [`tools/manimkc/AGENTS.md`](tools/manimkc/AGENTS.md) before working in there.
 
 ## Install
 
 ```bash
-git clone --recursive https://github.com/c-wenlong/self-learn   # manimkc is a submodule
+git clone --recursive https://github.com/c-wenlong/self-learn   # two submodules under tools/
 cd self-learn
 npm ci
 cp .env.example .env.local    # optional: provider keys for live tutoring chat
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `manimkc/` and the manim clone nested inside it.
+Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `tools/manimkc/` and the manim clone nested inside it. Pulling a clone that predates the move needs `git submodule sync --recursive` first, because both submodules changed path.
 
-The diagram tool in `tldrawkc/` needs one extra step, because `npm run canvas` runs a compiled CLI that is not committed:
+The diagram tool in `tools/tldrawkc/` needs one extra step, because `npm run canvas` runs a compiled CLI that is not committed:
 
 ```bash
-git submodule update --init tldrawkc
-(cd tldrawkc && npm ci && npm run build)
+git submodule update --init tools/tldrawkc
+(cd tools/tldrawkc && npm ci && npm run build)
 npm run canvas -- doctor       # says which Chromium it found
 ```
 
@@ -175,7 +184,7 @@ flowchart LR
 | `event`, `mastery`, `review` (Postgres) | The trajectory and its projections. `event` is the only copy | not in git |
 | `progress`, `recap`, `preference` (Postgres) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
 | `.env.local` | Provider keys and `DATABASE_URL` | gitignored |
-| `manimkc/out/`, `manimkc/cache/` | Rendered videos and the TTS cache | gitignored |
+| `tools/manimkc/out/`, `tools/manimkc/cache/` | Rendered videos and the TTS cache | gitignored |
 
 Tutoring chat tries three free providers in order and falls through on errors and rate limits. Every variable is optional: with no keys the site still works, and Launch Agent falls back to **Copy system prompt** and **Copy terminal launch pack**.
 
@@ -188,7 +197,7 @@ Tutoring chat tries three free providers in order and falls through on errors an
 | `NVIDIA_MODEL` · `GEMINI_MODEL` · `OPENROUTER_MODEL` | `meta/llama-3.1-8b-instruct` · `gemini-2.5-flash` · `openrouter/free` | Model override per provider |
 | `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` | unset | Attribution headers sent to OpenRouter |
 
-Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never sees them. Production also needs them set in the Vercel project's environment variables. Deployment details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and editing the curriculum is covered in [docs/CURRICULUM.md](docs/CURRICULUM.md).
+Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the browser never sees them. Production also needs them set in the Vercel project's environment variables. Deployment details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and editing the curriculum is covered in [docs/CURRICULUM.md](docs/CURRICULUM.md).
 
 ## Development
 
@@ -202,7 +211,7 @@ Keys are read server-side only (`src/lib/agent/providers.ts`); the browser never
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
-| `npm run canvas -- <cmd>` | The `tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
+| `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
 | `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `index`, `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
 
 Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
