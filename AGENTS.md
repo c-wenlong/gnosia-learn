@@ -67,15 +67,30 @@ Rules of engagement:
 - Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
-- Rendered videos and the TTS cache are gitignored on both sides; deliverables
-  live locally under `tools/manimkc/out/`, which mirrors `tools/manimkc/topics/`
-  (`out/<domain>/<subdomain>/<topic>/<name>.mp4`).
+- **Rendered videos, the TTS cache and manimkc's own state live under
+  `$MANIMKC_HOME`, not necessarily inside the submodule.** That variable is
+  manimkc's data root and it defaults to its checkout, so with nothing set
+  deliverables sit at `tools/manimkc/out/<domain>/<subdomain>/<topic>/<name>.mp4`,
+  mirroring `tools/manimkc/topics/`. All of it is gitignored on both sides,
+  which is exactly why it can live elsewhere: moving this submodule from
+  `manimkc/` into `tools/` on 2026-09-13 deleted 25 rendered videos and the whole
+  clip cache, because git does not carry gitignored files across a move. Point
+  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.self-learn`)
+  and a repo relayout cannot do that again.
+- **Never join a manimkc path onto the submodule root.** `manimkc topics --json`
+  and `manimkc mirrors --json` report a top-level absolute `outRoot`; a
+  deliverable is `outRoot + path`, and the indexers in
+  `services/catalog/src/index/` do exactly that. The `out/…` strings themselves
+  are unchanged and remain the catalog's `asset.path` and the mirror ledger's
+  join key. `--manimkc-root` still names the *checkout*, which is a different
+  thing from where its output lands.
 - **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
-  `doctor` (venvs, ffmpeg, narration backend, output dirs), `api` (the palette
+  `doctor` (venvs, ffmpeg, narration backend, output dirs), `home` (the data
+  root and every path under it, plus `--migrate`), `api` (the palette
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
-  topic), `lint`, `preview`, `build`. Run it from any checkout, or install with
-  `uv tool install -e tools/cli`.
+  topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
+  checkout, or install with `uv tool install -e tools/cli`.
 - The end-to-end process is the `manimkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
   `.claude/` holds here is either `launch.json` or a symlink into a submodule:
