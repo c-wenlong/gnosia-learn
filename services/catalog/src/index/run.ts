@@ -65,6 +65,29 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   mirrors: [],
 };
 
+/**
+ * The other direction: sources that cannot run correctly on their own.
+ *
+ * `mirrors` matches ledger keys against the `asset.path` values `manimkc`
+ * stored, and those strings are relative to manimkc's `$MANIMKC_HOME`, which
+ * is a machine setting rather than something either report carries into the
+ * key. So `--only mirrors` with a different data root than the last `manimkc`
+ * run would match every path — the strings are identical — and attach a fresh
+ * audit to assets hashed from somewhere else, silently. Re-reading `manimkc`
+ * first makes that unrepresentable: both reports then come from one process
+ * with one environment, which is the only thing that makes the string join
+ * sound. It costs a rehash of two dozen videos.
+ */
+const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
+  topics: [],
+  courses: [],
+  concepts: [],
+  manimkc: [],
+  diagrams: [],
+  sessions: [],
+  mirrors: ["manimkc"],
+};
+
 /** Every indexer, in the order they must run. */
 export const INDEXERS: readonly Indexer[] = [
   topicsIndexer,
@@ -108,8 +131,14 @@ export interface RunResult {
   repoRoot: string;
   manimkcRoot: string;
   sources: SourceWrite[];
-  /** Sources `--only` did not name but that had to run anyway. */
+  /**
+   * Sources `--only` did not name but that had to run anyway, and which of the
+   * two reasons applies. They want opposite explanations: a dependent runs
+   * because a prune cascades into rows it owns, a prerequisite runs because
+   * the requested source reads what it wrote.
+   */
   addedForSafety: IndexSource[];
+  addedAsPrerequisite: IndexSource[];
   /** Sources that could not run in this checkout, and were safe to leave out. */
   skipped: { source: IndexSource; reason: string }[];
   totals: { written: number; deleted: number };
@@ -127,6 +156,24 @@ export function withDependents(requested: readonly IndexSource[]): Set<IndexSour
     if (selected.has(source)) return;
     selected.add(source);
     for (const dependent of DEPENDENTS[source]) visit(dependent);
+  };
+  for (const source of requested) visit(source);
+  return selected;
+}
+
+/**
+ * The requested sources plus everything they cannot be correct without. Kept
+ * separate from `withDependents` because the two close over opposite edges and
+ * conflating them would make either one hard to reason about; `runIndex`
+ * applies this first, then that, so a prerequisite's own dependents come along
+ * too.
+ */
+export function withPrerequisites(requested: readonly IndexSource[]): Set<IndexSource> {
+  const selected = new Set<IndexSource>();
+  const visit = (source: IndexSource) => {
+    if (selected.has(source)) return;
+    selected.add(source);
+    for (const required of REQUIRES[source]) visit(required);
   };
   for (const source of requested) visit(source);
   return selected;
@@ -153,8 +200,12 @@ export async function runIndex(
   const repoRoot = options.repoRoot ?? REPO_ROOT;
   const manimkcRoot = options.manimkcRoot ?? defaultManimkcRoot(repoRoot);
   const requested = options.only ?? INDEX_SOURCES;
-  const wanted = withDependents(requested);
-  const addedForSafety = [...wanted].filter((s) => !requested.includes(s));
+  const required = withPrerequisites(requested);
+  const wanted = withDependents([...required]);
+  const addedAsPrerequisite = [...required].filter((s) => !requested.includes(s));
+  const addedForSafety = [...wanted].filter(
+    (s) => !requested.includes(s) && !addedAsPrerequisite.includes(s),
+  );
   const selected = INDEXERS.filter((i) => wanted.has(i.source));
 
   const vocabulary = await loadVocabulary(repoRoot);
@@ -284,9 +335,12 @@ export async function runIndex(
     repoRoot,
     manimkcRoot,
     sources,
-    // Sorted into run order, so the reported list reads the way it ran.
+    // Sorted into run order, so the reported lists read the way they ran.
     addedForSafety: INDEXERS.map((i) => i.source).filter(
       (s) => addedForSafety.includes(s) && !skipped.some((k) => k.source === s),
+    ),
+    addedAsPrerequisite: INDEXERS.map((i) => i.source).filter(
+      (s) => addedAsPrerequisite.includes(s) && !skipped.some((k) => k.source === s),
     ),
     skipped,
     totals: {

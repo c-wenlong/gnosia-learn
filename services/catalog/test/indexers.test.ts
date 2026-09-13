@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { conceptsIndexer } from "../src/index/concepts";
-import { withDependents } from "../src/index/run";
+import { withDependents, withPrerequisites } from "../src/index/run";
 import { coursesIndexer } from "../src/index/courses";
 import { diagramsIndexer } from "../src/index/diagrams";
 import { IndexError } from "../src/index/errors";
@@ -451,6 +451,11 @@ describe("diagrams", () => {
  * indexer reads. Captured from the real command's output on 2026-09-13.
  */
 const LEDGER: MirrorsReport = {
+  // Absolute base the `out/…` keys below hang off. Nothing here joins onto it —
+  // the file comparison already happened in manimkc — but the run records which
+  // data root it describes, because the mirror rows are about files that need
+  // not live under the checkout.
+  outRoot: "/Users/x/.self-learn",
   destinations: {
     drive: {
       root: "/Users/x/Google Drive/My Drive",
@@ -561,11 +566,42 @@ describe("mirrors", () => {
     ]);
   });
 
+  it("records which data root the audit describes", () => {
+    const { metadata } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
+    expect(metadata?.["outRoot"]).toBe("/Users/x/.self-learn");
+    // A ledger from a CLI predating the field records null rather than a guess.
+    const older = buildMirrorRows({ destinations: LEDGER.destinations }, MANIMKC_ASSETS);
+    expect(older.metadata?.["outRoot"]).toBeNull();
+  });
+
   it("skips a ledger path with no asset, and says how many", () => {
     const { rows, notes } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
     expect(rows.mirror?.some((r) => r.assetId.includes("ghost"))).toBe(false);
     expect(notes?.join("\n")).toContain("1 ledger path(s) match no manimkc asset");
     expect(notes?.join("\n")).toContain("out/a/ghost/ghost.mp4");
+    // Some matched, so this is the ordinary "no render yet" case, not the
+    // two-reports-disagree-about-their-base one.
+    expect(notes?.join("\n")).not.toContain("disagree about");
+  });
+
+  it("says nothing is indexed when no manimkc assets exist at all", () => {
+    // A fresh database or a data root with no renders. Every ledger path is
+    // unmatched, but blaming a base disagreement would send the reader after a
+    // bug that is not there.
+    const { rows, notes } = buildMirrorRows(LEDGER, new Map());
+    expect(rows.mirror).toEqual([]);
+    expect(notes?.join("\n")).toContain("No manimkc assets are indexed at all");
+    expect(notes?.join("\n")).not.toContain("base disagreement");
+  });
+
+  it("names a base disagreement when assets exist and none of them match", () => {
+    // The real mismatch: assets are there, and not one ledger key reaches them.
+    // The only base the two sides can disagree about is manimkc's data root.
+    const elsewhere = new Map([["out/somewhere/else/other.mp4", "manimkc:other"]]);
+    const { rows, notes } = buildMirrorRows(LEDGER, elsewhere);
+    expect(rows.mirror).toEqual([]);
+    expect(notes?.join("\n")).toContain("base disagreement");
+    expect(notes?.join("\n")).toContain("different data roots");
   });
 
   it("says so when the checkout has no destinations configured", () => {
@@ -632,9 +668,20 @@ describe("sessions", () => {
   });
 });
 
-/** A captured `manimkc topics --json` shape, trimmed to what the indexer reads. */
-function report(overrides: Partial<TopicsReport["topics"][number]> = {}): TopicsReport {
+/**
+ * A captured `manimkc topics --json` shape, trimmed to what the indexer reads.
+ *
+ * `outRoot` is the absolute base every `out/…` string below resolves against,
+ * and it defaults to the checkout in a manimkc with no `$MANIMKC_HOME` set —
+ * so most cases pass the checkout and get the pre-data-root behaviour, and the
+ * one case that cares passes somewhere else.
+ */
+function report(
+  overrides: Partial<TopicsReport["topics"][number]> = {},
+  outRoot?: string,
+): TopicsReport {
   return {
+    outRoot,
     topics: [
       {
         path: "algorithms/example",
@@ -681,7 +728,7 @@ describe("manimkc", () => {
     const root = `${fixture.root}/manimkc`;
 
     const { rows } = await buildRows(
-      report(),
+      report({}, root),
       root,
       new Map([["algorithms/example", "alpha"]]),
       new Map([["alpha", {}]]),
@@ -761,6 +808,47 @@ describe("manimkc", () => {
     expect(notes.join("\n")).toContain("networking/elsewhere");
   });
 
+  it("resolves deliverables against the report's outRoot, not the checkout", async () => {
+    // The state a manimkc with $MANIMKC_HOME set is in: source in the checkout,
+    // rendered files somewhere that survives the checkout being deleted. Before
+    // outRoot existed this threw ENOENT, because the join assumed the checkout.
+    fixture = await makeFixture();
+    const checkout = `${fixture.root}/manimkc`;
+    const dataRoot = `${fixture.root}/manimkc-data`;
+    await fixture.write("manimkc-data/out/algorithms/example/example.mp4", "not really an mp4");
+    await fixture.write("manimkc-data/out/algorithms/example/example.transcript.json", "[]");
+    await fixture.write("manimkc-data/out/algorithms/example/example.chapters.json", "[]");
+
+    const { rows, notes } = await buildRows(
+      report({}, dataRoot),
+      checkout,
+      new Map([["algorithms/example", "alpha"]]),
+      new Map([["alpha", {}]]),
+    );
+
+    expect(rows.asset).toHaveLength(3);
+    expect(rows.asset?.[0]?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    // The stored path is unchanged: it is the mirror ledger's join key and the
+    // unique key on the asset row. Only the base it resolves against moved.
+    expect(rows.asset?.[0]?.path).toBe("out/algorithms/example/example.mp4");
+    expect(rows.asset?.[0]?.id).toBe("manimkc:out/algorithms/example/example.mp4");
+    expect(notes.join("\n")).toContain(`rendered output read from ${dataRoot}`);
+  });
+
+  it("falls back to the checkout when a report carries no outRoot", async () => {
+    // Defensive parsing, and also the honest answer: with no data root
+    // configured manimkc reports its checkout, so the two are the same path.
+    fixture = await withDeliverables();
+    const { rows, notes } = await buildRows(
+      report(),
+      `${fixture.root}/manimkc`,
+      new Map([["algorithms/example", "alpha"]]),
+      new Map([["alpha", {}]]),
+    );
+    expect(rows.asset).toHaveLength(3);
+    expect(notes.join("\n")).not.toContain("rendered output read from");
+  });
+
   it("passes manimkc's own orphan drift through as a note", async () => {
     fixture = await withDeliverables();
     const withOrphan = report();
@@ -812,5 +900,14 @@ describe("source selection", () => {
     expect([...withDependents(["diagrams"])]).toEqual(["diagrams"]);
     expect([...withDependents(["sessions"])]).toEqual(["sessions"]);
     expect([...withDependents(["mirrors"])]).toEqual(["mirrors"]);
+  });
+
+  it("pulls manimkc in ahead of mirrors, because mirrors joins on what it stored", () => {
+    // Upstream, not downstream. `--only mirrors` against a different
+    // $MANIMKC_HOME than the last manimkc run would match every path by string
+    // and attach the audit to assets hashed somewhere else, in silence.
+    expect([...withPrerequisites(["mirrors"])].sort()).toEqual(["manimkc", "mirrors"]);
+    expect([...withPrerequisites(["manimkc"])]).toEqual(["manimkc"]);
+    expect([...withPrerequisites(["topics"])]).toEqual(["topics"]);
   });
 });
