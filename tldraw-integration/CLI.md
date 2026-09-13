@@ -103,6 +103,7 @@ and `tldraw` in scope, saves the file, optionally exports.
 | `--svg <out.svg>` | Write an SVG export after the snippet. |
 | `--create` | Start from an empty document if the file does not exist. |
 | `--no-save` | Run and export but leave the file untouched. For "what would this look like" experiments. |
+| `--no-subset-fonts` | Inline the whole of each font instead of only the glyphs the diagram draws. For an SVG you mean to edit by hand later. |
 
 Output (`--json`):
 
@@ -114,6 +115,8 @@ Output (`--json`):
   "lints": [],
   "shot": "/home/you/self-learn/out/attention.png",
   "svg": null,
+  "svgBytes": null,
+  "svgFontsSubset": null,
   "ms": 1840
 }
 ```
@@ -177,12 +180,16 @@ The final export step. `--svg` is what gets committed next to notes;
 exports and never writes the `.tldr`, so the only thing that can fail is the
 export.
 
+| Option | What |
+| --- | --- |
+| `--no-subset-fonts` | Inline the whole of each font instead of only the glyphs the diagram draws. For an SVG you mean to edit by hand later. |
+
 Output (`--json`):
 
 ```json
 {
   "file": "/home/you/self-learn/learn/assets/map.tldr",
-  "svg": { "path": "/home/you/self-learn/learn/assets/map.svg", "width": 2322, "height": 2394 },
+  "svg": { "path": "/home/you/self-learn/learn/assets/map.svg", "width": 2322, "height": 2394, "bytes": 213482, "fontsSubset": true, "fontWarnings": [] },
   "png": null,
   "ms": 611
 }
@@ -190,12 +197,20 @@ Output (`--json`):
 
 `svg` and `png` are each an object or `null`, depending on which was asked
 for. `width` and `height` are pixels for the PNG and the SVG's own viewport
-for the SVG.
+for the SVG. `bytes` is the file's size on disk; `fontsSubset` says whether
+any inlined face was cut down or dropped; `fontWarnings` names a face that
+kept its whole payload, which is never an error.
 
 `--svg` stamps the document's metadata onto the file it writes: the title as
 a `<title>` element and the topic as `data-kc-topic` on the root `<svg>`. A
 document with neither a title nor a topic exports untouched. See "What a
 diagram is about" below.
+
+`--svg` cuts each inlined font to the characters the document draws and
+drops any family nothing references. The fonts stay inline, because an SVG
+loaded as an image fetches nothing and a missing family silently falls back
+to a system font. Subsetting never fails an export: a face harfbuzz cannot
+read keeps its whole payload and becomes a warning.
 
 ### `from-mermaid <file.tldr> --source <diagram.mmd> [--append] [--shot <out.png>]`
 
