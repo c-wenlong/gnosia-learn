@@ -21,6 +21,8 @@ export interface IndexResult {
   sources: SourceWrite[];
   /** Sources `--only` did not name but that had to run, and why they had to. */
   addedForSafety: string[];
+  /** Sources it did not name that had to run *first*, for a different reason. */
+  addedAsPrerequisite: string[];
   /** Sources that could not run in this checkout, and why leaving them out was safe. */
   skipped: { source: string; reason: string }[];
   totals: { written: number; deleted: number };
@@ -44,6 +46,7 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
       manimkcRoot: result.manimkcRoot,
       sources: result.sources,
       addedForSafety: result.addedForSafety,
+      addedAsPrerequisite: result.addedAsPrerequisite,
       skipped: result.skipped,
       totals: result.totals,
     };
@@ -54,6 +57,14 @@ export function formatIndex(result: IndexResult): string {
   const lines = [`database     ${result.database}`, `manimkc root ${result.manimkcRoot}`, ""];
   for (const skip of result.skipped) {
     lines.push(`skipping ${skip.source}: ${skip.reason}.`, "");
+  }
+  if (result.addedAsPrerequisite.length > 0) {
+    lines.push(
+      `also running ${result.addedAsPrerequisite.join(", ")} first: the selected ` +
+        `sources read rows it writes, and joining onto a stale set of them is a ` +
+        `wrong answer rather than a missing one.`,
+      "",
+    );
   }
   if (result.addedForSafety.length > 0) {
     lines.push(

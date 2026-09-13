@@ -22,7 +22,13 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
   The `out/…` strings are untouched: they remain `asset.path`, the `manimkc:`
   asset id, and the literal key the mirror ledger is matched on. Only the base
-  they resolve against moved. `mirrors` records the `outRoot` it audited in
+  they resolve against moved.
+
+  `--only mirrors` now runs `manimkc` first. Those keys carry no trace of the
+  root they were built against, so a `mirrors` run under a different
+  `$MANIMKC_HOME` than the last `manimkc` run would match every path by string
+  and attach the audit to assets hashed somewhere else, in silence. Re-reading
+  `manimkc` in the same process makes that unrepresentable. `mirrors` records the `outRoot` it audited in
   `index_run.metadata`, and says so when *nothing* matched, since every path
   unmatched at once means the two reports disagree about their base rather than
   a few sidecars being absent.

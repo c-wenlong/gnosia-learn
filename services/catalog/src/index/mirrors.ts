@@ -219,12 +219,8 @@ export function buildMirrorRows(
     notes.push(
       `${unmatched.size} ledger path(s) match no manimkc asset and were skipped: ` +
         `${shown.join(", ")}${unmatched.size > shown.length ? ", …" : ""}. ` +
-        `These are sidecars the ledger expects and no render has produced yet` +
-        (rows.length === 0
-          ? `. Nothing matched at all, which means the two reports disagree about ` +
-            `their base rather than a sidecar being absent: re-index \`manimkc\` ` +
-            `first, since \`mirrors\` joins onto the paths it stored.`
-          : `.`),
+        `These are sidecars the ledger expects and no render has produced yet.` +
+        diagnosis(rows.length, assetsByPath.size),
     );
   }
   for (const entry of destinations) {
@@ -244,6 +240,38 @@ export function buildMirrorRows(
     // without this the run record cannot say where they were.
     metadata: { destinations, outRoot: typeof report.outRoot === "string" ? report.outRoot : null },
   };
+}
+
+/**
+ * The extra sentence when nothing matched, and only then.
+ *
+ * A handful of unmatched paths is the ordinary state: the ledger lists the
+ * sidecars a topic is *supposed* to have and most are not rendered. Zero
+ * matches out of hundreds is a different animal and should not read the same,
+ * but the two ways of getting there want opposite advice, so they are told
+ * apart rather than lumped under the louder one:
+ *
+ * an empty `assetsByPath` means manimkc has indexed nothing at all — a fresh
+ * database, or a data root with no renders in it — and pointing that at a
+ * base disagreement would send the reader looking for a bug that is not there;
+ *
+ * assets that exist and still match nothing is the real mismatch, and the only
+ * base both sides can disagree about is manimkc's data root.
+ */
+function diagnosis(matched: number, knownAssets: number): string {
+  if (matched > 0) return "";
+  if (knownAssets === 0) {
+    return (
+      ` No manimkc assets are indexed at all, so there was nothing to match against: ` +
+      `run the \`manimkc\` source (it now runs ahead of this one automatically) ` +
+      `or render something first.`
+    );
+  }
+  return (
+    ` None of the ${knownAssets} manimkc asset path(s) matched, which is a base ` +
+    `disagreement rather than absent sidecars: the ledger and the stored paths ` +
+    `were produced against different data roots. Re-index \`manimkc\`.`
+  );
 }
 
 function statusOf(value: unknown): MirrorStatus {

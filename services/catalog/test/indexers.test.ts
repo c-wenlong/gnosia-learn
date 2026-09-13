@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { conceptsIndexer } from "../src/index/concepts";
-import { withDependents } from "../src/index/run";
+import { withDependents, withPrerequisites } from "../src/index/run";
 import { coursesIndexer } from "../src/index/courses";
 import { diagramsIndexer } from "../src/index/diagrams";
 import { IndexError } from "../src/index/errors";
@@ -584,12 +584,24 @@ describe("mirrors", () => {
     expect(notes?.join("\n")).not.toContain("disagree about");
   });
 
-  it("names the likely cause when nothing at all matched", () => {
-    // Every path unmatched is not thirty missing sidecars, it is the two
-    // reports keying on different bases. Say so, or the note reads as noise.
+  it("says nothing is indexed when no manimkc assets exist at all", () => {
+    // A fresh database or a data root with no renders. Every ledger path is
+    // unmatched, but blaming a base disagreement would send the reader after a
+    // bug that is not there.
     const { rows, notes } = buildMirrorRows(LEDGER, new Map());
     expect(rows.mirror).toEqual([]);
-    expect(notes?.join("\n")).toContain("disagree about their base");
+    expect(notes?.join("\n")).toContain("No manimkc assets are indexed at all");
+    expect(notes?.join("\n")).not.toContain("base disagreement");
+  });
+
+  it("names a base disagreement when assets exist and none of them match", () => {
+    // The real mismatch: assets are there, and not one ledger key reaches them.
+    // The only base the two sides can disagree about is manimkc's data root.
+    const elsewhere = new Map([["out/somewhere/else/other.mp4", "manimkc:other"]]);
+    const { rows, notes } = buildMirrorRows(LEDGER, elsewhere);
+    expect(rows.mirror).toEqual([]);
+    expect(notes?.join("\n")).toContain("base disagreement");
+    expect(notes?.join("\n")).toContain("different data roots");
   });
 
   it("says so when the checkout has no destinations configured", () => {
@@ -888,5 +900,14 @@ describe("source selection", () => {
     expect([...withDependents(["diagrams"])]).toEqual(["diagrams"]);
     expect([...withDependents(["sessions"])]).toEqual(["sessions"]);
     expect([...withDependents(["mirrors"])]).toEqual(["mirrors"]);
+  });
+
+  it("pulls manimkc in ahead of mirrors, because mirrors joins on what it stored", () => {
+    // Upstream, not downstream. `--only mirrors` against a different
+    // $MANIMKC_HOME than the last manimkc run would match every path by string
+    // and attach the audit to assets hashed somewhere else, in silence.
+    expect([...withPrerequisites(["mirrors"])].sort()).toEqual(["manimkc", "mirrors"]);
+    expect([...withPrerequisites(["manimkc"])]).toEqual(["manimkc"]);
+    expect([...withPrerequisites(["topics"])]).toEqual(["topics"]);
   });
 });
