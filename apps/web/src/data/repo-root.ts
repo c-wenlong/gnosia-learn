@@ -20,17 +20,17 @@ import path from "node:path";
  * content at all fails here with a sentence rather than deep inside a YAML
  * reader with "content/courses does not exist".
  */
-function findRepoRoot(): string {
-  let directory = process.cwd();
+export function findRepoRoot(from: string = process.cwd()): string {
+  let directory = path.resolve(from);
   for (;;) {
     if (existsSync(path.join(directory, "content", "courses"))) return directory;
     const parent = path.dirname(directory);
     if (parent === directory) {
       throw new Error(
-        `No content/courses directory above ${process.cwd()}. The web app reads the ` +
+        `No content/courses directory at or above ${from}. The web app reads the ` +
           `authored content from the repository's content/ directory at request time; ` +
-          `if this is a deployment, next.config.ts's outputFileTracingIncludes is what ` +
-          `puts those files there.`,
+          `if this is a deployment, outputFileTracingIncludes in next.config.ts is ` +
+          `what puts those files there.`,
       );
     }
     directory = parent;
