@@ -58,7 +58,7 @@ Options:
                            downstream of it.
   --manimkc-root PATH      index: the manimkc checkout to read, for both the
                            manimkc source and the mirror ledger beside it.
-                           Default: <repo>/manimkc.
+                           Default: <repo>/tools/manimkc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
