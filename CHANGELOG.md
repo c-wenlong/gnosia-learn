@@ -9,6 +9,59 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Changed
 
+- **Configuration that was hard-coded in source now has an environment
+  variable, and every one of them has a default that needs no configuration.**
+  An audit found four; none held a secret, so this is purely about being able
+  to point the code somewhere else.
+
+  `MANIMKC_ROOT` and `TLDRAWKC_ROOT` name the two submodule checkouts, and both
+  default to where `.gitmodules` puts them. They exist because that location has
+  moved once already: relocating the pair from the repo root into `tools/` on
+  2026-09-13 cost a day. `MANIMKC_ROOT` is deliberately manimkc's own variable
+  carrying manimkc's own meaning: its CLI resolves the checkout as `--root`,
+  then `$MANIMKC_ROOT`, then a walk up from the cwd. One name for one thing is
+  the only version of this that stays true across two repos. It is not
+  `$MANIMKC_HOME`, the data root, which the indexers still take from each
+  report's `outRoot` and never from a path set here. `--manimkc-root` still wins
+  over both for a single run.
+
+  `npm run canvas` reads `TLDRAWKC_ROOT` through the same function, so the tool
+  and the diagram indexer cannot end up running different builds of it. It goes
+  through a launcher (`services/catalog/src/canvas.ts`) rather than expanding
+  the variable in the shell, because a shell cannot apply the rule: it sees only
+  the process environment, so a root set in `services/catalog/.env` would reach
+  the indexer and not the tool, and it leaves a `~` that arrived inside a
+  variable literal. The launcher forwards every argument, writes nothing to
+  stdout and exits with the tool's own code, so `--json` output and `inspect`'s
+  exit 3 are unchanged.
+
+  Both roots resolve the way `DATABASE_URL` does (shell, then
+  `services/catalog/.env`, then the default), with two rules a connection string
+  never needs: a relative value resolves against the repo root rather than the
+  working directory, since a variable is set once and read from anywhere, and a
+  leading `~` is expanded, since `process.loadEnvFile` performs no shell
+  expansion.
+
+  `NVIDIA_BASE_URL`, `GEMINI_BASE_URL` and `OPENROUTER_BASE_URL` point a
+  provider at a proxy or a local mock, matching the `*_MODEL` variables that
+  were already there. Exercising the cascade's fallback path against the real
+  endpoints spends free-tier quota, which is the reason.
+
+  The OpenRouter attribution header falls back to the site URL the app already
+  resolves, instead of the literal `https://self-learn-one.vercel.app`. A fork
+  that configured its own site and nothing else was crediting its requests to
+  this deployment. `resolveSiteUrl` moved out of `apps/web/src/app/layout.tsx`
+  into `apps/web/src/lib/site-url.ts` so both callers share one parse: a second
+  one in the provider had the two disagreeing on bad input, with the layout
+  falling back to localhost while the header carried the malformed string on to
+  OpenRouter. The empty-string handling the layout already had (`||` over `??`,
+  because `new URL("")` throws) now covers the header too.
+
+  `LEARN_ROOT` was read but documented only in ARCHITECTURE.md; it is in
+  [services/catalog/.env.example](services/catalog/.env.example) now, marked as
+  the test-fixture override it is, and `repoRoot()` reads it through `loadEnv`
+  so that documentation is true rather than aspirational.
+
 - **The catalog resolves manimkc files against the report's `outRoot`, not the
   submodule.** manimkc gained a data root (`$MANIMKC_HOME`) so its renders, TTS
   cache and state can live outside a checkout that a repo relayout can delete —

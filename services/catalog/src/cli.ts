@@ -58,7 +58,8 @@ Options:
                            downstream of it.
   --manimkc-root PATH      index: the manimkc checkout to read, for both the
                            manimkc source and the mirror ledger beside it.
-                           Default: <repo>/tools/manimkc.
+                           Relative to the working directory. Default:
+                           $MANIMKC_ROOT, else <repo>/tools/manimkc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
@@ -66,8 +67,17 @@ Options:
   -h, --help               Show this text.
 
 Environment:
-  DATABASE_URL  Defaults to postgres://localhost:5432/self_learn.
-                See services/catalog/.env.example.
+  DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
+  MANIMKC_ROOT   The manimkc checkout. Defaults to <repo>/tools/manimkc.
+                 Same variable and same meaning as manimkc's own CLI.
+  TLDRAWKC_ROOT  The tldrawkc checkout, whose dist/ build reads the .tldr
+                 files. Defaults to <repo>/tools/tldrawkc.
+  LEARN_ROOT     The knowledge base's repo root, for tests. Defaults to
+                 this repo.
+
+  All four are documented in services/catalog/.env.example, all four take a
+  default that needs no configuration, and the shell always wins over
+  services/catalog/.env.
 `;
 
 type Command =

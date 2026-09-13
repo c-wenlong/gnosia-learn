@@ -1,3 +1,5 @@
+import { resolveSiteUrl } from "@/lib/site-url";
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -38,6 +40,53 @@ export const DEFAULT_PROVIDER_ORDER: ProviderId[] = [
 
 type EnvMap = Record<string, string | undefined>;
 
+/**
+ * Each provider's OpenAI-compatible endpoint, as shipped.
+ *
+ * `<PROVIDER>_BASE_URL` overrides one, the same way `<PROVIDER>_MODEL` already
+ * overrides the model beside it. The reason is a proxy or a mock: pointing the
+ * cascade at a local stub is the only way to exercise a fallback path without
+ * spending a real free-tier request, and a self-hoster fronting NVIDIA with a
+ * gateway should not have to patch this file. A trailing slash is trimmed
+ * because `callOpenAiCompatible` appends `/chat/completions`, and
+ * `https://host/v1//chat/completions` is a 404 on some gateways and not others.
+ */
+const DEFAULT_BASE_URL = {
+  nvidia: "https://integrate.api.nvidia.com/v1",
+  // OpenAI-compatible endpoint for Gemini Developer API
+  gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
+  openrouter: "https://openrouter.ai/api/v1",
+} as const satisfies Record<ProviderId, string>;
+
+function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
+  const configured = env[variable]?.trim();
+  return (configured || DEFAULT_BASE_URL[id]).replace(/\/+$/, "");
+}
+
+/**
+ * What OpenRouter is told this traffic came from, for its attribution page.
+ *
+ * `OPENROUTER_HTTP_REFERER` still wins, and is passed through as written: it is
+ * an explicit answer to exactly this question, and a header is all it becomes.
+ *
+ * Below it, `resolveSiteUrl` answers, in place of the literal
+ * `https://self-learn-one.vercel.app` that used to sit here. That was this
+ * deployment's own domain, so a fork that set `NEXT_PUBLIC_SITE_URL` and
+ * nothing else was crediting its requests to us.
+ *
+ * It calls the shared resolver rather than reading those variables again.
+ * Parsing them a second time here is exactly how the two answers came to
+ * disagree on bad input: a non-blank but unparseable `NEXT_PUBLIC_SITE_URL`
+ * sends the layout to localhost, and used to send the malformed string on to
+ * OpenRouter as a header. One implementation, one answer, including the empty
+ * string that once crashed a build.
+ */
+export function openRouterReferer(env: EnvMap): string {
+  const explicit = env.OPENROUTER_HTTP_REFERER?.trim();
+  if (explicit) return explicit;
+  return resolveSiteUrl(env).toString();
+}
+
 export function resolveProviders(
   env: EnvMap = process.env,
 ): ProviderConfig[] {
@@ -45,7 +94,7 @@ export function resolveProviders(
     {
       id: "nvidia",
       label: "NVIDIA NIM",
-      baseUrl: "https://integrate.api.nvidia.com/v1",
+      baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
       model:
         env.NVIDIA_MODEL?.trim() || "meta/llama-3.1-8b-instruct",
       apiKeyEnv: "NVIDIA_API_KEY",
@@ -53,22 +102,19 @@ export function resolveProviders(
     {
       id: "gemini",
       label: "Google Gemini",
-      // OpenAI-compatible endpoint for Gemini Developer API
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      baseUrl: baseUrl(env, "gemini", "GEMINI_BASE_URL"),
       model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
       apiKeyEnv: "GEMINI_API_KEY",
     },
     {
       id: "openrouter",
       label: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
+      baseUrl: baseUrl(env, "openrouter", "OPENROUTER_BASE_URL"),
       // Auto-picks from currently available free models
       model: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
       apiKeyEnv: "OPENROUTER_API_KEY",
       extraHeaders: {
-        "HTTP-Referer":
-          env.OPENROUTER_HTTP_REFERER?.trim() ||
-          "https://self-learn-one.vercel.app",
+        "HTTP-Referer": openRouterReferer(env),
         "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Self-Learn",
       },
     },

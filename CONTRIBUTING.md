@@ -46,7 +46,9 @@ of the app works.
 > submodule, and the script runs `tools/tldrawkc/dist/cli/index.js`, which is
 > build output and is not committed. So:
 > `git submodule update --init tools/tldrawkc && (cd tools/tldrawkc && npm ci && npm run build)`.
-> Only diagram work needs it. Its own conventions are in
+> Only diagram work needs it. Set `TLDRAWKC_ROOT` to use a checkout somewhere
+> else; the script and the diagram indexer read the same variable, so they
+> cannot end up on different builds. Its own conventions are in
 > [`tools/tldrawkc/AGENTS.md`](tools/tldrawkc/AGENTS.md); the design docs it was
 > built from are in [`tools/tldrawkc/docs/`](tools/tldrawkc/docs/README.md).
 
@@ -63,7 +65,7 @@ there.
 | `apps/web/` | The Next.js app, and the only workspace with a `next.config.ts`, a `public/` and a `vercel.json` |
 | `apps/web/src/app/` | App Router routes: home, `/learn`, the course and module pages, the `/api/agent/*` handlers |
 | `apps/web/src/components/` | Shell, sidebar, progress, checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `kb/` (the concept graph, from the catalog) |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `site-url.ts` (where this deployment lives, for social cards and the OpenRouter referer), `kb/` (the concept graph, from the catalog) |
 | `apps/web/src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts`, the repo root in `repo-root.ts` |
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
 | `packages/content/` | The reader both the app and the catalog parse `content/` with |
