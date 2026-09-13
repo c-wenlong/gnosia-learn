@@ -1,4 +1,4 @@
-import { open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { open, readFile, rename, rm, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -263,26 +263,35 @@ async function withVocabularyLock<T>(file: string, fn: () => Promise<T>): Promis
   const lockFile = `${file}.lock`;
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
 
-  for (;;) {
-    try {
-      const handle = await open(lockFile, "wx");
-      await handle.writeFile(`${process.pid}\n`, "utf8");
-      await handle.close();
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      if (Date.now() >= deadline) {
-        throw new VocabularyEditError(
-          `another process has been editing ${TOPICS_FILE} for over ` +
-            `${LOCK_TIMEOUT_MS / 1000}s. If nothing else is running, the lock is stale: ` +
-            `delete ${path.basename(lockFile)} beside it.`,
-        );
+  /** Blocks until the lock file is ours, and hands back the open handle. */
+  async function acquire(): Promise<FileHandle> {
+    for (;;) {
+      try {
+        return await open(lockFile, "wx");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (Date.now() >= deadline) {
+          throw new VocabularyEditError(
+            `another process has been editing ${TOPICS_FILE} for over ` +
+              `${LOCK_TIMEOUT_MS / 1000}s. If nothing else is running, the lock is stale: ` +
+              `delete ${path.basename(lockFile)} beside it.`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
       }
-      await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
     }
   }
 
+  const handle = await acquire();
+  // From here the lock is held, so every exit has to give it back. A throw
+  // between `open` and this `finally` would leave a file nobody owns, and the
+  // next edit would wait the full timeout and then fail on it.
   try {
+    try {
+      await handle.writeFile(`${process.pid}\n`, "utf8");
+    } finally {
+      await handle.close();
+    }
     return await fn();
   } finally {
     await rm(lockFile, { force: true });
