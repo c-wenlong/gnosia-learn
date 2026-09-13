@@ -2,7 +2,15 @@ import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, concept, curriculumItem, mirror, topic } from "@self-learn/schema";
+import {
+  asset,
+  collection,
+  concept,
+  curriculumItem,
+  indexRun,
+  mirror,
+  topic,
+} from "@self-learn/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -100,26 +108,33 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("index", () => {
-    it("runs manimkc, or skips it with a reason when the submodule is absent", async () => {
+    it("runs the two manimkc sources, or skips both with a reason", async () => {
       const result = await runIndexCommand({});
       const ran = result.sources.map((s) => s.source);
+      // `mirrors` reads the same CLI out of the same submodule, so it is
+      // absent for exactly the same reason `manimkc` is and never on its own.
       if (withManimkc) {
-        expect(ran).toContain("manimkc");
+        expect(ran).toEqual(expect.arrayContaining(["manimkc", "mirrors"]));
         expect(result.skipped).toEqual([]);
       } else {
         expect(ran).not.toContain("manimkc");
+        expect(ran).not.toContain("mirrors");
         expect(result.skipped).toEqual([
           { source: "manimkc", reason: expect.stringContaining("never been indexed") },
+          { source: "mirrors", reason: expect.stringContaining("never been indexed") },
         ]);
       }
     });
 
-    it("refuses --only manimkc when the submodule is absent", async () => {
+    it("refuses --only manimkc or --only mirrors when the submodule is absent", async () => {
       if (withManimkc) return;
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
       await expect(runIndexCommand({ only: ["manimkc"] })).rejects.toThrow(
-        /submodule is not initialised/,
+        /submodule is not initialised.*manimkc topics --json/s,
+      );
+      await expect(runIndexCommand({ only: ["mirrors"] })).rejects.toThrow(
+        /submodule is not initialised.*manimkc mirrors --json/s,
       );
     });
 
@@ -429,6 +444,38 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
         checkedAt: "2026-09-06T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("keeps a reachable destination that matched nothing, so it does not read as never audited", async () => {
+    // The ledger listed only files this catalog has no asset for, so the audit
+    // succeeded and wrote no rows. Reading the table alone would drop the
+    // destination entirely and say the opposite of what happened.
+    const at = new Date("2026-09-13T01:00:00Z");
+    await scratch.db.insert(indexRun).values({
+      source: "mirrors",
+      sourceRoot: "/checkout/manimkc",
+      startedAt: at,
+      finishedAt: at,
+      metadata: {
+        destinations: [
+          { destination: "drive", root: "/mnt/drive", reachable: true, checked: "2026-09-13T01:00:00Z", files: 3 },
+          { destination: "usb", root: "/mnt/usb", reachable: true, checked: "2026-09-13T01:00:00Z", files: 0 },
+          { destination: "seafile", root: "/mnt/seafile", reachable: false, checked: null, files: 0 },
+        ],
+      },
+    });
+
+    const { mirrors } = await runStatus();
+    expect(mirrors["usb"]).toEqual({
+      present: 0,
+      stale: 0,
+      missing: 0,
+      unknown: 0,
+      checked: "2026-09-13T01:00:00.000Z",
+    });
+    // Seafile was not reached, and its rows carry their own older stamp.
+    expect(mirrors["seafile"]?.checked).toBe("2026-09-06T00:00:00.000Z");
+    expect(mirrors["drive"]?.present).toBe(1);
   });
 
   it("returns no mirrors for an asset no mirror carries", async () => {

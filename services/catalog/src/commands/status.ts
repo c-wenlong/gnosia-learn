@@ -9,7 +9,7 @@ import {
   type TableName,
   tables,
 } from "@self-learn/schema";
-import { asc, count, getTableName, max, sql } from "drizzle-orm";
+import { asc, count, eq, getTableName, max, sql } from "drizzle-orm";
 
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -163,12 +163,56 @@ export async function runStatus(): Promise<StatusResult> {
 
 type Db = Parameters<Parameters<typeof withDatabase<StatusResult>>[0]>[0]["db"];
 
+const empty = (): MirrorCoverage => ({
+  present: 0,
+  stale: 0,
+  missing: 0,
+  unknown: 0,
+  checked: null,
+});
+
 /**
- * One grouped scan of `mirror`, counting each status per destination. A count
- * per status per destination would be four queries times however many mirrors
- * exist, for a command whose whole point is to be cheap.
+ * Destinations the last `mirrors` run reached, whether or not it wrote a row.
+ *
+ * The `mirror` table alone cannot answer this. A reachable destination whose
+ * ledger matched no asset writes nothing and clears whatever it had, so it
+ * would drop out of the report and read as never audited, which is the
+ * opposite of what happened. `index_run.metadata` is where the run says what
+ * it actually saw, so that is where the list of destinations comes from and
+ * the table only supplies the counts.
+ */
+async function auditedDestinations(db: Db): Promise<Record<string, MirrorCoverage>> {
+  const run = (
+    await db
+      .select({ metadata: indexRun.metadata })
+      .from(indexRun)
+      .where(eq(indexRun.source, "mirrors"))
+      .limit(1)
+  )[0];
+  const raw = (run?.metadata ?? {}) as { destinations?: unknown };
+  const out: Record<string, MirrorCoverage> = {};
+  for (const entry of Array.isArray(raw.destinations) ? raw.destinations : []) {
+    const row = entry as { destination?: unknown; reachable?: unknown; checked?: unknown };
+    // An unreachable destination is deliberately not seeded. Its rows, if it
+    // has any, still come through the table with the older stamp that says
+    // when they were last true; with none, there is nothing to report.
+    if (typeof row?.destination !== "string" || row.reachable !== true) continue;
+    out[row.destination] = {
+      ...empty(),
+      checked: typeof row.checked === "string" ? new Date(row.checked).toISOString() : null,
+    };
+  }
+  return out;
+}
+
+/**
+ * One grouped scan of `mirror`, counting each status per destination, over the
+ * destinations the last run reached. A count per status per destination would
+ * be four queries times however many mirrors exist, for a command whose whole
+ * point is to be cheap.
  */
 async function mirrorCoverage(db: Db): Promise<Record<string, MirrorCoverage>> {
+  const out = await auditedDestinations(db);
   const counted = await db
     .select({
       destination: mirror.destination,
@@ -180,15 +224,8 @@ async function mirrorCoverage(db: Db): Promise<Record<string, MirrorCoverage>> {
     .groupBy(mirror.destination, mirror.status)
     .orderBy(asc(mirror.destination));
 
-  const out: Record<string, MirrorCoverage> = {};
   for (const row of counted) {
-    const entry = (out[row.destination] ??= {
-      present: 0,
-      stale: 0,
-      missing: 0,
-      unknown: 0,
-      checked: null,
-    });
+    const entry = (out[row.destination] ??= empty());
     // A status outside the vocabulary cannot reach the table (there is a CHECK
     // on it), so this only guards against the column and the constant drifting.
     if ((MIRROR_STATUSES as readonly string[]).includes(row.status)) {
