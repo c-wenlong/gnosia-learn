@@ -28,6 +28,19 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * indexer was written and tested against, while the checkout being pointed at
  * may be any commit, including one predating the command's existence.
  *
+ * **Two roots, and the report says which is which.** `--manimkc-root` is the
+ * *checkout*: source, and the `--root` the CLI is handed. Where the rendered
+ * files actually sit is the report's own top-level `outRoot`, an absolute path,
+ * because manimkc's `$MANIMKC_HOME` lets generated data live outside the
+ * checkout entirely — which is the point of it, after a submodule move deleted
+ * 25 rendered videos. So a deliverable resolves as `outRoot + deliverable.path`,
+ * never as `manimkcRoot + deliverable.path`. With no data root configured the
+ * two are the same directory and nothing observable changes.
+ *
+ * The stored `asset.path` stays the reported string, `out/<domain>/…`, exactly
+ * as before. It is the join key `mirrors.ts` matches ledger entries on and the
+ * unique key on the asset row; only the *base* it is resolved against moved.
+ *
  * **Drift, and which direction is fatal.** A topic folder with no entry in
  * `content/topics.yaml` is refused: an unmapped video is one the catalog cannot
  * see, which is the failure this whole bundle exists to prevent. A vocabulary
@@ -85,6 +98,12 @@ interface Orphan {
 }
 
 export interface TopicsReport {
+  /**
+   * Absolute path the `out/…` strings below are relative to: manimkc's
+   * `$MANIMKC_HOME`, which defaults to the checkout root. Optional only for
+   * defensive parsing; every version of the CLI this repo pins reports it.
+   */
+  outRoot?: unknown;
   topics: TopicEntry[];
   drift: { orphans?: Orphan[]; unrendered?: unknown[] };
 }
@@ -176,6 +195,11 @@ export async function buildRows(
   const problems = new IndexErrors();
   const seenPaths = new Set<string>();
 
+  // Where the rendered files are, which is not necessarily where the source is.
+  // The fallback is for a report from a CLI predating the field; it is also
+  // what the value would be anyway on a checkout with no data root configured.
+  const outRoot = str(report.outRoot) ?? manimkcRoot;
+
   let videos = 0;
   let sidecars = 0;
 
@@ -221,7 +245,7 @@ export async function buildRows(
       if (videoPath === null) continue;
 
       const videoId = `${ASSET_PREFIX.manimkc}${videoPath}`;
-      const facts = await fileFacts(path.join(manimkcRoot, videoPath));
+      const facts = await fileFacts(path.join(outRoot, videoPath));
       const sectionName = str(section.section);
       assets.push({
         id: videoId,
@@ -245,7 +269,7 @@ export async function buildRows(
         const sidecarPath = str(sidecar.path);
         if (sidecarPath === null) continue;
         const sidecarId = `${ASSET_PREFIX.manimkc}${sidecarPath}`;
-        const sidecarFacts = await fileFacts(path.join(manimkcRoot, sidecarPath));
+        const sidecarFacts = await fileFacts(path.join(outRoot, sidecarPath));
         assets.push({
           id: sidecarId,
           kind,
@@ -269,6 +293,12 @@ export async function buildRows(
   problems.throwIfAny(`manimkc topics (${manimkcRoot})`);
 
   const notes = [`${report.topics.length} topic folders, ${videos} videos, ${sidecars} sidecars`];
+  if (outRoot !== manimkcRoot) {
+    // Worth a line: the videos this run hashed are not under the checkout it
+    // was pointed at, and a reader comparing counts between machines needs to
+    // know which data root produced them.
+    notes.push(`rendered output read from ${outRoot} (manimkc's MANIMKC_HOME), not the checkout`);
+  }
 
   // The non-fatal direction: mappings this checkout has nothing for.
   const unmatched = [...byManimkcPath.keys()].filter((p) => !seenPaths.has(p));
