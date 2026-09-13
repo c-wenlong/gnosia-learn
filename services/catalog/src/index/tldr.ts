@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { REPO_ROOT, resolveTldrawkcRoot } from "../env";
 import { IndexError } from "./errors";
 import { filesIn, relativeTo } from "./files";
 
@@ -31,8 +32,27 @@ import { filesIn, relativeTo } from "./files";
 
 const run = promisify(execFile);
 
-/** Relative to the repo root. The same path `npm run canvas` invokes. */
-export const CANVAS_CLI = path.join("tools", "tldrawkc", "dist", "cli", "index.js");
+/** Relative to the tldrawkc checkout. The same file `npm run canvas` invokes. */
+export const CANVAS_CLI = path.join("dist", "cli", "index.js");
+
+/**
+ * Where the built tldrawkc CLI is on this machine: `$TLDRAWKC_ROOT` if it is
+ * set, otherwise the submodule.
+ *
+ * The override exists because the checkout has moved before (both submodules
+ * went from the repo root into `tools/` on 2026-09-13), and because a build
+ * kept outside the superproject is a reasonable thing to have.
+ *
+ * `npm run canvas` calls this function rather than expanding the variable in
+ * the shell, so the two cannot disagree about which build they are talking to.
+ * A shell cannot: it sees only the process environment, so a root set in
+ * `services/catalog/.env` would reach the indexer and not the tool, and it does
+ * not expand a `~` that arrived inside a variable's value. Both entry points go
+ * through `services/catalog/src/canvas.ts` and this line.
+ */
+export function canvasCliPath(repoRoot: string = REPO_ROOT): string {
+  return path.join(resolveTldrawkcRoot(repoRoot), CANVAS_CLI);
+}
 
 /** The metadata schema version this reader was written against. */
 export const KC_SCHEMA = 1;
@@ -68,7 +88,7 @@ export interface DiagramListing {
 
 /** Is there a built tldrawkc CLI to run? */
 export function hasCanvasCli(repoRoot: string): boolean {
-  return existsSync(path.join(repoRoot, CANVAS_CLI));
+  return existsSync(canvasCliPath(repoRoot));
 }
 
 function asMeta(value: unknown): DiagramMeta | null {
@@ -165,7 +185,7 @@ export function normaliseListing(parsed: unknown, directory: string): DiagramLis
 
 /** `tldrawkc list <directory> --json`, run out of the pinned submodule build. */
 export async function listByCli(repoRoot: string, directory: string): Promise<DiagramListing> {
-  const cli = path.join(repoRoot, CANVAS_CLI);
+  const cli = canvasCliPath(repoRoot);
   let stdout: string;
   try {
     ({ stdout } = await run("node", [cli, "list", directory, "--json"], {

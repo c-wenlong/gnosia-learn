@@ -558,6 +558,25 @@ one indexer can never remove another's. `--only` expands to include everything
 downstream of what it names, because a prune cascades and a half-run index is
 worse than none: it looks complete and answers with fewer rows.
 
+### Where the tools are
+
+Two of the indexers shell out to a submodule, and neither hard-codes where the
+submodule is. `services/catalog/src/env.ts` resolves both roots the way it
+resolves `DATABASE_URL`: the shell environment, then `services/catalog/.env`,
+then a default that needs no configuration.
+
+| Variable | Names | Default |
+| --- | --- | --- |
+| `MANIMKC_ROOT` | The manimkc checkout: where the pinned CLI runs from, and the default for `--manimkc-root`. manimkc's own CLI reads the same variable for the same thing. Not `MANIMKC_HOME`, which is where its renders land and which only ever arrives as a report's `outRoot`. | `tools/manimkc` |
+| `TLDRAWKC_ROOT` | The tldrawkc checkout, whose `dist/` build reads the `.tldr` files. `npm run canvas` reads it too, so the tool and the indexer cannot end up on different builds. | `tools/tldrawkc` |
+| `LEARN_ROOT` | The knowledge base's repo root, for tests. A fixture tree plus a scratch `DATABASE_URL` is what keeps a test run off the real `learn/`. | this repo |
+
+A relative value resolves against the repo root rather than the working
+directory, because a variable is set once and read by commands run from
+anywhere; `--manimkc-root` is typed at a prompt and still resolves against the
+cwd. All three are in
+[services/catalog/.env.example](services/catalog/.env.example).
+
 ### How agents read it
 
 The command surface is deliberately layered, and no layer returns a whole tree.

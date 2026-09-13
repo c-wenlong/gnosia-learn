@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 
 import type { NewAsset, NewAssetDerivation, NewAssetTopic } from "@self-learn/schema";
 
+import { MANIMKC_DIR, MANIMKC_ROOT_ENV, resolveManimkcRoot } from "../env";
 import { IndexError, IndexErrors } from "./errors";
 import { fileFacts } from "./files";
 import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
@@ -27,6 +28,12 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * not, the pinned reader is the right one: it is the version whose JSON this
  * indexer was written and tested against, while the checkout being pointed at
  * may be any commit, including one predating the command's existence.
+ *
+ * Where "the submodule this repo pins" *is* comes from `resolveManimkcRoot`,
+ * so `$MANIMKC_ROOT` moves the reader and the default checkout together. That
+ * matters because the pair moved once already: relocating them from the repo
+ * root into `tools/` on 2026-09-13 cost a day, and a hard-coded
+ * `tools/manimkc` here is a second copy of a fact `.gitmodules` owns.
  *
  * **Two roots, and the report says which is which.** `--manimkc-root` is the
  * *checkout*: source, and the `--root` the CLI is handed. Where the rendered
@@ -51,9 +58,6 @@ import { VOCABULARY_FILE } from "./vocabulary";
  */
 
 const run = promisify(execFile);
-
-/** The submodule, relative to the repo root. */
-export const MANIMKC_DIR = path.join("tools", "manimkc");
 
 /** Relative to the manimkc root. Same path in the submodule and in any checkout. */
 export const MANIMKC_CLI = path.join("tools", "cli", "manimkc");
@@ -108,9 +112,28 @@ export interface TopicsReport {
   drift: { orphans?: Orphan[]; unrendered?: unknown[] };
 }
 
+/** Where the pinned manimkc CLI is on this machine. */
+export function manimkcCliPath(repoRoot: string): string {
+  return path.join(resolveManimkcRoot(repoRoot), MANIMKC_CLI);
+}
+
 /** Is there a manimkc CLI to run? The e2e test skips rather than fails when not. */
 export function hasManimkcCli(repoRoot: string): boolean {
-  return existsSync(path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI));
+  return existsSync(manimkcCliPath(repoRoot));
+}
+
+/**
+ * The refusal both readers share. It names the resolved path rather than the
+ * default one, because "tools/manimkc/tools/cli/manimkc does not exist" is a
+ * lie on a machine whose `$MANIMKC_ROOT` points somewhere else, and the whole
+ * point of looking is to find out where the tool actually is.
+ */
+export function missingCli(repoRoot: string): IndexError {
+  return new IndexError(
+    `${manimkcCliPath(repoRoot)} does not exist. The manimkc submodule is not ` +
+      `initialised; run \`git submodule update --init ${MANIMKC_DIR}\`, or set ` +
+      `${MANIMKC_ROOT_ENV} to a checkout.`,
+  );
 }
 
 /**
@@ -121,13 +144,8 @@ export async function readTopicsReport(
   repoRoot: string,
   manimkcRoot: string,
 ): Promise<TopicsReport> {
-  const cli = path.join(repoRoot, MANIMKC_DIR, MANIMKC_CLI);
-  if (!existsSync(cli)) {
-    throw new IndexError(
-      `${path.join(MANIMKC_DIR, MANIMKC_CLI)} does not exist. The manimkc submodule is not ` +
-        `initialised; run \`git submodule update --init ${MANIMKC_DIR}\`.`,
-    );
-  }
+  const cli = manimkcCliPath(repoRoot);
+  if (!existsSync(cli)) throw missingCli(repoRoot);
   if (!existsSync(manimkcRoot)) {
     throw new IndexError(`--manimkc-root ${manimkcRoot} does not exist`);
   }
