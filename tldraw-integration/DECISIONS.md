@@ -500,3 +500,26 @@ say what any of them are about was exactly that problem. `missing-topic`
 an error for the same reason this decision keeps the metadata optional:
 every diagram drawn before this shipped has none, and failing all of them at
 once would be the tool breaking work that was already fine.
+
+## D37. `line` and `stub` mute `friendless-arrow` and `arrow-crosses-shape` by default
+
+**Verdict:** every mark `helpers.line` or `helpers.stub` draws carries
+`meta.lintIgnore = ['friendless-arrow', 'arrow-crosses-shape']` unless the
+caller says otherwise. `lintIgnore: []` lints it like any other arrow, and
+`true` mutes every rule.
+
+**Why:** both rules exist to catch an arrow that claims a connection it does
+not have, and a line never made that claim. `friendless-arrow` fires on an
+unbound end, which is the whole definition of a line; `arrow-crosses-shape`
+fires on a path running through a shape that is neither endpoint, which is
+what an axis through the dot at its own origin does by design. Leaving them on
+would mean every axis, tick, vector and rule in a teaching diagram had to be
+excused one by one, and a lint that is muted by hand at every call site is a
+lint nobody reads.
+
+The default is a default, not a rule change. `connect` is untouched, so a real
+connection is still linted exactly as before, and the opt-out runs both ways:
+a caller who wants a line held to the arrow rules passes `lintIgnore: []`.
+What forced it was the vector redraw, which hand-rolled a raw arrow shape with
+`meta.lintIgnore` set 27 times over two diagrams, which is precisely the work
+the helpers bag exists to absorb.
