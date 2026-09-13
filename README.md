@@ -147,7 +147,7 @@ The `/learn` and `/review` skills are not in this repo. They live in the globall
 | `/learn`'s Teach phase | Spawns the `diagram-maker` subagent, which drives the tool and falls back to a hand-written SVG if `doctor` fails | Automatic, nothing to type |
 | The `tldrawkc-diagram` skill | Symlinked into `.claude/skills/` | You ask an agent to draw a diagram or lift a mermaid flowchart onto the canvas |
 | The CLI | `npm run --silent canvas -- <verb>` | You, or any script |
-| The library | `import { ... } from "tldrawkc"`, JSON in and out, the same verbs as the CLI | Node code that wants them without a shell |
+| The library | A relative import, e.g. `import { run } from "../tools/tldrawkc/dist/lib/index.js"` from `scripts/`. `tools/` is not an npm workspace, so there is no bare `"tldrawkc"` specifier | Node code that wants the verbs without a shell |
 | `serve` | A real browser tab, open until Ctrl+C | A human watching and nudging shapes by hand |
 
 The deployed web app is not an entry point. It reads `learn/` and renders the exported SVGs; it never runs the tool, because a Vercel build has no local Chromium and no business writing local files.
