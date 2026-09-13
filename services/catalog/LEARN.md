@@ -69,6 +69,26 @@ in [`learn/README.md`](../../learn/README.md#the-json-shapes) and pinned by
   scheduled.
 - `observe --force` can no longer record evidence about a concept the catalog
   has never seen. There is nowhere to put it.
+- `concept add --topic <slug>` is new, and it is the other half of that refusal.
+  It validates the slug against `content/topics.yaml` before writing anything,
+  appends the new id to that topic's `maps.concepts`, and runs the concepts
+  indexer, so a note written mid-session can carry mastery at the next
+  `observe`. The `--json` shape is `{ id, path, topic, indexed }`. Without the
+  flag the behaviour is what it was, and the message now names the flag and the
+  exact edit rather than leaving the reader to work it out.
+
+  The edit takes an exclusive lock (`content/topics.yaml.lock`, created with
+  `open(..., "wx")`) and writes through a temp file and a rename. Two
+  `concept add --topic` runs at once would otherwise both read the same
+  original and the second write would drop the first mapping, with both
+  reporting success because each verifies only its own slug.
+
+  The YAML edit is textual and one line wide. `topics.yaml` is 80 hand-written
+  entries with banners and comments, and a round trip through a serialiser would
+  rewrite all of it for a one-word change. What makes that safe is the check
+  after the write: the file is re-read through `loadTopics`, and if the concept
+  did not land under the topic that was asked for, the original bytes go back
+  and the command fails.
 
 ## If something looks wrong
 
