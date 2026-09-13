@@ -542,7 +542,17 @@ over on first mount.
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
 `diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
 neither: it writes `mirror` rows against ids `manimkc` produced, and is scoped
-by the destinations it declares it audited instead. That ownership is what lets the
+by the destinations it declares it audited instead.
+
+The `manimkc:` ids are the CLI's own `out/<domain>/…` strings, stored verbatim
+as `asset.path` — which is also the literal key `mirrors` matches ledger
+entries on, so neither side may rewrite them. **What those strings are relative
+to is not the submodule.** Both commands report a top-level absolute `outRoot`,
+manimkc's `$MANIMKC_HOME`, and the indexers resolve a file as `outRoot + path`.
+It defaults to the submodule checkout, so with nothing configured the two are
+the same directory; set it and the videos live somewhere a repo relayout cannot
+delete, which is why it exists. `--manimkc-root` names the checkout to index,
+never where its output landed. That ownership is what lets the
 writer prune safely: a source may delete only rows it could have produced, so
 one indexer can never remove another's. `--only` expands to include everything
 downstream of what it names, because a prune cascades and a half-run index is

@@ -7,6 +7,32 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ## [Unreleased]
 
+### Changed
+
+- **The catalog resolves manimkc files against the report's `outRoot`, not the
+  submodule.** manimkc gained a data root (`$MANIMKC_HOME`) so its renders, TTS
+  cache and state can live outside a checkout that a repo relayout can delete —
+  the move from `manimkc/` into `tools/` on 2026-09-13 took 25 rendered videos
+  and the whole clip cache with it, because git does not carry gitignored files
+  across a move. Both `manimkc topics --json` and `manimkc mirrors --json` now
+  report that root as a top-level absolute `outRoot`, and the two indexers join
+  onto it. `--manimkc-root` still names the *checkout*, which is a different
+  question from where its output landed, and with no data root configured the
+  two are the same directory so nothing observable changes.
+
+  The `out/…` strings are untouched: they remain `asset.path`, the `manimkc:`
+  asset id, and the literal key the mirror ledger is matched on. Only the base
+  they resolve against moved.
+
+  `--only mirrors` now runs `manimkc` first. Those keys carry no trace of the
+  root they were built against, so a `mirrors` run under a different
+  `$MANIMKC_HOME` than the last `manimkc` run would match every path by string
+  and attach the audit to assets hashed somewhere else, in silence. Re-reading
+  `manimkc` in the same process makes that unrepresentable. `mirrors` records the `outRoot` it audited in
+  `index_run.metadata`, and says so when *nothing* matched, since every path
+  unmatched at once means the two reports disagree about their base rather than
+  a few sidecars being absent.
+
 ### Added
 
 - **The catalog's indexers and read commands.** `npm run catalog -- index`

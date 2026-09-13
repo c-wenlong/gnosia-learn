@@ -26,10 +26,21 @@ import type { Indexer, SourceResult } from "./source";
  * Drive placeholder will not open and has to be judged by size and mtime
  * instead. Re-deriving any of that here would be a second copy free to drift.
  *
- * **The join is one literal string.** Every ledger key is repo-relative to the
- * manimkc root, `out/<domain>/<topic>/<name>.mp4`, which is exactly the `path`
- * the manimkc indexer stored on the asset row. Neither side rewrites it. A
- * ledger path with no asset is reported and skipped rather than refused: the
+ * **The join is one literal string.** Every ledger key is
+ * `out/<domain>/<topic>/<name>.mp4`, relative to the report's own `outRoot`,
+ * and it is exactly the `path` the manimkc indexer stored on the asset row.
+ * Neither side rewrites it. Nothing here resolves those strings against a
+ * filesystem at all — the comparison already happened in manimkc, and what
+ * reaches this file is its verdict — so `outRoot` is carried into
+ * `index_run.metadata` for the record rather than joined onto anything.
+ *
+ * That both reports use the same base is what keeps the join sound: they are
+ * two subcommands of one CLI reading one `$MANIMKC_HOME`, and `topics`
+ * derives the very list `mirrors` audits. If that ever stopped holding, every
+ * single path would go unmatched at once rather than a few, which is why the
+ * note below says so.
+ *
+ * A ledger path with no asset is reported and skipped rather than refused: the
  * ledger lists the sidecars a topic is *supposed* to have, most of which do not
  * exist yet, and refusing those would make the source unrunnable for a year.
  *
@@ -64,6 +75,13 @@ interface LedgerDestination {
 }
 
 export interface MirrorsReport {
+  /**
+   * Absolute path the ledger's `out/…` keys are relative to: manimkc's
+   * `$MANIMKC_HOME`, which defaults to its checkout root. Recorded, never
+   * joined — see the note on the literal-string join above. Optional only for
+   * defensive parsing; every version of the CLI this repo pins reports it.
+   */
+  outRoot?: unknown;
   destinations: Record<string, LedgerDestination>;
   summary?: Record<string, Record<string, unknown>>;
 }
@@ -201,7 +219,8 @@ export function buildMirrorRows(
     notes.push(
       `${unmatched.size} ledger path(s) match no manimkc asset and were skipped: ` +
         `${shown.join(", ")}${unmatched.size > shown.length ? ", …" : ""}. ` +
-        `These are sidecars the ledger expects and no render has produced yet.`,
+        `These are sidecars the ledger expects and no render has produced yet.` +
+        diagnosis(rows.length, assetsByPath.size),
     );
   }
   for (const entry of destinations) {
@@ -216,8 +235,43 @@ export function buildMirrorRows(
     // keeps the rows it had, which is the whole reason this is not a plain
     // clear-and-reinsert like the other link tables.
     scope: { mirrorDestinations: destinations.filter((d) => d.reachable).map((d) => d.destination) },
-    metadata: { destinations },
+    // `outRoot` says which data root the audit describes. The mirror rows are
+    // about files that may not live under the checkout `source_root` names, and
+    // without this the run record cannot say where they were.
+    metadata: { destinations, outRoot: typeof report.outRoot === "string" ? report.outRoot : null },
   };
+}
+
+/**
+ * The extra sentence when nothing matched, and only then.
+ *
+ * A handful of unmatched paths is the ordinary state: the ledger lists the
+ * sidecars a topic is *supposed* to have and most are not rendered. Zero
+ * matches out of hundreds is a different animal and should not read the same,
+ * but the two ways of getting there want opposite advice, so they are told
+ * apart rather than lumped under the louder one:
+ *
+ * an empty `assetsByPath` means manimkc has indexed nothing at all — a fresh
+ * database, or a data root with no renders in it — and pointing that at a
+ * base disagreement would send the reader looking for a bug that is not there;
+ *
+ * assets that exist and still match nothing is the real mismatch, and the only
+ * base both sides can disagree about is manimkc's data root.
+ */
+function diagnosis(matched: number, knownAssets: number): string {
+  if (matched > 0) return "";
+  if (knownAssets === 0) {
+    return (
+      ` No manimkc assets are indexed at all, so there was nothing to match against: ` +
+      `run the \`manimkc\` source (it now runs ahead of this one automatically) ` +
+      `or render something first.`
+    );
+  }
+  return (
+    ` None of the ${knownAssets} manimkc asset path(s) matched, which is a base ` +
+    `disagreement rather than absent sidecars: the ledger and the stored paths ` +
+    `were produced against different data roots. Re-index \`manimkc\`.`
+  );
 }
 
 function statusOf(value: unknown): MirrorStatus {
