@@ -54,7 +54,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       const { rows } = await scratch.db.execute<{ n: number }>(
         sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
       );
-      expect(rows[0]?.n).toBe(20);
+      expect(rows[0]?.n).toBe(21);
     });
 
     it("is idempotent", async () => {

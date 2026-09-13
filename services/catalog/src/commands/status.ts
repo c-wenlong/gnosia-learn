@@ -2,12 +2,14 @@ import {
   CONTENT_TABLES,
   indexRun,
   INDEX_SOURCES,
+  mirror,
+  MIRROR_STATUSES,
   OPERATIONAL_TABLES,
   STATE_TABLES,
   type TableName,
   tables,
 } from "@self-learn/schema";
-import { asc, getTableName, sql } from "drizzle-orm";
+import { asc, count, getTableName, max, sql } from "drizzle-orm";
 
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -26,6 +28,23 @@ export interface SourceStatus {
   counts: Record<string, number>;
 }
 
+/**
+ * Mirror coverage for one destination: how many deliverables are there, and how
+ * long ago anyone looked.
+ *
+ * `checked` is the newest `checked_at` across the destination's rows, which is
+ * when the last audit that could reach it ran. A destination signed out for a
+ * week keeps its rows and keeps last week's stamp, which is the honest answer:
+ * those counts were true then and nothing has confirmed them since.
+ */
+export interface MirrorCoverage {
+  present: number;
+  stale: number;
+  missing: number;
+  unknown: number;
+  checked: string | null;
+}
+
 export interface StatusResult {
   database: string;
   migrations: {
@@ -42,6 +61,13 @@ export interface StatusResult {
    * checkout three weeks old looks exactly like a fresh one.
    */
   sources: SourceStatus[];
+  /**
+   * Mirror coverage per destination, or an empty object when nothing has been
+   * audited. This is the "did it reach Google Drive" question, which no row
+   * count answers: a video row says the file exists here, not that a copy of it
+   * exists anywhere else.
+   */
+  mirrors: Record<string, MirrorCoverage>;
 }
 
 function half(name: TableName): "content" | "state" | "operational" {
@@ -96,6 +122,7 @@ export async function runStatus(): Promise<StatusResult> {
         rows,
         totals,
         sources: sourceStatuses([]),
+        mirrors: {},
       };
     }
 
@@ -129,8 +156,48 @@ export async function runStatus(): Promise<StatusResult> {
       rows,
       totals,
       sources: sourceStatuses(runs),
+      mirrors: await mirrorCoverage(db),
     };
   });
+}
+
+type Db = Parameters<Parameters<typeof withDatabase<StatusResult>>[0]>[0]["db"];
+
+/**
+ * One grouped scan of `mirror`, counting each status per destination. A count
+ * per status per destination would be four queries times however many mirrors
+ * exist, for a command whose whole point is to be cheap.
+ */
+async function mirrorCoverage(db: Db): Promise<Record<string, MirrorCoverage>> {
+  const counted = await db
+    .select({
+      destination: mirror.destination,
+      status: mirror.status,
+      rows: count(),
+      checked: max(mirror.checkedAt),
+    })
+    .from(mirror)
+    .groupBy(mirror.destination, mirror.status)
+    .orderBy(asc(mirror.destination));
+
+  const out: Record<string, MirrorCoverage> = {};
+  for (const row of counted) {
+    const entry = (out[row.destination] ??= {
+      present: 0,
+      stale: 0,
+      missing: 0,
+      unknown: 0,
+      checked: null,
+    });
+    // A status outside the vocabulary cannot reach the table (there is a CHECK
+    // on it), so this only guards against the column and the constant drifting.
+    if ((MIRROR_STATUSES as readonly string[]).includes(row.status)) {
+      entry[row.status as (typeof MIRROR_STATUSES)[number]] = row.rows;
+    }
+    const at = row.checked === null ? null : new Date(row.checked).toISOString();
+    if (at !== null && (entry.checked === null || at > entry.checked)) entry.checked = at;
+  }
+  return out;
 }
 
 export function formatStatus(result: StatusResult): string {
@@ -172,6 +239,23 @@ export function formatStatus(result: StatusResult): string {
     lines.push(
       `  ${source.source.padEnd(sourceWidth)}  ${source.lastIndexedAt}  ` +
         `${String(source.written).padStart(5)} rows  ${source.sourceRoot ?? ""}`,
+    );
+  }
+
+  const destinations = Object.keys(result.mirrors);
+  lines.push("");
+  lines.push("mirrors");
+  if (destinations.length === 0) {
+    lines.push("  nothing audited yet. Run `npm run catalog -- index --only mirrors`.");
+    return lines.join("\n");
+  }
+  const mirrorWidth = Math.max(...destinations.map((d) => d.length));
+  for (const destination of destinations) {
+    const m = result.mirrors[destination]!;
+    lines.push(
+      `  ${destination.padEnd(mirrorWidth)}  ${String(m.present).padStart(4)} present, ` +
+        `${String(m.stale).padStart(3)} stale, ${String(m.missing).padStart(3)} missing, ` +
+        `${String(m.unknown).padStart(4)} unknown  ${m.checked ?? "never"}`,
     );
   }
   return lines.join("\n");
