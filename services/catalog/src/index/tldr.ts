@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { resolveTldrawkcRoot } from "../env";
+import { REPO_ROOT, resolveTldrawkcRoot } from "../env";
 import { IndexError } from "./errors";
 import { filesIn, relativeTo } from "./files";
 
@@ -41,11 +41,16 @@ export const CANVAS_CLI = path.join("dist", "cli", "index.js");
  *
  * The override exists because the checkout has moved before (both submodules
  * went from the repo root into `tools/` on 2026-09-13), and because a build
- * kept outside the superproject is a reasonable thing to have. `npm run canvas`
- * reads the same variable, so the tool and this reader cannot disagree about
- * which build they are talking to.
+ * kept outside the superproject is a reasonable thing to have.
+ *
+ * `npm run canvas` calls this function rather than expanding the variable in
+ * the shell, so the two cannot disagree about which build they are talking to.
+ * A shell cannot: it sees only the process environment, so a root set in
+ * `services/catalog/.env` would reach the indexer and not the tool, and it does
+ * not expand a `~` that arrived inside a variable's value. Both entry points go
+ * through `services/catalog/src/canvas.ts` and this line.
  */
-export function canvasCliPath(repoRoot: string): string {
+export function canvasCliPath(repoRoot: string = REPO_ROOT): string {
   return path.join(resolveTldrawkcRoot(repoRoot), CANVAS_CLI);
 }
 

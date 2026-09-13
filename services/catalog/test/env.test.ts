@@ -1,4 +1,5 @@
-import { homedir } from "node:os";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -84,6 +85,50 @@ describe("resolveManimkcRoot and resolveTldrawkcRoot", () => {
     process.env.TLDRAWKC_ROOT = "   ";
     expect(resolveManimkcRoot()).toBe(path.join(REPO_ROOT, MANIMKC_DIR));
     expect(resolveTldrawkcRoot()).toBe(path.join(REPO_ROOT, TLDRAWKC_DIR));
+  });
+});
+
+describe("a value that arrives through services/catalog/.env", () => {
+  /**
+   * The rule Greptile caught the shell expansion breaking: a root set only in
+   * the dotenv has to normalise exactly as one set in the shell, and reach the
+   * same resolved CLI path. Asserted against a temp file rather than the real
+   * one, which is a fixed path in the repo: writing it would clobber a
+   * developer's own and a crashed run would leave it behind.
+   */
+  async function dotenv(contents: string): Promise<void> {
+    const directory = await mkdtemp(path.join(tmpdir(), "catalog-dotenv-"));
+    temporary.push(directory);
+    const file = path.join(directory, ".env");
+    await writeFile(file, contents, "utf8");
+    loadEnv(file);
+  }
+
+  const temporary: string[] = [];
+
+  afterAll(async () => {
+    for (const directory of temporary) await rm(directory, { recursive: true, force: true });
+  });
+
+  it("resolves the same as one set in the shell", async () => {
+    await dotenv("TLDRAWKC_ROOT=/opt/from-dotenv/tldrawkc\n");
+    expect(resolveTldrawkcRoot()).toBe("/opt/from-dotenv/tldrawkc");
+    expect(canvasCliPath()).toBe(
+      path.join("/opt/from-dotenv/tldrawkc", "dist", "cli", "index.js"),
+    );
+  });
+
+  it("gets its tilde expanded, which no dotenv reader does for itself", async () => {
+    // `process.loadEnvFile` performs no shell expansion, so this is the one
+    // route by which a literal "~" can reach a path join.
+    await dotenv("MANIMKC_ROOT=~/checkouts/manimkc\n");
+    expect(resolveManimkcRoot()).toBe(path.join(homedir(), "checkouts", "manimkc"));
+  });
+
+  it("loses to the shell, the way DATABASE_URL does", async () => {
+    process.env.MANIMKC_ROOT = "/from/the/shell";
+    await dotenv("MANIMKC_ROOT=/from/the/file\n");
+    expect(resolveManimkcRoot()).toBe("/from/the/shell");
   });
 });
 

@@ -1,3 +1,5 @@
+import { resolveSiteUrl } from "@/lib/site-url";
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -64,25 +66,25 @@ function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
 /**
  * What OpenRouter is told this traffic came from, for its attribution page.
  *
- * `OPENROUTER_HTTP_REFERER` still wins. Below it the site URL the app already
- * resolves for social cards answers instead of a literal
- * `https://self-learn-one.vercel.app`, which was this deployment's own domain:
- * a fork that set `NEXT_PUBLIC_SITE_URL` and nothing else would otherwise
- * spend its requests under our name. Same two variables and same scheme
- * defaulting as `resolveSiteUrl` in `apps/web/src/app/layout.tsx`, kept here
- * rather than imported because that module is a route file that pulls in React
- * and the whole metadata object with it.
+ * `OPENROUTER_HTTP_REFERER` still wins, and is passed through as written: it is
+ * an explicit answer to exactly this question, and a header is all it becomes.
  *
- * The last resort is localhost, matching that function, and it is only reached
- * when the deployment has said nothing about where it lives at all.
+ * Below it, `resolveSiteUrl` answers, in place of the literal
+ * `https://self-learn-one.vercel.app` that used to sit here. That was this
+ * deployment's own domain, so a fork that set `NEXT_PUBLIC_SITE_URL` and
+ * nothing else was crediting its requests to us.
+ *
+ * It calls the shared resolver rather than reading those variables again.
+ * Parsing them a second time here is exactly how the two answers came to
+ * disagree on bad input: a non-blank but unparseable `NEXT_PUBLIC_SITE_URL`
+ * sends the layout to localhost, and used to send the malformed string on to
+ * OpenRouter as a header. One implementation, one answer, including the empty
+ * string that once crashed a build.
  */
 export function openRouterReferer(env: EnvMap): string {
   const explicit = env.OPENROUTER_HTTP_REFERER?.trim();
   if (explicit) return explicit;
-  const site =
-    env.NEXT_PUBLIC_SITE_URL?.trim() || env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (!site) return "http://localhost:3000";
-  return /^https?:\/\//i.test(site) ? site : `https://${site}`;
+  return resolveSiteUrl(env).toString();
 }
 
 export function resolveProviders(

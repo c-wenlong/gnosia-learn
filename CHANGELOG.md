@@ -25,23 +25,37 @@ This project is continuously deployed and not versioned; entries are grouped by 
   report's `outRoot` and never from a path set here. `--manimkc-root` still wins
   over both for a single run.
 
-  `npm run canvas` reads `TLDRAWKC_ROOT` too, so the tool and the diagram
-  indexer cannot end up running different builds of it. Both resolve the way
-  `DATABASE_URL` does (shell, then `services/catalog/.env`, then the default),
-  with two rules a connection string never needs: a relative value resolves
-  against the repo root rather than the working directory, since a variable is
-  set once and read from anywhere, and a leading `~` is expanded, since
-  `process.loadEnvFile` performs no shell expansion.
+  `npm run canvas` reads `TLDRAWKC_ROOT` through the same function, so the tool
+  and the diagram indexer cannot end up running different builds of it. It goes
+  through a launcher (`services/catalog/src/canvas.ts`) rather than expanding
+  the variable in the shell, because a shell cannot apply the rule: it sees only
+  the process environment, so a root set in `services/catalog/.env` would reach
+  the indexer and not the tool, and it leaves a `~` that arrived inside a
+  variable literal. The launcher forwards every argument, writes nothing to
+  stdout and exits with the tool's own code, so `--json` output and `inspect`'s
+  exit 3 are unchanged.
+
+  Both roots resolve the way `DATABASE_URL` does (shell, then
+  `services/catalog/.env`, then the default), with two rules a connection string
+  never needs: a relative value resolves against the repo root rather than the
+  working directory, since a variable is set once and read from anywhere, and a
+  leading `~` is expanded, since `process.loadEnvFile` performs no shell
+  expansion.
 
   `NVIDIA_BASE_URL`, `GEMINI_BASE_URL` and `OPENROUTER_BASE_URL` point a
   provider at a proxy or a local mock, matching the `*_MODEL` variables that
   were already there. Exercising the cascade's fallback path against the real
   endpoints spends free-tier quota, which is the reason.
 
-  The OpenRouter attribution header falls back to `NEXT_PUBLIC_SITE_URL` (then
-  `VERCEL_PROJECT_PRODUCTION_URL`, then localhost) instead of the literal
-  `https://self-learn-one.vercel.app`. A fork that configured its own site and
-  nothing else was crediting its requests to this deployment.
+  The OpenRouter attribution header falls back to the site URL the app already
+  resolves, instead of the literal `https://self-learn-one.vercel.app`. A fork
+  that configured its own site and nothing else was crediting its requests to
+  this deployment. `resolveSiteUrl` moved out of `apps/web/src/app/layout.tsx`
+  into `apps/web/src/lib/site-url.ts` so both callers share one parse: a second
+  one in the provider had the two disagreeing on bad input, with the layout
+  falling back to localhost while the header carried the malformed string on to
+  OpenRouter. The empty-string handling the layout already had (`||` over `??`,
+  because `new URL("")` throws) now covers the header too.
 
   `LEARN_ROOT` was read but documented only in ARCHITECTURE.md; it is in
   [services/catalog/.env.example](services/catalog/.env.example) now, marked as

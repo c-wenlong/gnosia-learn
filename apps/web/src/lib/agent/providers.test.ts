@@ -5,6 +5,7 @@ import {
   openRouterReferer,
   resolveProviders,
 } from "@/lib/agent/providers";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -97,18 +98,37 @@ describe("openRouterReferer", () => {
     // The point of the change: a fork that configured its site and nothing
     // else must not spend its OpenRouter requests under our name.
     expect(openRouterReferer({ NEXT_PUBLIC_SITE_URL: "https://forked.test" })).toBe(
-      "https://forked.test",
+      "https://forked.test/",
     );
   });
 
   it("assumes https for a bare Vercel domain, as the layout does", () => {
     expect(
       openRouterReferer({ VERCEL_PROJECT_PRODUCTION_URL: "forked.vercel.app" }),
-    ).toBe("https://forked.vercel.app");
+    ).toBe("https://forked.vercel.app/");
   });
 
   it("falls back to localhost when the deployment says nothing at all", () => {
-    expect(openRouterReferer({})).toBe("http://localhost:3000");
+    expect(openRouterReferer({})).toBe("http://localhost:3000/");
+  });
+
+  it("agrees with the layout on a value that will not parse", () => {
+    // The two resolution paths used to disagree here: the layout fell back to
+    // localhost and this sent the malformed string on as a header.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(openRouterReferer({ NEXT_PUBLIC_SITE_URL: "http://" })).toBe(
+      resolveSiteUrl({ NEXT_PUBLIC_SITE_URL: "http://" }).toString(),
+    );
+    expect(openRouterReferer({ NEXT_PUBLIC_SITE_URL: "http://" })).toBe(
+      "http://localhost:3000/",
+    );
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("agrees with the layout on an empty string", () => {
+    expect(openRouterReferer({ NEXT_PUBLIC_SITE_URL: "" })).toBe(
+      resolveSiteUrl({ NEXT_PUBLIC_SITE_URL: "" }).toString(),
+    );
   });
 
   it("rides along on the provider's headers", () => {
@@ -116,7 +136,7 @@ describe("openRouterReferer", () => {
       OPENROUTER_API_KEY: "or",
       NEXT_PUBLIC_SITE_URL: "https://forked.test",
     });
-    expect(providers[0].extraHeaders?.["HTTP-Referer"]).toBe("https://forked.test");
+    expect(providers[0].extraHeaders?.["HTTP-Referer"]).toBe("https://forked.test/");
   });
 });
 
