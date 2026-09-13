@@ -46,7 +46,9 @@ of the app works.
 > submodule, and the script runs `tools/tldrawkc/dist/cli/index.js`, which is
 > build output and is not committed. So:
 > `git submodule update --init tools/tldrawkc && (cd tools/tldrawkc && npm ci && npm run build)`.
-> Only diagram work needs it. Its own conventions are in
+> Only diagram work needs it. Set `TLDRAWKC_ROOT` to use a checkout somewhere
+> else; the script and the diagram indexer read the same variable, so they
+> cannot end up on different builds. Its own conventions are in
 > [`tools/tldrawkc/AGENTS.md`](tools/tldrawkc/AGENTS.md); the design docs it was
 > built from are in [`tools/tldrawkc/docs/`](tools/tldrawkc/docs/README.md).
 

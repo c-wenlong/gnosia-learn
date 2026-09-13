@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import {
   asset,
   concept,
@@ -12,12 +10,12 @@ import {
 import { eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { REPO_ROOT } from "../env";
+import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
-import { hasManimkcCli, MANIMKC_DIR, manimkcIndexer } from "./manimkc";
+import { hasManimkcCli, manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
 import type { IndexContext, Indexer } from "./source";
@@ -115,11 +113,6 @@ const NEEDS_MANIMKC_CLI = new Set<IndexSource>(
   Object.keys(MANIMKC_COMMAND) as (keyof typeof MANIMKC_COMMAND)[],
 );
 
-/** Where the manimkc checkout is unless `--manimkc-root` says otherwise. */
-export function defaultManimkcRoot(repoRoot = REPO_ROOT): string {
-  return path.join(repoRoot, MANIMKC_DIR);
-}
-
 export interface RunOptions {
   repoRoot?: string;
   manimkcRoot?: string;
@@ -198,7 +191,9 @@ export async function runIndex(
   options: RunOptions = {},
 ): Promise<RunResult> {
   const repoRoot = options.repoRoot ?? REPO_ROOT;
-  const manimkcRoot = options.manimkcRoot ?? defaultManimkcRoot(repoRoot);
+  // The flag, else $MANIMKC_ROOT, else the submodule. The middle step is the
+  // resolver's, so this line is the whole precedence rule.
+  const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(repoRoot);
   const requested = options.only ?? INDEX_SOURCES;
   const required = withPrerequisites(requested);
   const wanted = withDependents([...required]);
@@ -301,7 +296,8 @@ export async function runIndex(
           (asked
             ? ""
             : `, and ${source} has rows in this database that pruning would orphan`) +
-          `. Run \`git submodule update --init ${MANIMKC_DIR}\`, or point --manimkc-root at a checkout.`,
+          `. Run \`git submodule update --init ${MANIMKC_DIR}\`, or set ${MANIMKC_ROOT_ENV} ` +
+          `to a checkout.`,
       );
     }
     skipped.push({

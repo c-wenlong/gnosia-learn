@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   availableProviderSummary,
   completeWithFallback,
+  openRouterReferer,
   resolveProviders,
 } from "@/lib/agent/providers";
 
@@ -40,6 +41,82 @@ describe("resolveProviders", () => {
       NVIDIA_MODEL: "meta/llama-3.1-70b-instruct",
     });
     expect(providers[0].model).toBe("meta/llama-3.1-70b-instruct");
+  });
+
+  it("uses the published endpoints when no base URL is set", () => {
+    const providers = resolveProviders({
+      NVIDIA_API_KEY: "nv",
+      GEMINI_API_KEY: "gm",
+      OPENROUTER_API_KEY: "or",
+    });
+    expect(providers.map((p) => p.baseUrl)).toEqual([
+      "https://integrate.api.nvidia.com/v1",
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+      "https://openrouter.ai/api/v1",
+    ]);
+  });
+
+  it("honors base URL overrides, one provider at a time", () => {
+    const providers = resolveProviders({
+      NVIDIA_API_KEY: "nv",
+      GEMINI_API_KEY: "gm",
+      NVIDIA_BASE_URL: "http://localhost:8080/v1",
+    });
+    expect(providers[0].baseUrl).toBe("http://localhost:8080/v1");
+    // The one that was not overridden is untouched.
+    expect(providers[1].baseUrl).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+    );
+  });
+
+  it("trims a trailing slash, since the caller appends /chat/completions", () => {
+    const providers = resolveProviders({
+      GEMINI_API_KEY: "gm",
+      GEMINI_BASE_URL: "http://127.0.0.1:1234/v1/",
+    });
+    expect(providers[0].baseUrl).toBe("http://127.0.0.1:1234/v1");
+  });
+
+  it("falls back to the default for a blank base URL", () => {
+    const providers = resolveProviders({ NVIDIA_API_KEY: "nv", NVIDIA_BASE_URL: "  " });
+    expect(providers[0].baseUrl).toBe("https://integrate.api.nvidia.com/v1");
+  });
+});
+
+describe("openRouterReferer", () => {
+  it("prefers the explicit variable", () => {
+    expect(
+      openRouterReferer({
+        OPENROUTER_HTTP_REFERER: "https://example.test",
+        NEXT_PUBLIC_SITE_URL: "https://ignored.test",
+      }),
+    ).toBe("https://example.test");
+  });
+
+  it("credits the deployment's own site URL, not this project's domain", () => {
+    // The point of the change: a fork that configured its site and nothing
+    // else must not spend its OpenRouter requests under our name.
+    expect(openRouterReferer({ NEXT_PUBLIC_SITE_URL: "https://forked.test" })).toBe(
+      "https://forked.test",
+    );
+  });
+
+  it("assumes https for a bare Vercel domain, as the layout does", () => {
+    expect(
+      openRouterReferer({ VERCEL_PROJECT_PRODUCTION_URL: "forked.vercel.app" }),
+    ).toBe("https://forked.vercel.app");
+  });
+
+  it("falls back to localhost when the deployment says nothing at all", () => {
+    expect(openRouterReferer({})).toBe("http://localhost:3000");
+  });
+
+  it("rides along on the provider's headers", () => {
+    const providers = resolveProviders({
+      OPENROUTER_API_KEY: "or",
+      NEXT_PUBLIC_SITE_URL: "https://forked.test",
+    });
+    expect(providers[0].extraHeaders?.["HTTP-Referer"]).toBe("https://forked.test");
   });
 });
 

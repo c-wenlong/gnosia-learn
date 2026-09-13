@@ -38,6 +38,53 @@ export const DEFAULT_PROVIDER_ORDER: ProviderId[] = [
 
 type EnvMap = Record<string, string | undefined>;
 
+/**
+ * Each provider's OpenAI-compatible endpoint, as shipped.
+ *
+ * `<PROVIDER>_BASE_URL` overrides one, the same way `<PROVIDER>_MODEL` already
+ * overrides the model beside it. The reason is a proxy or a mock: pointing the
+ * cascade at a local stub is the only way to exercise a fallback path without
+ * spending a real free-tier request, and a self-hoster fronting NVIDIA with a
+ * gateway should not have to patch this file. A trailing slash is trimmed
+ * because `callOpenAiCompatible` appends `/chat/completions`, and
+ * `https://host/v1//chat/completions` is a 404 on some gateways and not others.
+ */
+const DEFAULT_BASE_URL = {
+  nvidia: "https://integrate.api.nvidia.com/v1",
+  // OpenAI-compatible endpoint for Gemini Developer API
+  gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
+  openrouter: "https://openrouter.ai/api/v1",
+} as const satisfies Record<ProviderId, string>;
+
+function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
+  const configured = env[variable]?.trim();
+  return (configured || DEFAULT_BASE_URL[id]).replace(/\/+$/, "");
+}
+
+/**
+ * What OpenRouter is told this traffic came from, for its attribution page.
+ *
+ * `OPENROUTER_HTTP_REFERER` still wins. Below it the site URL the app already
+ * resolves for social cards answers instead of a literal
+ * `https://self-learn-one.vercel.app`, which was this deployment's own domain:
+ * a fork that set `NEXT_PUBLIC_SITE_URL` and nothing else would otherwise
+ * spend its requests under our name. Same two variables and same scheme
+ * defaulting as `resolveSiteUrl` in `apps/web/src/app/layout.tsx`, kept here
+ * rather than imported because that module is a route file that pulls in React
+ * and the whole metadata object with it.
+ *
+ * The last resort is localhost, matching that function, and it is only reached
+ * when the deployment has said nothing about where it lives at all.
+ */
+export function openRouterReferer(env: EnvMap): string {
+  const explicit = env.OPENROUTER_HTTP_REFERER?.trim();
+  if (explicit) return explicit;
+  const site =
+    env.NEXT_PUBLIC_SITE_URL?.trim() || env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (!site) return "http://localhost:3000";
+  return /^https?:\/\//i.test(site) ? site : `https://${site}`;
+}
+
 export function resolveProviders(
   env: EnvMap = process.env,
 ): ProviderConfig[] {
@@ -45,7 +92,7 @@ export function resolveProviders(
     {
       id: "nvidia",
       label: "NVIDIA NIM",
-      baseUrl: "https://integrate.api.nvidia.com/v1",
+      baseUrl: baseUrl(env, "nvidia", "NVIDIA_BASE_URL"),
       model:
         env.NVIDIA_MODEL?.trim() || "meta/llama-3.1-8b-instruct",
       apiKeyEnv: "NVIDIA_API_KEY",
@@ -53,22 +100,19 @@ export function resolveProviders(
     {
       id: "gemini",
       label: "Google Gemini",
-      // OpenAI-compatible endpoint for Gemini Developer API
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      baseUrl: baseUrl(env, "gemini", "GEMINI_BASE_URL"),
       model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
       apiKeyEnv: "GEMINI_API_KEY",
     },
     {
       id: "openrouter",
       label: "OpenRouter",
-      baseUrl: "https://openrouter.ai/api/v1",
+      baseUrl: baseUrl(env, "openrouter", "OPENROUTER_BASE_URL"),
       // Auto-picks from currently available free models
       model: env.OPENROUTER_MODEL?.trim() || "openrouter/free",
       apiKeyEnv: "OPENROUTER_API_KEY",
       extraHeaders: {
-        "HTTP-Referer":
-          env.OPENROUTER_HTTP_REFERER?.trim() ||
-          "https://self-learn-one.vercel.app",
+        "HTTP-Referer": openRouterReferer(env),
         "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Self-Learn",
       },
     },

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { REPO_ROOT } from "../env";
+import { loadEnv, REPO_ROOT } from "../env";
 
 /**
  * Where the knowledge base's *files* live. The state that used to sit beside
@@ -15,11 +15,17 @@ import { REPO_ROOT } from "../env";
  * database, so the override is explicit: the tests set `LEARN_ROOT` to a
  * fixture tree and `DATABASE_URL` to a scratch database, and nothing they do
  * can touch the real `learn/` or the real `self_learn`.
+ *
+ * It is read through `loadEnv` rather than straight off `process.env`, so
+ * `services/catalog/.env.example` can document it beside `DATABASE_URL` and
+ * have that documentation be true. A test setting it in the process
+ * environment still wins: `loadEnv` never overwrites a variable already set.
  */
 
 export const LEARN_ROOT_ENV = "LEARN_ROOT";
 
 export function repoRoot(): string {
+  loadEnv();
   const override = process.env[LEARN_ROOT_ENV]?.trim();
   return override !== undefined && override !== "" ? path.resolve(override) : REPO_ROOT;
 }
