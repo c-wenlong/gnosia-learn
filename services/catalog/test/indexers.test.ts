@@ -306,34 +306,135 @@ describe("concepts", () => {
   });
 });
 
-describe("diagrams", () => {
-  it("links an svg to its .tldr source and to the matching concept", async () => {
-    fixture = await makeFixture();
-    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]));
-    await fixture.write("learn/assets/dot-product.svg", "<svg></svg>");
-    await fixture.write("learn/assets/dot-product.tldr", "{}");
-    await fixture.write("learn/assets/orphan.svg", "<svg></svg>");
+/** A `.tldr` carrying whatever `meta.tldrawkc` the case needs, or none. */
+function tldr(meta?: Record<string, unknown>): string {
+  return JSON.stringify({
+    tldrawFileFormatVersion: 1,
+    schema: { schemaVersion: 2, sequences: {} },
+    records: [
+      { id: "shape:one", typeName: "shape", type: "geo", meta: {} },
+      {
+        id: "document:document",
+        typeName: "document",
+        gridSize: 10,
+        name: "",
+        meta: meta === undefined ? {} : { tldrawkc: { kc: 1, ...meta } },
+      },
+    ],
+  });
+}
 
-    const { rows } = await diagramsIndexer.read(
+describe("diagrams", () => {
+  it("takes the topic and concepts from the .tldr's metadata, and shares them with its svg", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/anything.svg", "<svg></svg>");
+    await fixture.write(
+      "learn/assets/anything.tldr",
+      tldr({ topic: "alpha", concepts: ["dot-product"], title: "The dot product" }),
+    );
+
+    const { rows, notes } = await diagramsIndexer.read(
       await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
     );
 
-    expect(rows.asset?.map((a) => [a.id, a.kind])).toEqual([
-      ["diagram:learn/assets/dot-product.svg", "diagram_svg"],
-      ["diagram:learn/assets/dot-product.tldr", "diagram_source"],
-      ["diagram:learn/assets/orphan.svg", "diagram_svg"],
+    // The filename says nothing about the subject any more. It was `stem`
+    // before this bundle, and a stem matching no concept was filed nowhere.
+    expect(rows.asset?.map((a) => [a.id, a.kind, a.title])).toEqual([
+      ["diagram:learn/assets/anything.svg", "diagram_svg", "The dot product"],
+      ["diagram:learn/assets/anything.tldr", "diagram_source", "The dot product"],
     ]);
+    expect(rows.assetTopic).toEqual([
+      { assetId: "diagram:learn/assets/anything.svg", topicSlug: "alpha" },
+      { assetId: "diagram:learn/assets/anything.tldr", topicSlug: "alpha" },
+    ]);
+    expect(rows.assetConcept?.map((r) => r.conceptSlug)).toEqual(["dot-product", "dot-product"]);
     expect(rows.assetDerivation).toEqual([
       {
-        assetId: "diagram:learn/assets/dot-product.svg",
-        sourceAssetId: "diagram:learn/assets/dot-product.tldr",
+        assetId: "diagram:learn/assets/anything.svg",
+        sourceAssetId: "diagram:learn/assets/anything.tldr",
       },
     ]);
-    // Both files matching the concept get the link; the orphan gets neither
-    // that nor a topic, and is not an error.
-    expect(rows.assetConcept).toHaveLength(2);
-    expect(rows.assetTopic).toHaveLength(2);
-    expect(rows.assetConcept?.every((r) => r.conceptSlug === "dot-product")).toBe(true);
+    expect(notes?.[0]).toContain("1 stamped .tldr");
+  });
+
+  it("refuses a .tldr with no topic, and names the file", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/unstamped.tldr", tldr());
+    await fixture.write("learn/assets/no-topic.tldr", tldr({ title: "Untitled" }));
+
+    const failure = diagramsIndexer.read(await fixture.context());
+    await expect(failure).rejects.toThrow(IndexError);
+    await expect(failure).rejects.toThrow(/learn\/assets\/no-topic\.tldr names no topic/);
+    await expect(failure).rejects.toThrow(
+      /learn\/assets\/unstamped\.tldr carries no tldrawkc metadata/,
+    );
+    // Both, in one run. Fixing one refusal per run is thirty edits, not one.
+    await expect(failure).rejects.toThrow(/2 unresolved references/);
+  });
+
+  it("refuses a topic that is not in the vocabulary", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/wrong.tldr", tldr({ topic: "not-a-topic" }));
+    await expect(diagramsIndexer.read(await fixture.context())).rejects.toThrow(
+      /names topic "not-a-topic", which is not in/,
+    );
+  });
+
+  it("refuses a concept with no note, rather than leaving it to the foreign key", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha" }]));
+    await fixture.write("learn/assets/x.tldr", tldr({ topic: "alpha", concepts: ["ghost"] }));
+    await expect(diagramsIndexer.read(await fixture.context())).rejects.toThrow(
+      /names concept "ghost", which has no note/,
+    );
+  });
+
+  it("files a legacy svg with no .tldr by its filename, and warns that it guessed", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/dot-product.svg", "<svg></svg>");
+    await fixture.write("learn/assets/scribble.svg", "<svg></svg>");
+
+    const { rows, notes } = await diagramsIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
+    );
+
+    // There is nothing to stamp: an SVG has no editable source, so refusing it
+    // would refuse work that cannot be fixed.
+    expect(rows.asset).toHaveLength(2);
+    expect(rows.assetConcept).toEqual([
+      { assetId: "diagram:learn/assets/dot-product.svg", conceptSlug: "dot-product" },
+    ]);
+    expect(rows.assetTopic).toEqual([
+      { assetId: "diagram:learn/assets/dot-product.svg", topicSlug: "alpha" },
+    ]);
+    expect(rows.assetDerivation).toEqual([]);
+    expect(notes?.join("\n")).toContain("WARNING learn/assets/dot-product.svg");
+    expect(notes?.join("\n")).toContain("WARNING learn/assets/scribble.svg");
+  });
+
+  it("notes a concept the vocabulary files under a different topic", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha" }, { slug: "beta", concepts: ["dot-product"] }]),
+    );
+    await fixture.write("learn/assets/x.tldr", tldr({ topic: "alpha", concepts: ["dot-product"] }));
+
+    const { rows, notes } = await diagramsIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["dot-product"]) }),
+    );
+    expect(rows.assetTopic).toEqual([{ assetId: "diagram:learn/assets/x.tldr", topicSlug: "alpha" }]);
+    expect(notes?.join("\n")).toContain('puts under "beta"');
   });
 
   it("is an empty result when there are no diagrams", async () => {
