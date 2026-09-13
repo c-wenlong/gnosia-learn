@@ -24,6 +24,7 @@
     "test:coverage": "vitest run --coverage",
     "learn": "node scripts/learn/cli.mjs",
     "canvas": "node tools/tldrawkc/dist/cli/index.js",
+    "gitmodules": "scripts/update-gitmodules.sh",
     "catalog": "tsx services/catalog/src/cli.ts"
   },
   "devDependencies": {

@@ -192,7 +192,9 @@ not have to be worked out again.
 - **Only bump a submodule pointer to a commit that is already pushed.**
   Check `git diff --submodule=log tools/manimkc` (or `tools/tldrawkc`) before
   `git add`; staging a dirty or unpushed submodule leaves a pointer nobody
-  else can resolve.
+  else can resolve. `scripts/update-gitmodules.sh` (`npm run gitmodules`,
+  `--check` for a dry run) does this fetch-and-compare for both submodules
+  and only ever checks out a commit already on the remote's tracked branch.
 - **The `event` append-only trigger is `FOR EACH ROW`, and must stay that way.**
   As `FOR EACH STATEMENT` (how migration `0001` first wrote it) it fired on the
   `ON DELETE SET NULL` that Postgres runs against `event.concept_slug` whenever
