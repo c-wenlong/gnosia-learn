@@ -129,15 +129,15 @@ options to `boxShapes`, gave `stub` the options it always accepted, and taught
   multi-page document.** Every document this phase touched had one page.
 - **Rendering on Linux has never been eyeballed.** CI runs the end-to-end
   suite there and asserts sizes and labels; nobody has looked at the output.
-- **An exported SVG is about 440 kB, whatever the diagram, and that is
-  accepted for now.** `export --svg` inlines both fonts it uses as base64, so
-  the vector diagram went from a 5 kB hand-written file to 444 kB, of which
-  220 kB is font. The hand-drawn font is kept, and so is the cost: fonts
-  cannot be shared across SVGs, because Obsidian, GitHub and the session log
-  all render an SVG as an image, and a browser fetches no external resource
-  for an SVG in an image tag. The open follow-up is subsetting the fonts at
-  export to the glyphs the diagram actually uses, which should bring each SVG
-  to roughly 20 to 40 kB.
+- **Done: fonts are subset at export (tldrawkc PR #9), and the honest
+  ceiling is 200 to 300 kB, not tens of kB.** `export --svg` used to inline
+  both fonts whole as base64, so the vector diagram went from a 5 kB
+  hand-written file to 444 kB, of which 220 kB was font. Subsetting cuts each
+  inlined face to the glyphs the document draws and drops any family nothing
+  references, which took the two committed diagrams from 454 kB and 561 kB to
+  213 kB and 313 kB. What is left is mostly path data, the hand-drawn strokes
+  themselves, so a diagram lands at 200 to 300 kB rather than the 20 to 40 kB
+  once hoped for.
 - **The agent cannot read its own export.** An SVG that size is refused by
   the Read tool, which counts the file at roughly 194000 tokens against a
   25000 cap, and the export is one enormous line so paging through it with

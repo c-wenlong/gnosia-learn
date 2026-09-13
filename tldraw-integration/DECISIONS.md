@@ -523,3 +523,17 @@ a caller who wants a line held to the arrow rules passes `lintIgnore: []`.
 What forced it was the vector redraw, which hand-rolled a raw arrow shape with
 `meta.lintIgnore` set 27 times over two diagrams, which is precisely the work
 the helpers bag exists to absorb.
+
+## D38. Inlined fonts are subset, not linked
+
+**Verdict:** `export --svg` and `run --svg` subset every inlined
+`@font-face` to the glyphs the document draws and drop any family nothing
+references, by default; `--no-subset-fonts` keeps the whole fonts.
+
+**Why:** D8 wants a self-contained SVG, and an SVG loaded as an image
+fetches nothing, so linking the fonts would silently degrade every label to
+a system font. Whole fonts were most of the file: 294 kB of base64 against
+161 kB of drawing. Subsetting takes that to 46 kB with a pixel-identical
+render, verified in a real Chrome on both committed diagrams. `subset-font`
+(harfbuzz as wasm, 4.7 MB installed, no native build) is the second runtime
+dependency.
