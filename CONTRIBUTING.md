@@ -105,6 +105,10 @@ bug fixes or docs. All welcome.
    commit the updated pointer here, and only ever to a commit that is already
    on the submodule's remote. `git diff --submodule=log <name>` before
    `git add <name>` says which commit you are about to pin.
+   `scripts/update-gitmodules.sh` (`npm run gitmodules`) checks out each
+   submodule's tracked branch tip for you and leaves the pointer in the
+   working tree to review before that commit; `--check` reports what is
+   behind without touching anything.
 6. **Do not copy the `/learn` and `/review` skills into `.claude/`.** They live
    in the `learning` plugin, installed globally, so they work in every project.
    A local copy would shadow the plugin and the two would drift apart.
