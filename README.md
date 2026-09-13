@@ -138,6 +138,65 @@ npm run learn -- help        # the full primitive surface
 
 The `/learn` and `/review` skills are not in this repo. They live in the globally installed `learning` plugin, and both open by running `npm run learn -- status` so they refuse to improvise a session that records nothing. Full architecture, formulas, and an honest list of what these models get wrong: **[learn/README.md](learn/README.md)**.
 
+## Drawing diagrams
+
+`tools/tldrawkc/` draws teaching diagrams on a real tldraw canvas: a snippet places boxes and arrows, the agent looks at a screenshot and fixes what reads wrong, then exports a self-contained SVG. Both the editable `.tldr` and the exported `.svg` are committed to `learn/assets/`; the PNGs used to look at a diagram mid-edit are scratch and never are.
+
+| Entry point | How | When |
+| --- | --- | --- |
+| `/learn`'s Teach phase | Spawns the `diagram-maker` subagent, which drives the tool and falls back to a hand-written SVG if `doctor` fails | Automatic, nothing to type |
+| The `tldrawkc-diagram` skill | Symlinked into `.claude/skills/` | You ask an agent to draw a diagram or lift a mermaid flowchart onto the canvas |
+| The CLI | `npm run --silent canvas -- <verb>` | You, or any script |
+| The library | `import { ... } from "tldrawkc"`, JSON in and out, the same verbs as the CLI | Node code that wants them without a shell |
+| `serve` | A real browser tab, open until Ctrl+C | A human watching and nudging shapes by hand |
+
+The deployed web app is not an entry point. It reads `learn/` and renders the exported SVGs; it never runs the tool, because a Vercel build has no local Chromium and no business writing local files.
+
+A CLI session, start to finish (needs the submodule built first, see [Install](#install)):
+
+```bash
+npm run --silent canvas -- doctor
+npm run --silent canvas -- run learn/assets/probe-and-frontier.tldr --create \
+  --shot /tmp/probe-and-frontier.png --code - <<'JS'
+helpers.box('probe', 'probe', { x: 60, y: 60, w: 160, h: 64 })
+helpers.box('teach', 'teach', { after: 'probe', gap: 120, w: 160, h: 64 })
+helpers.connect('probe', 'teach', { label: 'frontier' })
+return helpers.describe().lints
+JS
+# look: the "frontier" label wraps, gap is too small. fix with a second snippet:
+npm run --silent canvas -- run learn/assets/probe-and-frontier.tldr \
+  --shot /tmp/probe-and-frontier.png --code - <<'JS'
+helpers.box('teach', 'teach', { after: 'probe', gap: 160, w: 160, h: 64 })
+return helpers.describe().lints
+JS
+# look again: fixed. file it and export:
+npm run --silent canvas -- meta set learn/assets/probe-and-frontier.tldr \
+  --topic vector-and-linear-algebra-basics
+npm run --silent canvas -- export learn/assets/probe-and-frontier.tldr \
+  --svg learn/assets/probe-and-frontier.svg
+npm run --silent canvas -- list
+```
+
+| Verb | What |
+| --- | --- |
+| `doctor` | check node, the page bundle, Chromium and the page |
+| `api` | what a snippet can call, from the helpers' own JSDoc |
+| `new` | create an empty document, refuses to overwrite |
+| `run` | load, run a snippet, save, export |
+| `shot` | screenshot without running anything |
+| `inspect` | print every shape, binding, lint and the metadata. Exits 3 on lints |
+| `export` | write the files that get committed |
+| `from-mermaid` | build a document from a mermaid flowchart |
+| `list` | every .tldr in a directory (default `learn/assets`), no browser |
+| `meta set` | stamp metadata on an existing document, no browser |
+| `serve` | mirror the document in a real browser tab until Ctrl+C |
+
+Three things that bite:
+
+- `npm run canvas` without `--silent` prints npm's own banner ahead of the tool's stdout, which breaks `--json` parsing. Same for `npm run learn`.
+- Exit 3 means the file saved but lints remain: read them and run again, or pass `--allow-lints`. Exit 2 means the snippet threw and nothing was written.
+- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog index` will take it.
+
 ## How it works
 
 ```mermaid
