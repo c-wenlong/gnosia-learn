@@ -52,8 +52,8 @@ label on and the result reads as a word floating between two boxes.
 ### `helpers.text(id, str, opts)`
 
 A standalone text shape for headings and free labels. Same placement
-options as `box`. Words that belong to a shape go in that shape's label, not
-here.
+options as `box`, plus the three below. Words that belong to a shape go in
+that shape's label, not here.
 
 ### `helpers.note(id, str, opts)`
 
@@ -61,6 +61,23 @@ A sticky note. For asides and "why" callouts in teaching diagrams. A note
 takes no `w` or `h`: `TLNoteShapeProps` carries `size`, `growY` and
 `fontSizeAdjustment`, and tldraw sizes the note from its `size` style, grows
 it down to fit, and shrinks the font rather than overflowing.
+
+### Placing a `text` or a `note` against other shapes
+
+Both take three options that position a label against what it is labelling
+rather than at a coordinate.
+
+| Option | Notes |
+| --- | --- |
+| `centerOn: ids` | Centres horizontally on the union bounds of those shapes, at the `y` given |
+| `above: ids` | Sits `gap` clear over them, and centres |
+| `below: ids` | Sits `gap` clear under them |
+
+All three are settled after the shape exists, against the bounds tldraw
+reports, so a heading that wrapped is centred by its measured width rather
+than by the width it asked for. A single key in `below` still shares that
+shape's left edge the way `box` does; a list, or any placement alongside
+`centerOn`, uses the union bounds and centres.
 
 ### `helpers.remove(ids)` and `helpers.clear()`
 
@@ -160,11 +177,35 @@ The "line" is an arrow shape with `arrowheadStart` and `arrowheadEnd` both
 `none`, because an arrow is the only tldraw shape that can carry a binding. A
 real `line` shape would be a loose mark that stays put when its owner moves.
 
-### `helpers.stub(id, x, y, dx, dy)`
+### `helpers.line(id, x1, y1, x2, y2, opts)`
 
-A decorative unbound line. Sets `meta.lintIgnore = ['friendless-arrow']`
-so the lint pass knows it is intentional. For the loose marks in a legend
-and nothing else.
+An unbound mark between two page points: an axis, a tick, a vector, a rule
+under a heading. It binds to nothing, so it stays where it was put; anything
+joining two shapes is `connect` instead.
+
+| Option | Default | Notes |
+| --- | --- | --- |
+| `color`, `size`, `dash` | `black`, `s`, `draw` | |
+| `head` | `none` | `none`, `end`, `start`, `both` |
+| `kind` | `arc` | `arc` for a straight or curved line, `elbow` for right-angled segments |
+| `bend` | 0 | For `arc` only |
+| `label`, `labelColor` | none, follows `color` | |
+| `parent` | page | A frame or group id. The points given stay page coordinates; the helper converts them |
+| `meta` | none | Arbitrary record metadata |
+| `lintIgnore` | `['friendless-arrow', 'arrow-crosses-shape']` | Rule names, or `true` for all of them |
+
+It mutes `friendless-arrow` and `arrow-crosses-shape` by default, because
+neither rule means anything for geometry that never claimed to join two
+shapes; pass `lintIgnore: []` to have it linted like any other arrow. The id
+is derived from the key, so re-running a snippet moves the line rather than
+stacking a second one on it.
+
+### `helpers.stub(id, x, y, dx, dy, opts)`
+
+`line` with a delta instead of a second point, which is the convenient form
+for the loose marks in a legend. It takes the same options and now honours
+them: it used to accept `color`, `size` and `dash` and throw them away, so a
+legend dash asked for in red came out black.
 
 ## Layout
 
@@ -190,6 +231,25 @@ frame, so the enclosed shapes keep page coordinates. It carries
 the one phase 3 added: an arrow that enters or leaves a group has to cross
 the box drawn round it, so a container that counted as something to run
 through would fire on every edge into a subgraph.
+
+`opts.matchSize: otherContainerId` puts this container and that one on one
+size, and `opts.minW` and `opts.minH` put a floor under it whatever its
+members need.
+
+### `helpers.alignContainers(ids, opts)`
+
+Puts every listed container on one size, the largest width and the largest
+height in the set taken independently, each keeping its own top-left. That is
+`matchSize` generalised past a pair, and it exists because two panels drawn
+round different numbers of shapes otherwise come out visibly different sizes
+and the reader takes the difference for meaning. `opts.axis` is `both`
+(default), `x` or `y`.
+
+The size is applied as a difference to `props.w` and `props.h` rather than
+assigned, because `growY` on a wrapped label means two shapes given the same
+`props.h` still render at different heights. Containers are sent to the back
+again afterwards, since resizing one is an update and an update lifts it over
+its own members.
 
 ### `helpers.translate(ids, dx, dy)`
 
