@@ -8,7 +8,11 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { applyMigrations } from "../src/migrations";
-import { addConceptToTopic, VocabularyEditError } from "../src/learn/vocabulary-edit";
+import {
+  addConceptToTopic,
+  mapConceptToTopic,
+  VocabularyEditError,
+} from "../src/learn/vocabulary-edit";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -66,6 +70,14 @@ topics:
     maps:
       manimkc: []
       courses: []
+
+  - slug: commented-topic
+    title: A topic whose concepts key is empty and annotated
+    domain: fixtures
+    maps:
+      manimkc: []
+      courses: []
+      concepts:   # concept note ids
 `;
 
 describe("addConceptToTopic", () => {
@@ -102,6 +114,24 @@ describe("addConceptToTopic", () => {
   it("adds the concepts key when maps has none", () => {
     const after = addConceptToTopic(DOCUMENT, "keyless-topic", "widgets");
     expect(after).toContain("      courses: []\n      concepts: [widgets]");
+  });
+
+  it("is idempotent on a flow list", () => {
+    const once = addConceptToTopic(DOCUMENT, "fixture-topic", "widgets");
+    expect(addConceptToTopic(once, "fixture-topic", "widgets")).toBe(once);
+    // And on a slug that was already there before anyone touched it.
+    expect(addConceptToTopic(DOCUMENT, "fixture-topic", "beta")).toBe(DOCUMENT);
+  });
+
+  it("is idempotent on a block list", () => {
+    expect(addConceptToTopic(DOCUMENT, "block-topic", "delta")).toBe(DOCUMENT);
+    const once = addConceptToTopic(DOCUMENT, "block-topic", "widgets");
+    expect(addConceptToTopic(once, "block-topic", "widgets")).toBe(once);
+  });
+
+  it("keeps the inline comment on an empty key", () => {
+    const after = addConceptToTopic(DOCUMENT, "commented-topic", "widgets");
+    expect(after).toContain("      concepts: [widgets]  # concept note ids");
   });
 
   it("refuses a slug that is not in the file", () => {
@@ -227,6 +257,33 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
 
     expect(failure?.stderr).toContain('already mapped to topic "block-topic"');
     expect(await topics()).toBe(before);
+  });
+
+  it("keeps both mappings when two edits race", async () => {
+    // Two read-modify-writes over one file. Without the lock the second read
+    // sees the first's original and its write drops that mapping, and both
+    // calls still report success because each only verifies its own slug.
+    await writeFile(path.join(root, "learn", "concepts", "fixtures", "racer-one.md"),
+      "---\nid: racer-one\ntitle: Racer one\n---\n", "utf8");
+    await writeFile(path.join(root, "learn", "concepts", "fixtures", "racer-two.md"),
+      "---\nid: racer-two\ntitle: Racer two\n---\n", "utf8");
+
+    await Promise.all([
+      mapConceptToTopic(root, "fixture-topic", "racer-one"),
+      mapConceptToTopic(root, "block-topic", "racer-two"),
+    ]);
+
+    const after = await topics();
+    expect(after).toContain("racer-one");
+    expect(after).toContain("racer-two");
+    // No lock or temp file left behind.
+    await expect(
+      readFile(path.join(root, "content", "topics.yaml.lock"), "utf8"),
+    ).rejects.toThrow(/ENOENT/);
+
+    for (const slug of ["racer-one", "racer-two"]) {
+      await rm(path.join(root, "learn", "concepts", "fixtures", `${slug}.md`), { force: true });
+    }
   });
 
   it("without --topic, names the flag and the exact edit", async () => {

@@ -1,5 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 
 import { loadTopics, TOPICS_FILE } from "@self-learn/content";
 
@@ -98,6 +99,31 @@ function keyLine(
 }
 
 /**
+ * The items of a `[a, b]` flow sequence starting on `lines[at]`, unquoted.
+ *
+ * Only good enough to answer "is this slug already here", which is all it is
+ * asked. Slugs are kebab-case, so nothing in a real list needs quoting or
+ * escaping, and a comma inside a quoted item would be a file this module
+ * refuses to touch anyway.
+ */
+function flowItems(lines: string[], at: number, stop: number): string[] {
+  let text = "";
+  for (let i = at; i < stop; i += 1) {
+    const line = lines[i] as string;
+    const close = line.lastIndexOf("]");
+    text += close === -1 ? line : line.slice(0, close);
+    if (close !== -1) break;
+  }
+  const open = text.indexOf("[");
+  if (open === -1) return [];
+  return text
+    .slice(open + 1)
+    .split(",")
+    .map((item) => item.trim().replace(/^["']|["']$/g, ""))
+    .filter((item) => item !== "");
+}
+
+/**
  * Insert `slug` into a `[a, b]` flow sequence that starts on `lines[at]`.
  *
  * The list may run over several lines, so the closing bracket is searched for
@@ -166,6 +192,7 @@ export function addConceptToTopic(text: string, topicSlug: string, conceptSlug: 
   const value = (KEY.exec(lines[concepts] as string)?.[3] ?? "").trim();
 
   if (value.startsWith("[")) {
+    if (flowItems(lines, concepts, mapsEnd).includes(conceptSlug)) return text;
     if (!insertIntoFlow(lines, concepts, mapsEnd, conceptSlug)) {
       throw new VocabularyEditError(
         `${TOPICS_FILE}: topic "${topicSlug}" has a maps.concepts list that never closes`,
@@ -189,14 +216,20 @@ export function addConceptToTopic(text: string, topicSlug: string, conceptSlug: 
     if (isBlank(line)) continue;
     const indent = indentOf(line);
     if (indent <= propertyIndent + 2) break;
-    if (!line.trimStart().startsWith("- ")) break;
+    const item = line.trimStart();
+    if (!item.startsWith("- ")) break;
+    if (item.slice(2).trim().replace(/^["']|["']$/g, "") === conceptSlug) return text;
     last = i;
     itemIndent = indent;
   }
   if (last === -1) {
     // `concepts:` with nothing under it parses as null, which `stringList`
-    // reads as the empty list. Write the flow form the rest of the file uses.
-    lines[concepts] = `${" ".repeat(propertyIndent + 2)}concepts: [${conceptSlug}]`;
+    // reads as the empty list. Write the flow form the rest of the file uses,
+    // keeping any inline comment: those comments are what the file uses to
+    // explain what each `maps` key holds, and losing one is churn in a
+    // hand-maintained document.
+    const comment = value === "" ? "" : `  ${value}`;
+    lines[concepts] = `${" ".repeat(propertyIndent + 2)}concepts: [${conceptSlug}]${comment}`;
     return lines.join(newline);
   }
   lines.splice(last + 1, 0, `${" ".repeat(itemIndent)}- ${conceptSlug}`);
@@ -206,6 +239,72 @@ export function addConceptToTopic(text: string, topicSlug: string, conceptSlug: 
 export interface MapConceptResult {
   /** True when the file was written; false when the mapping was already there. */
   changed: boolean;
+}
+
+/** How long to wait for another process to finish its edit before giving up. */
+const LOCK_TIMEOUT_MS = 10_000;
+const LOCK_POLL_MS = 50;
+
+/**
+ * Hold an exclusive lock on the vocabulary for the length of one edit.
+ *
+ * The edit is a read, a splice and a write, so two of them running at once can
+ * both read the same original and the second write drops the first mapping.
+ * Neither would notice: each verifies only its own slug, so both report
+ * success and one concept note is left orphaned, unindexable, and refused by
+ * the next `observe`. That is precisely the failure `--topic` exists to
+ * prevent, so it cannot be left to luck.
+ *
+ * `open(..., "wx")` is the lock: creating a file that must not already exist
+ * is atomic on every filesystem this runs on, which a "read then write" check
+ * is not. The lock file holds the pid, so a stale one names who to look for.
+ */
+async function withVocabularyLock<T>(file: string, fn: () => Promise<T>): Promise<T> {
+  const lockFile = `${file}.lock`;
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+
+  for (;;) {
+    try {
+      const handle = await open(lockFile, "wx");
+      await handle.writeFile(`${process.pid}\n`, "utf8");
+      await handle.close();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        throw new VocabularyEditError(
+          `another process has been editing ${TOPICS_FILE} for over ` +
+            `${LOCK_TIMEOUT_MS / 1000}s. If nothing else is running, the lock is stale: ` +
+            `delete ${path.basename(lockFile)} beside it.`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await rm(lockFile, { force: true });
+  }
+}
+
+let temporaryCounter = 0;
+
+/**
+ * Replace a file's contents in one step.
+ *
+ * Write then rename, so a crash mid-write leaves the old vocabulary rather
+ * than half of one. The temporary name carries the pid and a counter: the lock
+ * already keeps two edits apart, and a name that could collide would turn a
+ * missing lock into a confusing ENOENT on the rename rather than a clean
+ * last-write-wins.
+ */
+async function writeAtomically(file: string, text: string): Promise<void> {
+  temporaryCounter += 1;
+  const temporary = `${file}.${process.pid}.${temporaryCounter}.tmp`;
+  await writeFile(temporary, text, "utf8");
+  await rename(temporary, file);
 }
 
 /**
@@ -260,26 +359,30 @@ export async function mapConceptToTopic(
 ): Promise<MapConceptResult> {
   const file = path.join(repoRoot, TOPICS_FILE);
 
-  if (checkMapping(repoRoot, topicSlug, conceptSlug).already) return { changed: false };
+  return withVocabularyLock(file, async () => {
+    // Inside the lock, deliberately. Checking outside it would read a file
+    // another edit is part-way through changing.
+    if (checkMapping(repoRoot, topicSlug, conceptSlug).already) return { changed: false };
 
-  const original = await readFile(file, "utf8");
-  const updated = addConceptToTopic(original, topicSlug, conceptSlug);
-  await writeFile(file, updated, "utf8");
+    const original = await readFile(file, "utf8");
+    const updated = addConceptToTopic(original, topicSlug, conceptSlug);
+    await writeAtomically(file, updated);
 
-  try {
-    const vocabulary = await loadVocabulary(repoRoot);
-    const landed = vocabulary.byConcept.get(conceptSlug);
-    if (landed !== topicSlug) {
-      throw new VocabularyEditError(
-        `editing ${TOPICS_FILE} put "${conceptSlug}" under ` +
-          `${landed === undefined ? "no topic" : `"${landed}"`} rather than "${topicSlug}". ` +
-          `The file has been left as it was; add the mapping by hand.`,
-      );
+    try {
+      const vocabulary = await loadVocabulary(repoRoot);
+      const landed = vocabulary.byConcept.get(conceptSlug);
+      if (landed !== topicSlug) {
+        throw new VocabularyEditError(
+          `editing ${TOPICS_FILE} put "${conceptSlug}" under ` +
+            `${landed === undefined ? "no topic" : `"${landed}"`} rather than "${topicSlug}". ` +
+            `The file has been left as it was; add the mapping by hand.`,
+        );
+      }
+    } catch (error) {
+      await writeAtomically(file, original);
+      throw error;
     }
-  } catch (error) {
-    await writeFile(file, original, "utf8");
-    throw error;
-  }
 
-  return { changed: true };
+    return { changed: true };
+  });
 }
