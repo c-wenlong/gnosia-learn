@@ -144,14 +144,25 @@ const EMPTY_DETAIL: AssetDetail = {
 const RELATED_CAP = 12;
 
 /**
- * How many rows one topic's query may return before the list is cut.
+ * There is deliberately no SQL limit on the per-topic queries below, and the
+ * reason is that a limit there would cut the wrong rows.
  *
- * Comfortably above `RELATED_CAP` so a topic with a handful of assets is never
- * truncated in a way a reader could notice, and bounded so a topic that grows
- * to thousands costs a short list rather than a full scan. The biggest topic
- * carries eleven assets today.
+ * `listAssets` orders by `kind, id` with kind alphabetical, so a `LIMIT 60`
+ * returns the first sixty of `captions, chapters, diagram_source, diagram_svg,
+ * link, note, session, transcript, video` — in that order. The ranking a reader
+ * cares about is applied afterwards, in `compareByKindThenId`, which puts video
+ * first. On a topic large enough for the limit to bite, the sixty rows would
+ * already be caption files and the videos would be gone before the sort ever
+ * saw them: a related list showing the least interesting rows and silently
+ * omitting the most.
+ *
+ * The fix is to rank first and cut second, which means the cut cannot be in
+ * SQL unless the ranking is, and putting one page's kind preference into a
+ * query three other callers share is worse than reading a topic's rows. The
+ * read is bounded by `asset_topic` membership for a single topic — the same
+ * bound `assetsForTopic` in the catalog accepts without a limit, for the same
+ * reason — and the biggest topic carries eleven assets today.
  */
-const RELATED_SCAN_CAP = 60;
 
 /**
  * One asset, its derivations, and what else is filed beside it.
@@ -166,8 +177,9 @@ const RELATED_SCAN_CAP = 60;
  *
  * **Related is asked per topic, not filtered out of everything.** An asset's
  * topics come back on the row, so "what else is about this" is one query per
- * topic against `asset_topic`, which is usually one. Each is capped: a huge
- * topic should cost a short list, never a scan.
+ * topic against `asset_topic`, which is usually one. Ranked here and cut to
+ * `RELATED_CAP` afterwards, never by a SQL `LIMIT` — the note above that
+ * constant is why.
  *
  * `assetDerivations` is the query that makes a video more than a file. It is
  * where the transcript, the captions and the chapter list beside a `.mp4` are
@@ -183,9 +195,8 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
 
     const [derivations, perTopic] = await Promise.all([
       assetDerivations(db, id),
-      Promise.all(
-        asset.topics.map((slug) => listAssets(db, { topicSlug: slug, limit: RELATED_SCAN_CAP })),
-      ),
+      // Unlimited on purpose; see the note above `RELATED_CAP`.
+      Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }))),
     ]);
 
     // This asset, and its own companion files, which have their own section
