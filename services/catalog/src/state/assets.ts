@@ -1,4 +1,11 @@
-import { asset, assetConcept, assetTopic, collectionItem } from "@self-learn/schema";
+import {
+  asset,
+  assetConcept,
+  assetTopic,
+  collectionItem,
+  indexRun,
+  type IndexSource,
+} from "@self-learn/schema";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -186,6 +193,58 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
 export async function assetsByIds(db: CatalogDatabase, ids: string[]): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
   return db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
+}
+
+/** What one source's last index run said about where it read from. */
+export interface IndexedRoot {
+  /** The directory the run read. Absolute for manimkc, repo-relative otherwise. */
+  sourceRoot: string;
+  /**
+   * The base an `asset.path` from this source resolves against, when the
+   * source records one. Null for a source whose paths are repo-relative, and
+   * null for a manimkc run indexed before that value was persisted.
+   */
+  dataRoot: string | null;
+}
+
+/**
+ * Where the files one source indexed actually are.
+ *
+ * An `asset.path` is a string relative to something, and which something
+ * depends on the source. A note, a diagram and a session log are relative to
+ * this repository; a manimkc video is relative to manimkc's own data root,
+ * which may sit anywhere and on this machine sits outside the checkout
+ * entirely. Reading `$MANIMKC_HOME` to find out is not an option: nothing in
+ * this repository does (AGENTS.md), and the answer belongs to whichever
+ * checkout was indexed rather than to the ambient environment. So the run
+ * records what the manimkc report told it and this reads that back.
+ *
+ * `source_root` and `dataRoot` are deliberately separate. The column says what
+ * the run *read*: for manimkc the checkout, for the others a repo-relative
+ * directory. The metadata says what its output paths are *relative to*. They
+ * are the same directory only when manimkc has no data root configured, and
+ * telling them apart is the difference between serving a video and 404ing on
+ * all thirty of them.
+ *
+ * Null means this source has never been indexed here, which is a different
+ * answer from "indexed, but before `outRoot` was recorded" and the caller has
+ * to distinguish them: one needs a first index run, the other a re-run.
+ */
+export async function indexedRoot(
+  db: CatalogDatabase,
+  source: IndexSource,
+): Promise<IndexedRoot | null> {
+  const [row] = await db
+    .select({ sourceRoot: indexRun.sourceRoot, metadata: indexRun.metadata })
+    .from(indexRun)
+    .where(eq(indexRun.source, source))
+    .limit(1);
+  if (row === undefined) return null;
+  // jsonb, so anything could be in there: an older run wrote `{}`, and the
+  // column's type says nothing about its shape.
+  const raw = (row.metadata as Record<string, unknown> | null)?.outRoot;
+  const dataRoot = typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
+  return { sourceRoot: row.sourceRoot, dataRoot };
 }
 
 /** An `AssetRef` plus the topics it is filed under, for a page with no single subject in mind. */

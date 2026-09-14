@@ -22,6 +22,18 @@ Without it, "is the manimkc half of this database stale?" has no answer short of
 re-indexing and diffing, because a table full of rows from a three-week-old
 checkout looks exactly like a fresh one.
 
+It carries one thing that is not a report on the run, and the distinction is
+worth stating because the column names invite confusion. `source_root` is what
+the run *read*: `learn/concepts` for the notes, and for manimkc the checkout the
+CLI was pointed at. `metadata.outRoot`, written by the manimkc source only, is
+what that source's `asset.path` strings are *relative to*, which is manimkc's
+own data root and is a different directory whenever `$MANIMKC_HOME` is set.
+Nothing outside the catalog may re-derive it, since this repo does not read
+that variable ([AGENTS.md](../../AGENTS.md)), so a consumer that wants to open one
+of those files, such as `apps/web/src/app/api/assets/[id]/file/route.ts`, joins
+`metadata.outRoot` onto `asset.path` and refuses when the run predates the
+value rather than guessing at a base.
+
 Losing the content half costs an index run. Losing the state half loses the
 study record, which is why `event` is append-only and why the derived state
 tables can always be recomputed rather than restored.

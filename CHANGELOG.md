@@ -88,6 +88,71 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **A route that serves an indexed asset's bytes:
+  `GET /api/assets/<encodeURIComponent(asset.id)>/file`.** The catalog has held
+  rows for 30 videos, 69 sidecars and a pair of diagrams with nothing able to
+  play or show one, because the videos sit under manimkc's data root outside
+  this repository and the diagrams sit in `learn/assets/`, outside
+  `apps/web/public/`. Next serves neither.
+
+  **The URL carries an id, never a path.** Nothing from it is joined onto
+  anything: the id is a primary key, looked up through `assetsByIds`, and every
+  filesystem decision is made from the row that comes back. An id of
+  `manimkc:out/../../../../etc/passwd` finds no row and stops. The stored path
+  is then checked anyway, because an indexer walks a real tree and the row
+  outlives the run that wrote it: it must be relative, it must resolve inside
+  the root its `source_repo` names, and it must still be inside it after
+  `realpath`, so a symlink in the tree cannot point out of it. The comparison
+  is `path.relative`, not a prefix test, which would accept
+  `/data/out-old` for a root of `/data/out`.
+
+  **Range requests, so a video can be scrubbed.** `Accept-Ranges: bytes`, a 206
+  with `Content-Range` for a range the file can satisfy, a 416 with the real
+  length for one past the end, and the whole file for a header that is
+  malformed, multi-range or in a unit we do not speak, which RFC 9110 permits.
+  The slice is streamed from the offset rather than read whole.
+
+  **Content type from a closed list** (`mp4`, `svg`, `vtt`, `json`, `md`,
+  `png`), and an extension that is not on it is refused rather than sent as
+  `application/octet-stream`. Every response carries `nosniff`, so the
+  extension decides the type, and a CSP whose `sandbox` and `script-src 'none'`
+  are what make `image/svg+xml` safe: an SVG is a document, and one served from
+  this origin could otherwise run script with this origin's storage. The policy
+  still names `style-src 'unsafe-inline'`, `font-src data:` and `img-src data:`,
+  because a tldrawkc export writes its CSS inline and embeds its fonts, and
+  blocking those returns a 200 that renders as an unstyled diagram.
+  `Content-Disposition` is `inline`, because the point is a `<video>` and an
+  `<img>` and `attachment` would break both.
+
+  **Off unless `ASSET_FILES_ENABLED` is set**, the shape the studio's
+  `STUDIO_ENABLED` gate uses (decision D11 in
+  [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)). Production has
+  none of these files, so a request there is a 404 rather than a stat of a path
+  that cannot exist. Deliberately not keyed on `NODE_ENV`: the documented way
+  to look at this app locally is a production build, so that gate would be off
+  on the one machine that has the files.
+
+- **The manimkc index run records the data root its paths are relative to.**
+  `index_run.metadata.outRoot`, from the same report the indexer already stats
+  files with. `source_root` could not carry it: that column is the directory
+  the run *read*, which for manimkc is the checkout and for `concepts`,
+  `diagrams` and `sessions` is a repo-relative folder, and overloading it would
+  make one column mean two things and misreport every other source.
+
+  Without this the value existed only in a log line. The live database recorded
+  the checkout, `tools/manimkc`, while all 99 manimkc files sat under
+  `~/.self-learn/manimkc`, so a route resolving against `source_root` would
+  have 404'd every video at once. Reading `$MANIMKC_HOME` instead is not an
+  option: nothing in this repository reads it, and the data root belongs to the
+  checkout that was indexed rather than to the environment the server booted
+  with. `indexedRoot()` in `services/catalog/src/state/assets.ts` reads it back
+  through the web app's one door.
+
+  An index run from before this change has no `outRoot`, and the route answers
+  503 naming `npm run catalog -- index --only manimkc` rather than 404. "The
+  file is gone" and "your index is older than this feature" are different
+  problems with different fixes, and a 404 conflates them.
+
 - **`listAssets` and `assetCounts`, the queries a library page needs.**
   `assetsForTopic`, `assetsForConcept` and `assetsForCollection` all answer
   "what belongs to this one thing"; a library page's first screen has no
