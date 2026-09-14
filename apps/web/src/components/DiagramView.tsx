@@ -48,6 +48,24 @@ export function DiagramView({
   const imgRef = useRef<HTMLImageElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
 
+  // The status describes one file, so a new `src` starts over. It has to,
+  // because `failed` renders the message *instead of* the `<img>`: with the
+  // old status kept there is no element left to fire `onLoad` for the new
+  // file, and the component is stuck on "This diagram did not load" for every
+  // diagram it is handed afterwards. A soft navigation between two library
+  // assets reuses the mounted instance (the route renders no `key`), so one
+  // missing file poisoned every diagram opened after it.
+  //
+  // Set during render rather than in an effect so the swapped-in diagram is
+  // never painted through the previous file's status, and kept inside the
+  // component rather than pushed onto callers as a `key`: the diagram studio
+  // renders this from another route, and the next caller would have to know.
+  const [renderedSrc, setRenderedSrc] = useState(src);
+  if (renderedSrc !== src) {
+    setRenderedSrc(src);
+    setStatus("loading");
+  }
+
   // A cached diagram can finish loading before React attaches `onLoad`, which
   // would leave the skeleton up over a picture that is already there.
   useEffect(() => {
