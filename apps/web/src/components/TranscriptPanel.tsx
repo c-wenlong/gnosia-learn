@@ -50,6 +50,13 @@ export function TranscriptPanel({
   const expectedTop = useRef<number | null>(null);
 
   const active = activeCueIndex(cues, currentTime);
+  // `active` is `-1` before the first cue starts: nothing has been said yet,
+  // so there is no line to report a position for. "0" would claim the reader
+  // is on a line that does not exist, and clamping to "1" would claim they
+  // are already on the first line before anyone has pressed play. Neither is
+  // true, so the position reads as a dash instead, same shape as a real
+  // number so the label does not resize once playback actually starts.
+  const position = active < 0 ? "-" : active + 1;
 
   const activeVisible = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -95,7 +102,7 @@ export function TranscriptPanel({
         {cues.length > 0 &&
           (following ? (
             <span className="text-[11px] tabular-nums text-[var(--muted)]">
-              {active + 1} / {cues.length}
+              {position} / {cues.length}
             </span>
           ) : (
             <button
