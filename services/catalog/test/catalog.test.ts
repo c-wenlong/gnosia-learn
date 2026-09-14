@@ -1,7 +1,3 @@
-import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import {
   asset,
   collection,
@@ -28,7 +24,8 @@ import {
 import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { hasManimkcCli } from "../src/index/manimkc";
-import { applyMigrations, MIGRATIONS_FOLDER } from "../src/migrations";
+import { applyMigrations } from "../src/migrations";
+import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -51,32 +48,6 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 const reachable = await probe();
 const withManimkc = hasManimkcCli(REPO_ROOT);
-
-/**
- * A migrations folder holding only the first two migrations, so a scratch
- * database can be left deliberately behind. `index_run` arrives in 0002, which
- * is what makes "head is set but this table does not exist" reachable at all.
- */
-async function partialMigrations(count = 2): Promise<string> {
-  const folder = await mkdtemp(path.join(tmpdir(), "catalog-partial-"));
-  await mkdir(path.join(folder, "meta"), { recursive: true });
-  const journal = JSON.parse(
-    await readFile(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
-  ) as { entries: { tag: string }[] };
-  const kept = journal.entries.slice(0, count);
-  for (const entry of kept) {
-    await copyFile(
-      path.join(MIGRATIONS_FOLDER, `${entry.tag}.sql`),
-      path.join(folder, `${entry.tag}.sql`),
-    );
-  }
-  await writeFile(
-    path.join(folder, "meta", "_journal.json"),
-    JSON.stringify({ ...journal, entries: kept }),
-    "utf8",
-  );
-  return folder;
-}
 
 /** What `content/` and `learn/` hold today. Update deliberately. */
 const EXPECTED = {

@@ -8,6 +8,7 @@ import {
   event,
   learner,
   LOCAL_LEARNER_ID,
+  session,
   topic,
 } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
@@ -54,7 +55,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       const { rows } = await scratch.db.execute<{ n: number }>(
         sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
       );
-      expect(rows[0]?.n).toBe(21);
+      expect(rows[0]?.n).toBe(24);
     });
 
     it("is idempotent", async () => {
@@ -174,6 +175,14 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
 
   describe("event is append-only", () => {
     beforeAll(async () => {
+      // `event.session_id` is a foreign key since 0006, so the session has to
+      // exist before an event can name it.
+      await scratch.db.insert(session).values({
+        id: "2026-08-20-asymptotic-analysis",
+        kind: "tutor",
+        learnerId: LOCAL_LEARNER_ID,
+        state: "running",
+      });
       await scratch.db.insert(event).values({
         learnerId: LOCAL_LEARNER_ID,
         type: "observation",

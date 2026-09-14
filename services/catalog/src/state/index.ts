@@ -43,6 +43,14 @@ export { connect, withDatabase, type CatalogDatabase, type Connection } from "..
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
 export {
+  endSession,
+  ensureSession,
+  readSession,
+  touchSession,
+  type SessionEndInput,
+  type SessionInput,
+} from "./sessions";
+export {
   appendEvent,
   readEvents,
   toRecord,

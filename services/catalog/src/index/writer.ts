@@ -185,7 +185,7 @@ function columnOf(table: PgTable, name: string): PgColumn {
  * than to the insert's default for the same reason in reverse — it is a fact
  * about this write.
  */
-function updateSet(table: PgTable): Record<string, SQL> {
+export function updateSet(table: PgTable): Record<string, SQL> {
   const set: Record<string, SQL> = {};
   for (const [key, column] of Object.entries(getTableColumns(table))) {
     if (NEVER_UPDATED.has(column.name)) continue;

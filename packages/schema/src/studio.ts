@@ -1,0 +1,284 @@
+import { sql } from "drizzle-orm";
+import {
+  type AnyPgColumn,
+  bigint,
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+import { createdAt, instant, updatedAt } from "./columns";
+import { asset, topic } from "./content";
+import { learner } from "./state";
+import {
+  JOB_ACTIVE_STATES,
+  JOB_KINDS,
+  JOB_STATES,
+  SESSION_KINDS,
+  SESSION_STATES,
+} from "./shared";
+
+/**
+ * The studio half: who asked for something to be made, and what came out.
+ *
+ * `SCHEMA.md` splits the catalog into content (derived from files), state (the
+ * only copy of what a learner did) and operational (what the indexers did to
+ * themselves). These are a fourth group.
+ *
+ * They have the state half's durability — losing them loses the brief and the
+ * failure record, and no re-index writes either back — and none of its meaning.
+ * A render error is not a thing a learner did, and a row saying Chromium fell
+ * over sitting beside a Bayesian belief about the dot product would make both
+ * harder to read. So they are counted apart by `catalog status`, the way
+ * `OPERATIONAL_TABLES` already is.
+ *
+ * What deliberately does not happen here: no new `asset` kind (a diagram is a
+ * kind `asset` already has), no new event type (a failed render is not evidence
+ * about a learner and nothing projects it into `mastery`), and no column on
+ * `asset` pointing back at a job (see `asset_job`).
+ */
+
+const inList = (column: string, values: readonly string[]) =>
+  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
+
+const jsonObject = (column: string, nullable = false) =>
+  sql.raw(
+    nullable
+      ? `${column} is null or jsonb_typeof(${column}) = 'object'`
+      : `jsonb_typeof(${column}) = 'object'`,
+  );
+
+/**
+ * One run of something that writes to the knowledge base: a tutoring session or
+ * a studio generation session.
+ *
+ * The id is minted by the caller and is readable rather than a UUID
+ * (`2026-09-14-dot-product`), because `learn session log --id` is typed by hand
+ * and the session log's filename is the same string.
+ *
+ * A `tutor` session only ever uses `running`, `closed` and `interrupted`. The
+ * other two states exist for a studio runner, which can observe a non-zero exit
+ * and can acknowledge a cancel; a tutoring session has no process watching it
+ * that could tell those apart.
+ *
+ * `log_asset_id` is the one `ON DELETE SET NULL` in this file, and it points the
+ * opposite way from everything else: the markdown log is a derived `asset` row
+ * that a full re-index can prune, and losing the pointer must not take the
+ * session with it. There is no `asset_session` link table, because the only
+ * asset a session produces without a job is that log.
+ */
+export const session = pgTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    state: text("state").notNull().default("running"),
+    title: text("title"),
+    goal: text("goal"),
+    /** The headless agent session this ran under, for Resume. Not our id space. */
+    agentSessionId: text("agent_session_id"),
+    logAssetId: text("log_asset_id").references(() => asset.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    startedAt: instant("started_at").notNull().default(sql`now()`),
+    endedAt: instant("ended_at"),
+    /** Last sign of life. A stale one plus a dead process is `interrupted`. */
+    heartbeatAt: instant("heartbeat_at"),
+    /** A short machine-readable reason: `timeout`, `nonzero-exit`, `gate`. */
+    errorKind: text("error_kind"),
+    error: text("error"),
+    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("session_kind_check", inList("kind", SESSION_KINDS)),
+    check("session_state_check", inList("state", SESSION_STATES)),
+    check("session_metadata_object_check", jsonObject("metadata")),
+    // A running session has not ended. The converse is deliberately not
+    // asserted: the backfill in migration 0006 marks a session that never
+    // closed `interrupted` with no `ended_at`, because nothing in the event log
+    // says when it stopped and inventing an instant would be worse than a null.
+    check("session_ended_at_check", sql`state <> 'running' or ended_at is null`),
+    check("session_order_check", sql`ended_at is null or ended_at >= started_at`),
+    index("session_kind_state_idx").on(t.kind, t.state),
+    index("session_started_at_idx").on(t.startedAt),
+    index("session_learner_id_idx").on(t.learnerId),
+    index("session_log_asset_id_idx").on(t.logAssetId),
+  ],
+);
+
+/**
+ * One request to generate one file, and everything that happened to it.
+ *
+ * **`target_path` and `candidate_path` are different files.** The job writes
+ * only the candidate, under `learn/assets/.candidates/`; nothing under
+ * `learn/assets/` changes until a person accepts. So `target_path` names a file
+ * the job has never opened, and it is also the lease key: the partial unique
+ * index below stops a second job claiming a path an unaccepted candidate is
+ * still holding.
+ *
+ * **`topic_slug` is a column and a foreign key, and the rest of the brief is
+ * jsonb.** A foreign key does not survive being stuffed into JSON, and the
+ * topic is the earliest moment "refuse, never skip" can fire: an agent naming a
+ * slug that is not in `content/topics.yaml` fails the enqueue with a `23503`
+ * before any GPU time, rather than producing a file the indexer then refuses.
+ *
+ * **`state` is checked and `phase` is not.** `state` is what a transition is
+ * guarded with, so it stays small enough to reason about; `phase` is the
+ * progress label the UI shows (`drawing`, `linting`, `exporting`) and differs
+ * per generator, so a CHECK on it would grow every time a pipeline gains a
+ * step.
+ *
+ * `cancel_requested_at` is a timestamp rather than a state for the same reason:
+ * a job being cancelled is still running until the runner has killed Chromium,
+ * and the row should say so.
+ */
+export const job = pgTable(
+  "job",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    /** The session that ran it. Null while queued: no runner has claimed it. */
+    sessionId: text("session_id").references(() => session.id, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+    /** The job this one revises, for a retry or a resume. */
+    parentJobId: text("parent_job_id").references((): AnyPgColumn => job.id, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+    state: text("state").notNull().default("queued"),
+    /** Free text for the progress list. Not a state; see the note above. */
+    phase: text("phase"),
+    topicSlug: text("topic_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    /** The committed path the job intends to land on, and the lease key. */
+    targetPath: text("target_path").notNull(),
+    /** Where it actually writes, under `learn/assets/.candidates/`. */
+    candidatePath: text("candidate_path"),
+    /**
+     * The target's content hash when the job was enqueued, or null when there
+     * was no file there yet. One of the three hashes that make a human edit
+     * landing mid-job visible: accept refuses when the target has moved since.
+     */
+    targetHashBefore: text("target_hash_before"),
+    brief: jsonb("brief").notNull().default(sql`'{}'::jsonb`),
+    /** What the gate found. Null until it has run. */
+    gate: jsonb("gate"),
+    /**
+     * Supplied by the caller, so a retried submit returns the existing job
+     * instead of queueing the render twice. Unique, and therefore the one
+     * column here that makes enqueue idempotent.
+     */
+    idempotencyKey: text("idempotency_key").notNull(),
+    /** How many times a runner has claimed it. Capped at three by the runner. */
+    attempt: integer("attempt").notNull().default(0),
+    requestedAt: instant("requested_at").notNull().default(sql`now()`),
+    startedAt: instant("started_at"),
+    finishedAt: instant("finished_at"),
+    /** When a person accepted or discarded it. */
+    reviewedAt: instant("reviewed_at"),
+    heartbeatAt: instant("heartbeat_at"),
+    cancelRequestedAt: instant("cancel_requested_at"),
+    /** Which runner holds it, and that runner's own id for the work. */
+    runner: text("runner"),
+    runnerJobId: text("runner_job_id"),
+    exitCode: integer("exit_code"),
+    turns: integer("turns"),
+    costUsd: doublePrecision("cost_usd"),
+    errorKind: text("error_kind"),
+    error: text("error"),
+    errorDetail: jsonb("error_detail"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("job_idempotency_key_key").on(t.idempotencyKey),
+    // Two jobs cannot hold the same committed path at once. Partial rather than
+    // total, because the whole history of a path is jobs that have finished
+    // with it, and a lease that outlived its holder would be a lock nobody can
+    // release. An advisory lock was the alternative and dies with its
+    // connection, so the UI could never show who holds it.
+    uniqueIndex("job_active_target_key")
+      .on(t.targetPath)
+      .where(inList("state", JOB_ACTIVE_STATES)),
+    check("job_kind_check", inList("kind", JOB_KINDS)),
+    check("job_state_check", inList("state", JOB_STATES)),
+    check("job_brief_object_check", jsonObject("brief")),
+    check("job_gate_object_check", jsonObject("gate", true)),
+    check("job_error_detail_object_check", jsonObject("error_detail", true)),
+    check("job_attempt_check", sql`attempt >= 0`),
+    check("job_turns_check", sql`turns is null or turns >= 0`),
+    check("job_cost_usd_check", sql`cost_usd is null or cost_usd >= 0`),
+    check("job_not_own_parent_check", sql`parent_job_id is distinct from id`),
+    check("job_started_at_check", sql`started_at is null or started_at >= requested_at`),
+    check(
+      "job_finished_at_check",
+      sql`finished_at is null or started_at is null or finished_at >= started_at`,
+    ),
+    // A queued job is one no runner has claimed, and that is what the lease
+    // index and the reconcile pass both assume. Saying it here means a claim
+    // that forgot to set `started_at` fails loudly instead of leaving a row
+    // that looks queued and is not.
+    check("job_queued_check", sql`state <> 'queued' or (started_at is null and runner is null)`),
+    index("job_session_id_idx").on(t.sessionId),
+    index("job_state_idx").on(t.state),
+    index("job_topic_slug_idx").on(t.topicSlug),
+    index("job_parent_job_id_idx").on(t.parentJobId),
+    index("job_requested_at_idx").on(t.requestedAt),
+  ],
+);
+
+/**
+ * Which job wrote which file: provenance as a link table, not a column.
+ *
+ * A column on `asset` is overwritten the next time the diagram is regenerated,
+ * and the earlier job's claim is gone. The relationship is many-to-many over
+ * time and one-to-many at any instant, which is a link table for the same
+ * reason every other relationship in this schema is.
+ *
+ * `content_hash` is what the job wrote, and `asset.content_hash` is what is on
+ * disk now. The two disagreeing is how an edit that landed after the accept
+ * becomes visible at all.
+ *
+ * An asset with no row here had no job — it was scanned, or drawn by hand — and
+ * that absence is the statement. Nothing needs backfilling into it.
+ */
+export const assetJob = pgTable(
+  "asset_job",
+  {
+    assetId: text("asset_id")
+      .notNull()
+      .references(() => asset.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      // Restrict, not cascade: the job row is the record of who made the file,
+      // and a delete that silently took the provenance with it would leave an
+      // asset claiming no author rather than refusing the delete.
+      .references(() => job.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    /** sha256 of the bytes the job landed, lowercase hex. */
+    contentHash: text("content_hash").notNull(),
+    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    writtenAt: instant("written_at").notNull().default(sql`now()`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.jobId] }),
+    check("asset_job_bytes_check", sql`bytes >= 0`),
+    index("asset_job_job_id_idx").on(t.jobId),
+  ],
+);

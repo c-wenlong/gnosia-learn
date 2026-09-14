@@ -56,3 +56,11 @@ next-env.d.ts
 # They are removed when an agent finishes, and this is the guard for the
 # window where they are not.
 .claude/worktrees/
+
+# Where a generation job writes before a person accepts it. The job's only
+# writable artifact paths are in here, so nothing under learn/assets/ changes
+# until the candidate is renamed into place; a candidate committed by accident
+# would be a half-drawn diagram nobody reviewed. `filesIn` in
+# services/catalog/src/index/files.ts does not descend, so the indexer cannot
+# see these either.
+learn/assets/.candidates/

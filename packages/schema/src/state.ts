@@ -14,6 +14,12 @@ import {
 
 import { createdAt, instant, updatedAt } from "./columns";
 import { concept, curriculumItem } from "./content";
+// `state` and `studio` reference each other: `event.session_id` points at
+// `session`, and `session.learner_id` points back at `learner`. Both are
+// declared inside `() => …` callbacks, which drizzle only calls once every
+// module has finished evaluating, so the cycle never dereferences a binding
+// that is still in its temporal dead zone.
+import { session } from "./studio";
 import {
   DEFAULT_P_L,
   EVENT_TYPES,
@@ -103,8 +109,24 @@ export const event = pgTable(
       onDelete: "restrict",
       onUpdate: "cascade",
     }),
-    /** The `learn` CLI's session id, e.g. `2026-08-20-transformer-block`. Free text, no table yet. */
-    sessionId: text("session_id"),
+    /**
+     * The session this happened inside, e.g. `2026-08-20-transformer-block`.
+     *
+     * A foreign key since migration `0006`, and `restrict` for the same reason
+     * `concept_slug` is: forgetting what an event was about is what an
+     * append-only log exists to prevent, and `set null` is not even available
+     * here — the referential UPDATE it fires is exactly what the per-row
+     * trigger from `0003` refuses.
+     *
+     * It was free text until then because `learn session start` wrote the event
+     * before there was anything to point at. There is now: the same command
+     * writes a `session` row beside the event, so the referent exists at write
+     * time.
+     */
+    sessionId: text("session_id").references(() => session.id, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
     /** Everything type-specific: grade, correct, pLBefore/pLAfter, question, reason, propagated. */
     payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),

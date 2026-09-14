@@ -3,7 +3,7 @@ import path from "node:path";
 import type { NewAsset, NewAssetConcept, NewAssetDerivation, NewAssetTopic } from "@self-learn/schema";
 
 import { IndexErrors } from "./errors";
-import { fileFacts, filesIn, relativeTo } from "./files";
+import { fileFacts, type FileFacts, filesIn, relativeTo } from "./files";
 import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
 import { KC_SCHEMA, listDiagrams, type DiagramMeta } from "./tldr";
 import { VOCABULARY_FILE } from "./vocabulary";
@@ -38,16 +38,49 @@ import { VOCABULARY_FILE } from "./vocabulary";
 
 export const ASSETS_DIR = "learn/assets";
 
-const KINDS = {
+export const KINDS = {
   ".svg": "diagram_svg",
   ".tldr": "diagram_source",
 } as const;
 
+export type DiagramExtension = keyof typeof KINDS;
+
+/** Is this a file the diagrams source owns? */
+export function isDiagramExtension(extension: string): extension is DiagramExtension {
+  return extension in KINDS;
+}
+
 /** What one `.tldr` resolved to, shared with the `.svg` exported from it. */
-interface Subject {
+export interface Subject {
   topicSlug: string;
   concepts: string[];
   title: string | null;
+}
+
+/**
+ * One diagram file as an `asset` row: the single definition of that shape.
+ *
+ * The full index calls it once per file and `catalog assert-output` calls it
+ * once, for one file, so a row written by a job and a row written by a sweep
+ * cannot drift apart. That is the whole argument for `assert-output` existing
+ * rather than the studio shelling out to `index --only diagrams`.
+ */
+export function diagramAsset(
+  where: string,
+  extension: DiagramExtension,
+  facts: FileFacts,
+  title: string | null,
+): NewAsset {
+  return {
+    id: `${ASSET_PREFIX.diagrams}${where}`,
+    kind: KINDS[extension],
+    path: where,
+    url: null,
+    contentHash: facts.contentHash,
+    bytes: facts.bytes,
+    title: title ?? path.basename(where, extension),
+    sourceRepo: "self-learn",
+  };
 }
 
 export const diagramsIndexer: Indexer = {
@@ -81,7 +114,7 @@ export const diagramsIndexer: Indexer = {
     for (const entry of listing.diagrams) {
       const stem = path.basename(entry.path, ".tldr");
       const where = relativeTo(repoRoot, entry.path);
-      const subject = resolve(entry.meta, where, concepts, vocabulary, problems, notes);
+      const subject = resolveSubject(entry.meta, where, concepts, vocabulary, problems, notes);
       if (subject !== null) subjects.set(stem, subject);
     }
 
@@ -97,19 +130,10 @@ export const diagramsIndexer: Indexer = {
       const stem = path.basename(file, extension);
       const where = relativeTo(repoRoot, file);
       const id = `${ASSET_PREFIX.diagrams}${where}`;
-      const { contentHash, bytes } = await fileFacts(file);
+      const facts = await fileFacts(file);
       const subject = subjects.get(stem);
 
-      assets.push({
-        id,
-        kind: KINDS[extension],
-        path: where,
-        url: null,
-        contentHash,
-        bytes,
-        title: subject?.title ?? stem,
-        sourceRepo: "self-learn",
-      });
+      assets.push(diagramAsset(where, extension, facts, subject?.title ?? null));
       if (extension === ".tldr") {
         sources.set(stem, id);
         stamped += 1;
@@ -177,7 +201,7 @@ export const diagramsIndexer: Indexer = {
  * here rather than left to the database because the foreign key would fail
  * later with a constraint name and no path, halfway through a run.
  */
-function resolve(
+export function resolveSubject(
   meta: DiagramMeta | null,
   where: string,
   known: ReadonlySet<string>,

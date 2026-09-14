@@ -224,3 +224,35 @@ export async function listDiagrams(
 export function describe(repoRoot: string, file: string): string {
   return relativeTo(repoRoot, file);
 }
+
+/**
+ * One `.tldr`, read the same way the whole directory would be.
+ *
+ * It reads the directory and picks the file out rather than parsing the file
+ * alone, so a single-file write path and a full index run always agree about
+ * what a document says: `tldrawkc list` answers when the tool is built and the
+ * JSON parser answers when it is not, and which of the two ran is not something
+ * `catalog assert-output` should be able to decide differently.
+ *
+ * `learn/assets/` holds tens of files, not thousands, so the cost of reading
+ * the siblings is a directory scan nobody notices.
+ */
+export async function readDiagram(
+  repoRoot: string,
+  file: string,
+): Promise<DiagramEntry> {
+  const listing = await listDiagrams(repoRoot, path.dirname(file));
+  const failed = listing.errors.find((entry) => path.resolve(entry.path) === path.resolve(file));
+  if (failed !== undefined) {
+    throw new IndexError(
+      `${describe(repoRoot, file)} could not be read as a tldraw document: ${failed.message}`,
+    );
+  }
+  const found = listing.diagrams.find((entry) => path.resolve(entry.path) === path.resolve(file));
+  if (found === undefined) {
+    throw new IndexError(
+      `${describe(repoRoot, file)} is not a .tldr this repo can read (read by ${listing.via})`,
+    );
+  }
+  return found;
+}

@@ -83,6 +83,8 @@ import { runIndex } from "../index/run";
 import { migrationStatus } from "../migrations";
 import {
   appendEvent,
+  endSession,
+  ensureSession,
   assertKnownConcepts,
   ensureEntry,
   ensureLearner,
@@ -1130,7 +1132,13 @@ commands.session = async ({ values, positionals }, session) => {
     await ensureDirs();
     const existing = await fs.readFile(sessionPath(id), "utf8").catch(() => null);
     if (existing === null) await fs.writeFile(sessionPath(id), header, "utf8");
-    await appendEvent(await session.db(), {
+    const db = await session.db();
+    // The `session` row before the event that references it. This is what let
+    // `event.session_id` become a foreign key in migration `0006`: the referent
+    // now exists at write time, where before it was a markdown file nothing had
+    // indexed yet.
+    await ensureSession(db, { id, kind: "tutor", title: topic, goal: values.goal ?? null });
+    await appendEvent(db, {
       type: "session-start",
       session: id,
       goal: values.goal ?? null,
@@ -1200,6 +1208,10 @@ commands.session = async ({ values, positionals }, session) => {
     }
 
     await appendEvent(db, { type: "session-close", session: id, concepts: touched });
+    // The event is the evidence; the row is the state. A close replayed against
+    // a session that already ended moves nothing, which is why this reports
+    // rather than asserts.
+    await endSession(db, id, "closed");
 
     const front = frontierOf(graph, model);
     const result = {
