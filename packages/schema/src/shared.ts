@@ -189,3 +189,112 @@ export const emptyLearnerState = (): LearnerState => ({
  * defensively rather than trusted.
  */
 export const LEGACY_STORAGE_KEY = "self-learn:v1";
+
+/* -------------------------------------------------------------------------- */
+/* The studio: sessions and jobs                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The two kinds of session that share one id space.
+ *
+ * `tutor` is what `learn session start` opens; `studio` is what a generation
+ * runner opens. One table with a discriminator rather than two, because
+ * `event.session_id` needs exactly one foreign key target and a polymorphic
+ * column is the shape this schema rejects everywhere else.
+ */
+export const SESSION_KINDS = ["tutor", "studio"] as const;
+export type SessionKind = (typeof SESSION_KINDS)[number];
+
+/**
+ * `interrupted` is never written by the process itself — it is what a
+ * reconcile pass concludes about a process that stopped writing heartbeats.
+ * That is why it is distinct from `failed`: "it died" and "it exited non-zero"
+ * are different facts and the row should not conflate them.
+ */
+export const SESSION_STATES = [
+  "running",
+  "closed",
+  "failed",
+  "cancelled",
+  "interrupted",
+] as const;
+export type SessionState = (typeof SESSION_STATES)[number];
+
+/** What a generation job produces. One kind today; `video` is phase 5. */
+export const JOB_KINDS = ["diagram"] as const;
+export type JobKind = (typeof JOB_KINDS)[number];
+
+export const JOB_STATES = [
+  "queued",
+  "running",
+  "awaiting_review",
+  "accepted",
+  "discarded",
+  "failed",
+  "cancelled",
+  "interrupted",
+] as const;
+export type JobState = (typeof JOB_STATES)[number];
+
+/**
+ * The states that hold the lease on a committed path.
+ *
+ * A job in any of these owns `target_path` and no second job may take it: an
+ * unaccepted candidate still holds it, because the next brief would be written
+ * against a file the first job has not landed yet. Enforced by the partial
+ * unique index `job_active_target_key`, so the refusal is a `23505` naming the
+ * holder rather than a race nobody sees.
+ */
+export const JOB_ACTIVE_STATES = ["queued", "running", "awaiting_review"] as const;
+export type JobActiveState = (typeof JOB_ACTIVE_STATES)[number];
+
+/**
+ * Every transition either lifecycle allows, as `from -> to`. Anything absent
+ * is refused, and the four (five for a job) terminal states are terminal:
+ * their entries are empty.
+ *
+ * These are data rather than a switch statement because three places need the
+ * same answer — the CLI's conditional updates, the runner's reconcile pass and
+ * the UI's button states — and a second copy of a state machine is a second
+ * state machine.
+ */
+export const SESSION_TRANSITIONS: Readonly<Record<SessionState, readonly SessionState[]>> = {
+  running: ["closed", "failed", "cancelled", "interrupted"],
+  closed: [],
+  failed: [],
+  cancelled: [],
+  interrupted: [],
+};
+
+/**
+ * `queued -> interrupted` is deliberately absent: a queued job survives a
+ * restart, because nothing was in flight to lose. `awaiting_review ->
+ * interrupted` is present, because the candidate outlives the process that
+ * wrote it and a restart has to decide whether it is still trustworthy.
+ */
+export const JOB_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = {
+  queued: ["running", "cancelled"],
+  running: ["awaiting_review", "failed", "cancelled", "interrupted"],
+  awaiting_review: ["accepted", "discarded", "interrupted"],
+  accepted: [],
+  discarded: [],
+  failed: [],
+  cancelled: [],
+  interrupted: [],
+};
+
+/** Is `to` reachable from `from`? The one place either state machine is read. */
+export function canTransition(
+  transitions: Readonly<Record<string, readonly string[]>>,
+  from: string,
+  to: string,
+): boolean {
+  return (transitions[from] ?? []).includes(to);
+}
+
+/**
+ * Where a job writes before a person accepts it. Not recursive-visible to the
+ * indexer (`filesIn` does not descend), on the same filesystem as the target
+ * so the accept rename is atomic, and gitignored.
+ */
+export const CANDIDATES_DIR = "learn/assets/.candidates";
