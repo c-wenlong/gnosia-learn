@@ -561,8 +561,11 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         expect(byId.get(ASSETS.diagram)).toEqual([TOPIC_SLUG]);
         expect(byId.get(ASSETS.link)).toEqual([TOPIC_SLUG]);
         expect(byId.get(ASSETS.transcript)).toEqual([TOPIC_SLUG]);
-        // Filed nowhere is an empty list, not a missing key or a null.
+        // Filed nowhere is an empty list, not a missing key or a null. The SQL
+        // is `coalesce(array_agg(...), '{}')` precisely so this is `[]` rather
+        // than the `null` an unfiltered `array_agg` over zero rows would send.
         expect(byId.get(ASSETS.orphan)).toEqual([]);
+        expect(Array.isArray(byId.get(ASSETS.orphan))).toBe(true);
         expect(byId.get(ASSETS.pinned)).toEqual([]);
       });
 

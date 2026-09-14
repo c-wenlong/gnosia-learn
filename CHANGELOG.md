@@ -98,13 +98,25 @@ This project is continuously deployed and not versioned; entries are grouped by 
   second query per row. `assetCounts` is one grouped `count() ... group by
   kind` for the filter chips that show how many of each kind exist.
 
-  Two queries, never more, whatever the page size: one for the filtered,
-  paged, `ORDER BY kind, id` list — the same stable order `assetsForTopic`
-  already uses, for the reason the `byKindThenId` comment in the same file
-  gives — and one asking `asset_topic` for exactly the ids the first query
-  kept, so attaching topics never becomes a query per row. `topicSlug`
-  filters by membership through an `IN` against `asset_topic` rather than a
-  join, so an asset filed under three topics stays one row instead of three.
+  One statement, not two. The topics come back as a correlated scalar
+  subquery in the select list — `coalesce(array_agg(topic_slug order by
+  topic_slug), '{}')` over `asset_topic` for that row's `asset.id` — rather
+  than a second round trip for the ids the first query kept. A two-query
+  version worked and was reviewed, but under READ COMMITTED each query gets
+  its own snapshot: a `catalog index` run committing between them could hand
+  back an asset whose chips no longer matched the membership that selected
+  it for a `topicSlug` filter. One statement has one snapshot, so the race
+  does not need reasoning about, and the query is shorter than the two-query
+  version was, not longer. `ORDER BY kind, id` is still what orders the
+  list — the same stable order `assetsForTopic` uses, for the reason the
+  `byKindThenId` comment in the same file gives — and the subquery's own
+  `order by topic_slug` is what orders the topics within one asset, so
+  neither ordering is redone in TypeScript. `topicSlug` filters by
+  membership through an `IN` against `asset_topic` rather than a join, for
+  the same reason the topics themselves are a subquery and not a join: a
+  join would multiply an asset filed under three topics into three rows and
+  break both the paging and the one-row-per-asset contract every other query
+  in the file keeps.
 
 - **The asset queries are behind the door the web app comes through.** A new
   `services/catalog/src/state/assets.ts` owns `assetsForTopic`,
