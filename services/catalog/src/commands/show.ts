@@ -15,9 +15,17 @@ import {
   mirror,
   topic,
 } from "@self-learn/schema";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";
+import {
+  assetsByIds,
+  assetsForCollection,
+  assetsForConcept,
+  assetsForTopic,
+  byKind,
+  type AssetRef,
+} from "../state/assets";
 
 /**
  * `catalog show <slug-or-id>` — one entity and everything that points at it.
@@ -32,6 +40,11 @@ import { withDatabase } from "../db";
  * then curriculum items, then assets. Those namespaces do not collide today; if
  * one ever does, the other matches come back under `alternatives` rather than
  * being silently dropped.
+ *
+ * The asset lookups themselves are not here. They live in
+ * `../state/assets.ts`, because the web app may import that directory and may
+ * not import this one, and because one implementation is the only way the CLI
+ * and a page cannot disagree about what an asset row is.
  */
 
 export type ShowResult =
@@ -41,15 +54,12 @@ export type ShowResult =
   | ShowCurriculumItem
   | ShowAsset;
 
-export interface AssetRef {
-  id: string;
-  kind: string;
-  path: string | null;
-  url: string | null;
-  bytes: number | null;
-  title: string | null;
-  sourceRepo: string;
-}
+/**
+ * Re-exported so a caller reading this file's result types does not have to
+ * know the queries moved. The implementation is `../state/assets.ts`, which is
+ * where the web app can reach it.
+ */
+export type { AssetRef };
 
 export interface ShowTopic {
   type: "topic";
@@ -156,23 +166,6 @@ export class NotFound extends Error {
 
 type Db = Parameters<Parameters<typeof withDatabase<ShowResult>>[0]>[0]["db"];
 
-/** Group an asset list by kind, dropping empty groups so the JSON stays small. */
-function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
-  const out: Record<string, AssetRef[]> = {};
-  for (const row of rows) (out[row.kind] ??= []).push(row);
-  return out;
-}
-
-const ASSET_COLUMNS = {
-  id: asset.id,
-  kind: asset.kind,
-  path: asset.path,
-  url: asset.url,
-  bytes: asset.bytes,
-  title: asset.title,
-  sourceRepo: asset.sourceRepo,
-} as const;
-
 export async function runShow(target: string): Promise<ShowResult> {
   return withDatabase(async ({ db }) => {
     const first =
@@ -203,24 +196,6 @@ async function otherTypes(db: Db, target: string, found: string): Promise<string
     if (name !== found && (await check())) out.push(name);
   }
   return out;
-}
-
-async function assetsForTopic(db: Db, slug: string): Promise<AssetRef[]> {
-  return db
-    .select(ASSET_COLUMNS)
-    .from(assetTopic)
-    .innerJoin(asset, eq(asset.id, assetTopic.assetId))
-    .where(eq(assetTopic.topicSlug, slug))
-    .orderBy(asc(asset.kind), asc(asset.id));
-}
-
-async function assetsForConcept(db: Db, slug: string): Promise<AssetRef[]> {
-  return db
-    .select(ASSET_COLUMNS)
-    .from(assetConcept)
-    .innerJoin(asset, eq(asset.id, assetConcept.assetId))
-    .where(eq(assetConcept.conceptSlug, slug))
-    .orderBy(asc(asset.kind), asc(asset.id));
 }
 
 async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
@@ -358,12 +333,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
       .limit(1)
   )[0];
 
-  const assets = await db
-    .select(ASSET_COLUMNS)
-    .from(collectionItem)
-    .innerJoin(asset, eq(asset.id, collectionItem.assetId))
-    .where(eq(collectionItem.collectionId, id))
-    .orderBy(asc(asset.kind), asc(asset.id));
+  const assets = await assetsForCollection(db, id);
 
   return {
     type: "collection",
@@ -444,11 +414,6 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
       .where(eq(assetDerivation.sourceAssetId, id))
   ).map((r) => r.id);
 
-  const lookup = async (ids: string[]): Promise<AssetRef[]> =>
-    ids.length === 0
-      ? []
-      : db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
-
   const mirrors = await db
     .select({
       destination: mirror.destination,
@@ -475,8 +440,8 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     sourceRepo: found.sourceRepo,
     topics: topics.map((t) => t.slug),
     concepts: concepts.map((c) => c.slug),
-    derivedFrom: await lookup(sourceIds),
-    derivedInto: await lookup(derivedIds),
+    derivedFrom: await assetsByIds(db, sourceIds),
+    derivedInto: await assetsByIds(db, derivedIds),
     mirrors: mirrors.map((row) => ({
       ...row,
       mtime: row.mtime?.toISOString() ?? null,

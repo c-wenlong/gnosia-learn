@@ -118,9 +118,9 @@ removed.
 
 `packages/` and `services/` are npm workspaces, added for the catalog.
 `apps/web/` imports `packages/content` for the course files and
-`services/catalog/src/state/` for the learner state, and nothing else from
-either: it is a reader of the content files and a client of the state store,
-never of the database directly.
+`services/catalog/src/state/` for the learner state, the concept graph and the
+assets, and nothing else from either: it is a reader of the content files and a
+client of the store, never of the database directly.
 
 | Workspace | Owns |
 | --- | --- |
@@ -537,7 +537,7 @@ over on first mount.
 | Migrations | `services/catalog/drizzle/` | Generated from the schema, applied by `catalog migrate`. |
 | Indexers | `services/catalog/src/index/` | One module per source, each a pure "read files, return rows" function, plus one shared writer. |
 | Read commands | `services/catalog/src/commands/` | `status`, `index`, `backfill`, `ls`, `show`, `path`, `search`, all with `--json`. |
-| The learner store | `services/catalog/src/state/` | The only writer of the state tables. Imported by the `learn` CLI, the backfill and the web app. |
+| The learner store | `services/catalog/src/state/` | The only writer of the state tables, plus the read-only content queries the web app needs (`knowledge-base.ts`, `assets.ts`). Imported by the `learn` CLI, the backfill and the web app. |
 
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
 `diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
@@ -607,6 +607,14 @@ Postgres would put a staler one in front of the agent.
    The `learn` CLI, the backfill and the web app all go through it. It is where
    "an event first, the projections after" is enforced, and where the clamps
    live, so no caller can record evidence a different way.
+
+   It is not *only* the state tables, and the name undersells it: it is also
+   the one door out of this package, so the read-only content queries the web
+   app needs live behind it too. `knowledge-base.ts` reads `concept` and its
+   edges, `assets.ts` reads `asset` and the link tables. Neither writes
+   anything, and the content half still has exactly one writer, which is
+   `catalog index` (rule 11). Anything that would *write* content from here is
+   the violation this rule is about; a query is not.
 5. **A module that reads content or reaches the database says
    `import "server-only"`.** `apps/web/src/data/courses/index.ts`, `apps/web/src/data/content.ts`
    and `apps/web/src/lib/learner-store.ts` all do. Without it a `"use client"` import
