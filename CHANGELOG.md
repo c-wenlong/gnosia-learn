@@ -86,6 +86,39 @@ This project is continuously deployed and not versioned; entries are grouped by 
   unmatched at once means the two reports disagree about their base rather than
   a few sidecars being absent.
 
+### Fixed
+
+- **The three asset-presentation components now reset their own state when the
+  file they are showing changes.** `VideoPlayer` kept the playback position,
+  `DiagramView` kept a failed load and `AssetCard` kept a failed thumbnail, so
+  a re-render with a new `src` showed the previous file's state. The two image
+  cases were the worse half: a failed load swaps the `<img>` out for the
+  message, which leaves nothing to load the next file, so one missing diagram
+  poisoned every diagram the component was handed afterwards.
+
+  The reset lives inside each component rather than as a `key` at the caller.
+  `/library/[id]` renders `VideoPlayer` and `DiagramView` without one, and a
+  key there would have been cheaper, but the diagram studio renders the same
+  components from another route and the next caller does not inherit a
+  guarantee it never saw. It is done during render, not in an effect, so the
+  swapped-in file is never painted through the previous one's state.
+
+  Not reachable through `/library` today: every link between two assets of the
+  same kind is a plain `<a>`, which loads a new document, and each list keys
+  its cards by asset id. It is reachable the moment any caller re-renders with
+  a new `src`, which is what the studio will do.
+
+- **A seek `VideoPlayer` could not perform is now retried rather than
+  dropped.** Clicking a chapter or a transcript line before the element has its
+  metadata moved the highlight and left the video where it was, so the next
+  play started from the top. The seek is held against the load it was asked
+  for, applied at `loadedmetadata`, and discarded once the element has moved
+  past that load. It is keyed to a load counter rather than to the URL, so
+  going from one video to another and back does not resurrect it. Chromium
+  never takes this path: it accepts the write as a default playback start
+  position rather than throwing, so this is a guard for the engines that do,
+  which is what the original `catch` was written for.
+
 ### Added
 
 - **The asset library: `/library` and `/library/[id]`.** Every piece that made
