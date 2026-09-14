@@ -1,8 +1,22 @@
+import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import path from "node:path";
 
+import { formatAssertOutput, runAssertOutput } from "./commands/assert-output";
 import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
 import { formatIndex, runIndexCommand } from "./commands/index-command";
+import {
+  formatJob,
+  readBrief,
+  runAccept,
+  runClaim,
+  runDiscard,
+  runEnqueue,
+  runFinish,
+  runList,
+  runShow as runJobShow,
+  type JobResult,
+} from "./commands/job";
 import { formatLs, parseKinds, runLs } from "./commands/ls";
 import { formatMigrate, runMigrate } from "./commands/migrate";
 import { formatPath, runPath } from "./commands/path";
@@ -48,6 +62,11 @@ Commands:
                            learning order.
   search <term>            Topic titles and aliases, concept titles, asset
                            titles. Top 20.
+  job <verb>               The generation jobs behind the diagram studio:
+                           enqueue --brief FILE, claim, finish --state S,
+                           accept, discard, ls, show ID.
+  assert-output            Index one file the way the owning source would, and
+                           record which job produced it. Needs --job and --path.
 
 Options:
   --json                   Machine-readable output. Supported by every command.
@@ -63,7 +82,28 @@ Options:
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
-  --kind a,b               ls: count only these asset kinds.
+  --kind a,b               ls: count only these asset kinds. job ls/claim: the
+                           job kind, e.g. diagram.
+  --job ID                 assert-output, job: which job.
+  --path P                 assert-output, job accept: a repo-relative file the
+                           job landed. Repeatable on accept.
+  --brief FILE             job enqueue: the brief JSON. Needs "topic", "target"
+                           and "idempotencyKey"; "brief" is the generator's own
+                           and is stored as jsonb.
+  --state S                job finish: the state to move to, one of
+                           awaiting_review, failed, cancelled, interrupted.
+                           job ls: filter by state.
+  --phase P                job finish: the progress label to leave on the row.
+  --candidate P            job finish: where the candidate was written.
+  --runner NAME            job claim: which runner is taking it.
+  --session ID             job claim: the session it runs under.
+  --exit-code N            job finish: the generator's exit code.
+  --turns N                job finish: agent turns used.
+  --cost N                 job finish: US dollars spent.
+  --gate FILE              job finish: the gate's findings, as JSON.
+  --error-kind K           job finish: a short machine-readable reason.
+  --error M                job finish: the message a person reads.
+  --limit N                job ls: rows to return. Default 20, max 100.
   -h, --help               Show this text.
 
 Environment:
@@ -88,7 +128,9 @@ type Command =
   | "ls"
   | "show"
   | "path"
-  | "search";
+  | "search"
+  | "job"
+  | "assert-output";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -99,6 +141,8 @@ const COMMANDS: readonly Command[] = [
   "show",
   "path",
   "search",
+  "job",
+  "assert-output",
 ];
 
 function isCommand(value: string | undefined): value is Command {
@@ -121,6 +165,21 @@ export async function main(argv: string[]): Promise<number> {
         "manimkc-root": { type: "string" },
         from: { type: "string" },
         kind: { type: "string" },
+        job: { type: "string" },
+        path: { type: "string", multiple: true },
+        brief: { type: "string" },
+        state: { type: "string" },
+        phase: { type: "string" },
+        candidate: { type: "string" },
+        runner: { type: "string" },
+        session: { type: "string" },
+        "exit-code": { type: "string" },
+        turns: { type: "string" },
+        cost: { type: "string" },
+        gate: { type: "string" },
+        "error-kind": { type: "string" },
+        error: { type: "string" },
+        limit: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -208,6 +267,23 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatSearch(result));
         break;
       }
+      case "assert-output": {
+        const jobId = values.job;
+        const target = values.path?.[0];
+        if (jobId === undefined) throw new Usage("assert-output needs --job");
+        if (target === undefined) throw new Usage("assert-output needs --path");
+        if ((values.path?.length ?? 0) > 1) {
+          throw new Usage("assert-output takes one --path. Run it once per file.");
+        }
+        const result = await runAssertOutput({ jobId, path: target });
+        emit(result, formatAssertOutput(result));
+        break;
+      }
+      case "job": {
+        const result = await job(positionals, values);
+        emit(result, formatJob(result));
+        break;
+      }
     }
     return 0;
   } catch (error) {
@@ -226,6 +302,111 @@ export async function main(argv: string[]): Promise<number> {
       );
     }
     return 1;
+  }
+}
+
+
+/** A numeric option, or undefined. Refuses anything that is not a number. */
+function number(value: string | undefined, flag: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Usage(`${flag} takes a number, not "${value}"`);
+  return parsed;
+}
+
+/** A JSON file passed as a flag, e.g. `--gate findings.json`. */
+async function jsonFile(
+  file: string | undefined,
+  flag: string,
+): Promise<Record<string, unknown> | undefined> {
+  if (file === undefined) return undefined;
+  const raw = await readFile(file, "utf8").catch((error: Error) => {
+    throw new Usage(`${flag}: could not read ${file}: ${error.message}`);
+  });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Usage(`${flag}: ${file} is not JSON: ${(error as Error).message}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Usage(`${flag}: ${file} must hold a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+type Values = {
+  job?: string;
+  path?: string[];
+  brief?: string;
+  state?: string;
+  phase?: string;
+  candidate?: string;
+  runner?: string;
+  session?: string;
+  kind?: string;
+  limit?: string;
+  "exit-code"?: string;
+  turns?: string;
+  cost?: string;
+  gate?: string;
+  "error-kind"?: string;
+  error?: string;
+};
+
+/** `catalog job <verb>`. Split out because it is seven verbs, not one. */
+async function job(positionals: string[], values: Values): Promise<JobResult> {
+  const verb = positionals[1];
+  const needsJob = (): string => {
+    if (values.job !== undefined) return values.job;
+    const positional = positionals[2];
+    if (positional !== undefined) return positional;
+    throw new Usage(`job ${verb} needs --job <id>`);
+  };
+
+  switch (verb) {
+    case "enqueue": {
+      if (values.brief === undefined) throw new Usage("job enqueue needs --brief <file.json>");
+      return runEnqueue({ brief: await readBrief(values.brief) });
+    }
+    case "claim":
+      return runClaim({
+        jobId: values.job,
+        kind: values.kind,
+        runner: values.runner,
+        sessionId: values.session,
+      });
+    case "finish": {
+      if (values.state === undefined) throw new Usage("job finish needs --state <state>");
+      return runFinish({
+        jobId: needsJob(),
+        state: values.state,
+        phase: values.phase,
+        candidatePath: values.candidate,
+        exitCode: number(values["exit-code"], "--exit-code"),
+        turns: number(values.turns, "--turns"),
+        costUsd: number(values.cost, "--cost"),
+        gate: await jsonFile(values.gate, "--gate"),
+        errorKind: values["error-kind"],
+        error: values.error,
+      });
+    }
+    case "accept":
+      return runAccept({ jobId: needsJob(), paths: values.path });
+    case "discard":
+      return runDiscard({ jobId: needsJob() });
+    case "ls":
+      return runList({
+        state: values.state,
+        kind: values.kind,
+        limit: number(values.limit, "--limit"),
+      });
+    case "show":
+      return runJobShow(needsJob());
+    default:
+      throw new Usage(
+        "usage: job enqueue|claim|finish|accept|discard|ls|show",
+      );
   }
 }
 

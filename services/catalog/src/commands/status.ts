@@ -6,6 +6,7 @@ import {
   MIRROR_STATUSES,
   OPERATIONAL_TABLES,
   STATE_TABLES,
+  STUDIO_TABLES,
   type TableName,
   tables,
 } from "@self-learn/schema";
@@ -54,7 +55,12 @@ export interface StatusResult {
   };
   /** Row count keyed by SQL table name, in dependency order. */
   rows: Record<string, number>;
-  totals: { content: number; state: number; operational: number };
+  /**
+   * Four groups, not two. The studio tables are as durable as the state half
+   * and about a different subject, so a render failure must not inflate the
+   * count of what a learner did.
+   */
+  totals: { content: number; state: number; operational: number; studio: number };
   /**
    * When each source was last indexed. The question this answers is "is the
    * content half stale", which no row count can: a table full of rows from a
@@ -70,13 +76,16 @@ export interface StatusResult {
   mirrors: Record<string, MirrorCoverage>;
 }
 
-function half(name: TableName): "content" | "state" | "operational" {
+function half(name: TableName): "content" | "state" | "operational" | "studio" {
   if ((CONTENT_TABLES as readonly TableName[]).includes(name)) return "content";
   if ((STATE_TABLES as readonly TableName[]).includes(name)) return "state";
   if ((OPERATIONAL_TABLES as readonly TableName[]).includes(name)) return "operational";
+  if ((STUDIO_TABLES as readonly TableName[]).includes(name)) return "studio";
   // Only reachable if a table is added to `tables` and to none of the lists.
   // Loud beats a count that quietly lands in the wrong half.
-  throw new Error(`table ${name} is in none of CONTENT_TABLES, STATE_TABLES, OPERATIONAL_TABLES`);
+  throw new Error(
+    `table ${name} is in none of CONTENT_TABLES, STATE_TABLES, OPERATIONAL_TABLES, STUDIO_TABLES`,
+  );
 }
 
 /** Every source, in dependency order, with its last run folded in. */
@@ -103,7 +112,7 @@ export async function runStatus(): Promise<StatusResult> {
   return withDatabase(async ({ db }) => {
     const migrations = await migrationStatus(db);
     const rows: Record<string, number> = {};
-    const totals = { content: 0, state: 0, operational: 0 };
+    const totals = { content: 0, state: 0, operational: 0, studio: 0 };
 
     if (migrations.head === null || migrations.pending.length > 0) {
       // Two cases, one answer: nothing applied, so no table exists; or some
@@ -262,7 +271,7 @@ export function formatStatus(result: StatusResult): string {
   lines.push("");
   lines.push(
     `content ${result.totals.content} rows, state ${result.totals.state} rows, ` +
-      `operational ${result.totals.operational} rows`,
+      `operational ${result.totals.operational} rows, studio ${result.totals.studio} rows`,
   );
 
   lines.push("");

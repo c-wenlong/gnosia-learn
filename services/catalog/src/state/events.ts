@@ -8,6 +8,7 @@ import { asc, eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "./learner";
+import { ensureSession } from "./sessions";
 import { StateError } from "./errors";
 
 /**
@@ -117,6 +118,16 @@ export async function appendEvent(
 ): Promise<EventRecord> {
   const stamped: EventRecord = { ...record, at: record.at ?? new Date().toISOString() };
   await ensureLearner(db, learnerId);
+  // `session_id` has been a foreign key since migration `0006`, so a session
+  // named here has to exist before the row lands. `learn session start`
+  // normally created it already; this covers `learn observe --session x` run
+  // against a session nobody opened, which was legal while the column was free
+  // text and would otherwise now fail on a 23503 mid-loop. It is the same
+  // reconstruction the `0006` backfill does, one row at a time.
+  const session = stamped.session;
+  if (typeof session === "string" && session.trim() !== "") {
+    await ensureSession(db, { id: session, startedAt: new Date(stamped.at) }, learnerId);
+  }
   await db.insert(event).values(toRow(stamped, learnerId));
   return stamped;
 }

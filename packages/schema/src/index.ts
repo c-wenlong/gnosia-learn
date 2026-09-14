@@ -11,6 +11,7 @@ export * from "./shared";
 export * from "./content";
 export * from "./operations";
 export * from "./state";
+export * from "./studio";
 
 import {
   asset,
@@ -36,6 +37,7 @@ import {
   recap,
   review,
 } from "./state";
+import { assetJob, job, session } from "./studio";
 
 /**
  * Every table, in dependency order: a parent always precedes anything that
@@ -56,12 +58,15 @@ export const tables = {
   curriculumItemTopic,
   conceptCurriculumItem,
   learner,
+  session,
   event,
   mastery,
   review,
   progress,
   recap,
   preference,
+  job,
+  assetJob,
   indexRun,
   mirror,
 } as const;
@@ -90,6 +95,13 @@ export const CONTENT_TABLES = [
  * audited. Counted apart so a status line cannot read it as either.
  */
 export const OPERATIONAL_TABLES = ["indexRun", "mirror"] as const satisfies readonly TableName[];
+
+/**
+ * Who asked for a file to be made, and what came out. As durable as the state
+ * half and about a different subject, so `catalog status` counts it apart
+ * rather than letting a render failure inflate the learner's row count.
+ */
+export const STUDIO_TABLES = ["session", "job", "assetJob"] as const satisfies readonly TableName[];
 
 export const STATE_TABLES = [
   "learner",
@@ -143,6 +155,13 @@ export type Recap = typeof recap.$inferSelect;
 export type NewRecap = typeof recap.$inferInsert;
 export type Preference = typeof preference.$inferSelect;
 export type NewPreference = typeof preference.$inferInsert;
+
+export type Session = typeof session.$inferSelect;
+export type NewSession = typeof session.$inferInsert;
+export type Job = typeof job.$inferSelect;
+export type NewJob = typeof job.$inferInsert;
+export type AssetJob = typeof assetJob.$inferSelect;
+export type NewAssetJob = typeof assetJob.$inferInsert;
 
 export type IndexRun = typeof indexRun.$inferSelect;
 export type NewIndexRun = typeof indexRun.$inferInsert;
