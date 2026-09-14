@@ -21,6 +21,13 @@ import { formatLs, parseKinds, runLs } from "./commands/ls";
 import { formatMigrate, runMigrate } from "./commands/migrate";
 import { formatPath, runPath } from "./commands/path";
 import { formatSearch, runSearch } from "./commands/search";
+import {
+  formatSession,
+  runSessionEnd,
+  runSessionStart,
+  type SessionEndResult,
+  type SessionStartResult,
+} from "./commands/session";
 import { formatShow, runShow } from "./commands/show";
 import { formatStatus, runStatus } from "./commands/status";
 import { databaseUrl, redactUrl } from "./env";
@@ -67,6 +74,9 @@ Commands:
                            accept, discard, ls, show ID.
   assert-output            Index one file the way the owning source would, and
                            record which job produced it. Needs --job and --path.
+  session <verb>           The session row a job hangs off: start --id ID
+                           [--kind studio] [--title T] [--goal G]
+                           [--agent-session UUID], and end --id ID --state S.
 
 Options:
   --json                   Machine-readable output. Supported by every command.
@@ -104,6 +114,10 @@ Options:
   --error-kind K           job finish: a short machine-readable reason.
   --error M                job finish: the message a person reads.
   --limit N                job ls: rows to return. Default 20, max 100.
+  --id ID                  session: which session.
+  --title T                session start: what it is about.
+  --goal G                 session start: what it set out to do.
+  --agent-session UUID     session start: the headless session id, for Resume.
   -h, --help               Show this text.
 
 Environment:
@@ -130,6 +144,7 @@ type Command =
   | "path"
   | "search"
   | "job"
+  | "session"
   | "assert-output";
 
 const COMMANDS: readonly Command[] = [
@@ -142,6 +157,7 @@ const COMMANDS: readonly Command[] = [
   "path",
   "search",
   "job",
+  "session",
   "assert-output",
 ];
 
@@ -180,6 +196,10 @@ export async function main(argv: string[]): Promise<number> {
         "error-kind": { type: "string" },
         error: { type: "string" },
         limit: { type: "string" },
+        id: { type: "string" },
+        title: { type: "string" },
+        goal: { type: "string" },
+        "agent-session": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -279,6 +299,11 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatAssertOutput(result));
         break;
       }
+      case "session": {
+        const result = await sessionCommand(positionals, values);
+        emit(result, formatSession(result));
+        break;
+      }
       case "job": {
         const result = await job(positionals, values);
         emit(result, formatJob(result));
@@ -352,7 +377,49 @@ type Values = {
   gate?: string;
   "error-kind"?: string;
   error?: string;
+  id?: string;
+  title?: string;
+  goal?: string;
+  "agent-session"?: string;
 };
+
+/**
+ * `catalog session <verb>`. Two verbs: the row a job hangs off, and its end.
+ *
+ * `--id` rather than a positional, so a runner assembling an argv never has to
+ * think about ordering, and the same flag means the same thing here as in
+ * `learn session`.
+ */
+async function sessionCommand(
+  positionals: string[],
+  values: Values,
+): Promise<SessionStartResult | SessionEndResult> {
+  const verb = positionals[1];
+  const id = values.id ?? positionals[2];
+  if (id === undefined) throw new Usage(`session ${verb ?? "<verb>"} needs --id <id>`);
+
+  switch (verb) {
+    case "start":
+      return runSessionStart({
+        id,
+        kind: values.kind,
+        title: values.title,
+        goal: values.goal,
+        agentSessionId: values["agent-session"],
+      });
+    case "end": {
+      if (values.state === undefined) throw new Usage("session end needs --state <state>");
+      return runSessionEnd({
+        id,
+        state: values.state,
+        errorKind: values["error-kind"],
+        error: values.error,
+      });
+    }
+    default:
+      throw new Usage("usage: session start|end --id <id>");
+  }
+}
 
 /** `catalog job <verb>`. Split out because it is seven verbs, not one. */
 async function job(positionals: string[], values: Values): Promise<JobResult> {
