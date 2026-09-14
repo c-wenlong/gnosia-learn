@@ -77,6 +77,12 @@ export interface AssertOutputResult {
   derivedFrom: string | null;
   /** False when this job had already asserted this file. */
   firstAssert: boolean;
+  /**
+   * The hash `asset_job` now holds: what the job wrote. Equal to
+   * `contentHash` unless the file has been edited since the job landed it,
+   * because an accepted job's claim is a snapshot and is never rewritten.
+   */
+  recordedHash: string;
   /** Rows written, by SQL table name. Link rows are replaced, so this is the count after. */
   written: Record<string, number>;
   /**
@@ -283,6 +289,7 @@ export async function assertOutput(
     const written: Record<string, number> = {};
 
     const tx = db;
+    let recordedHash = facts.contentHash;
     const firstAssert = await (async () => {
       await tx
         .insert(asset)
@@ -316,29 +323,42 @@ export async function assertOutput(
       }
 
       const existing = await tx
-        .select({ assetId: assetJob.assetId })
+        .select({ contentHash: assetJob.contentHash })
         .from(assetJob)
         .where(sql`${assetJob.assetId} = ${row.id} and ${assetJob.jobId} = ${job.id}`)
         .limit(1);
-      await tx
-        .insert(assetJob)
-        .values({
-          assetId: row.id,
-          jobId: job.id,
-          contentHash: facts.contentHash,
-          bytes: facts.bytes,
-          writtenAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [assetJob.assetId, assetJob.jobId],
-          set: {
-            contentHash: sql`excluded."content_hash"`,
-            bytes: sql`excluded."bytes"`,
-            writtenAt: sql`excluded."written_at"`,
-            updatedAt: sql`now()`,
-          },
-        });
+
+      const values = {
+        assetId: row.id,
+        jobId: job.id,
+        contentHash: facts.contentHash,
+        bytes: facts.bytes,
+        writtenAt: new Date(),
+      };
+      const insert = tx.insert(assetJob).values(values);
+      // Once a job is accepted its claim is a snapshot and is never rewritten.
+      // A repair re-assert of a file someone has edited since reads the edited
+      // bytes, and overwriting the hash with them would replace "what the job
+      // wrote" with "what a person wrote afterwards" — destroying the one
+      // record that makes an edit visible at all. While the job is still
+      // `awaiting_review` nothing has been claimed yet, so a re-render that
+      // lands before the verdict does update it.
+      await (job.state === "accepted"
+        ? insert.onConflictDoNothing({ target: [assetJob.assetId, assetJob.jobId] })
+        : insert.onConflictDoUpdate({
+            target: [assetJob.assetId, assetJob.jobId],
+            set: {
+              contentHash: sql`excluded."content_hash"`,
+              bytes: sql`excluded."bytes"`,
+              writtenAt: sql`excluded."written_at"`,
+              updatedAt: sql`now()`,
+            },
+          }));
       written.asset_job = 1;
+      recordedHash =
+        job.state === "accepted" && existing[0] !== undefined
+          ? existing[0].contentHash
+          : facts.contentHash;
       return existing.length === 0;
     })();
 
@@ -355,6 +375,7 @@ export async function assertOutput(
       bytes: facts.bytes,
       derivedFrom: resolved.sourceAssetId,
       firstAssert,
+      recordedHash,
       written,
       notes: resolved.notes,
     };
@@ -377,6 +398,12 @@ export function formatAssertOutput(result: AssertOutputResult): string {
     `  concepts ${result.concepts.length === 0 ? "(none)" : result.concepts.join(", ")}`,
     `  bytes    ${result.bytes}  sha256 ${result.contentHash.slice(0, 12)}…`,
   ];
+  if (result.recordedHash !== result.contentHash) {
+    lines.push(
+      `  provenance kept, at ${result.recordedHash.slice(0, 12)}… — the file on disk is not ` +
+        `what this job wrote`,
+    );
+  }
   if (result.derivedFrom !== null) lines.push(`  from     ${result.derivedFrom}`);
   for (const note of result.notes) lines.push(`  note     ${note}`);
   return lines.join("\n");

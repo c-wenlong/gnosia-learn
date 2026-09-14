@@ -592,6 +592,64 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       ).toHaveLength(0);
     });
 
+    it("never rewrites an accepted job's provenance, even on a repair assert", async () => {
+      await fixture.write("learn/assets/snapshot.tldr", tldr({ topic: "alpha" }));
+      const queued = await enqueue({ target: "learn/assets/snapshot.tldr" });
+      await runClaim({ jobId: queued.job.id });
+      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
+      const accepted = await runAccept({
+        jobId: queued.job.id,
+        paths: ["learn/assets/snapshot.tldr"],
+        repoRoot: fixture.root,
+      });
+      const landed = accepted.outputs[0]!.contentHash;
+
+      // Somebody edits the committed file, then a repair assert runs over it.
+      await fixture.write(
+        "learn/assets/snapshot.tldr",
+        tldr({ topic: "alpha", title: "edited afterwards" }),
+      );
+      const repaired = await runAssertOutput({
+        jobId: queued.job.id,
+        path: "learn/assets/snapshot.tldr",
+        repoRoot: fixture.root,
+      });
+
+      // The asset row follows the file; the job's claim does not.
+      expect(repaired.contentHash).not.toBe(landed);
+      expect(repaired.recordedHash).toBe(landed);
+      const [row] = await scratch.db
+        .select()
+        .from(assetJob)
+        .where(eq(assetJob.jobId, queued.job.id));
+      expect(row!.contentHash).toBe(landed);
+      const shown = await runShow(queued.job.id, fixture.root);
+      expect(shown.outputs[0]!.current).toBe(false);
+    });
+
+    it("updates the claim while the job is still awaiting review", async () => {
+      await fixture.write("learn/assets/provisional.tldr", tldr({ topic: "alpha" }));
+      const queued = await enqueue({ target: "learn/assets/provisional.tldr" });
+      await runClaim({ jobId: queued.job.id });
+      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
+      const first = await runAssertOutput({
+        jobId: queued.job.id,
+        path: "learn/assets/provisional.tldr",
+        repoRoot: fixture.root,
+      });
+      await fixture.write(
+        "learn/assets/provisional.tldr",
+        tldr({ topic: "alpha", title: "re-rendered before the verdict" }),
+      );
+      const second = await runAssertOutput({
+        jobId: queued.job.id,
+        path: "learn/assets/provisional.tldr",
+        repoRoot: fixture.root,
+      });
+      expect(second.recordedHash).toBe(second.contentHash);
+      expect(second.recordedHash).not.toBe(first.contentHash);
+    });
+
     it("notices when the bytes on disk stopped matching what the job wrote", async () => {
       await fixture.write("learn/assets/edited.tldr", tldr({ topic: "alpha" }));
       const queued = await enqueue({ target: "learn/assets/edited.tldr" });
