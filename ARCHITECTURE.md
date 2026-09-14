@@ -68,7 +68,7 @@ another repo.
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `apps/web/src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
@@ -149,6 +149,18 @@ interactive parts opt into the client one component at a time.
 | not found | `not-found.tsx` | The 404 |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
+| `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
+
+The asset route is the one place the app reads a file the deployment does not
+contain. A video sits under manimkc's data root and a diagram under
+`learn/assets/`, so neither is servable by Next, and the URL carries an asset
+id rather than a path: the id is a primary key, the row's `path` is joined onto
+a root chosen by the row's own `source_repo`, and the result is proved to be
+inside that root before and after symlinks are resolved. It is off unless
+`ASSET_FILES_ENABLED` is set, the shape decision D11 in
+[docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) uses for the
+studio, because production has none of these files. The reasoning for each
+header it sets is in `apps/web/src/lib/asset-files.ts`.
 
 The session route declares `generateStaticParams()` over every course and
 module pair, so the shell is prerendered and only the chat is live.
@@ -463,6 +475,8 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
 | `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
+| `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
+| `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
 | `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
@@ -552,7 +566,10 @@ manimkc's `$MANIMKC_HOME`, and the indexers resolve a file as `outRoot + path`.
 It defaults to the submodule checkout, so with nothing configured the two are
 the same directory; set it and the videos live somewhere a repo relayout cannot
 delete, which is why it exists. `--manimkc-root` names the checkout to index,
-never where its output landed. That ownership is what lets the
+never where its output landed. The run writes that `outRoot` to
+`index_run.metadata`, because the path on the row resolves against nothing
+without it and no consumer may go looking in `$MANIMKC_HOME` for itself; the
+asset file route is the first thing to read it back. That ownership is what lets the
 writer prune safely: a source may delete only rows it could have produced, so
 one indexer can never remove another's. `--only` expands to include everything
 downstream of what it names, because a prune cascades and a half-run index is

@@ -236,6 +236,16 @@ not have to be worked out again.
   that no `concept` row could ever be deleted, which breaks the indexers.
   Migration `0003_append_only_per_row` fixes it and
   `services/catalog/test/schema.test.ts` guards it.
+- **`index_run.source_root` is not where a manimkc file is.** It is the
+  directory the run *read*, which for manimkc is the checkout the CLI was
+  pointed at, and for `concepts`, `diagrams` and `sessions` is a repo-relative
+  folder. A `manimkc:` asset's `out/…` path resolves against manimkc's data
+  root instead, which the run records on `index_run.metadata.outRoot` in
+  `services/catalog/src/index/manimkc.ts`. Join the wrong one and every video
+  404s at once, since with `MANIMKC_HOME` set the two are different
+  directories. A row indexed before that value existed carries no `outRoot`,
+  and the honest answer there is "re-run `npm run catalog -- index --only
+  manimkc`", never a 404 that reads as a deleted file.
 - **A catalog indexer must never `continue` past an unresolved slug.** The rule
   is refuse, with the file and the slug named; `IndexErrors` collects them so
   one run reports all of them. A skipped row is an asset that is silently

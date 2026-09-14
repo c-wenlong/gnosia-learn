@@ -109,10 +109,12 @@ export {
   assetsForConcept,
   assetsForTopic,
   byKind,
+  indexedRoot,
   listAssets,
   type AssetKindCount,
   type AssetRef,
   type AssetWithTopics,
+  type IndexedRoot,
   type ListAssetsOptions,
 } from "./assets";
 export {
