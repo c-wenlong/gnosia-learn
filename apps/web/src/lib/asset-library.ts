@@ -163,6 +163,16 @@ export interface AssetDetail {
   reachable: boolean;
   /** Titles for every slug on this page, this asset's and its neighbours'. */
   titles: TopicTitles;
+  /**
+   * Concept-note slugs to their asset ids, for resolving `[[wikilinks]]`.
+   *
+   * A note's id is `note:learn/concepts/<domain>/<slug>.md` and a wikilink
+   * carries only the slug, so the domain folder has to come from somewhere.
+   * It comes from here: every note in one read, keyed by the basename a link
+   * would name. There are 32 of them, so the whole index costs less than
+   * asking per link would.
+   */
+  notes: Record<string, string>;
 }
 
 const EMPTY_DETAIL: AssetDetail = {
@@ -171,6 +181,7 @@ const EMPTY_DETAIL: AssetDetail = {
   related: [],
   reachable: false,
   titles: {},
+  notes: {},
 };
 
 /** How many siblings the detail page offers before it stops listing them. */
@@ -229,14 +240,22 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
         related: [],
         reachable: true,
         titles: {},
+        notes: {},
       };
     }
+
+    // Only a markdown file can contain a wikilink, so only a markdown file
+    // pays for the index. `endsWith` rather than the kind, because a session
+    // log and a concept note are different kinds and both are markdown.
+    const wantsNotes = asset.path?.endsWith(".md") ?? false;
 
     const [derivations, perTopic] = await Promise.all([
       assetDerivations(db, id),
       // Unlimited on purpose; see the note above `RELATED_CAP`.
       Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }))),
     ]);
+
+    const notes = wantsNotes ? noteIndex(await listAssets(db, { kind: "note" })) : {};
 
     // This asset, and its own companion files, which have their own section
     // immediately above and would otherwise appear twice on one page.
@@ -258,7 +277,7 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     // once per section, so the two cannot disagree about one topic's name.
     const titles = await topicTitles(db, distinctTopics([asset, ...related]));
 
-    return { asset, derivations, related, reachable: true, titles };
+    return { asset, derivations, related, reachable: true, titles, notes };
   } catch (error) {
     warn(`asset ${id}`, error);
     return EMPTY_DETAIL;
@@ -391,6 +410,24 @@ export function accessFor(
   sourceRepo: string,
 ): FileAccess {
   return sourceRepo === "manimkc" ? access.manimkc : access.selfLearn;
+}
+
+/**
+ * Note rows keyed by the slug a `[[wikilink]]` would write.
+ *
+ * The slug is the filename without `.md`, which is what the knowledge base
+ * links by. Two notes in different domains sharing a filename would collide;
+ * the first wins and the second is simply unlinkable, which is the same thing
+ * that happens in Obsidian and is better than a link pointing at the wrong
+ * note. Nothing in the corpus collides today.
+ */
+function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const slug = row.path?.split("/").pop()?.replace(/\.md$/, "");
+    if (slug !== undefined && slug !== "" && out[slug] === undefined) out[slug] = row.id;
+  }
+  return out;
 }
 
 /**
