@@ -144,43 +144,64 @@ const EMPTY_DETAIL: AssetDetail = {
 const RELATED_CAP = 12;
 
 /**
+ * How many rows one topic's query may return before the list is cut.
+ *
+ * Comfortably above `RELATED_CAP` so a topic with a handful of assets is never
+ * truncated in a way a reader could notice, and bounded so a topic that grows
+ * to thousands costs a short list rather than a full scan. The biggest topic
+ * carries eleven assets today.
+ */
+const RELATED_SCAN_CAP = 60;
+
+/**
  * One asset, its derivations, and what else is filed beside it.
  *
- * The row comes out of the same unfiltered `listAssets` the grid uses rather
- * than from `assetsByIds`, for one reason: the page needs the asset's topic
- * slugs, and the topics are what "what else is about this" is computed from.
- * `assetsByIds` returns an `AssetRef`, which has no topics on it, so it would
- * answer neither question and a second query would be needed for each. One
- * statement covers the row, its chips and its siblings, and — being one
- * statement — cannot show a topic chip that disagrees with the list under it.
+ * **The row is looked up directly, by id.** An earlier version took it out of
+ * the same capped `listAssets` the grid uses and searched the result for a
+ * matching id, which is correct only while the whole catalog fits inside one
+ * page: the 1001st asset by kind-and-id would have had a real row, a working
+ * file, and a detail URL that answered 404. `listAssets`' `ids` option is what
+ * this needs — the row *with* its topic chips, which `assetsByIds` cannot give
+ * — and it resolves the asset whatever the size of the catalog.
  *
- * `assetDerivations` is the second statement, and the one that makes a video
- * more than a file: it is where the transcript, the captions and the chapter
- * list beside a `.mp4` are found, and where an exported SVG finds the `.tldr`
- * it was drawn on.
+ * **Related is asked per topic, not filtered out of everything.** An asset's
+ * topics come back on the row, so "what else is about this" is one query per
+ * topic against `asset_topic`, which is usually one. Each is capped: a huge
+ * topic should cost a short list, never a scan.
+ *
+ * `assetDerivations` is the query that makes a video more than a file. It is
+ * where the transcript, the captions and the chapter list beside a `.mp4` are
+ * found, and where an exported SVG finds the `.tldr` it was drawn on.
  */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
   try {
     const db = await catalogDatabase();
-    const rows = await listAssets(db, { limit: LIBRARY_ROW_CAP });
-    const asset = rows.find((row) => row.id === id) ?? null;
-    if (asset === null) {
+    const [asset] = await listAssets(db, { ids: [id] });
+    if (asset === undefined) {
       return { asset: null, derivations: { sources: [], derived: [] }, related: [], reachable: true };
     }
 
-    const derivations = await assetDerivations(db, id);
-    // Anything sharing a topic, minus this asset and minus its own companion
-    // files, which are listed in their own section immediately above and would
-    // otherwise appear twice on one page.
-    const family = new Set([id, ...derivations.sources.map((a) => a.id), ...derivations.derived.map((a) => a.id)]);
-    const topics = new Set(asset.topics);
-    const related =
-      topics.size === 0
-        ? []
-        : rows
-            .filter((row) => !family.has(row.id) && row.topics.some((slug) => topics.has(slug)))
-            .sort(compareByKindThenId)
-            .slice(0, RELATED_CAP);
+    const [derivations, perTopic] = await Promise.all([
+      assetDerivations(db, id),
+      Promise.all(
+        asset.topics.map((slug) => listAssets(db, { topicSlug: slug, limit: RELATED_SCAN_CAP })),
+      ),
+    ]);
+
+    // This asset, and its own companion files, which have their own section
+    // immediately above and would otherwise appear twice on one page.
+    const family = new Set([
+      id,
+      ...derivations.sources.map((a) => a.id),
+      ...derivations.derived.map((a) => a.id),
+    ]);
+    // Deduped by id: an asset filed under two of this one's topics comes back
+    // from two of the queries above and is still one card.
+    const merged = new Map<string, AssetWithTopics>();
+    for (const row of perTopic.flat()) {
+      if (!family.has(row.id)) merged.set(row.id, row);
+    }
+    const related = [...merged.values()].sort(compareByKindThenId).slice(0, RELATED_CAP);
 
     return { asset, derivations, related, reachable: true };
   } catch (error) {
@@ -209,8 +230,11 @@ export type FileAccess =
   | { ok: true }
   | {
       ok: false;
-      /** `off` is the switch; `unindexed` and `stale` are the manimkc data root. */
-      reason: "off" | "unindexed" | "stale";
+      /**
+       * `off` is the switch; `unindexed` and `stale` are the manimkc data root;
+       * `unknown` is the check itself having failed.
+       */
+      reason: "off" | "unindexed" | "stale" | "unknown";
       headline: string;
       detail: string;
       /** The exact thing to run or set. Rendered as a command, so it is one line. */
@@ -244,15 +268,29 @@ const FILES_OFF: FileAccess = {
 export async function readFileAccess(): Promise<{ selfLearn: FileAccess; manimkc: FileAccess }> {
   if (!assetFilesEnabled()) return { selfLearn: FILES_OFF, manimkc: FILES_OFF };
 
-  let run: Awaited<ReturnType<typeof indexedRoot>> = null;
+  let run: Awaited<ReturnType<typeof indexedRoot>>;
   try {
     run = await indexedRoot(await catalogDatabase(), "manimkc");
   } catch (error) {
     warn("manimkc index root", error);
-    // The catalog being unreachable is already said by `reachable` on the
-    // snapshot beside this. Reporting it a second time as a file problem would
-    // put two banners on one page for one outage.
-    return { selfLearn: { ok: true }, manimkc: { ok: true } };
+    // Not `{ ok: true }`. This read is separate from the one that fetches the
+    // rows, so a failure here can land while the rows come back fine — and
+    // then a page that treated "could not check" as "available" would render a
+    // player pointing at a URL the file route is about to refuse. Unknown
+    // fails closed, and says which question went unanswered rather than
+    // claiming the index is missing, which it has no evidence of.
+    return {
+      selfLearn: { ok: true },
+      manimkc: {
+        ok: false,
+        reason: "unknown",
+        headline: "Could not check where manimkc's files are.",
+        detail:
+          "The rows below are real; what could not be read is the index run that records the directory " +
+          "their out/… paths resolve against. Nothing is known to be wrong with the files themselves.",
+        fix: "npm run catalog -- status",
+      },
+    };
   }
 
   if (run === null) {

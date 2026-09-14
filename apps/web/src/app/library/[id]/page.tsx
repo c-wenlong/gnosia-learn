@@ -291,12 +291,15 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   const sidecars =
     asset.kind === "video" && servable ? await videoSidecars(derivations.derived) : null;
 
-  // Anything whose bytes are words. Read on the server so the page arrives with
-  // them; `readAssetText` refuses a file over its cap and every caller here
-  // falls back to the same metadata-and-link panel a missing file gets.
-  const textual = ["note", "session", "captions", "diagram_source", "transcript", "chapters"];
+  // Anything that is neither a player nor a picture nor a bare URL has words,
+  // so it is read on the server and the page arrives with them. Attempted for
+  // any kind rather than a fixed list, so a kind a future indexer adds shows
+  // its contents instead of nothing; `resolveAssetFile`'s closed extension list
+  // is what refuses a binary, and `readAssetText` refuses anything over the
+  // preview cap. A null lands on `UnreadableFile`, which says so.
+  const rendered = ["video", "diagram_svg", "link"];
   const text =
-    servable && textual.includes(asset.kind)
+    servable && !rendered.includes(asset.kind)
       ? await withCatalog((db) => readAssetText(db, asset.id))
       : null;
 
@@ -377,6 +380,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         ) : (
           <TextPanel title={`${label} · ${asset.path?.split("/").pop() ?? "file"}`} text={text} href={fileHref} />
         )
+      ) : fileAccess.ok ? (
+        // The deployment serves files and this one still did not come back:
+        // moved since it was indexed, unreadable, an extension the route will
+        // not serve, or simply larger than the preview cap. `AccessPanel`
+        // renders nothing when access is fine, so without this branch the page
+        // would drop the body and the raw-file link without a word.
+        <UnreadableFile path={asset.path} href={fileHref} />
       ) : (
         <AccessPanel access={fileAccess} />
       )}
@@ -459,6 +469,61 @@ function BackLink() {
     >
       <span aria-hidden>←</span> Library
     </Link>
+  );
+}
+
+/**
+ * This deployment serves files, and this one did not come back.
+ *
+ * A different fact from the three `FileAccess` states, which are all about the
+ * deployment: those say nothing can be served, this says everything else can
+ * and this one file could not. `readAssetText` deliberately collapses the
+ * reasons — gone from disk, unreadable, an extension the route refuses, larger
+ * than the preview cap — because the reader's next move is the same for all of
+ * them, so the panel lists them rather than guessing between them. The raw link
+ * stays, since it is the one way to find out which it was.
+ */
+function UnreadableFile({ path, href }: { path: string | null; href: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-5">
+      <h2 className="text-sm font-semibold text-[var(--foreground)]">
+        {path === null ? "This row names no file." : "This file could not be read."}
+      </h2>
+      <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-[var(--muted-strong)]">
+        {path === null ? (
+          <>
+            The catalog holds it with neither a path nor a URL, which no indexer
+            should produce. Everything below is what the row does say.
+          </>
+        ) : (
+          <>
+            The row is real and this deployment does serve asset files, so this
+            is about the file itself: it may have moved since the catalog last
+            indexed it, be larger than the page reads in one go, or be a kind of
+            file this page does not show. Re-indexing corrects a path that
+            changed.
+          </>
+        )}
+      </p>
+      {path && (
+        <p className="mt-2 break-all font-mono text-[12px] text-[var(--muted)]">{path}</p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {path && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md text-[12px] font-medium text-[var(--accent-strong)] transition-colors duration-150 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            Try the raw file
+          </a>
+        )}
+        <code className="rounded-md border border-[var(--border)] bg-[var(--sidebar-bg)] px-2 py-1 font-mono text-[11px] text-[var(--muted-strong)]">
+          npm run catalog -- index
+        </code>
+      </div>
+    </div>
   );
 }
 

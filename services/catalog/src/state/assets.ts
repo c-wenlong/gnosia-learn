@@ -329,6 +329,18 @@ export interface ListAssetsOptions {
   kind?: string;
   topicSlug?: string;
   sourceRepo?: string;
+  /**
+   * Exactly these assets, by id. The narrow case of the broad query, and the
+   * reason it is here rather than served by `assetsByIds`: that returns an
+   * `AssetRef`, which carries no topics, so a caller that needs one row *and*
+   * its topic chips would otherwise have to page through everything looking
+   * for it — which finds nothing once the catalog outgrows the page, and
+   * answers 404 for a row that exists.
+   *
+   * An empty array asks for nothing and gets nothing, rather than being
+   * dropped and quietly widening the query to every asset in the catalog.
+   */
+  ids?: string[];
   limit?: number;
   offset?: number;
 }
@@ -375,10 +387,15 @@ export async function listAssets(
   db: CatalogDatabase,
   options: ListAssetsOptions = {},
 ): Promise<AssetWithTopics[]> {
-  const { kind, topicSlug, sourceRepo, limit, offset } = options;
+  const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
+  // An `ids: []` asks for nothing, and `where id in ()` is not how Postgres
+  // spells that. Short-circuiting also saves the round trip, the same way
+  // `assetsByIds` does.
+  if (ids !== undefined && ids.length === 0) return [];
   const conditions = [
     kind === undefined ? undefined : eq(asset.kind, kind),
     sourceRepo === undefined ? undefined : eq(asset.sourceRepo, sourceRepo),
+    ids === undefined ? undefined : inArray(asset.id, ids),
     topicSlug === undefined
       ? undefined
       : inArray(
