@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "../src/migrations";
 import {
   appendEvent,
+  assetCounts,
   assetsByIds,
   assetsForCollection,
   assetsForConcept,
@@ -12,6 +13,7 @@ import {
   dueReviews,
   emptyReviews,
   importLegacyState,
+  listAssets,
   readEvents,
   readLearnerSnapshot,
   readModel,
@@ -526,6 +528,116 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       // An id the catalog does not have is absent, not an error: the caller
       // asked what exists, and the answer is that this one does not.
       expect(await assetsByIds(scratch.db, ["fx:gone"])).toEqual([]);
+    });
+
+    /**
+     * `listAssets` is the library page's query: everything, filtered and
+     * paged, rather than "about this one topic". The fixture's eight assets
+     * sort `diagram_svg, link, note x4, transcript, video` by kind, and the
+     * four notes sort `fx:Beta, fx:alpha, fx:orphan, fx:pinned` by code unit —
+     * the same order `assetsForCollection`'s ordering test already proves
+     * `ORDER BY` produces and `localeCompare` does not.
+     */
+    describe("listAssets", () => {
+      it("returns everything when no option is given, in kind-then-id order", async () => {
+        const rows = await listAssets(scratch.db);
+        expect(rows.map((r) => r.id)).toEqual([
+          ASSETS.diagram,
+          ASSETS.link,
+          ASSETS.upperCase,
+          ASSETS.lowerCase,
+          ASSETS.orphan,
+          ASSETS.pinned,
+          ASSETS.transcript,
+          ASSETS.video,
+        ]);
+      });
+
+      it("attaches topic slugs without a query per row", async () => {
+        const rows = await listAssets(scratch.db);
+        const byId = new Map(rows.map((r) => [r.id, r.topics]));
+        // Everything asset_topic names comes back with it.
+        expect(byId.get(ASSETS.video)).toEqual([TOPIC_SLUG]);
+        expect(byId.get(ASSETS.diagram)).toEqual([TOPIC_SLUG]);
+        expect(byId.get(ASSETS.link)).toEqual([TOPIC_SLUG]);
+        expect(byId.get(ASSETS.transcript)).toEqual([TOPIC_SLUG]);
+        // Filed nowhere is an empty list, not a missing key or a null. The SQL
+        // is `coalesce(array_agg(...), '{}')` precisely so this is `[]` rather
+        // than the `null` an unfiltered `array_agg` over zero rows would send.
+        expect(byId.get(ASSETS.orphan)).toEqual([]);
+        expect(Array.isArray(byId.get(ASSETS.orphan))).toBe(true);
+        expect(byId.get(ASSETS.pinned)).toEqual([]);
+      });
+
+      it("filters by kind", async () => {
+        const rows = await listAssets(scratch.db, { kind: "note" });
+        expect(rows.map((r) => r.id)).toEqual([
+          ASSETS.upperCase,
+          ASSETS.lowerCase,
+          ASSETS.orphan,
+          ASSETS.pinned,
+        ]);
+      });
+
+      it("filters by topic slug, to the asset_topic membership rather than a join that would duplicate rows", async () => {
+        const rows = await listAssets(scratch.db, { topicSlug: TOPIC_SLUG });
+        expect(rows.map((r) => r.id)).toEqual([
+          ASSETS.diagram,
+          ASSETS.link,
+          ASSETS.transcript,
+          ASSETS.video,
+        ]);
+        // A note in no asset_topic row is excluded, not returned with an empty list.
+        expect(rows.map((r) => r.id)).not.toContain(ASSETS.orphan);
+      });
+
+      it("filters by source repo", async () => {
+        const rows = await listAssets(scratch.db, { sourceRepo: "tldrawkc" });
+        expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram]);
+      });
+
+      it("combines filters with AND", async () => {
+        const rows = await listAssets(scratch.db, { kind: "link", topicSlug: TOPIC_SLUG });
+        expect(rows.map((r) => r.id)).toEqual([ASSETS.link]);
+        expect(await listAssets(scratch.db, { kind: "video", topicSlug: "no-such-topic" })).toEqual(
+          [],
+        );
+      });
+
+      it("pages with limit and offset, over the same order as the unpaged call", async () => {
+        const first = await listAssets(scratch.db, { limit: 2 });
+        expect(first.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.link]);
+        const second = await listAssets(scratch.db, { limit: 2, offset: 2 });
+        expect(second.map((r) => r.id)).toEqual([ASSETS.upperCase, ASSETS.lowerCase]);
+      });
+
+      it("returns an empty list for a filter that matches nothing, rather than throwing", async () => {
+        expect(await listAssets(scratch.db, { kind: "no-such-kind" })).toEqual([]);
+      });
+    });
+
+    /**
+     * `assetCounts` backs a filter chip. One grouped scan, not one query per
+     * kind, the same shape `mirrorCoverage` in `../commands/status.ts` already
+     * uses for the same reason.
+     */
+    describe("assetCounts", () => {
+      it("counts every kind the fixture has, and nothing it does not", async () => {
+        const counts = new Map((await assetCounts(scratch.db)).map((r) => [r.kind, r.count]));
+        expect(counts.get("video")).toBe(1);
+        expect(counts.get("diagram_svg")).toBe(1);
+        expect(counts.get("transcript")).toBe(1);
+        expect(counts.get("link")).toBe(1);
+        expect(counts.get("note")).toBe(4);
+        // No chapters or captions in the fixture, so no chip should claim any.
+        expect(counts.has("chapters")).toBe(false);
+        expect(counts.has("captions")).toBe(false);
+      });
+
+      it("orders by kind, stably", async () => {
+        const kinds = (await assetCounts(scratch.db)).map((r) => r.kind);
+        expect(kinds).toEqual([...kinds].sort());
+      });
     });
   });
 
