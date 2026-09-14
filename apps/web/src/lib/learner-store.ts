@@ -50,6 +50,21 @@ import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared"
  */
 let pool: { db: CatalogDatabase; close: () => Promise<void> } | null = null;
 
+/**
+ * The pool itself, for a read that lives in another module.
+ *
+ * `@/lib/asset-library` is the catalog's other reader — the content half rather
+ * than the learner's — and it degrades in exactly the shape the three reads
+ * below do. What it must not do is open a second pool: two pools in one process
+ * is two sets of sockets, two idle-error handlers and two answers to "is the
+ * database up". So the connection stays private to this module and is handed
+ * out; the degradation stays with whoever is doing the reading, because the
+ * empty value a failed read falls back to is different for every one of them.
+ */
+export async function catalogDatabase(): Promise<CatalogDatabase> {
+  return database();
+}
+
 async function database(): Promise<CatalogDatabase> {
   if (pool === null) {
     // Imported lazily so the pool is never constructed during a build, even if

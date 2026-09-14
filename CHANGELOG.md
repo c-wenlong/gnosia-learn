@@ -88,6 +88,51 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **The asset library: `/library` and `/library/[id]`.** Every piece that made
+  this possible landed separately — the queries, the components, the file route
+  — and this is the surface that puts them together. `Library` is in the
+  sidebar.
+
+  **The default view shows 135 of 206 rows, and says so.** The catalog holds
+  link 68, note 32, video 30, captions 23, transcript 23, chapters 23, session
+  3, diagram_svg 2, diagram_source 2. Sixty-nine of those are a `.vtt`, a
+  `.transcript.json` and a `.chapters.json` written beside each of the thirty
+  videos, and two more are the `.tldr` each diagram was exported from. Rendered
+  flat and sorted by kind they would also sort *above* the videos, so the first
+  two screens of a library would be caption files. So the default is everything
+  that stands on its own, and the 71 companions keep their own chips with their
+  true counts, their own linkable `?kind=` views, and a place on the page of
+  whatever they belong to. The rule is a set of kinds in
+  `apps/web/src/lib/library.ts`, not "anything with a derivation": a video is
+  the *source* of its sidecars and a diagram SVG is *derived* from its `.tldr`,
+  so the derivation test would keep the transcripts and drop the drawings.
+
+  **Filters are the query string**, so `?kind=` and `?topic=` are linkable, the
+  back button undoes one, and the whole rail is `<a>` elements with no client
+  JavaScript. Eighty topics carry assets, which is why they sit behind a native
+  `<details>` that opens itself when a topic filter is on.
+
+  **The detail page renders what the thing is.** A video gets `VideoPlayer`
+  with its chapter rail and transcript; a diagram gets `DiagramView`; a note,
+  session log or caption track gets its own words; a link gets the link, since
+  a row with a URL and no file has nothing else to give. The transcript is
+  read and validated on the server and passed down as `cues`, never fetched
+  from the browser: the components already take props, and a server read needs
+  no loading state. `apps/web/src/lib/transcript.ts` is where a truncated or
+  half-written sidecar costs the transcript panel and nothing else.
+
+  **Files unavailable is a first-class view, not an error.** Three states, and
+  the page tells them apart: `ASSET_FILES_ENABLED` unset (the default, and what
+  a fresh clone and production both look like), manimkc never indexed here, and
+  a manimkc index that predates the run recording its data root. Each says what
+  to run. Nothing renders a dead player or a broken image in any of them, and
+  the titles, topics, sizes and paths stay real throughout.
+
+  New query: `assetDerivations` in `services/catalog/src/state/assets.ts`, both
+  directions of `asset_derivation` in one answer. `catalog show` now calls it
+  instead of the four statements it had inline, so the CLI and a page cannot
+  disagree about what an asset was made from.
+
 - **A route that serves an indexed asset's bytes:
   `GET /api/assets/<encodeURIComponent(asset.id)>/file`.** The catalog has held
   rows for 30 videos, 69 sidecars and a pair of diagrams with nothing able to

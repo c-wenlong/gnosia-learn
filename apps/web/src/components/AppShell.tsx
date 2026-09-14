@@ -87,8 +87,16 @@ export function AppShell({
           </div>
         </header>
         <StoreBanner />
+        {/* 48rem is the reading measure every page wants and one does not: a
+            gallery at that width is two cards across, and the media player's
+            own container queries only reach their side-by-side layout at 64rem.
+            A page opts out by putting `data-layout="wide"` on its root element,
+            which `has-*` reads without a prop, a context or a client boundary
+            between the layout and the route. */}
         <main className="flex-1 px-4 py-8 sm:px-8 lg:px-12">
-          <div className="mx-auto w-full max-w-3xl">{children}</div>
+          <div className="mx-auto w-full max-w-3xl has-[[data-layout=wide]]:max-w-6xl">
+            {children}
+          </div>
         </main>
       </div>
     </div>

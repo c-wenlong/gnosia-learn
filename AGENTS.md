@@ -343,6 +343,24 @@ not have to be worked out again.
   `npm run learn -- doctor` starts reporting the database as behind. Bundle 5
   did this to itself once, tidying a comment in 0004. Corrections go in
   `SCHEMA.md` or in the schema source, never in the SQL.
+- **A `"use client"` module's exports are client references, functions
+  included.** A server component that imports `assetKindLabel` from
+  `AssetCard.tsx` type-checks, builds without a warning, and throws *Attempted
+  to call assetKindLabel() from the server* on the first request: what the
+  server holds is a stub for a function that lives in the browser bundle.
+  `npm run build` does not catch it, so the only way to find it is to load the
+  page. The pure half of a client component goes in its own React-free module —
+  `apps/web/src/components/asset-meta.ts` beside `AssetCard.tsx`, the same shape
+  as `media.ts` beside `VideoPlayer.tsx` — and the component imports it like
+  anyone else.
+- **A page's `params` are not URL-decoded; a route handler's are.**
+  `/library/[id]` is handed `"link%3Acs3216-m3-r1"` while
+  `/api/assets/[id]/file` is handed `"link:cs3216-m3-r1"`, for the same URL
+  shape. The type is `string` on both sides and nothing says which you have, so
+  a page that uses `params.id` as a primary key 404s on every row in the
+  catalog and builds clean. `decodeAssetId` in `apps/web/src/lib/library.ts`
+  does it, and swallows the `URIError` a malformed escape raises so a hand-typed
+  URL is a 404 rather than a 500.
 - **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
   `scripts/learn` on purpose.** `apps/web/src/app` and
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
