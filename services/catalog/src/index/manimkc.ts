@@ -48,6 +48,14 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * as before. It is the join key `mirrors.ts` matches ledger entries on and the
  * unique key on the asset row; only the *base* it is resolved against moved.
  *
+ * That base is written to `index_run.metadata.outRoot`, because a row saying
+ * `out/algorithms/…/cs3230_a1.mp4` and nothing else is not enough to open the
+ * file. Nothing downstream may re-derive it from `$MANIMKC_HOME`: this repo
+ * does not read that variable, by the rule in `AGENTS.md`, and the data root
+ * belongs to whichever manimkc checkout this run actually asked. So the run
+ * records what it was told, and a reader that finds no `outRoot` there knows
+ * its index predates this and says so rather than guessing.
+ *
  * **Drift, and which direction is fatal.** A topic folder with no entry in
  * `content/topics.yaml` is refused: an unmapped video is one the catalog cannot
  * see, which is the failure this whole bundle exists to prevent. A vocabulary
@@ -206,7 +214,7 @@ export async function buildRows(
   manimkcRoot: string,
   byManimkcPath: ReadonlyMap<string, string>,
   bySlug: ReadonlyMap<string, unknown>,
-): Promise<{ rows: SourceRows; notes: string[] }> {
+): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string } }> {
   const assets: NewAsset[] = [];
   const assetTopics: NewAssetTopic[] = [];
   const derivations: NewAssetDerivation[] = [];
@@ -334,5 +342,23 @@ export async function buildRows(
   const unrendered = report.drift?.unrendered ?? [];
   if (unrendered.length > 0) notes.push(`${unrendered.length} topic(s) not rendered in this checkout`);
 
-  return { rows: { asset: assets, assetTopic: assetTopics, assetDerivation: derivations }, notes };
+  return {
+    rows: { asset: assets, assetTopic: assetTopics, assetDerivation: derivations },
+    notes,
+    // The one fact about this run that a later reader cannot recompute. Every
+    // `asset.path` here is `out/<domain>/…`, relative to a base that is not in
+    // the row and is not the checkout, so anything opening one of these files
+    // has to be told where the base was. `index_run.source_root` cannot carry
+    // it: that column is the source this run *read*, and for manimkc that is
+    // the checkout the CLI ran against, while for `concepts`, `diagrams` and
+    // `sessions` it is a repo-relative directory. Overloading it would make
+    // one column mean two things and would misreport every other source.
+    //
+    // `mirrors` already records the same value for the same reason, and the
+    // two are the same `$MANIMKC_HOME` because they are two subcommands of one
+    // CLI. Serving a video is what reads it back:
+    // `apps/web/src/app/api/assets/[id]/file/route.ts`, which joins it onto
+    // `asset.path`, exactly as the indexer does above when it hashes the file.
+    metadata: { outRoot },
+  };
 }
