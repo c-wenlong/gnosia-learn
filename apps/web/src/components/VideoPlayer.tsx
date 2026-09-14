@@ -55,6 +55,29 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [time, setTime] = useState(0);
+  // A seek the element refused, held until it can be honoured. See `seek`.
+  // It carries the `src` it was asked for, so a seek left over from the video
+  // before this one is discarded rather than applied to the new file.
+  const pendingSeek = useRef<{ src: string; seconds: number } | null>(null);
+
+  // Playback position belongs to the file being played, so a new `src` starts
+  // over. Without this the component keeps whatever the last video was at: a
+  // soft navigation from one asset to the next reuses the mounted instance
+  // (the route renders no `key`), and the chapter rail and the transcript then
+  // highlight a position in a video nobody is watching.
+  //
+  // Done during render rather than in an effect on purpose. React re-runs this
+  // component before committing anything, so the swapped-in video is never
+  // painted with the old position; an effect would show the wrong highlight
+  // for a frame first. This is the documented way to adjust state when a prop
+  // changes, and it is the component's own job rather than the caller's: the
+  // diagram studio renders this from another route, and a fix that depends on
+  // every caller remembering a `key` is a fix that the next caller loses.
+  const [renderedSrc, setRenderedSrc] = useState(src);
+  if (renderedSrc !== src) {
+    setRenderedSrc(src);
+    setTime(0);
+  }
 
   function seek(seconds: number) {
     const target = Math.max(0, seconds);
@@ -62,12 +85,35 @@ export function VideoPlayer({
     // the next `timeupdate`, and the highlight should move on the click.
     setTime(target);
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      pendingSeek.current = { src, seconds: target };
+      return;
+    }
     try {
       video.currentTime = target;
+      pendingSeek.current = null;
     } catch {
-      // A seek before metadata has loaded throws in some browsers. The time
-      // the reader asked for is already on screen; the next play starts there.
+      // A seek before metadata has loaded throws, and `preload="metadata"`
+      // means the first clicks land in exactly that window. Dropping it here
+      // left the reader on a chapter the video had never moved to, so the next
+      // play started from the top. Hold it and apply it at `loadedmetadata`.
+      pendingSeek.current = { src, seconds: target };
+    }
+  }
+
+  function applyPendingSeek(video: HTMLVideoElement) {
+    const pending = pendingSeek.current;
+    if (!pending) return;
+    if (pending.src !== src) {
+      // Asked for on the file that was here before. It is not this one's.
+      pendingSeek.current = null;
+      return;
+    }
+    try {
+      video.currentTime = pending.seconds;
+      pendingSeek.current = null;
+    } catch {
+      // Still too early. The next readiness event tries again.
     }
   }
 
@@ -97,6 +143,8 @@ export function VideoPlayer({
             aria-label={title}
             onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
             onSeeked={(e) => setTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
+            onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
             className="aspect-video w-full bg-black outline-none"
           />
         </div>
@@ -159,6 +207,13 @@ export function VideoPlayer({
 
             {transcript !== undefined && (
               <TranscriptPanel
+                // The panel's follow-along state is playback state too: a
+                // reader who scrolled away from one video should not land on
+                // the next one with its transcript already given up on. A key
+                // is right *here*, where the one caller owns the child and
+                // always passes it, and wrong at the route, where the next
+                // caller would have to remember it.
+                key={src}
                 cues={transcript}
                 currentTime={time}
                 onSeek={seek}

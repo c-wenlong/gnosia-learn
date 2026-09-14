@@ -21,16 +21,25 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
+const roots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>();
+
 function mount(element: ReactElement) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
+  roots.set(host, root);
   act(() => root.render(element));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
   });
   return host;
+}
+
+/** Re-renders into the same root, which is what a soft navigation does: the
+    component instance and its state are kept, only the props change. */
+function rerender(host: HTMLElement, element: ReactElement) {
+  act(() => roots.get(host)?.render(element));
 }
 
 function asset(over: Partial<AssetCardRef> = {}): AssetCardRef {
@@ -143,6 +152,32 @@ describe("AssetCard", () => {
     act(() => img.dispatchEvent(new Event("error")));
     expect(host.querySelector("img")).toBeNull();
     expect(host.textContent).toContain("Preview unavailable");
+  });
+
+  it("tries the new preview after an earlier one failed", () => {
+    const host = mount(
+      createElement(AssetCard, {
+        asset: asset({ kind: "diagram_svg", path: "learn/assets/bkt.svg" }),
+        thumbnailSrc: "/learn/assets/bkt.svg",
+      }),
+    );
+    act(() =>
+      (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")),
+    );
+    expect(host.textContent).toContain("Preview unavailable");
+
+    rerender(
+      host,
+      createElement(AssetCard, {
+        asset: asset({ id: "a2", kind: "diagram_svg", path: "learn/assets/decay.svg" }),
+        thumbnailSrc: "/learn/assets/decay.svg",
+      }),
+    );
+
+    const img = host.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("/learn/assets/decay.svg");
+    expect(host.textContent).not.toContain("Preview unavailable");
   });
 
   it("gives a text asset a compact row instead of an empty preview", () => {

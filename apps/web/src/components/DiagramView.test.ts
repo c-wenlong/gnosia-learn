@@ -15,16 +15,25 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
+const roots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>();
+
 function mount(element: ReactElement) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
+  roots.set(host, root);
   act(() => root.render(element));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
   });
   return host;
+}
+
+/** Re-renders into the same root, which is what a soft navigation does: the
+    component instance and its state are kept, only the props change. */
+function rerender(host: HTMLElement, element: ReactElement) {
+  act(() => roots.get(host)?.render(element));
 }
 
 const props = { src: "/assets/bkt-update.svg", title: "How BKT updates a belief" };
@@ -67,6 +76,29 @@ describe("DiagramView", () => {
     expect(host.textContent).toContain("This diagram did not load.");
     // The path stays on screen, so the reader can see what was missing.
     expect(host.textContent).toContain(props.src);
+  });
+
+  it("tries again when it is handed a different diagram", () => {
+    const host = mount(createElement(DiagramView, props));
+    act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
+    expect(host.textContent).toContain("This diagram did not load.");
+
+    rerender(host, createElement(DiagramView, { ...props, src: "/assets/bkt-decay.svg" }));
+
+    const next = host.querySelector("img");
+    expect(next).not.toBeNull();
+    expect(next?.getAttribute("src")).toBe("/assets/bkt-decay.svg");
+    expect(host.textContent).not.toContain("This diagram did not load.");
+  });
+
+  it("puts the placeholder back while the next diagram loads", () => {
+    const host = mount(createElement(DiagramView, props));
+    act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("load")));
+    expect(host.querySelector("[aria-hidden]")).toBeNull();
+
+    rerender(host, createElement(DiagramView, { ...props, src: "/assets/bkt-decay.svg" }));
+
+    expect(host.querySelector("[aria-hidden]")).not.toBeNull();
   });
 
   it("renders a caption only when it is given one", () => {

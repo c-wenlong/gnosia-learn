@@ -27,16 +27,25 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
+const roots = new WeakMap<HTMLElement, ReturnType<typeof createRoot>>();
+
 function mount(element: ReactElement) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
+  roots.set(host, root);
   act(() => root.render(element));
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
   });
   return host;
+}
+
+/** Re-renders into the same root, which is what a soft navigation does: the
+    component instance and its state are kept, only the props change. */
+function rerender(host: HTMLElement, element: ReactElement) {
+  act(() => roots.get(host)?.render(element));
 }
 
 function video(host: HTMLElement) {
@@ -137,5 +146,71 @@ describe("VideoPlayer", () => {
     act(() => chapterButtons(host)[1].click());
     // The click still lands: the chapter the reader asked for is the one shown.
     expect(currentChapter(host)).toContain("The body");
+  });
+
+  it("applies a refused seek once the metadata arrives", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        // What a browser does before `loadedmetadata`: it refuses the write.
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+
+    act(() => chapterButtons(host)[1].click());
+    expect(stored).toBe(0);
+
+    ready = true;
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    // The chapter the reader clicked is where playback actually starts.
+    expect(stored).toBe(8);
+    expect(currentChapter(host)).toContain("The body");
+  });
+
+  it("drops a pending seek when the source is swapped before it lands", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/a.mp4", chapters }));
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+
+    act(() => chapterButtons(host)[2].click());
+    rerender(host, createElement(VideoPlayer, { src: "/b.mp4", chapters }));
+
+    ready = true;
+    act(() => video(host).dispatchEvent(new Event("loadedmetadata")));
+    // The new video starts at its own beginning, not 20s into the old one.
+    expect(stored).toBe(0);
+  });
+
+  it("forgets the playback position when the source changes", () => {
+    const host = mount(
+      createElement(VideoPlayer, { src: "/a.mp4", chapters, transcript }),
+    );
+    const el = video(host);
+    el.currentTime = 25;
+    act(() => el.dispatchEvent(new Event("timeupdate")));
+    expect(currentChapter(host)).toContain("Close");
+
+    rerender(host, createElement(VideoPlayer, { src: "/b.mp4", chapters, transcript }));
+
+    expect(video(host).getAttribute("src")).toBe("/b.mp4");
+    expect(currentChapter(host)).toContain("Intro");
+    expect(
+      host.querySelector('ol[aria-label="Transcript"] [aria-current="true"]')?.textContent,
+    ).toContain("First line.");
   });
 });
