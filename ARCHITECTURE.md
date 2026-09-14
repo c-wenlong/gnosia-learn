@@ -68,7 +68,7 @@ another repo.
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `apps/web/src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-posters.ts` (a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
@@ -136,7 +136,7 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Seven pages, a 404, and three API handlers. Pages are server components; the
+Seven pages, a 404, and four API handlers. Pages are server components; the
 interactive parts opt into the client one component at a time.
 
 | Route | File | What it renders |
@@ -152,6 +152,7 @@ interactive parts opt into the client one component at a time.
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
+| `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
 
 The asset route is the one place the app reads a file the deployment does not
 contain. A video sits under manimkc's data root and a diagram under
@@ -163,6 +164,20 @@ inside that root before and after symlinks are resolved. It is off unless
 [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) uses for the
 studio, because production has none of these files. The reasoning for each
 header it sets is in `apps/web/src/lib/asset-files.ts`.
+
+The poster route is that resolver's second reader, on the same gate, and it
+resolves nothing itself: it hands the id to `resolveAssetFile` and refuses
+anything that does not come back a video. A poster is not a row in the catalog
+— manimkc writes no thumbnail — so the frame is extracted here, fifteen seconds
+in rather than at the start, because frame 0 of a narrated render is a fade-in
+and three seconds in is a title card the card already prints as text. One
+ffmpeg per video, never per request: the result is cached under the system temp
+root, outside the repository where no git operation can reach it, bounded by
+bytes and by count and written through a rename so a half-made poster cannot be
+served. A machine with no ffmpeg is an ordinary 503 that names the variable to
+set, and the card keeps the placeholder it already had.
+`apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
+concurrency reasoning.
 
 The session route declares `generateStaticParams()` over every course and
 module pair, so the shell is prerendered and only the chat is live.
@@ -513,6 +528,7 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
 | `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
 | `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
+| `apps/web/src/app/api/assets/asset-poster.test.ts` | The poster route, against a fake ffmpeg that counts its own runs: a hit, a second hit from cache, a 304, a non-video, no ffmpeg, the gate, and a burst of ten sharing one process |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
 | `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |

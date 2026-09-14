@@ -49,3 +49,10 @@ next-env.d.ts
 
 # Obsidian vault state (per-machine editor config)
 .obsidian/
+
+# Worktrees Claude Code materialises for background agents. Each is a full
+# checkout of this repo inside this repo, so committing one would nest the
+# tree in itself; the agents that built the asset library ran four at once.
+# They are removed when an agent finishes, and this is the guard for the
+# window where they are not.
+.claude/worktrees/

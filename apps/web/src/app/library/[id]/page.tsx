@@ -5,6 +5,7 @@ import type { AssetRef, AssetWithTopics } from "@self-learn/catalog/state";
 import { AssetCard } from "@/components/AssetCard";
 import { assetDisplayTitle, assetKindLabel, formatBytes } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
+import { NoteProse } from "@/components/NoteProse";
 import { formatTimecode, type VideoChapter } from "@/components/media";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import {
@@ -14,6 +15,7 @@ import {
   readAssetText,
   withCatalog,
   type FileAccess,
+  thumbnailFor,
 } from "@/lib/asset-library";
 import { assetFileHref, assetHref, decodeAssetId, libraryHref } from "@/lib/library";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
@@ -66,6 +68,20 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+/*
+ * 80ch, not the full column. These pages are wide so a video can have a
+ * transcript beside it, and text set to a 1030px measure is unreadable
+ * however good the rest of the page is. Markdown is written at about 80
+ * columns, so the source wraps where its author wrapped it.
+ */
+function RawText({ text }: { text: string }) {
+  return (
+    <pre className="max-h-[36rem] max-w-[80ch] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[13px] leading-relaxed text-[var(--muted-strong)]">
+      {text}
+    </pre>
+  );
+}
+
 function Panel({
   title,
   action,
@@ -104,8 +120,23 @@ function AccessPanel({ access }: { access: FileAccess }) {
   );
 }
 
-/** A file's own words, as they are on disk. */
-function TextPanel({ title, text, href }: { title: string; text: string; href: string }) {
+/**
+ * A file's own words.
+ *
+ * `body` is what varies: a markdown note is rendered as prose, everything
+ * else is shown as it is on disk. Both keep the same panel, the same title
+ * and the same Raw file action, because the reader's next move is identical
+ * either way and only the middle of the panel differs.
+ */
+function TextPanel({
+  title,
+  href,
+  children,
+}: {
+  title: string;
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
     <Panel
       title={title}
@@ -120,13 +151,7 @@ function TextPanel({ title, text, href }: { title: string; text: string; href: s
         </a>
       }
     >
-      {/* 80ch, not the full column. These pages are wide so a video can have a
-          transcript beside it, and prose set to a 1030px measure is unreadable
-          however good the rest of the page is. Markdown is written at about 80
-          columns, so the source wraps where its author wrapped it. */}
-      <pre className="max-h-[36rem] max-w-[80ch] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[13px] leading-relaxed text-[var(--muted-strong)]">
-        {text}
-      </pre>
+      {children}
     </Panel>
   );
 }
@@ -254,7 +279,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // Decoded by hand: a page's dynamic segment arrives exactly as it appears in
   // the URL. `decodeAssetId` is where the reason this is not `params.id` lives.
   const id = decodeAssetId((await params).id);
-  const [{ asset, derivations, related, reachable }, access] = await Promise.all([
+  const [{ asset, derivations, related, reachable, titles, notes }, access] = await Promise.all([
     loadAssetDetail(id),
     loadFileAccess(),
   ]);
@@ -318,7 +343,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               href={libraryHref({ topic: slug })}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted-strong)] transition-colors duration-150 hover:border-[var(--accent)]/40 hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
             >
-              {slug}
+              {titles[slug] ?? slug}
             </Link>
           ))}
           {size && <span className="tabular-nums text-[var(--muted)]">{size}</span>}
@@ -378,7 +403,31 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         ) : asset.kind === "chapters" ? (
           <ChapterSidecar text={text} href={fileHref} />
         ) : (
-          <TextPanel title={`${label} · ${asset.path?.split("/").pop() ?? "file"}`} text={text} href={fileHref} />
+          <TextPanel title={`${label} · ${asset.path?.split("/").pop() ?? "file"}`} href={fileHref}>
+            {asset.path?.endsWith(".md") ? (
+              <NoteProse
+                source={text}
+                className="px-4 py-4"
+                // A wikilink carries a slug and a note's id carries its domain
+                // folder too, so the index built alongside the row is what
+                // closes that gap. An unresolved slug stays readable text.
+                resolveNote={(slug) => {
+                  const id = notes[slug];
+                  return id === undefined ? undefined : assetHref(id);
+                }}
+                // Embeds are `learn/assets/<name>`, the same files the diagram
+                // rows point at, so they resolve through the file route. It is
+                // gated, so an embed is only offered when that gate is open
+                // for this repo; otherwise the note shows the name instead of
+                // a picture that cannot load.
+                resolveEmbed={(name) =>
+                  fileAccess.ok ? assetFileHref(`diagram:learn/assets/${name}`) : undefined
+                }
+              />
+            ) : (
+              <RawText text={text} />
+            )}
+          </TextPanel>
         )
       ) : fileAccess.ok ? (
         // The deployment serves files and this one still did not come back:
@@ -429,6 +478,9 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
             {asset.topics.length === 0 ? (
               "—"
             ) : (
+              // Slugs, not titles, and deliberately: every other row in this
+              // panel is an identifier, and the chips above already carry the
+              // readable name. A reader here is checking what to type.
               <span className="font-mono text-[12px]">{asset.topics.join(", ")}</span>
             )}
           </Fact>
@@ -445,13 +497,9 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               <AssetCard
                 key={row.id}
                 asset={row}
-                topic={row.topics[0]}
+                topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                 href={assetHref(row.id)}
-                thumbnailSrc={
-                  row.kind === "diagram_svg" && accessFor(access, row.sourceRepo).ok
-                    ? assetFileHref(row.id)
-                    : null
-                }
+                thumbnailSrc={thumbnailFor(row, access)}
               />
             ))}
           </div>
@@ -568,7 +616,11 @@ function LinkPanel({ url }: { url: string | null }) {
 function TranscriptSidecar({ text, href }: { text: string; href: string }) {
   const parsed = parseTranscript(text);
   if (parsed === null || parsed.cues.length === 0) {
-    return <TextPanel title="Transcript" text={text} href={href} />;
+    return (
+      <TextPanel title="Transcript" href={href}>
+        <RawText text={text} />
+      </TextPanel>
+    );
   }
   return <CueList title="Transcript" entries={parsed.cues} href={href} />;
 }
@@ -577,7 +629,11 @@ function TranscriptSidecar({ text, href }: { text: string; href: string }) {
 function ChapterSidecar({ text, href }: { text: string; href: string }) {
   const parsed = parseChapters(text);
   if (parsed === null || parsed.length === 0) {
-    return <TextPanel title="Chapters" text={text} href={href} />;
+    return (
+      <TextPanel title="Chapters" href={href}>
+        <RawText text={text} />
+      </TextPanel>
+    );
   }
   return (
     <CueList

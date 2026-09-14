@@ -240,6 +240,25 @@ export function assetFileHref(id: string): string {
 }
 
 /**
+ * `/api/assets/<id>/poster`, a still frame from a video asset.
+ *
+ * One spelling, here, for the same reason `assetFileHref` is one spelling: the
+ * id holds colons and slashes, so a call site that writes the URL by hand is a
+ * call site that forgets to encode it, and the route answers 404 for every
+ * video in the catalog while looking like it works for none of them.
+ *
+ * It is a URL and nothing more. Whether a frame can actually be extracted
+ * depends on `ASSET_FILES_ENABLED` and on ffmpeg being installed, and neither
+ * is a question a pure string function can answer; the route says so per
+ * request and a card that gets no image shows the placeholder it always had.
+ * Only a `video` asset has one — every other kind is a 404 — so a caller that
+ * points an `<img>` at this for a note is asking for a broken image.
+ */
+export function assetPosterHref(id: string): string {
+  return `/api/assets/${encodeURIComponent(id)}/poster`;
+}
+
+/**
  * The first value of a search param, or null.
  *
  * Next hands a repeated key (`?kind=a&kind=b`) over as an array. Taking the

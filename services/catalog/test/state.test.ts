@@ -25,6 +25,7 @@ import {
   setNote,
   setProgress,
   StateError,
+  topicTitles,
   upsertRecap,
   upsertReview,
   writeModel,
@@ -42,6 +43,7 @@ import {
   DECK_ID,
   fixtureGraph,
   ITEMS,
+  OTHER_TOPIC_SLUG,
   seedAssets,
   seedContent,
   TOPIC_SLUG,
@@ -663,6 +665,36 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         const kinds = (await assetCounts(scratch.db)).map((r) => r.kind);
         expect(kinds).toEqual([...kinds].sort());
       });
+    });
+  });
+
+  /**
+   * `topicTitles` is the library grid's chip lookup: a card's `topics` is a
+   * list of slugs, and this turns a page of them into titles in one round
+   * trip rather than one query per chip.
+   */
+  describe("topicTitles", () => {
+    it("resolves every slug it is given, keyed by slug", async () => {
+      expect(await topicTitles(scratch.db, [TOPIC_SLUG, OTHER_TOPIC_SLUG])).toEqual({
+        [TOPIC_SLUG]: "Fixture topic",
+        [OTHER_TOPIC_SLUG]: "Second fixture topic",
+      });
+    });
+
+    it("omits a slug with no topic row rather than erroring", async () => {
+      // A chip falls back to the raw slug with `titles[slug] ?? slug`, so the
+      // miss has to be a missing key rather than `null` or a thrown error.
+      const titles = await topicTitles(scratch.db, [TOPIC_SLUG, "no-such-topic"]);
+      expect(titles).toEqual({ [TOPIC_SLUG]: "Fixture topic" });
+      expect(Object.prototype.hasOwnProperty.call(titles, "no-such-topic")).toBe(false);
+    });
+
+    it("asks for nothing when given no slugs, rather than issuing where slug in ()", async () => {
+      expect(await topicTitles(scratch.db, [])).toEqual({});
+    });
+
+    it("returns an empty result when nothing given resolves", async () => {
+      expect(await topicTitles(scratch.db, ["no-such-topic", "also-not-a-topic"])).toEqual({});
     });
   });
 
