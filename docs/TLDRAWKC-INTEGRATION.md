@@ -299,13 +299,13 @@ queueing the render twice.
 
 The two-process split matters. The root `package.json` reserves `services/*` for
 long-lived processes and CLIs, and `apps/*` for deployable surfaces. A job queue
-inside a Next dev server dies on every hot reload, so each generator's queue
-lives in `services/studio/` on `127.0.0.1:7250`, behind one process and one
-port, and `apps/web` rewrites `/studio/api/*` to it. Diagrams and any future
-manimkc jobs still don't share a queue; D25 is why. The rewrite, rather than a
-cross-port fetch from the browser, is so the page sees one origin and SSE needs
-no CORS. D11 covers why the UI still lives in `apps/web` and how it stays out
-of production.
+inside a Next dev server dies on every hot reload, so `services/studio/` on
+`127.0.0.1:7250` is the one HTTP surface for every generator's queue, and
+`apps/web` rewrites `/studio/api/*` to it. That one surface is not one runner:
+diagrams and any future manimkc jobs still don't share a queue or a runner
+process behind it; D25 is why. The rewrite, rather than a cross-port fetch from
+the browser, is so the page sees one origin and SSE needs no CORS. D11 covers
+why the UI still lives in `apps/web` and how it stays out of production.
 
 ### The job API
 
@@ -1316,7 +1316,10 @@ earns its place when there is a second client and not before.
 Only if usage ever needs metering. `STUDIO_DAILY_USD` refuses new jobs with 429
 once a rolling day's `cost_usd` total crosses it, on top of the five guards A10
 already lists. One user on one machine has nothing to meter today, which is why
-this is last and optional rather than part of phase 1.
+this is last and optional rather than part of phase 1. A10's `cost_usd` is only
+ever written from the final `stream-json` result event, so a cap built on that
+column alone misses a cancelled, timed-out or interrupted attempt's spend;
+recording a cost for those too is part of this phase, not a footnote on it.
 
 ## Known gaps
 
