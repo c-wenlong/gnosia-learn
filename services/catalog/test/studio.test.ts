@@ -19,8 +19,14 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { assertOutputPath, claimablePaths, runAssertOutput } from "../src/commands/assert-output";
 import {
+  ASSERTABLE_STATES,
+  assertOutputPath,
+  claimablePaths,
+  runAssertOutput,
+} from "../src/commands/assert-output";
+import {
+  briefCandidate,
   briefTarget,
   candidateFor,
   runAccept,
@@ -215,6 +221,21 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       expect(result.job.targetHashBefore).toMatch(/^[0-9a-f]{64}$/);
     });
 
+    it("refuses a candidate outside the candidates directory", async () => {
+      expect(() => briefCandidate("learn/assets/x.tldr", "learn/assets/x.tldr")).toThrow(
+        /only directory a job may write to/,
+      );
+      expect(() => briefCandidate("/tmp/x.tldr", "learn/assets/x.tldr")).toThrow(
+        /repo-relative/,
+      );
+      expect(() =>
+        briefCandidate("learn/assets/.candidates/x.svg", "learn/assets/x.tldr"),
+      ).toThrow(/does not end in \.tldr/);
+      await expect(
+        enqueue({ target: "learn/assets/bad-candidate.tldr", candidate: "../escape.tldr" }),
+      ).rejects.toThrow(/repo-relative/);
+    });
+
     it("refuses a target outside learn/assets, or one that is not a .tldr", () => {
       expect(() => briefTarget("learn/assets/deep/x.tldr")).toThrow(/directly inside/);
       expect(() => briefTarget("../outside.tldr")).toThrow(/repo-relative/);
@@ -294,6 +315,18 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
 
     it("refuses a transition on a job that does not exist", async () => {
       await expect(runAccept({ jobId: "ghost" })).rejects.toThrow(/no job "ghost"/);
+    });
+
+    it("refuses a candidate override on finish that leaves the staging directory", async () => {
+      const queued = await enqueue({ target: "learn/assets/finish-candidate.tldr" });
+      await runClaim({ jobId: queued.job.id });
+      await expect(
+        runFinish({
+          jobId: queued.job.id,
+          state: "awaiting_review",
+          candidatePath: "learn/assets/finish-candidate.tldr",
+        }),
+      ).rejects.toThrow(/only directory a job may write to/);
     });
 
     it("records the cost and the exit code a failed run reports", async () => {
@@ -402,6 +435,29 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       ).rejects.toThrow(/was enqueued under "alpha"/);
     });
 
+    it("refuses a job whose state landed nothing", async () => {
+      await fixture.write("learn/assets/too-early.tldr", tldr({ topic: "alpha" }));
+      const queued = await enqueue({ target: "learn/assets/too-early.tldr" });
+      await expect(
+        runAssertOutput({
+          jobId: queued.job.id,
+          path: "learn/assets/too-early.tldr",
+          repoRoot: fixture.root,
+        }),
+      ).rejects.toThrow(/is queued, so it landed nothing to assert/);
+
+      await runClaim({ jobId: queued.job.id });
+      await runFinish({ jobId: queued.job.id, state: "failed", errorKind: "gate" });
+      await expect(
+        runAssertOutput({
+          jobId: queued.job.id,
+          path: "learn/assets/too-early.tldr",
+          repoRoot: fixture.root,
+        }),
+      ).rejects.toThrow(/is failed, so it landed nothing to assert/);
+      expect([...ASSERTABLE_STATES]).toEqual(["awaiting_review", "accepted"]);
+    });
+
     it("refuses a file the job does not target", async () => {
       await fixture.write("learn/assets/mine.tldr", tldr({ topic: "alpha" }));
       await fixture.write("learn/assets/theirs.tldr", tldr({ topic: "alpha" }));
@@ -487,6 +543,32 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       ]);
       expect(shown.outputs.every((o) => o.current === true)).toBe(true);
       expect(shown.next).toEqual([]);
+    });
+
+    it("refuses to accept a job with nothing to point at", async () => {
+      const queued = await enqueue({ target: "learn/assets/empty-accept.tldr" });
+      await runClaim({ jobId: queued.job.id });
+      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
+      await expect(runAccept({ jobId: queued.job.id, repoRoot: fixture.root })).rejects.toThrow(
+        /has no output to accept/,
+      );
+      const rows = await scratch.db.select().from(job).where(eq(job.id, queued.job.id));
+      expect(rows[0]!.state).toBe("awaiting_review");
+    });
+
+    it("accepts with no --path when an earlier assert already landed the rows", async () => {
+      await fixture.write("learn/assets/retried-accept.tldr", tldr({ topic: "alpha" }));
+      const queued = await enqueue({ target: "learn/assets/retried-accept.tldr" });
+      await runClaim({ jobId: queued.job.id });
+      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
+      await runAssertOutput({
+        jobId: queued.job.id,
+        path: "learn/assets/retried-accept.tldr",
+        repoRoot: fixture.root,
+      });
+      const accepted = await runAccept({ jobId: queued.job.id, repoRoot: fixture.root });
+      expect(accepted.to).toBe("accepted");
+      expect(accepted.outputs).toHaveLength(0);
     });
 
     it("leaves the job in awaiting_review when an output will not resolve", async () => {

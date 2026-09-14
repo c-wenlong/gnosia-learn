@@ -256,6 +256,38 @@ export function candidateFor(targetPath: string): string {
   return `${CANDIDATES_DIR}/${path.posix.basename(targetPath)}`;
 }
 
+/**
+ * A candidate path the job is allowed to write to.
+ *
+ * Held to the same containment rule as the target, and for a stronger reason:
+ * the candidate directory is the *only* place the job's permission file lets it
+ * write, so a stored path outside it is either a mistake or a job describing a
+ * write it should never have been able to make. An absolute path or one
+ * escaping the repo is refused rather than normalised.
+ */
+export function briefCandidate(given: string, targetPath: string): string {
+  const cleaned = given.trim().replaceAll("\\", "/");
+  const normalised = path.posix.normalize(cleaned);
+  if (path.isAbsolute(normalised) || normalised.startsWith("..")) {
+    throw new JobError(
+      `"${given}" is not a repo-relative path. A candidate lives in ${CANDIDATES_DIR}/.`,
+    );
+  }
+  if (path.posix.dirname(normalised) !== CANDIDATES_DIR) {
+    throw new JobError(
+      `"${normalised}" is not in ${CANDIDATES_DIR}/, which is the only directory a job may ` +
+        `write to. Nothing under ${ASSETS_DIR}/ changes until a person accepts.`,
+    );
+  }
+  const wanted = path.posix.extname(targetPath);
+  if (path.posix.extname(normalised) !== wanted) {
+    throw new JobError(
+      `"${normalised}" does not end in ${wanted}, so it is not a candidate for ${targetPath}.`,
+    );
+  }
+  return normalised;
+}
+
 export async function readBrief(file: string): Promise<BriefDocument> {
   let raw: string;
   try {
@@ -296,15 +328,26 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
   const targetPath = briefTarget(asString(document.target, "target"));
   const idempotencyKey = asString(document.idempotencyKey, "idempotencyKey");
   const candidatePath =
-    document.candidate === undefined ? candidateFor(targetPath) : document.candidate.trim();
+    document.candidate === undefined
+      ? candidateFor(targetPath)
+      : briefCandidate(document.candidate, targetPath);
   const brief = document.brief ?? {};
   if (typeof brief !== "object" || brief === null || Array.isArray(brief)) {
     throw new JobError(`"brief" must be a JSON object`);
   }
 
-  // Recorded at enqueue rather than at accept, because by the time a candidate
-  // is renamed into place the target has already been overwritten and the
-  // question "did a human edit this while the job ran" is no longer answerable.
+  // Recorded at enqueue, and deliberately not compared here or at accept.
+  //
+  // The comparison it exists for belongs to whoever owns the rename: the check
+  // has to happen *before* the candidate goes over the target, and phase 0 does
+  // not rename — a person does, and then says so. By the time `catalog job
+  // accept` runs, the target has already been replaced and "did a human edit
+  // this while the job ran" is no longer a question the file can answer. Storing
+  // the hash now is what makes it answerable by the phase that does the rename.
+  //
+  // What phase 0 can already see is drift afterwards: `asset_job.content_hash`
+  // is what the job landed, and `catalog job show` re-hashes the file and
+  // reports `current: false` when the bytes have moved since.
   const absolute = path.join(repoRoot, targetPath);
   const targetHashBefore =
     (await stat(absolute).catch(() => null)) === null
@@ -339,6 +382,25 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
         job: summarise(inserted!),
       };
     } catch (error) {
+      // Two submits of one key can both miss the lookup above and race to the
+      // insert. The loser lands here, and the honest answer is the same one the
+      // lookup would have given: this key already belongs to that job. Throwing
+      // would make the key idempotent only when nothing is concurrent, which is
+      // when nobody needs it.
+      if (
+        sqlstate(error) === "23505" &&
+        constraintName(error) === "job_idempotency_key_key"
+      ) {
+        const winner = await byIdempotencyKey(db, idempotencyKey);
+        if (winner !== undefined) {
+          return {
+            ok: true as const,
+            command: "enqueue" as const,
+            created: false,
+            job: summarise(winner),
+          };
+        }
+      }
       throw await explainEnqueue(db, error, row);
     }
   });
@@ -389,9 +451,10 @@ async function explainEnqueue(
     );
   }
   if (code === "23505" && constraint === "job_idempotency_key_key") {
-    const existing = await byIdempotencyKey(db, row.idempotencyKey);
+    // Only reachable when the winning row has vanished between the failed
+    // insert and this lookup, which takes a concurrent delete.
     return new JobError(
-      `idempotency key "${row.idempotencyKey}" already belongs to job ${existing?.id ?? "(unknown)"}.`,
+      `idempotency key "${row.idempotencyKey}" is already taken, by a job that is no longer there.`,
     );
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_topic_slug_topic_slug_fk") {
@@ -541,11 +604,12 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
   }
 
   return withDatabase(async ({ db }) => {
-    const before = await db
-      .select({ state: jobTable.state })
-      .from(jobTable)
-      .where(eq(jobTable.id, options.jobId))
-      .limit(1);
+    const rows = await db.select().from(jobTable).where(eq(jobTable.id, options.jobId)).limit(1);
+    const before = rows[0];
+    const candidatePath =
+      options.candidatePath === undefined || before === undefined
+        ? options.candidatePath
+        : briefCandidate(options.candidatePath, before.targetPath);
     const updated = await db
       .update(jobTable)
       .set({
@@ -553,7 +617,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
         finishedAt: sql`now()`,
         heartbeatAt: sql`now()`,
         phase: options.phase ?? (to === "awaiting_review" ? "ready" : null),
-        candidatePath: options.candidatePath ?? sql`${jobTable.candidatePath}`,
+        candidatePath: candidatePath ?? sql`${jobTable.candidatePath}`,
         exitCode: options.exitCode ?? null,
         turns: options.turns ?? null,
         costUsd: options.costUsd ?? null,
@@ -569,7 +633,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
     return {
       ok: true as const,
       command: "finish" as const,
-      from: before[0]?.state ?? "(unknown)",
+      from: before?.state ?? "(unknown)",
       to,
       job: summarise(updated[0]!),
       outputs: [],
@@ -605,10 +669,33 @@ export async function runAccept(options: VerdictOptions): Promise<TransitionResu
         .limit(1);
       const before = rows[0];
       if (before === undefined) throw await explainRefusal(tx, options.jobId, "accepted");
+      // Checked before anything is written, so a job in the wrong state gets
+      // the transition refusal rather than a complaint about its outputs. The
+      // conditional update at the end still guards the row itself: this is the
+      // message, that is the lock.
+      if (!canTransition(JOB_TRANSITIONS, before.state, "accepted")) {
+        throw await explainRefusal(tx, options.jobId, "accepted");
+      }
 
       const outputs: AssertOutputResult[] = [];
       for (const given of options.paths ?? []) {
         outputs.push(await assertOutput(tx, { jobId: options.jobId, path: given, repoRoot }));
+      }
+
+      // An accepted job says which files it landed, so one with nothing to
+      // point at is not accepted, it is a row claiming a result it cannot name.
+      // Counted rather than requiring `--path`, because a retried accept whose
+      // asserts already went through on an earlier attempt is legitimate and
+      // has the rows to prove it.
+      const landed = await tx
+        .select({ assetId: assetJob.assetId })
+        .from(assetJob)
+        .where(eq(assetJob.jobId, options.jobId));
+      if (landed.length === 0) {
+        throw new JobError(
+          `job ${options.jobId} has no output to accept. Rename the candidate into place and ` +
+            `pass it: \`catalog job accept --job ${options.jobId} --path ${before.targetPath}\`.`,
+        );
       }
 
       const updated = await tx

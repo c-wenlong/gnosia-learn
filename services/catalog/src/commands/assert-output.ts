@@ -122,6 +122,22 @@ export function assertOutputPath(given: string): { relative: string; extension: 
 }
 
 /**
+ * The states a job may write back from.
+ *
+ * `awaiting_review` is the accept path: the gate has passed and the candidate
+ * is real, and `accept` asserts inside its own transaction before moving the
+ * row, so the state it sees is still this one. `accepted` is the repair path,
+ * which is a re-assert of a file that already landed.
+ *
+ * Every other state is refused. A `queued` job has produced nothing, a
+ * `running` one has produced nothing a gate has looked at, and `failed`,
+ * `cancelled`, `discarded` and `interrupted` all mean the opposite of landed —
+ * writing an `asset_job` row from one of those would be recording an author
+ * for a file that job never put there.
+ */
+export const ASSERTABLE_STATES = ["awaiting_review", "accepted"] as const;
+
+/**
  * The paths one job is allowed to claim: the committed path it leased, and the
  * SVG exported beside it.
  *
@@ -230,6 +246,14 @@ export async function assertOutput(
     const job = found[0];
     if (job === undefined) {
       throw new IndexError(`no job "${options.jobId}". \`catalog job ls\` lists them.`);
+    }
+
+    if (!(ASSERTABLE_STATES as readonly string[]).includes(job.state)) {
+      throw new IndexError(
+        `job ${job.id} is ${job.state}, so it landed nothing to assert. Only a job in ` +
+          `${ASSERTABLE_STATES.join(" or ")} has output: the first is a candidate a person is ` +
+          `accepting, the second a file that already landed.`,
+      );
     }
 
     const claimable = claimablePaths(job.targetPath);
