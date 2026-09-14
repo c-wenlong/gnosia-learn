@@ -431,6 +431,15 @@ not have to be worked out again.
   catalog and builds clean. `decodeAssetId` in `apps/web/src/lib/library.ts`
   does it, and swallows the `URIError` a malformed escape raises so a hand-typed
   URL is a 404 rather than a 500.
+- **A poster needs `format=yuvj420p` in the filter chain, or ffmpeg writes
+  nothing.** `apps/web/src/lib/asset-posters.ts` extracts a still frame as
+  JPEG, and mjpeg refuses a limited-range YUV source outright: *Non full-range
+  YUV is non-standard*, then *Could not open encoder before EOF*, then a
+  zero-byte output and a non-zero exit. It looks exactly like a corrupt video.
+  The manim renders happen to be full-range and worked without it; a clip from
+  anywhere else does not. Its cache lives under the system temp root, never in
+  the tree, for the same reason `$MANIMKC_HOME` exists: generated data that a
+  `git clean` or a relayout can delete is generated data that will be deleted.
 - **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
   `scripts/learn` on purpose.** `apps/web/src/app` and
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
