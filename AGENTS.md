@@ -101,6 +101,9 @@ Rules of engagement:
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
   topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
   checkout, or install with `uv tool install -e tools/cli`.
+- `tools/manimkc/server/` is a portable job server meant to run locally on macOS or
+  Linux, keeping its state under `$MANIMKC_HOME/state/server/`. See
+  [`tools/manimkc/server/DESIGN.md`](../tools/manimkc/server/DESIGN.md) for what it needs from a machine and how it decides one can take a job.
 - The end-to-end process is the `manimkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/manimkc-video`. Everything
   `.claude/` holds here is either `launch.json` or a symlink into a submodule:
