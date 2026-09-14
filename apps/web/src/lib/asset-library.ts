@@ -118,9 +118,11 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
     ]);
     // A third statement, and it has to be third: the slugs it asks about are
     // the ones the first read returned. It is a lookup rather than a fact the
-    // page depends on, so the snapshot gap the comment above worries about
-    // costs a chip its title here, never a wrong row.
-    const titles = await topicTitles(db, distinctTopics(rows));
+    // page depends on, so it gets a failure boundary of its own: inside the
+    // outer `catch` a failing title query would have discarded rows that were
+    // already in hand and rendered the library unreachable, which is the exact
+    // opposite of the fallback the chips are written for.
+    const titles = await optionalTitles(db, rows);
     return {
       rows: [...rows].sort(compareByKindThenId),
       counts,
@@ -255,7 +257,10 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
       Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }))),
     ]);
 
-    const notes = wantsNotes ? noteIndex(await listAssets(db, { kind: "note" })) : {};
+    // Its own boundary too, and for the same reason as the titles above: a
+    // wikilink that does not resolve stays readable text, so losing the index
+    // costs a note its links and must not cost the page its asset.
+    const notes = wantsNotes ? await optionalNotes(db) : {};
 
     // This asset, and its own companion files, which have their own section
     // immediately above and would otherwise appear twice on one page.
@@ -275,7 +280,7 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     // Every slug this page will draw a chip for: the asset's own, plus those
     // of the related cards beside it. Asked once for all of them rather than
     // once per section, so the two cannot disagree about one topic's name.
-    const titles = await topicTitles(db, distinctTopics([asset, ...related]));
+    const titles = await optionalTitles(db, [asset, ...related]);
 
     return { asset, derivations, related, reachable: true, titles, notes };
   } catch (error) {
@@ -410,6 +415,36 @@ export function accessFor(
   sourceRepo: string,
 ): FileAccess {
   return sourceRepo === "manimkc" ? access.manimkc : access.selfLearn;
+}
+
+/**
+ * Titles for a page's rows, or none, never a thrown error.
+ *
+ * The chips render `titles[slug] ?? slug`, so an empty result is a page of
+ * slugs: the same page this code shipped before titles existed, and a fine
+ * one. Letting this share the caller's `catch` instead would turn a label
+ * failure into an empty library, hiding rows that had already been read.
+ */
+async function optionalTitles(
+  db: CatalogDatabase,
+  rows: AssetWithTopics[],
+): Promise<TopicTitles> {
+  try {
+    return await topicTitles(db, distinctTopics(rows));
+  } catch (error) {
+    warn("topic titles", error);
+    return {};
+  }
+}
+
+/** The note index, or none. See `optionalTitles` for why this cannot throw. */
+async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string>> {
+  try {
+    return noteIndex(await listAssets(db, { kind: "note" }));
+  } catch (error) {
+    warn("note index", error);
+    return {};
+  }
 }
 
 /**

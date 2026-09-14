@@ -428,12 +428,35 @@ export async function extractFrame(
     let stderr = "";
     let settled = false;
 
+    /**
+     * Settle once, and never before the child is actually gone.
+     *
+     * A kill is a request, not a death: the process still exists until the
+     * kernel reaps it and `close` fires. Resolving at the moment of the signal
+     * let the caller start the next offset while the killed ffmpeg was still
+     * decoding, so the four-slot cap counted slots that several generations of
+     * process were sharing. That is worst exactly when it matters, since the
+     * reason to kill one is usually that the machine is already struggling.
+     *
+     * So a kill records the answer and waits; `close` delivers it. The timer is
+     * cleared either way, and `exited` guards against a `close` that never
+     * comes by settling on the next one that does.
+     */
     const finish = (value: Buffer | null): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve(value);
+      if (exited || child.exitCode !== null || child.signalCode !== null) {
+        resolve(value);
+        return;
+      }
+      pending = { value };
+      child.once("close", () => resolve(value));
     };
+
+    /** Set by the `close` handler, so a later `finish` resolves immediately. */
+    let exited = false;
+    let pending: { value: Buffer | null } | null = null;
 
     const timer = setTimeout(() => {
       // SIGKILL rather than SIGTERM: the point of the timeout is that this
@@ -468,6 +491,9 @@ export async function extractFrame(
     });
 
     child.on("close", (code) => {
+      exited = true;
+      // A kill already decided the answer and was waiting for this moment.
+      if (pending !== null) return;
       if (code === 0 && size > 0) {
         finish(Buffer.concat(chunks));
         return;
