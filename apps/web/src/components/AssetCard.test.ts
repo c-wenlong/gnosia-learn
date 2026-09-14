@@ -2,13 +2,13 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { AssetCard } from "./AssetCard";
 import {
-  AssetCard,
   assetDisplayTitle,
   assetKindLabel,
   formatBytes,
   type AssetCardRef,
-} from "./AssetCard";
+} from "./asset-meta";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

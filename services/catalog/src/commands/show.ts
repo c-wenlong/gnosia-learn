@@ -1,7 +1,6 @@
 import {
   asset,
   assetConcept,
-  assetDerivation,
   assetTopic,
   collection,
   collectionItem,
@@ -19,7 +18,7 @@ import { and, asc, eq, isNotNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";
 import {
-  assetsByIds,
+  assetDerivations,
   assetsForCollection,
   assetsForConcept,
   assetsForTopic,
@@ -400,19 +399,11 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     .where(eq(assetConcept.assetId, id))
     .orderBy(asc(assetConcept.conceptSlug));
 
-  const sourceIds = (
-    await db
-      .select({ id: assetDerivation.sourceAssetId })
-      .from(assetDerivation)
-      .where(eq(assetDerivation.assetId, id))
-  ).map((r) => r.id);
-
-  const derivedIds = (
-    await db
-      .select({ id: assetDerivation.assetId })
-      .from(assetDerivation)
-      .where(eq(assetDerivation.sourceAssetId, id))
-  ).map((r) => r.id);
+  // Both directions of `asset_derivation`, from `../state/assets.ts` rather
+  // than from four statements written out here: the web app may import that
+  // module and may not import this one, and one implementation is what stops
+  // `catalog show` and a page disagreeing about what an asset was made from.
+  const derivations = await assetDerivations(db, id);
 
   const mirrors = await db
     .select({
@@ -440,8 +431,8 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
     sourceRepo: found.sourceRepo,
     topics: topics.map((t) => t.slug),
     concepts: concepts.map((c) => c.slug),
-    derivedFrom: await assetsByIds(db, sourceIds),
-    derivedInto: await assetsByIds(db, derivedIds),
+    derivedFrom: derivations.sources,
+    derivedInto: derivations.derived,
     mirrors: mirrors.map((row) => ({
       ...row,
       mtime: row.mtime?.toISOString() ?? null,

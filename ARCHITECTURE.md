@@ -68,7 +68,7 @@ another repo.
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `apps/web/src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
@@ -136,13 +136,15 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Five pages, a 404, and two API handlers. Pages are server components; the
+Seven pages, a 404, and three API handlers. Pages are server components; the
 interactive parts opt into the client one component at a time.
 
 | Route | File | What it renders |
 | --- | --- | --- |
 | `/` | `page.tsx` | The course shortlist, grouped by theme tag |
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
+| `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
+| `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | One course: its modules, progress, related courses |
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | One module: topic checklist, notes, resources, recaps |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
@@ -164,6 +166,40 @@ header it sets is in `apps/web/src/lib/asset-files.ts`.
 
 The session route declares `generateStaticParams()` over every course and
 module pair, so the shell is prerendered and only the chat is live.
+
+The two library routes are that route's reader, and reach the catalog through
+`apps/web/src/lib/asset-library.ts`, which is `learner-store.ts`'s shape for the
+content half: `connection()` before every read, an unreachable database
+degrading to empty with a `reachable` flag beside it, and one pool for the
+process, borrowed from `learner-store` rather than opened a second time.
+
+**The default view is 135 of 206 rows, and the page says so.** Sixty-nine
+assets are a caption track, a transcript and a chapter list written beside each
+of the thirty videos, and two more are the `.tldr` each diagram was exported
+from; shown flat they would sort above the videos and bury them. The rule is a
+set of kinds in `apps/web/src/lib/library.ts` — not "anything `asset_derivation`
+derives", which would keep the sidecars and drop the two drawings, since a video
+is the *source* of its companions and an SVG is *derived* from its canvas. Every
+companion kind keeps its chip, its count, its `?kind=` view and its place on the
+page of what it belongs to.
+
+**Both pages treat unavailable files as a state.** `ASSET_FILES_ENABLED` unset,
+manimkc never indexed here, and a manimkc index older than the run that recorded
+its data root are three different answers with three different fixes, and the
+first is what a fresh clone and production both look like. Nothing renders a
+dead player or a broken image in any of them.
+
+`apps/web/src/lib/transcript.ts` parses the sidecars, defensively: a malformed
+one costs the transcript panel and leaves the video playing. Its cues are read
+on the server and passed to `TranscriptPanel` as props, so there is no loading
+state and no second round trip for text the render already had a request in
+which to read.
+
+**A page's dynamic segment is not decoded.** `/library/[id]` is handed
+`"link%3Acs3216-m3-r1"`, not `"link:cs3216-m3-r1"`, so it calls `decodeAssetId`
+before the lookup. Route handlers differ — `/api/assets/[id]/file` is given a
+decoded id — and nothing about the types says so, so copying one into the other
+is a 404 on every asset that builds without a word.
 
 ## Learner state
 

@@ -104,6 +104,7 @@ export {
 } from "./snapshot";
 export {
   assetCounts,
+  assetDerivations,
   assetsByIds,
   assetsForCollection,
   assetsForConcept,
@@ -111,6 +112,7 @@ export {
   byKind,
   indexedRoot,
   listAssets,
+  type AssetDerivations,
   type AssetKindCount,
   type AssetRef,
   type AssetWithTopics,
