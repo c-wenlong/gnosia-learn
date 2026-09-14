@@ -48,6 +48,8 @@ const REQUIRED = [
   "assetCounts",
   // Assets: what this one came from, and what came out of it.
   "assetDerivations",
+  // Topics: titles for the chips a card renders from `AssetWithTopics.topics`.
+  "topicTitles",
 ] as const;
 
 describe("the state barrel", () => {

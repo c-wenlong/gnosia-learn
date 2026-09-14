@@ -55,6 +55,11 @@ function activeText(host: HTMLElement) {
   return host.querySelector('[aria-current="true"]')?.textContent ?? null;
 }
 
+/** The `X / Y` counter beside the "Transcript" heading, while following. */
+function counterText(host: HTMLElement) {
+  return host.querySelector("h3")?.parentElement?.querySelector("span")?.textContent ?? null;
+}
+
 /**
  * jsdom lays nothing out, so the panel's geometry has to be described to it:
  * a 100px window over lines 40px tall. Without this every element is 0x0 and
@@ -91,6 +96,31 @@ describe("TranscriptPanel", () => {
   it("highlights nothing before the first line starts", () => {
     const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: -1 }));
     expect(activeText(host)).toBeNull();
+  });
+
+  it("marks the position with a dash before the first line starts, never a false line", () => {
+    // No cue has started yet: there is no line to count as read, so the
+    // counter must not read "0 / 3" (claims a line that does not exist) or
+    // "1 / 3" (claims the reader is already on the first line).
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: -1 }));
+    expect(counterText(host)).toBe("- / 3");
+  });
+
+  it("counts the line being spoken", () => {
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 0 }));
+    expect(counterText(host)).toBe("1 / 3");
+  });
+
+  it("counts the last line spoken through a gap between cues", () => {
+    // 7 to 12 is silence between the second and third lines; the count rests
+    // on the second line rather than dropping back to the dash.
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 9 }));
+    expect(counterText(host)).toBe("2 / 3");
+  });
+
+  it("counts the last line once playback runs past it", () => {
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 999 }));
+    expect(counterText(host)).toBe("3 / 3");
   });
 
   it("seeks to a line when it is clicked", () => {
