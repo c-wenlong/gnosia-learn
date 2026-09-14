@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { AssetCard } from "@/components/AssetCard";
-import { accessFor, loadFileAccess, loadLibrary, type FileAccess } from "@/lib/asset-library";
 import {
-  assetFileHref,
+  loadFileAccess,
+  loadLibrary,
+  thumbnailFor,
+  type FileAccess,
+} from "@/lib/asset-library";
+import {
   assetHref,
   firstParam,
   isCompanionKind,
@@ -185,7 +189,7 @@ export default async function LibraryPage({
   const kind = firstParam(params.kind);
   const topic = firstParam(params.topic);
 
-  const [{ rows, counts, reachable, truncated }, access] = await Promise.all([
+  const [{ rows, counts, reachable, truncated, titles }, access] = await Promise.all([
     loadLibrary(),
     loadFileAccess(),
   ]);
@@ -363,18 +367,16 @@ export default async function LibraryPage({
                         <AssetCard
                           key={row.id}
                           asset={row}
-                          topic={row.topics[0]}
+                          // The slug is the identity and the title is the
+                          // label, so a slug with no title still draws a chip.
+                          topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                           href={assetHref(row.id)}
-                          // The only asset that is its own thumbnail. A video
-                          // has no poster row in the catalog, and pointing this
-                          // at the `.mp4` would ask an `<img>` to decode a
-                          // video; the card's labelled placeholder is the
-                          // honest answer until a poster is indexed.
-                          thumbnailSrc={
-                            row.kind === "diagram_svg" && accessFor(access, row.sourceRepo).ok
-                              ? assetFileHref(row.id)
-                              : null
-                          }
+                          // A diagram is its own thumbnail; a video gets a
+                          // frame cut out of it on demand. Both are the same
+                          // decision: point the `<img>` at something an `<img>`
+                          // can decode. Asking it to decode the `.mp4` is what
+                          // the placeholder used to stand in for.
+                          thumbnailSrc={thumbnailFor(row, access)}
                         />
                       ))}
                     </div>

@@ -7,15 +7,17 @@ import {
   assetDerivations,
   indexedRoot,
   listAssets,
+  topicTitles,
   type AssetDerivations,
   type AssetKindCount,
+  type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
 import { assetFilesEnabled, resolveAssetFile } from "@/lib/asset-files";
 import { catalogDatabase } from "@/lib/learner-store";
-import { compareByKindThenId } from "@/lib/library";
+import { assetFileHref, assetPosterHref, compareByKindThenId } from "@/lib/library";
 
 /**
  * The library's door to the catalog, shaped exactly like
@@ -71,6 +73,15 @@ export interface LibrarySnapshot {
   reachable: boolean;
   /** True when the read came back at `LIBRARY_ROW_CAP` and there may be more. */
   truncated: boolean;
+  /**
+   * Titles for every topic slug the rows carry, keyed by slug.
+   *
+   * Chips render `titles[slug] ?? slug`, so this failing to resolve one costs
+   * a readable label and nothing else. That is why it is not folded into
+   * `listAssets`: a title is presentation, the slug is the identity, and the
+   * page is correct with only the slug.
+   */
+  titles: TopicTitles;
 }
 
 const EMPTY_LIBRARY: LibrarySnapshot = {
@@ -78,6 +89,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
   counts: [],
   reachable: false,
   truncated: false,
+  titles: {},
 };
 
 /**
@@ -104,11 +116,19 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
       listAssets(db, { limit: LIBRARY_ROW_CAP }),
       assetCounts(db),
     ]);
+    // A third statement, and it has to be third: the slugs it asks about are
+    // the ones the first read returned. It is a lookup rather than a fact the
+    // page depends on, so it gets a failure boundary of its own: inside the
+    // outer `catch` a failing title query would have discarded rows that were
+    // already in hand and rendered the library unreachable, which is the exact
+    // opposite of the fallback the chips are written for.
+    const titles = await optionalTitles(db, rows);
     return {
       rows: [...rows].sort(compareByKindThenId),
       counts,
       reachable: true,
       truncated: rows.length >= LIBRARY_ROW_CAP,
+      titles,
     };
   } catch (error) {
     warn("asset library", error);
@@ -122,6 +142,18 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
   return readLibrary();
 }
 
+/**
+ * Every topic slug across a page of rows, once each.
+ *
+ * A set rather than a flat map: one topic carries many assets, so a grid of
+ * 135 cards asks about a handful of distinct slugs, and sending the repeats
+ * would make the `IN` list an order of magnitude longer to learn the same
+ * thing.
+ */
+function distinctTopics(rows: AssetWithTopics[]): string[] {
+  return [...new Set(rows.flatMap((row) => row.topics))];
+}
+
 /** Everything `/library/[id]` renders from. */
 export interface AssetDetail {
   /** The asset, or null when no row has that id — a 404, not a failure. */
@@ -131,6 +163,18 @@ export interface AssetDetail {
   /** Other assets filed under a topic this one is filed under, this one excluded. */
   related: AssetWithTopics[];
   reachable: boolean;
+  /** Titles for every slug on this page, this asset's and its neighbours'. */
+  titles: TopicTitles;
+  /**
+   * Concept-note slugs to their asset ids, for resolving `[[wikilinks]]`.
+   *
+   * A note's id is `note:learn/concepts/<domain>/<slug>.md` and a wikilink
+   * carries only the slug, so the domain folder has to come from somewhere.
+   * It comes from here: every note in one read, keyed by the basename a link
+   * would name. There are 32 of them, so the whole index costs less than
+   * asking per link would.
+   */
+  notes: Record<string, string>;
 }
 
 const EMPTY_DETAIL: AssetDetail = {
@@ -138,6 +182,8 @@ const EMPTY_DETAIL: AssetDetail = {
   derivations: { sources: [], derived: [] },
   related: [],
   reachable: false,
+  titles: {},
+  notes: {},
 };
 
 /** How many siblings the detail page offers before it stops listing them. */
@@ -190,14 +236,31 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     const db = await catalogDatabase();
     const [asset] = await listAssets(db, { ids: [id] });
     if (asset === undefined) {
-      return { asset: null, derivations: { sources: [], derived: [] }, related: [], reachable: true };
+      return {
+        asset: null,
+        derivations: { sources: [], derived: [] },
+        related: [],
+        reachable: true,
+        titles: {},
+        notes: {},
+      };
     }
+
+    // Only a markdown file can contain a wikilink, so only a markdown file
+    // pays for the index. `endsWith` rather than the kind, because a session
+    // log and a concept note are different kinds and both are markdown.
+    const wantsNotes = asset.path?.endsWith(".md") ?? false;
 
     const [derivations, perTopic] = await Promise.all([
       assetDerivations(db, id),
       // Unlimited on purpose; see the note above `RELATED_CAP`.
       Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }))),
     ]);
+
+    // Its own boundary too, and for the same reason as the titles above: a
+    // wikilink that does not resolve stays readable text, so losing the index
+    // costs a note its links and must not cost the page its asset.
+    const notes = wantsNotes ? await optionalNotes(db) : {};
 
     // This asset, and its own companion files, which have their own section
     // immediately above and would otherwise appear twice on one page.
@@ -214,7 +277,12 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     }
     const related = [...merged.values()].sort(compareByKindThenId).slice(0, RELATED_CAP);
 
-    return { asset, derivations, related, reachable: true };
+    // Every slug this page will draw a chip for: the asset's own, plus those
+    // of the related cards beside it. Asked once for all of them rather than
+    // once per section, so the two cannot disagree about one topic's name.
+    const titles = await optionalTitles(db, [asset, ...related]);
+
+    return { asset, derivations, related, reachable: true, titles, notes };
   } catch (error) {
     warn(`asset ${id}`, error);
     return EMPTY_DETAIL;
@@ -347,6 +415,79 @@ export function accessFor(
   sourceRepo: string,
 ): FileAccess {
   return sourceRepo === "manimkc" ? access.manimkc : access.selfLearn;
+}
+
+/**
+ * Titles for a page's rows, or none, never a thrown error.
+ *
+ * The chips render `titles[slug] ?? slug`, so an empty result is a page of
+ * slugs: the same page this code shipped before titles existed, and a fine
+ * one. Letting this share the caller's `catch` instead would turn a label
+ * failure into an empty library, hiding rows that had already been read.
+ */
+async function optionalTitles(
+  db: CatalogDatabase,
+  rows: AssetWithTopics[],
+): Promise<TopicTitles> {
+  try {
+    return await topicTitles(db, distinctTopics(rows));
+  } catch (error) {
+    warn("topic titles", error);
+    return {};
+  }
+}
+
+/** The note index, or none. See `optionalTitles` for why this cannot throw. */
+async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string>> {
+  try {
+    return noteIndex(await listAssets(db, { kind: "note" }));
+  } catch (error) {
+    warn("note index", error);
+    return {};
+  }
+}
+
+/**
+ * Note rows keyed by the slug a `[[wikilink]]` would write.
+ *
+ * The slug is the filename without `.md`, which is what the knowledge base
+ * links by. Two notes in different domains sharing a filename would collide;
+ * the first wins and the second is simply unlinkable, which is the same thing
+ * that happens in Obsidian and is better than a link pointing at the wrong
+ * note. Nothing in the corpus collides today.
+ */
+function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const slug = row.path?.split("/").pop()?.replace(/\.md$/, "");
+    if (slug !== undefined && slug !== "" && out[slug] === undefined) out[slug] = row.id;
+  }
+  return out;
+}
+
+/**
+ * What an `<img>` should point at for one row, or null for the placeholder.
+ *
+ * Shared by the grid and the related strip on the detail page, because two
+ * copies of this rule would drift and the symptom is a card that shows a
+ * picture in one place and a grey box in the other.
+ *
+ * A diagram is already an image, so it is served as itself. A video is not,
+ * and an `<img>` pointed at an `.mp4` decodes nothing; `/poster` cuts a frame
+ * out of it instead. Everything else has no picture to show and says so.
+ *
+ * Both depend on the file route being reachable for that asset's repo, which
+ * is a per-request answer rather than a property of the row: the route is off
+ * in production, and a manimkc index older than it answers 503. When it is
+ * not reachable the placeholder is the correct output, not a broken image.
+ */
+export function thumbnailFor(
+  row: AssetWithTopics,
+  access: { selfLearn: FileAccess; manimkc: FileAccess },
+): string | null {
+  if (!accessFor(access, row.sourceRepo).ok) return null;
+  if (row.kind === "diagram_svg") return assetFileHref(row.id);
+  return row.kind === "video" ? assetPosterHref(row.id) : null;
 }
 
 /**

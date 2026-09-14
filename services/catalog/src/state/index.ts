@@ -129,3 +129,4 @@ export {
   type KnowledgeBase,
   type MasteryLabel,
 } from "./knowledge-base";
+export { topicTitles, type TopicTitles } from "./topics";
