@@ -1,11 +1,22 @@
 /**
- * The learner state store: typed functions over the state tables.
+ * The learner state store, and the catalog's one door for everybody outside it.
  *
- * This is the only module that writes `learner`, `event`, `mastery`, `review`,
- * `progress`, `recap` or `preference`. Three callers use it and none of them
- * talks to a pool of its own: the `learn` CLI in `../learn/`, the backfill in
- * `../commands/backfill.ts`, and the web app through
- * `@self-learn/catalog/state`.
+ * Two things live here, and the difference matters.
+ *
+ * **The store.** This is the only module that writes `learner`, `event`,
+ * `mastery`, `review`, `progress`, `recap` or `preference`. Three callers use
+ * it and none of them talks to a pool of its own: the `learn` CLI in
+ * `../learn/`, the backfill in `../commands/backfill.ts`, and the web app
+ * through `@self-learn/catalog/state`.
+ *
+ * **Reads of the content half.** `knowledge-base.ts` and `assets.ts` only read,
+ * and what they read is `concept`, `asset` and the link tables, which this
+ * package's indexers write and nothing here ever touches. They are here because
+ * `./state` is the single export the web app may import (ARCHITECTURE.md
+ * layering rule 1), so a query the app needs and this directory does not hold
+ * is a query the app cannot run. Rule 4 names `state/` the only *writer* of the
+ * state tables, which it still is; it does not say this is the only thing under
+ * the door.
  *
  * Two rules hold everywhere below.
  *
@@ -91,6 +102,14 @@ export {
   asUserResources,
   readLearnerSnapshot,
 } from "./snapshot";
+export {
+  assetsByIds,
+  assetsForCollection,
+  assetsForConcept,
+  assetsForTopic,
+  byKind,
+  type AssetRef,
+} from "./assets";
 export {
   domainOf,
   dueConcepts,

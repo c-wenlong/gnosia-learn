@@ -18,7 +18,13 @@ import { runIndexCommand } from "../src/commands/index-command";
 import { runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
 import { runSearch } from "../src/commands/search";
-import { runShow, type ShowAsset, type ShowConcept, type ShowTopic } from "../src/commands/show";
+import {
+  runShow,
+  type ShowAsset,
+  type ShowCollection,
+  type ShowConcept,
+  type ShowTopic,
+} from "../src/commands/show";
 import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
 import { hasManimkcCli } from "../src/index/manimkc";
@@ -289,6 +295,34 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(result.domain).toBe("algorithms");
       expect(result.concepts).toHaveLength(5);
       expect(result.aliases).toContain("master theorem");
+    });
+
+    /**
+     * The module's own resource links, reached through the topic it contains.
+     *
+     * Worth a golden test because it was wrong and silent: `collection_item`
+     * rows written by the courses indexer are all topic-backed, so a query that
+     * resolved only `collection_item.asset_id` reported `assets: {}` for every
+     * collection in the catalog. Nothing recorded that empty output as expected,
+     * which is why no test caught it.
+     *
+     * The `link` group is asserted exactly and the rest is not: this topic is
+     * shared with another module, so which notes and videos hang off it moves
+     * with the content and with whether manimkc is checked out. The authored
+     * resources do not.
+     */
+    it("returns a module's assets through the topic it contains", async () => {
+      const result = (await runShow("cp4284-m1")) as ShowCollection;
+      expect(result.type).toBe("collection");
+      expect(result.topicSlug).toBe("transformer-architecture-and-training");
+      // `cp4283-m6-r1` is authored under a different module that maps to the
+      // same topic. A module's assets are its subject's assets, so it belongs.
+      expect(result.assets["link"]?.map((a) => a.id)).toEqual([
+        "link:cp4283-m6-r1",
+        "link:cp4284-m1-r1",
+        "link:cp4284-m1-r2",
+      ]);
+      expect(result.assets["note"]?.length).toBeGreaterThan(0);
     });
 
     it("never returns a body, only paths", async () => {
