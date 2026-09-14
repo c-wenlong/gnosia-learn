@@ -43,6 +43,9 @@ const REQUIRED = [
   "assetsForCollection",
   "assetsByIds",
   "byKind",
+  // Assets: everything, filtered and paged, for a library page.
+  "listAssets",
+  "assetCounts",
 ] as const;
 
 describe("the state barrel", () => {

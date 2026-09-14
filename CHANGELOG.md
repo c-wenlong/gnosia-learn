@@ -88,6 +88,24 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **`listAssets` and `assetCounts`, the queries a library page needs.**
+  `assetsForTopic`, `assetsForConcept` and `assetsForCollection` all answer
+  "what belongs to this one thing"; a library page's first screen has no
+  single subject yet; it wants everything, filtered and paged. `listAssets`
+  takes `kind`, `topicSlug`, `sourceRepo`, `limit` and `offset`, every one
+  optional, and returns `AssetWithTopics[]` — an `AssetRef` plus the topic
+  slugs each asset is filed under, so a grid can render a topic chip without a
+  second query per row. `assetCounts` is one grouped `count() ... group by
+  kind` for the filter chips that show how many of each kind exist.
+
+  Two queries, never more, whatever the page size: one for the filtered,
+  paged, `ORDER BY kind, id` list — the same stable order `assetsForTopic`
+  already uses, for the reason the `byKindThenId` comment in the same file
+  gives — and one asking `asset_topic` for exactly the ids the first query
+  kept, so attaching topics never becomes a query per row. `topicSlug`
+  filters by membership through an `IN` against `asset_topic` rather than a
+  join, so an asset filed under three topics stays one row instead of three.
+
 - **The asset queries are behind the door the web app comes through.** A new
   `services/catalog/src/state/assets.ts` owns `assetsForTopic`,
   `assetsForConcept`, `assetsForCollection` and `assetsByIds`, plus the

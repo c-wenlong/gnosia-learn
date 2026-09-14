@@ -1,5 +1,5 @@
 import { asset, assetConcept, assetTopic, collectionItem } from "@self-learn/schema";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 
@@ -186,4 +186,111 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
 export async function assetsByIds(db: CatalogDatabase, ids: string[]): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
   return db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
+}
+
+/** An `AssetRef` plus the topics it is filed under, for a page with no single subject in mind. */
+export interface AssetWithTopics extends AssetRef {
+  /** Slugs, sorted. Empty when the asset is in no `asset_topic` row, which is legal. */
+  topics: string[];
+}
+
+/**
+ * Every option optional; no options means every asset, everything the
+ * catalog holds. `assetsForTopic`, `assetsForConcept` and
+ * `assetsForCollection` all answer "what belongs to this one thing"; a library
+ * page's first screen has no single subject yet, and needs "everything, a
+ * page at a time" instead.
+ */
+export interface ListAssetsOptions {
+  kind?: string;
+  topicSlug?: string;
+  sourceRepo?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Everything, filtered and paged, with the topic chips a grid needs already
+ * attached.
+ *
+ * Two queries, never more, whatever `limit` is. The first applies the filters
+ * and the paging and is where the ordering comes from — `ORDER BY kind, id` in
+ * SQL, the same stable order `assetsForTopic` uses and the `byKindThenId`
+ * comment above explains: a sort redone in TypeScript would have to agree with
+ * Postgres, and `localeCompare` already proved it does not. The second asks
+ * `asset_topic` for exactly the ids the first query kept, once, rather than
+ * once per row — the N+1 a naive "load assets, then load each one's topics"
+ * would be. Grouping that result into a `Map` and reattaching it is a lookup,
+ * not a sort, so it carries no ordering risk of its own; the topics within one
+ * asset are still ordered by the second query's own `ORDER BY topic_slug`.
+ *
+ * `topicSlug` filters by membership — "assets filed under this topic" — using
+ * an `EXISTS`-shaped `IN` against `asset_topic` rather than joining it
+ * directly, because a direct join would multiply a row with three topics into
+ * three and break both the paging and the one-row-per-asset contract every
+ * other query here keeps.
+ */
+export async function listAssets(
+  db: CatalogDatabase,
+  options: ListAssetsOptions = {},
+): Promise<AssetWithTopics[]> {
+  const { kind, topicSlug, sourceRepo, limit, offset } = options;
+  const conditions = [
+    kind === undefined ? undefined : eq(asset.kind, kind),
+    sourceRepo === undefined ? undefined : eq(asset.sourceRepo, sourceRepo),
+    topicSlug === undefined
+      ? undefined
+      : inArray(
+          asset.id,
+          db.select({ id: assetTopic.assetId }).from(assetTopic).where(eq(assetTopic.topicSlug, topicSlug)),
+        ),
+  ].filter((c) => c !== undefined);
+
+  const base = db
+    .select(ASSET_COLUMNS)
+    .from(asset)
+    .where(conditions.length === 0 ? undefined : and(...conditions))
+    .orderBy(asc(asset.kind), asc(asset.id));
+  const limited = limit === undefined ? base : base.limit(limit);
+  const paged = offset === undefined ? limited : limited.offset(offset);
+  const rows = await paged;
+  if (rows.length === 0) return [];
+
+  const links = await db
+    .select({ assetId: assetTopic.assetId, topicSlug: assetTopic.topicSlug })
+    .from(assetTopic)
+    .where(
+      inArray(
+        assetTopic.assetId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .orderBy(asc(assetTopic.topicSlug));
+
+  const topicsByAsset = new Map<string, string[]>();
+  for (const link of links) {
+    const existing = topicsByAsset.get(link.assetId);
+    if (existing === undefined) topicsByAsset.set(link.assetId, [link.topicSlug]);
+    else existing.push(link.topicSlug);
+  }
+
+  return rows.map((row) => ({ ...row, topics: topicsByAsset.get(row.id) ?? [] }));
+}
+
+/** How many assets of one kind exist, for a filter chip that shows the count. */
+export interface AssetKindCount {
+  kind: string;
+  count: number;
+}
+
+/**
+ * One grouped scan of `asset`, counting every kind at once — the same shape as
+ * `mirrorCoverage` in `../commands/status.ts`, for the same reason: a count
+ * per kind, one query at a time, would be nine round trips for a page whose
+ * whole point is to be cheap. A kind with no rows is simply absent, the same
+ * contract `byKind` already keeps, so a chip never claims a count of zero for
+ * something the catalog does not have and never lies about one it does.
+ */
+export async function assetCounts(db: CatalogDatabase): Promise<AssetKindCount[]> {
+  return db.select({ kind: asset.kind, count: count() }).from(asset).groupBy(asset.kind).orderBy(asc(asset.kind));
 }
