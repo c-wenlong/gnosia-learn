@@ -182,8 +182,20 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     // An SVG is a document, so the type is right and the sandbox is what makes
     // it safe. nosniff keeps everything else from being re-read as one.
     expect(response.headers.get("content-type")).toBe("image/svg+xml");
-    expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const csp = response.headers.get("content-security-policy") ?? "";
+    // Script off, in both the way that stops it and the way that says so.
+    expect(csp).toContain("sandbox");
+    expect(csp).toContain("script-src 'none'");
+    expect(csp).toContain("default-src 'none'");
+    // And the three a tldrawkc export needs, or the diagram comes back 200 and
+    // unstyled: it writes its CSS inline and embeds its fonts as data URLs.
+    // Whether that actually renders is not a thing jsdom can answer, so it is
+    // verified by opening one in a browser; this pins the header.
+    expect(csp).toContain("style-src 'unsafe-inline'");
+    expect(csp).toContain("font-src data:");
+    expect(csp).toContain("img-src data:");
   });
 
   it("answers a range with a 206 and the slice that was asked for", async () => {

@@ -342,6 +342,44 @@ export function parseRange(header: string | null, size: number): RangeRequest {
 }
 
 /**
+ * How much may sit in the web stream's queue while a client is slow to read.
+ *
+ * The size function is the point. A queuing strategy that does not supply one
+ * scores every chunk as 1, so a high-water mark of 65,536 means 65,536
+ * *chunks*, which for a file stream reading 64 KiB at a time is four gigabytes
+ * of a ten megabyte video in memory: the whole file, for one stalled client,
+ * which is the exact thing streaming it was meant to avoid.
+ *
+ * Measured on Node 22.23 against an 8 MB file with a reader that stops after
+ * one chunk: 196,608 bytes read with a byte-counting strategy, and all
+ * 8,388,608 with a counting one. Node's own default for a non-object-mode
+ * readable is already `ByteLengthQueuingStrategy`
+ * (`newReadableStreamFromStreamReadable` in `internal/webstreams/adapters`),
+ * so this is not a live leak being plugged. It is written out because the
+ * guarantee matters more than the default does: it survives a Node that
+ * changes its mind, and the test measures it rather than trusting either.
+ */
+export const BYTE_QUEUE = {
+  highWaterMark: 64 * 1024,
+  size: (chunk: Uint8Array) => chunk.byteLength,
+};
+
+/**
+ * A Node readable as a web stream, queued by bytes.
+ *
+ * Separate from `openRange` so a test can hand in a stream it holds a
+ * reference to, stall the reader, and read `bytesRead` off it. That is the
+ * only way to observe the queue from outside.
+ *
+ * A client that seeks away cancels the web stream, which destroys the file
+ * handle behind it; that is `Readable.toWeb`'s own behaviour and is why this
+ * is not a hand-rolled `ReadableStream`.
+ */
+export function webStreamFrom(stream: Readable): ReadableStream<Uint8Array> {
+  return Readable.toWeb(stream, { strategy: BYTE_QUEUE }) as unknown as ReadableStream<Uint8Array>;
+}
+
+/**
  * The bytes, as a stream.
  *
  * Streamed rather than read into a buffer because a 10 MB video read whole
@@ -349,12 +387,7 @@ export function parseRange(header: string | null, size: number): RangeRequest {
  * range request exists precisely so that the rest of the file is never read.
  * `start` and `end` are passed to the read stream, so the kernel seeks and
  * only the asked-for slice is touched.
- *
- * A client that seeks away cancels the web stream, which destroys the file
- * handle behind it; that is `Readable.toWeb`'s own behaviour and is why this
- * is not a hand-rolled `ReadableStream`.
  */
 export function openRange(file: string, start?: number, end?: number): ReadableStream<Uint8Array> {
-  const stream = createReadStream(file, start === undefined ? {} : { start, end });
-  return Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>;
+  return webStreamFrom(createReadStream(file, start === undefined ? {} : { start, end }));
 }

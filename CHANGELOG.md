@@ -115,9 +115,12 @@ This project is continuously deployed and not versioned; entries are grouped by 
   **Content type from a closed list** (`mp4`, `svg`, `vtt`, `json`, `md`,
   `png`), and an extension that is not on it is refused rather than sent as
   `application/octet-stream`. Every response carries `nosniff`, so the
-  extension decides the type, and `default-src 'none'; sandbox`, which is what
-  makes `image/svg+xml` safe: an SVG is a document, and one served from this
-  origin could otherwise run script with this origin's storage.
+  extension decides the type, and a CSP whose `sandbox` and `script-src 'none'`
+  are what make `image/svg+xml` safe: an SVG is a document, and one served from
+  this origin could otherwise run script with this origin's storage. The policy
+  still names `style-src 'unsafe-inline'`, `font-src data:` and `img-src data:`,
+  because a tldrawkc export writes its CSS inline and embeds its fonts, and
+  blocking those returns a 200 that renders as an unstyled diagram.
   `Content-Disposition` is `inline`, because the point is a `<video>` and an
   `<img>` and `attachment` would break both.
 

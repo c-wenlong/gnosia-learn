@@ -1,13 +1,19 @@
+import { createReadStream } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   ASSET_FILES_ENV,
   assetFilesEnabled,
+  BYTE_QUEUE,
   contains,
   contentTypeFor,
   parseRange,
   safeFilename,
+  webStreamFrom,
 } from "@/lib/asset-files";
 
 /**
@@ -94,6 +100,52 @@ describe("safeFilename", () => {
     expect(safeFilename("a/b/we ird\r\nname.mp4")).toBe("we_ird__name.mp4");
     expect(safeFilename("/")).toBe("asset");
     expect(safeFilename("..")).toBe("asset");
+  });
+});
+
+describe("webStreamFrom", () => {
+  const MEGABYTE = 1024 * 1024;
+  let dir: string;
+  let file: string;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "asset-stream-"));
+    file = path.join(dir, "big.bin");
+    await writeFile(file, Buffer.alloc(8 * MEGABYTE, 7));
+  });
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("stops reading the file when the client stops reading the stream", async () => {
+    // The failure this pins: a queuing strategy that counts chunks rather than
+    // bytes lets a 64 KiB high-water mark hold 64 KiB *chunks*, so one slow
+    // client pulls the whole video into memory. `bytesRead` on the file stream
+    // is the only place that is visible from outside.
+    const source = createReadStream(file);
+    const reader = webStreamFrom(source).getReader();
+
+    await reader.read();
+    await delay(200);
+
+    expect(source.bytesRead).toBeLessThan(MEGABYTE);
+    expect(source.bytesRead).toBeLessThan(8 * MEGABYTE);
+
+    // Reading on lets the rest through, so the bound is backpressure and not a
+    // truncated file.
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+    }
+    expect(source.bytesRead).toBe(8 * MEGABYTE);
+    expect(total).toBeGreaterThan(7 * MEGABYTE);
+  });
+
+  it("measures the queue in bytes", () => {
+    expect(BYTE_QUEUE.size(new Uint8Array(4_096))).toBe(4_096);
   });
 });
 
