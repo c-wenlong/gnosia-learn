@@ -131,6 +131,13 @@ export const ASSETS = {
   link: "fx:link",
   pinned: "fx:pinned",
   orphan: "fx:orphan",
+  // Two notes whose ids order one way by code unit and the other way by
+  // locale. `assetsForCollection` merges three selects in TypeScript, so it is
+  // the one query that cannot lean on ORDER BY, and this pair is what proves
+  // it still agrees with Postgres. Verified against the database: an ORDER BY
+  // puts `fx:Beta` first, and `localeCompare` puts `fx:alpha` first.
+  upperCase: "fx:Beta",
+  lowerCase: "fx:alpha",
 } as const;
 
 /** The deck that holds the member shapes no indexer writes. Created here. */
@@ -184,6 +191,18 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         path: "learn/concepts/fixtures/unfiled.md",
         sourceRepo: "self-learn",
       },
+      {
+        id: ASSETS.upperCase,
+        kind: "note",
+        path: "learn/concepts/fixtures/Beta.md",
+        sourceRepo: "self-learn",
+      },
+      {
+        id: ASSETS.lowerCase,
+        kind: "note",
+        path: "learn/concepts/fixtures/alpha.md",
+        sourceRepo: "self-learn",
+      },
     ])
     .onConflictDoNothing();
 
@@ -228,6 +247,8 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
       { collectionId: DECK_ID, position: 0, conceptSlug: "alpha" },
       { collectionId: DECK_ID, position: 1, conceptSlug: "beta" },
       { collectionId: DECK_ID, position: 2, assetId: ASSETS.pinned },
+      { collectionId: DECK_ID, position: 3, assetId: ASSETS.upperCase },
+      { collectionId: DECK_ID, position: 4, assetId: ASSETS.lowerCase },
     ])
     .onConflictDoNothing();
 

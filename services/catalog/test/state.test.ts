@@ -469,12 +469,34 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(link?.path).toBeNull();
     });
 
+    it("orders the merge the way Postgres would, not the way the locale would", async () => {
+      /**
+       * The other queries sort in `ORDER BY`. This one merges three selects, so
+       * its ordering is TypeScript and has to agree with them. `localeCompare`
+       * does not: it is locale-sensitive, so the answer depends on the host's
+       * ICU data, and on these ids it is simply wrong. `select ... order by`
+       * against the fixture database returns `fx:Beta` before `fx:alpha`;
+       * `localeCompare` returns the reverse.
+       */
+      const notes = (await assetsForCollection(scratch.db, DECK_ID))
+        .filter((r) => r.kind === "note")
+        .map((r) => r.id);
+      expect(notes).toEqual([ASSETS.upperCase, ASSETS.lowerCase, ASSETS.pinned]);
+      expect(notes).not.toEqual([...notes].sort((a, b) => a.localeCompare(b)));
+    });
+
     it("resolves concept members and asset members too, and dedupes", async () => {
       const rows = await assetsForCollection(scratch.db, DECK_ID);
       // `alpha` brings the video and the diagram, `beta` brings the diagram
       // again, and the deck names the pinned note directly. The diagram appears
       // once: two members sharing an asset is one asset, not two.
-      expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.pinned, ASSETS.video]);
+      expect(rows.map((r) => r.id)).toEqual([
+        ASSETS.diagram,
+        ASSETS.upperCase,
+        ASSETS.lowerCase,
+        ASSETS.pinned,
+        ASSETS.video,
+      ]);
       expect(rows.filter((r) => r.id === ASSETS.diagram)).toHaveLength(1);
     });
 

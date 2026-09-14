@@ -157,7 +157,25 @@ export async function assetsForCollection(db: CatalogDatabase, id: string): Prom
 
   const merged = new Map<string, AssetRef>();
   for (const row of [...viaTopic, ...viaConcept, ...direct]) merged.set(row.id, row);
-  return [...merged.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
+  return [...merged.values()].sort((a, b) => byKindThenId(a, b));
+}
+
+/**
+ * Kind then id, by code unit. This is the one ordering in this module done in
+ * TypeScript rather than by `ORDER BY`, because the three selects above are
+ * merged here, so it has to agree with what Postgres would have produced.
+ *
+ * `localeCompare` would not. It is locale-sensitive, so the answer depends on
+ * the host's ICU data rather than on the rows, and the punctuation these ids
+ * are full of is exactly where locale collation and byte order disagree: an id
+ * is `manimkc:out/algorithms/...`, and a locale-aware comparison can treat `:`
+ * and `/` as ignorable. Two machines would then order one collection two ways
+ * while `assetsForTopic` beside it never moves.
+ */
+function byKindThenId(a: AssetRef, b: AssetRef): number {
+  if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+  if (a.id === b.id) return 0;
+  return a.id < b.id ? -1 : 1;
 }
 
 /**
