@@ -7,8 +7,10 @@ import {
   assetDerivations,
   indexedRoot,
   listAssets,
+  topicTitles,
   type AssetDerivations,
   type AssetKindCount,
+  type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
@@ -71,6 +73,15 @@ export interface LibrarySnapshot {
   reachable: boolean;
   /** True when the read came back at `LIBRARY_ROW_CAP` and there may be more. */
   truncated: boolean;
+  /**
+   * Titles for every topic slug the rows carry, keyed by slug.
+   *
+   * Chips render `titles[slug] ?? slug`, so this failing to resolve one costs
+   * a readable label and nothing else. That is why it is not folded into
+   * `listAssets`: a title is presentation, the slug is the identity, and the
+   * page is correct with only the slug.
+   */
+  titles: TopicTitles;
 }
 
 const EMPTY_LIBRARY: LibrarySnapshot = {
@@ -78,6 +89,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
   counts: [],
   reachable: false,
   truncated: false,
+  titles: {},
 };
 
 /**
@@ -104,11 +116,17 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
       listAssets(db, { limit: LIBRARY_ROW_CAP }),
       assetCounts(db),
     ]);
+    // A third statement, and it has to be third: the slugs it asks about are
+    // the ones the first read returned. It is a lookup rather than a fact the
+    // page depends on, so the snapshot gap the comment above worries about
+    // costs a chip its title here, never a wrong row.
+    const titles = await topicTitles(db, distinctTopics(rows));
     return {
       rows: [...rows].sort(compareByKindThenId),
       counts,
       reachable: true,
       truncated: rows.length >= LIBRARY_ROW_CAP,
+      titles,
     };
   } catch (error) {
     warn("asset library", error);
@@ -122,6 +140,18 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
   return readLibrary();
 }
 
+/**
+ * Every topic slug across a page of rows, once each.
+ *
+ * A set rather than a flat map: one topic carries many assets, so a grid of
+ * 135 cards asks about a handful of distinct slugs, and sending the repeats
+ * would make the `IN` list an order of magnitude longer to learn the same
+ * thing.
+ */
+function distinctTopics(rows: AssetWithTopics[]): string[] {
+  return [...new Set(rows.flatMap((row) => row.topics))];
+}
+
 /** Everything `/library/[id]` renders from. */
 export interface AssetDetail {
   /** The asset, or null when no row has that id — a 404, not a failure. */
@@ -131,6 +161,8 @@ export interface AssetDetail {
   /** Other assets filed under a topic this one is filed under, this one excluded. */
   related: AssetWithTopics[];
   reachable: boolean;
+  /** Titles for every slug on this page, this asset's and its neighbours'. */
+  titles: TopicTitles;
 }
 
 const EMPTY_DETAIL: AssetDetail = {
@@ -138,6 +170,7 @@ const EMPTY_DETAIL: AssetDetail = {
   derivations: { sources: [], derived: [] },
   related: [],
   reachable: false,
+  titles: {},
 };
 
 /** How many siblings the detail page offers before it stops listing them. */
@@ -190,7 +223,13 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     const db = await catalogDatabase();
     const [asset] = await listAssets(db, { ids: [id] });
     if (asset === undefined) {
-      return { asset: null, derivations: { sources: [], derived: [] }, related: [], reachable: true };
+      return {
+        asset: null,
+        derivations: { sources: [], derived: [] },
+        related: [],
+        reachable: true,
+        titles: {},
+      };
     }
 
     const [derivations, perTopic] = await Promise.all([
@@ -214,7 +253,12 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     }
     const related = [...merged.values()].sort(compareByKindThenId).slice(0, RELATED_CAP);
 
-    return { asset, derivations, related, reachable: true };
+    // Every slug this page will draw a chip for: the asset's own, plus those
+    // of the related cards beside it. Asked once for all of them rather than
+    // once per section, so the two cannot disagree about one topic's name.
+    const titles = await topicTitles(db, distinctTopics([asset, ...related]));
+
+    return { asset, derivations, related, reachable: true, titles };
   } catch (error) {
     warn(`asset ${id}`, error);
     return EMPTY_DETAIL;

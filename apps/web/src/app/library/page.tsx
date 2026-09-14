@@ -185,7 +185,7 @@ export default async function LibraryPage({
   const kind = firstParam(params.kind);
   const topic = firstParam(params.topic);
 
-  const [{ rows, counts, reachable, truncated }, access] = await Promise.all([
+  const [{ rows, counts, reachable, truncated, titles }, access] = await Promise.all([
     loadLibrary(),
     loadFileAccess(),
   ]);
@@ -363,7 +363,9 @@ export default async function LibraryPage({
                         <AssetCard
                           key={row.id}
                           asset={row}
-                          topic={row.topics[0]}
+                          // The slug is the identity and the title is the
+                          // label, so a slug with no title still draws a chip.
+                          topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                           href={assetHref(row.id)}
                           // The only asset that is its own thumbnail. A video
                           // has no poster row in the catalog, and pointing this

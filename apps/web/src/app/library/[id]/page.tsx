@@ -254,7 +254,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // Decoded by hand: a page's dynamic segment arrives exactly as it appears in
   // the URL. `decodeAssetId` is where the reason this is not `params.id` lives.
   const id = decodeAssetId((await params).id);
-  const [{ asset, derivations, related, reachable }, access] = await Promise.all([
+  const [{ asset, derivations, related, reachable, titles }, access] = await Promise.all([
     loadAssetDetail(id),
     loadFileAccess(),
   ]);
@@ -318,7 +318,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               href={libraryHref({ topic: slug })}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted-strong)] transition-colors duration-150 hover:border-[var(--accent)]/40 hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
             >
-              {slug}
+              {titles[slug] ?? slug}
             </Link>
           ))}
           {size && <span className="tabular-nums text-[var(--muted)]">{size}</span>}
@@ -429,6 +429,9 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
             {asset.topics.length === 0 ? (
               "—"
             ) : (
+              // Slugs, not titles, and deliberately: every other row in this
+              // panel is an identifier, and the chips above already carry the
+              // readable name. A reader here is checking what to type.
               <span className="font-mono text-[12px]">{asset.topics.join(", ")}</span>
             )}
           </Fact>
@@ -445,7 +448,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               <AssetCard
                 key={row.id}
                 asset={row}
-                topic={row.topics[0]}
+                topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                 href={assetHref(row.id)}
                 thumbnailSrc={
                   row.kind === "diagram_svg" && accessFor(access, row.sourceRepo).ok
