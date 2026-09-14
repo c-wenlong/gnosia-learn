@@ -14,7 +14,8 @@ the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues
 | --- | --- | --- |
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables | Files in git. Every row is rebuildable by re-running the indexers. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
-| Operational | `index_run` | Neither. One row per source saying when it was last read and what it produced. |
+| Operational | `index_run`, `mirror` | Neither. One row per source saying when it was last read and what it produced. |
+| Studio | `session`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
 `index_run` is the third thing because it is neither of the first two: it is not
 derived *from* files, and it is not the only copy of anything a learner did.
@@ -34,9 +35,19 @@ of those files, such as `apps/web/src/app/api/assets/[id]/file/route.ts`, joins
 `metadata.outRoot` onto `asset.path` and refuses when the run predates the
 value rather than guessing at a base.
 
+The studio group is the fourth thing, and it is fourth for the opposite reason
+`index_run` is third. It has the state half's durability — losing it loses the
+brief and the failure record, and no re-index writes either back — and none of
+its meaning. A render error is not a thing a learner did, so a row saying
+Chromium fell over sitting beside a Bayesian belief about the dot product would
+make both harder to read. `catalog status` counts it apart for exactly that
+reason.
+
 Losing the content half costs an index run. Losing the state half loses the
 study record, which is why `event` is append-only and why the derived state
-tables can always be recomputed rather than restored.
+tables can always be recomputed rather than restored. Losing the studio half
+loses the provenance: the files are still in git with their authors, and what
+goes is the record of which brief produced them.
 
 ## Entities
 
@@ -75,6 +86,47 @@ tables can always be recomputed rather than restored.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
+
+### Studio
+
+| Table | Purpose |
+| --- | --- |
+| `session` | One run of something that writes to the knowledge base. `kind` is `tutor` (a `/learn` session) or `studio` (a generation runner); both share one id space, which is what lets `event.session_id` be a foreign key. |
+| `job` | One request to generate one file: the brief, the lease on a committed path, the state machine, the gate's verdict and what it cost. |
+| `asset_job` | This job wrote this asset, at this hash, at this size. Provenance as a link table, so regenerating does not erase the earlier job's claim. |
+
+Three shapes here are worth stating outright.
+
+**`target_path` and `candidate_path` are different files.** A job writes only
+the candidate, under `learn/assets/.candidates/`, and nothing under
+`learn/assets/` changes until a person accepts. So `target_path` names a file
+the job has never opened, and it is also the lease key:
+
+```sql
+CREATE UNIQUE INDEX job_active_target_key ON job (target_path)
+  WHERE state in ('queued', 'running', 'awaiting_review');
+```
+
+Two jobs cannot hold the same committed path at once, and an unaccepted
+candidate keeps holding it, because the second brief would be written against
+what the first has not landed yet. Partial rather than total, because the whole
+history of a path is jobs that have finished with it. An advisory lock was the
+alternative and dies with its connection, so nothing could ever show who holds
+it.
+
+**`state` is checked and `phase` is not.** `state` is the small vocabulary every
+transition is guarded against, so a conditional `UPDATE … WHERE state = ?` is
+the only way a job moves and two runners cannot both claim one. `phase` is the
+progress label the UI shows (`drawing`, `linting`, `exporting`), differs per
+generator, and would make the CHECK grow every time a pipeline gained a step.
+`cancel_requested_at` is a timestamp for the same reason: a job being cancelled
+is still running until the runner has killed Chromium.
+
+**`topic_slug` is a column and a foreign key; the rest of the brief is jsonb.**
+A foreign key does not survive being stuffed into JSON — the same argument that
+keeps `curriculum_item` out of `asset` — and the topic is the earliest moment
+refuse-never-skip can fire: a brief naming a slug that is not in
+`content/topics.yaml` fails the enqueue with a `23503` before any GPU time.
 
 ## Decisions
 
@@ -548,12 +600,18 @@ an edit makes the migration look unapplied everywhere it has already run.
   Tightening it to `NOT NULL` is a one-line migration and is deliberately not in
   this bundle: the constraint should land after bundle 4 has exercised the
   column, not on the same day the indexer that fills it does.
-- `event.session_id` is still free text. Sessions are assets of kind `session`,
-  so the column could become a foreign key to `asset(id)`. Bundle 5 did not do
-  it: `session start` writes the event before the session log exists as a file,
-  so the asset it would reference has not been indexed yet, and making the
-  foreign key work would mean either indexing mid-command or writing the event
-  at close. Both are bigger than the guarantee is worth today.
+- **Settled in migration `0006`: `event.session_id` is a foreign key.** Not to
+  `asset(id)`, which is what this section used to propose and what could never
+  have worked — `learn session start` writes the event before the markdown log
+  exists as a file, so the asset had not been indexed yet. It points at
+  `session(id)` instead, a row the same command now writes beside the event, so
+  the referent exists at write time. `ON DELETE RESTRICT ON UPDATE CASCADE`,
+  and `SET NULL` was not even available: the referential UPDATE it fires is
+  what the per-row trigger from `0003` refuses. The migration backfills a
+  `tutor` session for every distinct value the column already held, taking
+  `started_at` from `min(at)` and reading a `session-close` event as `closed`
+  and its absence as `interrupted`, because a column that has been free text
+  for six migrations cannot be cleaned up after the constraint lands.
 - **Settled in bundle 5: a studied concept cannot be deleted.**
   `event.concept_slug` is now `ON DELETE RESTRICT` (migration 0004). Under
   `SET NULL` the delete fired an UPDATE that the append-only trigger refused,
