@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./brief";
-import { canvas } from "./canvas";
+import { doctor } from "./canvas";
 import { status as catalogStatus } from "./catalog";
 import { CLAUDE_BIN, CONCURRENCY, HOST, PORT } from "./config";
 import { run } from "./proc";
@@ -183,17 +183,13 @@ async function handle(
     }
 
     case "POST accept": {
+      // `accept` writes the record itself, between the renames and the catalog
+      // call, so the route neither repeats nor reorders that.
       const result = await accept(store, record);
       if (!result.ok) return fail(response, 409, result.note, result.error ?? null);
-      const updated = await store.update(id, {
-        state: "accepted",
-        reviewedAt: new Date().toISOString(),
-        written: result.written,
-        indexed: result.indexed,
-      });
       return send(response, 200, {
         jobId: id,
-        state: updated.state,
+        state: store.get(id)?.state ?? "accepted",
         written: result.written,
         indexed: result.indexed,
         note: result.note,
@@ -203,11 +199,11 @@ async function handle(
     case "POST discard": {
       const result = await discard(store, record);
       if (!result.ok) return fail(response, 409, result.note, result.error ?? null);
-      const updated = await store.update(id, {
-        state: "discarded",
-        reviewedAt: new Date().toISOString(),
+      return send(response, 200, {
+        jobId: id,
+        state: store.get(id)?.state ?? "discarded",
+        note: result.note,
       });
-      return send(response, 200, { jobId: id, state: updated.state, note: result.note });
     }
 
     case "POST revise":
@@ -242,10 +238,10 @@ async function postJob(
 
   // A8: no tldrawkc build refuses the job outright, because every job would
   // fail identically and a queue of them is a queue of identical failures.
-  const doctor = await canvas(["doctor"], 120_000);
-  if (doctor.code !== 0) {
+  const checked = await doctor();
+  if (checked.code !== 0) {
     return fail(response, 503, "tldrawkc cannot run on this machine, so nothing was queued", {
-      doctor: doctor.stdout.trim().split("\n").slice(-8),
+      doctor: checked.stdout.trim().split("\n").slice(-8),
       fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
     });
   }
@@ -362,8 +358,8 @@ function events(
 
 /** What is and is not working right now. */
 async function health(store: JobStore, runner: Runner): Promise<Record<string, unknown>> {
-  const [doctor, claudeVersion, catalog] = await Promise.all([
-    canvas(["doctor"], 120_000).catch(() => null),
+  const [checked, claudeVersion, catalog] = await Promise.all([
+    doctor().catch(() => null),
     run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
     catalogStatus().catch(() => null),
   ]);
@@ -374,7 +370,7 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     .filter((record) => Date.parse(record.requestedAt) >= since)
     .reduce((total, record) => total + (record.costUsd ?? 0), 0);
 
-  const tldrawkc = doctor !== null && doctor.code === 0;
+  const tldrawkc = checked !== null && checked.code === 0;
   const claude = claudeVersion !== null && claudeVersion.code === 0;
   const postgres = catalog !== null && catalog.ok;
   return {

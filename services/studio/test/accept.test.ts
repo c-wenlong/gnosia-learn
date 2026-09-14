@@ -115,6 +115,14 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
 
 let store: InstanceType<typeof JobStore>;
 
+/**
+ * The record, in the store. `accept` and `discard` write it themselves — the
+ * disk record before the database row, which is rule 7 — so a fixture that only
+ * built the object would be testing a path the routes do not take.
+ */
+const place = async (over: Partial<JobRecord> = {}): Promise<JobRecord> =>
+  store.create(record(over));
+
 beforeEach(async () => {
   process.env.STUDIO_HOME = path.join(tmpdir(), `studio-test-${Date.now()}`);
   store = new JobStore();
@@ -137,7 +145,10 @@ describe("a forced export failure", () => {
   it("moves nothing, so the candidate and the target are both where they were", async () => {
     await rm(files.candidateSvg, { force: true });
     canvasMock.canvas.mockImplementationOnce(() => reply(4));
-    const result = await accept(store, record({ gate: { ...record().gate!, svg: null, exportFailed: true } }));
+    const result = await accept(
+      store,
+      await place({ gate: { ...record().gate!, svg: null, exportFailed: true } }),
+    );
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("export-failed");
@@ -154,7 +165,7 @@ describe("a verify that refuses the export", () => {
     canvasMock.canvas.mockImplementationOnce(() =>
       reply(3, { checks: [{ rule: "text-visible", ok: false, detail: "text outside the frame" }] }),
     );
-    const result = await accept(store, record());
+    const result = await accept(store, await place());
     expect(result.ok).toBe(false);
     expect(result.error).toBe("verify-failed");
     expect(await exists(files.target)).toBe(false);
@@ -165,7 +176,7 @@ describe("a verify that refuses the export", () => {
 describe("a clean accept", () => {
   it("renames both files and then records them, in that order", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
-    const result = await accept(store, record());
+    const result = await accept(store, await place());
 
     expect(result.ok).toBe(true);
     expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
@@ -178,6 +189,10 @@ describe("a clean accept", () => {
       targetPath(SLUG),
       targetSvgPath(SLUG),
     ]);
+    // The disk record moved before the catalog call, so a crash in between
+    // leaves a job that says what actually happened to the two files.
+    expect(store.get("job-accept")?.state).toBe("accepted");
+    expect(store.get("job-accept")?.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
   });
 
   it("lands the files and reports indexed: false when Postgres is unreachable", async () => {
@@ -187,7 +202,7 @@ describe("a clean accept", () => {
       json: null,
       error: "connection refused",
     });
-    const result = await accept(store, record());
+    const result = await accept(store, await place());
 
     expect(result.ok).toBe(true);
     expect(result.indexed).toBe(false);
@@ -202,7 +217,7 @@ describe("a human edit that landed while the job ran", () => {
     await writeFile(files.target, "someone else's work", "utf8");
     const result = await accept(
       store,
-      record({ targetHashBefore: createHash("sha256").update("something older").digest("hex") }),
+      await place({ targetHashBefore: createHash("sha256").update("something older").digest("hex") }),
     );
     expect(result.ok).toBe(false);
     expect(result.error).toBe("target-moved");
@@ -212,7 +227,7 @@ describe("a human edit that landed while the job ran", () => {
 
 describe("the state guard", () => {
   it("refuses to accept a job that is not awaiting review", async () => {
-    const result = await accept(store, record({ state: "failed" }));
+    const result = await accept(store, await place({ state: "failed" }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe("wrong-state");
     expect(await exists(files.target)).toBe(false);
@@ -221,10 +236,11 @@ describe("the state guard", () => {
 
 describe("discard", () => {
   it("deletes both candidates and leaves learn/assets/ alone", async () => {
-    const result = await discard(store, record());
+    const result = await discard(store, await place());
     expect(result.ok).toBe(true);
     expect(await exists(files.candidate)).toBe(false);
     expect(await exists(files.candidateSvg)).toBe(false);
     expect(await exists(files.target)).toBe(false);
+    expect(store.get("job-accept")?.state).toBe("discarded");
   });
 });

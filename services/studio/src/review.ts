@@ -126,7 +126,19 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
     written.push(record.targetSvgPath);
   }
 
-  /* 4. The only step that needs Postgres, and therefore the last one. */
+  /* 4. The disk record, before the database row: rule 7, and the reason it is
+   *    not simply tidiness. The files have moved by now, so a crash between
+   *    here and the catalog call would otherwise leave a record saying the job
+   *    is still awaiting review of a candidate that is no longer there, and a
+   *    retry could neither accept nor discard it. */
+  await store.update(record.id, {
+    state: "accepted",
+    reviewedAt: new Date().toISOString(),
+    written,
+    indexed: false,
+  });
+
+  /* 5. The only step that needs Postgres, and therefore the last one. */
   const indexed = await jobAccept(record.id, written);
   if (!indexed.ok) {
     await store.noteCatalogError(record.id, indexed.error ?? "accept could not be recorded");
@@ -141,6 +153,7 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
     };
   }
 
+  await store.update(record.id, { indexed: true });
   return {
     ok: true,
     written,
@@ -164,6 +177,7 @@ export async function discard(store: JobStore, record: JobRecord): Promise<Accep
   }
   await rm(absolute(record.candidatePath), { force: true });
   await rm(absolute(record.candidateSvgPath), { force: true });
+  await store.update(record.id, { state: "discarded", reviewedAt: new Date().toISOString() });
   const recorded = await jobDiscard(record.id);
   if (!recorded.ok) await store.noteCatalogError(record.id, recorded.error ?? "discard not recorded");
   return {

@@ -31,6 +31,35 @@ export function canvas(args: string[], timeoutMs = 120_000): Promise<RunResult> 
   return run(NPM, ["run", "--silent", "canvas", "--", ...args], { timeoutMs });
 }
 
+/**
+ * `doctor`, cached for half a minute.
+ *
+ * Every verb launches its own Chromium, `doctor` included: it loads the page
+ * bundle to check that the bridge answers. Two callers ask — `POST /api/jobs`
+ * before queueing anything, and `/api/health`, which a panel polls — and an
+ * uncached health endpoint would open a browser on a timer for as long as the
+ * page is left open. Half a minute is short enough that a `npm run build` in
+ * the submodule is noticed while a person is still looking at the banner, and
+ * long enough that polling costs nothing.
+ */
+let doctorCache: { at: number; result: RunResult } | null = null;
+export const DOCTOR_TTL_MS = 30_000;
+
+export async function doctor(force = false): Promise<RunResult> {
+  const now = Date.now();
+  if (!force && doctorCache !== null && now - doctorCache.at < DOCTOR_TTL_MS) {
+    return doctorCache.result;
+  }
+  const result = await canvas(["doctor"], 120_000);
+  doctorCache = { at: now, result };
+  return result;
+}
+
+/** For the tests, and for a `?refresh=1` the UI may want in a later phase. */
+export function forgetDoctor(): void {
+  doctorCache = null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The shapes the tool reports                                                */
 /* -------------------------------------------------------------------------- */
