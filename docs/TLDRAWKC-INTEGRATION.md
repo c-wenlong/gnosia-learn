@@ -381,15 +381,34 @@ Each with the reason it exists.
   resolves from there. manimkc's `agent.run_claude` does the same with
   `cwd=ROOT`.
 - **A per-job `--settings` file, written into the job workspace.** This is the
-  primary control, not the prompt. Deny `Write` and `Edit` everywhere, then
-  allow exactly `learn/assets/.candidates/<slug>.tldr`,
-  `learn/assets/.candidates/<slug>.svg` and the job scratch directory.
-  Permission rules fail an injected instruction; prompt wording only discourages
-  it. Note that `learn/assets/<slug>.tldr` is denied, so the agent cannot reach
-  the committed file at all.
-- **`--allowedTools Bash,Read,Write,Edit,Glob,Grep,TodoWrite`, and `Bash` is an
-  allowlist rather than a deny list.** This is the correction the first draft
-  needed. A deny list over `rm`, `mv`, `git`, `node` and the network tools does
+  primary control, not the prompt. Allow exactly
+  `learn/assets/.candidates/<slug>.tldr`,
+  `learn/assets/.candidates/<slug>.svg` and the job scratch directory, and let
+  everything else fall through to a refusal. Permission rules fail an injected
+  instruction; prompt wording only discourages it. Note that
+  `learn/assets/<slug>.tldr` is denied, so the agent cannot reach the committed
+  file at all.
+  **Three corrections phase 1 found by checking the CLI rather than assuming
+  it**, each of which silently removes the boundary if it is got wrong. A file
+  write is matched against `Edit(path)` rules and never `Write(path)`: the CLI
+  accepts a `Write(...)` path rule and never consults it, so a file allowlist
+  written that way reads as careful and permits nothing. A deny on a parent
+  directory always beats an allow beneath it, so the rules are written to miss
+  the two files the job is allowed to write, and the committed corpus is denied
+  by enumerating the directory at spawn time rather than by a glob over it. And
+  `permissions.allow` **merges** across settings sources rather than the most
+  specific file winning, so the spawn passes `--setting-sources ""` and this
+  file is the only source of rules the session has; without it the job's
+  permissions are the union of three files, two of which the runner cannot
+  see.
+- **The Bash allowlist is in the settings file, and no bare tool name is passed
+  anywhere.** This is the correction the first draft needed, and phase 1 found
+  the second half of it: a bare tool name *is* a permission rule that matches
+  every use of that tool, so `--allowedTools Bash,Read,Write,Edit,Glob,Grep,TodoWrite`
+  would have allowed every command and made the prefixes below decorative. The
+  spawn therefore passes no `--allowedTools` at all; the tool set is narrowed by
+  denying `WebFetch` and `WebSearch` as whole tools, and every other rule is
+  prefixed. A deny list over `rm`, `mv`, `git`, `node` and the network tools does
   not constrain `Bash` at all: a shell redirect, `cp`, `tee`, `printf >`, `sed
   -i` or `python3` writes anywhere in the tree, and the `Write` and `Edit`
   allowlist has no say over any of it. So the settings file allows a fixed set
@@ -781,7 +800,7 @@ raised it: S schema, A API and runner, U interface.
 | S7 | A session is deleted | It is not, once it did anything. `event.session_id` and `job.session_id` are `ON DELETE RESTRICT`, the same verdict [`0004_event_concept_restrict.sql`](../services/catalog/drizzle/0004_event_concept_restrict.sql) reached, and `SET NULL` is not even available: the referential `UPDATE` it fires is what the per-row trigger from [`0003_append_only_per_row.sql`](../services/catalog/drizzle/0003_append_only_per_row.sql) refuses. `session.log_asset_id` is the one `SET NULL`, the other way round | Migration `0006` |
 | S8 | The same diagram is regenerated | Update in place. The asset id is derived from the path, both files are committed per D8 in the tool's docs, and git holds every version with a diff and an author. What is new each time is one `asset_job` row per file. The history of the bytes stays in git, the history of who made them in the catalog | `assert-output` upsert |
 | S9 | An asset row exists from a scan and a job later claims it | One `asset_job` insert, and nothing else. The id the studio derives from the path is the id the indexer derives from the same path. Assets with no producer need no backfill: the absence of an `asset_job` row is that statement | `assert-output` |
-| A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
+| A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
 | A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again | Runner timers |
 | A3 | The agent exits zero but wrote nothing, or wrote something that fails `verify` | The gate, in the five steps listed above. Any failure is fed back as a resume prompt carrying the specific finding, three attempts total, then `failed` with the findings and the partials moved to `jobs/<id>/rejected/` | The gate |
 | A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Write` and `Edit` on exactly the two candidate paths and the scratch directory, so the committed file is not reachable through either. `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` against the candidates directory at the end; anything else dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
@@ -1210,24 +1229,24 @@ typecheck && npm test && npm run build` is green.
 
 Goal: a brief in, a reviewed candidate out, driven by curl. No UI.
 
-- [ ] `services/studio/` as a workspace, with its own `tsconfig.json` and a
+- [x] `services/studio/` as a workspace, with its own `tsconfig.json` and a
       `typecheck` script, per the `AGENTS.md` gotcha about workspaces
-- [ ] `services/studio/src/paths.ts`, the only module that builds a path
-- [ ] The queue: enqueue, claim, the reconcile pass at start, concurrency 1
-- [ ] The per-job workspace: `jobs/<id>/` with `job.json`, `session.ndjson`,
+- [x] `services/studio/src/paths.ts`, the only module that builds a path
+- [x] The queue: enqueue, claim, the reconcile pass at start, concurrency 1
+- [x] The per-job workspace: `jobs/<id>/` with `job.json`, `session.ndjson`,
       the settings file and the scratch directory
-- [ ] The agent spawn: detached process group, `--settings`, `--allowedTools`,
+- [x] The agent spawn: detached process group, `--settings`, `--allowedTools`,
       the Bash allowlist, `--session-id` persisted first, `--output-format
       stream-json`, `--max-turns`, the three timers
-- [ ] The prompt: brief fields in a delimited data block, mermaid through
+- [x] The prompt: brief fields in a delimited data block, mermaid through
       `from-mermaid --source` and never in the prompt text
-- [ ] The gate, its five steps, the three-attempt retry with a finding attached
-- [ ] Accept and discard in the order above: export and verify the candidate,
+- [x] The gate, its five steps, the three-attempt retry with a finding attached
+- [x] Accept and discard in the order above: export and verify the candidate,
       then the two renames, then the `assert-output` calls
-- [ ] The HTTP API on `127.0.0.1:7250`: every route in the table above, the SSE
+- [x] The HTTP API on `127.0.0.1:7250`: every route in the table above, the SSE
       stream, and `/api/health`
-- [ ] `learn/assets/.candidates/` added to `.gitignore`
-- [ ] Tests: the state machine, the gate against a fixture candidate, the
+- [x] `learn/assets/.candidates/` added to `.gitignore`
+- [x] Tests: the state machine, the gate against a fixture candidate, the
       settings file contents (the Bash allowlist is an allowlist and `cp`,
       `tee` and a redirect are absent from it), the prompt assembly against an
       injected brief, the accept ordering with a forced export failure, and a
