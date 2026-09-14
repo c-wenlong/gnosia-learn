@@ -6,7 +6,7 @@ import {
   indexRun,
   type IndexSource,
 } from "@self-learn/schema";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 
@@ -245,4 +245,124 @@ export async function indexedRoot(
   const raw = (row.metadata as Record<string, unknown> | null)?.outRoot;
   const dataRoot = typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
   return { sourceRoot: row.sourceRoot, dataRoot };
+}
+
+/** An `AssetRef` plus the topics it is filed under, for a page with no single subject in mind. */
+export interface AssetWithTopics extends AssetRef {
+  /** Slugs, sorted. Empty when the asset is in no `asset_topic` row, which is legal. */
+  topics: string[];
+}
+
+/**
+ * Every option optional; no options means every asset, everything the
+ * catalog holds. `assetsForTopic`, `assetsForConcept` and
+ * `assetsForCollection` all answer "what belongs to this one thing"; a library
+ * page's first screen has no single subject yet, and needs "everything, a
+ * page at a time" instead.
+ */
+export interface ListAssetsOptions {
+  kind?: string;
+  topicSlug?: string;
+  sourceRepo?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Everything, filtered and paged, with the topic chips a grid needs already
+ * attached.
+ *
+ * One statement. The topics come back as a correlated scalar subquery in the
+ * select list — `array_agg` over `asset_topic` for that row's `asset.id`,
+ * `coalesce`d to `'{}'` — rather than either of the two shapes that look
+ * obvious first.
+ *
+ * **Not a second round trip.** An earlier version of this ran the filtered,
+ * paged list first and then asked `asset_topic` for the ids it kept, in a
+ * second query, on the theory that two cheap statements beat one query per
+ * row. They do, but they are not the same statement: under the default READ
+ * COMMITTED isolation, each query gets its own snapshot, so a `catalog index`
+ * run committing between them could hand back an asset whose chips no longer
+ * match the membership that selected it for a `topicSlug` filter. A single
+ * statement has one snapshot, so the question does not need answering rather
+ * than being reasoned about — and it is also less code than the two-query
+ * version was, not more, which is the rest of the argument for it.
+ *
+ * **Not a join either.** Joining `asset_topic` directly would multiply a row
+ * with three topics into three, which breaks `limit`/`offset` (paging would
+ * count topic links, not assets) and the one-row-per-asset contract every
+ * other query in this file keeps. The subquery stays one row per asset no
+ * matter how many topics it carries.
+ *
+ * The outer `ORDER BY kind, id` is unchanged and is still where the ordering
+ * comes from — the same stable order `assetsForTopic` uses, for the same
+ * reason the `byKindThenId` comment above gives. The topics *within* one
+ * asset are ordered by the subquery's own `array_agg(... order by
+ * topic_slug)`, so that ordering is SQL's too, not a second sort layered on
+ * after.
+ *
+ * `topicSlug` filters by membership — "assets filed under this topic" — using
+ * an `IN` against `asset_topic` rather than a join, for the same
+ * row-multiplication reason: filtering and displaying both need one row per
+ * asset, so neither can afford to join it directly.
+ */
+export async function listAssets(
+  db: CatalogDatabase,
+  options: ListAssetsOptions = {},
+): Promise<AssetWithTopics[]> {
+  const { kind, topicSlug, sourceRepo, limit, offset } = options;
+  const conditions = [
+    kind === undefined ? undefined : eq(asset.kind, kind),
+    sourceRepo === undefined ? undefined : eq(asset.sourceRepo, sourceRepo),
+    topicSlug === undefined
+      ? undefined
+      : inArray(
+          asset.id,
+          db.select({ id: assetTopic.assetId }).from(assetTopic).where(eq(assetTopic.topicSlug, topicSlug)),
+        ),
+  ].filter((c) => c !== undefined);
+
+  const base = db
+    .select({
+      ...ASSET_COLUMNS,
+      topics: sql<string[]>`(
+        select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug}), '{}')
+        from ${assetTopic}
+        where ${assetTopic.assetId} = ${asset.id}
+      )`,
+    })
+    .from(asset)
+    .where(conditions.length === 0 ? undefined : and(...conditions))
+    .orderBy(asc(asset.kind), asc(asset.id));
+  const limited = limit === undefined ? base : base.limit(limit);
+  const paged = offset === undefined ? limited : limited.offset(offset);
+  const rows = await paged;
+
+  // `coalesce(array_agg(...), '{}')` never sends a SQL null down this column,
+  // and node-postgres parses a `text[]` into a real array on its own — checked
+  // against this project's own database, not assumed: both the raw driver and
+  // drizzle's node-postgres adapter hand back `Array.isArray(...) === true`
+  // for an asset with topics and `[]`, never `null`, for one with none. This
+  // still normalises rather than trusting that forever: the guarantee lives in
+  // the SQL text above, and a future edit to it should not also have to
+  // remember that every caller assumed the shape it produced today.
+  return rows.map((row) => ({ ...row, topics: row.topics ?? [] }));
+}
+
+/** How many assets of one kind exist, for a filter chip that shows the count. */
+export interface AssetKindCount {
+  kind: string;
+  count: number;
+}
+
+/**
+ * One grouped scan of `asset`, counting every kind at once — the same shape as
+ * `mirrorCoverage` in `../commands/status.ts`, for the same reason: a count
+ * per kind, one query at a time, would be nine round trips for a page whose
+ * whole point is to be cheap. A kind with no rows is simply absent, the same
+ * contract `byKind` already keeps, so a chip never claims a count of zero for
+ * something the catalog does not have and never lies about one it does.
+ */
+export async function assetCounts(db: CatalogDatabase): Promise<AssetKindCount[]> {
+  return db.select({ kind: asset.kind, count: count() }).from(asset).groupBy(asset.kind).orderBy(asc(asset.kind));
 }

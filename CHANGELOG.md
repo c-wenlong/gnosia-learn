@@ -153,6 +153,94 @@ This project is continuously deployed and not versioned; entries are grouped by 
   file is gone" and "your index is older than this feature" are different
   problems with different fixes, and a 404 conflates them.
 
+- **`listAssets` and `assetCounts`, the queries a library page needs.**
+  `assetsForTopic`, `assetsForConcept` and `assetsForCollection` all answer
+  "what belongs to this one thing"; a library page's first screen has no
+  single subject yet; it wants everything, filtered and paged. `listAssets`
+  takes `kind`, `topicSlug`, `sourceRepo`, `limit` and `offset`, every one
+  optional, and returns `AssetWithTopics[]` — an `AssetRef` plus the topic
+  slugs each asset is filed under, so a grid can render a topic chip without a
+  second query per row. `assetCounts` is one grouped `count() ... group by
+  kind` for the filter chips that show how many of each kind exist.
+
+  One statement, not two. The topics come back as a correlated scalar
+  subquery in the select list — `coalesce(array_agg(topic_slug order by
+  topic_slug), '{}')` over `asset_topic` for that row's `asset.id` — rather
+  than a second round trip for the ids the first query kept. A two-query
+  version worked and was reviewed, but under READ COMMITTED each query gets
+  its own snapshot: a `catalog index` run committing between them could hand
+  back an asset whose chips no longer matched the membership that selected
+  it for a `topicSlug` filter. One statement has one snapshot, so the race
+  does not need reasoning about, and the query is shorter than the two-query
+  version was, not longer. `ORDER BY kind, id` is still what orders the
+  list — the same stable order `assetsForTopic` uses, for the reason the
+  `byKindThenId` comment in the same file gives — and the subquery's own
+  `order by topic_slug` is what orders the topics within one asset, so
+  neither ordering is redone in TypeScript. `topicSlug` filters by
+  membership through an `IN` against `asset_topic` rather than a join, for
+  the same reason the topics themselves are a subquery and not a join: a
+  join would multiply an asset filed under three topics into three rows and
+  break both the paging and the one-row-per-asset contract every other query
+  in the file keeps.
+
+- **Four components that put an asset on a page: `VideoPlayer`,
+  `TranscriptPanel`, `DiagramView` and `AssetCard`**, in
+  `apps/web/src/components/`, with the shapes and the index arithmetic they
+  share in `media.ts`.
+
+  All four are pure presentation. Every one takes what it needs as props: none
+  queries the catalog, imports `@self-learn/catalog/state` or builds a URL, so
+  the parent that lists the rows and the route that serves the bytes can be
+  written beside these rather than after them.
+
+  `VideoPlayer` is a native `<video controls>` with a chapter rail and the
+  transcript beside it, and no player library: every browser already ships
+  play/pause, a scrubber, captions and fullscreen that the keyboard and a
+  screen reader know, and a study surface gains nothing from a worse second
+  copy. Chapters seek, and the transcript, the chapter highlight and the video
+  all read one clock. Its layout is driven by container queries rather than
+  viewport breakpoints, because the app's content column is capped at 48rem
+  whatever the screen is doing: a `lg:` rule there would leave the video
+  narrower than its own transcript.
+
+  `TranscriptPanel` holds the behaviour worth having. The line being spoken is
+  highlighted and the lines already spoken recede; the highlight rests on the
+  last line through a pause instead of blinking out; clicking a line seeks; and
+  the panel keeps the current line in view until the reader scrolls somewhere
+  else, at which point it stops and offers to follow again. Its own scroll is
+  told apart from the reader's by the position it expected to land on.
+
+  `DiagramView` renders the SVG as an `<img>`, not inline. A committed export
+  is 200kB to 300kB and self-contained, so inlining would put every byte in the
+  HTML of every page uncached, and drop its ids, `<defs>` and `<style>` into the
+  page's one global namespace where two diagrams start borrowing each other's
+  clip paths. Inlining buys one thing, restyling from CSS, and that is the
+  wrong thing here: the drawings carry their own meaning-bearing colours, so a
+  dark-mode `filter: invert()` would turn a red warning box cyan. They are
+  given a constant near-white mat in both themes instead, framed like a plate
+  in a book.
+
+  `AssetCard` has two shapes, not one. A video and a diagram are worth looking
+  at before opening and get a preview tile; a transcript, a note or a link is
+  text and gets a compact row, because a grid of empty 16:9 rectangles is not a
+  gallery. It degrades honestly: a kind it has never seen still reads as
+  itself, a video with no poster says so, an asset with no title falls back to
+  its filename in mono and admits to `Untitled <kind>` only when there is no
+  name at all, and a preview that fails to load says that where the picture
+  would have been.
+
+  The transcript and chapter props are typed to what manimkc actually writes
+  (`<name>.transcript.json` is `{ video, duration, chapters, segments }`), not
+  to an invented shape.
+
+  These are the first components in the app with tests, which CONTRIBUTING.md
+  and ARCHITECTURE.md both say are unnecessary. The exception is deliberate and
+  narrow: the follow-then-give-up scroll, the seek and the four empty states
+  are behaviour rather than markup, and looking at the running app does not
+  catch a regression in them. The tests render with `react-dom/client` and
+  React's own `act` rather than a testing library, so the dependency list is
+  unchanged, and coverage scope is untouched.
+
 - **The asset queries are behind the door the web app comes through.** A new
   `services/catalog/src/state/assets.ts` owns `assetsForTopic`,
   `assetsForConcept`, `assetsForCollection` and `assetsByIds`, plus the

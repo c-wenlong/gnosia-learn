@@ -103,14 +103,19 @@ export {
   readLearnerSnapshot,
 } from "./snapshot";
 export {
+  assetCounts,
   assetsByIds,
   assetsForCollection,
   assetsForConcept,
   assetsForTopic,
   byKind,
   indexedRoot,
+  listAssets,
+  type AssetKindCount,
   type AssetRef,
+  type AssetWithTopics,
   type IndexedRoot,
+  type ListAssetsOptions,
 } from "./assets";
 export {
   domainOf,
