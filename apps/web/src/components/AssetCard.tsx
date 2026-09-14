@@ -2,6 +2,15 @@
 
 import { useState, type ReactNode } from "react";
 
+import {
+  assetDisplayTitle,
+  assetKindLabel,
+  familyOf,
+  formatBytes,
+  type AssetCardRef,
+  type Family,
+} from "@/components/asset-meta";
+
 /**
  * One row of the catalog's asset table, as a card in a grid.
  *
@@ -21,105 +30,14 @@ import { useState, type ReactNode } from "react";
  * no title falls back to its filename, in mono, because that is what it is
  * actually called, and to `Untitled <kind>` only when there is no name at all.
  * A preview that fails to load says so where the picture would have been.
- */
-
-/**
- * The asset as `@self-learn/catalog/state` hands it over. Restated here rather
- * than imported: a `"use client"` module that reaches the catalog would drag a
- * Postgres driver into the browser bundle, and the shapes a component renders
- * are its own contract anyway. `title` is nullable and usually exactly one of
- * `path` and `url` is set, which is why both fallbacks below exist.
- */
-export interface AssetCardRef {
-  id: string;
-  kind: string;
-  path: string | null;
-  url: string | null;
-  bytes: number | null;
-  title: string | null;
-  sourceRepo?: string;
-}
-
-type Family = "video" | "diagram" | "text" | "link";
-
-/**
- * The kinds in the catalog today, with the counts they were written against:
- * link 68, note 32, video 30, captions 23, transcript 23, chapters 23,
- * session 3, diagram_svg 2, diagram_source 2. Anything not here is rendered
- * from its own name, so a new indexer does not need a change in this file to
- * put its rows on a page.
- */
-const KINDS: Record<string, { label: string; family: Family }> = {
-  video: { label: "Video", family: "video" },
-  diagram_svg: { label: "Diagram", family: "diagram" },
-  diagram_source: { label: "Diagram source", family: "text" },
-  transcript: { label: "Transcript", family: "text" },
-  captions: { label: "Captions", family: "text" },
-  chapters: { label: "Chapters", family: "text" },
-  note: { label: "Note", family: "text" },
-  session: { label: "Session log", family: "text" },
-  link: { label: "Link", family: "link" },
-};
-
-/** `diagram_source` reads as "Diagram source"; an unknown kind reads as itself. */
-export function assetKindLabel(kind: string): string {
-  const known = KINDS[kind];
-  if (known) return known.label;
-  const words = kind.replace(/[_-]+/g, " ").trim();
-  if (!words) return "Asset";
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function familyOf(kind: string): Family {
-  return KINDS[kind]?.family ?? "text";
-}
-
-/**
- * What to call this asset, and how honest the name is.
  *
- * `title` when there is one, else the filename, else the host of the link,
- * else an admission that the row has no name. The caller styles the three
- * cases differently, because a filename is not a title and should not be
- * dressed as one.
+ * **The naming and sizing live in `./asset-meta`**, which is React-free and
+ * carries no `"use client"`. They were in this file and had to move: a
+ * `"use client"` module's exports are client references, functions included, so
+ * a server component that imported `assetKindLabel` from here compiled, built
+ * without a word and threw *Attempted to call assetKindLabel() from the server*
+ * on the first request. The pure half belongs where both sides may call it.
  */
-export function assetDisplayTitle(asset: AssetCardRef): {
-  text: string;
-  source: "title" | "filename" | "host" | "none";
-} {
-  const title = asset.title?.trim();
-  if (title) return { text: title, source: "title" };
-
-  const path = asset.path?.trim();
-  if (path) {
-    const base = path.split("/").filter(Boolean).pop();
-    if (base) return { text: base, source: "filename" };
-  }
-
-  const url = asset.url?.trim();
-  if (url) {
-    try {
-      return { text: new URL(url).host, source: "host" };
-    } catch {
-      return { text: url, source: "filename" };
-    }
-  }
-
-  return { text: `Untitled ${assetKindLabel(asset.kind).toLowerCase()}`, source: "none" };
-}
-
-/** `298 kB`, SI units, because that is what the file managers say. */
-export function formatBytes(bytes: number | null): string | null {
-  if (bytes === null || !Number.isFinite(bytes) || bytes < 0) return null;
-  if (bytes < 1000) return `${Math.round(bytes)} B`;
-  const units = ["kB", "MB", "GB", "TB"];
-  let value = bytes / 1000;
-  let unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
 
 /** One stroke set for every kind, so the grid reads as one family of things. */
 function KindGlyph({ family, className }: { family: Family; className?: string }) {

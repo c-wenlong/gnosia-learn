@@ -1,6 +1,7 @@
 import {
   asset,
   assetConcept,
+  assetDerivation,
   assetTopic,
   collectionItem,
   indexRun,
@@ -195,6 +196,70 @@ export async function assetsByIds(db: CatalogDatabase, ids: string[]): Promise<A
   return db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
 }
 
+/** Both directions of `asset_derivation` for one asset, in one answer. */
+export interface AssetDerivations {
+  /** What this asset was produced from. A transcript's video; an SVG's `.tldr`. */
+  sources: AssetRef[];
+  /** What was produced from this asset. A video's three sidecars; a `.tldr`'s SVG. */
+  derived: AssetRef[];
+}
+
+/**
+ * What this asset came from, and what came out of it.
+ *
+ * `asset_derivation` is the link that says a `.transcript.json`, a `.vtt` and a
+ * `.chapters.json` belong to one `.mp4` rather than standing on their own —
+ * 71 rows today, 69 of them manimkc sidecars and two the SVG each `.tldr` was
+ * exported to. Without it a library page has no way to tell the thirty videos
+ * that are the point from the sixty-nine files that exist only to accompany
+ * them, and would show 206 equal rows.
+ *
+ * **Both directions, because the table is read both ways and the direction is
+ * not the same one for every kind.** A video is the `source_asset_id` of its
+ * sidecars, so its companions are found by looking *down*; a diagram SVG is the
+ * `asset_id` of its `.tldr`, so its source is found by looking *up*. A query
+ * that answered only one of those would be right for videos and silently wrong
+ * for diagrams, which is the pair of cases this catalog actually holds.
+ *
+ * Two round trips and then `assetsByIds`, rather than two joins: the ids are
+ * what the table stores, `assetsByIds` is already the one place `AssetRef`
+ * columns are selected by id, and a derivation set is a handful of rows. The
+ * ordering is `assetsByIds`' — by id — so `sources` and `derived` sort the same
+ * way the rest of this file does within a kind.
+ *
+ * `../commands/show.ts` did exactly this inline before this existed, which put
+ * the lookup somewhere the web app may not import (ARCHITECTURE.md layering
+ * rule 1). It calls this now, so `catalog show` and a page cannot disagree
+ * about what an asset was made from.
+ */
+export async function assetDerivations(
+  db: CatalogDatabase,
+  id: string,
+): Promise<AssetDerivations> {
+  const [sourceIds, derivedIds] = await Promise.all([
+    db
+      .select({ id: assetDerivation.sourceAssetId })
+      .from(assetDerivation)
+      .where(eq(assetDerivation.assetId, id)),
+    db
+      .select({ id: assetDerivation.assetId })
+      .from(assetDerivation)
+      .where(eq(assetDerivation.sourceAssetId, id)),
+  ]);
+
+  const [sources, derived] = await Promise.all([
+    assetsByIds(
+      db,
+      sourceIds.map((r) => r.id),
+    ),
+    assetsByIds(
+      db,
+      derivedIds.map((r) => r.id),
+    ),
+  ]);
+  return { sources, derived };
+}
+
 /** What one source's last index run said about where it read from. */
 export interface IndexedRoot {
   /** The directory the run read. Absolute for manimkc, repo-relative otherwise. */
@@ -264,6 +329,18 @@ export interface ListAssetsOptions {
   kind?: string;
   topicSlug?: string;
   sourceRepo?: string;
+  /**
+   * Exactly these assets, by id. The narrow case of the broad query, and the
+   * reason it is here rather than served by `assetsByIds`: that returns an
+   * `AssetRef`, which carries no topics, so a caller that needs one row *and*
+   * its topic chips would otherwise have to page through everything looking
+   * for it — which finds nothing once the catalog outgrows the page, and
+   * answers 404 for a row that exists.
+   *
+   * An empty array asks for nothing and gets nothing, rather than being
+   * dropped and quietly widening the query to every asset in the catalog.
+   */
+  ids?: string[];
   limit?: number;
   offset?: number;
 }
@@ -310,10 +387,15 @@ export async function listAssets(
   db: CatalogDatabase,
   options: ListAssetsOptions = {},
 ): Promise<AssetWithTopics[]> {
-  const { kind, topicSlug, sourceRepo, limit, offset } = options;
+  const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
+  // An `ids: []` asks for nothing, and `where id in ()` is not how Postgres
+  // spells that. Short-circuiting also saves the round trip, the same way
+  // `assetsByIds` does.
+  if (ids !== undefined && ids.length === 0) return [];
   const conditions = [
     kind === undefined ? undefined : eq(asset.kind, kind),
     sourceRepo === undefined ? undefined : eq(asset.sourceRepo, sourceRepo),
+    ids === undefined ? undefined : inArray(asset.id, ids),
     topicSlug === undefined
       ? undefined
       : inArray(

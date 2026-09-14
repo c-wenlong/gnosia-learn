@@ -139,6 +139,15 @@ export function Sidebar({
                 Knowledge base
               </NavLink>
             </div>
+            {/* `startsWith` rather than equality: /library/<id> is the same
+                destination one level in, and a nav item that unhighlights the
+                moment you open something from it reads as having navigated
+                away from the section. */}
+            <div onClick={onClose}>
+              <NavLink href="/library" active={pathname.startsWith("/library")}>
+                Library
+              </NavLink>
+            </div>
           </div>
           <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             Courses

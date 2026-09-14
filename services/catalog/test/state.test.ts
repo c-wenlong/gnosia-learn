@@ -614,6 +614,31 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       it("returns an empty list for a filter that matches nothing, rather than throwing", async () => {
         expect(await listAssets(scratch.db, { kind: "no-such-kind" })).toEqual([]);
       });
+
+      it("selects exactly the named ids, with their topics attached", async () => {
+        // The detail page's lookup. `assetsByIds` answers the same question
+        // without the topics, which is why this option exists: a page needing
+        // both had to page through the whole catalog looking for one row, and
+        // answered 404 for anything past the end of that page.
+        const rows = await listAssets(scratch.db, { ids: [ASSETS.video, ASSETS.orphan] });
+        expect(rows.map((r) => r.id).sort()).toEqual([ASSETS.orphan, ASSETS.video].sort());
+        expect(rows.find((r) => r.id === ASSETS.video)?.topics).toEqual([TOPIC_SLUG]);
+        expect(rows.find((r) => r.id === ASSETS.orphan)?.topics).toEqual([]);
+      });
+
+      it("asks for nothing when given no ids, rather than widening to everything", async () => {
+        expect(await listAssets(scratch.db, { ids: [] })).toEqual([]);
+      });
+
+      it("returns nothing for an id no row has", async () => {
+        expect(await listAssets(scratch.db, { ids: ["nope:not-a-row"] })).toEqual([]);
+      });
+
+      it("ANDs ids with the other filters", async () => {
+        expect(
+          await listAssets(scratch.db, { ids: [ASSETS.video], kind: "note" }),
+        ).toEqual([]);
+      });
     });
 
     /**
