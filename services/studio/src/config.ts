@@ -1,0 +1,80 @@
+/**
+ * Every number and name the runner reads from the environment, with the reason
+ * it has the value it has.
+ *
+ * The three timers are guesses and the design says so. They belong here rather
+ * than inline so the first ten real jobs can move them without a code read.
+ */
+
+function integer(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+/** Loopback only. Not a default that can be widened: see `bindHost`. */
+export const PORT = integer("STUDIO_PORT", 7250, 1024, 65535);
+
+/**
+ * `127.0.0.1`, and not configurable.
+ *
+ * D10 makes loopback binding the boundary that replaces the same-origin and
+ * rate-limit guards the app's agent routes carry. A `STUDIO_HOST` knob would be
+ * a way to switch that boundary off from a dotenv, which is not a knob this
+ * service should own.
+ */
+export const HOST = "127.0.0.1";
+
+/**
+ * One job at a time, capped at two.
+ *
+ * Every tldrawkc verb launches its own Chromium and a job is four or more of
+ * them at a 1904px viewport. D9 also notes the second benefit: at 1, two jobs
+ * on one file is structurally impossible rather than something a lock has to
+ * get right.
+ */
+export const CONCURRENCY = integer("STUDIO_CONCURRENCY", 1, 1, 2);
+
+/** Per attempt. A diagram job is short Chromium launches, not a video render. */
+export const ATTEMPT_TIMEOUT_MS = integer("STUDIO_ATTEMPT_TIMEOUT_MS", 15 * 60_000, 30_000, 3_600_000);
+
+/** Per job, across every attempt. */
+export const JOB_TIMEOUT_MS = integer("STUDIO_JOB_TIMEOUT_MS", 45 * 60_000, 60_000, 6 * 3_600_000);
+
+/**
+ * Silence on the agent's stdout. This is the one that catches a browser that
+ * never answered the bridge, where the CLI's own 30 second exec timeout never
+ * fires because the CLI is not the thing that is stuck.
+ */
+export const IDLE_TIMEOUT_MS = integer("STUDIO_IDLE_TIMEOUT_MS", 5 * 60_000, 30_000, 3_600_000);
+
+/** Capped server side regardless of what a brief asks for. */
+export const MAX_TURNS = integer("STUDIO_MAX_TURNS", 60, 1, 200);
+
+/** Three attempts, and a retry only ever carries a specific gate finding. */
+export const MAX_ATTEMPTS = integer("STUDIO_MAX_ATTEMPTS", 3, 1, 5);
+
+/** Drawing loops are mechanical, so the default is the cheaper tier. */
+export const DEFAULT_MODEL = "sonnet";
+export const MODELS = ["sonnet", "opus"] as const;
+export type Model = (typeof MODELS)[number];
+
+/** Seconds between SIGTERM to the process group and SIGKILL. */
+export const KILL_GRACE_MS = integer("STUDIO_KILL_GRACE_MS", 5_000, 500, 60_000);
+
+/** How many SSE events one connection buffers before it starts dropping. */
+export const SSE_BUFFER = integer("STUDIO_SSE_BUFFER", 500, 50, 10_000);
+
+/** The name this runner claims jobs under. One runner per generator kind: D25. */
+export const RUNNER_NAME = "studio-diagrams";
+
+/** The `claude` binary. Overridable the way manimkc's `MANIMKC_CLAUDE_BIN` is. */
+export const CLAUDE_BIN = process.env.STUDIO_CLAUDE_BIN?.trim() || "claude";
+
+/** A cap on every free-text brief field, so none can carry a paragraph of prompt. */
+export const TEXT_LIMIT = integer("STUDIO_TEXT_LIMIT", 2_000, 200, 20_000);
+
+/** A cap on the mermaid source, which is written to a file and never to the prompt. */
+export const MERMAID_LIMIT = integer("STUDIO_MERMAID_LIMIT", 20_000, 1_000, 200_000);

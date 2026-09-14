@@ -1,0 +1,18 @@
+{
+  "//": "Its own tsconfig, like every other workspace. The root config's `include` is flat (`*.ts`) and cannot reach here, so without this file nothing in this service is type-checked at all. The `typecheck` script in package.json is the other half: `npm run typecheck` at the root fans out through `--workspaces --if-present`.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
