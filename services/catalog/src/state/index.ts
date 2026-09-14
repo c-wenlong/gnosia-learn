@@ -108,7 +108,9 @@ export {
   assetsForConcept,
   assetsForTopic,
   byKind,
+  indexedRoot,
   type AssetRef,
+  type IndexedRoot,
 } from "./assets";
 export {
   domainOf,

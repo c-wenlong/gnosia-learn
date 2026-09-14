@@ -76,9 +76,17 @@ export const indexRun = pgTable(
     counts: jsonb("counts").notNull().default(sql`'{}'::jsonb`),
     /**
      * Anything else the source wants remembered about the run that is not a
-     * count. Today only `mirrors` writes here, recording which destinations it
-     * could reach: a destination it could not reach keeps its old rows, so
-     * without this the table would claim an audit that never happened.
+     * count. Two sources write here.
+     *
+     * `mirrors` records which destinations it could reach: a destination it
+     * could not reach keeps its old rows, so without this the table would
+     * claim an audit that never happened.
+     *
+     * `manimkc` records `outRoot`, the absolute base its `out/…` asset paths
+     * are relative to. That is the one thing about the run nothing downstream
+     * can recompute (`source_root` is the checkout it read, which is a
+     * different directory whenever manimkc's data root is set), so a reader
+     * that wants to open one of those files has to be told it here.
      */
     metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
