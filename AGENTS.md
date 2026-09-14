@@ -182,7 +182,7 @@ instead of being a bare command list.
 
 ### Workflow 1: move a submodule to a newer commit
 
-Four separate things have to happen in order; skipping any one of them fails
+Five separate things have to happen in order; skipping any one of them fails
 quietly rather than loudly.
 
 1. `npm run gitmodules -- --check` first. It is genuinely read-only: for a
@@ -215,11 +215,14 @@ quietly rather than loudly.
 Do not grep `dist/` for a function name to confirm a rebuild took. The page
 bundle is minified into a single line of roughly 280,000 characters with
 mangled internal names, so a grep can say yes on a stale build. Verify by
-behaviour instead: run a command whose output changes, for example
+behaviour instead: run
 `npm run --silent canvas -- from-mermaid <scratchpad-path>.tldr --source
-tools/tldrawkc/test/fixtures/mermaid/subgraph-8-9.mmd`, and read the lint
-list it prints. Behaviour is the only honest check here; say so plainly
-rather than treating a grep as proof.
+tools/tldrawkc/test/fixtures/mermaid/subgraph-8-9.mmd`. A working build
+prints `8 nodes, 9 edges, 1 container, 18 shapes` and exits 0; a broken or
+stale one throws, prints a different shape count, or exits nonzero. That
+exact line is the expected value, not just "some output changed". Behaviour
+is the only honest check here; say so plainly rather than treating a grep as
+proof.
 
 ### Workflow 3: working in a checkout other sessions share
 
@@ -238,7 +241,7 @@ progress.
 | --- | --- | --- |
 | The committed pointer | A tree entry, mode `160000`, at the path this repo tracks | `git ls-tree HEAD tools/<name>` |
 | The staged pointer | The commit about to land if you commit right now | `git ls-files -s tools/<name>` |
-| Your own checkout | The submodule's own `.git`, and its `HEAD` | `tools/<name>/.git` is a file containing `gitdir: ../../.git/modules/<name>`; the submodule's `HEAD` lives under that path |
+| Your own checkout | The submodule's own `.git`, and its `HEAD` | `tools/<name>/.git` is a file whose `gitdir:` line names where the submodule's real git dir is; resolve it by reading the file rather than assuming the path, since it differs between a plain checkout (`../../.git/modules/<name>`) and a linked worktree (`.git/worktrees/<worktree>/modules/<name>`). The submodule's `HEAD` lives under that resolved path |
 | `.gitmodules` | Path and URL only | Never a commit id |
 
 ## Gotchas
