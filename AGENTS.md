@@ -174,6 +174,76 @@ Rules of engagement:
   against the installed one. An edit that leaves the version alone is an edit
   nobody's session ever sees.
 
+## Workflows
+
+Procedures for the two submodules and the checkout they live in. Each step
+below comes from a real failure, so the reason stays attached to the step
+instead of being a bare command list.
+
+### Workflow 1: move a submodule to a newer commit
+
+Five separate things have to happen in order; skipping any one of them fails
+quietly rather than loudly.
+
+1. `npm run gitmodules -- --check` first. It is genuinely read-only: for a
+   submodule that is not yet checked out it reads the pinned commit straight
+   from the superproject's tree and the target from `git ls-remote`, so it
+   neither fetches into nor checks out the submodule. It exits 1 when
+   anything is behind, 0 otherwise.
+2. Make sure the submodule sits on its own `main` before running the script
+   for real. A squash merge writes a new commit id on `main`, so the branch
+   commit that got merged is not an ancestor of it, and
+   `scripts/update-gitmodules.sh` reports `(diverged, skipped)` rather than
+   force-detaching and throwing local work away. Fix with
+   `git -C tools/<name> checkout main`. That is correct behaviour, not a bug:
+   the script cannot tell a merged branch from an unpushed one.
+3. `npm run gitmodules`. It fetches, checks out the new commit in the
+   submodule's working tree, and stops there. It stages nothing, commits
+   nothing, and never writes `.gitmodules` or any git config.
+4. Rebuild the tool if it ships build output. For tldrawkc that is
+   `cd tools/tldrawkc && npm ci && npm run build`. `dist/` is gitignored, so
+   no git operation ever refreshes it: after a pointer move the source is new
+   and the code that actually runs is still old, with nothing warning you.
+5. Commit the pointer on a branch and open a PR. An uncommitted pointer bump
+   does not survive: checking out any branch re-syncs the submodule to
+   whatever commit that branch records, silently undoing the bump. Before
+   `git add`, run `git diff --submodule=log tools/<name>` and check it lists
+   only commits that are already pushed.
+
+### Workflow 2: verify a tool rebuild
+
+Do not grep `dist/` for a function name to confirm a rebuild took. The page
+bundle is minified into a single line of roughly 280,000 characters with
+mangled internal names, so a grep can say yes on a stale build. Verify by
+behaviour instead: run
+`npm run --silent canvas -- from-mermaid <scratchpad-path>.tldr --source
+tools/tldrawkc/test/fixtures/mermaid/subgraph-8-9.mmd`. A working build
+prints `8 nodes, 9 edges, 1 container, 18 shapes` and exits 0; a broken or
+stale one throws, prints a different shape count, or exits nonzero. That
+exact line is the expected value, not just "some output changed". Behaviour
+is the only honest check here; say so plainly rather than treating a grep as
+proof.
+
+### Workflow 3: working in a checkout other sessions share
+
+Several Claude sessions can hold this checkout at once and move its branch
+under you. Before any git decision, `git fetch origin` and read the file you
+care about from `origin/main`, not the working tree, since the tree can be
+mid-change from another session. Do PR work in a `git worktree` instead of
+checking out a branch in the shared tree, so nobody's branch moves under
+them. Never stage a submodule or a file you did not intend to change;
+`git status` in a shared checkout routinely shows someone else's work in
+progress.
+
+### Where a submodule's commit lives
+
+| Where | What it holds | How to read it |
+| --- | --- | --- |
+| The committed pointer | A tree entry, mode `160000`, at the path this repo tracks | `git ls-tree HEAD tools/<name>` |
+| The staged pointer | The commit about to land if you commit right now | `git ls-files -s tools/<name>` |
+| Your own checkout | The submodule's own `.git`, and its `HEAD` | `tools/<name>/.git` is a file whose `gitdir:` line names where the submodule's real git dir is; resolve it by reading the file rather than assuming the path, since it differs between a plain checkout (`../../.git/modules/<name>`) and a linked worktree (`.git/worktrees/<worktree>/modules/<name>`). The submodule's `HEAD` lives under that resolved path |
+| `.gitmodules` | Path and URL only | Never a commit id |
+
 ## Gotchas
 
 Traps that cost time once already. Each names the file, so the reasoning does
@@ -226,9 +296,9 @@ not have to be worked out again.
 - **Only bump a submodule pointer to a commit that is already pushed.**
   Check `git diff --submodule=log tools/manimkc` (or `tools/tldrawkc`) before
   `git add`; staging a dirty or unpushed submodule leaves a pointer nobody
-  else can resolve. `scripts/update-gitmodules.sh` (`npm run gitmodules`,
-  `--check` for a dry run) does this fetch-and-compare for both submodules
-  and only ever checks out a commit already on the remote's tracked branch.
+  else can resolve. Workflow 1 under [Workflows](#workflows) has the full
+  sequence: `--check`, put the submodule back on `main`, run the script,
+  rebuild, then commit.
 - **The `event` append-only trigger is `FOR EACH ROW`, and must stay that way.**
   As `FOR EACH STATEMENT` (how migration `0001` first wrote it) it fired on the
   `ON DELETE SET NULL` that Postgres runs against `event.concept_slug` whenever
