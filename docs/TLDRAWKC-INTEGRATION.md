@@ -1170,25 +1170,35 @@ Goal: a job can be recorded and its output attached, with no studio at all. This
 is useful on its own: the `tldrawkc-diagram` skill draws a diagram from a
 terminal today and nothing records who asked for it or whether it landed.
 
-- [ ] Migration `0006` in `services/catalog/drizzle/`: `session`, `job`,
+- [x] Migration `0006` in `services/catalog/drizzle/`: `session`, `job`,
       `asset_job`, the `event.session_id` foreign key, and the `tutor` session
       backfill that has to precede it
-- [ ] Table definitions in `packages/schema/src/state.ts` (or a new
+- [x] Table definitions in `packages/schema/src/state.ts` (or a new
       `studio.ts`), plus `STUDIO_TABLES` in `packages/schema/src/index.ts`
-- [ ] `job_active_target_key`, the partial unique index, and the `CHECK`
+- [x] `job_active_target_key`, the partial unique index, and the `CHECK`
       constraints on `session.kind`, `session.state`, `job.kind` and `job.state`
-- [ ] `catalog assert-output --job <id> --path <p> [--json]`: the owning
+- [x] `catalog assert-output --job <id> --path <p> [--json]`: the owning
       indexer's reader over one file, the `asset` upsert and the `asset_job` row
       in one transaction, refusing an untopiced `.tldr` by name
-- [ ] `catalog job` verbs enough to drive it by hand: `enqueue` (from a brief
-      JSON file), `claim`, `finish`, `accept`, `ls`, `show`, all with `--json`
-- [ ] `catalog status` counts the studio tables apart, the way it counts
+- [x] `catalog job` verbs enough to drive it by hand: `enqueue` (from a brief
+      JSON file), `claim`, `finish`, `accept`, `discard`, `ls`, `show`, all
+      with `--json`. `discard` was not on this list and is here because
+      `discarded` is otherwise a state nothing can reach
+- [x] `catalog status` counts the studio tables apart, the way it counts
       `OPERATIONAL_TABLES`
-- [ ] Schema tests in `services/catalog/test/`: every refused transition, the
+- [x] Schema tests in `services/catalog/test/`: every refused transition, the
       lease collision, the `RESTRICT` on a session that ran a job, and the
-      backfill against a fixture event log
-- [ ] `services/catalog/SCHEMA.md` gains the studio group and loses the
+      backfill against a fixture event log — `services/catalog/test/studio.test.ts`
+- [x] `services/catalog/SCHEMA.md` gains the studio group and loses the
       `event.session_id` item from "Still open"
+
+Two things the checklist did not name and the foreign key made necessary.
+`learn session start` writes the `session` row beside its event, and
+`learn session close` moves it to `closed`; without that, the first thing the
+tutoring loop does after this migration is a `23503`. And `appendEvent` creates
+a `tutor` session on first reference, which is the runtime form of the same
+reconstruction the backfill does, so `learn observe --session x` against a
+session nobody opened keeps working as it did while the column was free text.
 
 Done when: on a clean database, `npm run catalog -- migrate` succeeds, a job
 enqueued from a brief JSON reaches `accepted` through the `catalog job` verbs
