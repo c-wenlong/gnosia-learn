@@ -49,7 +49,7 @@ fact stated in one is cross-referenced rather than repeated in the others.
 | --- | --- | --- |
 | UI | `apps/web/src/app/studio/` | The conversation with the person: the grid, the inspector, the brief form, the job panel, the accept screen. Holds no job state of its own |
 | API | `services/studio/src/api/` | HTTP on `127.0.0.1:7250`. JSON in, JSON out, plus one SSE stream per job |
-| Runner | `services/studio/src/runner/` | Jobs. Brief in, reviewed candidate out. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws |
+| Runner | `services/studio/src/runner/` | Jobs, one runner per generator kind it drives — the diagrams runner is what phases 0 to 4 build. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws. See D25 |
 | Agent | a headless `claude -p` session | The drawing. Writes snippets, runs the draw-look-fix loop, reads its own screenshots. The only model call in the system |
 | Catalog | `services/catalog/src/` | The index. Gains one command, `assert-output`, and one migration |
 | Tools | `tools/tldrawkc/`, `tools/manimkc/` | The canvas and the renderer. Neither changes for the studio |
@@ -64,7 +64,7 @@ flowchart TB
     end
     subgraph studio["services/studio, 127.0.0.1:7250"]
         API["api/<br/>REST plus SSE"]
-        RUN["runner/<br/>queue, spawn, gate, accept"]
+        RUN["runner/diagrams<br/>queue, spawn, gate, accept"]
         WAL["jobs/id/session.ndjson<br/>write-ahead log"]
     end
     subgraph agent["headless claude -p"]
@@ -130,6 +130,9 @@ test where a grep test is possible, a named reviewer check where it is not.
 10. **`npm run` calls carry `--silent`.** Both `canvas` and `learn` print a
     two-line npm banner otherwise, and `--json` output is then unparseable. The
     root [`AGENTS.md`](../AGENTS.md) names this as a trap that cost time once.
+11. **Each generator kind has its own runner and its own queue.** A runner
+    claims only the job kinds it owns; tldrawkc jobs and any future manimkc
+    jobs are never queued together. See D25.
 
 ## The schema
 
@@ -296,11 +299,13 @@ queueing the render twice.
 
 The two-process split matters. The root `package.json` reserves `services/*` for
 long-lived processes and CLIs, and `apps/*` for deployable surfaces. A job queue
-inside a Next dev server dies on every hot reload, so the queue is
-`services/studio/` on `127.0.0.1:7250` and `apps/web` rewrites `/studio/api/*`
-to it. The rewrite, rather than a cross-port fetch from the browser, is so the
-page sees one origin and SSE needs no CORS. D11 covers why the UI still lives in
-`apps/web` and how it stays out of production.
+inside a Next dev server dies on every hot reload, so `services/studio/` on
+`127.0.0.1:7250` is the one HTTP surface for every generator's queue, and
+`apps/web` rewrites `/studio/api/*` to it. That one surface is not one runner:
+diagrams and any future manimkc jobs still don't share a queue or a runner
+process behind it; D25 is why. The rewrite, rather than a cross-port fetch from
+the browser, is so the page sees one origin and SSE needs no CORS. D11 covers
+why the UI still lives in `apps/web` and how it stays out of production.
 
 ### The job API
 
@@ -785,7 +790,7 @@ raised it: S schema, A API and runner, U interface.
 | A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `revise` against the stored session id. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
-| A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row from the final `stream-json` result event and shown in the list and on `/api/health`, and `STUDIO_DAILY_USD` refusing new jobs with 429 once crossed | Runner; `POST /api/jobs` |
+| A10 | Cost | Five guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, and `turns` and `cost_usd` recorded on the row from the final `stream-json` result event and shown in the list and on `/api/health`. A sixth, a daily cap (`STUDIO_DAILY_USD`) that refuses new jobs with 429 once crossed, is optional and deferred to phase 7: one user on one machine has nothing to meter yet | Runner; `POST /api/jobs`; phase 7 |
 | U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
 | U3 | Postgres is down | The studio keeps working. The asset list comes from `list --json`, the topics from `content/topics.yaml`, and the jobs from disk. An amber banner in the existing `StoreBanner` position says `not connected to the catalog, browsing and drawing still work`. Accept still renames, exports and verifies, and reports `indexed: false` with a Reindex button. The concept picker falls back to the slugs in `topics.yaml` | Accept step 4; `GET /api/health` |
@@ -809,9 +814,10 @@ hold and are not renumbered here.
 
 ### D1. Write-back is a single-file `catalog assert-output`, not `catalog index --only diagrams`
 
-**Verdict:** accept calls `catalog assert-output --job <id> --path <p>` once per
-file. A full `catalog index --only diagrams` stays available as the Reindex
-button and as the repair path.
+**Verdict:** accept runs the single-file write path only, `catalog assert-output
+--job <id> --path <p>` once per file. The studio never runs a full
+`catalog index --only diagrams` on its own; that stays available as the Reindex
+button and as the repair path, and only ever runs when a person asks for it.
 
 **Why:** `--only diagrams` is a sweep of the whole directory that also prunes,
 so one job's write-back becomes a rebuild of the source, and
@@ -822,7 +828,11 @@ write-back can pull in topics and concepts as well. It also cannot write
 a second write outside the transaction that made the asset row. `assert-output`
 runs the same `diagramsIndexer` reader over one file, so there is still one
 implementation of what a diagram asset row looks like and one implementation of
-"a `.tldr` with no topic is refused by name".
+"a `.tldr` with no topic is refused by name". The cost is kept rather than
+hidden: a `.tldr` deleted outside the studio leaves its `asset` row in place,
+because nothing but a full index prunes, and pruning automatically risks
+deleting something by mistake. That row sits stale until a person presses
+Reindex or runs the CLI's own full index.
 
 ### D2. A job writes a candidate; accept renames it into place
 
@@ -889,13 +899,14 @@ here points at it. The studio's `job` row is the caller's record and carries
 `runner` plus `runner_job_id`.
 
 **Why:** that submodule is its own repository that has to run from a fresh clone
-with no Postgres anywhere, and its server is a separate process on a separate
-box per its `DESIGN.md`. Pointing it at this schema would couple a submodule to
-its consumer and break the independence rule the root
-[`AGENTS.md`](../AGENTS.md) states. The cost is two state machines that can
+with no Postgres anywhere, and its server is a separate process, run locally
+like everything else here, per its `DESIGN.md`. Pointing it at this schema
+would couple a submodule to its consumer and break the independence rule the
+root [`AGENTS.md`](../AGENTS.md) states. The cost is two state machines that can
 drift, and the rule for that is stated rather than hidden: the runner is right
 about `state`, the catalog is right about linkage, and a poll writes the first
-into the second.
+into the second. D25 keeps the same independence one layer up: manimkc gets its
+own runner and its own queue rather than sharing this one's.
 
 ### D6. The person commits, and the runner has no mutating git access
 
@@ -1123,6 +1134,25 @@ same reason D14 exists one layer down. A narration line a person reads while
 waiting is a claim about the output, and every claim about the output is
 re-established by the runner.
 
+### D25. Each generator gets its own runner; there is no shared queue
+
+**Verdict:** the `job` table can name any generator through `job.kind`, but the
+process that spawns, supervises and gates a job is per tool. The diagrams
+runner drives tldrawkc jobs today. If phase 5 happens, manimkc video jobs run
+through a second, separate runner with its own queue and its own concurrency
+limit, not through this one's.
+
+**Why:** the two tools already disagree in everything a queue would have to be
+shaped around. A tldrawkc job is four or more short Chromium launches at a
+fixed viewport, capped at fifteen minutes an attempt; a manimkc job is a
+single long render. D5 above already keeps manimkc's own job index and treats
+the submodule as independent for the same reason. One shared queue would need
+concurrency limits, timers and a gate sized for the slower of the two, which
+throttles a diagram job for no reason a diagram job has. Two runners cost one
+more process; they buy each tool a queue shaped like its own work, and they
+keep the independence rule the root [`AGENTS.md`](../AGENTS.md) already states
+for these two submodules.
+
 ## Roadmap
 
 Phases in order. Each has a definition of done an agent can verify without
@@ -1266,10 +1296,11 @@ with Postgres stopped still lands both files and reports `indexed: false`.
 
 ### Phase 5. Optional: manimkc video jobs
 
-Only once phases 0 to 4 have real use. `job.kind` widens to `video` and the
-studio shows diagram and video jobs side by side, which is what phase 6 of the
-tool's own roadmap describes. Needs the open question about where manimkc's
-queue lives settled first. Not designed here.
+Only once phases 0 to 4 have real use. `job.kind` widens to `video`, but the
+video jobs run through their own manimkc runner and their own queue rather
+than joining the diagrams one (D25), and the studio shows both side by side in
+the one job list, which is what phase 6 of the tool's own roadmap describes.
+Not designed here.
 
 ### Phase 6. Optional: an MCP entry for the agent
 
@@ -1279,6 +1310,16 @@ caught by a gate; with typed tools whose only path argument is a document id, it
 stops being representable. D6 in the tool's docs defers MCP, and the project's
 own preference is a CLI with `--json` and MCP only as a thin wrapper, so this
 earns its place when there is a second client and not before.
+
+### Phase 7. Optional: a daily spend cap
+
+Only if usage ever needs metering. `STUDIO_DAILY_USD` refuses new jobs with 429
+once a rolling day's `cost_usd` total crosses it, on top of the five guards A10
+already lists. One user on one machine has nothing to meter today, which is why
+this is last and optional rather than part of phase 1. A10's `cost_usd` is only
+ever written from the final `stream-json` result event, so a cap built on that
+column alone misses a cancelled, timed-out or interrupted attempt's spend;
+recording a cost for those too is part of this phase, not a footnote on it.
 
 ## Known gaps
 
@@ -1342,28 +1383,16 @@ deliberately.
 
 These need the user, not the repo.
 
-1. **Where the runner runs.** This design assumes the runner is on the same
-   machine as the working tree, because it renames files into `learn/assets/`.
-   manimkc's server is bound to loopback on a different box and published over
-   Tailscale. If video jobs ever join the studio, the queue and the renderer are
-   on different machines and phase 5 has to answer that first.
-2. **Should Accept run a full `catalog index --only diagrams` as well?**
-   `assert-output` attaches the two files. It does not prune a diagram deleted
-   outside the studio, so the catalog can hold a row for a file that is gone
-   until someone runs a full index. Automatic is fewer steps and fails when
-   Postgres is down, which is a state the rest of the studio tolerates.
-3. **Should `revise` be allowed to change the brief, or only add a change
+1. **Should `revise` be allowed to change the brief, or only add a change
    request?** manimkc's `/revise` takes free text only. A brief edit that moves
    `slug` or `topic` is really a new job, which argues for free text, but a
    person who mistyped one element label will want the edit.
-4. **The two submodule changes the UI wants.** Should the mirror's overlay be
+2. **The two submodule changes the UI wants.** Should the mirror's overlay be
    made theme-aware, and should it pass `null` for tldraw's presence slots
    (`PeopleMenu`, `CollaboratorCursor`, `SharePanel`, `CursorChatBubble`)? Both
    are small PRs against `tools/tldrawkc/`, and both are cosmetic until the
    studio exists.
-5. **What `STUDIO_DAILY_USD` should be.** A10 puts a daily ceiling in front of
-   repeated Resume clicks, and the number is the user's to pick.
-6. **Whether a `tutor` session should be able to open a `studio` job.** The
+3. **Whether a `tutor` session should be able to open a `studio` job.** The
    `/learn` skill runs the `diagram-maker` agent today and the studio is a
    second path to the same output. Two paths to one artifact is a decision, not
    an accident.
