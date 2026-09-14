@@ -4,6 +4,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "../src/migrations";
 import {
   appendEvent,
+  assetsByIds,
+  assetsForCollection,
+  assetsForConcept,
+  assetsForTopic,
   clearRecap,
   dueReviews,
   emptyReviews,
@@ -30,7 +34,15 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
 import { createScratchDatabase, probe, SQLSTATE, sqlstate, type Scratch } from "./scratch-database";
-import { CONCEPTS, fixtureGraph, ITEMS, seedContent } from "./state-fixture";
+import {
+  ASSETS,
+  CONCEPTS,
+  fixtureGraph,
+  ITEMS,
+  seedAssets,
+  seedContent,
+  TOPIC_SLUG,
+} from "./state-fixture";
 
 const reachable = await probe();
 
@@ -390,6 +402,78 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(kb.stats.total).toBe(CONCEPTS.length);
       // Nothing is mastered, and only `alpha` has no unmet prerequisite.
       expect(kb.frontier).toEqual(["alpha"]);
+    });
+  });
+
+  /**
+   * The asset queries. They read the content half rather than the state half,
+   * and they are here because `src/state/` is the door the web app comes
+   * through: a page that cannot run these cannot show a video or a diagram at
+   * all, which is the gap this suite is guarding against reopening.
+   */
+  describe("assets", () => {
+    beforeAll(async () => {
+      await seedAssets(scratch.db);
+    });
+
+    it("finds everything about a topic, ordered by kind then id", async () => {
+      const rows = await assetsForTopic(scratch.db, TOPIC_SLUG);
+      expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.transcript, ASSETS.video]);
+      // The whole row, so a page has the path, the title and the size without
+      // a second query. `bytes` comes back as a number, not a bigint string.
+      expect(rows.find((r) => r.id === ASSETS.video)).toEqual({
+        id: ASSETS.video,
+        kind: "video",
+        path: "out/fixtures/alpha/alpha.mp4",
+        url: null,
+        bytes: 1024,
+        title: "Alpha, animated",
+        sourceRepo: "manimkc",
+      });
+    });
+
+    it("finds the narrower set about a concept", async () => {
+      expect((await assetsForConcept(scratch.db, "alpha")).map((r) => r.id)).toEqual([
+        ASSETS.diagram,
+        ASSETS.video,
+      ]);
+      expect((await assetsForConcept(scratch.db, "beta")).map((r) => r.id)).toEqual([
+        ASSETS.diagram,
+      ]);
+    });
+
+    it("finds what a collection holds directly", async () => {
+      const rows = await assetsForCollection(scratch.db, "fx-m1");
+      expect(rows.map((r) => r.id)).toEqual([ASSETS.link]);
+      // A link has a url and no path. Both columns come back so the caller
+      // never has to guess which one is set.
+      expect(rows[0]?.url).toBe("https://example.invalid/alpha");
+      expect(rows[0]?.path).toBeNull();
+    });
+
+    it("returns an empty list rather than throwing for something with no assets", async () => {
+      expect(await assetsForTopic(scratch.db, "no-such-topic")).toEqual([]);
+      expect(await assetsForConcept(scratch.db, "gamma")).toEqual([]);
+      expect(await assetsForCollection(scratch.db, "fx")).toEqual([]);
+    });
+
+    it("never reaches an asset nothing points at", async () => {
+      const reachable = [
+        ...(await assetsForTopic(scratch.db, TOPIC_SLUG)),
+        ...(await assetsForConcept(scratch.db, "alpha")),
+        ...(await assetsForCollection(scratch.db, "fx-m1")),
+      ].map((r) => r.id);
+      expect(reachable).not.toContain(ASSETS.orphan);
+    });
+
+    it("looks assets up by id, and asks nothing for an empty list", async () => {
+      expect((await assetsByIds(scratch.db, [ASSETS.video, ASSETS.link])).map((r) => r.id)).toEqual(
+        [ASSETS.link, ASSETS.video],
+      );
+      expect(await assetsByIds(scratch.db, [])).toEqual([]);
+      // An id the catalog does not have is absent, not an error: the caller
+      // asked what exists, and the answer is that this one does not.
+      expect(await assetsByIds(scratch.db, ["fx:gone"])).toEqual([]);
     });
   });
 

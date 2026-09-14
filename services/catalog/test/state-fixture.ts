@@ -1,5 +1,10 @@
 import {
+  asset,
+  assetConcept,
+  assetDerivation,
+  assetTopic,
   collection,
+  collectionItem,
   concept,
   conceptPrerequisite,
   curriculumItem,
@@ -94,4 +99,99 @@ export function fixtureGraph() {
     ]),
   );
   return { nodes };
+}
+
+/**
+ * A handful of assets over the same fixture graph, for the asset queries.
+ *
+ * Separate from `seedContent` because two other suites call that one and
+ * neither has any business growing an asset table underneath it. The shapes
+ * here are the four ways an asset actually reaches a caller: about a topic,
+ * about a concept, held by a collection, and derived from another asset.
+ *
+ * The kinds are chosen so that ordering is provable. `assetsForTopic` sorts by
+ * kind then id, and `diagram_svg` sorts before `video`, which is the opposite
+ * of the insertion order below.
+ */
+export const ASSETS = {
+  video: "fx:video",
+  diagram: "fx:diagram",
+  transcript: "fx:transcript",
+  link: "fx:link",
+  orphan: "fx:orphan",
+} as const;
+
+export async function seedAssets(db: CatalogDatabase): Promise<void> {
+  await db
+    .insert(asset)
+    .values([
+      {
+        id: ASSETS.video,
+        kind: "video",
+        path: "out/fixtures/alpha/alpha.mp4",
+        title: "Alpha, animated",
+        bytes: 1024,
+        sourceRepo: "manimkc",
+      },
+      {
+        id: ASSETS.diagram,
+        kind: "diagram_svg",
+        path: "learn/assets/alpha.svg",
+        title: "Alpha, drawn",
+        sourceRepo: "tldrawkc",
+      },
+      {
+        id: ASSETS.transcript,
+        kind: "transcript",
+        path: "out/fixtures/alpha/alpha.vtt",
+        sourceRepo: "manimkc",
+      },
+      {
+        id: ASSETS.link,
+        kind: "link",
+        url: "https://example.invalid/alpha",
+        title: "Somebody else's alpha",
+        sourceRepo: "self-learn",
+      },
+      // About nothing: no topic, no concept, in no collection. The queries must
+      // not reach it, which is the only thing it is here to prove.
+      {
+        id: ASSETS.orphan,
+        kind: "note",
+        path: "learn/concepts/fixtures/unfiled.md",
+        sourceRepo: "self-learn",
+      },
+    ])
+    .onConflictDoNothing();
+
+  await db
+    .insert(assetTopic)
+    .values([
+      { assetId: ASSETS.video, topicSlug: TOPIC_SLUG },
+      { assetId: ASSETS.diagram, topicSlug: TOPIC_SLUG },
+      { assetId: ASSETS.transcript, topicSlug: TOPIC_SLUG },
+    ])
+    .onConflictDoNothing();
+
+  // Narrower than the topic link, and deliberately not the same set: `beta` has
+  // the diagram and nothing else, so "a concept with fewer assets than its
+  // topic" is a case the tests can see.
+  await db
+    .insert(assetConcept)
+    .values([
+      { assetId: ASSETS.video, conceptSlug: "alpha" },
+      { assetId: ASSETS.diagram, conceptSlug: "alpha" },
+      { assetId: ASSETS.diagram, conceptSlug: "beta" },
+    ])
+    .onConflictDoNothing();
+
+  await db
+    .insert(collectionItem)
+    .values({ collectionId: "fx-m1", position: 1, assetId: ASSETS.link })
+    .onConflictDoNothing();
+
+  await db
+    .insert(assetDerivation)
+    .values({ assetId: ASSETS.transcript, sourceAssetId: ASSETS.video })
+    .onConflictDoNothing();
 }

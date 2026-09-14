@@ -88,6 +88,32 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **The asset queries are behind the door the web app comes through.** A new
+  `services/catalog/src/state/assets.ts` owns `assetsForTopic`,
+  `assetsForConcept`, `assetsForCollection` and `assetsByIds`, plus the
+  `AssetRef` shape and the `byKind` grouping, and `@self-learn/catalog/state`
+  exports all of it.
+
+  They were private functions inside `services/catalog/src/commands/show.ts`,
+  which meant the CLI could name a video and the web app could not: `apps/web/`
+  may import that one module of this package and nothing else
+  (ARCHITECTURE.md layering rule 1). The catalog had indexed 200-odd assets
+  that no page could reach. `show.ts` now calls the same functions, so
+  `catalog show` and a page cannot drift apart about what an asset row is; its
+  `--json` output is unchanged, and the golden tests say so.
+
+  No `assetsForCurriculumItem`. Assets attach to `topic` slugs, and a
+  curriculum item inherits its module's single topic, so the join would answer
+  every checklist row in a module with the same list. The pages that would
+  render an asset already hold what they need: the course, module and session
+  pages hold the whole `Module`, whose `topic` is that slug, and `/learn` holds
+  concept slugs. It can be added the day something asks for it.
+
+  Rule 4 in ARCHITECTURE.md still says `state/` is the only *writer* of the
+  state tables, which is still true; it now also says out loud that read-only
+  content queries live there, because `knowledge-base.ts` had been doing that
+  since bundle 5 and the module header described neither.
+
 - **The catalog's indexers and read commands.** `npm run catalog -- index`
   fills Postgres from six sources: `content/topics.yaml`, `content/courses/`,
   `learn/concepts/`, `manimkc topics --json`, `learn/assets/` and
