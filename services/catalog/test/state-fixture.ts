@@ -28,13 +28,19 @@ import type { CatalogDatabase } from "../src/db";
  */
 
 export const TOPIC_SLUG = "fixture-topic";
+// Named by no asset, no concept and no collection. It exists only so a query
+// over titles has a second real row to resolve alongside `TOPIC_SLUG`.
+export const OTHER_TOPIC_SLUG = "fixture-topic-two";
 export const CONCEPTS = ["alpha", "beta", "gamma"] as const;
 export const ITEMS = ["fx-m1-t1", "fx-m1-t2"] as const;
 
 export async function seedContent(db: CatalogDatabase): Promise<void> {
   await db
     .insert(topic)
-    .values({ slug: TOPIC_SLUG, title: "Fixture topic", domain: "fixtures" })
+    .values([
+      { slug: TOPIC_SLUG, title: "Fixture topic", domain: "fixtures" },
+      { slug: OTHER_TOPIC_SLUG, title: "Second fixture topic", domain: "fixtures" },
+    ])
     .onConflictDoNothing();
 
   await db
