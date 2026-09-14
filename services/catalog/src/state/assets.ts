@@ -102,18 +102,62 @@ export async function assetsForConcept(db: CatalogDatabase, slug: string): Promi
 }
 
 /**
- * Assets a course or module contains directly, through `collection_item`. Today
- * that is the resource links authored in the course YAML, which belong to the
- * module and not to the subject in general: the same topic under a different
- * course has a different reading list.
+ * Assets a course or module reaches through what it contains.
+ *
+ * `collection_item` is polymorphic: a member row names exactly one of a topic,
+ * a concept or an asset, and `collection_item_one_target_check` enforces the
+ * "exactly one". So a collection's assets are the union of three resolutions,
+ * and all three are asked.
+ *
+ * ```
+ *   collection_item ─ topic_slug ──► asset_topic   ──┐
+ *                   ─ concept_slug ► asset_concept ──┼──► asset
+ *                   ─ asset_id ─────────────────────┘
+ * ```
+ *
+ * Only the topic branch has rows today: `../index/courses.ts` is the only
+ * writer of `collection_item` in the repo and every row it writes is the
+ * module's topic. The other two are asked anyway, because the constraint
+ * permits them and a query that silently ignores a row shape the schema allows
+ * is a bug waiting for the first indexer that writes one. This function
+ * resolved *only* the asset branch when it was first lifted out of
+ * `catalog show`, which is why `show <module>` reported no assets for any
+ * module in the catalog.
+ *
+ * **Deduped by asset id.** Two member topics can share one asset, and a module
+ * that listed the same video twice would be a rendering bug that looks like a
+ * data bug. Kind-then-id ordering is applied over the merged list so it matches
+ * what the other queries return.
+ *
+ * Three round trips rather than one `UNION`: a collection holds a handful of
+ * members, and merging in TypeScript keeps the ordering rule in one place
+ * instead of restating it as an `ORDER BY` over a set operation, where
+ * Postgres only accepts output column names.
  */
 export async function assetsForCollection(db: CatalogDatabase, id: string): Promise<AssetRef[]> {
-  return db
-    .select(ASSET_COLUMNS)
-    .from(collectionItem)
-    .innerJoin(asset, eq(asset.id, collectionItem.assetId))
-    .where(eq(collectionItem.collectionId, id))
-    .orderBy(asc(asset.kind), asc(asset.id));
+  const [viaTopic, viaConcept, direct] = await Promise.all([
+    db
+      .select(ASSET_COLUMNS)
+      .from(collectionItem)
+      .innerJoin(assetTopic, eq(assetTopic.topicSlug, collectionItem.topicSlug))
+      .innerJoin(asset, eq(asset.id, assetTopic.assetId))
+      .where(eq(collectionItem.collectionId, id)),
+    db
+      .select(ASSET_COLUMNS)
+      .from(collectionItem)
+      .innerJoin(assetConcept, eq(assetConcept.conceptSlug, collectionItem.conceptSlug))
+      .innerJoin(asset, eq(asset.id, assetConcept.assetId))
+      .where(eq(collectionItem.collectionId, id)),
+    db
+      .select(ASSET_COLUMNS)
+      .from(collectionItem)
+      .innerJoin(asset, eq(asset.id, collectionItem.assetId))
+      .where(eq(collectionItem.collectionId, id)),
+  ]);
+
+  const merged = new Map<string, AssetRef>();
+  for (const row of [...viaTopic, ...viaConcept, ...direct]) merged.set(row.id, row);
+  return [...merged.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
 }
 
 /**

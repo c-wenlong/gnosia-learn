@@ -99,8 +99,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
   may import that one module of this package and nothing else
   (ARCHITECTURE.md layering rule 1). The catalog had indexed 200-odd assets
   that no page could reach. `show.ts` now calls the same functions, so
-  `catalog show` and a page cannot drift apart about what an asset row is; its
-  `--json` output is unchanged, and the golden tests say so.
+  `catalog show` and a page cannot drift apart about what an asset row is.
 
   No `assetsForCurriculumItem`. Assets attach to `topic` slugs, and a
   curriculum item inherits its module's single topic, so the join would answer
@@ -250,6 +249,34 @@ This project is continuously deployed and not versioned; entries are grouped by 
   needs is the optional `CODECOV_TOKEN`.
 
 ### Fixed
+
+- **`catalog show <course-or-module>` reported no assets at all, for every
+  collection in the catalog.** It resolved a collection's assets through
+  `collection_item.asset_id`, and no indexer has ever written that column:
+  `services/catalog/src/index/courses.ts` is the only writer of
+  `collection_item` in the repo, every row it writes names the module's topic,
+  and the course YAML's resources are filed as `asset_topic` rows. The join
+  matched zero rows every time and the command printed nothing, which looks
+  exactly like a module with no resources.
+
+  `assetsForCollection` now resolves all three member shapes the
+  `collection_item_one_target_check` constraint permits: `topic_slug` into
+  `asset_topic`, `concept_slug` into `asset_concept`, and `asset_id` directly.
+  The last two have no rows today and are asked anyway, because a query that
+  ignores a shape the schema allows is the same bug again. Results are deduped
+  by asset id, since two member topics can share one asset and a module listing
+  the same video twice is a rendering bug that reads as a data bug.
+
+  This changes what `catalog show` prints for a collection: a module now lists
+  the assets of the subject it covers. That is the first time the field has
+  ever been non-empty, so nothing was relying on the old output, and no golden
+  test had recorded it. There is one now.
+
+  The bug predates the move to `state/`, and the audit that found it turned up
+  no second instance: the only other readers of `collection_item` are
+  `commands/ls.ts` and `commands/show.ts`, both of which read `topic_slug`
+  under an `isNotNull`, and `collection_item.asset_id` and
+  `.concept_slug` are the only always-null columns in the content half.
 
 - **`concept` rows could never be deleted.** The `event` append-only guard was
   written `FOR EACH STATEMENT`, so it fired on the `ON DELETE SET NULL` that

@@ -37,6 +37,7 @@ import { createScratchDatabase, probe, SQLSTATE, sqlstate, type Scratch } from "
 import {
   ASSETS,
   CONCEPTS,
+  DECK_ID,
   fixtureGraph,
   ITEMS,
   seedAssets,
@@ -418,7 +419,12 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
     it("finds everything about a topic, ordered by kind then id", async () => {
       const rows = await assetsForTopic(scratch.db, TOPIC_SLUG);
-      expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.transcript, ASSETS.video]);
+      expect(rows.map((r) => r.id)).toEqual([
+        ASSETS.diagram,
+        ASSETS.link,
+        ASSETS.transcript,
+        ASSETS.video,
+      ]);
       // The whole row, so a page has the path, the title and the size without
       // a second query. `bytes` comes back as a number, not a bigint string.
       expect(rows.find((r) => r.id === ASSETS.video)).toEqual({
@@ -442,18 +448,41 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       ]);
     });
 
-    it("finds what a collection holds directly", async () => {
+    /**
+     * A module's members are all topic-backed, because that is the only shape
+     * `src/index/courses.ts` writes. Resolving only `collection_item.asset_id`
+     * returns nothing at all here, which is what it did for every collection in
+     * the catalog until this was fixed.
+     */
+    it("resolves a module through the topic it contains", async () => {
       const rows = await assetsForCollection(scratch.db, "fx-m1");
-      expect(rows.map((r) => r.id)).toEqual([ASSETS.link]);
+      expect(rows.map((r) => r.id)).toEqual([
+        ASSETS.diagram,
+        ASSETS.link,
+        ASSETS.transcript,
+        ASSETS.video,
+      ]);
       // A link has a url and no path. Both columns come back so the caller
       // never has to guess which one is set.
-      expect(rows[0]?.url).toBe("https://example.invalid/alpha");
-      expect(rows[0]?.path).toBeNull();
+      const link = rows.find((r) => r.id === ASSETS.link);
+      expect(link?.url).toBe("https://example.invalid/alpha");
+      expect(link?.path).toBeNull();
+    });
+
+    it("resolves concept members and asset members too, and dedupes", async () => {
+      const rows = await assetsForCollection(scratch.db, DECK_ID);
+      // `alpha` brings the video and the diagram, `beta` brings the diagram
+      // again, and the deck names the pinned note directly. The diagram appears
+      // once: two members sharing an asset is one asset, not two.
+      expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.pinned, ASSETS.video]);
+      expect(rows.filter((r) => r.id === ASSETS.diagram)).toHaveLength(1);
     });
 
     it("returns an empty list rather than throwing for something with no assets", async () => {
       expect(await assetsForTopic(scratch.db, "no-such-topic")).toEqual([]);
       expect(await assetsForConcept(scratch.db, "gamma")).toEqual([]);
+      // The course holds the module, and membership is not transitive: `fx` has
+      // no `collection_item` rows of its own.
       expect(await assetsForCollection(scratch.db, "fx")).toEqual([]);
     });
 
@@ -462,6 +491,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         ...(await assetsForTopic(scratch.db, TOPIC_SLUG)),
         ...(await assetsForConcept(scratch.db, "alpha")),
         ...(await assetsForCollection(scratch.db, "fx-m1")),
+        ...(await assetsForCollection(scratch.db, DECK_ID)),
       ].map((r) => r.id);
       expect(reachable).not.toContain(ASSETS.orphan);
     });

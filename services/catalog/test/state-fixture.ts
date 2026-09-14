@@ -105,21 +105,36 @@ export function fixtureGraph() {
  * A handful of assets over the same fixture graph, for the asset queries.
  *
  * Separate from `seedContent` because two other suites call that one and
- * neither has any business growing an asset table underneath it. The shapes
- * here are the four ways an asset actually reaches a caller: about a topic,
- * about a concept, held by a collection, and derived from another asset.
+ * neither has any business growing an asset table underneath it.
  *
- * The kinds are chosen so that ordering is provable. `assetsForTopic` sorts by
- * kind then id, and `diagram_svg` sorts before `video`, which is the opposite
- * of the insertion order below.
+ * **The membership rows are built the way `src/index/courses.ts` builds them**,
+ * and that is the point of this fixture rather than a detail of it. The first
+ * version hand-wrote an asset-backed `collection_item` for `fx-m1`, which no
+ * indexer has ever produced: the module rows are all topic-backed, and the
+ * course YAML's resources become `asset_topic` rows. So the test passed against
+ * a shape that does not exist while `assetsForCollection` returned nothing for
+ * every real collection.
+ *
+ * `fx-m1` is therefore shaped exactly like an indexed module: one topic member,
+ * with the resource link hanging off the topic. `fx-d1` is a deck, and carries
+ * the two member shapes the CHECK constraint permits and no indexer writes yet,
+ * so the query is exercised over all three branches.
+ *
+ * The kinds are chosen so that ordering is provable. The queries sort by kind
+ * then id, and `diagram_svg` sorts before `video`, which is the opposite of the
+ * insertion order below.
  */
 export const ASSETS = {
   video: "fx:video",
   diagram: "fx:diagram",
   transcript: "fx:transcript",
   link: "fx:link",
+  pinned: "fx:pinned",
   orphan: "fx:orphan",
 } as const;
+
+/** The deck that holds the member shapes no indexer writes. Created here. */
+export const DECK_ID = "fx-d1";
 
 export async function seedAssets(db: CatalogDatabase): Promise<void> {
   await db
@@ -153,6 +168,14 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         title: "Somebody else's alpha",
         sourceRepo: "self-learn",
       },
+      // Named by a collection directly, and by nothing else. The only way it
+      // comes back is the `asset_id` branch.
+      {
+        id: ASSETS.pinned,
+        kind: "note",
+        path: "learn/concepts/fixtures/pinned.md",
+        sourceRepo: "self-learn",
+      },
       // About nothing: no topic, no concept, in no collection. The queries must
       // not reach it, which is the only thing it is here to prove.
       {
@@ -164,12 +187,16 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
     ])
     .onConflictDoNothing();
 
+  // The link is a course resource, and `courses.ts` files those under the
+  // module's topic rather than against the module. That is the whole reason a
+  // module's assets have to be resolved through its topic.
   await db
     .insert(assetTopic)
     .values([
       { assetId: ASSETS.video, topicSlug: TOPIC_SLUG },
       { assetId: ASSETS.diagram, topicSlug: TOPIC_SLUG },
       { assetId: ASSETS.transcript, topicSlug: TOPIC_SLUG },
+      { assetId: ASSETS.link, topicSlug: TOPIC_SLUG },
     ])
     .onConflictDoNothing();
 
@@ -186,8 +213,22 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
     .onConflictDoNothing();
 
   await db
+    .insert(collection)
+    .values({ id: DECK_ID, kind: "deck", slug: "d1", title: "Fixture deck", position: 0 })
+    .onConflictDoNothing();
+
+  await db
     .insert(collectionItem)
-    .values({ collectionId: "fx-m1", position: 1, assetId: ASSETS.link })
+    .values([
+      // A module, exactly as `courses.ts` writes one: its topic, and nothing
+      // else. `assetId` and `conceptSlug` are null here in every real row.
+      { collectionId: "fx-m1", position: 0, topicSlug: TOPIC_SLUG },
+      // The other two branches the CHECK allows. `alpha` and `beta` share the
+      // diagram, which is what makes the deduplication observable.
+      { collectionId: DECK_ID, position: 0, conceptSlug: "alpha" },
+      { collectionId: DECK_ID, position: 1, conceptSlug: "beta" },
+      { collectionId: DECK_ID, position: 2, assetId: ASSETS.pinned },
+    ])
     .onConflictDoNothing();
 
   await db
