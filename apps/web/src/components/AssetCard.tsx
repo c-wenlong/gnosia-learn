@@ -109,6 +109,19 @@ export function AssetCard({
 }) {
   const [thumbFailed, setThumbFailed] = useState(false);
 
+  // The failure belongs to the thumbnail that failed, so a new one gets its own
+  // attempt. As with `DiagramView`, a failed preview swaps the `<img>` out for
+  // the "Preview unavailable" glyph, so nothing is left to load the next file
+  // and the card would stay unavailable for every asset it is later given.
+  // Every list in the app keys its cards by asset id today, which is what has
+  // kept this from showing, and that is exactly the kind of guarantee the next
+  // caller does not inherit; the reset lives here instead.
+  const [renderedThumb, setRenderedThumb] = useState(thumbnailSrc);
+  if (renderedThumb !== thumbnailSrc) {
+    setRenderedThumb(thumbnailSrc);
+    setThumbFailed(false);
+  }
+
   const family = familyOf(asset.kind);
   const label = assetKindLabel(asset.kind);
   const name = assetDisplayTitle(asset);
