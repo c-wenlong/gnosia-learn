@@ -17,7 +17,7 @@ import {
 
 import { assetFilesEnabled, resolveAssetFile } from "@/lib/asset-files";
 import { catalogDatabase } from "@/lib/learner-store";
-import { compareByKindThenId } from "@/lib/library";
+import { assetFileHref, assetPosterHref, compareByKindThenId } from "@/lib/library";
 
 /**
  * The library's door to the catalog, shaped exactly like
@@ -391,6 +391,31 @@ export function accessFor(
   sourceRepo: string,
 ): FileAccess {
   return sourceRepo === "manimkc" ? access.manimkc : access.selfLearn;
+}
+
+/**
+ * What an `<img>` should point at for one row, or null for the placeholder.
+ *
+ * Shared by the grid and the related strip on the detail page, because two
+ * copies of this rule would drift and the symptom is a card that shows a
+ * picture in one place and a grey box in the other.
+ *
+ * A diagram is already an image, so it is served as itself. A video is not,
+ * and an `<img>` pointed at an `.mp4` decodes nothing; `/poster` cuts a frame
+ * out of it instead. Everything else has no picture to show and says so.
+ *
+ * Both depend on the file route being reachable for that asset's repo, which
+ * is a per-request answer rather than a property of the row: the route is off
+ * in production, and a manimkc index older than it answers 503. When it is
+ * not reachable the placeholder is the correct output, not a broken image.
+ */
+export function thumbnailFor(
+  row: AssetWithTopics,
+  access: { selfLearn: FileAccess; manimkc: FileAccess },
+): string | null {
+  if (!accessFor(access, row.sourceRepo).ok) return null;
+  if (row.kind === "diagram_svg") return assetFileHref(row.id);
+  return row.kind === "video" ? assetPosterHref(row.id) : null;
 }
 
 /**

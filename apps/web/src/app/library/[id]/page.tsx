@@ -14,6 +14,7 @@ import {
   readAssetText,
   withCatalog,
   type FileAccess,
+  thumbnailFor,
 } from "@/lib/asset-library";
 import { assetFileHref, assetHref, decodeAssetId, libraryHref } from "@/lib/library";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
@@ -450,11 +451,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                 asset={row}
                 topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                 href={assetHref(row.id)}
-                thumbnailSrc={
-                  row.kind === "diagram_svg" && accessFor(access, row.sourceRepo).ok
-                    ? assetFileHref(row.id)
-                    : null
-                }
+                thumbnailSrc={thumbnailFor(row, access)}
               />
             ))}
           </div>
