@@ -111,11 +111,13 @@ This project is continuously deployed and not versioned; entries are grouped by 
 - **A seek `VideoPlayer` could not perform is now retried rather than
   dropped.** Clicking a chapter or a transcript line before the element has its
   metadata moved the highlight and left the video where it was, so the next
-  play started from the top. The seek is held with the `src` it was asked for
-  and applied at `loadedmetadata`, and discarded if the source changed first.
-  Chromium does not take this path — it accepts the write as a default playback
-  start position rather than throwing — so this is a guard for the engines that
-  do, which is what the original `catch` was written for.
+  play started from the top. The seek is held against the load it was asked
+  for, applied at `loadedmetadata`, and discarded once the element has moved
+  past that load. It is keyed to a load counter rather than to the URL, so
+  going from one video to another and back does not resurrect it. Chromium
+  never takes this path: it accepts the write as a default playback start
+  position rather than throwing, so this is a guard for the engines that do,
+  which is what the original `catch` was written for.
 
 ### Added
 

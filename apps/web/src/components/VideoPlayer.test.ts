@@ -196,6 +196,31 @@ describe("VideoPlayer", () => {
     expect(stored).toBe(0);
   });
 
+  it("drops a pending seek even when the same source comes back around", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/a.mp4", chapters }));
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+
+    act(() => chapterButtons(host)[2].click());
+    // Away and back before the first load ever reported itself. The URL is the
+    // same string again; the load is not.
+    rerender(host, createElement(VideoPlayer, { src: "/b.mp4", chapters }));
+    rerender(host, createElement(VideoPlayer, { src: "/a.mp4", chapters }));
+
+    ready = true;
+    act(() => video(host).dispatchEvent(new Event("loadedmetadata")));
+    expect(stored).toBe(0);
+  });
+
   it("forgets the playback position when the source changes", () => {
     const host = mount(
       createElement(VideoPlayer, { src: "/a.mp4", chapters, transcript }),

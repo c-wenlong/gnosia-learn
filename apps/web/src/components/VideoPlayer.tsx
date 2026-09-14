@@ -56,9 +56,11 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [time, setTime] = useState(0);
   // A seek the element refused, held until it can be honoured. See `seek`.
-  // It carries the `src` it was asked for, so a seek left over from the video
-  // before this one is discarded rather than applied to the new file.
-  const pendingSeek = useRef<{ src: string; seconds: number } | null>(null);
+  // It carries the load it was asked for rather than the URL: with the URL, a
+  // reader who goes A to B and back to A before the first load reports itself
+  // would have the seek they asked for on the first A applied to the second,
+  // because the two As are the same string. A load number cannot repeat.
+  const pendingSeek = useRef<{ load: number; seconds: number } | null>(null);
 
   // Playback position belongs to the file being played, so a new `src` starts
   // over. Without this the component keeps whatever the last video was at: a
@@ -73,9 +75,9 @@ export function VideoPlayer({
   // changes, and it is the component's own job rather than the caller's: the
   // diagram studio renders this from another route, and a fix that depends on
   // every caller remembering a `key` is a fix that the next caller loses.
-  const [renderedSrc, setRenderedSrc] = useState(src);
-  if (renderedSrc !== src) {
-    setRenderedSrc(src);
+  const [source, setSource] = useState({ src, load: 0 });
+  if (source.src !== src) {
+    setSource((previous) => ({ src, load: previous.load + 1 }));
     setTime(0);
   }
 
@@ -86,7 +88,7 @@ export function VideoPlayer({
     setTime(target);
     const video = videoRef.current;
     if (!video) {
-      pendingSeek.current = { src, seconds: target };
+      pendingSeek.current = { load: source.load, seconds: target };
       return;
     }
     try {
@@ -97,15 +99,16 @@ export function VideoPlayer({
       // means the first clicks land in exactly that window. Dropping it here
       // left the reader on a chapter the video had never moved to, so the next
       // play started from the top. Hold it and apply it at `loadedmetadata`.
-      pendingSeek.current = { src, seconds: target };
+      pendingSeek.current = { load: source.load, seconds: target };
     }
   }
 
   function applyPendingSeek(video: HTMLVideoElement) {
     const pending = pendingSeek.current;
     if (!pending) return;
-    if (pending.src !== src) {
-      // Asked for on the file that was here before. It is not this one's.
+    if (pending.load !== source.load) {
+      // Asked for on a load this element has already moved past. Not this
+      // one's, even when the same file has come back around.
       pendingSeek.current = null;
       return;
     }
