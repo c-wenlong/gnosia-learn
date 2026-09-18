@@ -1,0 +1,184 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+
+/**
+ * The small, shared pieces of the studio's own chrome.
+ *
+ * All server components, and all React-free where they can be: nothing here
+ * holds state, so nothing here needs a client boundary. That also keeps the
+ * `"use client"` trap out of the way — a client module's exports are client
+ * references, so a helper exported from one and called on the server throws at
+ * request time and builds clean (`asset-meta.ts` beside `AssetCard.tsx` is the
+ * repo's existing answer to the same problem).
+ *
+ * Every size here comes from the design tokens table: 40px and 32px rows, 12px
+ * as the type floor, 6px on controls and 12px on cards. D22 is why there is no
+ * `text-[10px]` in this file or in any other under `components/studio/` — at
+ * `--muted` on `--surface` that size is under the contrast floor, and the
+ * studio's metadata rows are denser than anything else in the app.
+ */
+
+/** The 40px strip under the app header. Sticky, and its height never changes. */
+export function StudioStrip({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3">
+      {children}
+    </div>
+  );
+}
+
+export function Spacer() {
+  return <div className="flex-1" />;
+}
+
+/** A label-role chip. `tone` is the only thing that varies. */
+export function Chip({
+  children,
+  tone = "muted",
+  title,
+}: {
+  children: ReactNode;
+  tone?: "muted" | "accent" | "warn" | "danger" | "ok";
+  title?: string;
+}) {
+  const tones = {
+    muted: "border-[var(--border)] bg-[var(--chip-bg)] text-[var(--muted-strong)]",
+    accent: "border-[var(--accent)]/40 bg-[var(--nav-active-bg)] text-[var(--accent-strong)]",
+    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]",
+    danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
+  } as const;
+  return (
+    <span
+      title={title}
+      className={`inline-flex max-w-full items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-xs ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A chip that is also a link: the topic filter, and the topic on the strip. */
+export function ChipLink({
+  href,
+  children,
+  active = false,
+  title,
+}: {
+  href: string;
+  children: ReactNode;
+  active?: boolean;
+  title?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      title={title}
+      className={`inline-flex h-7 max-w-full shrink-0 items-center gap-1 truncate rounded-md border px-2 text-xs transition-colors ${
+        active
+          ? "border-[var(--accent)] bg-[var(--nav-active-bg)] text-[var(--accent-strong)]"
+          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-strong)] hover:bg-[var(--surface-hover)]"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** A 32px-tall control. Bordered by default, filled when it is the one action. */
+export function Button({
+  children,
+  filled = false,
+  ...rest
+}: { children: ReactNode; filled?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...rest}
+      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+        filled
+          ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
+          : "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The same shape as `Button`, for the places navigation is the action. */
+export function ButtonLink({
+  href,
+  children,
+  filled = false,
+  title,
+}: {
+  href: string;
+  children: ReactNode;
+  filled?: boolean;
+  title?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      title={title}
+      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
+        filled
+          ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]"
+          : "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** A heading inside the right panel. */
+export function PanelHeading({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+      {children}
+    </h2>
+  );
+}
+
+/** One `label · value` row in the inspector. 32px, the dense rhythm. */
+export function MetaRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-8 items-start gap-3 border-b border-[var(--border)] py-1.5 last:border-b-0">
+      <span className="w-24 shrink-0 text-xs text-[var(--muted)]">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-xs text-[var(--muted-strong)]">{children}</span>
+    </div>
+  );
+}
+
+/** A path, a slug or a count. Fixed at the 12px mono role. */
+export function Mono({ children }: { children: ReactNode }) {
+  return <span className="font-mono text-xs break-all">{children}</span>;
+}
+
+/**
+ * An amber strip that does not take the screen.
+ *
+ * U3 and U5 are both this: the catalog is unreachable, or the page bundle is
+ * older than its source. Both mean "everything still works", which is a banner
+ * and never a wall — the wall is U4, and that is `StudioBlocked`.
+ */
+export function Notice({
+  tone = "warn",
+  children,
+}: {
+  tone?: "warn" | "danger";
+  children: ReactNode;
+}) {
+  const tones = {
+    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]",
+    danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+  } as const;
+  return (
+    <div role="status" className={`border-b px-3 py-1.5 text-xs ${tones[tone]}`}>
+      {children}
+    </div>
+  );
+}
