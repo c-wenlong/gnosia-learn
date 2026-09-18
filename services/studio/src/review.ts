@@ -44,7 +44,46 @@ async function sha256(file: string): Promise<string | null> {
   }
 }
 
-export async function accept(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+/**
+ * One review action per job at a time, and the record re-read inside the lock.
+ *
+ * Every verdict here is a read-then-act over the filesystem with two awaited
+ * subprocesses in the middle, so a second request arriving during the first
+ * passes a guard that was true when it was checked and false by the time it
+ * acts. Two accepts both saw `awaiting_review` and the loser's rename failed
+ * with `ENOENT`; an accept racing a discard could delete the candidate the
+ * other one was about to land, or write `discarded` over files that are already
+ * in `learn/assets/`.
+ *
+ * A promise chain rather than a lock library: the queue is per job, the
+ * critical sections are short, and a rejected action must not wedge the next
+ * one, which is what the `catch` is for. It is in-process only, which is the
+ * right scope — the files are what two processes would fight over, and the
+ * catalog's own conditional update is what refuses the loser there.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+function withJobLock<T>(jobId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = inFlight.get(jobId) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  inFlight.set(
+    jobId,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+/**
+ * Land the candidate.
+ *
+ * The record is re-read inside the lock: the caller fetched it before the queue
+ * was joined, and whatever ran in front may have moved it.
+ */
+export function accept(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+  return withJobLock(record.id, () => acceptLocked(store, store.get(record.id) ?? record));
+}
+
+async function acceptLocked(store: JobStore, record: JobRecord): Promise<AcceptResult> {
   if (record.state !== "awaiting_review") {
     return {
       ok: false,
@@ -69,18 +108,8 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
   // S4: a human edit that landed while the job ran. The three hashes make the
   // loss visible, and this is the only moment the question can still be asked —
   // after the rename, the file cannot answer it.
-  const targetNow = await sha256(absolute(record.targetPath));
-  if (targetNow !== null && targetNow !== record.targetHashBefore) {
-    return {
-      ok: false,
-      written: [],
-      indexed: false,
-      note:
-        `${record.targetPath} has changed since this job started, so accepting would overwrite ` +
-        `an edit nobody reviewed. Compare the two and re-run the job against the current file.`,
-      error: "target-moved",
-    };
-  }
+  const moved = await targetMoved(record);
+  if (moved !== null) return moved;
 
   /* 1. The export the gate may not have got to. This is the exit-4 case. */
   if (record.gate?.svg === null || record.gate?.exportFailed === true) {
@@ -115,7 +144,18 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
     }
   }
 
-  /* 3. The renames. Atomic, because the candidates directory is a sibling of
+  /* 3. The same question again, immediately before the rename.
+   *
+   *    The export and the verify above are each a Chromium launch, so the check
+   *    at the top of this function can be a minute or two old by now, and the
+   *    window it leaves open is the exact one S4 is about: a person editing the
+   *    committed file in the mirror while the job was running. Asking once was
+   *    asking early; the answer that matters is the one taken with nothing left
+   *    to await between it and the rename. */
+  const movedLate = await targetMoved(record);
+  if (movedLate !== null) return movedLate;
+
+  /* 4. The renames. Atomic, because the candidates directory is a sibling of
    *    the target and not the OS temp directory: each file is either the old
    *    one or the new one, never a half-written mix of both. */
   const written: string[] = [];
@@ -126,7 +166,7 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
     written.push(record.targetSvgPath);
   }
 
-  /* 4. The disk record, before the database row: rule 7, and the reason it is
+  /* 5. The disk record, before the database row: rule 7, and the reason it is
    *    not simply tidiness. The files have moved by now, so a crash between
    *    here and the catalog call would otherwise leave a record saying the job
    *    is still awaiting review of a candidate that is no longer there, and a
@@ -138,7 +178,7 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
     indexed: false,
   });
 
-  /* 5. The only step that needs Postgres, and therefore the last one. */
+  /* 6. The only step that needs Postgres, and therefore the last one. */
   const indexed = await jobAccept(record.id, written);
   if (!indexed.ok) {
     await store.noteCatalogError(record.id, indexed.error ?? "accept could not be recorded");
@@ -148,8 +188,9 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
       indexed: false,
       note:
         `${written.join(" and ")} landed in learn/assets/, and the catalog did not record it: ` +
-        `${indexed.error}. The files are the output and the index is derived, so a Reindex ` +
-        `finishes this. Commit them yourself: git add ${written.join(" ")}`,
+        `${indexed.error}. The files are the output and the index is derived, so this is ` +
+        `finished by POST /api/jobs/${record.id}/reindex once the database is back. Commit them ` +
+        `yourself: git add ${written.join(" ")}`,
     };
   }
 
@@ -164,8 +205,102 @@ export async function accept(store: JobStore, record: JobRecord): Promise<Accept
   };
 }
 
+/**
+ * Has the committed file changed since the job started? The refusal, or null.
+ *
+ * Asked twice by `accept`, which is the point of it being a function: once
+ * early, so a job that was already stale costs no Chromium, and once with
+ * nothing left to await before the rename, which is the answer that actually
+ * protects the file.
+ */
+async function targetMoved(record: JobRecord): Promise<AcceptResult | null> {
+  const now = await sha256(absolute(record.targetPath));
+  if (now === null || now === record.targetHashBefore) return null;
+  return {
+    ok: false,
+    written: [],
+    indexed: false,
+    note:
+      `${record.targetPath} has changed since this job started, so accepting would overwrite ` +
+      `an edit nobody reviewed. Compare the two and re-run the job against the current file.`,
+    error: "target-moved",
+  };
+}
+
+/**
+ * Re-run the catalog half of an accept whose files already landed.
+ *
+ * This is the Reindex the accept note and U3 both name, and without it the one
+ * failure accept is designed to survive was the one it could not recover from:
+ * the files are in `learn/assets/`, the disk record says `accepted`, and a
+ * second `POST accept` is refused because `accepted` is terminal. The catalog's
+ * own row is still `awaiting_review` in that case — `job accept` is what moves
+ * it — so re-running the same call is a retry and not a second transition.
+ *
+ * Idempotent on the catalog side too: `assert-output` upserts, and a retried
+ * accept whose asserts already went through is the case `runAccept` counts
+ * `asset_job` rows for rather than requiring `--path`.
+ */
+export function reindex(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+  return withJobLock(record.id, () => reindexLocked(store, store.get(record.id) ?? record));
+}
+
+async function reindexLocked(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+  if (record.state !== "accepted") {
+    return {
+      ok: false,
+      written: record.written,
+      indexed: record.indexed,
+      note:
+        `job ${record.id} is ${record.state}, and there is nothing to reindex: reindex finishes ` +
+        `an accept whose files landed and whose catalog call did not.`,
+      error: "wrong-state",
+    };
+  }
+  if (record.indexed) {
+    return {
+      ok: true,
+      written: record.written,
+      indexed: true,
+      note: `job ${record.id} is already recorded in the catalog; nothing to do`,
+    };
+  }
+  if (record.written.length === 0) {
+    return {
+      ok: false,
+      written: [],
+      indexed: false,
+      note: `job ${record.id} is accepted but names no file it landed, so there is nothing to record`,
+      error: "nothing-written",
+    };
+  }
+
+  const indexed = await jobAccept(record.id, record.written);
+  if (!indexed.ok) {
+    await store.noteCatalogError(record.id, indexed.error ?? "reindex could not be recorded");
+    return {
+      ok: false,
+      written: record.written,
+      indexed: false,
+      note: `the catalog still will not record it: ${indexed.error}. The files are in learn/assets/ either way.`,
+      error: "catalog-failed",
+    };
+  }
+  await store.update(record.id, { indexed: true });
+  return {
+    ok: true,
+    written: record.written,
+    indexed: true,
+    note: `the catalog now records ${record.written.join(" and ")} as this job's output`,
+  };
+}
+
 /** Discard: both candidates go, the lease is released, and git is the undo. */
-export async function discard(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+export function discard(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+  return withJobLock(record.id, () => discardLocked(store, store.get(record.id) ?? record));
+}
+
+async function discardLocked(store: JobStore, record: JobRecord): Promise<AcceptResult> {
   if (record.state !== "awaiting_review" && record.state !== "interrupted") {
     return {
       ok: false,

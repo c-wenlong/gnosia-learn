@@ -32,7 +32,7 @@ export function canvas(args: string[], timeoutMs = 120_000): Promise<RunResult> 
 }
 
 /**
- * `doctor`, cached for half a minute.
+ * `doctor`, cached for half a minute, and shared while it is in flight.
  *
  * Every verb launches its own Chromium, `doctor` included: it loads the page
  * bundle to check that the bridge answers. Two callers ask — `POST /api/jobs`
@@ -41,23 +41,45 @@ export function canvas(args: string[], timeoutMs = 120_000): Promise<RunResult> 
  * page is left open. Half a minute is short enough that a `npm run build` in
  * the submodule is noticed while a person is still looking at the banner, and
  * long enough that polling costs nothing.
+ *
+ * Two things the first cache got wrong, and both of them opened a browser the
+ * cache existed to avoid. It stamped the call's **start**, so a `doctor` slower
+ * than the TTL — which is exactly the machine where a browser launch is
+ * expensive — stored a result that was already expired. And it held no promise
+ * while the subprocess was running, so a health poll landing next to an enqueue
+ * on a cold cache ran two of them. The in-flight promise is the fix for the
+ * second and stamping completion is the fix for the first.
  */
 let doctorCache: { at: number; result: RunResult } | null = null;
+let doctorInFlight: Promise<RunResult> | null = null;
 export const DOCTOR_TTL_MS = 30_000;
 
 export async function doctor(force = false): Promise<RunResult> {
-  const now = Date.now();
-  if (!force && doctorCache !== null && now - doctorCache.at < DOCTOR_TTL_MS) {
+  if (!force && doctorCache !== null && Date.now() - doctorCache.at < DOCTOR_TTL_MS) {
     return doctorCache.result;
   }
-  const result = await canvas(["doctor"], 120_000);
-  doctorCache = { at: now, result };
-  return result;
+  // A second caller arriving while the first is still waiting gets the first
+  // one's promise rather than a Chromium of its own. `force` joins an in-flight
+  // check too: it asks for a fresh answer, and one is already being fetched.
+  if (doctorInFlight !== null) return doctorInFlight;
+
+  doctorInFlight = (async () => {
+    try {
+      const result = await canvas(["doctor"], 120_000);
+      // Stamped when the answer arrived, not when it was asked for.
+      doctorCache = { at: Date.now(), result };
+      return result;
+    } finally {
+      doctorInFlight = null;
+    }
+  })();
+  return doctorInFlight;
 }
 
 /** For the tests, and for a `?refresh=1` the UI may want in a later phase. */
 export function forgetDoctor(): void {
   doctorCache = null;
+  doctorInFlight = null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -71,9 +93,29 @@ export interface CanvasLint {
   shape?: string;
 }
 
+/**
+ * One shape, as `inspect --json` reports it.
+ *
+ * `text` is the label's plain text or null, which is what the gate matches the
+ * brief's elements against. The tool's own `InspectShape` in
+ * `src/lib/browser.ts` is the definition; this is the half the studio reads.
+ */
+export interface InspectShape {
+  id?: string;
+  type?: string;
+  text?: string | null;
+}
+
+/** One arrow's two bound ends. `from` and `to` are shape ids, or null. */
+export interface InspectBinding {
+  arrow?: string;
+  from?: string | null;
+  to?: string | null;
+}
+
 export interface InspectReport {
-  shapes?: unknown[];
-  bindings?: unknown[];
+  shapes?: InspectShape[];
+  bindings?: InspectBinding[];
   lints?: CanvasLint[];
   meta?: { title?: string; topic?: string; concepts?: string[] } | null;
   bounds?: unknown;

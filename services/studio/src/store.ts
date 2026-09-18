@@ -68,6 +68,10 @@ export interface JobRecord {
   /** The `session` row this runs under, and the headless session for Resume. */
   sessionId: string | null;
   agentSessionId: string | null;
+  /** The job this one revises, when it is a revision. */
+  parentJobId: string | null;
+  /** What the person asked to be different, verbatim. The revise prompt. */
+  changes: string | null;
   idempotencyKey: string;
   targetHashBefore: string | null;
   requestedAt: string;
@@ -157,6 +161,20 @@ export class JobStore {
 
   get(id: string): JobRecord | undefined {
     return this.records.get(id);
+  }
+
+  /**
+   * Drop a job that was never really created.
+   *
+   * The one caller is an enqueue the catalog refused: its workspace is deleted,
+   * and a record left in this map would go on holding its target's lease
+   * against every later brief while no file on disk backs it up. Not a delete
+   * for anything that ran — a job that did work is kept, in whatever terminal
+   * state it reached.
+   */
+  forget(id: string): void {
+    this.records.delete(id);
+    this.streams.delete(id);
   }
 
   /** Newest first, which is the order every list in the UI wants. */

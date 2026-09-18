@@ -1,11 +1,13 @@
+import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./brief";
 import { doctor } from "./canvas";
 import { status as catalogStatus } from "./catalog";
 import { CLAUDE_BIN, CONCURRENCY, HOST, PORT } from "./config";
+import { absolute } from "./paths";
 import { run } from "./proc";
-import { accept, discard } from "./review";
+import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
 
@@ -129,7 +131,14 @@ async function handle(
 
   if (segments[1] !== "jobs") {
     return fail(response, 404, `no route ${method} ${url.pathname}`, {
-      routes: ["/api/jobs", "/api/jobs/{id}", "/api/jobs/{id}/events", "/api/jobs/{id}/log", "/api/health"],
+      routes: [
+        "/api/jobs",
+        "/api/jobs/{id}",
+        "/api/jobs/{id}/events",
+        "/api/jobs/{id}/log",
+        "/api/jobs/{id}/cancel|accept|discard|reindex|revise",
+        "/api/health",
+      ],
     });
   }
 
@@ -206,6 +215,21 @@ async function handle(
       });
     }
 
+    case "POST reindex": {
+      // The one recovery accept needs and did not have. Its files landed and
+      // its catalog call did not, which leaves a terminal `accepted` record no
+      // second accept can re-enter, so this re-runs the catalog half alone.
+      const result = await reindex(store, record);
+      if (!result.ok) return fail(response, 409, result.note, result.error ?? null);
+      return send(response, 200, {
+        jobId: id,
+        state: store.get(id)?.state ?? "accepted",
+        written: result.written,
+        indexed: result.indexed,
+        note: result.note,
+      });
+    }
+
     case "POST revise":
       return revise(request, response, runner, record);
 
@@ -271,6 +295,16 @@ async function postJob(
  * suggestion. The new job carries the parent's `agentSessionId`, so the first
  * attempt continues the stored session with a change request rather than paying
  * for the whole drawing again.
+ *
+ * **`mode` is re-derived from what is on disk rather than copied from the
+ * parent's brief**, which is the difference between this route working and this
+ * route being unreachable for the commonest case there is. The parent of a
+ * revision is usually an accepted `mode: "new"` job — that is what "change the
+ * diagram I just made" means — and accepting it put a file at the target path,
+ * so re-posting `new` walks straight into the guard that refuses a `new` brief
+ * over an existing target. The mode was never a property of the brief anyway:
+ * it says whether there is something there to build on, and after an accept
+ * there is.
  */
 async function revise(
   request: IncomingMessage,
@@ -297,17 +331,29 @@ async function revise(
     );
   }
 
+  const targetExists = (await stat(absolute(record.targetPath)).catch(() => null)) !== null;
+
   try {
-    const { record: next } = await runner.enqueue({
-      ...record.brief,
-      notes: [record.brief.notes, `Change requested: ${changes}`].filter(Boolean).join("\n\n"),
-      idempotencyKey: `${record.idempotencyKey}:revise:${Date.now()}`,
-    });
+    const { record: next } = await runner.enqueue(
+      {
+        ...record.brief,
+        mode: targetExists ? "extend" : "new",
+        notes: [record.brief.notes, `Change requested: ${changes}`].filter(Boolean).join("\n\n"),
+        idempotencyKey: `${record.idempotencyKey}:revise:${Date.now()}`,
+      },
+      { jobId: record.id, agentSessionId: record.agentSessionId, changes },
+    );
     return send(response, 201, {
       jobId: next.id,
       state: next.state,
       parentJob: record.id,
-      note: `queued as a revision of ${record.id}`,
+      mode: next.brief.mode,
+      resuming: next.agentSessionId !== null,
+      note:
+        `queued as a revision of ${record.id}` +
+        (next.agentSessionId === null
+          ? `; the parent kept no session, so this one draws from the brief`
+          : `, continuing its session`),
     });
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);

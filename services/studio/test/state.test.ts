@@ -65,6 +65,8 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     attempt: 0,
     sessionId: null,
     agentSessionId: null,
+    parentJobId: null,
+    changes: null,
     idempotencyKey: over.idempotencyKey ?? "k",
     targetHashBefore: null,
     requestedAt: new Date().toISOString(),

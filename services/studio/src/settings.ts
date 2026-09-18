@@ -36,6 +36,10 @@ import {
  *    `~/.claude/settings.json` would be added to this file's, so the runner
  *    passes `--setting-sources ""` and this file is the only source of rules
  *    the session has.
+ * 4. **A `Bash` rule is a string prefix and knows nothing about paths.** An
+ *    allowed `cat` is allowed against every file on the machine, and only a
+ *    `Read(...)` deny it happens to match stops it. `BASH_ALLOW` says what was
+ *    done about that and why an enumerated deny list was not the answer.
  *
  * The shape is the same one manimkc's `agent.write_settings` writes, and so is
  * the reason its paths are absolute and derived at runtime: manimkc shipped
@@ -75,39 +79,65 @@ function rule(tool: string, absolutePath: string, suffix = ""): string {
 }
 
 /**
- * The Bash allowlist: five command prefixes, and everything else denied.
+ * The Bash allowlist: one command prefix, and everything else denied.
  *
  * This is the correction the design's first draft needed, and a review caught
- * it once already. A deny list over `rm`, `mv`, `git` and the network tools
- * does not constrain Bash at all, because a shell redirect, `cp`, `tee`,
- * `printf >`, `sed -i` or `python3` writes anywhere in the tree and the file
- * allowlist has no say over any of it. An allowlist inverts the default: a
- * command that matches nothing here reaches no approval surface in a `-p`
- * session and is refused.
+ * it twice. A deny list over `rm`, `mv`, `git` and the network tools does not
+ * constrain Bash at all, because a shell redirect, `cp`, `tee`, `printf >`,
+ * `sed -i` or `python3` writes anywhere in the tree and the file allowlist has
+ * no say over any of it. An allowlist inverts the default: a command that
+ * matches nothing here reaches no approval surface in a `-p` session and is
+ * refused, and a compound command is split on `&&`, `||`, `;`, `|` and a
+ * newline with every part matched independently, so a second command cannot
+ * ride along behind the first.
+ *
+ * **`cat`, `head`, `ls` and `wc` used to be here and are not any more**, which
+ * is the fourth thing phase 1 found by checking the CLI. A Bash rule is a
+ * string prefix and carries no idea of a path, so `Bash(cat:*)` allows `cat`
+ * against *any* file. Two mechanisms partly cover that and neither is enough.
+ * `Read(...)` deny rules do reach a file command the CLI recognises — `cat`,
+ * `head`, `tail`, `sed`, `tee` and a redirect's target — so the secret denies
+ * below were doing real work; but a deny list only ever names what somebody
+ * thought of, and a token in a dotfile nobody enumerated was one `cat` away.
+ * And `blockReadsOutsideWorkingDirectories` only removes those commands'
+ * read-only auto-approval, which an explicit allow rule then grants back.
+ *
+ * So the file reading goes through the Read tool instead, which is the one
+ * mechanism here that is genuinely path-matched: it is checked against the
+ * `Read(...)` rules below and confined to the working directories, which are
+ * the repository and this job's scratch. The agent loses nothing — it was
+ * already told to Read its screenshots rather than `cat` them, because looking
+ * at a picture is the point — and the boundary stops depending on an
+ * enumeration being complete.
  *
  * `npm run --silent canvas` carries `--silent` because npm prints a two-line
  * banner otherwise and `--json` output is then unparseable. It is in the rule
  * rather than only in the prompt, so the call that works is the call that is
  * spelled correctly.
  */
-export const BASH_ALLOW = [
-  "Bash(npm run --silent canvas:*)",
-  "Bash(cat:*)",
-  "Bash(ls:*)",
-  "Bash(head:*)",
-  "Bash(wc:*)",
-] as const;
+export const BASH_ALLOW = ["Bash(npm run --silent canvas:*)"] as const;
 
 /**
- * Belt and braces, not the boundary.
+ * Not only belt and braces any more.
  *
- * Every one of these is already denied by not being on the allowlist. They are
+ * Most of these are already denied by not being on the allowlist, and they are
  * written down because a future edit that widens the allowlist — an `npx`, a
- * `sh -c`, a `docker exec` — would otherwise re-open a hole quietly, and
- * because the CLI's matcher normalises some wrappers away, so naming the
- * wrappers is the only way a reader learns they exist.
+ * `sh -c`, a `docker exec` — would otherwise re-open a hole quietly.
+ *
+ * The file readers at the top are load-bearing rather than decorative. A
+ * compound command is split and each part matched, but a **command
+ * substitution** is not split, so `npm run --silent canvas -- run x --code
+ * "$(cat ~/.aws/credentials)"` matches the allowed prefix as one string. Deny
+ * rules are the half of the matcher that does reach inside a substitution, a
+ * subshell and a control-flow body, so naming `cat`, `head`, `ls` and `wc`
+ * here is what closes that route rather than a note about it.
  */
 export const BASH_DENY = [
+  "Bash(cat:*)",
+  "Bash(head:*)",
+  "Bash(tail:*)",
+  "Bash(ls:*)",
+  "Bash(wc:*)",
   "Bash(sh:*)",
   "Bash(bash:*)",
   "Bash(zsh:*)",

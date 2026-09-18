@@ -83,6 +83,8 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     attempt: 1,
     sessionId: "studio-job-accept",
     agentSessionId: "00000000-0000-4000-8000-000000000000",
+    parentJobId: null,
+    changes: null,
     idempotencyKey: "k",
     targetHashBefore: null,
     requestedAt: new Date().toISOString(),

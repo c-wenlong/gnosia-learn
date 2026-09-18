@@ -52,21 +52,40 @@ function replies(...queue: Reply[]): void {
   }
 }
 
+/**
+ * A document that covers the brief below: two labelled shapes and a bound arrow
+ * between them, which is the smallest drawing that passes every step.
+ */
 const inspectOk = (topic: string | null = TOPIC, shapes = 12, lints: unknown[] = []) => ({
   code: 0,
   json: {
-    shapes: Array.from({ length: shapes }, (_, i) => ({ id: `shape:${i}` })),
+    shapes: [
+      { id: "shape:a", type: "geo", text: "vector a" },
+      { id: "shape:b", type: "geo", text: "vector b, the one projected onto" },
+      ...Array.from({ length: Math.max(0, shapes - 2) }, (_, i) => ({
+        id: `shape:${i}`,
+        type: "geo",
+        text: null,
+      })),
+    ],
+    bindings: [{ arrow: "shape:arrow", from: "shape:a", to: "shape:b" }],
     lints,
     meta: topic === null ? null : { topic, title: "A dot product" },
   },
 });
 
-const gateInput = () => ({
+const ELEMENTS = [{ label: "vector a" }, { label: "vector b" }];
+const RELATIONS = [{ from: "vector a", to: "vector b", label: "projects onto" }];
+
+const gateInput = (over: Partial<Parameters<typeof runGate>[0]> = {}) => ({
   slug: SLUG,
   topic: TOPIC,
   candidatePath: candidatePath(SLUG),
   candidateSvgPath: candidateSvgPath(SLUG),
   startedAtMs: Date.now() - 60_000,
+  elements: ELEMENTS,
+  relations: RELATIONS,
+  ...over,
 });
 
 beforeEach(async () => {
@@ -102,7 +121,7 @@ describe("step 1: the candidate", () => {
 describe("step 2: inspect", () => {
   it("treats exit 3 as a finished document with lints, not a failure", async () => {
     replies(
-      { code: 3, json: { shapes: [{ id: "shape:a" }], lints: [{ rule: "overlap" }], meta: { topic: TOPIC } } },
+      { ...inspectOk(TOPIC, 12, [{ rule: "overlap" }]), code: 3 },
       { code: 0, json: { svg: { path: candidateSvg, bytes: 2048 } } },
       { code: 0, json: { checks: [{ rule: "self-contained", ok: true, detail: "" }] } },
     );
@@ -128,7 +147,86 @@ describe("step 2: inspect", () => {
   });
 });
 
-describe("step 3: the topic stamp", () => {
+describe("step 3: the brief", () => {
+  it("refuses a diagram that is missing an element the brief asked for", async () => {
+    // Twelve shapes, a good topic stamp, a clean export: every step the gate
+    // used to have passes. It is simply not the picture that was asked for.
+    replies({
+      code: 0,
+      json: {
+        shapes: [{ id: "shape:a", type: "geo", text: "vector a" }],
+        bindings: [],
+        lints: [],
+        meta: { topic: TOPIC },
+      },
+    });
+    const gate = await runGate(gateInput());
+    expect(gate.ok).toBe(false);
+    expect(gate.findings[0]).toContain(`"vector b"`);
+    // Nothing after it ran: no export was paid for on a drawing that is wrong.
+    expect(canvasMock.canvas).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a relation drawn as a loose line rather than a bound arrow", async () => {
+    replies({
+      code: 0,
+      json: {
+        shapes: [
+          { id: "shape:a", type: "geo", text: "vector a" },
+          { id: "shape:b", type: "geo", text: "vector b" },
+        ],
+        bindings: [],
+        lints: [],
+        meta: { topic: TOPIC },
+      },
+    });
+    const gate = await runGate(gateInput());
+    expect(gate.ok).toBe(false);
+    expect(gate.findings[0]).toContain("not a bound arrow");
+    expect(gate.findings[0]).toContain("vector a");
+  });
+
+  it("takes a label that says more than the brief did, and an arrow drawn the other way", async () => {
+    // A good diagram explains itself, so a label may grow; and an arrow the
+    // other way round is a picture worth reviewing rather than a paid retry.
+    await writeFile(candidateSvg, "<svg/>", "utf8");
+    replies(
+      {
+        code: 0,
+        json: {
+          shapes: [
+            { id: "shape:a", type: "geo", text: "Vector A (the projection's source)" },
+            { id: "shape:b", type: "geo", text: "vector-b" },
+          ],
+          bindings: [{ arrow: "shape:arrow", from: "shape:b", to: "shape:a" }],
+          lints: [],
+          meta: { topic: TOPIC },
+        },
+      },
+      { code: 0, json: { svg: { path: candidateSvg, bytes: 1024 } } },
+      { code: 0, json: { checks: [] } },
+    );
+    const gate = await runGate(gateInput());
+    expect(gate.ok).toBe(true);
+  });
+
+  it("refuses an extend candidate that is still exactly the copy it was handed", async () => {
+    // The case a failed agent reaches: extend copies the committed file to the
+    // candidate path before anything starts, so the file exists, is newer than
+    // the attempt, holds shapes, carries the right topic and exports cleanly —
+    // all of it describing the diagram that was already there.
+    const { createHash } = await import("node:crypto");
+    const { readFile } = await import("node:fs/promises");
+    const hash = createHash("sha256").update(await readFile(candidate)).digest("hex");
+    replies(inspectOk());
+    const gate = await runGate(gateInput({ unchangedHash: hash }));
+    expect(gate.ok).toBe(false);
+    expect(gate.findings[0]).toContain("unchanged");
+    expect(canvasMock.canvas).not.toHaveBeenCalled();
+  });
+});
+
+describe("step 4: the topic stamp", () => {
   it("refuses an unstamped document, which is what the indexer refuses by name", async () => {
     replies(inspectOk(null));
     const gate = await runGate(gateInput());
@@ -151,7 +249,7 @@ describe("step 3: the topic stamp", () => {
   });
 });
 
-describe("step 4: export", () => {
+describe("step 5: export", () => {
   it("records exit 4 and still lets the job reach review, because the work is saved", async () => {
     replies(inspectOk(), { code: 4, stderr: "export failed" });
     const gate = await runGate(gateInput());
@@ -164,7 +262,7 @@ describe("step 4: export", () => {
   });
 });
 
-describe("step 5: verify", () => {
+describe("step 6: verify", () => {
   it("feeds the failing check back verbatim", async () => {
     await writeFile(candidateSvg, "<svg/>", "utf8");
     replies(
@@ -200,6 +298,7 @@ describe("step 5: verify", () => {
     expect(gate.steps.map((step) => step.name)).toEqual([
       "candidate",
       "inspect",
+      "brief",
       "topic",
       "export",
       "verify",

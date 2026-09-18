@@ -62,6 +62,18 @@ export interface AgentOutcome {
   /** The final `result` event's `subtype`: `success`, `error_max_turns`, … */
   subtype: string | null;
   isError: boolean;
+  /**
+   * True when the process never started: no `claude` on PATH, or a spawn the
+   * OS refused.
+   *
+   * Kept apart from `isError` because the two mean different things to the
+   * runner. An agent that ran and failed still leaves work the gate can judge —
+   * rule 4 says the gate, not the exit code, decides what is on disk. An agent
+   * that never started wrote nothing, so gating its output means gating
+   * whatever was already there, which in `extend` mode is the runner's own copy
+   * of the committed file.
+   */
+  spawnFailed: boolean;
   /** Tool calls the permission rules refused. Evidence the boundary held. */
   denials: { tool: string; input: unknown }[];
   stopReason: StopReason;
@@ -160,6 +172,7 @@ export class AgentRun {
           costUsd,
           subtype,
           isError,
+          spawnFailed: false,
           denials,
           stopReason: this.stopReason,
           stderr: stderr.trim(),
@@ -175,6 +188,9 @@ export class AgentRun {
           costUsd: null,
           subtype: null,
           isError: true,
+          // The one outcome the gate must never be asked about: nothing ran, so
+          // whatever is at the candidate path was not written by this attempt.
+          spawnFailed: true,
           denials: [],
           stopReason: this.stopReason,
           stderr: `could not start ${CLAUDE_BIN}: ${error.message}`,

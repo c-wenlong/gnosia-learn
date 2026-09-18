@@ -24,7 +24,7 @@ import {
   targetSvgPath,
   CANDIDATES_DIR,
 } from "./paths";
-import { buildPrompt, buildRetryPrompt } from "./prompt";
+import { buildPrompt, buildRetryPrompt, buildRevisePrompt } from "./prompt";
 import { dirtyFiles } from "./review";
 import type { GateResult, JobRecord, JobStore } from "./store";
 
@@ -56,7 +56,26 @@ interface Running {
   record: JobRecord;
   agent: AgentRun | null;
   cancelled: boolean;
+  /**
+   * True when the 45-minute ceiling stopped it rather than a person.
+   *
+   * The two share one mechanism — both kill the process group and wait — and
+   * they must not share a verdict. A2 says a job over its ceiling is `failed`
+   * with `reason: "timeout"`, and a row that says "stopped on request" when
+   * nobody asked is a lie in the one record a person reads to find out what
+   * happened.
+   */
+  timedOut: boolean;
   jobTimer: NodeJS.Timeout;
+}
+
+/** What `enqueue` needs to know about the job a revision continues. */
+export interface ParentJob {
+  jobId: string;
+  /** The headless session `--resume` continues, when the parent had one. */
+  agentSessionId: string | null;
+  /** What the person asked to be different this time. */
+  changes: string;
 }
 
 export class Runner {
@@ -134,7 +153,10 @@ export class Runner {
    * catalog get asked — where the same two rules are enforced again by a unique
    * index that does not depend on this process being the only one.
    */
-  async enqueue(brief: ValidBrief): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
+  async enqueue(
+    brief: ValidBrief,
+    parent?: ParentJob,
+  ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
     const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
     if (existing !== undefined) {
       return { record: existing, created: false, jobsAhead: this.queued().length };
@@ -182,7 +204,13 @@ export class Runner {
       slug: brief.slug,
       attempt: 0,
       sessionId: null,
-      agentSessionId: null,
+      // A revision inherits its parent's headless session, so its first attempt
+      // continues that transcript with a change request instead of paying for
+      // the whole drawing again. That is what `POST /api/jobs/{id}/revise`
+      // means in the API table, and what the Resume button A7 describes does.
+      agentSessionId: parent?.agentSessionId ?? null,
+      parentJobId: parent?.jobId ?? null,
+      changes: parent?.changes ?? null,
       idempotencyKey: brief.idempotencyKey,
       targetHashBefore: targetExists ? await sha256(absolute(target)) : null,
       requestedAt: new Date().toISOString(),
@@ -222,15 +250,28 @@ export class Runner {
       "utf8",
     );
     const enqueued = await jobEnqueue(briefFile);
-    if (!enqueued.ok) {
-      // The catalog refused, and its reasons are the durable ones: a topic that
-      // is not in the vocabulary, a lease another process holds. The disk
-      // record is removed rather than left as a job nothing will ever claim.
+    if (!enqueued.ok && enqueued.reachable) {
+      // The catalog answered and said no, and its reasons are the durable ones:
+      // a topic that is not in the vocabulary, a lease another process holds.
+      // The disk record is removed, and forgotten, rather than left as a job
+      // nothing will ever claim while still holding this target's lease in
+      // memory against every brief that follows it.
       await rm(jobDir(id), { recursive: true, force: true });
+      this.store.forget(id);
       throw new JobRefused(
-        enqueued.error?.includes("already held") === true ? 409 : 503,
+        enqueued.error?.includes("already held") === true ? 409 : 400,
         enqueued.error ?? "the catalog would not take this job",
       );
+    }
+    if (!enqueued.ok) {
+      // The catalog never answered, which is a different fact and a different
+      // policy. D16: a missing `dist/` refuses the job and a missing Postgres
+      // does not, and U3 says the studio keeps browsing and drawing with the
+      // database down, reading its jobs from disk. Deleting the workspace here
+      // would have made "the database is down" the one thing that loses work,
+      // in the service whose whole write path is a disk record first (rule 7).
+      // The row is reconciled from `job.json` when the database is back.
+      await this.store.noteCatalogError(id, enqueued.error ?? "");
     }
 
     void this.kick();
@@ -254,8 +295,13 @@ export class Runner {
         record: next,
         agent: null,
         cancelled: false,
+        timedOut: false,
         jobTimer: setTimeout(() => {
-          void this.cancel(next.id, "job-timeout");
+          // Caught rather than left to reject: by the time the ceiling fires
+          // the job may already be finishing, and `cancel` refuses a job that
+          // is no longer running. That refusal is the right answer and an
+          // unhandled rejection is not.
+          void this.cancel(next.id, "job-timeout").catch(() => undefined);
         }, JOB_TIMEOUT_MS),
       };
       this.running.set(next.id, entry);
@@ -282,7 +328,13 @@ export class Runner {
   private async execute(entry: Running): Promise<void> {
     const id = entry.record.id;
     const sessionId = `studio-${id}`;
-    const agentSessionId = randomUUID();
+    // A revision carries its parent's headless session and continues it; every
+    // other job mints one. Reading the record rather than always minting is the
+    // difference between `revise` resuming a stored session and `revise` paying
+    // for the whole drawing a second time.
+    const inherited = entry.record.agentSessionId;
+    let agentSessionId = inherited ?? randomUUID();
+    let resumeFromParent = inherited !== null;
 
     // Persisted before the agent launches, which is the fix manimkc already
     // made after losing a session to a restart: a kill at any point leaves
@@ -306,8 +358,26 @@ export class Runner {
       agentSessionId,
     });
     if (!opened.ok) await this.store.noteCatalogError(id, opened.error ?? "");
+
     const claimed = await jobClaim(id, RUNNER_NAME, sessionId);
-    if (!claimed.ok) await this.store.noteCatalogError(id, claimed.error ?? "");
+    if (!claimed.ok) {
+      await this.store.noteCatalogError(id, claimed.error ?? "");
+      if (claimed.reachable) {
+        // The catalog answered and would not hand this job over, which means
+        // the row is no longer `queued`: another runner claimed it, or a person
+        // cancelled it. Continuing anyway would put a second paid agent on the
+        // same candidate path, and the loser would then write terminal state
+        // over the winner's. The claim is the only lease that does not depend
+        // on this process being the only one, so a refusal ends the attempt.
+        //
+        // No `job finish` here on purpose: the row belongs to whoever holds it,
+        // and finishing it would transition *their* running job to failed.
+        await this.abandon(entry, claimed.error ?? "the catalog would not hand this job over");
+        return;
+      }
+      // Unreachable is the degraded mode, not a refusal. D16, and the same
+      // reading enqueue takes.
+    }
 
     const dirtyBefore = new Set(await dirtyFiles());
 
@@ -318,8 +388,14 @@ export class Runner {
     // document is how every diagram ends up looking like the first one, which
     // is the reason manimkc's clean-room rule exists and the reason this one
     // does; the copy is what lets the rule hold while extending still works.
+    let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
       await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
+      // Remembered so the gate can tell "extended it" from "left the copy
+      // exactly as it found it". Without it, an agent that did nothing at all
+      // presents the runner's own copy of the committed diagram for review and
+      // passes every check, because the committed diagram was already good.
+      unchangedHash = await sha256(absolute(record.candidatePath));
     }
     const hasMermaid = record.brief.mermaid !== undefined;
     if (hasMermaid) {
@@ -329,6 +405,8 @@ export class Runner {
     let gate: GateResult | null = null;
     let findings: string[] = [];
     let outcome: Awaited<AgentRun["done"]> | null = null;
+    /** True once this session id has a transcript, so the next call resumes it. */
+    let startedSession = false;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       if (entry.cancelled) break;
@@ -344,17 +422,26 @@ export class Runner {
         state: "running",
       });
 
+      // What to say, and whether to continue a transcript, are one question
+      // asked of the state rather than of the attempt number: a fresh session
+      // after a failed resume is attempt two and still needs the whole prompt.
+      const started = startedSession;
+      const prompt =
+        findings.length > 0
+          ? buildRetryPrompt(findings, record.slug)
+          : resumeFromParent && record.changes !== null
+            ? buildRevisePrompt(record.changes, record.slug)
+            : buildPrompt({ jobId: id, brief: record.brief, hasMermaid });
+      startedSession = true;
+
       const agent = await startAgent({
         jobId: id,
         slug: record.slug,
         ...(record.brief.source === undefined ? {} : { source: record.brief.source }),
-        prompt:
-          attempt === 1
-            ? buildPrompt({ jobId: id, brief: record.brief, hasMermaid })
-            : buildRetryPrompt(findings, record.slug),
+        prompt,
         model: record.brief.model,
         sessionId: agentSessionId,
-        resume: attempt > 1,
+        resume: resumeFromParent || started,
         onLine: (line) => {
           void this.onAgentLine(id, line);
         },
@@ -364,6 +451,37 @@ export class Runner {
       entry.agent = null;
 
       if (entry.cancelled || outcome.stopReason === "cancelled") break;
+
+      if (outcome.spawnFailed) {
+        // Nothing ran, so there is nothing on disk to judge and no point paying
+        // for two more attempts at the same missing binary.
+        await this.finish(entry, "failed", {
+          errorKind: "spawn",
+          error: `the agent never started: ${outcome.stderr || "the process could not be spawned"}`,
+          exitCode: null,
+          turns: null,
+          costUsd: null,
+        });
+        return;
+      }
+
+      if (resumeFromParent && outcome.turns === null && outcome.exitCode !== 0) {
+        // A `--resume` against a session this machine no longer has exits
+        // without taking a turn. Retrying the same id twice more would spend
+        // two attempts on the same missing transcript, so the revision falls
+        // back to a session of its own and draws from the brief instead.
+        agentSessionId = randomUUID();
+        resumeFromParent = false;
+        startedSession = false;
+        record = await this.store.update(id, { agentSessionId });
+        findings = [];
+        await this.store.emit(id, {
+          type: "phase",
+          note: "the stored session could not be resumed, so this attempt starts a fresh one",
+          state: "running",
+        });
+        continue;
+      }
       if (outcome.stopReason === "attempt-timeout" || outcome.stopReason === "idle-timeout") {
         await this.finish(entry, "failed", {
           errorKind: "timeout",
@@ -385,6 +503,9 @@ export class Runner {
         candidatePath: record.candidatePath,
         candidateSvgPath: record.candidateSvgPath,
         startedAtMs: Date.parse(record.startedAt ?? record.requestedAt),
+        elements: record.brief.elements,
+        relations: record.brief.relations,
+        unchangedHash,
         onStep: (step) => {
           void this.store.emit(id, { type: "step", note: narrate(step), state: "running" });
         },
@@ -579,27 +700,64 @@ export class Runner {
     });
     if (entry !== undefined) {
       entry.cancelled = true;
+      if (reason === "job-timeout") entry.timedOut = true;
       await entry.agent?.stop("cancelled");
     }
     return updated;
   }
 
-  /** Called once the agent has actually exited. Sweeps, then writes `cancelled`. */
+  /**
+   * Called once the agent has actually exited. Sweeps, then writes the verdict.
+   *
+   * Two verdicts, because the ceiling and a person share a mechanism and not a
+   * meaning. A2 says a job past forty-five minutes is `failed` with
+   * `reason: "timeout"`; only a job somebody stopped is `cancelled`. Writing
+   * "stopped on request" over a timeout puts a sentence in the record that
+   * nobody can act on, and hides the one number that needs raising.
+   */
   private async acknowledgeCancel(
     entry: Running,
     outcome: Awaited<AgentRun["done"]> | null,
   ): Promise<void> {
     const swept = await sweepOrphans(entry.record.id);
-    await this.finish(entry, "cancelled", {
-      errorKind: "cancelled",
-      error:
-        swept.length === 0
-          ? "stopped on request; the process group kill was enough"
-          : `stopped on request; ${swept.length} process${swept.length === 1 ? "" : "es"} survived the group kill and were swept`,
+    const sweptNote =
+      swept.length === 0
+        ? "the process group kill was enough"
+        : `${swept.length} process${swept.length === 1 ? "" : "es"} survived the group kill and were swept`;
+    await this.finish(entry, entry.timedOut ? "failed" : "cancelled", {
+      errorKind: entry.timedOut ? "timeout" : "cancelled",
+      error: entry.timedOut
+        ? `the job ran past its ${Math.round(JOB_TIMEOUT_MS / 60_000)} minute ceiling and was ` +
+          `stopped; ${sweptNote}. The session id is kept, so a revise can continue it rather ` +
+          `than paying for the drawing again.`
+        : `stopped on request; ${sweptNote}`,
       exitCode: outcome?.exitCode ?? null,
       turns: outcome?.turns ?? null,
       costUsd: outcome?.costUsd ?? null,
     });
+  }
+
+  /**
+   * End a job the catalog would not hand over, without touching the catalog.
+   *
+   * `finish` is the wrong tool here: it calls `job finish`, and the row is
+   * somebody else's by definition — that is what the refused claim said. So the
+   * disk record and the session are closed and the row is left alone.
+   */
+  private async abandon(entry: Running, reason: string): Promise<void> {
+    const id = entry.record.id;
+    const error =
+      `${reason}. Another runner holds this job, or it was cancelled between being queued and ` +
+      `being picked up, so no agent was started and nothing was spent.`;
+    const updated = await this.store.update(id, {
+      state: "failed",
+      phase: null,
+      finishedAt: new Date().toISOString(),
+      errorKind: "not-claimed",
+      error,
+    });
+    await this.store.emit(id, { type: "error", state: "failed", note: noteFor(updated) });
+    if (updated.sessionId !== null) await sessionEnd(updated.sessionId, "failed", error);
   }
 
   /** Partial artifacts, kept where a person can look at them. */

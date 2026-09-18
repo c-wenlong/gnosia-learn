@@ -27,24 +27,60 @@ export interface CatalogResult {
   json: unknown;
   /** A sentence a person can act on, when `ok` is false. */
   error: string | null;
+  /**
+   * False when the catalog never got to answer: no `DATABASE_URL`, nothing
+   * listening, a socket that died, or a CLI that would not start.
+   *
+   * This is the distinction D16 turns on, and two callers need it. "Postgres is
+   * down" is a degraded mode the studio keeps working through; "the catalog
+   * said no" is a durable refusal — a lease another runner holds, a topic that
+   * is not in the vocabulary, a row that is no longer `queued` — and treating
+   * one as the other either drops a job that should have run or runs a job a
+   * second process already owns. `true` on a successful call.
+   */
+  reachable: boolean;
 }
+
+/**
+ * Whether a failure was the database being out of reach rather than the catalog
+ * refusing something.
+ *
+ * Matched on the message because the CLI has one failure exit code for both: it
+ * prints `{ ok: false, error }` and exits 1 whether the row was in the wrong
+ * state or the socket was never opened. Every pattern here is a `pg` connection
+ * error or a `node-postgres` pool message, none of which a domain refusal in
+ * `services/catalog/src/commands/` can produce — those name a job, a state or a
+ * path. A pattern that stopped matching would make the studio treat an outage
+ * as a refusal, which is the safe direction: it refuses the job instead of
+ * running one twice.
+ */
+const UNREACHABLE =
+  /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|EHOSTUNREACH|ENETUNREACH|connection terminated|timeout exceeded when trying to connect|server closed the connection|could not run the catalog CLI|DATABASE_URL|password authentication failed|too many clients|the database system is (starting up|shutting down)/i;
 
 async function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResult> {
   try {
     const result = await run(NPM, ["run", "--silent", "catalog", "--", ...args, "--json"], {
       timeoutMs,
     });
-    if (result.code === 0) return { ok: true, json: result.json, error: null };
+    if (result.code === 0) return { ok: true, json: result.json, error: null, reachable: true };
     const detail = (result.stderr.trim() || result.stdout.trim() || "").split("\n").slice(-4).join(" ");
+    const error = result.timedOut
+      ? `catalog ${args[0] ?? ""} timed out after ${timeoutMs}ms`
+      : `catalog ${args.join(" ")} exited ${result.code}: ${detail}`;
     return {
       ok: false,
       json: result.json,
-      error: result.timedOut
-        ? `catalog ${args[0] ?? ""} timed out after ${timeoutMs}ms`
-        : `catalog ${args.join(" ")} exited ${result.code}: ${detail}`,
+      error,
+      // A timeout is the database not answering, whatever the message says.
+      reachable: !result.timedOut && !UNREACHABLE.test(detail),
     };
   } catch (error) {
-    return { ok: false, json: null, error: `could not run the catalog CLI: ${(error as Error).message}` };
+    return {
+      ok: false,
+      json: null,
+      error: `could not run the catalog CLI: ${(error as Error).message}`,
+      reachable: false,
+    };
   }
 }
 

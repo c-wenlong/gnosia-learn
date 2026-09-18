@@ -18,9 +18,33 @@ const allow = settings.permissions.allow;
 const deny = settings.permissions.deny;
 
 describe("the Bash rules are an allowlist", () => {
-  it("allows exactly five command prefixes", () => {
+  it("allows exactly one command prefix, the canvas launcher", () => {
     const bash = allow.filter((rule) => rule.startsWith("Bash("));
     expect(bash).toEqual([...BASH_ALLOW]);
+    expect(bash).toEqual(["Bash(npm run --silent canvas:*)"]);
+  });
+
+  it("allows no command that reads a file, because a Bash rule cannot name a path", () => {
+    // `Bash(cat:*)` is a string prefix with no idea of a path, so it allows
+    // `cat` against every file on the machine and only a `Read(...)` deny it
+    // happens to match stops it — which makes the boundary an enumeration of
+    // secrets somebody remembered. File reading goes through the Read tool
+    // instead, which is matched against paths and confined to the working
+    // directories.
+    for (const command of ["cat", "head", "tail", "ls", "wc", "grep", "less", "od", "strings"]) {
+      expect(allow.some((rule) => rule.startsWith(`Bash(${command}`))).toBe(false);
+    }
+  });
+
+  it("denies the file readers by name, because a command substitution is not split", () => {
+    // A compound command is split on `&&`, `;` and `|` and each part matched,
+    // but `npm run --silent canvas -- run x --code "$(cat ~/.aws/credentials)"`
+    // is one string that matches the allowed prefix. Deny rules are the half of
+    // the matcher that reaches inside a substitution, so these are the rule
+    // that closes it rather than a note about it.
+    for (const command of ["cat", "head", "tail", "ls", "wc"]) {
+      expect(deny).toContain(`Bash(${command}:*)`);
+    }
   });
 
   it("never allows a bare tool name, which would match every use of it", () => {
