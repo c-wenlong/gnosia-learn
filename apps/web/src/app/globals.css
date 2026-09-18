@@ -15,6 +15,25 @@
   --nav-active-bg: #e8f0fe;
   --accent: #2563eb;
   --accent-strong: #1d4ed8;
+
+  /* One step above --surface, for a panel sitting over a canvas. In light mode
+     the two are equal: paper on paper needs a border, not a lighter paper. */
+  --surface-raised: #ffffff;
+
+  /* The amber the shell's store banner and the course cards already used
+     inline, named once. Tailwind's amber-900 / amber-50 / amber-300. */
+  --warn: #78350f;
+  --warn-bg: #fffbeb;
+  --warn-border: #fcd34d;
+
+  /* A red at the same lightness as the amber triple. A failed job and a failed
+     verify check had no colour before the studio. */
+  --danger: #7f1d1d;
+  --danger-bg: #fef2f2;
+  --danger-border: #fca5a5;
+
+  /* Green, used only for a passed verify check and a done phase glyph. */
+  --ok: #166534;
 }
 
 .dark {
@@ -31,6 +50,24 @@
   --nav-active-bg: #1a2744;
   --accent: #60a5fa;
   --accent-strong: #93c5fd;
+
+  /* Elevation by lightening the surface rather than by shadow, which is the
+     Material dark-theme rule the research table adopted: a shadow does not
+     carry on a dark ground. */
+  --surface-raised: #1e232c;
+
+  /* The dark half of the banner the shell already drew inline. --warn-bg is
+     amber-950 at 40% resolved over --background, since a panel that sits over
+     a canvas cannot be translucent. */
+  --warn: #fde68a;
+  --warn-bg: #25150e;
+  --warn-border: #78350f;
+
+  --danger: #fecaca;
+  --danger-bg: #2a1113;
+  --danger-border: #7f1d1d;
+
+  --ok: #86efac;
 }
 
 @theme inline {

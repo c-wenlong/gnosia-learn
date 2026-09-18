@@ -78,3 +78,23 @@ export const TEXT_LIMIT = integer("STUDIO_TEXT_LIMIT", 2_000, 200, 20_000);
 
 /** A cap on the mermaid source, which is written to a file and never to the prompt. */
 export const MERMAID_LIMIT = integer("STUDIO_MERMAID_LIMIT", 20_000, 1_000, 200_000);
+
+/**
+ * How long a mirror nobody has asked about is kept open.
+ *
+ * A browser leaving the canvas screen cannot be relied on to say so — a closed
+ * lid sends nothing — so the lifecycle is a timer rather than a DELETE. Fifteen
+ * minutes is long enough to read a diagram, think, and come back to the same
+ * tab, and short enough that a forgotten window is not a Node process and a
+ * port held overnight.
+ */
+export const MIRROR_IDLE_MS = integer("STUDIO_MIRROR_IDLE_MS", 15 * 60_000, 30_000, 6 * 3_600_000);
+
+/** How long `serve` gets to print the object that says it is listening. */
+export const MIRROR_START_MS = integer("STUDIO_MIRROR_START_MS", 30_000, 2_000, 300_000);
+
+/** The server-side poll of a mirror's own `/api/health`, which the page cannot do (D13). */
+export const MIRROR_HEALTH_MS = integer("STUDIO_MIRROR_HEALTH_MS", 2_000, 200, 30_000);
+
+/** A `canvas` verb the UI triggers: one Chromium launch, so generous but bounded. */
+export const VERB_TIMEOUT_MS = integer("STUDIO_VERB_TIMEOUT_MS", 180_000, 10_000, 900_000);

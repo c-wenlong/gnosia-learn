@@ -316,7 +316,10 @@ JSON in and JSON out, an `{ error, detail }` envelope on failure,
 same-origin and rate-limit guards in
 [`apps/web/src/lib/agent/guard.ts`](../apps/web/src/lib/agent/guard.ts) are not
 carried over: the runner binds loopback only, which is a stronger boundary than
-either.
+either. **Half of that sentence was wrong and D10 records the correction**: the
+rate limit stays out, and the same-origin half came back as `guard` in
+`api.ts`, because loopback is a boundary against the network and not against a
+browser on this machine.
 
 | Method | Path | Purpose | Request | Response |
 | --- | --- | --- | --- | --- |
@@ -333,7 +336,11 @@ either.
 | `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
-| `GET` | `/api/mirrors` | What is open, and whether each is answering | none | `{ mirrors: [{ file, url, port, openedAt, healthy }] }` |
+| `GET` | `/api/mirrors` | What is open, and whether each is answering | `?file=…` to poll and touch one | `{ mirrors: [{ file, url, port, startedAt, lastSeenAt, healthy }] }` |
+| `GET` | `/api/diagrams` | The corpus: `list --json` plus each SVG's own modified time | none | `{ dir, diagrams, errors, counts: { total, withTopic, unreadable } }` |
+| `GET` | `/api/diagrams/{name}` | One of them | none | `{ name, tldr, svg, title, topic, concepts, shapes, created, svgState, note }` |
+| `GET` | `/api/diagrams/{name}/svg` | The committed SVG's bytes, for a thumbnail | none | `image/svg+xml` |
+| `POST` | `/api/diagrams/{name}/export\|verify\|inspect` | One verb over a committed file | none | `{ verb, ok, exitCode, result, detail, note }` |
 
 `state` is the `job` column from the schema section and means exactly what it
 says there. `phase` refines `running`. Every response carries a `note`, the
@@ -631,6 +638,17 @@ The studio keeps the app's shell so it reads as a sibling. Three regions.
   [`AppShell`](../apps/web/src/components/AppShell.tsx) wraps `children` in
   `max-w-3xl` centred, which is right for prose and wrong for a canvas. Studio
   routes opt out and take the full width and the full remaining height.
+
+  **Corrected in phase 2.** The shell had already grown a `data-layout="wide"`
+  value by the time this was built, read through a `has-*` selector with no
+  prop and no client boundary, and `/library` uses it to reach `max-w-6xl`. The
+  studio adds a **third** value, `full`, rather than widening `wide`: a measure
+  of any width is still a measure, and the page gutters that make prose
+  readable put a border of background around a drawing surface. `full` drops
+  the measure and the padding, pins the shell to `h-dvh` with
+  `overflow-hidden`, and hands the route a flex child it can make exactly as
+  tall as the space under the header — so only the content scrolls. Reusing
+  `wide` for that would have changed `/library` too.
 - **Right panel.** 320px, fixed, its own scroll. The inspector for one diagram
   and for the job attached to it. Collapses with a toggle in the strip, and
   below 1024px is not rendered inline at all.
@@ -656,7 +674,26 @@ No percentage is ever shown.
 
 ### Asset browser
 
-Route `/studio`. A grid of cards at `repeat(auto-fill, minmax(260px, 1fr))` with
+Route `/studio`, beside `/library` and **not a second view of it**. The two
+cannot share a data source and should not: `/library` reads the `asset` table,
+and the diagram indexer refuses a `.tldr` with no topic *by name*, so such a
+file has no asset row at all — and it is the one file a person most needs to
+see, because nothing else in the repo will mention it until somebody fixes it.
+The studio lists from `canvas list --json` over `learn/assets/`, through the
+runner's `GET /api/diagrams`.
+
+**Its cards are its own components, not `/library`'s.** That was the intention
+and it does not survive contact with D22: `AssetCard.tsx` ships a 16:9 tile and
+`text-[10px]` metadata, both of which D22 rules out, and restyling `/library` is
+a different change with a different audience. So `components/studio/` holds the
+tile and the row, and what is shared is the reasoning rather than the code. One
+thing `/library` does that the studio deliberately does not copy: its cards are
+plain `<a>` anchors, so moving between assets there is a full page load. The
+studio is a screen a person moves around in, and reloading the shell to select a
+card throws away the scroll position of the grid they are scanning, so every
+link here is `next/link`.
+
+A grid of cards at `repeat(auto-fill, minmax(260px, 1fr))` with
 a 16px gap, so a 1440px window at full rail and panel gives four columns and a
 1024px window with the panel collapsed gives three. Each card:
 
@@ -715,6 +752,26 @@ Saving is the mirror's job and the studio does not restate it. What the studio
 does say is the thing the mirror cannot know: whether the committed SVG is older
 than the `.tldr`. The freshness pill reads `SVG current` or `SVG stale`, derived
 from the two file times. Clicking it runs `export --svg` over the same path.
+
+**Where that comparison happens, and one thing the tool does not report.**
+`canvas list --json` gives `svg: { path, exists }` and no modified time, so the
+question cannot be answered from its output at all. The runner stats both files
+and reports `svgState` on each diagram; the pill is rendered from that on the
+server. It is computed there rather than in a Next page for the same reason
+every other read is — layering rule 1 — and `stale` is *strictly* older rather
+than "not newer", because `export` writes the two seconds apart and a coarse
+filesystem timestamp would otherwise leave the pill amber on a diagram the tool
+had just finished making. A missing SVG is its own third answer, `No SVG`, and
+not a stale one.
+
+**Mirror lifecycle is a timer, not a navigation event.** `POST /api/mirrors` is
+idempotent — the canvas screen calls it on every render, and a second `serve`
+on one document would be a second port and a second writer — and a mirror
+nobody has asked about for `STUDIO_MIRROR_IDLE_MS` (fifteen minutes) is closed
+by a sweep. `DELETE ?file=` exists and is a courtesy: a browser that goes away
+cannot be relied on to say so, and a closed laptop lid sends nothing. Every
+`POST` and every `GET` naming a file pushes its timer back, so a page somebody
+is looking at keeps its canvas.
 
 Verb buttons in the strip, in order: Export SVG, Verify, Inspect, New job. Open
 in browser is in an overflow menu. The right panel is the same inspector with a
@@ -821,8 +878,8 @@ floor is a 1024px window.
 | `--border`, `--chip-bg` | `#e7e5e4` / `#f5f5f4`, dark `#2a2e37` / `#1e232c` | Existing |
 | `--muted`, `--muted-strong` | `#78716c` / `#57534e`, dark `#a8a29e` / `#d6d3d1` | Existing |
 | `--accent`, `--accent-strong` | `#2563eb` / `#1d4ed8`, dark `#60a5fa` / `#93c5fd` | Existing |
-| `--warn`, `--warn-bg`, `--warn-border` | The amber the shell already uses for its store banner | New as tokens. The values exist twice today, inline in [`AppShell.tsx`](../apps/web/src/components/AppShell.tsx) and [`CourseCard.tsx`](../apps/web/src/components/CourseCard.tsx) |
-| `--danger`, `--danger-bg` | A red pair at the same lightness as the amber pair | New. A failed job and a failed verify check have no colour today |
+| `--warn`, `--warn-bg`, `--warn-border` | The amber the shell already uses for its store banner | New as tokens. The values exist twice today, inline in [`AppShell.tsx`](../apps/web/src/components/AppShell.tsx) and [`CourseCard.tsx`](../apps/web/src/components/CourseCard.tsx). **Phase 2 replaced those two and found two more**, in [`InferredBanner.tsx`](../apps/web/src/components/InferredBanner.tsx) and [`AgentSession.tsx`](../apps/web/src/components/AgentSession.tsx), at slightly different opacities. Those were left alone: restyling components outside the studio is a change with a different audience, and the token is there when somebody wants it |
+| `--danger`, `--danger-bg`, `--danger-border` | A red triple at the same lightness as the amber triple | New. A failed job and a failed verify check have no colour today. **Phase 2 added the third**: a danger panel needs a border for the same reason the warn one does, and a pair plus an opacity modifier on a CSS variable is a Tailwind arbitrary-value trick rather than a token |
 | `--ok` | A green, used only for a passed verify check and a done phase glyph | New |
 | `--font-geist-sans`, `--font-geist-mono` | Geist and Geist Mono | Existing, via `next/font` |
 | Type: title | 14px / 20px, weight 500 | New role over existing sizes. Card titles, panel headings |
@@ -1088,6 +1145,39 @@ test that every route under `src/app/studio/` calls it. Note that
 looking at the studio means `npm run build` then `next start`, the workaround
 the root [`AGENTS.md`](../AGENTS.md) records.
 
+**Amended in phase 2, three ways.**
+
+*The gate covers server actions too.* A server action compiles to a POST
+endpoint with a stable id, so an ungated one is the same hole as an ungated
+route with a different door. `studio-gate.test.ts` walks
+`apps/web/src/app/studio/` for `page`, `layout`, `route`, `default`,
+`template` **and** `actions`, and asserts it found something, so a glob that
+breaks fails rather than passing by finding nothing.
+
+*The rewrite is a route handler, not a `rewrites()` entry.* Measured rather
+than reasoned about: a `next.config.ts` rewrite rewrites `Host` to the
+destination and forwards `Sec-Fetch-Site: same-origin`, both of which the
+runner's `guard` accepts — and it forwards the browser's `Origin` verbatim,
+which `guard` refuses, so every POST through one comes back 403. That is the
+guard working: a transparent proxy is byte-identical to the page it proxies
+for, and the difference has to be something the app does on purpose. A route
+handler at `app/studio/api/[...segments]/route.ts` strips `Origin`,
+`Sec-Fetch-*`, `Cookie` and `Host`, which is the deliberate act that says "a
+program ran this". It is also the only form that can read `STUDIO_ENABLED` at
+request time, since `rewrites()` is evaluated when the config loads — so one
+build serves both the deployed encyclopedia and a local studio.
+
+*`ASSET_FILES_ENABLED` is a second variable and the studio does not touch it.*
+That flag did not exist when this decision was written; it now gates
+`/api/assets/{id}/file`. Borrowing that route for studio thumbnails would have
+made the studio depend on two flags — and worse, that route also requires the
+asset to be **indexed**, and an untopiced `.tldr` has no asset row at all. The
+blank tile would land on exactly the diagram the studio exists to show. So
+thumbnails come from the runner's own `GET /api/diagrams/{name}/svg` through
+the proxy, and `STUDIO_ENABLED` stays the only gate the studio has. Keeping
+them separate is right on its own terms too: one turns on a read-only byte
+server, the other turns on an agent runner with filesystem access.
+
 ### D12. The studio puts nothing inside the tldraw iframe
 
 **Verdict:** every studio control sits in the strip above the canvas or the
@@ -1211,6 +1301,17 @@ a piece of the drawing off, and the drawing is the only thing the eye is
 scanning for. At `--muted` on `--surface`, 10px is under the contrast floor for
 small text, and the studio's metadata rows are denser than anything the app has
 today.
+
+**Scope, narrowed in phase 2.** This decision predates the asset library, which
+landed in #47 and #51 to #54 and disagrees with it twice: `AssetCard.tsx` ships
+a 16:9 thumbnail and new `text-[10px]` metadata. Neither is wrong for that
+screen — a gallery mixing videos and diagrams has a real argument for 16:9 —
+but they cannot both be the rule, so D22 binds the studio's own surfaces and
+nothing else. Everything under `apps/web/src/components/studio/` is 4:3,
+contained, and has no type below 12px; `/library` is left exactly as it is,
+which is why the studio's tile is its own component rather than a reuse of
+`AssetCard`. "The existing `text-[10px]` metadata sizes go" was a repo-wide
+claim this design was never entitled to make on another screen's behalf.
 
 ### D23. No percentage, ever
 
@@ -1346,27 +1447,47 @@ and a `POST .../cancel` on a running job leaves no Chromium process behind.
 
 Goal: a person can look at the corpus and open one diagram on a live canvas.
 
-- [ ] The `STUDIO_ENABLED` gate helper and a test that every route under
-      `apps/web/src/app/studio/` calls it
-- [ ] The rewrite from `/studio/api/*` to `127.0.0.1:7250`, gated the same way
-- [ ] The tokens from the design tokens table in `globals.css`, including
+- [x] The `STUDIO_ENABLED` gate helper and a test that every route under
+      `apps/web/src/app/studio/` calls it — `apps/web/src/lib/studio.ts` and
+      `studio-gate.test.ts`, which covers `actions.ts` too
+- [x] The rewrite from `/studio/api/*` to `127.0.0.1:7250`, gated the same way —
+      a route handler rather than a `rewrites()` entry, for the two reasons
+      under D11
+- [x] The tokens from the design tokens table in `globals.css`, including
       replacing the two inline amber copies
-- [ ] `/studio`: the grid, the cards, the badges, the topic chips, Display and
+- [x] `/studio`: the grid, the cards, the badges, the topic chips, Display and
       Sort, the URL-encoded filter set
-- [ ] The right panel inspector: counts, errors from `list --json`, the
+- [x] The right panel inspector: counts, errors from `list --json`, the
       per-diagram metadata, the verbs
-- [ ] `/studio/d/<name>`: the mirror iframe, the studio strip, the freshness
+- [x] `/studio/d/<name>`: the mirror iframe, the studio strip, the freshness
       pill, Export SVG, Verify and Inspect
-- [ ] `POST`/`DELETE`/`GET /api/mirrors` wired to the `ServeHandle`, with the
-      idle timeout
-- [ ] The blocked states: no build, stale build, no database, unparseable file,
-      empty directory
+- [x] `POST`/`DELETE`/`GET /api/mirrors` wired to the `ServeHandle`, with the
+      idle timeout — `services/studio/src/mirrors.ts`. The handle is the
+      `serve` subprocess and its ready JSON, not the tool's in-process
+      `ServeHandle`: tldrawkc is a submodule with its own toolchain and is not
+      a dependency of this workspace
+- [x] The blocked states: no build, stale build, no database, unparseable file,
+      empty directory — and a sixth the list did not name and every user meets
+      first, a runner that is not running
+
+Two the checklist did not name and the work made necessary. The corpus needs a
+route of its own, `GET /api/diagrams` and `/api/diagrams/{name}`, because
+`/library`'s table cannot answer for a file the indexer refuses; and the SVG
+bytes need `GET /api/diagrams/{name}/svg`, because the library's file route is
+gated on a second flag and on the asset being indexed. The three verbs the strip
+offers are `POST /api/diagrams/{name}/export|verify|inspect`, driven from server
+actions so no browser header ever reaches the runner's `guard`.
 
 Done when: with `STUDIO_ENABLED` set and the runner up, `/studio` lists both
 committed diagrams with their topics and thumbnails, opening one shows a live
 tldraw canvas whose drag-then-save is visible to a `canvas -- inspect` from
 another terminal, the freshness pill flips to stale after touching the `.tldr`,
-and `/studio` returns 404 with the variable unset.
+and `/studio` returns 404 with the variable unset. **Verified in a browser on
+2026-09-18**: `shape:sum` dragged from (930, 342) to (1098.5, 594.7) with the
+two arrows bound to it following, read back by `inspect` from a terminal; the
+pill flipped to `SVG stale` on a `touch` and back to `SVG current` after the
+strip's Export SVG; every studio route including the proxy returned 404 from
+the same build with the variable unset.
 
 ### Phase 3. Generation in the UI
 

@@ -92,10 +92,13 @@ export function Sidebar({
   nav,
   open,
   onClose,
+  studio = false,
 }: {
   nav: CourseNavEntry[];
   open: boolean;
   onClose: () => void;
+  /** Whether this deployment has a studio. Resolved on the server: see D11. */
+  studio?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -148,6 +151,17 @@ export function Sidebar({
                 Library
               </NavLink>
             </div>
+            {/* Only when the server says there is one. Every route under
+                /studio calls `requireStudio()` and 404s with STUDIO_ENABLED
+                unset (D11), so an unconditional entry would be a nav item that
+                is broken on the deployed site by design. */}
+            {studio && (
+              <div onClick={onClose}>
+                <NavLink href="/studio" active={pathname.startsWith("/studio")}>
+                  Studio
+                </NavLink>
+              </div>
+            )}
           </div>
           <p className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             Courses
