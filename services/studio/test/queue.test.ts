@@ -107,7 +107,49 @@ function stageAgent(hang = false): void {
   });
 }
 
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
+/**
+ * Let the queue get on with it.
+ *
+ * Twenty milliseconds was a bet that an enqueue, two `mkdir`s and a `writeFile`
+ * land inside one tick, and on a laptop running eleven vitest workers that bet
+ * loses every few runs — as a job that had not started yet, or a gate nothing
+ * had called. The wait is longer now, and every assertion about *when*
+ * something happened goes through `gateInput` or `agentsStarted` instead, which
+ * wait for the thing rather than for a duration.
+ */
+const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150));
+
+/** Wait until the agent has been started `count` times, or say it never was. */
+async function agentsStarted(count: number, budgetMs = 5_000): Promise<void> {
+  const until = Date.now() + budgetMs;
+  while (agentMock.startAgent.mock.calls.length < count) {
+    if (Date.now() > until) {
+      throw new Error(
+        `the agent was started ${agentMock.startAgent.mock.calls.length} times, not ${count}`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+/**
+ * Wait for the gate to have been called, rather than for 20 milliseconds.
+ *
+ * `settled()` is a fixed tick, and a fixed tick is a bet that one enqueue, two
+ * `mkdir`s and a `writeFile` land inside it. On a laptop running eleven vitest
+ * workers that bet loses every few runs, and the test then reads `calls[0]` of
+ * a mock nothing has called yet. Every assertion about what the gate was handed
+ * waits for the call instead.
+ */
+async function gateInput<T>(budgetMs = 5_000): Promise<T> {
+  const until = Date.now() + budgetMs;
+  for (;;) {
+    const call = gateMock.runGate.mock.calls.at(-1)?.[0];
+    if (call !== undefined) return call as T;
+    if (Date.now() > until) throw new Error("the gate was never called");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 /** The sha256 the reconcile pass would have recorded for this content. */
 const hash = (body: string): string => createHash("sha256").update(body).digest("hex");
@@ -258,6 +300,7 @@ describe("a catalog that cannot be reached", () => {
     expect(store.get(record.id)?.catalogErrors.join(" ")).toContain("ECONNREFUSED");
     // And it actually runs, which is the half of "keeps the job" that matters.
     await settled();
+    await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
 
@@ -329,6 +372,7 @@ describe("a claim the catalog refuses", () => {
 
     await runner.enqueue(await brief());
     await settled();
+    await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
 });
@@ -394,6 +438,7 @@ describe("an agent that never started", () => {
     expect(store.get(record.id)?.state).toBe("failed");
     expect(store.get(record.id)?.errorKind).toBe("spawn");
     // One attempt, not three: two more would be two more missing binaries.
+    await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
 });
@@ -407,6 +452,7 @@ describe("a revision", () => {
     });
     await settled();
 
+    await agentsStarted(1);
     const options = started[0]?.options ?? {};
     expect(options.sessionId).toBe("11111111-1111-4111-8111-111111111111");
     expect(options.resume).toBe(true);
@@ -419,6 +465,7 @@ describe("a revision", () => {
     await runner.enqueue(await brief());
     await settled();
 
+    await agentsStarted(1);
     expect(started[0]?.options.resume).toBe(false);
     expect(String(started[0]?.options.prompt)).toContain("You are drawing one teaching diagram");
   });
@@ -442,6 +489,7 @@ describe("a revision", () => {
     });
     await settled();
 
+    await agentsStarted(2);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(2);
     const second = started[1]?.options ?? {};
     expect(second.sessionId).not.toBe("22222222-2222-4222-8222-222222222222");
@@ -459,6 +507,7 @@ describe("a resume", () => {
     });
     await settled();
 
+    await agentsStarted(1);
     const options = started[0]?.options ?? {};
     expect(options.sessionId).toBe("44444444-4444-4444-8444-444444444444");
     expect(options.resume).toBe(true);
@@ -489,7 +538,7 @@ describe("a resume", () => {
     });
     await settled();
 
-    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { startedAtMs: number };
+    const input = await gateInput<{ startedAtMs: number }>();
     expect(input.startedAtMs).toBeLessThanOrEqual(parentStart);
   });
 
@@ -519,7 +568,7 @@ describe("a resume", () => {
     expect(await readFile(candidate, "utf8")).toContain("half-drawn");
     // And no `unchangedHash`: the candidate is not the runner's copy of
     // anything, so "byte-identical to the copy" is not a question about it.
-    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { unchangedHash?: string | null };
+    const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(input.unchangedHash).toBeNull();
   });
 
@@ -551,10 +600,7 @@ describe("a resume", () => {
     // Treated as a fresh extend: the committed file is copied over it, and the
     // gate measures freshness from this job rather than from the parent.
     expect(await readFile(candidate, "utf8")).toContain("committed");
-    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as {
-      unchangedHash?: string | null;
-      startedAtMs: number;
-    };
+    const input = await gateInput<{ unchangedHash?: string | null; startedAtMs: number; }>();
     expect(typeof input.unchangedHash).toBe("string");
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
@@ -571,7 +617,7 @@ describe("a resume", () => {
     });
     await settled();
 
-    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { unchangedHash?: string | null };
+    const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(typeof input.unchangedHash).toBe("string");
   });
 
@@ -585,7 +631,7 @@ describe("a resume", () => {
     });
     await settled();
 
-    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { startedAtMs: number };
+    const input = await gateInput<{ startedAtMs: number }>();
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
 });
@@ -597,7 +643,7 @@ describe("extend mode", () => {
     await runner.enqueue(await brief({ mode: "extend" }));
     await settled();
 
-    const input = gateMock.runGate.mock.calls[0]?.[0] as { unchangedHash?: string | null };
+    const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(typeof input.unchangedHash).toBe("string");
   });
 
@@ -610,10 +656,7 @@ describe("extend mode", () => {
     );
     await settled();
 
-    const input = gateMock.runGate.mock.calls[0]?.[0] as {
-      elements: unknown[];
-      relations: unknown[];
-    };
+    const input = await gateInput<{ elements: unknown[]; relations: unknown[]; }>();
     expect(input.elements).toHaveLength(2);
     expect(input.relations).toHaveLength(1);
   });
