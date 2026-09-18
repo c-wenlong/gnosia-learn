@@ -230,7 +230,10 @@ function Accepted({
             Committing is yours: the studio has no mutating git access and never runs{" "}
             <Mono>git add</Mono>.
           </p>
-          <pre className="mt-1.5 overflow-x-auto rounded-md bg-[var(--chip-bg)] p-2 font-mono text-xs text-[var(--foreground)]">
+          {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
+              column, and a line that runs off the edge is one a person copies
+              half of — which is the one mistake this box exists to prevent. */}
+          <pre className="mt-1.5 rounded-md bg-[var(--chip-bg)] p-2 font-mono text-xs break-all whitespace-pre-wrap text-[var(--foreground)]">
             {line}
           </pre>
         </div>
