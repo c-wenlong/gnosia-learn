@@ -26,7 +26,8 @@
     "learn": "node scripts/learn/cli.mjs",
     "canvas": "tsx services/catalog/src/canvas.ts",
     "gitmodules": "scripts/update-gitmodules.sh",
-    "catalog": "tsx services/catalog/src/cli.ts"
+    "catalog": "tsx services/catalog/src/cli.ts",
+    "studio": "tsx services/studio/src/index.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
