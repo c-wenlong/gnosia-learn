@@ -8,6 +8,7 @@ import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspec
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
+import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
@@ -192,7 +193,18 @@ export default async function CanvasPage({
       )}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          {mirror.ok && mirror.data.healthy !== false ? (
+          {panel.shot !== null && panel.job !== null ? (
+            /* The canvas keeps running behind this: `POST /api/mirrors` has
+               already been made above and the idle timer is pushed back by the
+               keep-alive on the next render, so closing the picture comes back
+               to the same document rather than to a cold start. */
+            <ShotView
+              jobId={panel.job}
+              which={panel.shot}
+              path={path}
+              title={diagram.tldr.path}
+            />
+          ) : mirror.ok && mirror.data.healthy !== false ? (
             <>
               {/* Editing happens between the browser and the serve port, which
                   this service never sees, so without a heartbeat the idle sweep

@@ -5,6 +5,7 @@ import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspec
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
+import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, EmptyDirectory, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   ButtonLink,
@@ -129,9 +130,8 @@ export default async function StudioPage({
   const visible = sortDiagrams(filterDiagrams(listing.diagrams, view), view);
   const groups = groupDiagrams(visible, view, topicTitles, topicDomains);
   const selected = listing.diagrams.find((entry) => entry.name === view.selected) ?? null;
-  const jobs = (jobList.ok ? jobList.data.jobs : []).filter(
-    (job) => selected !== null && job.target === selected.tldr.path,
-  );
+  const allJobs = jobList.ok ? jobList.data.jobs : [];
+  const jobs = allJobs.filter((job) => selected !== null && job.target === selected.tldr.path);
 
   return (
     <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
@@ -172,7 +172,17 @@ export default async function StudioPage({
 
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto">
-          {listing.diagrams.length === 0 && listing.errors.length === 0 ? (
+          {view.shot !== null && view.job !== null ? (
+            /* A thumbnail was clicked. The grid is behind it and one Close
+               brings it back, because a picture of a diagram is worth the whole
+               width and 320px of panel is not enough to look at one. */
+            <ShotView
+              jobId={view.job}
+              which={view.shot}
+              path={path}
+              title={allJobs.find((job) => job.jobId === view.job)?.target ?? view.job}
+            />
+          ) : listing.diagrams.length === 0 && listing.errors.length === 0 ? (
             <EmptyDirectory dir={listing.dir} />
           ) : visible.length === 0 ? (
             <div className="p-8 text-sm text-[var(--muted)]">
