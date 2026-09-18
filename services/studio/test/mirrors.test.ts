@@ -65,6 +65,43 @@ describe("starting a mirror over nothing", () => {
   });
 });
 
+describe("two requests opening the same document at once", () => {
+  it("spawns one server, not two", async () => {
+    // The canvas screen POSTs on every render, so two reloads race. Checking
+    // the open map before the first `await` only rules out a mirror that has
+    // already finished starting; without an in-flight entry both callers got
+    // past it, both spawned, and the second `open.set` dropped the first
+    // detached child on the floor still holding a port. Caught in review on
+    // the phase 2 PR.
+    const mirrors = new Mirrors();
+    const spawned: string[] = [];
+    const held = mirrors as unknown as { spawn: (file: string) => Promise<unknown> };
+    const real = held.spawn.bind(mirrors);
+    held.spawn = async (file: string) => {
+      spawned.push(file);
+      return real(file);
+    };
+
+    const both = await Promise.allSettled([
+      mirrors.start("learn/assets/racing.tldr"),
+      mirrors.start("learn/assets/racing.tldr"),
+    ]);
+
+    expect(spawned).toEqual(["learn/assets/racing.tldr"]);
+    // Both callers get the same answer, which here is the same refusal: the
+    // file does not exist. What matters is that there was one attempt.
+    expect(both.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("lets a later request try again once the first attempt has settled", async () => {
+    const mirrors = new Mirrors();
+    await expect(mirrors.start("learn/assets/racing.tldr")).rejects.toBeInstanceOf(MirrorRefused);
+    // The in-flight entry is cleared in a `finally`, so a failed start is not a
+    // permanent refusal for that path.
+    await expect(mirrors.start("learn/assets/racing.tldr")).rejects.toBeInstanceOf(MirrorRefused);
+  });
+});
+
 describe("the idle sweep", () => {
   it("closes a mirror nobody has asked about and leaves a fresh one alone", async () => {
     const mirrors = new Mirrors();

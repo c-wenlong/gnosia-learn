@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/studio/actions";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
+import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
@@ -12,14 +13,17 @@ import {
   Notice,
   Spacer,
   StudioStrip,
+  VerbNotice,
 } from "@/components/studio/StudioChrome";
 import { requireStudio, studioApi } from "@/lib/studio";
 import {
   canvasHref,
   displayTitle,
   freshness,
+  readOutcome,
   type Diagram,
   type DiagramListing,
+  type RawParams,
 } from "@/lib/studio-view";
 
 /**
@@ -67,6 +71,8 @@ interface Mirror {
   url: string;
   port: number;
   healthy: boolean | null;
+  /** Optional on the wire: a runner one version behind does not send it. */
+  idleMs?: number;
   note: string;
 }
 
@@ -79,10 +85,14 @@ interface Health {
 
 export default async function CanvasPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ name: string }>;
+  searchParams: Promise<RawParams>;
 }) {
   requireStudio();
+
+  const outcome = readOutcome(await searchParams);
 
   // A page's `params` are not URL-decoded, unlike a route handler's. The two
   // sides of the same URL disagree and nothing in the type says which you have,
@@ -162,6 +172,7 @@ export default async function CanvasPage({
   return (
     <Shell>
       <Strip diagram={diagram} path={path} />
+      {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
       {health.data.stale && (
         <Notice>
           The tldrawkc page bundle is older than its source, so this canvas is the previous build.
@@ -171,11 +182,17 @@ export default async function CanvasPage({
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
           {mirror.ok && mirror.data.healthy !== false ? (
-            <iframe
-              src={mirror.data.url}
-              title={`${displayTitle(diagram)} on a live canvas`}
-              className="h-full w-full border-0"
-            />
+            <>
+              {/* Editing happens between the browser and the serve port, which
+                  this service never sees, so without a heartbeat the idle sweep
+                  would close a canvas somebody is still drawing on. */}
+              <MirrorKeepAlive file={diagram.tldr.path} idleMs={mirror.data.idleMs} />
+              <iframe
+                src={mirror.data.url}
+                title={`${displayTitle(diagram)} on a live canvas`}
+                className="h-full w-full border-0"
+              />
+            </>
           ) : (
             <MirrorProblem
               file={diagram.tldr.path}

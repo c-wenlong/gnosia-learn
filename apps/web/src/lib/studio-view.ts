@@ -376,6 +376,62 @@ export function formatBytes(bytes: number | null): string | null {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* What a verb did, carried back to the page that asked                        */
+/* -------------------------------------------------------------------------- */
+
+export interface VerbReport {
+  verb: string;
+  ok: boolean;
+  headline: string;
+  detail: string | null;
+}
+
+/** The cap on a message put in a URL. A stack trace does not belong in one. */
+const MESSAGE_LIMIT = 300;
+
+/**
+ * Add a verb's outcome to a path, so the redirect after a form carries it.
+ *
+ * A server action that simply revalidated left a failed export looking exactly
+ * like a button that did nothing: a 409 saying there was no SVG to verify, or a
+ * 502 carrying the snippet's own stack line, went nowhere. The outcome rides
+ * back in the query string instead, which needs no client state and no toast
+ * library, and is gone the moment the person navigates.
+ */
+export function withOutcome(
+  path: string,
+  verb: string,
+  outcome: { ok: boolean; headline: string; detail: string | null },
+): string {
+  const [base, existing] = path.split("?");
+  const params = new URLSearchParams(existing ?? "");
+  params.delete("v");
+  params.delete("ok");
+  params.delete("m");
+  params.set("v", verb);
+  params.set("ok", outcome.ok ? "1" : "0");
+  params.set(
+    "m",
+    [outcome.headline, outcome.detail].filter((part) => part !== null && part !== "").join(" — ").slice(0, MESSAGE_LIMIT),
+  );
+  return `${base ?? "/studio"}?${params.toString()}`;
+}
+
+/** Read one back, or null when the page was not reached through a verb. */
+export function readOutcome(params: RawParams): VerbReport | null {
+  const verb = one(params.v);
+  if (verb === null) return null;
+  const message = one(params.m) ?? "";
+  const [headline, detail] = message.split(" — ");
+  return {
+    verb,
+    ok: one(params.ok) === "1",
+    headline: headline ?? verb,
+    detail: detail ?? null,
+  };
+}
+
 /** `/studio/d/<name>`, the canvas route. */
 export function canvasHref(name: string): string {
   return `/studio/d/${encodeURIComponent(name)}`;

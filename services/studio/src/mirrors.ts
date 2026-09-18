@@ -27,8 +27,17 @@ import { NPM, signalGroup } from "./proc";
  * Lifecycle is idle-based, not navigation-based. A browser leaving the canvas
  * screen cannot be relied on to send a DELETE — a closed laptop lid sends
  * nothing — so a mirror nobody has asked about for `MIRROR_IDLE_MS` is closed
- * by the sweep. Every `open` and every `list` touches the one it names, so a
- * page that keeps polling keeps its canvas.
+ * by the sweep. Every `start` and every `list` naming a file touches it.
+ *
+ * **Idle has to mean "nobody is looking", and only the page can say that.**
+ * The editing happens entirely between the browser and the `serve` port, which
+ * is a different origin and a different process: nothing about a person drawing
+ * for twenty minutes reaches this service, so without a heartbeat the sweep
+ * would close a canvas out from under someone mid-edit and cost them whatever
+ * they had not saved. `MirrorKeepAlive` on the canvas screen touches this at a
+ * third of `idleMs`, which is why the view reports that number instead of the
+ * page hard-coding one. What the sweep then closes is a window somebody walked
+ * away from, which is what it was for. Caught in review on the phase 2 PR.
  */
 
 export interface MirrorView {
@@ -41,6 +50,13 @@ export interface MirrorView {
   lastSeenAt: string;
   /** Null until someone asks; `true`/`false` after this process has polled it. */
   healthy: boolean | null;
+  /**
+   * How long this mirror survives without being touched.
+   *
+   * Reported so the canvas screen can size its own heartbeat against it rather
+   * than hard-coding a number that drifts from `STUDIO_MIRROR_IDLE_MS`.
+   */
+  idleMs: number;
 }
 
 interface Mirror {
@@ -118,6 +134,7 @@ export function readyObject(buffer: string): { url: string; port: number } | nul
 
 export class Mirrors {
   private readonly open = new Map<string, Mirror>();
+  private readonly starting = new Map<string, Promise<MirrorView>>();
   private sweeper: NodeJS.Timeout | null = null;
 
   /**
@@ -126,6 +143,15 @@ export class Mirrors {
    * Idempotent on purpose: the canvas screen calls this on every render, and a
    * second `serve` on the same document would be a second port, a second tab's
    * worth of state, and two writers on one file.
+   *
+   * **The in-flight map is what makes that true under concurrency**, and the
+   * first version did not have it. Checking `open` before the first `await`
+   * only rules out a mirror that has already finished starting; two requests
+   * arriving while the first `serve` is still coming up both passed the check,
+   * both spawned, and the second `open.set` dropped the first child on the
+   * floor — an untracked detached process holding a port. Two reloads of the
+   * canvas screen is enough to do it. This is the same shape as the in-flight
+   * promise `doctor()` in `canvas.ts` already keeps, for the same reason.
    */
   async start(file: string): Promise<MirrorView> {
     const existing = this.open.get(file);
@@ -133,7 +159,17 @@ export class Mirrors {
       existing.lastSeenAt = Date.now();
       return this.view(existing);
     }
+    const inFlight = this.starting.get(file);
+    if (inFlight !== undefined) return inFlight;
 
+    const attempt = this.spawn(file).finally(() => {
+      this.starting.delete(file);
+    });
+    this.starting.set(file, attempt);
+    return attempt;
+  }
+
+  private async spawn(file: string): Promise<MirrorView> {
     const target = absolute(file);
     const info = await stat(target).catch(() => null);
     if (info === null || !info.isFile()) {
@@ -294,6 +330,7 @@ export class Mirrors {
       startedAt: new Date(mirror.startedAt).toISOString(),
       lastSeenAt: new Date(mirror.lastSeenAt).toISOString(),
       healthy: null,
+      idleMs: MIRROR_IDLE_MS,
     };
   }
 }

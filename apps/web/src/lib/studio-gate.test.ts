@@ -70,6 +70,63 @@ describe("every entry point under app/studio", () => {
   );
 });
 
+/**
+ * One call somewhere in a file is not enough for `actions.ts`.
+ *
+ * A route file has one entry point; an actions file has as many as it has
+ * exports, each compiled to its own callable POST endpoint with its own stable
+ * id. A whole-file check passes the moment *any* function in it mentions the
+ * gate, so a new action added beside three gated ones would ship ungated and
+ * the suite would stay green. Caught in review on the phase 2 PR.
+ *
+ * So this reads each exported function's own body. That is also why the gate is
+ * spelled out in each action rather than hoisted into the shared helper they
+ * all call: a gate reached only through a helper cannot be checked per endpoint,
+ * and "every endpoint is gated" is the property worth having.
+ */
+function exportedBodies(source: string): { name: string; body: string }[] {
+  const found: { name: string; body: string }[] = [];
+  const signature = /export\s+(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/g;
+  for (const match of source.matchAll(signature)) {
+    const open = source.indexOf("{", match.index + match[0].length - 1);
+    if (open === -1) continue;
+    let depth = 0;
+    for (let at = open; at < source.length; at += 1) {
+      if (source[at] === "{") depth += 1;
+      else if (source[at] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          found.push({ name: match[1] ?? "", body: source.slice(open, at + 1) });
+          break;
+        }
+      }
+    }
+  }
+  return found;
+}
+
+describe("every exported server action", () => {
+  const file = path.join(STUDIO_DIR, "actions.ts");
+  const actions = exportedBodies(readFileSync(file, "utf8")).filter(
+    // The exported types and the outcome helpers are not endpoints. An action
+    // is the async function a `<form action=…>` posts to.
+    (fn) => fn.body.includes("formData") || fn.body.includes("FormData"),
+  );
+
+  it("finds the actions, so a parser that breaks cannot pass by finding none", () => {
+    expect(actions.map((fn) => fn.name).sort()).toEqual([
+      "exportSvg",
+      "inspectDiagram",
+      "restartMirror",
+      "verifySvg",
+    ]);
+  });
+
+  it.each(actions.map((fn) => [fn.name, fn.body]))("%s calls requireStudio() itself", (_name, body) => {
+    expect(body).toMatch(/\brequireStudio\(\)/);
+  });
+});
+
 describe("the gate itself", () => {
   it("is off when the variable is absent, which is what production looks like", () => {
     expect(studioEnabled({})).toBe(false);

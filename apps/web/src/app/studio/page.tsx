@@ -8,6 +8,7 @@ import {
   Notice,
   Spacer,
   StudioStrip,
+  VerbNotice,
 } from "@/components/studio/StudioChrome";
 import {
   DisplayMenu,
@@ -21,6 +22,7 @@ import {
   filterDiagrams,
   groupDiagrams,
   parseView,
+  readOutcome,
   sortDiagrams,
   studioHref,
   topicChips,
@@ -69,6 +71,8 @@ export default async function StudioPage({
   const params = await searchParams;
   const view = parseView(params);
   const path = studioHref(view);
+  // What the last verb did, if the person reached this page through one.
+  const outcome = readOutcome(params);
 
   const health = await studioApi<Health>("/api/health", { timeoutMs: 150_000 });
   if (!health.ok) {
@@ -138,6 +142,8 @@ export default async function StudioPage({
           {view.panel ? "Hide panel" : "Show panel"}
         </ButtonLink>
       </StudioStrip>
+
+      {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
 
       {/* U5 and U3: both mean everything still works, so both are banners. */}
       {health.data.stale && (

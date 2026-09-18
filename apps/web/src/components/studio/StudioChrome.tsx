@@ -175,10 +175,49 @@ export function Notice({
   const tones = {
     warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]",
     danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
   } as const;
   return (
     <div role="status" className={`border-b px-3 py-1.5 text-xs ${tones[tone]}`}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * What the verb a person just pressed actually did.
+ *
+ * Rendered from the query string the action redirected to, so a 409 or a 502
+ * reads as an answer rather than as a button that did nothing. It carries a
+ * link that drops the message, since a stale outcome pinned in a URL somebody
+ * bookmarked would be worse than no outcome at all.
+ */
+export function VerbNotice({
+  report,
+  clearHref,
+}: {
+  report: { verb: string; ok: boolean; headline: string; detail: string | null };
+  clearHref: string;
+}) {
+  const tones = {
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
+    bad: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
+  } as const;
+  return (
+    <div
+      role="status"
+      className={`flex items-start gap-3 border-b px-3 py-1.5 text-xs ${report.ok ? tones.ok : tones.bad}`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="font-medium">{report.verb}: </span>
+        {report.headline}
+        {report.detail !== null && report.detail !== "" && (
+          <span className="block font-mono text-xs opacity-80">{report.detail}</span>
+        )}
+      </span>
+      <Link href={clearHref} scroll={false} className="shrink-0 underline underline-offset-2">
+        Dismiss
+      </Link>
     </div>
   );
 }
