@@ -1,6 +1,7 @@
 import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fixtureDocument } from "./fixture-document";
 
 /**
  * The corpus reader: the one fact it adds to `canvas list --json`, and the one
@@ -104,7 +105,7 @@ describe("what counts as a diagram name", () => {
 
 describe("reading the directory", () => {
   it("adds the SVG's own modified time, which list does not report", async () => {
-    await writeFile(absolute(targetPath(NAME)), "{}");
+    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
     await writeFile(absolute(targetSvgPath(NAME)), "<svg/>");
     const old = new Date("2026-01-01T00:00:00.000Z");
     await utimes(absolute(targetSvgPath(NAME)), old, old);
@@ -117,7 +118,7 @@ describe("reading the directory", () => {
   });
 
   it("reports a file that will not parse rather than throwing past it", async () => {
-    await writeFile(absolute(targetPath(NAME)), "{}");
+    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
     const result = await listDiagrams();
     expect(result.errors).toEqual([
       { name: "broken", path: "learn/assets/broken.tldr", message: "not JSON" },
@@ -126,7 +127,7 @@ describe("reading the directory", () => {
   });
 
   it("counts the topiced ones apart, because the indexer refuses the others", async () => {
-    await writeFile(absolute(targetPath(NAME)), "{}");
+    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
     const result = await listDiagrams();
     expect(result.counts).toMatchObject({ total: 1, withTopic: 1 });
   });

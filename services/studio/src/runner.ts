@@ -24,7 +24,7 @@ import {
   targetSvgPath,
   CANDIDATES_DIR,
 } from "./paths";
-import { buildPrompt, buildRetryPrompt, buildRevisePrompt } from "./prompt";
+import { buildPrompt, buildResumePrompt, buildRetryPrompt, buildRevisePrompt } from "./prompt";
 import { dirtyFiles } from "./review";
 import type { GateResult, JobRecord, JobStore } from "./store";
 
@@ -74,8 +74,17 @@ export interface ParentJob {
   jobId: string;
   /** The headless session `--resume` continues, when the parent had one. */
   agentSessionId: string | null;
-  /** What the person asked to be different this time. */
-  changes: string;
+  /**
+   * What the person asked to be different this time, or `null` for a resume.
+   *
+   * The two callers are the two reasons to continue somebody else's session and
+   * they are not the same fact. `revise` carries a change request, because a
+   * revise with nothing to change is a re-run. A resume carries none: nothing
+   * about an interrupted job was wrong, the runner simply died under it, and a
+   * Resume button that had to invent a sentence would file words on the record
+   * as something a person asked for.
+   */
+  changes: string | null;
 }
 
 export class Runner {
@@ -119,9 +128,19 @@ export class Runner {
     for (const record of this.store.list()) {
       if (record.state !== "running") continue;
       swept.push(...(await sweepOrphans(record.id)));
+      // What is at the candidate path right now, so a later Resume can tell
+      // this job's half-finished work from a *different* job's leftovers. The
+      // path is per slug, not per job, and an interrupted job releases the
+      // target's lease — so another job can write that same path before anyone
+      // presses Resume. Without the hash, resuming would pick up whatever was
+      // there and offer it for review as this job's output.
+      const candidateHash = await sha256(absolute(record.candidatePath));
       await this.store.update(record.id, {
         state: "interrupted",
-        phase: null,
+        candidateHash,
+        // Kept, not cleared, for the reason `finish` keeps it: "it died while
+        // linting" is the only thing anyone can say about a job no gate ran on,
+        // and clearing it throws that away to store a null.
         finishedAt: new Date().toISOString(),
         errorKind: "interrupted",
         error: "the runner died while this job was running",
@@ -388,14 +407,36 @@ export class Runner {
     // document is how every diagram ends up looking like the first one, which
     // is the reason manimkc's clean-room rule exists and the reason this one
     // does; the copy is what lets the rule hold while extending still works.
+    //
+    // **Except when the candidate is the work being resumed.** A resume of an
+    // interrupted job re-derives `extend` from the target existing, and copying
+    // the committed file over the candidate would then delete the partial
+    // drawing the reconcile pass deliberately left on disk — a resume that
+    // begins by destroying what it is resuming. Caught in review on this PR;
+    // the phase's own testing never hit it, because every job it ran had no
+    // committed target and so resumed as `new`.
+    //
+    // Whether the candidate on disk *is* the preserved work is a question with
+    // an answer, and asking it is the difference between resuming a job and
+    // adopting whatever happens to be at that path: the reconcile pass hashed
+    // the candidate when it wrote `interrupted`, so a byte-for-byte match is
+    // this job's own half-drawn document and anything else is somebody's.
+    const resumedWork = await this.holdsResumedWork(record);
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
-      await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
-      // Remembered so the gate can tell "extended it" from "left the copy
-      // exactly as it found it". Without it, an agent that did nothing at all
-      // presents the runner's own copy of the committed diagram for review and
-      // passes every check, because the committed diagram was already good.
-      unchangedHash = await sha256(absolute(record.candidatePath));
+      if (!resumedWork) {
+        await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
+        // Remembered so the gate can tell "extended it" from "left the copy
+        // exactly as it found it". Without it, an agent that did nothing at all
+        // presents the runner's own copy of the committed diagram for review and
+        // passes every check, because the committed diagram was already good.
+        unchangedHash = await sha256(absolute(record.candidatePath));
+      }
+      // A resumed candidate gets no `unchangedHash` on purpose. It is not the
+      // runner's copy of anything, and a resume whose agent looks at a finished
+      // drawing and only re-exports it has done the right thing — which is the
+      // same reasoning that moved the gate's freshness check to the parent's
+      // start. The other five gate steps still judge the artifact.
     }
     const hasMermaid = record.brief.mermaid !== undefined;
     if (hasMermaid) {
@@ -410,15 +451,22 @@ export class Runner {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       if (entry.cancelled) break;
+      // A first attempt opens on `planning`, not `drawing`. What the agent
+      // actually does first is read `canvas api` and work out a layout, so the
+      // old value was a phase list that went drawing, planning, drawing in the
+      // first twenty seconds of every job — measured on the first real one.
+      // A retry does open on drawing: it is handed a finding and goes to fix
+      // it in the document it already has.
+      const opening = attempt === 1 ? "planning" : "drawing";
       record = await this.store.update(id, {
         attempt,
-        phase: "drawing",
+        phase: opening,
         heartbeatAt: new Date().toISOString(),
       });
       await this.store.emit(id, {
         type: "phase",
-        phase: "drawing",
-        note: attempt === 1 ? "the agent is drawing" : `attempt ${attempt}: fixing what the check found`,
+        phase: opening,
+        note: attempt === 1 ? "the agent is planning the drawing" : `attempt ${attempt}: fixing what the check found`,
         state: "running",
       });
 
@@ -429,8 +477,14 @@ export class Runner {
       const prompt =
         findings.length > 0
           ? buildRetryPrompt(findings, record.slug)
-          : resumeFromParent && record.changes !== null
-            ? buildRevisePrompt(record.changes, record.slug)
+          : resumeFromParent
+            ? record.changes !== null
+              ? buildRevisePrompt(record.changes, record.slug)
+              : // A parent with no change request is a resume: the job this one
+                // continues was interrupted rather than reviewed, so there is
+                // nothing different to ask for and the whole brief is already
+                // in the transcript being resumed.
+                buildResumePrompt(record.slug)
             : buildPrompt({ jobId: id, brief: record.brief, hasMermaid });
       startedSession = true;
 
@@ -502,12 +556,20 @@ export class Runner {
         topic: record.topic,
         candidatePath: record.candidatePath,
         candidateSvgPath: record.candidateSvgPath,
-        startedAtMs: Date.parse(record.startedAt ?? record.requestedAt),
+        startedAtMs: gateFreshnessFrom(record, this.store, resumedWork),
         elements: record.brief.elements,
         relations: record.brief.relations,
         unchangedHash,
         onStep: (step) => {
           void this.store.emit(id, { type: "step", note: narrate(step), state: "running" });
+          // The gate runs `export` and `verify` itself, and until phase 3 asked
+          // for a seven-row list those two phases only ever appeared if the
+          // agent happened to run the verbs before it exited. The phase named
+          // here is the one about to run, read off the step that just finished,
+          // so the list advances on the runner's own calls rather than on the
+          // agent's habits.
+          const next = GATE_PHASE_AFTER[step.name];
+          if (next !== undefined && step.ok) void this.advancePhase(id, next);
         },
       });
       await this.store.update(id, { gate });
@@ -579,6 +641,17 @@ export class Runner {
     await this.store.appendRaw(id, line);
     const phase = phaseFromLine(line);
     if (phase === null) return;
+    await this.advancePhase(id, phase);
+  }
+
+  /**
+   * Move the job to `phase`, and say so once.
+   *
+   * Idempotent on purpose: the agent runs `inspect` four times in a loop and
+   * the gate runs it again, and a phase list that flickered on each would be
+   * noise rather than progress. A phase the job is already in is not an event.
+   */
+  private async advancePhase(id: string, phase: string): Promise<void> {
     const record = this.store.get(id);
     if (record === undefined || record.phase === phase) return;
     await this.store.update(id, { phase, heartbeatAt: new Date().toISOString() });
@@ -588,6 +661,26 @@ export class Runner {
       note: PHASE_NOTES[phase] ?? phase,
       state: "running",
     });
+  }
+
+  /**
+   * Is the candidate on disk the work this job is resuming?
+   *
+   * Three things have to hold, and the third is the one the first version of
+   * this missed. It has to be a resume — a parent, and no change request. The
+   * parent has to have recorded a candidate when it was interrupted. And the
+   * bytes have to still match: the path is `learn/assets/.candidates/<slug>`,
+   * which is per slug rather than per job, and an interrupted job holds no
+   * lease on its target, so a later job for the same slug can write that path
+   * and leave its own file behind. Adopting it would mean resuming one job and
+   * offering another's artifact for review under its name.
+   */
+  private async holdsResumedWork(record: JobRecord): Promise<boolean> {
+    if (record.parentJobId === null || record.changes !== null) return false;
+    const parent = this.store.get(record.parentJobId);
+    const expected = parent?.candidateHash ?? null;
+    if (expected === null) return false;
+    return (await sha256(absolute(record.candidatePath))) === expected;
   }
 
   private async finish(
@@ -605,7 +698,12 @@ export class Runner {
     const id = entry.record.id;
     const record = await this.store.update(id, {
       state,
-      phase: state === "awaiting_review" ? "ready" : null,
+      // The phase a job stopped in is kept rather than cleared. The failure
+      // panel's whole shape is "the phase list with the failed phase marked",
+      // and a record that forgets which phase that was can only say so when a
+      // browser happened to be watching the stream at the time. `ready` is the
+      // one the runner names itself, because nothing emits it.
+      phase: state === "awaiting_review" ? "ready" : (this.store.get(id)?.phase ?? null),
       finishedAt: new Date().toISOString(),
       heartbeatAt: new Date().toISOString(),
       gate: patch.gate ?? this.store.get(id)?.gate ?? null,
@@ -751,7 +849,6 @@ export class Runner {
       `being picked up, so no agent was started and nothing was spent.`;
     const updated = await this.store.update(id, {
       state: "failed",
-      phase: null,
       finishedAt: new Date().toISOString(),
       errorKind: "not-claimed",
       error,
@@ -797,6 +894,51 @@ async function sha256(file: string): Promise<string | null> {
 function isOutput(file: string, record: JobRecord): boolean {
   return file === record.targetPath || file === record.targetSvgPath;
 }
+
+/**
+ * The moment the gate measures the candidate's age against.
+ *
+ * Normally the job's own start: a candidate older than that is a file left
+ * behind by something else, and calling it this job's output would attribute a
+ * drawing to a session that never made it.
+ *
+ * **A resumed job is the exception, and phase 3 found out the hard way.** The
+ * work a resume continues is already on disk — that is what makes it a resume
+ * rather than a re-run — so an agent that picks up a finished drawing, checks
+ * it and stops has done exactly the right thing and wrote nothing. Measured
+ * against its own start, every such job failed step 1 three times and then
+ * failed the job, which made Resume a button that could only ever produce a
+ * failure. Measured against the parent's start, the candidate is this work's
+ * output, which it is, and every other gate step still checks the artifact.
+ *
+ * Only a resume (no change request). A revision's parent was accepted,
+ * discarded or failed, so nothing of its candidate is left at that path, and
+ * the stricter reading is the right one there.
+ */
+function gateFreshnessFrom(record: JobRecord, store: JobStore, resumedWork: boolean): number {
+  const own = Date.parse(record.startedAt ?? record.requestedAt);
+  // Only when the candidate on disk really is the parent's preserved work. A
+  // file at that path that hashes differently belongs to some other job, and
+  // leniency about *its* age would let this job present it for review.
+  if (!resumedWork || record.parentJobId === null) return own;
+  const parent = store.get(record.parentJobId);
+  if (parent === undefined) return own;
+  const parentStart = Date.parse(parent.startedAt ?? parent.requestedAt);
+  return Number.isFinite(parentStart) ? Math.min(own, parentStart) : own;
+}
+
+/**
+ * What the gate is about to do, read off the step it has just finished.
+ *
+ * The gate's own order is candidate, inspect, brief, topic, export, verify, so
+ * a finished `topic` means the export is next and a finished `export` means the
+ * verify is. Only the two, because the phases before them are already set: the
+ * runner writes `linting` before the gate starts and `ready` when it passes.
+ */
+const GATE_PHASE_AFTER: Record<string, string | undefined> = {
+  topic: "exporting",
+  export: "verifying",
+};
 
 const PHASE_NOTES: Record<string, string> = {
   reading: "reading the brief",

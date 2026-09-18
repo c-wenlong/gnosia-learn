@@ -332,7 +332,9 @@ browser on this machine.
 | `POST` | `/api/jobs/{id}/accept` | Land the candidate | none | `{ jobId, state: "accepted", written, indexed, note }` |
 | `POST` | `/api/jobs/{id}/discard` | Delete the candidate | none | `{ jobId, state: "discarded" }` |
 | `POST` | `/api/jobs/{id}/reindex` | Re-run the catalog half of an accept whose files landed | none | `{ jobId, written, indexed, note }` |
-| `POST` | `/api/jobs/{id}/revise` | Resume the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
+| `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
+| `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
+
 | `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
@@ -353,6 +355,21 @@ to twenty minutes of an agent working, and the interesting part is the
 draw-look-fix loop, which moves irregularly. SSE costs nothing here because the
 runner already holds the agent's stdout, so the stream is a subscription to an
 in-process emitter. Rule 8 above is what keeps it honest.
+
+**`resume` and `revise` are two routes because they are two facts.** Phase 1
+gave A7's Resume button `revise` to press, and `revise` requires a change
+request — deliberately, since a revise with nothing to change is a re-run at
+full price. An interruption is precisely the case with nothing to change: the
+brief was right, the gate never ran, the runner died. Pressed through `revise`,
+the button had to invent a sentence and file it on the new job as
+`Change requested: …`, which puts words in a person's mouth on a durable
+record. `resume` takes no body, inherits the parent's session, refuses anything
+but an `interrupted` job, and opens the agent's transcript with a prompt that
+says what actually happened rather than asking for a change. Its idempotency
+key is the parent's plus the moment it was interrupted, never a timestamp:
+"resume this interruption" is one operation, and two clicks — or two requests
+in flight at once, which a state check cannot serialise — then resolve to one
+job through the unique index rather than to two paid agents on one candidate.
 
 ### The brief
 
@@ -512,6 +529,35 @@ finding, up to three attempts total. After that the job is `failed` with the
 gate's findings, and the partial artifacts are moved to `jobs/<id>/rejected/` so
 a person can look.
 
+**A resume only inherits the candidate it was interrupted with.** The
+candidate path is per slug rather than per job and an interrupted job holds
+no lease on its target, so a later job for the same slug can write that path
+and leave its own file there. The reconcile pass therefore hashes the
+candidate when it writes `interrupted`, and a resume compares the bytes: a
+match is this job's half-drawn document, which is kept and whose age is
+measured from the parent, and anything else is somebody's leftovers, which
+are treated as a fresh attempt — copied over in `extend` mode, and judged
+from this job's own start. Caught in review on the phase 3 PR.
+
+**Step 1 measures a resumed job's candidate against its parent's start, not its
+own.** The work a resume continues is already on disk — that is what makes it a
+resume rather than a re-run — so an agent that picks the drawing up, checks it
+and stops has done the right thing and written nothing. Measured against its own
+start, such a job failed step 1 three times and then failed the job, which made
+Resume a button that could only ever produce a failure. Seen on the first real
+resume in phase 3; `gateFreshnessFrom` in
+[`services/studio/src/runner.ts`](../services/studio/src/runner.ts) is the fix
+and it applies to a resume only. A revision keeps the strict reading, because
+its parent was accepted, discarded or failed and nothing of its candidate is
+left at that path.
+
+**The gate advances two of the seven phases itself.** `export` and `verify` are
+the runner's own calls, so until phase 3 asked for a seven-row list those phases
+only appeared when the agent happened to run the verbs before exiting. The
+runner now reads the phase about to run off the step that just finished, which
+is what makes the list advance on the runner's work rather than on the agent's
+habits.
+
 **The agent's exit code is not a tldrawkc exit code.** The agent runs the CLI
 many times and the runner sees only the session's own exit. The tldrawkc codes
 that reach a job come from the gate's own calls, and they are stored in
@@ -665,12 +711,17 @@ one filled button. On the canvas: a back arrow, the file name in the title role,
 the topic chip, the SVG freshness pill, a spacer, the verb buttons, and the
 right panel toggle.
 
-**The job strip** is 32px, present only while a job is queued, running, or
-awaiting review. It persists across both screens, because a job started from the
-canvas must still be visible after navigating back. Left to right: a status dot,
-the diagram name, the phase in words, `step 4 of 7`, elapsed counting up, an
-indeterminate bar, and Cancel. The whole strip opens the job in the right panel.
-No percentage is ever shown.
+**The job strip** is 32px, present while a job is queued, running, or awaiting
+review — and, once built, for one more case: the job this tab watched *stop*,
+until it is dismissed. Without that, a job that fails leaves nothing on screen
+saying so, because the row vanishes and the reason lives in a panel nobody has
+open. It persists across both screens, because a job started from the canvas must
+still be visible after navigating back; the provider behind it is mounted in
+`apps/web/src/app/studio/layout.tsx`, which is what survives a navigation. Left to
+right: a status dot, the diagram name, the phase in words, `step 4 of 7`, elapsed
+counting up, an indeterminate bar, `polling` when the event stream is not
+connected, and Cancel. The whole strip opens the job in the right panel. No
+percentage is ever shown.
 
 ### Asset browser
 
@@ -796,7 +847,12 @@ defensible default.
 Four parts in the right panel, top to bottom.
 
 **The phase list**, all seven visible from the first second: read the document,
-plan the snippet, draw, lint, export the SVG, verify, ready to accept. Each row
+plan the snippet, draw, lint, export the SVG, verify, ready to accept. A first
+attempt opens on *plan*, because what the agent actually does first is read
+`canvas api` and work out a layout; a retry opens on *draw*, because it is handed
+a finding and goes to fix the document it already has. Durations are the time a
+phase held, summed over the segments it held — a job that loops back from lint to
+draw and returns has two lint segments and one number. Each row
 is 32px: a state glyph, the phase name, and a duration once finished. The
 current row carries an indeterminate pulse and nothing else moves. Done rows go
 muted, unreached rows to 40 percent opacity. No phase shows a percentage.
@@ -813,7 +869,16 @@ itself when a phase fails, and only then.
 **Cancel**, a bordered button, enabled while the job runs.
 
 A job that finishes while the window is not focused sets the title and posts a
-notification.
+notification. The title changes whatever happens, because the Notifications API
+is behind a permission a person can refuse and a tab title is the one channel
+nobody has to grant; the permission is asked for on the Start button, where there
+is a gesture behind it, rather than minutes later when the job ends.
+
+**Which panel is open is in the URL, and no job state is.** `?job=<id>` is the
+job panel, `?new=` the brief form and `?new=<id>` one prefilled from that job,
+`?stream=off` forces the polling fallback. The runner owns everything else: the
+page holds a cache of `GET /api/jobs`, refreshed on a timer and refined by the
+stream, and a reload rebuilds the same screen from the record.
 
 ### A job finished
 
@@ -853,6 +918,14 @@ or in the transcript.
 | 3 | Not a failure. See the finished state above | |
 | 4 | Not a failure. See the finished state above | |
 | none | The gate's own finding, for instance `the agent exited 0 and wrote nothing` | Retry, Edit brief |
+
+There is a second key, `job.error_kind`, and it is the one that answers the
+table's `none` row properly: a timeout, an agent that never spawned, a job that
+wrote outside its allowed paths and a gate finding are four different sentences,
+and only the last of them is "the gate's own finding". `wrote-outside` is the
+one failure with **no** actions at all — something is dirty in the tree, the
+runner reverted nothing on purpose, and a person has to look before another
+agent runs over the same paths. `interrupted` gets Resume and nothing else.
 
 The committed diagram is unchanged in every one of these cases, by construction:
 the agent's permission file never allowed it.
@@ -921,7 +994,7 @@ raised it: S schema, A API and runner, U interface.
 | A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
 | A11 | A second runner has already claimed the job | `catalog job claim` is a conditional update on `state = 'queued'`, and it is the only lease that does not depend on this process being the only one. A refused claim ends the attempt before an agent is started, and does **not** call `job finish`: the row belongs to whoever holds it, and finishing it would transition *their* running job. A claim that failed because nothing answered is the degraded mode instead, and the job runs (D16) | Runner claim |
 | A12 | Postgres is unreachable at enqueue | The disk record stays and the job runs, because the write path is a disk record first (rule 7) and D16 says a missing database does not refuse a job. A catalog that *answers* and refuses — a topic outside the vocabulary, a lease another process holds — is the other fact and deletes the workspace, and forgets the record, so it stops holding that target's lease against every brief after it | `POST /api/jobs`; `runner.enqueue` |
-| A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `revise` against the stored session id. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
+| A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `POST /api/jobs/{id}/resume`, which inherits the stored session id and asks for no change request — an interruption is the one case with nothing to change, and `revise` requires one. The row keeps the phase it died in, so the panel can mark it rather than showing seven blank rows. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
 | A10 | Cost | Five guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, and `turns` and `cost_usd` recorded on the row from the final `stream-json` result event and shown in the list and on `/api/health`. A sixth, a daily cap (`STUDIO_DAILY_USD`) that refuses new jobs with 429 once crossed, is optional and deferred to phase 7: one user on one machine has nothing to meter yet | Runner; `POST /api/jobs`; phase 7 |
@@ -1493,21 +1566,50 @@ the same build with the variable unset.
 
 Goal: the brief, the job strip and the running panel.
 
-- [ ] The brief form in the right panel, with the topic combobox over
+- [x] The brief form in the right panel, with the topic combobox over
       `content/topics.yaml` and the concept multi-select
-- [ ] The job strip, persisting across both routes
-- [ ] The running panel: the seven-phase list, the narration, the collapsed log
+- [x] The job strip, persisting across both routes
+- [x] The running panel: the seven-phase list, the narration, the collapsed log
       with its window, Cancel
-- [ ] The SSE client, with reconnect from `Last-Event-ID` and a fall back to
+- [x] The SSE client, with reconnect from `Last-Event-ID` and a fall back to
       polling `GET /api/jobs/{id}`
-- [ ] The failure panel and its code-keyed messages
-- [ ] The title change and notification when a job finishes unfocused
+- [x] The failure panel and its code-keyed messages
+- [x] The title change and notification when a job finishes unfocused
 
 Done when: a brief submitted from `/studio` produces a candidate, the phase list
 advances through all seven phases with real durations, killing the runner
 mid-job leaves the job listed as `interrupted` with a Resume button, and
 reloading the page mid-job shows the correct phase from the polled GET with the
 stream disconnected.
+
+**Done, against a real runner and four paid jobs.** What the build changed about
+the design, each because running it said so:
+
+- **The job strip's state lives in the runner, and the cache of it lives in the
+  studio layout.** `apps/web/src/app/studio/layout.tsx` mounts the provider, so
+  the list, the events and the open `EventSource` survive a navigation between
+  `/studio` and `/studio/d/<name>`; the same provider inside each page would
+  rebuild the connection on every click. What the URL carries is which panel is
+  open — `?job=`, `?new=` — because that is the part a person navigates to and
+  links to. Nothing about a job is stored in the browser.
+- **The strip also keeps the job it watched finish, until it is dismissed.** The
+  design says the strip is present only while a job is queued, running or
+  awaiting review, which leaves a job that *fails* with nothing on screen saying
+  so — the row vanishes and the reason is only visible if the panel was already
+  open.
+- **`?stream=off` forces the polling fallback.** D8 says the polled `GET` is the
+  record and the stream is a cache, which is a claim until somebody can turn the
+  cache off and watch the screen stay right. It is also how the "done when"
+  above is checked by hand rather than by waiting for a connection to drop.
+- **Four changes to phase 1 the UI needed**, all in `services/studio/`:
+  `POST /api/jobs/{id}/resume`, the gate's freshness rule for a resumed job, the
+  phases the gate itself advances, and the phase a terminal record keeps. Each
+  is written up where it belongs: the API table, the gate section, and A7.
+- **An interrupted job records no cost.** `turns` and `cost_usd` come from the
+  agent's final `stream-json` result event, and a killed runner never reads one,
+  so the three interrupted rows from this phase's testing say `$0.00` for work
+  that was really paid for. The resumed job's own row carries only what the
+  resumed session spent. Known gap, not a bug to fix here.
 
 ### Phase 4. Accept and reject
 

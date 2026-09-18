@@ -74,6 +74,16 @@ export interface JobRecord {
   changes: string | null;
   idempotencyKey: string;
   targetHashBefore: string | null;
+  /**
+   * The candidate's sha256 when the reconcile pass marked this job
+   * `interrupted`, or null when there was nothing there.
+   *
+   * The candidate path is per slug and an interrupted job releases the target's
+   * lease, so another job can write that same path before anyone presses
+   * Resume. This is how a resume tells its own half-drawn document from
+   * somebody else's leftovers, and it is only ever set by the reconcile pass.
+   */
+  candidateHash?: string | null;
   requestedAt: string;
   startedAt: string | null;
   finishedAt: string | null;

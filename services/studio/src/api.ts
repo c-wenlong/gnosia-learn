@@ -252,7 +252,7 @@ async function handle(
         "/api/jobs/{id}",
         "/api/jobs/{id}/events",
         "/api/jobs/{id}/log",
-        "/api/jobs/{id}/cancel|accept|discard|reindex|revise",
+        "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -353,6 +353,9 @@ async function handle(
 
     case "POST revise":
       return revise(request, response, runner, record);
+
+    case "POST resume":
+      return resume(response, runner, record);
 
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`);
@@ -475,6 +478,81 @@ async function revise(
         (next.agentSessionId === null
           ? `; the parent kept no session, so this one draws from the brief`
           : `, continuing its session`),
+    });
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
+ * `resume`: continue a job the runner died under, and nothing else.
+ *
+ * A7 and D15 describe the button this is behind. On start the reconcile pass
+ * marks every `running` row `interrupted` and stops, because a person is
+ * sitting in front of this and an app that starts paid agent sessions on launch
+ * is a surprise. So the job is listed, and Resume is the person saying yes.
+ *
+ * **Why this is not `revise`.** Phase 1 pointed A7's button at `revise`, and
+ * `revise` requires a change request — deliberately, since a revise with
+ * nothing to change is a re-run. An interruption is exactly the case with
+ * nothing to change: the brief was fine, the gate never ran, the runner simply
+ * died. Routed through `revise`, the button had to invent a sentence and file
+ * it on the new job as `Change requested: …`, which puts words on the record
+ * that nobody said. This takes no body, carries the parent's session, and the
+ * agent's opening prompt says what actually happened.
+ *
+ * Interrupted only. A failed or cancelled job has a verdict on it and a reason
+ * somebody should read before paying for another attempt; `revise` is the route
+ * for those, and it asks what to change.
+ */
+async function resume(
+  response: ServerResponse,
+  runner: Runner,
+  record: JobRecord,
+): Promise<void> {
+  if (record.state !== "interrupted") {
+    return fail(
+      response,
+      409,
+      `job ${record.id} is ${record.state}, and resume is for a job the runner died under. ` +
+        `Nothing was interrupted here, so there is nothing to pick up half-way through.`,
+      { state: record.state, instead: "POST /api/jobs/{id}/revise with a change request" },
+    );
+  }
+
+  // The same re-derivation `revise` makes, for the same reason: mode says
+  // whether there is something at the target to build on, and that is a fact
+  // about disk now rather than a property of the brief that was posted.
+  const targetExists = (await stat(absolute(record.targetPath)).catch(() => null)) !== null;
+
+  try {
+    const { record: next } = await runner.enqueue(
+      {
+        ...record.brief,
+        mode: targetExists ? "extend" : "new",
+        // Derived from the parent and the moment it was interrupted, never
+        // from `Date.now()`. "Resume this interruption" is one operation, so
+        // two clicks — or two requests in flight at once, which the state
+        // check above cannot serialise on its own — carry the same key: the
+        // second resolves to the first's job instead of starting a second paid
+        // agent on the same candidate. The `job.idempotency_key` unique index
+        // is what makes that atomic rather than merely likely.
+        idempotencyKey: `${record.idempotencyKey}:resume:${record.finishedAt ?? record.id}`,
+      },
+      { jobId: record.id, agentSessionId: record.agentSessionId, changes: null },
+    );
+    return send(response, 201, {
+      jobId: next.id,
+      state: next.state,
+      parentJob: record.id,
+      mode: next.brief.mode,
+      resuming: next.agentSessionId !== null,
+      note:
+        next.agentSessionId === null
+          ? `queued as a fresh attempt at ${record.id}: that job kept no session, so this one ` +
+            `draws from the brief again`
+          : `queued, continuing ${record.id}'s session from wherever it stopped`,
     });
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
