@@ -1,11 +1,14 @@
+import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./brief";
-import { doctor } from "./canvas";
+import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
-import { CLAUDE_BIN, CONCURRENCY, HOST, PORT } from "./config";
-import { absolute } from "./paths";
+import { CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
+import { isDiagramName, listDiagrams, readDiagram } from "./diagrams";
+import { MirrorRefused, type Mirrors } from "./mirrors";
+import { absolute, targetPath, targetSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -79,10 +82,18 @@ function isOwnAuthority(value: string, localPort: number | undefined): boolean {
  *    safelisted content type, so a cross-origin `fetch` has to preflight, and
  *    this server answers no CORS headers at all — so the browser never sends
  *    the real request. An HTML form cannot send it in the first place.
- * 3. **`Origin`, when present, must be this server.** `curl`, the `learn` CLI
- *    and the Next rewrite (which is a server-side fetch) send none; a browser
- *    always does. `Sec-Fetch-Site` is checked the same way where the browser
- *    sends it.
+ * 3. **`Origin`, when present, must be this server.** `curl` and the `learn`
+ *    CLI send none; a browser sends one on every request that is not a plain
+ *    GET. `Sec-Fetch-Site` is checked the same way where the browser sends it.
+ *    Phase 2 measured what the app's side of this actually sends, because the
+ *    original note here guessed: a `next.config.ts` rewrite is a server-side
+ *    fetch and *still* forwards the browser's `Origin` verbatim, so a POST
+ *    through one arrives as `http://localhost:3000` and is refused here — which
+ *    is the guard working, since a transparent proxy is byte-identical to the
+ *    page it proxies for. The app therefore proxies through a route handler
+ *    that strips `Origin` and `Sec-Fetch-*` on purpose, and that deliberate
+ *    strip is the statement "a program ran this", which is the one thing the
+ *    guard is asking about.
  *
  * None of this is authentication and it is not meant to be. It is the
  * difference between "a program the user ran" and "a page the user visited",
@@ -186,11 +197,12 @@ function view(record: JobRecord): Record<string, unknown> {
 export interface ApiDeps {
   store: JobStore;
   runner: Runner;
+  mirrors: Mirrors;
 }
 
-export function createApi({ store, runner }: ApiDeps): Server {
+export function createApi({ store, runner, mirrors }: ApiDeps): Server {
   return createServer((request, response) => {
-    void handle(request, response, store, runner).catch((error: unknown) => {
+    void handle(request, response, store, runner, mirrors).catch((error: unknown) => {
       if (!response.headersSent) {
         fail(response, 500, "the studio threw handling this request", (error as Error).message);
       } else {
@@ -205,6 +217,7 @@ async function handle(
   response: ServerResponse,
   store: JobStore,
   runner: Runner,
+  mirrors: Mirrors,
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
@@ -222,14 +235,14 @@ async function handle(
     return send(response, 200, await health(store, runner));
   }
 
-  /* /api/mirrors — phase 2 owns the canvas and the ServeHandle behind it. */
-  if (segments[1] === "mirrors") {
-    return fail(
-      response,
-      501,
-      "mirrors are phase 2",
-      "the runner holds no ServeHandle yet, so there is no canvas to open or close.",
-    );
+  /* /api/diagrams — the corpus the browser screen lists. */
+  if (segments[1] === "diagrams") {
+    return diagrams(request, response, segments, method);
+  }
+
+  /* /api/mirrors — one `canvas serve` per document, held open while looked at. */
+  if (segments[1] === "mirrors" && segments.length === 2) {
+    return mirrorRoutes(request, response, mirrors, url, method);
   }
 
   if (segments[1] !== "jobs") {
@@ -240,6 +253,11 @@ async function handle(
         "/api/jobs/{id}/events",
         "/api/jobs/{id}/log",
         "/api/jobs/{id}/cancel|accept|discard|reindex|revise",
+        "/api/diagrams",
+        "/api/diagrams/{name}",
+        "/api/diagrams/{name}/svg",
+        "/api/diagrams/{name}/export|verify|inspect",
+        "/api/mirrors",
         "/api/health",
       ],
     });
@@ -368,7 +386,7 @@ async function postJob(
   const checked = await doctor();
   if (checked.code !== 0) {
     return fail(response, 503, "tldrawkc cannot run on this machine, so nothing was queued", {
-      doctor: checked.stdout.trim().split("\n").slice(-8),
+      doctor: doctorChecks(checked).filter((check) => check.status !== "pass"),
       fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
     });
   }
@@ -465,6 +483,230 @@ async function revise(
 }
 
 /**
+ * The corpus: `canvas list --json` plus the one fact it does not report.
+ *
+ * Every read the browser screen makes goes through here rather than through the
+ * `asset` table, and that is not an accident. The indexer refuses a `.tldr`
+ * with no topic *by name*, so such a file has no asset row at all — and it is
+ * exactly the file the studio exists to put in front of a person, because
+ * nothing else in the repo will ever mention it. `/library` reads the table;
+ * this reads the directory. The two answers differ on purpose.
+ *
+ * The SVG route is here for the same reason. `/api/assets/{id}/file` is gated
+ * on `ASSET_FILES_ENABLED` *and* on the asset being indexed, so borrowing it
+ * for thumbnails would leave a blank tile on precisely the untopiced diagram
+ * whose tile matters most. One gate — `STUDIO_ENABLED`, which is D11 — and one
+ * directory it can read from.
+ */
+async function diagrams(
+  request: IncomingMessage,
+  response: ServerResponse,
+  segments: string[],
+  method: string,
+): Promise<void> {
+  if (segments.length === 2) {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams does`);
+    const listing = await listDiagrams();
+    return send(response, 200, {
+      ...listing,
+      note:
+        `${listing.counts.total} diagram${listing.counts.total === 1 ? "" : "s"}, ` +
+        `${listing.counts.withTopic} with a topic` +
+        (listing.counts.unreadable > 0 ? `, ${listing.counts.unreadable} unreadable` : ""),
+    });
+  }
+
+  const name = segments[2] ?? "";
+  // A name is one path segment and matches a slug pattern, so no request can
+  // name a file outside `learn/assets` however it is spelled or escaped.
+  if (!isDiagramName(name)) {
+    return fail(response, 400, `"${name}" is not a diagram name`, "Names are slugs: letters, digits and hyphens.");
+  }
+
+  if (segments.length === 3) {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams/{name} does`);
+    const diagram = await readDiagram(name);
+    if (diagram === null) return fail(response, 404, `no diagram ${name} in learn/assets`);
+    return send(response, 200, { ...diagram, note: noteForDiagram(diagram.svgState, diagram.topic) });
+  }
+
+  if (segments.length !== 4) return fail(response, 404, `no route ${method} /api/diagrams/${name}`);
+
+  if (segments[3] === "svg") {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing a thumbnail does`);
+    return svgBytes(response, name);
+  }
+
+  if (method !== "POST") {
+    return fail(response, 405, `${segments[3]} is a POST: it changes a file on disk`);
+  }
+
+  const file = absolute(targetPath(name));
+  if ((await stat(file).catch(() => null)) === null) {
+    return fail(response, 404, `no diagram ${name} in learn/assets`);
+  }
+
+  switch (segments[3]) {
+    case "export": {
+      const result = await canvas(["export", file, "--svg", absolute(targetSvgPath(name))], VERB_TIMEOUT_MS);
+      return verbResult(response, "export", result.code, result.json, result.stderr || result.stdout);
+    }
+    case "inspect": {
+      // Exit 3 is "finished, with lints remaining" and not a failure (D4), so
+      // it is reported with the lint list rather than as an error.
+      const result = await canvas(["inspect", file, "--json"], VERB_TIMEOUT_MS);
+      return verbResult(response, "inspect", result.code, result.json, result.stderr || result.stdout, [0, 3]);
+    }
+    case "verify": {
+      const svg = absolute(targetSvgPath(name));
+      if ((await stat(svg).catch(() => null)) === null) {
+        return fail(response, 409, `${name} has no exported SVG, so there is nothing to verify`, {
+          fix: "Export SVG first.",
+        });
+      }
+      const result = await canvas(["verify", svg, "--json"], VERB_TIMEOUT_MS);
+      return verbResult(response, "verify", result.code, result.json, result.stderr || result.stdout);
+    }
+    default:
+      return fail(response, 404, `no verb ${segments[3]}`, {
+        verbs: ["export", "inspect", "verify"],
+      });
+  }
+}
+
+function noteForDiagram(svgState: string, topic: string | null): string {
+  const svg =
+    svgState === "missing"
+      ? "no SVG has been exported"
+      : svgState === "stale"
+        ? "the SVG is older than the document"
+        : "the SVG is current";
+  return topic === null
+    ? `${svg}, and it carries no topic, so the indexer refuses it by name`
+    : svg;
+}
+
+/**
+ * A verb's outcome, with the tool's own exit code kept rather than flattened.
+ *
+ * `ok` is membership of the codes that mean the work happened, which is not
+ * always `0`: `inspect` exits 3 when lints remain and the document is still
+ * perfectly readable. D4 is the reason the gate cannot check for zero, and the
+ * same reasoning applies to a button a person pressed.
+ */
+function verbResult(
+  response: ServerResponse,
+  verb: string,
+  code: number | null,
+  json: unknown,
+  output: string,
+  okCodes: number[] = [0],
+): void {
+  const ok = code !== null && okCodes.includes(code);
+  return send(response, ok ? 200 : 502, {
+    verb,
+    ok,
+    exitCode: code,
+    result: json,
+    detail: ok ? null : output.trim().split("\n").slice(-6),
+    note: ok ? `${verb} finished` : `${verb} exited ${code ?? "on a signal"}`,
+  });
+}
+
+/** The committed SVG's bytes, for a thumbnail and for the inspector's preview. */
+async function svgBytes(response: ServerResponse, name: string): Promise<void> {
+  const file = absolute(targetSvgPath(name));
+  const info = await stat(file).catch(() => null);
+  if (info === null || !info.isFile()) {
+    return fail(response, 404, `${name} has no exported SVG`, "Run export --svg over it.");
+  }
+  response.writeHead(200, {
+    "content-type": "image/svg+xml; charset=utf-8",
+    "content-length": info.size,
+    // An `<img>` never runs script in an SVG, and these two say so out loud for
+    // anything that later reaches for the same bytes a different way.
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    "x-content-type-options": "nosniff",
+    "cache-control": "no-cache",
+    // The mtime is what the freshness pill compares, so it is also the honest
+    // validator for a tile the browser may have cached.
+    "last-modified": info.mtime.toUTCString(),
+  });
+  createReadStream(file).pipe(response);
+}
+
+/**
+ * `/api/mirrors`: start one, list them, stop one.
+ *
+ * `POST` takes `{ file }` and is idempotent — the canvas screen calls it on
+ * every render and a second `serve` on one document would be a second writer.
+ * `DELETE ?file=` is a courtesy rather than the lifecycle: a browser that goes
+ * away cannot be relied on to say so, which is why the idle sweep exists.
+ */
+async function mirrorRoutes(
+  request: IncomingMessage,
+  response: ServerResponse,
+  mirrors: Mirrors,
+  url: URL,
+  method: string,
+): Promise<void> {
+  const named = url.searchParams.get("file");
+
+  if (method === "GET") {
+    const list = mirrors.list(named ?? undefined);
+    const healthy = named === null ? null : await mirrors.health(named);
+    return send(response, 200, {
+      mirrors: named === null ? list : list.map((mirror) => ({ ...mirror, healthy })),
+      note:
+        list.length === 0
+          ? "no canvas is open"
+          : `${list.length} canvas${list.length === 1 ? "" : "es"} open`,
+    });
+  }
+
+  if (method === "DELETE") {
+    if (named === null) return fail(response, 400, "name the file to stop mirroring: ?file=learn/assets/x.tldr");
+    const stopped = await mirrors.stop(named);
+    return send(response, 200, {
+      file: named,
+      stopped,
+      note: stopped ? "the canvas was closed" : "nothing was mirroring that file",
+    });
+  }
+
+  if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/mirrors does`);
+
+  let body: { file?: unknown };
+  try {
+    body = (await readJson(request)) as { file?: unknown };
+  } catch (error) {
+    return fail(response, 400, "the request body is not JSON", (error as Error).message);
+  }
+  const file = typeof body.file === "string" ? body.file.trim() : "";
+  const name = file.startsWith("learn/assets/") ? file.slice("learn/assets/".length).replace(/\.tldr$/, "") : file;
+  if (!isDiagramName(name)) {
+    return fail(response, 400, `"${file}" is not a diagram in learn/assets`, {
+      shape: "learn/assets/<name>.tldr, or just <name>",
+    });
+  }
+
+  try {
+    const mirror = await mirrors.start(targetPath(name));
+    const healthy = await mirrors.health(targetPath(name));
+    return send(response, 200, {
+      ...mirror,
+      healthy,
+      note: healthy
+        ? `mirroring ${name} on port ${mirror.port}`
+        : `serve is on port ${mirror.port} and did not answer its own health check yet`,
+    });
+  } catch (error) {
+    if (error instanceof MirrorRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
  * The SSE stream. A subscription to something the runner already holds, so it
  * costs nothing, and a reconnect replays from `Last-Event-ID`.
  */
@@ -522,9 +764,15 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
   const tldrawkc = checked !== null && checked.code === 0;
   const claude = claudeVersion !== null && claudeVersion.code === 0;
   const postgres = catalog !== null && catalog.ok;
+  // U4 replaces the screen on a `fail` and U5 shows a banner on a `warn`, so the
+  // two are reported apart. A stale bundle still works, which is `doctor`'s own
+  // verdict and the reason it is a warning there too.
+  const checks: DoctorCheck[] = checked === null ? [] : doctorChecks(checked);
   return {
     ok: tldrawkc && claude,
     tldrawkc,
+    checks,
+    stale: checks.some((check) => check.status === "warn"),
     // `doctor` checks Chromium as one of its lines, so a separate probe would
     // be a second answer to a question the tool already answers.
     chromium: tldrawkc,

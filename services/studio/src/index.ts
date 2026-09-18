@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { createApi } from "./api";
 import { CONCURRENCY, HOST, PORT } from "./config";
+import { Mirrors } from "./mirrors";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
 import { JobStore } from "./store";
@@ -36,7 +37,8 @@ async function main(): Promise<void> {
     );
   }
 
-  const server = createApi({ store, runner });
+  const mirrors = new Mirrors();
+  const server = createApi({ store, runner, mirrors });
   server.listen(PORT, HOST, () => {
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
@@ -53,12 +55,18 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string): void => {
     process.stdout.write(`\n${signal}: stopping the running job and closing the browser\n`);
-    void runner.drain().finally(() => {
-      server.close(() => process.exit(0));
-      // A stream that is still open would hold the process forever, and the
-      // job has already been told to stop by the time this fires.
-      setTimeout(() => process.exit(0), 10_000).unref();
-    });
+    // Mirrors first and unconditionally: each one is a `serve` holding a port,
+    // and a studio that exits leaving them behind makes the next start pick a
+    // fallback port for a document that is not open anywhere.
+    void mirrors
+      .stopAll()
+      .then(() => runner.drain())
+      .finally(() => {
+        server.close(() => process.exit(0));
+        // A stream that is still open would hold the process forever, and the
+        // job has already been told to stop by the time this fires.
+        setTimeout(() => process.exit(0), 10_000).unref();
+      });
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));

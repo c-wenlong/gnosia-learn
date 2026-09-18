@@ -65,7 +65,11 @@ export async function doctor(force = false): Promise<RunResult> {
 
   doctorInFlight = (async () => {
     try {
-      const result = await canvas(["doctor"], 120_000);
+      // `--json` rather than the human table: the blocked screens in the UI
+      // (U4, U5) name the failing checks individually and mark a `warn` as a
+      // banner rather than a wall, which needs the status per check and not the
+      // last eight lines of a padded listing.
+      const result = await canvas(["doctor", "--json"], 120_000);
       // Stamped when the answer arrived, not when it was asked for.
       doctorCache = { at: Date.now(), result };
       return result;
@@ -85,6 +89,48 @@ export function forgetDoctor(): void {
 /* -------------------------------------------------------------------------- */
 /* The shapes the tool reports                                                */
 /* -------------------------------------------------------------------------- */
+
+/** One `doctor` line: a stable name, a status, and something a person can act on. */
+export interface DoctorCheck {
+  name: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+}
+
+/**
+ * `doctor --json`, read back as checks.
+ *
+ * The distinction the UI needs is the one `doctor` itself draws: a `fail` means
+ * no verb will run and the screen is replaced (U4), a `warn` means the build is
+ * older than its source and everything still works, so it is a banner (U5). A
+ * report that cannot be parsed at all is reported as one failing check rather
+ * than as an empty list, because "nothing is wrong" is the one thing it does
+ * not mean.
+ */
+export function doctorChecks(result: RunResult): DoctorCheck[] {
+  const report = result.json as { checks?: unknown } | null;
+  const raw = Array.isArray(report?.checks) ? report.checks : null;
+  if (raw === null) {
+    return [
+      {
+        name: "doctor",
+        status: result.code === 0 ? "warn" : "fail",
+        detail:
+          (result.stderr || result.stdout).trim().split("\n").slice(-1)[0] ??
+          `doctor exited ${result.code ?? "on a signal"} and printed nothing readable`,
+      },
+    ];
+  }
+  return raw.flatMap((entry): DoctorCheck[] => {
+    const check = entry as { name?: unknown; status?: unknown; detail?: unknown };
+    if (typeof check.name !== "string") return [];
+    const status =
+      check.status === "fail" || check.status === "warn" || check.status === "pass"
+        ? check.status
+        : "warn";
+    return [{ name: check.name, status, detail: typeof check.detail === "string" ? check.detail : "" }];
+  });
+}
 
 export interface CanvasLint {
   rule?: string;

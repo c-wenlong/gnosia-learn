@@ -10,7 +10,7 @@ import {
   type Model,
 } from "./config";
 import { REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
-import { run } from "./proc";
+import { run, signalGroup } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
 /**
@@ -211,12 +211,10 @@ export class AgentRun {
   /**
    * Stop the session: SIGTERM to the process group, five seconds, then SIGKILL.
    *
-   * The negative pid is the whole point. A detached spawn makes the child a
-   * process group leader, so `kill(-pid)` reaches every descendant that stayed
-   * in the group — the agent, its shell, the npm launcher and the tldrawkc CLI.
-   * It does not reach a descendant that made a group of its own, which is
-   * exactly what Playwright does with the browser it launches, and that is why
-   * `sweepOrphans` exists and is not optional.
+   * `signalGroup` in `proc.ts` is why the pid is negated, and why a descendant
+   * that made a group of its own — which is exactly what Playwright does with
+   * the browser it launches — survives it. That is why `sweepOrphans` exists
+   * and is not optional.
    */
   async stop(reason: Exclude<StopReason, null>): Promise<void> {
     if (this.stopReason !== null) return;
@@ -227,19 +225,6 @@ export class AgentRun {
     this.killTimer = setTimeout(() => {
       signalGroup(pid, "SIGKILL");
     }, KILL_GRACE_MS);
-  }
-}
-
-function signalGroup(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, signal);
-  } catch {
-    // ESRCH: the group is already gone, which is the outcome we wanted.
-    try {
-      process.kill(pid, signal);
-    } catch {
-      /* nothing left to signal */
-    }
   }
 }
 

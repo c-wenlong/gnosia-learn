@@ -1,0 +1,131 @@
+import "server-only";
+
+import { notFound } from "next/navigation";
+
+/**
+ * The studio's gate, and the one way the app talks to the runner.
+ *
+ * **The gate (D11).** The studio is an agent runner with a UI: it spawns
+ * headless Claude Code sessions that write files, and it drives a headless
+ * Chromium. None of that belongs in the deployed encyclopedia, and D7 in the
+ * tool's own decisions keeps the Vercel app free of it. Rather than a second
+ * Next app duplicating `AppShell`, `Sidebar` and `globals.css`, every studio
+ * route calls `requireStudio()` first and production — where `STUDIO_ENABLED`
+ * is unset — serves a 404 for all of them. That is only true if the call is
+ * actually there, which is why `studio-gate.test.ts` walks the route directory
+ * and fails when a new file forgets.
+ *
+ * `notFound()` rather than a 403 or an explanatory page: an unset variable
+ * means this deployment has no studio, and "there is a studio here and you may
+ * not have it" is a different and untrue statement.
+ *
+ * **A separate variable from `ASSET_FILES_ENABLED`.** The library's file route
+ * is a read-only byte server for indexed assets; this starts paid agent
+ * sessions. One variable would mean turning on file downloads turned on an
+ * agent runner, so they stay two — and the studio never borrows
+ * `/api/assets/{id}/file`, because that route also requires the asset to be
+ * *indexed*, and the diagram the studio most needs to show is the untopiced one
+ * the indexer refuses by name. Studio thumbnails come from the runner instead,
+ * through `/studio/api/diagrams/{name}/svg`, behind this one gate.
+ */
+
+export const STUDIO_ENV = "STUDIO_ENABLED";
+
+/** Values that mean "set, but no". Anything else non-empty enables the studio. */
+const DISABLED_VALUES = new Set(["", "0", "false", "off", "no"]);
+
+export function studioEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return !DISABLED_VALUES.has((env[STUDIO_ENV] ?? "").trim().toLowerCase());
+}
+
+/**
+ * The first line of every studio route, server action and route handler.
+ *
+ * It throws — `notFound()` throws a `NEXT_NOT_FOUND` — so there is no way to
+ * call it and carry on past a disabled studio by mistake.
+ */
+export function requireStudio(): void {
+  if (!studioEnabled()) notFound();
+}
+
+/**
+ * Where the runner is. `STUDIO_PORT` mirrors the service's own variable, so a
+ * runner moved off 7250 does not need the app told twice.
+ */
+export function studioOrigin(env: Record<string, string | undefined> = process.env): string {
+  const raw = Number.parseInt((env.STUDIO_PORT ?? "").trim(), 10);
+  const port = Number.isFinite(raw) && raw >= 1024 && raw <= 65535 ? raw : 7250;
+  return `http://127.0.0.1:${port}`;
+}
+
+export type StudioResult<T> =
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      /** `down` is nothing listening; `refused` is the runner answering no. */
+      reason: "down" | "refused";
+      status: number | null;
+      headline: string;
+      detail: string;
+    };
+
+/**
+ * One call to the runner, from the server, with the failure named rather than
+ * thrown.
+ *
+ * Every blocked screen in the UI section is one of these two failures plus what
+ * `/api/health` said, so a helper that threw would push that decision into a
+ * `try` in every route. `down` and `refused` are kept apart because they need
+ * different words: nothing listening means "start the studio", and an answer of
+ * no means the runner has an opinion worth printing.
+ *
+ * **Why this is a server-side fetch and not a browser one.** The runner's
+ * `guard` refuses any request carrying a cross-origin `Origin` or a
+ * `Sec-Fetch-Site` that is not `same-origin`, which is what stops a page the
+ * user happens to have open from starting a paid agent session on their
+ * machine. Node's `fetch` sends neither header, and the `Host` it sends is the
+ * runner's own authority, so these calls pass the guard by being what the guard
+ * is looking for: a program, not a page.
+ */
+export async function studioApi<T>(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<StudioResult<T>> {
+  const { timeoutMs = 30_000, ...rest } = init;
+  const url = `${studioOrigin()}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...rest,
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        ...(rest.body === undefined ? {} : { "content-type": "application/json" }),
+        ...rest.headers,
+      },
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "down",
+      status: null,
+      headline: "The studio runner is not answering.",
+      detail:
+        `Nothing is listening on ${studioOrigin()}. Start it with \`npm run studio\` from the ` +
+        `repository root. (${(error as Error).message})`,
+    };
+  }
+
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const envelope = body as { error?: unknown; detail?: unknown } | null;
+    return {
+      ok: false,
+      reason: "refused",
+      status: response.status,
+      headline: typeof envelope?.error === "string" ? envelope.error : `the runner answered ${response.status}`,
+      detail: typeof envelope?.detail === "string" ? envelope.detail : JSON.stringify(envelope?.detail ?? {}),
+    };
+  }
+  return { ok: true, data: body as T };
+}

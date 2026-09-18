@@ -7,6 +7,7 @@ import { toCourseNav } from "@/lib/curriculum";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
 import { resolveSiteUrl } from "@/lib/site-url";
+import { studioEnabled } from "@/lib/studio";
 import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
 import "./globals.css";
 
@@ -87,7 +88,9 @@ export default async function RootLayout({
     >
       <body className="min-h-full">
         <LearnerProvider initialState={initialState} reachable={reachable}>
-          <AppShell nav={toCourseNav(courses)}>{children}</AppShell>
+          <AppShell nav={toCourseNav(courses)} studio={studioEnabled()}>
+            {children}
+          </AppShell>
         </LearnerProvider>
       </body>
     </html>

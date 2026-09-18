@@ -38,7 +38,7 @@ export function CourseCard({
         </div>
         <div className="flex flex-wrap gap-1.5">
           {course.inferred && (
-            <span className="rounded-md border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-100">
+            <span className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--warn)]">
               Inferred
             </span>
           )}
