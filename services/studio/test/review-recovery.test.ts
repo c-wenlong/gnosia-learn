@@ -14,6 +14,7 @@ import {
   CANDIDATES_DIR,
 } from "../src/paths";
 import type { JobRecord } from "../src/store";
+import { fixtureDocument } from "./fixture-document";
 
 /**
  * The three things accept could not survive, each one a window rather than a
@@ -128,7 +129,7 @@ beforeEach(async () => {
   catalogMock.jobAccept.mockResolvedValue({ ok: true, json: {}, error: null, reachable: true });
   catalogMock.jobDiscard.mockResolvedValue({ ok: true, json: {}, error: null, reachable: true });
   await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
-  await writeFile(files.candidate, "{}", "utf8");
+  await writeFile(files.candidate, fixtureDocument(), "utf8");
   await writeFile(files.candidateSvg, "<svg/>", "utf8");
 });
 

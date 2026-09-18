@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/studio/actions";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
@@ -5,6 +7,7 @@ import {
   displayTitle,
   formatBytes,
   freshness,
+  panelHref,
   relativeTime,
   thumbnailHref,
   type Diagram,
@@ -197,16 +200,29 @@ function SelectedDiagram({
       <div className="mt-5">
         <PanelHeading>Jobs</PanelHeading>
         {jobs.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">no jobs for this diagram</p>
+          <>
+            <p className="text-xs text-[var(--muted)]">no jobs for this diagram</p>
+            <div className="mt-2">
+              <ButtonLink href={panelHref(path, { brief: "", job: null })}>New job</ButtonLink>
+            </div>
+          </>
         ) : (
           <ul className="space-y-1">
             {jobs.map((job) => (
-              <li key={job.jobId} className="flex h-8 items-center gap-2 text-xs">
-                <span className="w-20 shrink-0 text-[var(--muted)]">
-                  {job.requested.slice(0, 10)}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
-                <Chip tone={job.state === "failed" ? "danger" : "muted"}>{job.state}</Chip>
+              <li key={job.jobId}>
+                {/* Each row opens that job in this panel: the history is a way
+                    back into a job, not a list of dates. */}
+                <Link
+                  href={panelHref(path, { job: job.jobId, brief: null })}
+                  scroll={false}
+                  className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-[var(--surface-hover)]"
+                >
+                  <span className="w-20 shrink-0 text-[var(--muted)]">
+                    {job.requested.slice(0, 10)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
+                  <Chip tone={job.state === "failed" ? "danger" : "muted"}>{job.state}</Chip>
+                </Link>
               </li>
             ))}
           </ul>
