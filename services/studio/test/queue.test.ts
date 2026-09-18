@@ -1,4 +1,4 @@
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -219,6 +219,10 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
+  // The candidates directory is shared with the real one, so a fixture left
+  // there is a fixture the next `catalog index` reads.
+  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
+  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.svg`), { force: true });
   delete process.env.STUDIO_HOME;
 });
 
@@ -474,6 +478,51 @@ describe("a resume", () => {
 
     const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { startedAtMs: number };
     expect(input.startedAtMs).toBeLessThanOrEqual(parentStart);
+  });
+
+  /**
+   * A resume that began by deleting what it was resuming.
+   *
+   * `resume` re-derives `extend` from the target existing, and every extend job
+   * copies the committed file over the candidate before the agent starts — so a
+   * resume of a job that was extending a committed diagram overwrote the
+   * partial drawing the reconcile pass had deliberately left on disk. Caught in
+   * review on the phase 3 PR.
+   */
+  it("leaves the partial candidate alone rather than copying the target over it", async () => {
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
+    await writeFile(candidate, fixtureDocument({ title: "half-drawn" }), "utf8");
+    await store.create(parentRecord("parent-three", Date.now() - 300_000));
+
+    await runner.enqueue(await brief({ mode: "extend" }), {
+      jobId: "parent-three",
+      agentSessionId: "88888888-8888-4888-8888-888888888888",
+      changes: null,
+    });
+    await settled();
+
+    expect(await readFile(candidate, "utf8")).toContain("half-drawn");
+    // And no `unchangedHash`: the candidate is not the runner's copy of
+    // anything, so "byte-identical to the copy" is not a question about it.
+    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { unchangedHash?: string | null };
+    expect(input.unchangedHash).toBeNull();
+  });
+
+  it("still copies the target when a revision extends it, because nothing is half-drawn", async () => {
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
+    await store.create(parentRecord("parent-four", Date.now() - 300_000, "accepted"));
+
+    await runner.enqueue(await brief({ mode: "extend" }), {
+      jobId: "parent-four",
+      agentSessionId: "99999999-9999-4999-8999-999999999999",
+      changes: "make it wider",
+    });
+    await settled();
+
+    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { unchangedHash?: string | null };
+    expect(typeof input.unchangedHash).toBe("string");
   });
 
   it("keeps its own start when it is a revision, where nothing of the parent is left", async () => {

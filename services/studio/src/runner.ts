@@ -399,14 +399,33 @@ export class Runner {
     // document is how every diagram ends up looking like the first one, which
     // is the reason manimkc's clean-room rule exists and the reason this one
     // does; the copy is what lets the rule hold while extending still works.
+    //
+    // **Except when the candidate is the work being resumed.** A resume of an
+    // interrupted job re-derives `extend` from the target existing, and copying
+    // the committed file over the candidate would then delete the partial
+    // drawing the reconcile pass deliberately left on disk — a resume that
+    // begins by destroying what it is resuming. Caught in review on this PR;
+    // the phase's own testing never hit it, because every job it ran had no
+    // committed target and so resumed as `new`.
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
-      await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
-      // Remembered so the gate can tell "extended it" from "left the copy
-      // exactly as it found it". Without it, an agent that did nothing at all
-      // presents the runner's own copy of the committed diagram for review and
-      // passes every check, because the committed diagram was already good.
-      unchangedHash = await sha256(absolute(record.candidatePath));
+      const partial =
+        resumeFromParent && record.changes === null
+          ? await stat(absolute(record.candidatePath)).catch(() => null)
+          : null;
+      if (partial === null) {
+        await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
+        // Remembered so the gate can tell "extended it" from "left the copy
+        // exactly as it found it". Without it, an agent that did nothing at all
+        // presents the runner's own copy of the committed diagram for review and
+        // passes every check, because the committed diagram was already good.
+        unchangedHash = await sha256(absolute(record.candidatePath));
+      }
+      // A resumed candidate gets no `unchangedHash` on purpose. It is not the
+      // runner's copy of anything, and a resume whose agent looks at a finished
+      // drawing and only re-exports it has done the right thing — which is the
+      // same reasoning that moved the gate's freshness check to the parent's
+      // start. The other five gate steps still judge the artifact.
     }
     const hasMermaid = record.brief.mermaid !== undefined;
     if (hasMermaid) {

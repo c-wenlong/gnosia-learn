@@ -39,9 +39,39 @@ import { panelHref } from "@/lib/studio-view";
 export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
   const { jobs, watching, events, connection, post, refresh } = useStudioJobs();
   const router = useRouter();
-  const job = jobs.find((entry) => entry.jobId === jobId) ?? null;
+  const cached = jobs.find((entry) => entry.jobId === jobId) ?? null;
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
+  /**
+   * The job, when it is older than the fifty this tab keeps.
+   *
+   * The inspector's history lists two hundred and the provider caches fifty, so
+   * clicking the fifty-first row said "no such job" about a job the runner
+   * would have answered for. `GET /api/jobs/{id}` is that answer, and a panel
+   * opened on a link from anywhere else lands in the same place.
+   */
+  const [fetched, setFetched] = useState<{ id: string; job: Job | null } | null>(null);
+  const job = cached ?? (fetched?.id === jobId ? fetched.job : null);
+  const looking = cached === null && fetched?.id !== jobId;
+
+  useEffect(() => {
+    if (cached !== null) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const response = await fetch(`/studio/api/jobs/${encodeURIComponent(jobId)}`, {
+          cache: "no-store",
+        });
+        const body = response.ok ? ((await response.json()) as Job) : null;
+        if (alive) setFetched({ id: jobId, job: body });
+      } catch {
+        if (alive) setFetched({ id: jobId, job: null });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [jobId, cached]);
 
   /** Cancel, Resume: one POST, and whatever the runner said about it. */
   const act = async (verb: string, body?: unknown): Promise<void> => {
@@ -67,8 +97,16 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
       <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
         <PanelHeading>Job</PanelHeading>
         <p className="text-xs text-[var(--muted)]">
-          No job <Mono>{jobId}</Mono> in the last fifty. It may have been pruned, or this link may
-          be from another machine&apos;s studio.
+          {looking ? (
+            <>
+              Looking up <Mono>{jobId}</Mono>…
+            </>
+          ) : (
+            <>
+              The runner does not have a job <Mono>{jobId}</Mono>. It may have been pruned, or this
+              link may be from another machine&apos;s studio.
+            </>
+          )}
         </p>
         <div className="mt-3">
           <Link href={panelHref(path, { job: null })} scroll={false} className="text-xs underline underline-offset-2">
