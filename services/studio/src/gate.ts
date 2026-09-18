@@ -6,9 +6,12 @@ import {
   canvas,
   EXIT,
   explainExit,
+  shot,
+  type CanvasLint,
   type InspectBinding,
   type InspectReport,
   type InspectShape,
+  type VerifyCheck,
   type VerifyReport,
 } from "./canvas";
 import { absolute } from "./paths";
@@ -60,6 +63,14 @@ export interface GateInput {
    * started. A candidate still byte-identical to it is a job that drew nothing.
    */
   unchangedHash?: string | null;
+  /**
+   * Where the after screenshot goes. Absolute, and inside the job workspace.
+   *
+   * Taken right after `inspect` passes rather than at the end, so a job whose
+   * export fails (exit 4) still has a picture of what it drew — which is the
+   * one case where the SVG cannot supply one. Omit it and no shot is taken.
+   */
+  shotPath?: string;
   /** Called as each step finishes, for the narration. */
   onStep?: (step: GateStep) => void;
 }
@@ -71,6 +82,10 @@ export async function runGate(input: GateInput): Promise<GateResult> {
   let lints: number | null = null;
   let svg: { path: string; bytes: number | null } | null = null;
   let exportFailed = false;
+  let bindings: number | null = null;
+  let lintList: CanvasLint[] = [];
+  let verify: VerifyCheck[] = [];
+  let shotTaken = false;
 
   const record = (step: GateStep): GateStep => {
     steps.push(step);
@@ -87,6 +102,10 @@ export async function runGate(input: GateInput): Promise<GateResult> {
     svg,
     exportFailed,
     checkedAt: new Date().toISOString(),
+    bindings,
+    lintList,
+    verify,
+    shot: shotTaken,
   });
 
   /* 1. The candidate exists, and this job wrote it. */
@@ -143,9 +162,10 @@ export async function runGate(input: GateInput): Promise<GateResult> {
   const inspected = await canvas(["inspect", input.candidatePath, "--json"]);
   const report = (inspected.json ?? {}) as InspectReport;
   const shapeCount = Array.isArray(report.shapes) ? report.shapes.length : 0;
-  const lintList = Array.isArray(report.lints) ? report.lints : [];
+  lintList = Array.isArray(report.lints) ? report.lints : [];
   shapes = shapeCount;
   lints = lintList.length;
+  bindings = Array.isArray(report.bindings) ? report.bindings.length : null;
   if (inspected.code !== EXIT.ok && inspected.code !== EXIT.lintsRemain) {
     record({
       name: "inspect",
@@ -170,6 +190,14 @@ export async function runGate(input: GateInput): Promise<GateResult> {
     detail: `${shapeCount} shape${shapeCount === 1 ? "" : "s"}, ${lintList.length} lint${lintList.length === 1 ? "" : "s"}`,
     exitCode: inspected.code,
   });
+
+  // The after picture, taken here rather than at the end, so an export that
+  // fails (exit 4) still leaves a picture of what was drawn. That is the one
+  // case where the SVG cannot supply one, and it is also the case the design
+  // sends to the finished panel with Accept live.
+  if (input.shotPath !== undefined) {
+    shotTaken = await shot(input.candidatePath, input.shotPath);
+  }
 
   /* 3. The picture is of the thing that was asked for. */
   const brief = checkBrief(input, report);
@@ -241,7 +269,10 @@ export async function runGate(input: GateInput): Promise<GateResult> {
   /* 6. The SVG is self-contained, its fonts applied, its text visible. */
   const verified = await canvas(["verify", input.candidateSvgPath, "--json"]);
   const verifyReport = (verified.json ?? {}) as VerifyReport;
-  const failed = (verifyReport.checks ?? []).filter((check) => !check.ok);
+  // Kept whether they passed or failed: the panel shows all four with a pass or
+  // a fail each, and a failed gate's four are the ones worth reading.
+  verify = verifyReport.checks ?? [];
+  const failed = verify.filter((check) => !check.ok);
   if (verified.code !== EXIT.ok) {
     record({
       name: "verify",
@@ -262,7 +293,7 @@ export async function runGate(input: GateInput): Promise<GateResult> {
   record({
     name: "verify",
     ok: true,
-    detail: `${(verifyReport.checks ?? []).length} checks passed`,
+    detail: `${verify.length} checks passed`,
     exitCode: verified.code,
   });
 

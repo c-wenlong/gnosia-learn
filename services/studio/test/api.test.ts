@@ -5,7 +5,15 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { absolute, targetPath, targetSvgPath, candidatePath, candidateSvgPath } from "../src/paths";
+import {
+  absolute,
+  candidatePath,
+  candidateSvgPath,
+  jobDir,
+  shotPath,
+  targetPath,
+  targetSvgPath,
+} from "../src/paths";
 import type { JobRecord } from "../src/store";
 import type { Runner } from "../src/runner";
 import { fixtureDocument } from "./fixture-document";
@@ -82,6 +90,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
 
 let store: InstanceType<typeof JobStore>;
 let server: ReturnType<typeof createApi>;
+let mirrors: InstanceType<typeof Mirrors>;
 let base: string;
 const enqueued: { brief: Record<string, unknown>; parent?: Record<string, unknown> }[] = [];
 
@@ -103,15 +112,18 @@ beforeEach(async () => {
     busy: 0,
   } as unknown as Runner;
 
-  const mirrors = new Mirrors();
+  mirrors = new Mirrors();
   server = createApi({ store, runner, mirrors });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(absolute(targetPath(SLUG)), { force: true });
+  await rm(absolute(candidatePath(SLUG)), { force: true });
+  await rm(absolute(candidateSvgPath(SLUG)), { force: true });
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   delete process.env.STUDIO_HOME;
 });
@@ -320,6 +332,88 @@ describe("a page in the user's own browser", () => {
       body: JSON.stringify({ changes: "wider" }),
     });
     expect(response.status).toBe(201);
+  });
+});
+
+describe("a job's two screenshots", () => {
+  it("streams the after picture as a PNG", async () => {
+    await store.create(record({ state: "awaiting_review" }));
+    await mkdir(jobDir("job-api"), { recursive: true });
+    await writeFile(shotPath("job-api", "after"), "not really a png, but bytes", "utf8");
+
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=after`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    // Never sniffed into something executable: these bytes are written by a
+    // tool and served back to an `<img>`, and that is all they are for.
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  /**
+   * The commonest 404 here is not an error, and the panel already said so in
+   * words: a `new` job had no diagram to photograph.
+   */
+  it("404s the before picture of a job that had no before", async () => {
+    await store.create(record({ state: "awaiting_review" }));
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=before`);
+    expect(response.status).toBe(404);
+  });
+
+  it("reads anything but `before` as the after picture rather than as a path", async () => {
+    // `which` never becomes a filename. A request naming something else gets
+    // the after picture, which is the safe reading of a parameter with two
+    // legal values.
+    await store.create(record({ state: "awaiting_review" }));
+    await mkdir(jobDir("job-api"), { recursive: true });
+    await writeFile(shotPath("job-api", "after"), "bytes", "utf8");
+    const response = await fetch(`${base}/api/jobs/job-api/shot?which=../../etc/passwd`);
+    expect(response.status).toBe(200);
+  });
+});
+
+describe("accepting", () => {
+  /**
+   * A6: the writer goes before the rename.
+   *
+   * `serve` holds the document as its tab last loaded it and Cmd+S PUTs the
+   * whole thing back, so a human save landing after the rename would silently
+   * revert the accepted diagram. Closed by the route rather than by the page,
+   * because a close the browser is responsible for is one a curl can skip.
+   */
+  it("closes an open mirror on the target before anything moves", async () => {
+    await store.create(record({ state: "awaiting_review" }));
+    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+
+    const response = await fetch(`${base}/api/jobs/job-api/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+
+    // The accept itself refuses here: there is no candidate on disk. What is
+    // under test is the order, and the mirror was closed before that was even
+    // asked — which is the point, since the alternative leaves a writer holding
+    // the file a rename is about to replace.
+    expect(stop).toHaveBeenCalledWith(targetPath(SLUG));
+    expect(response.status).toBe(409);
+  });
+
+  it("flags a hash refusal as one the UI should offer to re-compare, not retry", async () => {
+    // The candidate is there and the target has moved under it, which is S4.
+    await mkdir(absolute("learn/assets"), { recursive: true });
+    await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
+    await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "edited by hand" }), "utf8");
+    await store.create(record({ state: "awaiting_review", targetHashBefore: "a-hash-from-before" }));
+
+    const response = await fetch(`${base}/api/jobs/job-api/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const body = (await response.json()) as { error: string; detail: { recompare: boolean } };
+
+    expect(response.status).toBe(409);
+    expect(body.error).toContain("has changed since this job started");
+    expect(body.detail.recompare).toBe(true);
   });
 });
 
