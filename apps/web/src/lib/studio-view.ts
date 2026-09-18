@@ -81,6 +81,33 @@ export interface StudioView {
   selected: string | null;
   /** The right panel itself. Collapsible from the strip. */
   panel: boolean;
+  /**
+   * The job whose panel is open, or null for the inspector.
+   *
+   * In the URL for the same reason the filters are: the right panel has three
+   * contents now — the inspector, the brief form and one job — and which one is
+   * showing is a thing a person navigates to and back from. It is not job
+   * *state*: the runner holds that, and this is a pointer at it.
+   */
+  job: string | null;
+  /**
+   * The brief form: `""` for a blank one, a job id to prefill from that job.
+   *
+   * Null is "not open". Edit brief on a failed job is the second case, and it
+   * is a prefill rather than a copy — the form posts a new brief, and a job is
+   * never edited in place.
+   */
+  brief: string | null;
+  /**
+   * Whether the job panel may open an event stream at all.
+   *
+   * `?stream=off` forces the polling fallback that a dropped connection would
+   * reach on its own. D8 says the polled `GET` is the record and the stream is
+   * a cache, which is only a claim until somebody can turn the cache off and
+   * watch the screen stay correct. This is how that is checked by hand, and it
+   * is why the fallback is not a path that only runs when something breaks.
+   */
+  stream: boolean;
 }
 
 export const DEFAULT_VIEW: StudioView = {
@@ -93,6 +120,9 @@ export const DEFAULT_VIEW: StudioView = {
   layout: "grid",
   selected: null,
   panel: true,
+  job: null,
+  brief: null,
+  stream: true,
 };
 
 /** Next hands a repeated parameter as an array and a single one as a string. */
@@ -134,6 +164,28 @@ export function parseView(params: RawParams): StudioView {
     layout: member(one(params.view), LAYOUTS, DEFAULT_VIEW.layout),
     selected: one(params.sel),
     panel: flag(one(params.panel), DEFAULT_VIEW.panel),
+    ...parsePanel(params),
+  };
+}
+
+/**
+ * The three parameters that decide what the right panel holds.
+ *
+ * Split out of `parseView` because the canvas route needs them and does not
+ * have a view: `/studio/d/<name>` has no filters, no sort and no selection, and
+ * a job started from the canvas has to be visible there too.
+ *
+ * `new` is read with `has` rather than through `one`, because an empty value is
+ * meaningful here: `?new=` is a blank form and `?new=job-id` is a prefilled
+ * one, and `one` returns null for both.
+ */
+export function parsePanel(params: RawParams): Pick<StudioView, "job" | "brief" | "stream"> {
+  const brief = params.new;
+  const first = Array.isArray(brief) ? brief[0] : brief;
+  return {
+    job: one(params.job),
+    brief: first === undefined ? null : first,
+    stream: (one(params.stream) ?? "on") !== "off",
   };
 }
 
@@ -155,8 +207,40 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.layout !== DEFAULT_VIEW.layout) params.set("view", next.layout);
   if (next.selected !== null) params.set("sel", next.selected);
   if (next.panel !== DEFAULT_VIEW.panel) params.set("panel", next.panel ? "1" : "0");
+  if (next.job !== null) params.set("job", next.job);
+  if (next.brief !== null) params.set("new", next.brief);
+  if (!next.stream) params.set("stream", "off");
   const query = params.toString();
   return query === "" ? "/studio" : `/studio?${query}`;
+}
+
+/**
+ * The same three parameters, patched onto any path.
+ *
+ * `studioHref` rebuilds `/studio` from a whole view, which the canvas route
+ * cannot use: it has a name in its path and only these three in its query. Both
+ * screens open a job panel and a brief form with the same links, so the patch
+ * is written once and takes the path it is given.
+ */
+export function panelHref(
+  path: string,
+  patch: { job?: string | null; brief?: string | null },
+): string {
+  const [base, existing] = path.split("?");
+  const params = new URLSearchParams(existing ?? "");
+  if (patch.job !== undefined) {
+    if (patch.job === null) params.delete("job");
+    else params.set("job", patch.job);
+  }
+  if (patch.brief !== undefined) {
+    if (patch.brief === null) params.delete("new");
+    else params.set("new", patch.brief);
+  }
+  // A stale verb outcome pinned beside a newly opened panel would read as
+  // something the panel did, so opening one drops it.
+  for (const key of ["v", "ok", "m"]) params.delete(key);
+  const query = params.toString();
+  return query === "" ? (base ?? "/studio") : `${base ?? "/studio"}?${query}`;
 }
 
 /** Add or remove one topic chip, which is what clicking a chip means. */

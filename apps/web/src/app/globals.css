@@ -115,3 +115,32 @@ body {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.9em;
 }
+
+/*
+ * The studio's indeterminate bar: a strip sliding under a fixed track.
+ *
+ * Indeterminate is the whole point (D23). The phases have wildly different
+ * durations and nothing reports progress inside one, so there is no honest
+ * number to put on a bar — and a fabricated one is what destroys trust the
+ * first time it stalls at eighty percent. This says "something is happening"
+ * and claims nothing else.
+ */
+@keyframes studio-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* A person who asked for less movement gets a still bar rather than none: the
+   element is the only thing on the strip that distinguishes running from
+   stopped. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[studio-slide_1\.6s_ease-in-out_infinite\] {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

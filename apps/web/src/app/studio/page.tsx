@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
+import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
+import { JobPanel } from "@/components/studio/JobPanel";
+import { JobStrip } from "@/components/studio/JobStrip";
 import { BlockedCard, EmptyDirectory, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   ButtonLink,
@@ -16,7 +19,7 @@ import {
   SortMenu,
   TopicChips,
 } from "@/components/studio/StudioControls";
-import { topicDomains, topicTitles } from "@/data/topics";
+import { topicDomains, topicOptions, topicTitles } from "@/data/topics";
 import { requireStudio, studioApi } from "@/lib/studio";
 import {
   filterDiagrams,
@@ -141,7 +144,14 @@ export default async function StudioPage({
         <ButtonLink href={studioHref(view, { panel: !view.panel })}>
           {view.panel ? "Hide panel" : "Show panel"}
         </ButtonLink>
+        {/* The one filled button on this screen, which is what the design
+            says it is: everything else here is navigation. */}
+        <ButtonLink href={studioHref(view, { brief: "", job: null, panel: true })} filled>
+          New diagram
+        </ButtonLink>
       </StudioStrip>
+
+      <JobStrip path={path} stream={view.stream} />
 
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
 
@@ -214,9 +224,19 @@ export default async function StudioPage({
 
         {/* Below 1280px the panel is off by default and the strip's toggle
             brings it back; below 1024px it is not rendered inline at all. */}
+        {/* The right panel has three contents and the URL says which: the
+            brief form, one job, or the inspector. All three are the same 320px
+            column, because a form that replaced the screen would hide the thing
+            the brief is about. */}
         {view.panel && (
           <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
-            <DiagramInspector listing={listing} diagram={selected} jobs={jobs} path={path} />
+            {view.brief !== null ? (
+              <BriefForm path={path} topics={topicOptions} from={view.brief} suggested={undefined} />
+            ) : view.job !== null ? (
+              <JobPanel jobId={view.job} path={path} />
+            ) : (
+              <DiagramInspector listing={listing} diagram={selected} jobs={jobs} path={path} />
+            )}
           </aside>
         )}
       </div>

@@ -1,0 +1,687 @@
+import { JOB_ACTIVE_STATES, type JobState } from "@self-learn/schema/shared";
+
+/**
+ * What a job looks like to the UI, decided here and nowhere else.
+ *
+ * Pure, the same way `studio-view.ts` is pure: no React, no fetch, no
+ * `server-only`. The panel and the strip are view code and untested by design,
+ * so every judgement they make — which phase is current, how long one took,
+ * what a failure means, whether a brief is complete enough to post — lives on
+ * this side of the line where it can be a test.
+ *
+ * Two rules from the design run through all of it.
+ *
+ * **No percentage, ever (D23).** Phase, step count and elapsed time. The phases
+ * have wildly different durations and nothing reports progress inside one, so a
+ * bar with a number on it would be a fabrication, and the first time it stalled
+ * at eighty percent it would take the rest of the screen's credibility with it.
+ *
+ * **The polled `GET` is the record and the stream is a cache (D8, rule 8).**
+ * Everything here takes the job record as the truth and the event list as
+ * decoration: events refine what the record already says — the durations, the
+ * narration — and are never the only source of a state. A browser that never
+ * connected to the stream sees the same phase as one watching it live.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* What the runner sends                                                      */
+/* -------------------------------------------------------------------------- */
+
+export interface GateStep {
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** tldrawkc's own exit code, for the steps that ran it. */
+  exitCode?: number | null;
+}
+
+export interface GateResult {
+  ok: boolean;
+  steps: GateStep[];
+  findings: string[];
+  shapes: number | null;
+  lints: number | null;
+  svg: { path: string; bytes: number | null } | null;
+  /** True when the document saved and the export did not: tldrawkc exit 4. */
+  exportFailed: boolean;
+  checkedAt: string;
+}
+
+export interface BriefElement {
+  label: string;
+  note?: string;
+}
+
+export interface BriefRelation {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+export interface Brief {
+  intent: string;
+  topic: string;
+  slug: string;
+  title: string;
+  mode: "new" | "extend";
+  elements: BriefElement[];
+  relations: BriefRelation[];
+  concepts?: string[];
+  layout?: string;
+  mermaid?: string;
+  source?: string;
+  model?: "sonnet" | "opus";
+  notes?: string;
+}
+
+/** One row of `GET /api/jobs`, and the whole of `GET /api/jobs/{id}` bar the brief. */
+export interface Job {
+  jobId: string;
+  kind: string;
+  state: JobState;
+  phase: string | null;
+  title: string | null;
+  topic: string;
+  target: string;
+  candidate: string;
+  attempt: number;
+  turns: number | null;
+  costUsd: number | null;
+  exitCode: number | null;
+  gate: GateResult | null;
+  written: string[];
+  indexed: boolean;
+  error: string | null;
+  errorKind: string | null;
+  requested: string;
+  started: string | null;
+  finished: string | null;
+  updated: string;
+  cancelRequestedAt: string | null;
+  note: string;
+  /** Only `GET /api/jobs/{id}` carries it. */
+  brief?: Brief;
+}
+
+export type StudioEventType = "phase" | "step" | "gate" | "done" | "error";
+
+export interface StudioEvent {
+  type: StudioEventType;
+  seq: number;
+  at: string;
+  job: string;
+  note: string;
+  state?: JobState;
+  phase?: string;
+  gate?: GateResult;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The seven phases                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * All seven, visible from the first second.
+ *
+ * The keys are the runner's own phase strings and the labels are the design's
+ * words for them. Showing the whole list up front rather than revealing rows as
+ * they happen is the point: a person waiting on three to twenty minutes of an
+ * agent working needs to know how much of the shape is left, and that is the
+ * honest substitute for the percentage D23 refuses.
+ */
+export const PHASES = [
+  { key: "reading", label: "Read the document" },
+  { key: "planning", label: "Plan the snippet" },
+  { key: "drawing", label: "Draw" },
+  { key: "linting", label: "Lint" },
+  { key: "exporting", label: "Export the SVG" },
+  { key: "verifying", label: "Verify" },
+  { key: "ready", label: "Ready to accept" },
+] as const;
+
+export type PhaseKey = (typeof PHASES)[number]["key"];
+
+export function phaseIndex(phase: string | null | undefined): number {
+  if (phase === null || phase === undefined) return -1;
+  return PHASES.findIndex((entry) => entry.key === phase);
+}
+
+export type PhaseStatus = "done" | "current" | "pending" | "failed";
+
+export interface PhaseRow {
+  key: string;
+  label: string;
+  status: PhaseStatus;
+  /** Milliseconds spent in this phase, or null when it was never entered. */
+  durationMs: number | null;
+}
+
+const TERMINAL: readonly JobState[] = ["accepted", "discarded", "failed", "cancelled", "interrupted"];
+
+export function isActive(state: JobState): boolean {
+  return (JOB_ACTIVE_STATES as readonly string[]).includes(state);
+}
+
+export function isTerminal(state: JobState): boolean {
+  return TERMINAL.includes(state);
+}
+
+/**
+ * The newest job that still holds its target: the one the strip is about.
+ *
+ * Concurrency is 1 (D9), so at most one is `running`, but a queued job and a
+ * job waiting to be reviewed are both live things a person has to be able to
+ * get back to. The list arrives newest first and this keeps that order.
+ */
+export function activeJob(jobs: readonly Job[]): Job | null {
+  return jobs.find((job) => isActive(job.state)) ?? null;
+}
+
+/**
+ * Time actually spent in each phase, summed over the segments it held.
+ *
+ * A job loops: the gate sends a finding back and the agent goes from `linting`
+ * to `drawing` again, twice more at most. Reading a duration as "first entered
+ * until first left" would then report a lint step that lasted eleven minutes
+ * because a redraw happened in the middle of it. Every segment between two
+ * phase events belongs to the phase that was current for it, and the durations
+ * are those segments added up.
+ *
+ * Only `phase` events count. A `step` event says the gate finished a check and
+ * carries no phase of its own, so treating it as a boundary would cut a segment
+ * in half and attribute the tail to nothing.
+ */
+function phaseDurations(
+  events: readonly StudioEvent[],
+  job: Job,
+  now: number,
+): Map<string, number> {
+  const marks = events
+    .filter((event): event is StudioEvent & { phase: string } => event.type === "phase" && typeof event.phase === "string")
+    .map((event) => ({ phase: event.phase, at: Date.parse(event.at) }))
+    .filter((mark) => Number.isFinite(mark.at))
+    .sort((a, b) => a.at - b.at);
+
+  const totals = new Map<string, number>();
+  // The last segment runs to now while the job is going and to the finish once
+  // it has stopped — and `awaiting_review` has stopped. Reading only the
+  // terminal states as stopped left a finished job's last phase counting
+  // upwards for as long as the panel stayed open, which said the runner was
+  // still verifying a diagram it had verified minutes ago. Seen on the first
+  // real job.
+  const stoppedAt = job.finished === null ? null : Date.parse(job.finished);
+  const end = stoppedAt === null || !Number.isFinite(stoppedAt) ? now : stoppedAt;
+  for (let at = 0; at < marks.length; at += 1) {
+    const mark = marks[at];
+    if (mark === undefined) continue;
+    const next = marks[at + 1];
+    const until = next === undefined ? end : next.at;
+    const span = Math.max(0, until - mark.at);
+    totals.set(mark.phase, (totals.get(mark.phase) ?? 0) + span);
+  }
+  return totals;
+}
+
+/**
+ * The seven rows, with the one that is happening marked and nothing else moving.
+ *
+ * The current row is taken from the **record**, not from the last event seen: a
+ * page that reloaded mid-job has the record and no events at all, and it must
+ * still show the right row. The events only supply the durations, which is why
+ * a reloaded panel shows the right phase with blank times beside the earlier
+ * ones until the stream replays them.
+ */
+export function phaseRows(
+  job: Job,
+  events: readonly StudioEvent[] = [],
+  now: number = Date.now(),
+): PhaseRow[] {
+  const durations = phaseDurations(events, job, now);
+  const seen = new Set(
+    events.filter((event) => event.type === "phase" && event.phase !== undefined).map((event) => event.phase),
+  );
+  // `awaiting_review` is `ready`, and the runner writes that phase itself. A
+  // job that has left `running` any other way has no current phase on the
+  // record, so the last phase an event named is the one it stopped in.
+  const lastSeen = [...events].reverse().find((event) => event.type === "phase" && event.phase !== undefined)?.phase;
+  const currentKey = job.state === "awaiting_review" ? "ready" : (job.phase ?? lastSeen ?? null);
+  const current = phaseIndex(currentKey);
+  const stopped = isTerminal(job.state);
+  const failedHere = stopped && job.state !== "accepted" && job.state !== "discarded";
+
+  return PHASES.map((phase, at) => {
+    const durationMs = durations.get(phase.key) ?? null;
+    const reached = seen.has(phase.key) || (current >= 0 && at <= current);
+    let status: PhaseStatus;
+    if (current < 0) {
+      // Nothing has started: a queued job, which is every row pending.
+      status = "pending";
+    } else if (at < current) {
+      status = "done";
+    } else if (at > current) {
+      status = "pending";
+    } else if (job.state === "awaiting_review" || job.state === "accepted") {
+      status = "done";
+    } else if (failedHere) {
+      status = "failed";
+    } else {
+      status = "current";
+    }
+    return {
+      key: phase.key,
+      label: phase.label,
+      status,
+      durationMs: reached ? durationMs : null,
+    };
+  });
+}
+
+/** `step 4 of 7`, and never a percentage. */
+export function stepLabel(job: Job): string {
+  const at = phaseIndex(job.state === "awaiting_review" ? "ready" : job.phase);
+  return at < 0 ? `step 0 of ${PHASES.length}` : `step ${at + 1} of ${PHASES.length}`;
+}
+
+/** The phase in words, for the strip. */
+export function phaseWords(job: Job): string {
+  const key = job.state === "awaiting_review" ? "ready" : job.phase;
+  const row = PHASES.find((phase) => phase.key === key);
+  if (row !== undefined) return row.label.toLowerCase();
+  return job.state === "queued" ? "waiting for the runner" : job.state.replace("_", " ");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Time                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** How long the job has been going, counting up, stopping when it stops. */
+export function elapsedMs(job: Job, now: number = Date.now()): number {
+  const from = Date.parse(job.started ?? job.requested);
+  if (!Number.isFinite(from)) return 0;
+  const to = job.finished === null ? now : Date.parse(job.finished);
+  return Math.max(0, (Number.isFinite(to) ? to : now) - from);
+}
+
+/** `9s`, `1:04`, `12:30`. Coarse below a minute, mm:ss above it. */
+export function formatDuration(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return "";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The narration                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One line per finished check, newest last, capped at twenty.
+ *
+ * Only `step` events, which are D24's whole point: `drew 44 shapes` comes from
+ * the runner's own `inspect --json` and `exported 213 kB` from the file it
+ * wrote, never from the agent's account of itself. The phase events are already
+ * the list above, so repeating them here would be the same fact twice.
+ */
+export function narration(events: readonly StudioEvent[], cap = 20): { at: string; note: string }[] {
+  return events
+    .filter((event) => event.type === "step")
+    .slice(-cap)
+    .map((event) => ({ at: event.at, note: event.note }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* What a failure means                                                       */
+/* -------------------------------------------------------------------------- */
+
+export type FailureAction = "retry" | "edit" | "doctor" | "resume";
+
+export interface FailureReport {
+  /** The last tldrawkc exit code the gate recorded, when there was one. */
+  code: number | null;
+  headline: string;
+  detail: string | null;
+  actions: FailureAction[];
+}
+
+/**
+ * The failure panel's message, keyed on the runner's codes rather than on prose.
+ *
+ * The design's table is the contract and it keys on **the last tldrawkc exit
+ * code recorded in the gate**, which is not the agent's exit code: the agent
+ * runs the CLI many times and the runner only sees the session's own exit, so
+ * the codes that reach a job come from the gate's own calls and live in
+ * `job.gate`. Codes 3 and 4 never arrive here at all — a document with lints and
+ * a document whose export failed are both finished jobs (D4) — so this is only
+ * ever asked about 1, 2, or nothing.
+ *
+ * `errorKind` covers the row the table calls `none`. A timeout, an agent that
+ * never spawned, a job that wrote outside its allowed paths and a gate finding
+ * are four different sentences, and "the gate's own finding" is only the right
+ * words for the last of them.
+ */
+export function failureReport(job: Job): FailureReport {
+  const code = lastGateCode(job);
+  const detail = job.error ?? null;
+
+  if (code === 1) {
+    return {
+      code,
+      headline: firstSentence(gateDetail(job, 1) ?? detail ?? "tldrawkc refused the call"),
+      detail,
+      // The doctor action is offered because a code 1 is usage *or*
+      // environment and the message is the only thing that says which.
+      actions: ["edit", "doctor"],
+    };
+  }
+  if (code === 2) {
+    return {
+      code,
+      headline: "the snippet threw",
+      // The bridge rewrites the stack so the line number points at the
+      // snippet's own line rather than at the page bundle's.
+      detail: gateDetail(job, 2) ?? detail,
+      actions: ["retry", "edit"],
+    };
+  }
+
+  switch (job.errorKind) {
+    case "timeout":
+      return {
+        code: null,
+        headline: "it ran out of time",
+        detail,
+        // The session id is kept on a timeout, so a revision continues the
+        // transcript rather than paying for the drawing again.
+        actions: ["retry", "edit"],
+      };
+    case "spawn":
+      return {
+        code: null,
+        headline: "the agent never started",
+        detail,
+        actions: ["doctor", "retry"],
+      };
+    case "wrote-outside":
+      return {
+        code: null,
+        headline: "it left files it was never allowed to write",
+        detail,
+        // Deliberately no retry: something is dirty in the tree and a person
+        // has to look at it before another agent runs over the same paths.
+        actions: [],
+      };
+    case "cancelled":
+      return { code: null, headline: "stopped on request", detail, actions: ["retry"] };
+    case "interrupted":
+      return {
+        code: null,
+        headline: "the runner died while this was running",
+        detail: detail ?? "No gate ran on whatever is on disk.",
+        actions: ["resume"],
+      };
+    case "not-claimed":
+      return { code: null, headline: "the catalog would not hand this job over", detail, actions: ["retry"] };
+    default:
+      return {
+        code: null,
+        headline: job.gate === null ? "nothing was written" : "the check refused what it drew",
+        detail: job.gate?.findings.join(" ") ?? detail,
+        actions: ["retry", "edit"],
+      };
+  }
+}
+
+/** The last exit code the gate recorded on a step that did not pass. */
+export function lastGateCode(job: Job): number | null {
+  const steps = job.gate?.steps ?? [];
+  for (let at = steps.length - 1; at >= 0; at -= 1) {
+    const step = steps[at];
+    if (step === undefined || step.ok) continue;
+    if (typeof step.exitCode === "number") return step.exitCode;
+  }
+  return null;
+}
+
+function gateDetail(job: Job, code: number): string | null {
+  const step = (job.gate?.steps ?? []).find((entry) => !entry.ok && entry.exitCode === code);
+  return step?.detail ?? null;
+}
+
+function firstSentence(text: string): string {
+  const cut = text.indexOf(". ");
+  return cut === -1 ? text : text.slice(0, cut + 1);
+}
+
+/**
+ * What a finished job says at the top of the panel.
+ *
+ * Exit 3 and exit 4 both land here rather than in the failure panel (D4, U12):
+ * a diagram with a warning on it is often the right thing to accept, and a
+ * document that saved while its export did not has lost a picture and not the
+ * work, which accept redoes anyway.
+ */
+export function finishedHeadline(job: Job): string {
+  const gate = job.gate;
+  if (gate === null) return "the candidate is written";
+  if (gate.exportFailed) return "the document was saved, the export failed";
+  const lints = gate.lints ?? 0;
+  if (lints > 0) return `finished with ${lints} lint${lints === 1 ? "" : "s"}`;
+  return `finished: ${gate.shapes ?? "?"} shapes, no lints`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The title and the notification                                             */
+/* -------------------------------------------------------------------------- */
+
+export interface Announcement {
+  /** What `document.title` becomes, which happens whether or not a notification can. */
+  title: string;
+  body: string;
+}
+
+/**
+ * What to say when a job stops while nobody is looking.
+ *
+ * The title changes regardless, because the Notifications API is behind a
+ * permission a person can refuse and often has. A tab title is the one channel
+ * that cannot be denied.
+ */
+export function announcement(job: Job): Announcement | null {
+  const name = job.title ?? job.jobId.slice(0, 8);
+  switch (job.state) {
+    case "awaiting_review":
+      return { title: `✓ ${name} — ready to review`, body: finishedHeadline(job) };
+    case "failed":
+      return { title: `✕ ${name} — failed`, body: failureReport(job).headline };
+    case "cancelled":
+      return { title: `✕ ${name} — cancelled`, body: job.note };
+    case "interrupted":
+      return { title: `✕ ${name} — interrupted`, body: job.note };
+    default:
+      return null;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* The brief, as a form fills it in                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface DraftElement {
+  label: string;
+  note: string;
+}
+
+export interface DraftRelation {
+  from: string;
+  to: string;
+  label: string;
+}
+
+/** The form's own state. Strings throughout, because that is what inputs hold. */
+export interface BriefDraft {
+  intent: string;
+  topic: string;
+  slug: string;
+  title: string;
+  mode: "new" | "extend";
+  elements: DraftElement[];
+  relations: DraftRelation[];
+  concepts: string[];
+  layout: string;
+  mermaid: string;
+  source: string;
+  model: "sonnet" | "opus";
+  notes: string;
+}
+
+export function emptyDraft(): BriefDraft {
+  return {
+    intent: "",
+    topic: "",
+    slug: "",
+    title: "",
+    mode: "new",
+    elements: [
+      { label: "", note: "" },
+      { label: "", note: "" },
+    ],
+    relations: [],
+    concepts: [],
+    layout: "",
+    mermaid: "",
+    source: "",
+    model: "sonnet",
+    notes: "",
+  };
+}
+
+/** Prefill from a job, which is what Edit brief on a failed one means. */
+export function draftFromBrief(brief: Brief): BriefDraft {
+  return {
+    ...emptyDraft(),
+    intent: brief.intent,
+    topic: brief.topic,
+    slug: brief.slug,
+    title: brief.title,
+    mode: brief.mode,
+    elements: brief.elements.map((element) => ({ label: element.label, note: element.note ?? "" })),
+    relations: brief.relations.map((relation) => ({
+      from: relation.from,
+      to: relation.to,
+      label: relation.label ?? "",
+    })),
+    concepts: [...(brief.concepts ?? [])],
+    layout: brief.layout ?? "",
+    mermaid: brief.mermaid ?? "",
+    source: brief.source ?? "",
+    model: brief.model ?? "sonnet",
+    notes: brief.notes ?? "",
+  };
+}
+
+/** tldrawkc's own slug shape, which is also what a file name can carry. */
+export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The same refusals the runner makes, made before the request is sent.
+ *
+ * Not a replacement for the server's: `brief.ts` is the boundary and re-checks
+ * every one of these, plus the topic vocabulary and the caps. This is the UI
+ * doing its own job, which the design states plainly — a job cannot start until
+ * every required field is filled, and **the UI's job is to ask rather than to
+ * guess**. A form that posted an empty `elements` array and rendered the 400 it
+ * got back would be asking the runner to do the asking.
+ */
+export function draftErrors(draft: BriefDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (draft.intent.trim() === "") {
+    errors.intent = "Say in a sentence or two what the diagram has to make clear.";
+  }
+  if (draft.topic.trim() === "") {
+    errors.topic = "Pick the topic this is filed under: the indexer refuses a diagram without one.";
+  }
+  if (draft.title.trim() === "") errors.title = "The title is stamped onto the SVG and labels the card.";
+  if (draft.slug.trim() === "") {
+    errors.slug = "The slug is the file name: learn/assets/<slug>.tldr.";
+  } else if (!SLUG_PATTERN.test(draft.slug.trim())) {
+    errors.slug = "Lowercase letters, digits and single hyphens only.";
+  }
+
+  const labels = draft.elements.map((element) => element.label.trim()).filter((label) => label !== "");
+  if (labels.length === 0) {
+    errors.elements = "Name at least one thing that has to appear. They are half of what the gate checks.";
+  } else if (new Set(labels).size !== labels.length) {
+    errors.elements = "Two elements share a label, and a relation names its ends by label.";
+  }
+
+  const known = new Set(labels);
+  for (const [at, relation] of draft.relations.entries()) {
+    const from = relation.from.trim();
+    const to = relation.to.trim();
+    if (from === "" && to === "") continue;
+    if (!known.has(from) || !known.has(to)) {
+      errors[`relations.${at}`] = "An arrow binds two elements, so both ends have to be elements.";
+    }
+  }
+  return errors;
+}
+
+/**
+ * The draft as the runner takes it: structured JSON, and nothing else.
+ *
+ * The one path from this form to a job. The mermaid source rides in the body as
+ * a field the runner writes to the job scratch directory and lifts with
+ * `from-mermaid --source`; it never enters a prompt (A5), and there is no
+ * second route here that would let it.
+ */
+export function draftToBrief(draft: BriefDraft, idempotencyKey: string): Brief & { idempotencyKey: string } {
+  const elements = draft.elements
+    .map((element) => ({ label: element.label.trim(), note: element.note.trim() }))
+    .filter((element) => element.label !== "")
+    .map((element) => (element.note === "" ? { label: element.label } : element));
+  const labels = new Set(elements.map((element) => element.label));
+  const relations = draft.relations
+    .map((relation) => ({
+      from: relation.from.trim(),
+      to: relation.to.trim(),
+      label: relation.label.trim(),
+    }))
+    .filter((relation) => labels.has(relation.from) && labels.has(relation.to))
+    .map((relation) => (relation.label === "" ? { from: relation.from, to: relation.to } : relation));
+
+  const optional = <T,>(value: T | "", key: string): Record<string, T> =>
+    value === "" ? {} : ({ [key]: value } as Record<string, T>);
+
+  return {
+    intent: draft.intent.trim(),
+    topic: draft.topic.trim(),
+    slug: draft.slug.trim(),
+    title: draft.title.trim(),
+    mode: draft.mode,
+    elements,
+    relations,
+    concepts: draft.concepts,
+    model: draft.model,
+    ...optional(draft.layout, "layout"),
+    ...optional(draft.mermaid.trim(), "mermaid"),
+    ...optional(draft.source.trim(), "source"),
+    ...optional(draft.notes.trim(), "notes"),
+    idempotencyKey,
+  };
+}
+
+/** `learn/assets/.candidates/<slug>.tldr`, the line under the Start button. */
+export function candidatePathFor(slug: string): string {
+  return `learn/assets/.candidates/${slug === "" ? "<slug>" : slug}.tldr`;
+}
+
+/** A slug suggested from a title, which is what a person would have typed anyway. */
+export function slugFromTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
