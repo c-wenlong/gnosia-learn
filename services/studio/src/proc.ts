@@ -102,3 +102,29 @@ export function parseJson(stdout: string): unknown {
 
 /** `npm` resolves through the shell's PATH, and Windows is not a target here. */
 export const NPM = "npm";
+
+/**
+ * Signal a whole process group, falling back to the one process.
+ *
+ * The negative pid is the point. A detached spawn makes the child a process
+ * group leader, so `kill(-pid)` reaches every descendant that stayed in the
+ * group — the npm launcher, its shell and the tool underneath. It does not
+ * reach a descendant that made a group of its own, which is what Playwright
+ * does with the browser it launches; `sweepOrphans` in `agent.ts` is why that
+ * is survivable.
+ *
+ * Shared by the agent session and by a mirror's `serve` process, because both
+ * are `npm`-fronted trees that a `child.kill()` would leave half-standing.
+ */
+export function signalGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // ESRCH: the group is already gone, which is the outcome we wanted.
+    try {
+      process.kill(pid, signal);
+    } catch {
+      /* nothing left to signal */
+    }
+  }
+}

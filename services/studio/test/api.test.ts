@@ -25,6 +25,7 @@ vi.mock("../src/canvas", async (importOriginal) => {
 
 const { createApi } = await import("../src/api");
 const { JobStore } = await import("../src/store");
+const { Mirrors } = await import("../src/mirrors");
 
 const SLUG = "studio-api-fixture";
 
@@ -101,7 +102,8 @@ beforeEach(async () => {
     busy: 0,
   } as unknown as Runner;
 
-  server = createApi({ store, runner });
+  const mirrors = new Mirrors();
+  server = createApi({ store, runner, mirrors });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -224,7 +226,10 @@ describe("a page in the user's own browser", () => {
   });
 
   it("lets a program through, which is the caller this API is for", async () => {
-    // curl and the Next rewrite (a server-side fetch) send no Origin at all.
+    // curl sends no Origin, and neither does the app's proxy route handler,
+    // which strips it deliberately. A `next.config.ts` rewrite would *not*
+    // qualify: measured in phase 2, it forwards the browser's Origin verbatim
+    // and this guard refuses it. See `app/studio/api/[...segments]/route.ts`.
     await store.create(record({ state: "discarded" }));
     const response = await fetch(`${base}/api/jobs/job-api/revise`, {
       method: "POST",
@@ -241,5 +246,69 @@ describe("the route table", () => {
     const body = (await response.json()) as { detail: { routes: string[] } };
     expect(response.status).toBe(404);
     expect(body.detail.routes.join(" ")).toContain("reindex");
+  });
+
+  it("names the diagram and mirror routes phase 2 added", async () => {
+    const response = await fetch(`${base}/api/nothing`);
+    const body = (await response.json()) as { detail: { routes: string[] } };
+    expect(body.detail.routes.join(" ")).toContain("/api/diagrams");
+    expect(body.detail.routes.join(" ")).toContain("/api/mirrors");
+  });
+});
+
+describe("naming a diagram", () => {
+  it.each(["..%2Fsecrets", "a..b", "a b"])(
+    "refuses %j before it builds a path from it",
+    async (name) => {
+      // The route joins this onto `learn/assets`, so a name that is not one
+      // slug-shaped segment is refused rather than cleaned up: there is no
+      // correct file for it, and a sanitiser that guesses is the bug.
+      const response = await fetch(`${base}/api/diagrams/${name}/svg`);
+      expect(response.status).toBe(400);
+    },
+  );
+
+  it("404s a well-formed name with no file, rather than streaming nothing", async () => {
+    const response = await fetch(`${base}/api/diagrams/not-a-real-diagram/svg`);
+    expect(response.status).toBe(404);
+  });
+
+  it("refuses a verb sent as a GET, because a verb writes a file", async () => {
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`);
+    expect(response.status).toBe(405);
+  });
+});
+
+describe("the mirror routes", () => {
+  it("answers an empty list before anything is open", async () => {
+    const response = await fetch(`${base}/api/mirrors`);
+    const body = (await response.json()) as { mirrors: unknown[]; note: string };
+    expect(response.status).toBe(200);
+    expect(body.mirrors).toEqual([]);
+    expect(body.note).toBe("no canvas is open");
+  });
+
+  it("refuses a file outside learn/assets, whatever it is spelled as", async () => {
+    const response = await fetch(`${base}/api/mirrors`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file: "../../etc/passwd" }),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("needs the file named on a DELETE rather than closing everything", async () => {
+    const response = await fetch(`${base}/api/mirrors`, { method: "DELETE" });
+    expect(response.status).toBe(400);
+  });
+
+  it("says nothing was mirroring a file that was not open", async () => {
+    const response = await fetch(
+      `${base}/api/mirrors?file=${encodeURIComponent("learn/assets/never-opened.tldr")}`,
+      { method: "DELETE" },
+    );
+    const body = (await response.json()) as { stopped: boolean };
+    expect(response.status).toBe(200);
+    expect(body.stopped).toBe(false);
   });
 });
