@@ -64,3 +64,10 @@ next-env.d.ts
 # services/catalog/src/index/files.ts does not descend, so the indexer cannot
 # see these either.
 learn/assets/.candidates/
+
+# The diagram studio runner's own state: one directory per job, holding the
+# write-ahead log, the agent transcript, the per-job permission file and the
+# scratch the agent writes snippets into. None of it is knowledge base, and the
+# permission file names this machine's home directory. STUDIO_HOME moves it
+# somewhere else entirely, the way MANIMKC_HOME moves manimkc's data root.
+/.studio/
