@@ -328,7 +328,8 @@ either.
 | `POST` | `/api/jobs/{id}/cancel` | Stop a running or queued job | none | `{ jobId, state: "running" \| "cancelled", cancelRequestedAt }` |
 | `POST` | `/api/jobs/{id}/accept` | Land the candidate | none | `{ jobId, state: "accepted", written, indexed, note }` |
 | `POST` | `/api/jobs/{id}/discard` | Delete the candidate | none | `{ jobId, state: "discarded" }` |
-| `POST` | `/api/jobs/{id}/revise` | Resume the stored session with a change request | `{ changes }` | `{ jobId, state: "queued" }` |
+| `POST` | `/api/jobs/{id}/reindex` | Re-run the catalog half of an accept whose files landed | none | `{ jobId, written, indexed, note }` |
+| `POST` | `/api/jobs/{id}/revise` | Resume the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
@@ -359,7 +360,7 @@ rather than to guess.
 | `topic` | yes | `meta.tldrawkc.topic`, and `job.topic_slug`. Must already exist in [`content/topics.yaml`](../content/topics.yaml) |
 | `slug` | yes | The paths: `learn/assets/<slug>.tldr` is `target_path`, `learn/assets/.candidates/<slug>.tldr` is `candidate_path` |
 | `title` | yes | `meta.tldrawkc.title`, the `<title>` an `export --svg` stamps, and the card label |
-| `mode` | yes | `new` or `extend`. `new` refuses an existing target, `extend` refuses a missing one. The agent never decides this |
+| `mode` | yes | `new` or `extend`. `new` refuses an existing target, `extend` refuses a missing one. The agent never decides this, and neither does a revision: `revise` re-derives it from what is on disk, because accepting a `new` job puts a file at the target path and re-posting the parent's own brief would then be refused |
 | `elements` | yes | Ordered `{ label, note }`. The things that must appear. The agent's checklist and half the gate |
 | `relations` | yes, may be empty | Ordered `{ from, to, label }`. Each becomes a bound arrow through `helpers.connect`, which is layering rule 6 in the tool's `ARCHITECTURE.md` |
 | `concepts` | no | `meta.tldrawkc.concepts`, the concept slugs under that topic |
@@ -381,22 +382,57 @@ Each with the reason it exists.
   resolves from there. manimkc's `agent.run_claude` does the same with
   `cwd=ROOT`.
 - **A per-job `--settings` file, written into the job workspace.** This is the
-  primary control, not the prompt. Deny `Write` and `Edit` everywhere, then
-  allow exactly `learn/assets/.candidates/<slug>.tldr`,
-  `learn/assets/.candidates/<slug>.svg` and the job scratch directory.
-  Permission rules fail an injected instruction; prompt wording only discourages
-  it. Note that `learn/assets/<slug>.tldr` is denied, so the agent cannot reach
-  the committed file at all.
-- **`--allowedTools Bash,Read,Write,Edit,Glob,Grep,TodoWrite`, and `Bash` is an
-  allowlist rather than a deny list.** This is the correction the first draft
-  needed. A deny list over `rm`, `mv`, `git`, `node` and the network tools does
+  primary control, not the prompt. Allow exactly
+  `learn/assets/.candidates/<slug>.tldr`,
+  `learn/assets/.candidates/<slug>.svg` and the job scratch directory, and let
+  everything else fall through to a refusal. Permission rules fail an injected
+  instruction; prompt wording only discourages it. Note that
+  `learn/assets/<slug>.tldr` is denied, so the agent cannot reach the committed
+  file at all.
+  **Three corrections phase 1 found by checking the CLI rather than assuming
+  it**, each of which silently removes the boundary if it is got wrong. A file
+  write is matched against `Edit(path)` rules and never `Write(path)`: the CLI
+  accepts a `Write(...)` path rule and never consults it, so a file allowlist
+  written that way reads as careful and permits nothing. A deny on a parent
+  directory always beats an allow beneath it, so the rules are written to miss
+  the two files the job is allowed to write, and the committed corpus is denied
+  by enumerating the directory at spawn time rather than by a glob over it. And
+  `permissions.allow` **merges** across settings sources rather than the most
+  specific file winning, so the spawn passes `--setting-sources ""` and this
+  file is the only source of rules the session has; without it the job's
+  permissions are the union of three files, two of which the runner cannot
+  see.
+- **The Bash allowlist is in the settings file, and no bare tool name is passed
+  anywhere.** This is the correction the first draft needed, and phase 1 found
+  the second half of it: a bare tool name *is* a permission rule that matches
+  every use of that tool, so `--allowedTools Bash,Read,Write,Edit,Glob,Grep,TodoWrite`
+  would have allowed every command and made the prefixes below decorative. The
+  spawn therefore passes no `--allowedTools` at all; the tool set is narrowed by
+  denying `WebFetch` and `WebSearch` as whole tools, and every other rule is
+  prefixed. A deny list over `rm`, `mv`, `git`, `node` and the network tools does
   not constrain `Bash` at all: a shell redirect, `cp`, `tee`, `printf >`, `sed
   -i` or `python3` writes anywhere in the tree, and the `Write` and `Edit`
-  allowlist has no say over any of it. So the settings file allows a fixed set
-  of command prefixes and denies everything else:
-  `Bash(npm run --silent canvas:*)`, `Bash(cat:*)`, `Bash(ls:*)`,
-  `Bash(head:*)`, `Bash(wc:*)`. The deny entries stay as belt and braces, not as
-  the boundary.
+  allowlist has no say over any of it. So the settings file allows one command
+  prefix, `Bash(npm run --silent canvas:*)`, and denies everything else.
+  **`cat`, `ls`, `head` and `wc` were on that list and are not any more**, which
+  is the fourth thing phase 1 found by checking the CLI rather than assuming it.
+  A `Bash` rule is a string prefix and carries no notion of a path, so an
+  allowed `cat` is allowed against every file on the machine. Two mechanisms
+  partly cover that and neither is enough: a `Read(...)` **deny** rule does
+  reach a file command the CLI recognises — `cat`, `head`, `tail`, `sed`, `tee`
+  and a redirect's target — so the secret denies were doing real work, but a
+  deny list only ever names what somebody thought of, and a token in a dotfile
+  nobody enumerated was one `cat` away; and
+  `blockReadsOutsideWorkingDirectories` only removes those commands' read-only
+  auto-approval, which an explicit allow rule then hands straight back. Reading
+  goes through the `Read` tool instead, which is the one mechanism here that is
+  genuinely path-matched and is confined to the working directories. The four
+  are **denied** rather than merely absent, and that half is not belt and
+  braces: a compound command is split on `&&`, `;` and `|` with each part
+  matched, but a command substitution is not, so
+  `npm run --silent canvas -- run x --code "$(cat ~/.aws/credentials)"` matches
+  the allowed prefix as one string, and a deny rule is the half of the matcher
+  that reaches inside a substitution.
 - **The residual hole, named rather than hidden.** `canvas run <file> --code
   <snippet>` takes an output path as an argument, so even the allowlist lets the
   agent write a `.tldr` or a `.png` outside the candidates directory. Three
@@ -434,23 +470,40 @@ Each with the reason it exists.
 
 ### The gate
 
-The runner's own subprocess calls, in this order, after the agent exits:
+The runner's own checks, in this order, after the agent exits:
 
-1. The candidate `.tldr` exists and is newer than the job start.
+1. The candidate `.tldr` exists and is newer than the job start. In `extend`
+   mode it must also differ from the copy the runner made before the agent
+   started: that copy is a good diagram with the right topic that exports
+   cleanly, so without this check an agent that did nothing at all passes every
+   step below and offers the committed file back as new work.
 2. `canvas -- inspect <candidate> --json` exits 0 or 3, and reports at least one
    shape. Exit 3 is lints remaining, which is a finished diagram with findings,
    not a failure.
-3. The metadata names a topic, and that topic is in `content/topics.yaml`.
-4. `canvas -- export <candidate> --svg <candidate-svg>` runs. Exit 4 means the
+3. **The drawing covers the brief**: every `elements[].label` appears inside
+   some shape's label text, and every relation is a binding joining the two
+   shapes it names. Both come out of the `inspect --json` step 2 already ran, so
+   it costs no subprocess. This is the half the brief table always claimed —
+   `elements` is "the agent's checklist and half the gate" — and without it the
+   gate established that *a* diagram existed and never that it was the one that
+   was asked for. Matching is loose in one direction only: a label may say more
+   than the brief did, because a good diagram explains itself, and a binding
+   counts in either direction, because an arrow the wrong way round is a picture
+   worth reviewing rather than a paid retry.
+4. The metadata names a topic, and that topic is in `content/topics.yaml`.
+5. `canvas -- export <candidate> --svg <candidate-svg>` runs. Exit 4 means the
    document saved and the export did not, which is recorded and not fatal.
-5. `canvas -- verify <candidate-svg> --json` exits 0, when step 4 produced a
+6. `canvas -- verify <candidate-svg> --json` exits 0, when step 5 produced a
    file.
 
 A zero exit from the agent with nothing written is step 1 failing and needs no
-special case. A step 2 or 3 failure is fed back as a resume prompt carrying the
-specific finding, up to three attempts total. After that the job is `failed`
-with the gate's findings, and the partial artifacts are moved to
-`jobs/<id>/rejected/` so a person can look.
+special case. The one agent outcome the gate is *not* asked about is a spawn
+that failed — no `claude` on PATH, or a spawn the OS refused — because nothing
+ran, so whatever is at the candidate path was not written by this attempt. A
+step 2, 3 or 4 failure is fed back as a resume prompt carrying the specific
+finding, up to three attempts total. After that the job is `failed` with the
+gate's findings, and the partial artifacts are moved to `jobs/<id>/rejected/` so
+a person can look.
 
 **The agent's exit code is not a tldrawkc exit code.** The agent runs the CLI
 many times and the runner sees only the session's own exit. The tldrawkc codes
@@ -472,12 +525,24 @@ Discard cannot delete a candidate that has moved. So the order is:
    already produced one. This is the step an exit 4 job never got.
 2. `canvas -- verify <candidate.svg> --json`, because the tool's own rule is
    that the loop does not end at `export`.
-3. `rename(candidate.tldr, target.tldr)`, then
+3. The target's hash again, immediately before the rename and with nothing left
+   to await after it. Accept asks this once on entry too, so a job that is
+   already stale costs no Chromium — but steps 1 and 2 are a browser launch
+   each, so the early answer can be minutes old by the time the rename happens,
+   and the window it leaves open is exactly the one S4 is about.
+4. `rename(candidate.tldr, target.tldr)`, then
    `rename(candidate.svg, target.svg)`. Each is atomic, because
    `learn/assets/.candidates/` is a sibling directory and not the OS temp
    directory, so each file is either the old one or the new one.
-4. `catalog assert-output --job <id> --path learn/assets/<slug>.tldr`, then the
+5. `catalog assert-output --job <id> --path learn/assets/<slug>.tldr`, then the
    same for the `.svg`. A `job` conditional update to `accepted` last.
+
+Every review action is serialised per job, and re-reads the record inside that
+queue. Each of them is a read-then-act over the filesystem with two awaited
+subprocesses in the middle, so without it two accepts both pass the
+`awaiting_review` guard and the loser's rename fails with `ENOENT`, and an
+accept racing a discard can write `discarded` over two files that are already in
+`learn/assets/`.
 
 Two failure windows remain and both are recoverable by construction. A failure
 in step 1 or 2 changes nothing under `learn/assets/`, so the job stays
@@ -488,10 +553,19 @@ models: the pill goes stale and one click on Export SVG fixes it. The one thing
 the runner keeps for that window is the previous `target.tldr` hash in
 `job.target_hash_before`, so the panel can say which version is on disk.
 
-Step 4 is the only step that needs Postgres. With the database down, steps 1 to
-3 still run and the job lands as `accepted` with `indexed: false` and the
+Step 5 is the only step that needs Postgres. With the database down, steps 1 to
+4 still run and the job lands as `accepted` with `indexed: false` and the
 reason, which the UI surfaces as a Reindex button. The files are the output; the
 index is derived.
+
+**That button is `POST /api/jobs/{id}/reindex`, and it is not optional.**
+`accepted` is terminal, so once the files have moved and the record says so, a
+second Accept is refused by the state machine and the provenance is lost until
+somebody opens psql. The route re-runs step 5 alone, against the paths the
+record says it landed. It is safe to repeat: `assert-output` upserts, the
+catalog's own row is still `awaiting_review` because `job accept` is what moves
+it, and `runAccept` counts `asset_job` rows rather than requiring `--path` for
+exactly this case.
 
 Discard deletes both candidates and writes `discarded`. Neither is undoable
 inside the studio, and the panel says so in one line: git is the undo.
@@ -781,12 +855,15 @@ raised it: S schema, A API and runner, U interface.
 | S7 | A session is deleted | It is not, once it did anything. `event.session_id` and `job.session_id` are `ON DELETE RESTRICT`, the same verdict [`0004_event_concept_restrict.sql`](../services/catalog/drizzle/0004_event_concept_restrict.sql) reached, and `SET NULL` is not even available: the referential `UPDATE` it fires is what the per-row trigger from [`0003_append_only_per_row.sql`](../services/catalog/drizzle/0003_append_only_per_row.sql) refuses. `session.log_asset_id` is the one `SET NULL`, the other way round | Migration `0006` |
 | S8 | The same diagram is regenerated | Update in place. The asset id is derived from the path, both files are committed per D8 in the tool's docs, and git holds every version with a diff and an author. What is new each time is one `asset_job` row per file. The history of the bytes stays in git, the history of who made them in the catalog | `assert-output` upsert |
 | S9 | An asset row exists from a scan and a job later claims it | One `asset_job` insert, and nothing else. The id the studio derives from the path is the id the indexer derives from the same path. Assets with no producer need no backfill: the absence of an `asset_job` row is that statement | `assert-output` |
-| A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
-| A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again | Runner timers |
+| A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
+| A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again. The job ceiling and a person's Cancel share one mechanism — kill the process group, wait, sweep — and must not share a verdict: only a job somebody stopped is `cancelled`, and "stopped on request" written over a timeout hides the one number that needs raising | Runner timers |
 | A3 | The agent exits zero but wrote nothing, or wrote something that fails `verify` | The gate, in the five steps listed above. Any failure is fed back as a resume prompt carrying the specific finding, three attempts total, then `failed` with the findings and the partials moved to `jobs/<id>/rejected/` | The gate |
 | A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Write` and `Edit` on exactly the two candidate paths and the scratch directory, so the committed file is not reachable through either. `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` against the candidates directory at the end; anything else dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
 | A5 | A prompt injected through a brief field or a pasted mermaid source | The person submitting is not the threat; a note or a flowchart pasted from somewhere else is. Brief fields enter the prompt inside a delimited block labelled as data. Mermaid never enters the prompt: it is written to the scratch directory and lifted with `from-mermaid --source <path>`, which is a parser rather than a model. Slug fields are pattern-checked and free-text fields length-capped. The settings file is the backstop, so an injected command fails on a permission rule rather than on judgment | Prompt assembly; `from-mermaid`; the settings file |
 | A6 | Two jobs on one file, or a job on a file open in a mirror | The lease in S3 covers the first. For the second, the studio closes the mirror when a job starts on that file and reopens it when the job ends, so the common case never reaches a refusal. It matters less than it did under D2: the job writes a candidate, so only accept collides. Accept on a file with an open mirror closes the mirror first, because Cmd+S PUTs the document as the tab last loaded it and a human save landing after the rename would silently revert it | `POST /api/mirrors`; accept step 3 |
+| A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
+| A11 | A second runner has already claimed the job | `catalog job claim` is a conditional update on `state = 'queued'`, and it is the only lease that does not depend on this process being the only one. A refused claim ends the attempt before an agent is started, and does **not** call `job finish`: the row belongs to whoever holds it, and finishing it would transition *their* running job. A claim that failed because nothing answered is the degraded mode instead, and the job runs (D16) | Runner claim |
+| A12 | Postgres is unreachable at enqueue | The disk record stays and the job runs, because the write path is a disk record first (rule 7) and D16 says a missing database does not refuse a job. A catalog that *answers* and refuses — a topic outside the vocabulary, a lease another process holds — is the other fact and deletes the workspace, and forgets the record, so it stops holding that target's lease against every brief after it | `POST /api/jobs`; `runner.enqueue` |
 | A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `revise` against the stored session id. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
@@ -969,9 +1046,29 @@ inside Next.
 
 **Why:** the root `package.json` reserves `services/*` for long-lived
 processes, and a queue inside a Next dev server dies on every hot reload.
-Loopback-only binding is also a stronger boundary than the same-origin and
-rate-limit guards in `apps/web/src/lib/agent/guard.ts`, which is why those are
-not carried over.
+
+**Amended in phase 1.** This decision used to end "loopback-only binding is a
+stronger boundary than the same-origin and rate-limit guards in
+`apps/web/src/lib/agent/guard.ts`, which is why those are not carried over."
+Half of that is right and half of it is a mistake worth recording rather than
+quietly deleting. Loopback binding is a boundary against the **network**:
+nothing off this machine can open the socket. It is not a boundary against a
+**browser on this machine**. Any page the user visits can POST to
+`127.0.0.1:7250`, and while the same-origin policy stops it reading the reply,
+the side effect has already happened — a paid agent session, with filesystem
+access, started by a website. A JSON body sent as `text/plain` is one of the
+three content types that need no preflight, so nothing about it even looked
+unusual.
+
+So the rate limit stays out — loopback means there is no anonymous internet to
+meter, and A10's five cost guards are where a runaway is caught — and the
+same-origin half is carried over as `guard` in `services/studio/src/api.ts`:
+`Host` must name this socket (which is what DNS rebinding forges), a POST body
+must be `application/json` (which forces a preflight this server never answers),
+and `Origin` and `Sec-Fetch-Site`, when the browser sends them, must say
+same-origin. `curl`, the CLI and the `/studio/api/*` rewrite — a server-side
+fetch — send neither. It is not authentication and is not meant to be; it is the
+difference between a program the user ran and a page the user visited.
 
 ### D11. The UI lives in `apps/web`, gated off in production
 
@@ -1210,28 +1307,33 @@ typecheck && npm test && npm run build` is green.
 
 Goal: a brief in, a reviewed candidate out, driven by curl. No UI.
 
-- [ ] `services/studio/` as a workspace, with its own `tsconfig.json` and a
+- [x] `services/studio/` as a workspace, with its own `tsconfig.json` and a
       `typecheck` script, per the `AGENTS.md` gotcha about workspaces
-- [ ] `services/studio/src/paths.ts`, the only module that builds a path
-- [ ] The queue: enqueue, claim, the reconcile pass at start, concurrency 1
-- [ ] The per-job workspace: `jobs/<id>/` with `job.json`, `session.ndjson`,
+- [x] `services/studio/src/paths.ts`, the only module that builds a path
+- [x] The queue: enqueue, claim, the reconcile pass at start, concurrency 1
+- [x] The per-job workspace: `jobs/<id>/` with `job.json`, `session.ndjson`,
       the settings file and the scratch directory
-- [ ] The agent spawn: detached process group, `--settings`, `--allowedTools`,
+- [x] The agent spawn: detached process group, `--settings`, `--allowedTools`,
       the Bash allowlist, `--session-id` persisted first, `--output-format
       stream-json`, `--max-turns`, the three timers
-- [ ] The prompt: brief fields in a delimited data block, mermaid through
+- [x] The prompt: brief fields in a delimited data block, mermaid through
       `from-mermaid --source` and never in the prompt text
-- [ ] The gate, its five steps, the three-attempt retry with a finding attached
-- [ ] Accept and discard in the order above: export and verify the candidate,
-      then the two renames, then the `assert-output` calls
-- [ ] The HTTP API on `127.0.0.1:7250`: every route in the table above, the SSE
-      stream, and `/api/health`
-- [ ] `learn/assets/.candidates/` added to `.gitignore`
-- [ ] Tests: the state machine, the gate against a fixture candidate, the
-      settings file contents (the Bash allowlist is an allowlist and `cp`,
-      `tee` and a redirect are absent from it), the prompt assembly against an
-      injected brief, the accept ordering with a forced export failure, and a
-      cancel that leaves no Chromium behind
+- [x] The gate, its six steps, the three-attempt retry with a finding attached
+- [x] Accept and discard in the order above: export and verify the candidate,
+      the hash check again, then the two renames, then the `assert-output`
+      calls — with every review action serialised per job
+- [x] The HTTP API on `127.0.0.1:7250`: every route in the table above, the SSE
+      stream, `/api/health`, and the `reindex` the accept note names
+- [x] `learn/assets/.candidates/` added to `.gitignore`
+- [x] Tests: the state machine, the gate against a fixture candidate, the
+      settings file contents (the Bash allowlist is an allowlist, and `cp`,
+      `tee`, a redirect and every file-reading command are absent from it), the
+      prompt assembly against an injected brief, the accept ordering with a
+      forced export failure, a cancel that leaves no Chromium behind, and the
+      six windows a review found: an edit landing mid-accept, two review
+      actions at once, an accept whose catalog call failed, a refused claim, a
+      database that is down at enqueue, and a ceiling that must not read as a
+      cancellation
 
 Done when: with the studio running and no browser open,
 `curl -X POST 127.0.0.1:7250/api/jobs` with a brief produces a candidate under
@@ -1344,7 +1446,13 @@ deliberately.
   backstop catches it after the fact and refuses the job; nothing prevents it.
   Closing this means running the agent under a sandbox that denies writes
   outside the job's own directories, which is a real piece of work and belongs
-  in its own phase rather than bolted onto phase 1.
+  in its own phase rather than bolted onto phase 1. Phase 1 established what
+  that would be concretely: the CLI's own `sandbox.enabled` (Seatbelt on macOS,
+  bubblewrap on Linux), with `sandbox.filesystem.denyRead` and
+  `sandbox.credentials` set, since `~/.ssh` and `~/.aws/credentials` are
+  readable inside the sandbox by default unless they are named. Whether Chromium
+  launches under it is the question that has to be answered before it is
+  promised.
 - **The before thumbnail costs an extra Chromium launch per job.** The
   alternative is comparing the committed SVG against the candidate's PNG, which
   are different renderers and therefore not a fair comparison. The launch is
