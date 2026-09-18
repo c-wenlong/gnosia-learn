@@ -210,6 +210,76 @@ describe("step 3: the brief", () => {
     expect(gate.ok).toBe(true);
   });
 
+  it("does not pass a non-ASCII brief by deleting it down to nothing", async () => {
+    // An `a-z0-9` normaliser turns a Cyrillic or CJK label into the empty
+    // string, and an empty needle is inside every haystack — so every element
+    // reads as present and any binding satisfies any relation. A gate that
+    // passes whatever it cannot read is worse than no gate, because it is
+    // believed.
+    replies({
+      code: 0,
+      json: {
+        shapes: [
+          { id: "shape:a", type: "geo", text: "вектор" },
+          { id: "shape:x", type: "geo", text: "нечто совсем другое" },
+        ],
+        bindings: [{ arrow: "shape:arrow", from: "shape:a", to: "shape:x" }],
+        lints: [],
+        meta: { topic: TOPIC },
+      },
+    });
+    const gate = await runGate(
+      gateInput({
+        elements: [{ label: "вектор" }, { label: "ベクトル" }],
+        relations: [{ from: "вектор", to: "ベクトル" }],
+      }),
+    );
+    expect(gate.ok).toBe(false);
+    expect(gate.findings[0]).toContain("ベクトル");
+  });
+
+  it("matches a non-ASCII label that is actually there", async () => {
+    await writeFile(candidateSvg, "<svg/>", "utf8");
+    replies(
+      {
+        code: 0,
+        json: {
+          shapes: [
+            { id: "shape:a", type: "geo", text: "Вектор, слева" },
+            { id: "shape:b", type: "geo", text: "ベクトル について" },
+          ],
+          bindings: [{ arrow: "shape:arrow", from: "shape:a", to: "shape:b" }],
+          lints: [],
+          meta: { topic: TOPIC },
+        },
+      },
+      { code: 0, json: { svg: { path: candidateSvg, bytes: 1024 } } },
+      { code: 0, json: { checks: [] } },
+    );
+    const gate = await runGate(
+      gateInput({
+        elements: [{ label: "вектор" }, { label: "ベクトル" }],
+        relations: [{ from: "вектор", to: "ベクトル" }],
+      }),
+    );
+    expect(gate.ok).toBe(true);
+  });
+
+  it("does not let a label of pure symbols match every shape", async () => {
+    replies({
+      code: 0,
+      json: {
+        shapes: [{ id: "shape:a", type: "geo", text: "vector a" }],
+        bindings: [],
+        lints: [],
+        meta: { topic: TOPIC },
+      },
+    });
+    const gate = await runGate(gateInput({ elements: [{ label: "∑" }], relations: [] }));
+    expect(gate.ok).toBe(false);
+    expect(gate.findings[0]).toContain("∑");
+  });
+
   it("refuses an extend candidate that is still exactly the copy it was handed", async () => {
     // The case a failed agent reaches: extend copies the committed file to the
     // candidate path before anything starts, so the file exists, is newer than

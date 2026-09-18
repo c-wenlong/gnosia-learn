@@ -286,12 +286,29 @@ async function sha256(file: string): Promise<string | null> {
  * direction only — the label has to be *inside* the shape's text — because
  * adding to a label is how a good diagram explains itself and replacing one is
  * how it stops being the diagram that was asked for.
+ *
+ * `\p{L}` and `\p{N}`, not `a-z0-9`. An ASCII class deletes a Cyrillic, Greek
+ * or CJK label down to the empty string, and an empty needle is inside every
+ * haystack — so the check would have reported every element of a non-ASCII
+ * brief as present and let any binding satisfy any relation. A gate that passes
+ * whatever it cannot read is worse than no gate, because it is believed.
  */
 function normalise(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+/**
+ * The fallback for a label with no letters or digits in it at all: `+`, `→`,
+ * `∑`. Rare, legal, and the one case `normalise` cannot represent.
+ *
+ * Lowercased and trimmed, and nothing else. What it must never do is come back
+ * empty, because the caller treats an empty needle as matching everything.
+ */
+function raw(value: string): string {
+  return value.toLowerCase().trim();
 }
 
 const MAX_REPORTED = 6;
@@ -317,13 +334,27 @@ export function checkBrief(
   const bindings: InspectBinding[] = Array.isArray(report.bindings) ? report.bindings : [];
   const labelled = shapes
     .filter((shape) => typeof shape.text === "string" && shape.text.trim() !== "")
-    .map((shape) => ({ id: shape.id ?? "", text: normalise(shape.text ?? "") }));
+    .map((shape) => ({
+      id: shape.id ?? "",
+      text: normalise(shape.text ?? ""),
+      raw: raw(shape.text ?? ""),
+    }));
 
-  /** Every shape whose label carries this element's words. */
+  /**
+   * Every shape whose label carries this element's words.
+   *
+   * A label that normalises away — one made entirely of symbols — falls back to
+   * the raw text rather than to "everything", which is the answer that would
+   * report a missing element as present.
+   */
   const shapesFor = (label: string): string[] => {
     const wanted = normalise(label);
-    if (wanted === "") return labelled.map((shape) => shape.id);
-    return labelled.filter((shape) => shape.text.includes(wanted)).map((shape) => shape.id);
+    if (wanted !== "") {
+      return labelled.filter((shape) => shape.text.includes(wanted)).map((shape) => shape.id);
+    }
+    const literal = raw(label);
+    if (literal === "") return [];
+    return labelled.filter((shape) => shape.raw.includes(literal)).map((shape) => shape.id);
   };
 
   const found = new Map<string, string[]>();

@@ -861,6 +861,7 @@ raised it: S schema, A API and runner, U interface.
 | A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Write` and `Edit` on exactly the two candidate paths and the scratch directory, so the committed file is not reachable through either. `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` against the candidates directory at the end; anything else dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
 | A5 | A prompt injected through a brief field or a pasted mermaid source | The person submitting is not the threat; a note or a flowchart pasted from somewhere else is. Brief fields enter the prompt inside a delimited block labelled as data. Mermaid never enters the prompt: it is written to the scratch directory and lifted with `from-mermaid --source <path>`, which is a parser rather than a model. Slug fields are pattern-checked and free-text fields length-capped. The settings file is the backstop, so an injected command fails on a permission rule rather than on judgment | Prompt assembly; `from-mermaid`; the settings file |
 | A6 | Two jobs on one file, or a job on a file open in a mirror | The lease in S3 covers the first. For the second, the studio closes the mirror when a job starts on that file and reopens it when the job ends, so the common case never reaches a refusal. It matters less than it did under D2: the job writes a candidate, so only accept collides. Accept on a file with an open mirror closes the mirror first, because Cmd+S PUTs the document as the tab last loaded it and a human save landing after the rename would silently revert it | `POST /api/mirrors`; accept step 3 |
+| A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
 | A11 | A second runner has already claimed the job | `catalog job claim` is a conditional update on `state = 'queued'`, and it is the only lease that does not depend on this process being the only one. A refused claim ends the attempt before an agent is started, and does **not** call `job finish`: the row belongs to whoever holds it, and finishing it would transition *their* running job. A claim that failed because nothing answered is the degraded mode instead, and the job runs (D16) | Runner claim |
 | A12 | Postgres is unreachable at enqueue | The disk record stays and the job runs, because the write path is a disk record first (rule 7) and D16 says a missing database does not refuse a job. A catalog that *answers* and refuses — a topic outside the vocabulary, a lease another process holds — is the other fact and deletes the workspace, and forgets the record, so it stops holding that target's lease against every brief after it | `POST /api/jobs`; `runner.enqueue` |
 | A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `revise` against the stored session id. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
@@ -1045,9 +1046,29 @@ inside Next.
 
 **Why:** the root `package.json` reserves `services/*` for long-lived
 processes, and a queue inside a Next dev server dies on every hot reload.
-Loopback-only binding is also a stronger boundary than the same-origin and
-rate-limit guards in `apps/web/src/lib/agent/guard.ts`, which is why those are
-not carried over.
+
+**Amended in phase 1.** This decision used to end "loopback-only binding is a
+stronger boundary than the same-origin and rate-limit guards in
+`apps/web/src/lib/agent/guard.ts`, which is why those are not carried over."
+Half of that is right and half of it is a mistake worth recording rather than
+quietly deleting. Loopback binding is a boundary against the **network**:
+nothing off this machine can open the socket. It is not a boundary against a
+**browser on this machine**. Any page the user visits can POST to
+`127.0.0.1:7250`, and while the same-origin policy stops it reading the reply,
+the side effect has already happened — a paid agent session, with filesystem
+access, started by a website. A JSON body sent as `text/plain` is one of the
+three content types that need no preflight, so nothing about it even looked
+unusual.
+
+So the rate limit stays out — loopback means there is no anonymous internet to
+meter, and A10's five cost guards are where a runaway is caught — and the
+same-origin half is carried over as `guard` in `services/studio/src/api.ts`:
+`Host` must name this socket (which is what DNS rebinding forges), a POST body
+must be `application/json` (which forces a preflight this server never answers),
+and `Origin` and `Sec-Fetch-Site`, when the browser sends them, must say
+same-origin. `curl`, the CLI and the `/studio/api/*` rewrite — a server-side
+fetch — send neither. It is not authentication and is not meant to be; it is the
+difference between a program the user ran and a page the user visited.
 
 ### D11. The UI lives in `apps/web`, gated off in production
 

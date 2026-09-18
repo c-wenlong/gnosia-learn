@@ -250,7 +250,7 @@ export class Runner {
       "utf8",
     );
     const enqueued = await jobEnqueue(briefFile);
-    if (!enqueued.ok && enqueued.reachable) {
+    if (!enqueued.ok && !enqueued.offline) {
       // The catalog answered and said no, and its reasons are the durable ones:
       // a topic that is not in the vocabulary, a lease another process holds.
       // The disk record is removed, and forgotten, rather than left as a job
@@ -362,7 +362,7 @@ export class Runner {
     const claimed = await jobClaim(id, RUNNER_NAME, sessionId);
     if (!claimed.ok) {
       await this.store.noteCatalogError(id, claimed.error ?? "");
-      if (claimed.reachable) {
+      if (!claimed.offline) {
         // The catalog answered and would not hand this job over, which means
         // the row is no longer `queued`: another runner claimed it, or a person
         // cancelled it. Continuing anyway would put a second paid agent on the
@@ -375,7 +375,7 @@ export class Runner {
         await this.abandon(entry, claimed.error ?? "the catalog would not hand this job over");
         return;
       }
-      // Unreachable is the degraded mode, not a refusal. D16, and the same
+      // Offline is the degraded mode, not a refusal. D16, and the same
       // reading enqueue takes.
     }
 

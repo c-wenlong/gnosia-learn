@@ -16,9 +16,13 @@ import type { JobRecord, JobStore } from "./store";
  *
  * Route conventions follow `apps/web/src/app/api/`: an `{ error, detail }`
  * envelope on failure and the validate-then-act shape of `learner-api.ts`. The
- * same-origin and rate-limit guards in `apps/web/src/lib/agent/guard.ts` are
- * deliberately **not** carried over, and that is not an omission: this server
- * binds loopback only, which is a stronger boundary than either of them.
+ * rate-limit guard in `apps/web/src/lib/agent/guard.ts` is deliberately not
+ * carried over: loopback binding means there is no anonymous internet to meter,
+ * and A10's five cost guards are where a runaway is caught.
+ *
+ * The same-origin half **is** carried over, and `guard` below is why: loopback
+ * binding is a boundary against the network and not against a browser running
+ * on this machine, which is a distinction D10 did not draw and phase 1 had to.
  *
  * Every response carries a `note` — the plain-English line manimkc's
  * `_enrich_status` adds — for the same reason it does there: a caller should
@@ -30,6 +34,102 @@ import type { JobRecord, JobStore } from "./store";
  */
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
+
+/** The loopback names that are this machine, and nothing that merely resolves to it. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+/**
+ * Is `value` an authority naming this very socket?
+ *
+ * The port comes from the socket rather than from `PORT`, so a server listening
+ * on an ephemeral port — which is how the tests run it — is judged against the
+ * port it actually got.
+ */
+function isOwnAuthority(value: string, localPort: number | undefined): boolean {
+  const authority = value.includes("://") ? value.slice(value.indexOf("://") + 3) : value;
+  const cut = authority.lastIndexOf(":");
+  const host = (cut === -1 ? authority : authority.slice(0, cut)).toLowerCase();
+  const port = cut === -1 ? "" : authority.slice(cut + 1);
+  if (!LOOPBACK.has(host)) return false;
+  return port === String(localPort ?? PORT);
+}
+
+/**
+ * The one guard loopback binding does **not** replace: a web page in the user's
+ * own browser.
+ *
+ * D10 says binding to loopback is a stronger boundary than the app's
+ * same-origin and rate-limit guards, and against the network it is — nothing
+ * off this machine can open the socket. It is not a boundary against a browser
+ * *on* this machine, and that is the fourth thing phase 1 got wrong by
+ * reasoning about the CLI instead of checking it. A page the user visits can
+ * POST to `127.0.0.1:7250` and, while it cannot read the reply, the side effect
+ * has already happened: a paid agent session, started by a site, with
+ * filesystem access. `readJson` never looked at a header, so a `text/plain`
+ * body — one of the three content types that need no preflight — went straight
+ * through to `enqueue`.
+ *
+ * Three checks, each closing a different half of the same class:
+ *
+ * 1. **`Host` must be this server.** DNS rebinding is how a page reaches a
+ *    loopback service while looking same-origin to the browser: a name the
+ *    attacker controls, re-resolved to `127.0.0.1`. The browser sends that name
+ *    in `Host`, and no name but ours is us.
+ * 2. **A body-carrying method must be `application/json`.** That is not a
+ *    safelisted content type, so a cross-origin `fetch` has to preflight, and
+ *    this server answers no CORS headers at all — so the browser never sends
+ *    the real request. An HTML form cannot send it in the first place.
+ * 3. **`Origin`, when present, must be this server.** `curl`, the `learn` CLI
+ *    and the Next rewrite (which is a server-side fetch) send none; a browser
+ *    always does. `Sec-Fetch-Site` is checked the same way where the browser
+ *    sends it.
+ *
+ * None of this is authentication and it is not meant to be. It is the
+ * difference between "a program the user ran" and "a page the user visited",
+ * which is the distinction that was missing.
+ */
+function guard(request: IncomingMessage): string | null {
+  const port = request.socket.localPort;
+  const host = request.headers.host ?? "";
+  if (!isOwnAuthority(host, port)) {
+    return (
+      `this server answers to 127.0.0.1:${port ?? PORT} and nothing else, and this request arrived ` +
+      `addressed to "${host}". A name that resolves here is not this server: that is what DNS ` +
+      `rebinding looks like from the inside.`
+    );
+  }
+
+  const origin = request.headers.origin;
+  if (
+    typeof origin === "string" &&
+    origin !== "" &&
+    origin !== "null" &&
+    !isOwnAuthority(origin, port)
+  ) {
+    return (
+      `this request carries Origin "${origin}", so it came from a page rather than from a ` +
+      `program. The studio starts paid agent sessions with filesystem access; a website does not ` +
+      `get to do that, whatever the user happens to have open in another tab.`
+    );
+  }
+
+  const site = request.headers["sec-fetch-site"];
+  if (typeof site === "string" && site !== "same-origin" && site !== "none") {
+    return `this request is ${site} according to the browser that sent it, and only same-origin is taken`;
+  }
+
+  if (request.method === "POST") {
+    const type = (request.headers["content-type"] ?? "").toString().split(";")[0]?.trim().toLowerCase();
+    if (type !== "application/json") {
+      return (
+        `POST bodies here must be sent as application/json, and this one is "${type || "nothing"}". ` +
+        `The three content types a browser can send without asking permission first are exactly ` +
+        `the ones this refuses, which is the point: curl -H 'content-type: application/json' works.`
+      );
+    }
+  }
+  return null;
+}
 
 function send(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body, null, 1);
@@ -106,6 +206,9 @@ async function handle(
   store: JobStore,
   runner: Runner,
 ): Promise<void> {
+  const refused = guard(request);
+  if (refused !== null) return fail(response, 403, refused);
+
   const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
   const segments = url.pathname.split("/").filter((segment) => segment !== "");
   const method = request.method ?? "GET";

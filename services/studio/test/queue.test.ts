@@ -59,7 +59,7 @@ vi.mock("../src/agent", () => agentMock);
 const { Runner, JobRefused } = await import("../src/runner");
 const { JobStore } = await import("../src/store");
 
-const ok = { ok: true, json: {}, error: null, reachable: true };
+const ok = { ok: true, json: {}, error: null, offline: false };
 
 const outcome = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   exitCode: 0,
@@ -168,7 +168,7 @@ describe("a catalog that cannot be reached", () => {
       ok: false,
       json: null,
       error: "catalog job enqueue exited 1: connect ECONNREFUSED 127.0.0.1:5432",
-      reachable: false,
+      offline: true,
     });
 
     const { record, created } = await runner.enqueue(await brief());
@@ -191,7 +191,7 @@ describe("a catalog that cannot be reached", () => {
       ok: false,
       json: null,
       error: `no topic "x" in the catalog. Add it to content/topics.yaml`,
-      reachable: true,
+      offline: false,
     });
 
     await expect(runner.enqueue(await brief())).rejects.toBeInstanceOf(JobRefused);
@@ -202,13 +202,35 @@ describe("a catalog that cannot be reached", () => {
   });
 });
 
+describe("a database that is alive and refused this process", () => {
+  /**
+   * The dangerous middle case. Bad credentials, `too many clients`, a server
+   * still starting up: the error reads like a connection problem, but the
+   * database is up and a correctly configured runner may be working against it
+   * right now. Degrading to lease-free there puts two agents on one file.
+   */
+  for (const error of [
+    "catalog job enqueue exited 1: password authentication failed for user \"kaichen\"",
+    "catalog job enqueue exited 1: sorry, too many clients already",
+    "catalog job enqueue exited 1: the database system is starting up",
+    "catalog job enqueue exited 1: Connection terminated unexpectedly",
+  ]) {
+    it(`refuses rather than running lease-free: ${error.split(": ")[1]}`, async () => {
+      catalogMock.jobEnqueue.mockResolvedValue({ ok: false, json: null, error, offline: false });
+      await expect(runner.enqueue(await brief())).rejects.toBeInstanceOf(JobRefused);
+      await settled();
+      expect(agentMock.startAgent).not.toHaveBeenCalled();
+    });
+  }
+});
+
 describe("a claim the catalog refuses", () => {
   it("ends the job instead of starting a second paid agent on the same file", async () => {
     catalogMock.jobClaim.mockResolvedValue({
       ok: false,
       json: null,
       error: `job x is running, and running → running is not a transition.`,
-      reachable: true,
+      offline: false,
     });
 
     const { record } = await runner.enqueue(await brief());
@@ -227,7 +249,7 @@ describe("a claim the catalog refuses", () => {
       ok: false,
       json: null,
       error: "could not run the catalog CLI: spawn npm ENOENT",
-      reachable: false,
+      offline: true,
     });
 
     await runner.enqueue(await brief());

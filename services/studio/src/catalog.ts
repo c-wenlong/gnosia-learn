@@ -28,41 +28,47 @@ export interface CatalogResult {
   /** A sentence a person can act on, when `ok` is false. */
   error: string | null;
   /**
-   * False when the catalog never got to answer: no `DATABASE_URL`, nothing
-   * listening, a socket that died, or a CLI that would not start.
+   * True only when there is demonstrably **nothing there to talk to**: no
+   * `DATABASE_URL`, nothing listening on the address, a name that does not
+   * resolve, or a CLI that would not start.
    *
-   * This is the distinction D16 turns on, and two callers need it. "Postgres is
-   * down" is a degraded mode the studio keeps working through; "the catalog
-   * said no" is a durable refusal — a lease another runner holds, a topic that
-   * is not in the vocabulary, a row that is no longer `queued` — and treating
-   * one as the other either drops a job that should have run or runs a job a
-   * second process already owns. `true` on a successful call.
+   * This is the distinction D16 turns on, and two callers need it, because
+   * `false` means "refuse" and `true` means "run this job without the
+   * database-backed lease". That second one is only safe when no other runner
+   * can be holding that lease, which is why the test is this narrow rather than
+   * "the error looks like a connection problem".
+   *
+   * A live database that refused *this* process is emphatically not offline:
+   * bad credentials, `too many clients`, a server still starting up, a dropped
+   * socket. In every one of those the database is up and a correctly configured
+   * runner may be working against it right now, so running lease-free would put
+   * two agents on one candidate path. They are refusals, and the studio says so.
+   *
+   * `false` on a successful call too, which never reads it.
    */
-  reachable: boolean;
+  offline: boolean;
 }
 
 /**
- * Whether a failure was the database being out of reach rather than the catalog
- * refusing something.
+ * Is there nothing there to talk to?
  *
- * Matched on the message because the CLI has one failure exit code for both: it
- * prints `{ ok: false, error }` and exits 1 whether the row was in the wrong
- * state or the socket was never opened. Every pattern here is a `pg` connection
- * error or a `node-postgres` pool message, none of which a domain refusal in
- * `services/catalog/src/commands/` can produce — those name a job, a state or a
- * path. A pattern that stopped matching would make the studio treat an outage
- * as a refusal, which is the safe direction: it refuses the job instead of
- * running one twice.
+ * Matched on the message because the CLI has one failure exit code for
+ * everything: it prints `{ ok: false, error }` and exits 1 whether the row was
+ * in the wrong state or the socket was never opened. The list is deliberately
+ * short, and the bar for adding to it is not "this is a connection error" but
+ * **"this proves nothing else is using the database either"** — because that is
+ * what the caller does with the answer. Anything not on it is a refusal, which
+ * is the direction that costs a job rather than corrupting one.
  */
-const UNREACHABLE =
-  /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|EHOSTUNREACH|ENETUNREACH|connection terminated|timeout exceeded when trying to connect|server closed the connection|could not run the catalog CLI|DATABASE_URL|password authentication failed|too many clients|the database system is (starting up|shutting down)/i;
+const OFFLINE =
+  /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|could not run the catalog CLI|DATABASE_URL/i;
 
 async function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResult> {
   try {
     const result = await run(NPM, ["run", "--silent", "catalog", "--", ...args, "--json"], {
       timeoutMs,
     });
-    if (result.code === 0) return { ok: true, json: result.json, error: null, reachable: true };
+    if (result.code === 0) return { ok: true, json: result.json, error: null, offline: false };
     const detail = (result.stderr.trim() || result.stdout.trim() || "").split("\n").slice(-4).join(" ");
     const error = result.timedOut
       ? `catalog ${args[0] ?? ""} timed out after ${timeoutMs}ms`
@@ -71,15 +77,16 @@ async function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResu
       ok: false,
       json: result.json,
       error,
-      // A timeout is the database not answering, whatever the message says.
-      reachable: !result.timedOut && !UNREACHABLE.test(detail),
+      // A timeout is not offline: the server may be alive and slow, or busy
+      // serving somebody else, and "slow" is not a licence to skip the lease.
+      offline: !result.timedOut && OFFLINE.test(detail),
     };
   } catch (error) {
     return {
       ok: false,
       json: null,
       error: `could not run the catalog CLI: ${(error as Error).message}`,
-      reachable: false,
+      offline: true,
     };
   }
 }

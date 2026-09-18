@@ -164,6 +164,77 @@ describe("revising a diagram that was accepted", () => {
   });
 });
 
+describe("a page in the user's own browser", () => {
+  /**
+   * Loopback binding stops the network and not a browser on this machine. A
+   * site the user visits can POST here; it cannot read the reply, but a paid
+   * agent session with filesystem access has already started by then.
+   */
+  it("cannot enqueue with a content type that needs no preflight", async () => {
+    const response = await fetch(`${base}/api/jobs`, {
+      method: "POST",
+      // One of the three types a browser sends without asking permission first,
+      // which is what made this a fire-and-forget POST from any page.
+      headers: { "content-type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ intent: "x", topic: "vector-and-linear-algebra-basics" }),
+    });
+    expect(response.status).toBe(403);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("cannot enqueue while carrying a site's Origin", async () => {
+    const response = await fetch(`${base}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://evil.example" },
+      body: JSON.stringify({ intent: "x" }),
+    });
+    expect(response.status).toBe(403);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("cannot reach it through a name that merely resolves to 127.0.0.1", async () => {
+    // DNS rebinding: the attacker's own name, re-pointed at loopback, which is
+    // how a page reaches a local service while looking same-origin to itself.
+    // Raw `http`, because `fetch` will not let a caller set Host — a browser
+    // sets it from the URL, which is exactly what makes the attack work.
+    const { request } = await import("node:http");
+    const { port } = server.address() as AddressInfo;
+    const status = await new Promise<number>((resolve, reject) => {
+      const call = request(
+        { host: "127.0.0.1", port, path: "/api/health", headers: { host: `rebind.example:${port}` } },
+        (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        },
+      );
+      call.on("error", reject);
+      call.end();
+    });
+    expect(status).toBe(403);
+  });
+
+  it("refuses a cross-site request even when every other header looks right", async () => {
+    const response = await fetch(`${base}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "cross-site" },
+      body: JSON.stringify({ intent: "x" }),
+    });
+    expect(response.status).toBe(403);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("lets a program through, which is the caller this API is for", async () => {
+    // curl and the Next rewrite (a server-side fetch) send no Origin at all.
+    await store.create(record({ state: "discarded" }));
+    const response = await fetch(`${base}/api/jobs/job-api/revise`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ changes: "wider" }),
+    });
+    expect(response.status).toBe(201);
+  });
+});
+
 describe("the route table", () => {
   it("names reindex, so a caller looking at a 404 can find the recovery", async () => {
     const response = await fetch(`${base}/api/nothing`);
