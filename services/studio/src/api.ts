@@ -320,28 +320,33 @@ async function handle(
     }
 
     case "POST accept": {
-      /* A6: an open mirror on the target is closed before anything is renamed.
+      /* A6: an open mirror on the target has to be closed before the rename.
        *
        * `serve` holds the document as the tab last loaded it, and Cmd+S in that
        * tab PUTs the whole thing back. A human save landing after the rename
        * would silently revert the accepted diagram to the version that was on
        * screen before it — no error anywhere, and the only evidence a `git
-       * diff` nobody is looking at. So the writer goes first.
+       * diff` nobody is looking at.
        *
-       * Closed here rather than in the browser, even though the UI knows which
-       * mirrors are open: a close the page is responsible for is a close a
-       * curl, a reload mid-request or a second tab can skip, and this is the
-       * one route in the studio that replaces a committed file. The UI is told
-       * it happened so it can put the canvas back. */
-      const mirrorClosed = await mirrors.stop(record.targetPath);
-
-      // `accept` writes the record itself, between the renames and the catalog
-      // call, so the route neither repeats nor reorders that.
-      const result = await accept(store, record);
+       * Handed to `accept` as a capability rather than done here, because
+       * *when* is the whole question: this route cannot tell a refusal from an
+       * acceptance until `accept` has checked the state, the candidate, the
+       * hash, the export and the verify, and closing first meant a stale tab
+       * pressing Accept on a job somebody already discarded disconnected the
+       * canvas its owner was drawing on and then got a 409. Caught in review on
+       * this PR. It is still the runner that does it rather than the browser: a
+       * close a page is responsible for is one a curl or a reload can skip, and
+       * this is the one route that replaces a committed file.
+       *
+       * `accept` also writes the record itself, between the renames and the
+       * catalog call, so the route neither repeats nor reorders that. */
+      const result = await accept(store, record, {
+        closeMirror: () => mirrors.stop(record.targetPath),
+      });
       if (!result.ok) {
         return fail(response, 409, result.note, {
           reason: result.error ?? null,
-          mirrorClosed,
+          mirrorClosed: result.mirrorClosed ?? false,
           // The refusal a person most needs to act on. S4: the committed file
           // moved under the job, and re-running the comparison is the offer —
           // never a second accept, which would overwrite the edit.
@@ -353,7 +358,7 @@ async function handle(
         state: store.get(id)?.state ?? "accepted",
         written: result.written,
         indexed: result.indexed,
-        mirrorClosed,
+        mirrorClosed: result.mirrorClosed ?? false,
         note: result.note,
       });
     }
@@ -389,6 +394,26 @@ async function handle(
     }
 
     case "POST compare": {
+      /* Only a job that is still waiting to be reviewed.
+       *
+       * This launches two Chromium instances, overwrites the before picture and
+       * persists a new comparison, so on a `running` job it would race the
+       * runner's own writes to the same field, and on a terminal one it would
+       * replace the record of what was reviewed with a description of a file
+       * nobody compared. Neither is a recovery; both are damage. The refusal it
+       * exists behind only happens in `awaiting_review`. Caught in review on
+       * this PR. */
+      if (record.state !== "awaiting_review") {
+        return fail(
+          response,
+          409,
+          `job ${record.id} is ${record.state}, and comparing again is for a job still waiting to ` +
+            `be reviewed. The comparison on a finished job is the record of what was reviewed, and ` +
+            `rewriting it would describe a file nobody looked at.`,
+          { state: record.state },
+        );
+      }
+
       // The offer S4 names, and deliberately not a second accept.
       //
       // When the committed file has moved under a job, accept refuses and keeps

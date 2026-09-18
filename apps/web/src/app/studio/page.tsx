@@ -21,7 +21,7 @@ import {
   TopicChips,
 } from "@/components/studio/StudioControls";
 import { topicDomains, topicOptions, topicTitles } from "@/data/topics";
-import { requireStudio, studioApi } from "@/lib/studio";
+import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import {
   filterDiagrams,
   groupDiagrams,
@@ -132,6 +132,10 @@ export default async function StudioPage({
   const selected = listing.diagrams.find((entry) => entry.name === view.selected) ?? null;
   const allJobs = jobList.ok ? jobList.data.jobs : [];
   const jobs = allJobs.filter((job) => selected !== null && job.target === selected.tldr.path);
+  // Only when a picture is open, and only then: `GET /api/jobs/{id}` is the one
+  // route carrying the brief and the comparison, and the full-width view needs
+  // both to say why the other side is not there rather than linking to a 404.
+  const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
 
   return (
     <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
@@ -181,6 +185,8 @@ export default async function StudioPage({
               which={view.shot}
               path={path}
               title={allJobs.find((job) => job.jobId === view.job)?.target ?? view.job}
+              comparison={shown?.comparison ?? null}
+              mode={shown?.brief?.mode}
             />
           ) : listing.diagrams.length === 0 && listing.errors.length === 0 ? (
             <EmptyDirectory dir={listing.dir} />

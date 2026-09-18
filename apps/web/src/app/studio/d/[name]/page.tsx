@@ -20,7 +20,7 @@ import {
   VerbNotice,
 } from "@/components/studio/StudioChrome";
 import { topicOptions } from "@/data/topics";
-import { requireStudio, studioApi } from "@/lib/studio";
+import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import {
   canvasHref,
   displayTitle,
@@ -176,6 +176,10 @@ export default async function CanvasPage({
   });
 
   const jobList = await studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200");
+  // Only on the render that shows a picture: `GET /api/jobs` carries neither
+  // the brief nor the comparison, and the full-width view needs both to say why
+  // the other side is not there rather than linking to a 404.
+  const shown = panel.shot !== null && panel.job !== null ? await openShot(panel.job) : null;
   const jobs = (jobList.ok ? jobList.data.jobs : []).filter(
     (job) => job.target === diagram.tldr.path,
   );
@@ -203,6 +207,8 @@ export default async function CanvasPage({
               which={panel.shot}
               path={path}
               title={diagram.tldr.path}
+              comparison={shown?.comparison ?? null}
+              mode={shown?.brief?.mode}
             />
           ) : mirror.ok && mirror.data.healthy !== false ? (
             <>

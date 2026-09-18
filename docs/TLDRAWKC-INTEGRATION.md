@@ -641,14 +641,26 @@ exactly this case.
 Discard deletes both candidates and writes `discarded`. Neither is undoable
 inside the studio, and the panel says so in one line: git is the undo.
 
-**Step 0, added in phase 4: the mirror on the target is closed first.** A6 names
-this and phase 4 had to decide where. The route does it —
-`mirrors.stop(record.targetPath)` before anything else, reported back as
-`mirrorClosed` so the UI can reopen the canvas on the accepted file. Not the
-browser, even though the page knows which mirrors are open: A6 is a rule about
-what must not happen between the close and the rename, and a close a page is
-responsible for is one a `curl`, a reload mid-request or a second tab can skip.
-This is the one route in the studio that replaces a committed file.
+**The mirror on the target is closed inside step 3, just before the hash.** A6
+names the close and phase 4 had to decide where it goes. Not the browser, even
+though the page knows which mirrors are open: A6 is a rule about what must not
+happen between the close and the rename, and a close a page is responsible for
+is one a `curl`, a reload mid-request or a second tab can skip. This is the one
+route in the studio that replaces a committed file.
+
+And **not** at the top of the route either, which is where phase 4 first put it.
+Everything above step 3 can still refuse — the state, the candidate, the early
+hash, the export, the verify — and a refusal must not disconnect an editor: a
+stale tab pressing Accept on a job somebody already discarded closed the canvas
+its owner was drawing on and then answered 409 about a job that never moved a
+file. Caught in review on the phase 4 PR. `accept` takes the close as a
+capability (`AcceptHooks.closeMirror`) so the ordering stays in the file that
+owns it, and `mirrorClosed` comes back on the result so the UI can put the
+canvas back.
+
+The close comes *before* the last hash rather than after, which is what makes
+both of them mean something: the close stops any further save, and the check
+then catches one that had already landed.
 
 **And the refusal has somewhere to go.** S4 says a refused accept "offers to
 re-open the comparison", which needs the before side read again;
@@ -658,6 +670,13 @@ turn "show me what changed" into "agree to overwrite it", one click away from
 the loss the refusal exists to prevent, so accept goes on refusing and the way
 forward is Discard plus a new job over the current file. The panel says exactly
 that under the button.
+
+`compare` is refused on anything but `awaiting_review`. It launches two Chromium
+instances, overwrites the before picture and persists a new comparison, so on a
+`running` job it would race the runner's own writes to that field and on a
+terminal one it would replace the record of what was reviewed with a description
+of a file nobody looked at. Neither is a recovery. Caught in review on the phase
+4 PR.
 
 ### The canvas
 
@@ -1711,7 +1730,11 @@ with Postgres stopped still lands both files and reports `indexed: false`.
   diagram is new, so there is no before" and "the committed file was not there
   when this job started" are different sentences, and the deltas read `—`
   rather than `+48`, because a first drawing has no previous version to be
-  bigger than.
+  bigger than. The full-width view had to learn the same thing: it linked to the
+  other side whether or not that side existed, so a `new` job's "Show before"
+  put a broken image across the main area while the thumbnail beside it
+  correctly said there was none. It takes the comparison now, and the missing
+  side is a muted "no before" rather than a link. Caught in review on the PR.
 - **The refusal needed a third route.** S4 says accept "offers to re-open the
   comparison", which needs the before side read again — so
   `POST /api/jobs/{id}/compare` re-reads it against the file as it is now. It

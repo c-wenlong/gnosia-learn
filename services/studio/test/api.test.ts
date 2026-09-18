@@ -373,14 +373,55 @@ describe("a job's two screenshots", () => {
 
 describe("accepting", () => {
   /**
-   * A6: the writer goes before the rename.
+   * A6: the writer goes before the rename, and **only** before a rename.
    *
    * `serve` holds the document as its tab last loaded it and Cmd+S PUTs the
    * whole thing back, so a human save landing after the rename would silently
-   * revert the accepted diagram. Closed by the route rather than by the page,
+   * revert the accepted diagram. Closed by the runner rather than by the page,
    * because a close the browser is responsible for is one a curl can skip.
    */
-  it("closes an open mirror on the target before anything moves", async () => {
+  it("closes an open mirror on the target when the accept is going to happen", async () => {
+    await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
+    await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
+    await store.create(record({ state: "awaiting_review", targetHashBefore: null }));
+    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+
+    const response = await fetch(`${base}/api/jobs/job-api/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    const body = (await response.json()) as { mirrorClosed?: boolean };
+
+    expect(response.status).toBe(200);
+    expect(stop).toHaveBeenCalledWith(targetPath(SLUG));
+    expect(body.mirrorClosed).toBe(true);
+  });
+
+  /**
+   * And a refusal leaves it open.
+   *
+   * Closing at the top of the route meant a stale tab pressing Accept on a job
+   * somebody had already discarded disconnected the canvas its owner was
+   * drawing on, and then answered 409 about a job that never moved a file.
+   * Caught in review on the phase 4 PR.
+   */
+  it.each(["discarded", "accepted", "failed"] as const)(
+    "leaves the mirror alone when the job is %s and nothing can move",
+    async (state) => {
+      await store.create(record({ state }));
+      const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+
+      const response = await fetch(`${base}/api/jobs/job-api/accept`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+
+      expect(response.status).toBe(409);
+      expect(stop).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves the mirror alone when the candidate is gone", async () => {
     await store.create(record({ state: "awaiting_review" }));
     const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
 
@@ -389,12 +430,8 @@ describe("accepting", () => {
       headers: { "content-type": "application/json" },
     });
 
-    // The accept itself refuses here: there is no candidate on disk. What is
-    // under test is the order, and the mirror was closed before that was even
-    // asked — which is the point, since the alternative leaves a writer holding
-    // the file a rename is about to replace.
-    expect(stop).toHaveBeenCalledWith(targetPath(SLUG));
     expect(response.status).toBe(409);
+    expect(stop).not.toHaveBeenCalled();
   });
 
   it("flags a hash refusal as one the UI should offer to re-compare, not retry", async () => {
@@ -415,6 +452,29 @@ describe("accepting", () => {
     expect(body.error).toContain("has changed since this job started");
     expect(body.detail.recompare).toBe(true);
   });
+});
+
+describe("comparing again", () => {
+  /**
+   * Two Chromium launches, a screenshot overwritten and a comparison persisted.
+   * On a `running` job that races the runner's own writes to the same field; on
+   * a terminal one it replaces the record of what was reviewed with a
+   * description of a file nobody looked at. Neither is a recovery. Caught in
+   * review on the phase 4 PR.
+   */
+  it.each(["queued", "running", "accepted", "discarded", "failed"] as const)(
+    "refuses a %s job rather than rewriting its comparison",
+    async (state) => {
+      await store.create(record({ state, comparison: null }));
+      const response = await fetch(`${base}/api/jobs/job-api/compare`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      expect(response.status).toBe(409);
+      // And nothing was written over the record on the way to refusing.
+      expect(store.get("job-api")?.comparison ?? null).toBeNull();
+    },
+  );
 });
 
 describe("the route table", () => {
