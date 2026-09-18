@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  catalogErrorLine,
   countRows,
   emptyLintLine,
   formatBytes,
@@ -145,6 +146,34 @@ describe("a missing picture", () => {
     expect(missingShotReason("after", comparison({ after: side({ shot: false }) }), "new")).toContain(
       "not written",
     );
+  });
+});
+
+describe("the catalog error under an indexed: false banner", () => {
+  /**
+   * What a Postgres that is not listening actually produces: a command echo
+   * followed by four lines of pretty-printed JSON whose `error` is empty. Six
+   * lines of that in a 320px banner drowns the sentence above it.
+   */
+  it("collapses a multi-line CLI failure to one capped line", () => {
+    const raw =
+      'catalog job accept --job de8dcacb --path learn/assets/x.tldr exited 1:\n' +
+      '  "command": "job",\n  "database": "postgres://localhost:5432/self_learn",\n  "error": ""\n}';
+    const line = catalogErrorLine([raw]);
+    expect(line).not.toBeNull();
+    expect(line).not.toContain("\n");
+    expect((line ?? "").length).toBeLessThanOrEqual(140);
+    expect(line).toContain("catalog job accept");
+  });
+
+  it("reads the newest, because that is the one the banner is about", () => {
+    expect(catalogErrorLine(["old", "newest"])).toBe("newest");
+  });
+
+  it("is nothing when there is nothing to say", () => {
+    expect(catalogErrorLine([])).toBeNull();
+    expect(catalogErrorLine(undefined)).toBeNull();
+    expect(catalogErrorLine(["   "])).toBeNull();
   });
 });
 

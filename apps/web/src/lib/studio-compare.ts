@@ -172,6 +172,27 @@ export function gitAddLine(written: readonly string[]): string | null {
   return written.length === 0 ? null : `git add ${written.join(" ")}`;
 }
 
+/**
+ * The last catalog failure, short enough to read inside a 320px banner.
+ *
+ * The runner records the whole of what the CLI printed, which is right — it is
+ * the record, and a truncated one helps nobody at three in the morning. What a
+ * banner needs is the first line of it. The real thing a Postgres that is down
+ * produces here is a command echo followed by four lines of pretty-printed JSON
+ * whose `error` is the empty string, and six lines of that drowns the sentence
+ * above it that says what actually happened.
+ *
+ * Collapsed to one line and capped. The full text is on the record and in the
+ * element's `title`, so nothing is lost, and `catalogErrors` is a list the panel
+ * reads the newest of rather than printing all twenty.
+ */
+export function catalogErrorLine(errors: readonly string[] | undefined, cap = 140): string | null {
+  const last = (errors ?? []).at(-1);
+  if (last === undefined || last.trim() === "") return null;
+  const flat = last.replace(/\s+/g, " ").trim();
+  return flat.length <= cap ? flat : `${flat.slice(0, cap - 1)}…`;
+}
+
 /** `/studio/api/jobs/<id>/shot?which=…`, through the app's own proxy. */
 export function shotSrc(jobId: string, which: "before" | "after"): string {
   return `/studio/api/jobs/${encodeURIComponent(jobId)}/shot?which=${which}`;

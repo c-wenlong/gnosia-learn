@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
+  catalogErrorLine,
   countRows,
   emptyLintLine,
   gitAddLine,
@@ -185,8 +186,7 @@ function Accepted({
   onReindex: () => void;
 }) {
   const line = gitAddLine(job.written);
-  const errors = job.catalogErrors ?? [];
-  const lastCatalogError = errors[errors.length - 1];
+  const lastCatalogError = catalogErrorLine(job.catalogErrors);
   return (
     <div className="mb-3 space-y-2">
       <div className="rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs">
@@ -213,8 +213,13 @@ function Accepted({
             not answering, not a failed accept — the files are the output and the index is
             derived.
           </p>
-          {lastCatalogError !== undefined && (
-            <p className="mt-1 font-mono text-xs break-words opacity-90">{lastCatalogError}</p>
+          {lastCatalogError !== null && (
+            <p
+              className="mt-1 font-mono text-xs break-words opacity-90"
+              title={(job.catalogErrors ?? []).at(-1)}
+            >
+              {lastCatalogError}
+            </p>
           )}
           <div className="mt-2">
             <Button type="button" disabled={busy} onClick={onReindex}>
