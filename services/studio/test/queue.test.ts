@@ -5,7 +5,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
+import type { JobRecord } from "../src/store";
 import { absolute, jobDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { fixtureDocument } from "./fixture-document";
 
 /**
  * What the queue does when something other than the drawing goes wrong: the
@@ -123,6 +125,64 @@ async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
     },
     await loadVocabulary(),
   );
+}
+
+/**
+ * A finished parent job on disk, without running one.
+ *
+ * Enqueuing a real one would hold this target's lease and refuse the job under
+ * test, which is the lease doing its job and not the thing being checked here.
+ * Only the fields the code under test reads are meaningful; the rest are the
+ * record's own shape.
+ */
+function parentRecord(id: string, startedAtMs: number, state = "interrupted"): JobRecord {
+  const at = new Date(startedAtMs).toISOString();
+  return {
+    id,
+    kind: "diagram",
+    state,
+    phase: "drawing",
+    brief: {
+      intent: "x",
+      topic: "vector-and-linear-algebra-basics",
+      slug: SLUG,
+      title: "Dot product",
+      mode: "new",
+      elements: [{ label: "vector a" }],
+      relations: [],
+      concepts: [],
+      model: "sonnet",
+      idempotencyKey: `${id}-key`,
+    },
+    targetPath: targetPath(SLUG),
+    targetSvgPath: targetSvgPath(SLUG),
+    candidatePath: `${CANDIDATES_DIR}/${SLUG}.tldr`,
+    candidateSvgPath: `${CANDIDATES_DIR}/${SLUG}.svg`,
+    topic: "vector-and-linear-algebra-basics",
+    slug: SLUG,
+    attempt: 1,
+    sessionId: `studio-${id}`,
+    agentSessionId: "77777777-7777-4777-8777-777777777777",
+    parentJobId: null,
+    changes: null,
+    idempotencyKey: `${id}-key`,
+    targetHashBefore: null,
+    requestedAt: at,
+    startedAt: at,
+    finishedAt: at,
+    reviewedAt: null,
+    heartbeatAt: null,
+    cancelRequestedAt: null,
+    exitCode: null,
+    turns: null,
+    costUsd: null,
+    gate: null,
+    errorKind: null,
+    error: null,
+    written: [],
+    indexed: false,
+    catalogErrors: [],
+  } as JobRecord;
 }
 
 let store: InstanceType<typeof JobStore>;
@@ -375,9 +435,65 @@ describe("a revision", () => {
   });
 });
 
+describe("a resume", () => {
+  it("opens the parent's session with no change request, because there is nothing to change", async () => {
+    await runner.enqueue(await brief(), {
+      jobId: "parent-job",
+      agentSessionId: "44444444-4444-4444-8444-444444444444",
+      changes: null,
+    });
+    await settled();
+
+    const options = started[0]?.options ?? {};
+    expect(options.sessionId).toBe("44444444-4444-4444-8444-444444444444");
+    expect(options.resume).toBe(true);
+    expect(String(options.prompt)).toContain("stopped part-way");
+    // Not the revise prompt: nobody asked for anything to be different.
+    expect(String(options.prompt)).not.toContain("a change has been asked for");
+  });
+
+  /**
+   * The bug this catches made Resume a button that could only fail.
+   *
+   * The gate's first step refuses a candidate older than the job, because such
+   * a file is something else's output. A resumed job's candidate is older by
+   * construction — it is the work being resumed — so every resume failed step
+   * 1 three times and then failed the job. Measured against three real runs in
+   * phase 3.
+   */
+  it("measures the candidate's age from the parent, not from itself", async () => {
+    const parentStart = Date.now() - 600_000;
+    await store.create(parentRecord("parent-job", parentStart));
+
+    await runner.enqueue(await brief(), {
+      jobId: "parent-job",
+      agentSessionId: "55555555-5555-4555-8555-555555555555",
+      changes: null,
+    });
+    await settled();
+
+    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { startedAtMs: number };
+    expect(input.startedAtMs).toBeLessThanOrEqual(parentStart);
+  });
+
+  it("keeps its own start when it is a revision, where nothing of the parent is left", async () => {
+    await store.create(parentRecord("parent-two", Date.now() - 600_000, "discarded"));
+
+    await runner.enqueue(await brief(), {
+      jobId: "parent-two",
+      agentSessionId: "66666666-6666-4666-8666-666666666666",
+      changes: "wider",
+    });
+    await settled();
+
+    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { startedAtMs: number };
+    expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
+  });
+});
+
 describe("extend mode", () => {
   it("tells the gate what the copy looked like, so an untouched one cannot pass", async () => {
-    await writeFile(absolute(targetPath(SLUG)), '{"records":[]}', "utf8");
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
 
     await runner.enqueue(await brief({ mode: "extend" }));
     await settled();

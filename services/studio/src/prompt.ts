@@ -160,7 +160,40 @@ export function buildRevisePrompt(changes: string, slug: string): string {
 }
 
 /**
- * The resume prompt for attempt two and three.
+ * The prompt a resumed job opens with, against the interrupted job's session.
+ *
+ * A7 and D15: the runner marks a job `interrupted` when it finds one `running`
+ * with no process behind it, lists it, and leaves the decision to a person. The
+ * candidate outlives the process, so what is on disk is however far the agent
+ * had got — and the agent's own transcript is still resumable, which is the
+ * reason `--session-id` is persisted before the agent launches at all.
+ *
+ * No data block here, because there is no new text from anyone. The brief is
+ * already in the transcript this resumes, nothing about it was wrong, and the
+ * only new fact is that the work stopped part-way and nobody knows how far.
+ */
+export function buildResumePrompt(slug: string): string {
+  return [
+    `You were drawing this diagram and the process watching you stopped part-way`,
+    `through, so nobody knows how far you got. Nothing about the brief has changed:`,
+    `it is above, in this same session.`,
+    ``,
+    `Pick up where you left off. Start by finding out what is actually on disk —`,
+    `\`npm run --silent canvas -- inspect ${candidatePath(slug)} --json\` — rather than`,
+    `by assuming either that the file is empty or that it holds what you last`,
+    `intended. Then carry on the same way you were working: a snippet through`,
+    `\`npm run --silent canvas -- run\`, a screenshot, a look at the screenshot with`,
+    `the Read tool, \`inspect --json\` until it exits 0, then re-export with`,
+    `\`npm run --silent canvas -- export ${candidatePath(slug)} --svg ${candidateSvgPath(slug)}\`.`,
+    ``,
+    `If the document is already finished, verify that it is: inspect it, export it,`,
+    `and stop. A finished diagram redrawn from the start is the one outcome this`,
+    `resume exists to avoid.`,
+  ].join("\n");
+}
+
+/**
+ * The prompt attempts two and three open with, inside the same session.
  *
  * A retry always carries a specific finding: "the gate said this, fix this".
  * A bare "try again" is a second full-price attempt at the same thing, which is

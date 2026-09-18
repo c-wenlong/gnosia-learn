@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { absolute, targetPath, targetSvgPath, candidatePath, candidateSvgPath } from "../src/paths";
 import type { JobRecord } from "../src/store";
 import type { Runner } from "../src/runner";
+import { fixtureDocument } from "./fixture-document";
 
 /**
  * The routes, over a real socket on an ephemeral port.
@@ -122,7 +123,7 @@ describe("revising a diagram that was accepted", () => {
     // a `new` brief over an existing target — so the route was unreachable for
     // exactly the case it exists for.
     await mkdir(absolute("learn/assets"), { recursive: true });
-    await writeFile(absolute(targetPath(SLUG)), "{}", "utf8");
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
     await store.create(record());
 
     const response = await fetch(`${base}/api/jobs/job-api/revise`, {
@@ -164,6 +165,62 @@ describe("revising a diagram that was accepted", () => {
     expect(response.status).toBe(400);
     expect(enqueued).toHaveLength(0);
   });
+});
+
+describe("resuming a job the runner died under", () => {
+  /**
+   * A7's Resume button, and the reason it is not `revise`.
+   *
+   * `revise` refuses a request with nothing to change, which is correct and
+   * which makes it the wrong route for an interruption: nothing about the job
+   * was wrong, so a Resume routed through it had to invent a change request and
+   * record it as one a person made.
+   */
+  it("continues the interrupted job's session with no change request", async () => {
+    await store.create(record({ state: "interrupted", errorKind: "interrupted" }));
+
+    const response = await fetch(`${base}/api/jobs/job-api/resume`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+
+    expect(response.status).toBe(201);
+    expect(enqueued[0]?.parent).toMatchObject({
+      jobId: "job-api",
+      agentSessionId: "33333333-3333-4333-8333-333333333333",
+      changes: null,
+    });
+    // No `Change requested:` line appended to the brief's notes, because
+    // nobody requested one.
+    expect(enqueued[0]?.brief.notes).toBeUndefined();
+  });
+
+  it("is a new job when the target is not there, and an extend when it is", async () => {
+    await mkdir(absolute("learn/assets"), { recursive: true });
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await store.create(record({ state: "interrupted" }));
+
+    const response = await fetch(`${base}/api/jobs/job-api/resume`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+
+    expect(response.status).toBe(201);
+    expect(enqueued[0]?.brief.mode).toBe("extend");
+  });
+
+  it.each(["failed", "cancelled", "awaiting_review", "accepted"] as const)(
+    "refuses a %s job, which has a verdict on it rather than a half-finished attempt",
+    async (state) => {
+      await store.create(record({ state }));
+      const response = await fetch(`${base}/api/jobs/job-api/resume`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      expect(response.status).toBe(409);
+      expect(enqueued).toHaveLength(0);
+    },
+  );
 });
 
 describe("a page in the user's own browser", () => {
