@@ -3,7 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/studio/actions";
+import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
+import { JobPanel } from "@/components/studio/JobPanel";
+import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
@@ -15,11 +18,14 @@ import {
   StudioStrip,
   VerbNotice,
 } from "@/components/studio/StudioChrome";
+import { topicOptions } from "@/data/topics";
 import { requireStudio, studioApi } from "@/lib/studio";
 import {
   canvasHref,
   displayTitle,
   freshness,
+  panelHref,
+  parsePanel,
   readOutcome,
   type Diagram,
   type DiagramListing,
@@ -92,7 +98,11 @@ export default async function CanvasPage({
 }) {
   requireStudio();
 
-  const outcome = readOutcome(await searchParams);
+  const query = await searchParams;
+  const outcome = readOutcome(query);
+  // The canvas route has no view — no filters, no sort, no selection — but it
+  // has the same right panel, so it reads the same three parameters.
+  const panel = parsePanel(query);
 
   // A page's `params` are not URL-decoded, unlike a route handler's. The two
   // sides of the same URL disagree and nothing in the type says which you have,
@@ -172,6 +182,7 @@ export default async function CanvasPage({
   return (
     <Shell>
       <Strip diagram={diagram} path={path} />
+      <JobStrip path={path} stream={panel.stream} />
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
       {health.data.stale && (
         <Notice>
@@ -208,7 +219,22 @@ export default async function CanvasPage({
           )}
         </div>
         <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
-          <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+          {panel.brief !== null ? (
+            <BriefForm
+              path={path}
+              topics={topicOptions}
+              from={panel.brief}
+              // This screen names one document, so a new job started from it is
+              // about that document until somebody says otherwise: the slug is
+              // taken and the mode is `extend`, which is the only mode the
+              // runner would accept against a file that already exists.
+              suggested={{ slug: diagram.name, title: diagram.title, topic: diagram.topic }}
+            />
+          ) : panel.job !== null ? (
+            <JobPanel jobId={panel.job} path={path} />
+          ) : (
+            <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+          )}
         </aside>
       </div>
     </Shell>
@@ -261,6 +287,9 @@ function Strip({ diagram, path }: { diagram: Diagram; path: string }) {
       <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
       <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
       <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
+      <ButtonLink href={panelHref(path, { brief: "", job: null })} filled>
+        New job
+      </ButtonLink>
     </StudioStrip>
   );
 }

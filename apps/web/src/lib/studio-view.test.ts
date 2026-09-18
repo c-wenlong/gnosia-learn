@@ -9,6 +9,8 @@ import {
   formatBytes,
   freshness,
   groupDiagrams,
+  panelHref,
+  parsePanel,
   parseView,
   relativeTime,
   sortDiagrams,
@@ -98,6 +100,9 @@ describe("writing the view back into a URL", () => {
       layout: "list",
       selected: "dot-product",
       panel: false,
+      job: "job-1",
+      brief: "job-2",
+      stream: false,
     };
     const href = studioHref(view);
     const params = Object.fromEntries(new URL(href, "http://x").searchParams);
@@ -261,5 +266,45 @@ describe("the hrefs", () => {
     // and an untopiced diagram has no asset row at all. That is the tile that
     // matters most, so it cannot be the one that breaks.
     expect(thumbnailHref("dot-product")).toBe("/studio/api/diagrams/dot-product/svg");
+  });
+});
+
+/**
+ * The right panel has three contents and the URL says which.
+ *
+ * In the query string rather than in a component, for the reason the filters
+ * are: opening a job and opening the brief form are things a person navigates
+ * to, comes back from, and hands to somebody else as a link. The job *state* is
+ * not here — the runner holds that, and these are pointers at it.
+ */
+describe("what the right panel holds", () => {
+  it("reads a job and a blank form apart from a prefilled one", () => {
+    expect(parsePanel({ job: "job-1" })).toMatchObject({ job: "job-1", brief: null });
+    // `?new=` is a blank form and `?new=job-1` is one prefilled from that job.
+    // An empty value is meaningful, which is why this is not read like the rest.
+    expect(parsePanel({ new: "" })).toMatchObject({ brief: "" });
+    expect(parsePanel({ new: "job-1" })).toMatchObject({ brief: "job-1" });
+    expect(parsePanel({})).toMatchObject({ job: null, brief: null, stream: true });
+  });
+
+  it("turns the stream off only on the word that means it", () => {
+    expect(parsePanel({ stream: "off" }).stream).toBe(false);
+    expect(parsePanel({ stream: "on" }).stream).toBe(true);
+    expect(parsePanel({}).stream).toBe(true);
+  });
+
+  it("patches a path that is not /studio, which is what the canvas route needs", () => {
+    expect(panelHref("/studio/d/dot-product", { job: "job-1" })).toBe(
+      "/studio/d/dot-product?job=job-1",
+    );
+    expect(panelHref("/studio?sel=dot-product", { brief: "" })).toBe("/studio?sel=dot-product&new=");
+  });
+
+  it("closes one by dropping its parameter rather than by adding another", () => {
+    expect(panelHref("/studio/d/x?job=job-1", { job: null })).toBe("/studio/d/x");
+  });
+
+  it("drops a verb outcome, so a stale message does not read as this panel's", () => {
+    expect(panelHref("/studio?v=export&ok=0&m=it+failed", { job: "job-1" })).toBe("/studio?job=job-1");
   });
 });
