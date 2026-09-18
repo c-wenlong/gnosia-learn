@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -108,6 +109,9 @@ function stageAgent(hang = false): void {
 
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
 
+/** The sha256 the reconcile pass would have recorded for this content. */
+const hash = (body: string): string => createHash("sha256").update(body).digest("hex");
+
 const SLUG = "studio-queue-fixture";
 
 async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
@@ -135,7 +139,13 @@ async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
  * Only the fields the code under test reads are meaningful; the rest are the
  * record's own shape.
  */
-function parentRecord(id: string, startedAtMs: number, state = "interrupted"): JobRecord {
+function parentRecord(
+  id: string,
+  startedAtMs: number,
+  state = "interrupted",
+  /** What the reconcile pass hashed at the candidate path, when it wrote `interrupted`. */
+  candidateHash: string | null = null,
+): JobRecord {
   const at = new Date(startedAtMs).toISOString();
   return {
     id,
@@ -167,6 +177,7 @@ function parentRecord(id: string, startedAtMs: number, state = "interrupted"): J
     changes: null,
     idempotencyKey: `${id}-key`,
     targetHashBefore: null,
+    candidateHash,
     requestedAt: at,
     startedAt: at,
     finishedAt: at,
@@ -467,7 +478,9 @@ describe("a resume", () => {
    */
   it("measures the candidate's age from the parent, not from itself", async () => {
     const parentStart = Date.now() - 600_000;
-    await store.create(parentRecord("parent-job", parentStart));
+    const partial = fixtureDocument({ title: "half-drawn" });
+    await writeFile(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), partial, "utf8");
+    await store.create(parentRecord("parent-job", parentStart, "interrupted", hash(partial)));
 
     await runner.enqueue(await brief(), {
       jobId: "parent-job",
@@ -492,8 +505,9 @@ describe("a resume", () => {
   it("leaves the partial candidate alone rather than copying the target over it", async () => {
     await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
     const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
-    await writeFile(candidate, fixtureDocument({ title: "half-drawn" }), "utf8");
-    await store.create(parentRecord("parent-three", Date.now() - 300_000));
+    const partial = fixtureDocument({ title: "half-drawn" });
+    await writeFile(candidate, partial, "utf8");
+    await store.create(parentRecord("parent-three", Date.now() - 300_000, "interrupted", hash(partial)));
 
     await runner.enqueue(await brief({ mode: "extend" }), {
       jobId: "parent-three",
@@ -507,6 +521,42 @@ describe("a resume", () => {
     // anything, so "byte-identical to the copy" is not a question about it.
     const input = gateMock.runGate.mock.calls.at(-1)?.[0] as { unchangedHash?: string | null };
     expect(input.unchangedHash).toBeNull();
+  });
+
+  /**
+   * The other half of the same question, which the first fix did not ask.
+   *
+   * The candidate path is per slug, and an interrupted job holds no lease on
+   * its target — so a later job for the same slug can write that path and leave
+   * its own file there. Resuming would then adopt somebody else's artifact and
+   * offer it for review under this job's name. The hash the reconcile pass took
+   * is what tells them apart. Caught in review on the phase 3 PR.
+   */
+  it("does not adopt a candidate that is not the one it was interrupted with", async () => {
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
+    await writeFile(candidate, fixtureDocument({ title: "somebody else's" }), "utf8");
+    // The parent was interrupted holding something *else* at that path.
+    await store.create(
+      parentRecord("parent-five", Date.now() - 300_000, "interrupted", hash("what this job drew")),
+    );
+
+    await runner.enqueue(await brief({ mode: "extend" }), {
+      jobId: "parent-five",
+      agentSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      changes: null,
+    });
+    await settled();
+
+    // Treated as a fresh extend: the committed file is copied over it, and the
+    // gate measures freshness from this job rather than from the parent.
+    expect(await readFile(candidate, "utf8")).toContain("committed");
+    const input = gateMock.runGate.mock.calls.at(-1)?.[0] as {
+      unchangedHash?: string | null;
+      startedAtMs: number;
+    };
+    expect(typeof input.unchangedHash).toBe("string");
+    expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
 
   it("still copies the target when a revision extends it, because nothing is half-drawn", async () => {

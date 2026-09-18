@@ -531,7 +531,14 @@ async function resume(
       {
         ...record.brief,
         mode: targetExists ? "extend" : "new",
-        idempotencyKey: `${record.idempotencyKey}:resume:${Date.now()}`,
+        // Derived from the parent and the moment it was interrupted, never
+        // from `Date.now()`. "Resume this interruption" is one operation, so
+        // two clicks — or two requests in flight at once, which the state
+        // check above cannot serialise on its own — carry the same key: the
+        // second resolves to the first's job instead of starting a second paid
+        // agent on the same candidate. The `job.idempotency_key` unique index
+        // is what makes that atomic rather than merely likely.
+        idempotencyKey: `${record.idempotencyKey}:resume:${record.finishedAt ?? record.id}`,
       },
       { jobId: record.id, agentSessionId: record.agentSessionId, changes: null },
     );

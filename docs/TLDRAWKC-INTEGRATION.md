@@ -334,6 +334,7 @@ browser on this machine.
 | `POST` | `/api/jobs/{id}/reindex` | Re-run the catalog half of an accept whose files landed | none | `{ jobId, written, indexed, note }` |
 | `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
+
 | `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
@@ -364,7 +365,11 @@ the button had to invent a sentence and file it on the new job as
 `Change requested: …`, which puts words in a person's mouth on a durable
 record. `resume` takes no body, inherits the parent's session, refuses anything
 but an `interrupted` job, and opens the agent's transcript with a prompt that
-says what actually happened rather than asking for a change.
+says what actually happened rather than asking for a change. Its idempotency
+key is the parent's plus the moment it was interrupted, never a timestamp:
+"resume this interruption" is one operation, and two clicks — or two requests
+in flight at once, which a state check cannot serialise — then resolve to one
+job through the unique index rather than to two paid agents on one candidate.
 
 ### The brief
 
@@ -523,6 +528,16 @@ step 2, 3 or 4 failure is fed back as a resume prompt carrying the specific
 finding, up to three attempts total. After that the job is `failed` with the
 gate's findings, and the partial artifacts are moved to `jobs/<id>/rejected/` so
 a person can look.
+
+**A resume only inherits the candidate it was interrupted with.** The
+candidate path is per slug rather than per job and an interrupted job holds
+no lease on its target, so a later job for the same slug can write that path
+and leave its own file there. The reconcile pass therefore hashes the
+candidate when it writes `interrupted`, and a resume compares the bytes: a
+match is this job's half-drawn document, which is kept and whose age is
+measured from the parent, and anything else is somebody's leftovers, which
+are treated as a fresh attempt — copied over in `extend` mode, and judged
+from this job's own start. Caught in review on the phase 3 PR.
 
 **Step 1 measures a resumed job's candidate against its parent's start, not its
 own.** The work a resume continues is already on disk — that is what makes it a

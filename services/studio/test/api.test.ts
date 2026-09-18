@@ -209,6 +209,32 @@ describe("resuming a job the runner died under", () => {
     expect(enqueued[0]?.brief.mode).toBe("extend");
   });
 
+  /**
+   * Two clicks on Resume must not buy two agents.
+   *
+   * The state check cannot serialise concurrent requests on its own — both see
+   * an `interrupted` parent — so the key they carry has to be the same one, and
+   * `job.idempotency_key` is unique. A timestamped key made every press a new
+   * paid job against the same candidate. Caught in review on the phase 3 PR.
+   */
+  it("carries the same idempotency key however many times it is pressed", async () => {
+    await store.create(record({ state: "interrupted", finishedAt: "2026-09-18T15:32:00.000Z" }));
+
+    const press = (): Promise<Response> =>
+      fetch(`${base}/api/jobs/job-api/resume`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+    const [first, second] = await Promise.all([press(), press()]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(enqueued).toHaveLength(2);
+    expect(enqueued[0]?.brief.idempotencyKey).toBe(enqueued[1]?.brief.idempotencyKey);
+    // And it is derived from the interruption rather than from the clock.
+    expect(String(enqueued[0]?.brief.idempotencyKey)).toContain("resume:2026-09-18T15:32:00.000Z");
+  });
+
   it.each(["failed", "cancelled", "awaiting_review", "accepted"] as const)(
     "refuses a %s job, which has a verdict on it rather than a half-finished attempt",
     async (state) => {

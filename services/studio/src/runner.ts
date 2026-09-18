@@ -128,8 +128,16 @@ export class Runner {
     for (const record of this.store.list()) {
       if (record.state !== "running") continue;
       swept.push(...(await sweepOrphans(record.id)));
+      // What is at the candidate path right now, so a later Resume can tell
+      // this job's half-finished work from a *different* job's leftovers. The
+      // path is per slug, not per job, and an interrupted job releases the
+      // target's lease — so another job can write that same path before anyone
+      // presses Resume. Without the hash, resuming would pick up whatever was
+      // there and offer it for review as this job's output.
+      const candidateHash = await sha256(absolute(record.candidatePath));
       await this.store.update(record.id, {
         state: "interrupted",
+        candidateHash,
         // Kept, not cleared, for the reason `finish` keeps it: "it died while
         // linting" is the only thing anyone can say about a job no gate ran on,
         // and clearing it throws that away to store a null.
@@ -407,13 +415,16 @@ export class Runner {
     // begins by destroying what it is resuming. Caught in review on this PR;
     // the phase's own testing never hit it, because every job it ran had no
     // committed target and so resumed as `new`.
+    //
+    // Whether the candidate on disk *is* the preserved work is a question with
+    // an answer, and asking it is the difference between resuming a job and
+    // adopting whatever happens to be at that path: the reconcile pass hashed
+    // the candidate when it wrote `interrupted`, so a byte-for-byte match is
+    // this job's own half-drawn document and anything else is somebody's.
+    const resumedWork = await this.holdsResumedWork(record);
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
-      const partial =
-        resumeFromParent && record.changes === null
-          ? await stat(absolute(record.candidatePath)).catch(() => null)
-          : null;
-      if (partial === null) {
+      if (!resumedWork) {
         await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
         // Remembered so the gate can tell "extended it" from "left the copy
         // exactly as it found it". Without it, an agent that did nothing at all
@@ -545,7 +556,7 @@ export class Runner {
         topic: record.topic,
         candidatePath: record.candidatePath,
         candidateSvgPath: record.candidateSvgPath,
-        startedAtMs: gateFreshnessFrom(record, this.store),
+        startedAtMs: gateFreshnessFrom(record, this.store, resumedWork),
         elements: record.brief.elements,
         relations: record.brief.relations,
         unchangedHash,
@@ -650,6 +661,26 @@ export class Runner {
       note: PHASE_NOTES[phase] ?? phase,
       state: "running",
     });
+  }
+
+  /**
+   * Is the candidate on disk the work this job is resuming?
+   *
+   * Three things have to hold, and the third is the one the first version of
+   * this missed. It has to be a resume — a parent, and no change request. The
+   * parent has to have recorded a candidate when it was interrupted. And the
+   * bytes have to still match: the path is `learn/assets/.candidates/<slug>`,
+   * which is per slug rather than per job, and an interrupted job holds no
+   * lease on its target, so a later job for the same slug can write that path
+   * and leave its own file behind. Adopting it would mean resuming one job and
+   * offering another's artifact for review under its name.
+   */
+  private async holdsResumedWork(record: JobRecord): Promise<boolean> {
+    if (record.parentJobId === null || record.changes !== null) return false;
+    const parent = this.store.get(record.parentJobId);
+    const expected = parent?.candidateHash ?? null;
+    if (expected === null) return false;
+    return (await sha256(absolute(record.candidatePath))) === expected;
   }
 
   private async finish(
@@ -884,9 +915,12 @@ function isOutput(file: string, record: JobRecord): boolean {
  * discarded or failed, so nothing of its candidate is left at that path, and
  * the stricter reading is the right one there.
  */
-function gateFreshnessFrom(record: JobRecord, store: JobStore): number {
+function gateFreshnessFrom(record: JobRecord, store: JobStore, resumedWork: boolean): number {
   const own = Date.parse(record.startedAt ?? record.requestedAt);
-  if (record.parentJobId === null || record.changes !== null) return own;
+  // Only when the candidate on disk really is the parent's preserved work. A
+  // file at that path that hashes differently belongs to some other job, and
+  // leniency about *its* age would let this job present it for review.
+  if (!resumedWork || record.parentJobId === null) return own;
   const parent = store.get(record.parentJobId);
   if (parent === undefined) return own;
   const parentStart = Date.parse(parent.startedAt ?? parent.requestedAt);
