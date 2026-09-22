@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import { absolute, sessionLogPath, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { until } from "./wait";
 
 /**
  * The daily spend cap, and the half of it that is not the cap.
@@ -120,14 +121,6 @@ function stageAgent(fixture: string, hang: boolean): void {
 }
 
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150));
-
-async function until(check: () => boolean, what: string, budgetMs = 5_000): Promise<void> {
-  const deadline = Date.now() + budgetMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error(what);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-}
 
 /**
  * Wait for a job to reach `state` **and** for the runner to be done with it.

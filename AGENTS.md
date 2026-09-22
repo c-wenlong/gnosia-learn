@@ -580,4 +580,10 @@ not have to be worked out again.
   twenty runs of `services/studio/test/cap.test.ts` **on its own** with the
   machine loaded, on `Cannot read properties of undefined (reading 'costUsd')`.
   `Runner.settled(id)` resolves after the last of the five and is the thing to
-  wait on. A `setTimeout` is the same bet at longer odds, not a fix.
+  wait on. A `setTimeout` is the same bet at longer odds, not a fix. The waits
+  themselves live in `services/studio/test/wait.ts`: `until` polls for a named
+  condition, and `allSettled` is what a teardown needs before it deletes
+  `STUDIO_HOME`, since `drain` stops the agents without waiting for the
+  verdicts. Neutering `Runner.settled` fails `queue.test.ts` eight runs in
+  eight under load, on a state read too early and on `ENOTEMPTY` from the
+  teardown deleting a workspace mid-write, so those waits are a real gate.
