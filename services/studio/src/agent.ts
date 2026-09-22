@@ -58,7 +58,18 @@ export interface AgentOutcome {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   turns: number | null;
-  costUsd: number | null;
+  /**
+   * **There is no cost on this outcome, deliberately.**
+   *
+   * A10 read `cost_usd` off the final result event and off nothing else, which
+   * is exact and only ever arrives when the session exits cleanly — so a
+   * cancelled, timed-out or interrupted attempt recorded nothing for work that
+   * was really paid for. Cost is now a property of the *job*, not of one
+   * attempt's exit: the runner holds a `JobCostMeter` fed every line of this
+   * stream through `onLine`, and reads it at whatever moment the job ends,
+   * including the moments this outcome never reaches. Putting a figure here as
+   * well would be a second answer to the question `cost.ts` answers.
+   */
   /** The final `result` event's `subtype`: `success`, `error_max_turns`, … */
   subtype: string | null;
   isError: boolean;
@@ -117,7 +128,6 @@ export class AgentRun {
   private watch(): Promise<AgentOutcome> {
     return new Promise((resolve) => {
       let turns: number | null = null;
-      let costUsd: number | null = null;
       let subtype: string | null = null;
       let isError = false;
       let stderr = "";
@@ -140,11 +150,12 @@ export class AgentRun {
           const event = safeParse(line);
           if (event === null) continue;
           if (event.type === "result") {
-            // A10: `turns` and `cost_usd` are read from the final result event
-            // and from nowhere else, because it is the only number the CLI
-            // reports rather than the runner estimating one.
+            // `turns` still comes from the final result event and from nowhere
+            // else: there is no per-turn counter in the stream to accumulate,
+            // and a killed attempt genuinely does not know how many turns it
+            // took. Cost is a different question with a different answer —
+            // `cost.ts` and the note on this outcome above.
             turns = numberOrNull(event.num_turns);
-            costUsd = numberOrNull(event.total_cost_usd);
             subtype = typeof event.subtype === "string" ? event.subtype : null;
             isError = event.is_error === true;
             for (const denial of Array.isArray(event.permission_denials) ? event.permission_denials : []) {
@@ -169,7 +180,6 @@ export class AgentRun {
           exitCode: code,
           signal,
           turns,
-          costUsd,
           subtype,
           isError,
           spawnFailed: false,
@@ -185,7 +195,6 @@ export class AgentRun {
           exitCode: null,
           signal: null,
           turns: null,
-          costUsd: null,
           subtype: null,
           isError: true,
           // The one outcome the gate must never be asked about: nothing ran, so

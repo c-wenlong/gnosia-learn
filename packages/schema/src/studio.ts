@@ -17,6 +17,7 @@ import { createdAt, instant, updatedAt } from "./columns";
 import { asset, topic } from "./content";
 import { learner } from "./state";
 import {
+  COST_SOURCES,
   JOB_ACTIVE_STATES,
   JOB_KINDS,
   JOB_STATES,
@@ -199,6 +200,17 @@ export const job = pgTable(
     exitCode: integer("exit_code"),
     turns: integer("turns"),
     costUsd: doublePrecision("cost_usd"),
+    /**
+     * Where `cost_usd` came from, and therefore whether it is exact.
+     *
+     * A10 wrote that column from the agent's final `stream-json` result event
+     * and from nowhere else, so a cancelled, timed-out or interrupted attempt
+     * recorded nothing for work that was really paid for — which made the
+     * column useless as the basis of a cap. The runner now accumulates from the
+     * intermediate usage events too, and this says which kind of number a row
+     * is holding: `result` is the bill, `stream` is an under-estimate.
+     */
+    costSource: text("cost_source"),
     errorKind: text("error_kind"),
     error: text("error"),
     errorDetail: jsonb("error_detail"),
@@ -223,6 +235,17 @@ export const job = pgTable(
     check("job_attempt_check", sql`attempt >= 0`),
     check("job_turns_check", sql`turns is null or turns >= 0`),
     check("job_cost_usd_check", sql`cost_usd is null or cost_usd >= 0`),
+    // Spelled with the null arm rather than left to `NULL in (…)`, which is
+    // NULL and therefore passes a CHECK by accident rather than on purpose.
+    check(
+      "job_cost_source_check",
+      sql.raw(
+        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+      ),
+    ),
+    // A source with no figure beside it says where a number came from and then
+    // does not have one, which is not a state any writer here can produce.
+    check("job_cost_source_paired_check", sql`cost_source is null or cost_usd is not null`),
     check("job_not_own_parent_check", sql`parent_job_id is distinct from id`),
     check("job_started_at_check", sql`started_at is null or started_at >= requested_at`),
     check(

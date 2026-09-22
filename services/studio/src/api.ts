@@ -179,6 +179,12 @@ function view(record: JobRecord): Record<string, unknown> {
     attempt: record.attempt,
     turns: record.turns,
     costUsd: record.costUsd,
+    // `result` is the agent's own figure and `stream` is the runner's estimate
+    // from the intermediate usage events. Reported beside the number rather
+    // than folded into it: a panel showing "$0.04" for a cancelled job should
+    // be able to say that is an estimate, and it cannot if the shape does not
+    // carry the difference.
+    costSource: record.costSource,
     exitCode: record.exitCode,
     gate: record.gate,
     // The finished-job screen's whole content, computed by the runner when the
@@ -964,11 +970,12 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     catalogStatus().catch(() => null),
   ]);
   const queueDepth = store.list({ state: "queued" }).length;
-  const since = Date.now() - 24 * 60 * 60 * 1000;
-  const costLast24h = store
-    .list()
-    .filter((record) => Date.parse(record.requestedAt) >= since)
-    .reduce((total, record) => total + (record.costUsd ?? 0), 0);
+  // The same window and the same arithmetic the cap refuses on, rather than a
+  // second implementation that agrees with it until it does not. It also moves
+  // this figure off `requested_at`: spending happens when a runner claims a job
+  // and launches an agent, so a job that sat queued for two days and ran an
+  // hour ago spent an hour ago.
+  const cap = runner.capStatus();
 
   const tldrawkc = checked !== null && checked.code === 0;
   const claude = claudeVersion !== null && claudeVersion.code === 0;
@@ -990,12 +997,17 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     postgres,
     queueDepth,
     running: runner.busy,
-    costLast24h: Number(costLast24h.toFixed(4)),
+    costLast24h: cap.totalUsd,
+    dailyCap: cap,
     note: !tldrawkc
       ? "tldrawkc cannot run, so no job can be queued. Build the submodule."
       : !claude
         ? "the claude CLI is not on PATH, so no job can be spawned."
-        : postgres
+        : // Said here as well as in the 429, because a person who has just been
+          // refused looks at health next and a green screen would be a lie.
+          cap.exceeded
+          ? `everything is answering, but $${cap.totalUsd.toFixed(2)} of the $${(cap.capUsd ?? 0).toFixed(2)} daily cap is spent, so a new job is refused until ${cap.oldestAgesOutAt ?? "some of it ages out"}`
+          : postgres
           ? "everything is answering"
           : "not connected to the catalog: browsing and drawing still work, and accept will report indexed: false",
   };

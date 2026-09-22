@@ -10,12 +10,21 @@ import type { JobState } from "@self-learn/schema";
 import { type ValidBrief } from "./brief";
 import { AgentRun, startAgent, sweepOrphans } from "./agent";
 import { buildComparison, readSide, sideFromGate, type Side } from "./compare";
-import { CONCURRENCY, JOB_TIMEOUT_MS, MAX_ATTEMPTS, RUNNER_NAME } from "./config";
+import {
+  CONCURRENCY,
+  dailyCapUsd,
+  DAILY_WINDOW_MS,
+  JOB_TIMEOUT_MS,
+  MAX_ATTEMPTS,
+  RUNNER_NAME,
+} from "./config";
+import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
 import { jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
   candidatePath,
+  sessionLogPath,
   candidateSvgPath,
   jobDir,
   mermaidPath,
@@ -69,7 +78,26 @@ interface Running {
    */
   timedOut: boolean;
   jobTimer: NodeJS.Timeout;
+  /**
+   * What this job has spent so far, fed every line of the agent's stdout.
+   *
+   * One meter per job rather than per attempt, because a job is up to three
+   * attempts and every one of them spends. Live, so a cancel or the ceiling can
+   * read a real figure at the moment it kills the process — which is the whole
+   * point of phase 7, since neither of those ever sees a result event.
+   */
+  meter: JobCostMeter;
+  /** When the meter's figure was last written to the record. See `syncCost`. */
+  costWrittenAt: number;
 }
+
+/**
+ * How often the running total is written to `job.json` while a job runs.
+ *
+ * Not a config knob: it trades a write against how stale the cap's view of an
+ * in-flight job can be, and neither side of that is something a person tunes.
+ */
+const COST_SYNC_MS = 2_000;
 
 /** What `enqueue` needs to know about the job a revision continues. */
 export interface ParentJob {
@@ -137,9 +165,19 @@ export class Runner {
       // presses Resume. Without the hash, resuming would pick up whatever was
       // there and offer it for review as this job's output.
       const candidateHash = await sha256(absolute(record.candidatePath));
+      // The one cost that cannot be read live, because the process that would
+      // have read it is the process that died. `session.ndjson` is the
+      // write-ahead log (rule 7) and every usage event the agent emitted is
+      // still in it, so the meter is rebuilt from the file and the row stops
+      // saying $0.00 for an attempt that really spent. Known gap in phase 3,
+      // closed here.
+      const cost = await this.costFromDisk(record);
       await this.store.update(record.id, {
         state: "interrupted",
         candidateHash,
+        ...(cost?.usd === undefined || cost.usd === null
+          ? {}
+          : { costUsd: cost.usd, costSource: cost.source }),
         // Kept, not cleared, for the reason `finish` keeps it: "it died while
         // linting" is the only thing anyone can say about a job no gate ran on,
         // and clearing it throws that away to store a null.
@@ -154,11 +192,32 @@ export class Runner {
         state: "interrupted",
         errorKind: "interrupted",
         error: "the runner died while this job was running",
+        ...(cost?.usd === undefined || cost.usd === null
+          ? {}
+          : { costUsd: cost.usd, costSource: cost.source }),
       });
       if (!finished.ok) await this.store.noteCatalogError(record.id, finished.error ?? "");
       if (record.sessionId !== null) await sessionEnd(record.sessionId, "interrupted");
     }
     return { interrupted, swept };
+  }
+
+  /**
+   * Rebuild a dead job's spend from its own transcript.
+   *
+   * The studio's own progress events are appended to the same file, and are
+   * ignored here because none of them is an assistant or a result event — the
+   * meter only ever reads those two. A log that cannot be read at all is a job
+   * with no recoverable figure, which is a null and not a zero: zero is a claim
+   * that nothing was spent, and nobody knows that.
+   */
+  private async costFromDisk(record: JobRecord): Promise<CostReading | null> {
+    try {
+      const body = await readFile(sessionLogPath(record.id), "utf8");
+      return costFromLog(body, record.brief.model);
+    } catch {
+      return null;
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -210,6 +269,12 @@ export class Runner {
       );
     }
 
+    // The sixth guard, and last in the order because it is the only one that is
+    // about the *account* rather than about this brief. A10's five — the cheap
+    // model, the turn cap, three attempts, the ceiling, and the recorded
+    // figure — all still fire where they already did, and none of them moved.
+    this.refuseOverCap();
+
     const id = randomUUID();
     const record: JobRecord = {
       id,
@@ -243,6 +308,7 @@ export class Runner {
       exitCode: null,
       turns: null,
       costUsd: null,
+      costSource: null,
       gate: null,
       errorKind: null,
       error: null,
@@ -299,6 +365,86 @@ export class Runner {
     return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
   }
 
+  /* ------------------------------------------------------------------ */
+  /* The daily cap                                                      */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * What has been spent in the last rolling 24 hours.
+   *
+   * Read from the disk records rather than from Postgres, which is the same
+   * reading every other refusal here takes: rule 7 makes `job.json` the record
+   * and the database the query surface, and D16 says a database that is down
+   * does not stop the studio drawing. A cap that needed Postgres would be a cap
+   * that silently switched itself off exactly when nothing was watching.
+   *
+   * Includes the estimated figures. That is the phase: a cancelled attempt's
+   * spend is real spend, and a cap that counted only the clean finishes would
+   * be a cap anybody could walk past by pressing Cancel.
+   */
+  spend(now: number = Date.now()): ReturnType<typeof spendWindow> {
+    // Whole records: `SpendEntry` is structural, so `startedAt`, `finishedAt`
+    // and `costUsd` are read off them directly and nothing has to be kept in
+    // step with a second shape.
+    return spendWindow(this.store.list(), DAILY_WINDOW_MS, now);
+  }
+
+  /** What the cap is, and where it stands. For `/api/health` and the UI. */
+  capStatus(now: number = Date.now()): {
+    capUsd: number | null;
+    exceeded: boolean;
+  } & ReturnType<typeof spendWindow> {
+    const window = this.spend(now);
+    const cap = dailyCapUsd();
+    return {
+      capUsd: cap,
+      ...window,
+      exceeded: cap !== null && window.totalUsd >= cap,
+    };
+  }
+
+  /**
+   * Refuse a new job once the rolling day's spend has crossed the cap.
+   *
+   * **`>=`, not `>`.** The figures being summed are partly estimates and
+   * estimates here run low, so a total sitting exactly on the cap has probably
+   * already passed it. Refusing at the line is the direction that costs a job
+   * rather than the direction that costs money.
+   *
+   * **It refuses the next job; it never stops a running one.** Killing paid
+   * work halfway is a bill with nothing to show for it, and the 45 minute
+   * ceiling is already the guard for a job that will not stop.
+   *
+   * 429 rather than 409: nothing about this brief is wrong, and the same
+   * request will succeed later. The body says the total, the cap, and when the
+   * oldest counted attempt leaves the window, because a refusal that does not
+   * say when to come back is a dead end.
+   */
+  private refuseOverCap(now: number = Date.now()): void {
+    const cap = dailyCapUsd();
+    if (cap === null) return;
+    const window = this.spend(now);
+    if (window.totalUsd < cap) return;
+    const dollars = (value: number): string => `$${value.toFixed(2)}`;
+    throw new JobRefused(
+      429,
+      `the studio has spent ${dollars(window.totalUsd)} in the last 24 hours, which is at or over ` +
+        `the ${dollars(cap)} STUDIO_DAILY_USD cap. Nothing was queued. The oldest job counted ` +
+        `here is dated ${window.oldestCountedAt ?? "(unknown)"} and leaves the window at ` +
+        `${window.oldestAgesOutAt ?? "(unknown)"}, which is the earliest this total can fall. ` +
+        `Raise STUDIO_DAILY_USD, or wait.`,
+      {
+        reason: "daily-cap",
+        totalUsd: window.totalUsd,
+        capUsd: cap,
+        jobs: window.jobs,
+        windowHours: DAILY_WINDOW_MS / 3_600_000,
+        oldestCountedAt: window.oldestCountedAt,
+        oldestAgesOutAt: window.oldestAgesOutAt,
+      },
+    );
+  }
+
   private queued(): JobRecord[] {
     return this.store
       .list({ state: "queued" })
@@ -317,6 +463,13 @@ export class Runner {
         agent: null,
         cancelled: false,
         timedOut: false,
+        // Seeded with the brief's model rather than left null: the stream names
+        // the model on its first assistant event, and an attempt killed before
+        // one arrived would otherwise have tokens it could not price.
+        meter: new JobCostMeter(next.brief.model),
+        // Zero, not `Date.now()`: the first line of a job should land a figure
+        // rather than wait out a throttle window it never asked for.
+        costWrittenAt: 0,
         jobTimer: setTimeout(() => {
           // Caught rather than left to reject: by the time the ceiling fires
           // the job may already be finishing, and `cancel` refuses a job that
@@ -529,7 +682,9 @@ export class Runner {
           error: `the agent never started: ${outcome.stderr || "the process could not be spawned"}`,
           exitCode: null,
           turns: null,
-          costUsd: null,
+          // Not null. This attempt spent nothing, but an earlier one may have:
+          // a spawn that fails on attempt two still owes attempt one's bill.
+          cost: entry.meter.read(),
         });
         return;
       }
@@ -560,7 +715,9 @@ export class Runner {
               : "the attempt ran past fifteen minutes",
           exitCode: outcome.exitCode,
           turns: outcome.turns,
-          costUsd: outcome.costUsd,
+          // A killed session writes no result event, so `outcome` never carried
+          // a figure here at all. The meter has one.
+          cost: entry.meter.read(),
         });
         return;
       }
@@ -620,7 +777,7 @@ export class Runner {
           `and decide.`,
         exitCode: outcome?.exitCode ?? null,
         turns: outcome?.turns ?? null,
-        costUsd: outcome?.costUsd ?? null,
+        cost: entry.meter.read(),
         gate,
       });
       return;
@@ -631,7 +788,7 @@ export class Runner {
         gate,
         exitCode: outcome?.exitCode ?? null,
         turns: outcome?.turns ?? null,
-        costUsd: outcome?.costUsd ?? null,
+        cost: entry.meter.read(),
       });
       return;
     }
@@ -648,7 +805,9 @@ export class Runner {
           : gate.findings.join(" "),
       exitCode: outcome?.exitCode ?? null,
       turns: outcome?.turns ?? null,
-      costUsd: outcome?.costUsd ?? null,
+      // Every attempt, not just the last: three tries at one diagram is three
+      // bills, and reading the final result event alone forgot the two before it.
+      cost: entry.meter.read(),
     });
   }
 
@@ -662,7 +821,12 @@ export class Runner {
    * here.
    */
   private async onAgentLine(id: string, line: string): Promise<void> {
+    // Synchronously, before the first await: the meter must see every line in
+    // the order it arrived, and a cancel landing mid-append should still find
+    // the figure up to date.
+    this.running.get(id)?.meter.observe(line);
     await this.store.appendRaw(id, line);
+    await this.syncCost(id);
     const phase = phaseFromLine(line);
     if (phase === null) return;
     await this.advancePhase(id, phase);
@@ -719,6 +883,35 @@ export class Runner {
   }
 
   /**
+   * Write the running total onto the record, at most every few seconds.
+   *
+   * Two things want a figure before the job has a verdict. The cap, which would
+   * otherwise ignore a job that has been spending for twenty minutes and let a
+   * second one start beside it; and the panel's chip, which is the only place a
+   * person can see a job getting expensive while it still can be stopped.
+   *
+   * **Not folded into `advancePhase`, which was the first attempt.** A phase is
+   * inferred from the commands the agent happens to run, so tying the money to
+   * it means a job that spends heavily without changing phase records nothing —
+   * and the reconcile pass then has to find it. The throttle is time, not
+   * phases: a `job.json` write is a temp file and a rename, and the stream
+   * arrives faster than either needs to happen.
+   */
+  private async syncCost(id: string): Promise<void> {
+    const entry = this.running.get(id);
+    if (entry === undefined) return;
+    const now = Date.now();
+    if (now - entry.costWrittenAt < COST_SYNC_MS) return;
+    const cost = entry.meter.read();
+    if (cost.usd === null) return;
+    const record = this.store.get(id);
+    if (record === undefined) return;
+    if (record.costUsd === cost.usd && record.costSource === cost.source) return;
+    entry.costWrittenAt = now;
+    await this.store.update(id, { costUsd: cost.usd, costSource: cost.source });
+  }
+
+  /**
    * Is the candidate on disk the work this job is resuming?
    *
    * Three things have to hold, and the third is the one the first version of
@@ -747,7 +940,8 @@ export class Runner {
       error?: string;
       exitCode?: number | null;
       turns?: number | null;
-      costUsd?: number | null;
+      /** The job's meter, read at the moment it stopped. See `cost.ts`. */
+      cost?: CostReading | null;
     },
   ): Promise<void> {
     const id = entry.record.id;
@@ -764,7 +958,8 @@ export class Runner {
       gate: patch.gate ?? this.store.get(id)?.gate ?? null,
       exitCode: patch.exitCode ?? null,
       turns: patch.turns ?? null,
-      costUsd: patch.costUsd ?? null,
+      costUsd: patch.cost?.usd ?? null,
+      costSource: patch.cost?.source ?? null,
       errorKind: patch.errorKind ?? null,
       error: patch.error ?? null,
     });
@@ -788,6 +983,7 @@ export class Runner {
       exitCode: record.exitCode,
       turns: record.turns,
       costUsd: record.costUsd,
+      ...(record.costSource === null ? {} : { costSource: record.costSource }),
       ...(record.errorKind === null ? {} : { errorKind: record.errorKind }),
       ...(record.error === null ? {} : { error: record.error }),
     });
@@ -886,7 +1082,7 @@ export class Runner {
         : `stopped on request; ${sweptNote}`,
       exitCode: outcome?.exitCode ?? null,
       turns: outcome?.turns ?? null,
-      costUsd: outcome?.costUsd ?? null,
+      cost: entry.meter.read(),
     });
   }
 

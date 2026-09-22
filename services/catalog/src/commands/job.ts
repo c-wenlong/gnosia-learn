@@ -7,6 +7,7 @@ import {
   assetJob,
   CANDIDATES_DIR,
   canTransition,
+  COST_SOURCES,
   job as jobTable,
   JOB_ACTIVE_STATES,
   JOB_KINDS,
@@ -82,6 +83,7 @@ export interface JobSummary {
   exitCode: number | null;
   turns: number | null;
   costUsd: number | null;
+  costSource: string | null;
   errorKind: string | null;
   error: string | null;
   requestedAt: string;
@@ -180,6 +182,7 @@ export function summarise(row: Job): JobSummary {
     exitCode: row.exitCode,
     turns: row.turns,
     costUsd: row.costUsd,
+    costSource: row.costSource,
     errorKind: row.errorKind,
     error: row.error,
     requestedAt: row.requestedAt.toISOString(),
@@ -577,6 +580,15 @@ export interface FinishOptions {
   exitCode?: number;
   turns?: number;
   costUsd?: number;
+  /**
+   * Whether `costUsd` is the agent's own `total_cost_usd` or the runner's
+   * accumulation from the intermediate usage events.
+   *
+   * A killed attempt never writes a result event, so a row that recorded only
+   * the exact figure recorded nothing for work that was paid for. Both are
+   * stored now, and this is what stops the two being read as the same fact.
+   */
+  costSource?: string;
   gate?: Record<string, unknown>;
   errorKind?: string;
   error?: string;
@@ -592,6 +604,20 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
   const to = options.state as JobState;
   if (!(JOB_STATES as readonly string[]).includes(to)) {
     throw new JobError(`unknown job state "${options.state}". Known: ${JOB_STATES.join(", ")}.`);
+  }
+  if (
+    options.costSource !== undefined &&
+    !(COST_SOURCES as readonly string[]).includes(options.costSource)
+  ) {
+    // Checked here rather than left to the column's own CHECK, which would come
+    // back as a bare 23514 naming a constraint instead of a sentence naming the
+    // flag. The same reading every other refusal in this file takes.
+    throw new JobError(
+      `unknown --cost-source "${options.costSource}". Known: ${COST_SOURCES.join(", ")}.`,
+    );
+  }
+  if (options.costSource !== undefined && options.costUsd === undefined) {
+    throw new JobError("--cost-source says where a figure came from, so it needs --cost beside it.");
   }
   if (to === "accepted" || to === "discarded") {
     throw new JobError(
@@ -621,6 +647,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
         exitCode: options.exitCode ?? null,
         turns: options.turns ?? null,
         costUsd: options.costUsd ?? null,
+        costSource: options.costSource ?? null,
         gate: options.gate ?? null,
         errorKind: options.errorKind ?? null,
         error: options.error ?? null,

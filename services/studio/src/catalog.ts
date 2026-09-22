@@ -143,6 +143,8 @@ export interface JobFinishInput {
   exitCode?: number | null;
   turns?: number | null;
   costUsd?: number | null;
+  /** `result` or `stream`: whether that figure is the bill or an estimate. */
+  costSource?: string | null;
   errorKind?: string;
   error?: string;
 }
@@ -165,6 +167,9 @@ export function jobFinish(input: JobFinishInput): Promise<CatalogResult> {
     ...(input.costUsd === undefined || input.costUsd === null
       ? []
       : ["--cost", String(input.costUsd)]),
+    ...(input.costSource === undefined || input.costSource === null
+      ? []
+      : ["--cost-source", input.costSource]),
     ...(input.errorKind === undefined ? [] : ["--error-kind", input.errorKind]),
     ...(input.error === undefined ? [] : ["--error", input.error.slice(0, 500)]),
   ]);
