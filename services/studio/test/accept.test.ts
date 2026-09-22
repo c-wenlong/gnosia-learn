@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -130,8 +130,22 @@ let store: InstanceType<typeof JobStore>;
 const place = async (over: Partial<JobRecord> = {}): Promise<JobRecord> =>
   store.create(record(over));
 
+/**
+ * This file's own `$STUDIO_HOME`, kept in a variable so teardown deletes the
+ * directory this test made and nothing else.
+ *
+ * It used to be `studio-test-${Date.now()}`, a name with nothing unique in it
+ * beyond the millisecond. Two overlapping runs that started a test in the same
+ * millisecond shared a home, and the first to reach `afterEach` deleted the
+ * other's job workspaces out from under it. `mkdtemp` asks the operating
+ * system for a name no other process has, which is the only version of this
+ * that cannot collide.
+ */
+let home = "";
+
 beforeEach(async () => {
-  process.env.STUDIO_HOME = path.join(tmpdir(), `studio-test-${Date.now()}`);
+  home = await mkdtemp(path.join(tmpdir(), "studio-accept-"));
+  process.env.STUDIO_HOME = home;
   store = new JobStore();
   canvasMock.canvas.mockReset();
   catalogMock.jobAccept.mockReset();
@@ -144,7 +158,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   for (const file of Object.values(files)) await rm(file, { force: true });
-  await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
+  // `home`, not `process.env.STUDIO_HOME`: the variable is this file's own
+  // directory whatever anything else has done to the environment since.
+  if (home !== "") await rm(home, { recursive: true, force: true });
+  home = "";
   delete process.env.STUDIO_HOME;
 });
 
