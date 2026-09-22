@@ -397,14 +397,18 @@ SCREENS = [s_today, s_courses, s_course_path, s_workspace, s_session, s_session_
 
 def slug_of(fn): return fn().split('name="', 1)[1].split('"', 1)[0]
 
+def delete(node_id):
+    """True only when OpenPencil confirms the deletion."""
+    return call("delete_node", {"id": node_id}).get("deleted") == node_id
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     want = set(sys.argv[1:]); failures = []
     tree = call("get_page_tree", {})
-    existing = {}
+    existing = {}  # slug -> every frame id carrying that name, so duplicates get cleaned up too
     def walk(n):
         if isinstance(n, dict):
-            if "name" in n and "id" in n: existing.setdefault(n["name"], n["id"])
+            if "name" in n and "id" in n: existing.setdefault(n["name"], []).append(n["id"])
             for c in n.get("children", []) or []: walk(c)
         elif isinstance(n, list):
             for c in n: walk(c)
@@ -424,10 +428,13 @@ def main():
         exported = call("export_svg", {"ids": [res["id"]]})
         svg = exported.get("svg") or ""
         if not svg.startswith("<?xml") or "<svg" not in svg:
-            call("delete_node", {"id": res["id"]})
-            failures.append(f"{slug}: export failed, old frame and SVG kept: {json.dumps(exported)[:300]}"); print(failures[-1]); continue
-        if slug in existing:
-            call("delete_node", {"id": existing[slug]})
+            failures.append(f"{slug}: export failed, old frame and SVG kept: {json.dumps(exported)[:300]}"); print(failures[-1])
+            if not delete(res["id"]):
+                failures.append(f"{slug}: could not delete the half-rendered frame {res['id']}; remove it by hand"); print(failures[-1])
+            continue
+        for old_id in existing.get(slug, []):
+            if not delete(old_id):
+                failures.append(f"{slug}: could not delete the previous frame {old_id}; the document now holds a duplicate"); print(failures[-1])
         path = os.path.join(OUT, f"{slug}.svg"); open(path, "w").write(svg)
         print(f"{slug}: id={res['id']} svg={len(svg)}B warnings={len(warn)}", ("; ".join(warn[:3]) if warn else ""))
     saved = call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")})
