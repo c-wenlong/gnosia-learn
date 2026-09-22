@@ -415,16 +415,19 @@ def main():
         phone = slug.split("-", 1)[1].startswith("phone")
         col = i % 4; row = i // 4
         x = col * 1600; y = row * 1100
-        if slug in existing:
-            call("delete_node", {"id": existing[slug]})
+        # Render the replacement first; the old frame is deleted only once the new one has
+        # rendered and exported, so a failure leaves the document and the SVG as they were.
         res = call("render", {"x": x, "y": y, "jsx": jsx})
         if "id" not in res:
-            failures.append(f"{slug}: render failed: {json.dumps(res)[:300]}"); print(failures[-1]); continue
+            failures.append(f"{slug}: render failed, old frame kept: {json.dumps(res)[:300]}"); print(failures[-1]); continue
         warn = res.get("warnings") or []
         exported = call("export_svg", {"ids": [res["id"]]})
         svg = exported.get("svg") or ""
         if not svg.startswith("<?xml") or "<svg" not in svg:
-            failures.append(f"{slug}: export failed, existing SVG left alone: {json.dumps(exported)[:300]}"); print(failures[-1]); continue
+            call("delete_node", {"id": res["id"]})
+            failures.append(f"{slug}: export failed, old frame and SVG kept: {json.dumps(exported)[:300]}"); print(failures[-1]); continue
+        if slug in existing:
+            call("delete_node", {"id": existing[slug]})
         path = os.path.join(OUT, f"{slug}.svg"); open(path, "w").write(svg)
         print(f"{slug}: id={res['id']} svg={len(svg)}B warnings={len(warn)}", ("; ".join(warn[:3]) if warn else ""))
     saved = call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")})
