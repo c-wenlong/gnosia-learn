@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <g>
+    <rect width="1440" height="900" fill="#F5F5F5" stroke="#9A9A9A" stroke-width="1"/>
+    <g>
+      <rect width="1440" height="56" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+      <g transform="translate(28, 18.5)">
+        <text x="0" y="15" font-family="Inter" font-size="15" font-weight="700" fill="#1F1F1F">self-learn</text>
+      </g>
+      <g transform="translate(132, 16)">
+        <g>
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Today</text>
+          </g>
+          <g transform="translate(5.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(67, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Courses</text>
+          </g>
+          <g transform="translate(12, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#1F1F1F"/>
+          </g>
+        </g>
+        <g transform="translate(147, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Learn</text>
+          </g>
+          <g transform="translate(3.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(210, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Library</text>
+          </g>
+          <g transform="translate(7.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(281, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Review</text>
+          </g>
+          <g transform="translate(8.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(490, 28)"/>
+      <g transform="translate(1151, 14)">
+        <rect width="78" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(12, 6.5)">
+          <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Streak 14</text>
+        </g>
+      </g>
+      <g transform="translate(1261, 14)">
+        <rect width="89" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(12, 6.5)">
+          <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Target 1 / 2</text>
+        </g>
+      </g>
+      <g transform="translate(1382, 13)">
+        <ellipse cx="15" cy="15" rx="15" ry="15" fill="#D6D6D6"/>
+      </g>
+    </g>
+    <g transform="translate(0, 56)">
+      <g transform="translate(24, 24)">
+        <g transform="translate(0, 4.5)">
+          <text x="0" y="22" font-family="Inter" font-size="22" fill="#1F1F1F">Courses</text>
+        </g>
+        <g transform="translate(97, 18)"/>
+        <g transform="translate(998, 1)">
+          <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(12, 9.5)">
+            <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Search courses</text>
+          </g>
+        </g>
+        <g transform="translate(1268, 0)">
+          <rect width="124" height="36" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(14, 10)">
+            <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Import syllabus</text>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(24, 76)">
+        <g>
+          <rect width="33" height="24" rx="12" ry="12" fill="#222222"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#FFFFFF">All</text>
+          </g>
+        </g>
+        <g transform="translate(41, 0)">
+          <rect width="79" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">In progress</text>
+          </g>
+        </g>
+        <g transform="translate(128, 0)">
+          <rect width="67" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Graphics</text>
+          </g>
+        </g>
+        <g transform="translate(203, 0)">
+          <rect width="68" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Software</text>
+          </g>
+        </g>
+        <g transform="translate(279, 0)">
+          <rect width="53" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Maths</text>
+          </g>
+        </g>
+        <g transform="translate(340, 0)">
+          <rect width="57" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(10, 5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Agents</text>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(24, 116)">
+        <g>
+          <g>
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">CP4281 Computer Graphics</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">8 modules · 20 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Next: Barycentric coordinates</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(436, 0)">
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">CS3216 Software Engineering</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">6 modules · 17 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Next: Requirements elicitation</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(872, 0)">
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">Coding agent harness architectures</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">4 modules · 11 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Not started</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(0, 247)">
+          <g>
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">Linear algebra refresher</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">5 modules · 14 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Completed · 3 due for review</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(436, 0)">
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">Probability for ML</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">7 modules · 22 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Not started</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(872, 0)">
+            <rect width="420" height="231" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <rect width="388" height="90" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(177.5, 37.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">cover</text>
+              </g>
+            </g>
+            <g transform="translate(16, 116)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">Rendering pipelines</text>
+            </g>
+            <g transform="translate(16, 145)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">6 modules · 15 topics</text>
+            </g>
+            <g transform="translate(16, 169)">
+              <rect width="388" height="6" rx="3" ry="3" fill="#E6E6E6"/>
+              <rect width="100" height="6" rx="3" ry="3" fill="#3D3D3D"/>
+            </g>
+            <g transform="translate(16, 185)">
+              <g transform="translate(0, 7.5)">
+                <g>
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Not started</text>
+                </g>
+              </g>
+              <g transform="translate(329, 0)">
+                <rect width="59" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open</text>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

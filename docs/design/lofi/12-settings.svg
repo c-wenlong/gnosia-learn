@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <g>
+    <rect width="1440" height="900" fill="#F5F5F5" stroke="#9A9A9A" stroke-width="1"/>
+    <g>
+      <rect width="1440" height="56" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+      <g transform="translate(28, 18.5)">
+        <text x="0" y="15" font-family="Inter" font-size="15" font-weight="700" fill="#1F1F1F">self-learn</text>
+      </g>
+      <g transform="translate(132, 16)">
+        <g>
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Today</text>
+          </g>
+          <g transform="translate(5.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#1F1F1F"/>
+          </g>
+        </g>
+        <g transform="translate(67, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Courses</text>
+          </g>
+          <g transform="translate(12, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(147, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Learn</text>
+          </g>
+          <g transform="translate(3.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(210, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Library</text>
+          </g>
+          <g transform="translate(7.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+        <g transform="translate(281, 0)">
+          <g>
+            <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Review</text>
+          </g>
+          <g transform="translate(8.5, 22)">
+            <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(490, 28)"/>
+      <g transform="translate(1151, 14)">
+        <rect width="78" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(12, 6.5)">
+          <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Streak 14</text>
+        </g>
+      </g>
+      <g transform="translate(1261, 14)">
+        <rect width="89" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(12, 6.5)">
+          <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Target 1 / 2</text>
+        </g>
+      </g>
+      <g transform="translate(1382, 13)">
+        <ellipse cx="15" cy="15" rx="15" ry="15" fill="#D6D6D6"/>
+      </g>
+    </g>
+    <g transform="translate(0, 56)">
+      <g transform="translate(24, 24)">
+        <text x="0" y="22" font-family="Inter" font-size="22" fill="#1F1F1F">Settings</text>
+      </g>
+      <g transform="translate(24, 67)">
+        <rect width="852" height="181" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(16, 16)">
+          <g>
+            <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Habit</text>
+          </g>
+          <g transform="translate(35, 8.5)"/>
+        </g>
+        <g transform="translate(16, 43)">
+          <g transform="translate(0, 1)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Daily target</text>
+            </g>
+            <g transform="translate(0, 18)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">You set it. The app never raises it.</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">One concept + due reviews</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 87)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Streak leeway</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">1 free miss per week</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 131)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Reminders</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Facts only · 9:00</text>
+            </g>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(24, 264)">
+        <rect width="852" height="181" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(16, 16)">
+          <g>
+            <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Appearance and tutor</text>
+          </g>
+          <g transform="translate(145, 8.5)"/>
+        </g>
+        <g transform="translate(16, 43)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Theme</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">System</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 87)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Tutor style</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Learning guide · concise</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 131)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Motion</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Respect system reduced motion</text>
+            </g>
+          </g>
+        </g>
+      </g>
+      <g transform="translate(24, 461)">
+        <rect width="852" height="183" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(16, 16)">
+          <g>
+            <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Model</text>
+          </g>
+          <g transform="translate(42, 8.5)"/>
+        </g>
+        <g transform="translate(16, 43)">
+          <g transform="translate(0, 1)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">BKT priors</text>
+            </g>
+            <g transform="translate(0, 18)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Advanced. Changes future observations only.</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">pL0 0.2 · pT 0.1 · pG 0.2 · pS 0.1</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 87)">
+          <g transform="translate(0, 9)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Model providers</text>
+            </g>
+          </g>
+          <g transform="translate(336, 0)">
+            <rect width="260" height="34" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(12, 9)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Order: 3 free tiers</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(16, 131)">
+          <g>
+            <rect width="147" height="36" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(14, 10)">
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Export learner data</text>
+            </g>
+          </g>
+          <g transform="translate(157, 0)">
+            <rect width="123" height="36" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(14, 10)">
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Reset progress</text>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
