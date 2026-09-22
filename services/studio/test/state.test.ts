@@ -78,6 +78,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     exitCode: null,
     turns: null,
     costUsd: null,
+    costSource: null,
     gate: null,
     errorKind: null,
     error: null,

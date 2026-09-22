@@ -95,7 +95,6 @@ const outcome = (over: Record<string, unknown> = {}): Record<string, unknown> =>
   exitCode: 0,
   signal: null,
   turns: 9,
-  costUsd: 0.2,
   subtype: "success",
   isError: false,
   spawnFailed: false,
@@ -256,6 +255,7 @@ function parentRecord(
     exitCode: null,
     turns: null,
     costUsd: null,
+    costSource: null,
     gate: null,
     errorKind: null,
     error: null,
@@ -447,7 +447,6 @@ describe("an agent that never started", () => {
           outcome({
             exitCode: null,
             turns: null,
-            costUsd: null,
             subtype: null,
             isError: true,
             spawnFailed: true,
@@ -504,7 +503,7 @@ describe("a revision", () => {
     agentMock.startAgent.mockImplementationOnce((options: Record<string, unknown>) => {
       started.push({ options } as FakeAgent);
       return Promise.resolve({
-        done: Promise.resolve(outcome({ exitCode: 1, turns: null, costUsd: null, isError: true })),
+        done: Promise.resolve(outcome({ exitCode: 1, turns: null, isError: true })),
         stop: async () => undefined,
       });
     });

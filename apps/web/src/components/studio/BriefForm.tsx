@@ -13,8 +13,10 @@ import {
   draftFromBrief,
   draftToBrief,
   emptyDraft,
+  refusalReport,
   slugFromTitle,
   type BriefDraft,
+  type RefusalReport,
 } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-view";
 
@@ -68,7 +70,9 @@ export function BriefForm({
   });
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [refused, setRefused] = useState<{ error: string; field: string | null } | null>(null);
+  const [refused, setRefused] = useState<{ report: RefusalReport; field: string | null } | null>(
+    null,
+  );
 
   // Edit brief: the failed job's own brief, fetched once. A prefill and not a
   // copy — what this posts is a new job, because a job is never edited.
@@ -114,8 +118,11 @@ export function BriefForm({
     setBusy(false);
     if (!result.ok) {
       const detail = result.data.detail as { field?: unknown } | null;
+      // Coded rather than pasted through, so the one refusal that must not
+      // offer a retry — the daily cap — is a case the screen knows about
+      // instead of a sentence it happens to be printing.
       setRefused({
-        error: typeof result.data.error === "string" ? result.data.error : `the runner answered ${result.status}`,
+        report: refusalReport(result.status, result.data),
         field: typeof detail?.field === "string" ? detail.field : null,
       });
       return;
@@ -420,10 +427,19 @@ export function BriefForm({
       </details>
 
       {refused !== null && (
-        <p className="mt-3 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] p-2 text-xs text-[var(--danger)]">
-          {refused.field !== null && <span className="font-mono">{refused.field}: </span>}
-          {refused.error}
-        </p>
+        <div
+          role="alert"
+          data-refusal={refused.report.code}
+          className="mt-3 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] p-2 text-xs text-[var(--danger)]"
+        >
+          <p className="font-medium">
+            {refused.field !== null && <span className="font-mono">{refused.field}: </span>}
+            {refused.report.headline}
+          </p>
+          {refused.report.detail !== null && (
+            <p className="mt-1 text-[var(--muted-strong)]">{refused.report.detail}</p>
+          )}
+        </div>
       )}
 
       <div className="mt-4 flex items-center gap-2 border-t border-[var(--border)] pt-3">

@@ -17,6 +17,7 @@ import {
   narration,
   PHASES,
   phaseRows,
+  refusalReport,
   slugFromTitle,
   stepLabel,
   type Brief,
@@ -52,6 +53,7 @@ function job(over: Partial<Job> = {}): Job {
     attempt: 1,
     turns: null,
     costUsd: null,
+    costSource: null,
     exitCode: null,
     gate: null,
     written: [],
@@ -450,5 +452,55 @@ describe("the brief a form fills in", () => {
     ["  Gram–Schmidt, step 1  ", "gram-schmidt-step-1"],
   ])("suggests a slug from %j", (title, expected) => {
     expect(slugFromTitle(title)).toBe(expected);
+  });
+});
+
+describe("a refused enqueue", () => {
+  /** The 429 body the runner sends, as `refuseOverCap` builds it. */
+  const capBody = {
+    error:
+      "the studio has spent $0.52 in the last 24 hours, which is at or over the $0.50 " +
+      "STUDIO_DAILY_USD cap. Nothing was queued.",
+    detail: {
+      reason: "daily-cap",
+      totalUsd: 0.5231,
+      capUsd: 0.5,
+      jobs: 4,
+      windowHours: 24,
+      oldestCountedAt: "2026-09-21T22:00:00.000Z",
+      oldestAgesOutAt: "2026-09-22T22:00:00.000Z",
+    },
+  };
+
+  it("offers no action at all on the daily cap", () => {
+    const report = refusalReport(429, capBody);
+    expect(report.code).toBe("daily-cap");
+    // Retrying is the one thing that is certainly wrong: the answer does not
+    // change until the window moves or a person raises the number, and this
+    // screen can do neither.
+    expect(report.actions).toEqual([]);
+  });
+
+  it("says what was spent against what", () => {
+    const report = refusalReport(429, capBody);
+    expect(report.headline).toBe("$0.52 of the $0.50 daily cap is spent");
+    expect(report.detail).toContain("Nothing was queued");
+  });
+
+  it("falls back to the runner's own sentence when the body carries no figures", () => {
+    const report = refusalReport(429, { error: "over the cap" });
+    expect(report.code).toBe("daily-cap");
+    expect(report.headline).toBe("the daily spend cap is reached");
+    expect(report.detail).toBe("over the cap");
+    expect(report.actions).toEqual([]);
+  });
+
+  it("keeps the other refusals distinguishable, and their actions", () => {
+    // One guard on top of five: a cap must not make "that path is spoken for"
+    // read like "come back tomorrow".
+    expect(refusalReport(409, { error: "already held by job x" }).code).toBe("target-held");
+    expect(refusalReport(400, { error: "elements is required" }).actions).toEqual(["edit"]);
+    expect(refusalReport(503, { error: "no runner" }).actions).toEqual(["doctor"]);
+    expect(refusalReport(418, {}).headline).toBe("the runner answered 418");
   });
 });

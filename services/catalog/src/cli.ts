@@ -110,6 +110,8 @@ Options:
   --exit-code N            job finish: the generator's exit code.
   --turns N                job finish: agent turns used.
   --cost N                 job finish: US dollars spent.
+  --cost-source S          job finish: result | stream. Whether --cost is the
+                           agent's own figure or the runner's estimate.
   --gate FILE              job finish: the gate's findings, as JSON.
   --error-kind K           job finish: a short machine-readable reason.
   --error M                job finish: the message a person reads.
@@ -192,6 +194,7 @@ export async function main(argv: string[]): Promise<number> {
         "exit-code": { type: "string" },
         turns: { type: "string" },
         cost: { type: "string" },
+        "cost-source": { type: "string" },
         gate: { type: "string" },
         "error-kind": { type: "string" },
         error: { type: "string" },
@@ -374,6 +377,7 @@ type Values = {
   "exit-code"?: string;
   turns?: string;
   cost?: string;
+  "cost-source"?: string;
   gate?: string;
   "error-kind"?: string;
   error?: string;
@@ -453,6 +457,7 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
         exitCode: number(values["exit-code"], "--exit-code"),
         turns: number(values.turns, "--turns"),
         costUsd: number(values.cost, "--cost"),
+        costSource: values["cost-source"],
         gate: await jsonFile(values.gate, "--gate"),
         errorKind: values["error-kind"],
         error: values.error,

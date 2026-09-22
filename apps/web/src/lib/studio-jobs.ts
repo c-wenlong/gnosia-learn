@@ -101,6 +101,15 @@ export interface Job {
   attempt: number;
   turns: number | null;
   costUsd: number | null;
+  /**
+   * `result` when `costUsd` is the agent's own `total_cost_usd`, `stream` when
+   * the runner accumulated it from the intermediate usage events.
+   *
+   * A cancelled, timed-out or interrupted job now carries a figure where it
+   * used to carry nothing, and that figure is an under-estimate. Shown as such
+   * rather than rounded into the same chip as an exact one.
+   */
+  costSource: "result" | "stream" | null;
   exitCode: number | null;
   gate: GateResult | null;
   /**
@@ -460,6 +469,88 @@ export function failureReport(job: Job): FailureReport {
         actions: ["retry", "edit"],
       };
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* What a refused enqueue means                                               */
+/* -------------------------------------------------------------------------- */
+
+export type RefusalCode = "daily-cap" | "target-held" | "brief" | "unavailable" | "unknown";
+
+export interface RefusalReport {
+  code: RefusalCode;
+  headline: string;
+  detail: string | null;
+  /** The same vocabulary the failure panel uses, so one component renders both. */
+  actions: FailureAction[];
+}
+
+/**
+ * `POST /api/jobs` said no. What that means, keyed on the runner's status.
+ *
+ * The failure panel keys a *job's* ending on the runner's codes; a refused
+ * enqueue produces no job at all, so it has nowhere to be shown and was a bare
+ * sentence in a red box. Phase 7 adds one case that has to be distinguishable,
+ * so the whole set is keyed the same way the endings are.
+ *
+ * **`daily-cap` offers nothing.** Every other refusal here has an action behind
+ * it: a held target is something to accept or discard, a bad brief is something
+ * to fix in the form in front of you, a runner that is not answering is
+ * something `doctor` reports on. A cap is none of those. Retrying is the one
+ * thing that is certainly wrong, because the answer will not change until
+ * either the window moves or a person raises the number, and neither is a thing
+ * this screen can do. So there is no button, and the sentence carries the two
+ * facts that let somebody decide: what has been spent against what, and when
+ * the total can first fall.
+ */
+export function refusalReport(status: number, body: unknown): RefusalReport {
+  const envelope = (typeof body === "object" && body !== null ? body : {}) as {
+    error?: unknown;
+    detail?: unknown;
+  };
+  const message = typeof envelope.error === "string" ? envelope.error : null;
+  const detail = (
+    typeof envelope.detail === "object" && envelope.detail !== null ? envelope.detail : {}
+  ) as Record<string, unknown>;
+
+  if (status === 429) {
+    const spent = typeof detail.totalUsd === "number" ? detail.totalUsd : null;
+    const cap = typeof detail.capUsd === "number" ? detail.capUsd : null;
+    const clears = typeof detail.oldestAgesOutAt === "string" ? detail.oldestAgesOutAt : null;
+    return {
+      code: "daily-cap",
+      headline:
+        spent === null || cap === null
+          ? "the daily spend cap is reached"
+          : `$${spent.toFixed(2)} of the $${cap.toFixed(2)} daily cap is spent`,
+      detail:
+        message ??
+        (clears === null
+          ? "Nothing was queued. Raise STUDIO_DAILY_USD, or wait for the window to move."
+          : `Nothing was queued. The oldest counted attempt leaves the 24 hour window at ${clears}, which is the earliest this can fall.`),
+      actions: [],
+    };
+  }
+  if (status === 409) {
+    return { code: "target-held", headline: "that path is spoken for", detail: message, actions: [] };
+  }
+  if (status === 400 || status === 422) {
+    return { code: "brief", headline: "the brief was refused", detail: message, actions: ["edit"] };
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return {
+      code: "unavailable",
+      headline: "the runner is not answering",
+      detail: message,
+      actions: ["doctor"],
+    };
+  }
+  return {
+    code: "unknown",
+    headline: `the runner answered ${status}`,
+    detail: message,
+    actions: [],
+  };
 }
 
 /** The last exit code the gate recorded on a step that did not pass. */

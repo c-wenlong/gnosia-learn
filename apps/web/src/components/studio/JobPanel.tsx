@@ -155,7 +155,22 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
             <Elapsed job={job} />
           </>
         )}
-        {job.costUsd !== null && <Chip title="what this job cost">${job.costUsd.toFixed(3)}</Chip>}
+        {job.costUsd !== null && (
+          // A cancelled, timed-out or interrupted job now carries a figure
+          // where it used to carry nothing — and that figure is the runner's
+          // accumulation from the stream, which runs low. The tilde and the
+          // tooltip are the whole of saying so; a bare number would read as
+          // the bill.
+          <Chip
+            title={
+              job.costSource === "stream"
+                ? "an estimate: this job was stopped before the agent reported a final cost, so the runner accumulated it from the session's usage events. It runs low."
+                : "what this job cost, as the agent reported it"
+            }
+          >
+            {job.costSource === "stream" ? "~" : ""}${job.costUsd.toFixed(3)}
+          </Chip>
+        )}
         {job.turns !== null && <Chip>{job.turns} turns</Chip>}
       </div>
 
