@@ -188,8 +188,9 @@ Rules of engagement:
 - Run it with `npm run studio` from the repository root; it binds
   `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
   `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone,
-  not on `ASSET_FILES_ENABLED`: they are served from
-  `/api/diagrams/{name}/svg`, deliberately not from
+  not on `ASSET_FILES_ENABLED`: from the browser they are served from
+  `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
+  behind the `/studio/api/*` rewrite), deliberately not from
   `/api/assets/{id}/file`, because that route also needs the file indexed,
   and the one diagram a person most needs a tile for is the untopiced one
   with no asset row. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
