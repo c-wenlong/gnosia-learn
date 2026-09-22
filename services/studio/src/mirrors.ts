@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { stat } from "node:fs/promises";
 
-import { KILL_GRACE_MS, MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
+import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
 import { absolute, REPO_ROOT } from "./paths";
-import { NPM, signalGroup } from "./proc";
+import { NPM, stopChild } from "./proc";
 
 /**
  * One `canvas serve` per document, held open for as long as someone is looking.
@@ -145,17 +145,11 @@ export function readyObject(buffer: string): { url: string; port: number } | nul
   return null;
 }
 
-/**
- * How often `stopChild` asks whether the group has emptied.
- *
- * Small enough that a close costs milliseconds rather than a visible pause on
- * the accept path, and coarse enough not to be a spin.
- */
-const GROUP_POLL_MS = 25;
-
 export class Mirrors {
   private readonly open = new Map<string, Mirror>();
   private readonly starting = new Map<string, Promise<MirrorView>>();
+  /** The same in-flight trick as `starting`, for the other direction. */
+  private readonly stopping = new Map<string, Promise<MirrorStop>>();
   private sweeper: NodeJS.Timeout | null = null;
 
   /**
@@ -180,6 +174,28 @@ export class Mirrors {
       existing.lastSeenAt = Date.now();
       return this.view(existing);
     }
+
+    /* One that is on its way out is waited for, not spawned over.
+     *
+     * `stop` keeps a writer it could not kill in `open`, so this is also where
+     * a stuck one is found. Spawning beside it would be the two-writers case
+     * this method exists to prevent, and a worse version of it: the new mirror
+     * would take the map entry, accept would close *that* one, report it gone,
+     * and rename behind the old writer that is still running. `stop` dedupes,
+     * so the ordinary case — a sweep closing an idle canvas a moment before
+     * someone reopens it — just waits the close out. */
+    if (existing !== undefined) {
+      const closed = await this.stop(file);
+      if (!closed.gone) {
+        throw new MirrorRefused(
+          503,
+          `the canvas already open on ${file} will not shut down, so a second one would be a ` +
+            `second writer on the same document`,
+          "Look for a stuck `canvas serve` process, end it, and try again.",
+        );
+      }
+    }
+
     const inFlight = this.starting.get(file);
     if (inFlight !== undefined) return inFlight;
 
@@ -268,7 +284,14 @@ export class Mirrors {
     };
     // A serve that dies on its own — a port stolen, a crash — must not be
     // handed out again as a URL nothing answers.
+    //
+    // But a stop in flight owns the entry, and this must not race it: `child`
+    // is the `npm` launcher, which exits on the `SIGTERM` while the `canvas
+    // serve` underneath it may not. Dropping the entry on that exit would hide
+    // a writer that is still running from the retry that has to refuse on it.
+    // `stop` deletes it when the group is actually empty.
     child.on("exit", () => {
+      if (mirror.closing) return;
       if (this.open.get(file) === mirror) this.open.delete(file);
     });
     this.open.set(file, mirror);
@@ -320,11 +343,34 @@ export class Mirrors {
    * over: `found` is true the moment a mirror existed, whatever happened next.
    */
   async stop(file: string): Promise<MirrorStop> {
+    const inFlight = this.stopping.get(file);
+    if (inFlight !== undefined) return inFlight;
+
     const mirror = this.open.get(file);
     if (mirror === undefined) return { found: false, gone: true };
     mirror.closing = true;
-    this.open.delete(file);
-    return { found: true, gone: await stopChild(mirror.child) };
+
+    const attempt = this.close(mirror).finally(() => {
+      this.stopping.delete(file);
+    });
+    this.stopping.set(file, attempt);
+    return attempt;
+  }
+
+  /**
+   * Untracked only once it is gone.
+   *
+   * Deleting the entry before knowing was the hole. Accept refused with
+   * `mirror-stuck` and told the person to try again; the retry found no mirror
+   * on that file, answered `found: false, gone: true`, and renamed behind the
+   * writer the first refusal was about. So one that will not die stays in
+   * `open`, and every later `stop` finds it, signals it again and refuses
+   * again until it is really gone. Caught in review on the phase 4 PR.
+   */
+  private async close(mirror: Mirror): Promise<MirrorStop> {
+    const gone = await stopChild(mirror.child);
+    if (gone && this.open.get(mirror.file) === mirror) this.open.delete(mirror.file);
+    return { found: true, gone };
   }
 
   async stopAll(): Promise<void> {
@@ -364,73 +410,5 @@ export class Mirrors {
       healthy: null,
       idleMs: MIRROR_IDLE_MS,
     };
-  }
-}
-
-/**
- * Signal the mirror's process group and do not come back until it is empty.
- *
- * The waiting is the whole of it. This used to send `SIGTERM` and return, which
- * reads as a stop and is not one: accept closes the mirror precisely so that no
- * save can land after the rename (A6), and a writer that has been asked to go
- * is still listening for however long it takes to go. "Told it to stop" and
- * "it has stopped" are different facts and only the second is safe to rename
- * behind. Caught in review on the phase 4 PR.
- *
- * **The group is the authority, not the child object.** `child.pid` is the
- * `npm` launcher; the process holding the port and writing the `.tldr` is the
- * `canvas serve` underneath it, and the launcher can be reaped with its child
- * still flushing. `kill(-pid, 0)` asks whether *anything* is left in the group,
- * which is the question worth asking, and it is the same negated pid
- * `signalGroup` signals. A descendant that made a group of its own is outside
- * both, which is what `sweepOrphans` in `agent.ts` is for.
- *
- * `SIGTERM`, one grace window, `SIGKILL`, one more. Returns whether the group
- * actually emptied. False means a process survived a `SIGKILL` for ten seconds,
- * which is a sick machine rather than a busy one — and accept refuses on it
- * rather than renaming anyway. Returning the answer and ignoring it would have
- * left the whole of this waiting decorative in the one case it is for.
- */
-export async function stopChild(child: ChildProcess, graceMs = KILL_GRACE_MS): Promise<boolean> {
-  const pid = child.pid;
-  if (pid === undefined) return true;
-
-  signalGroup(pid, "SIGTERM");
-  if (await groupGone(pid, graceMs)) return true;
-
-  // It sat through the polite ask. A SIGKILL that is sent and not waited for
-  // would be the same bug one signal further along, so this waits too.
-  signalGroup(pid, "SIGKILL");
-  return groupGone(pid, graceMs);
-}
-
-/** Poll until nothing in the group answers, or the window runs out. */
-async function groupGone(pid: number, withinMs: number): Promise<boolean> {
-  const until = Date.now() + withinMs;
-  for (;;) {
-    if (!groupAlive(pid)) return true;
-    if (Date.now() >= until) return false;
-    await new Promise((resolve) => setTimeout(resolve, GROUP_POLL_MS));
-  }
-}
-
-/**
- * Is anything left of it?
- *
- * Both the group and the bare pid, because a child spawned without `detached`
- * is not a group leader and `kill(-pid)` would answer `ESRCH` about a process
- * that is very much alive. `EPERM` is an answer too: something is there and it
- * is not ours, which is still not gone.
- */
-function groupAlive(pid: number): boolean {
-  return answers(-pid) || answers(pid);
-}
-
-function answers(target: number): boolean {
-  try {
-    process.kill(target, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }

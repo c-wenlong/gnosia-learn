@@ -680,6 +680,19 @@ made every line of that waiting decorative in the one case it is for, and
 nothing has moved at that point: Discard, a retry and a follow-up job are all
 still available, so the refusal costs a click rather than the work.
 
+**A writer that will not die stays tracked, and that is not a detail.** The
+first version of the refusal dropped the mirror from `Mirrors.open` before
+knowing whether the process died, which turned the retry it recommends into the
+loss it prevents: the second Accept found no mirror on the file, answered
+"nothing to close", and renamed behind the writer the first refusal was about.
+So the entry survives until the group is empty, every later `stop` finds it and
+signals it again, and `start` waits for a closing mirror rather than spawning a
+second `serve` beside it — a new mirror would take the map entry and accept
+would then close the wrong one. `stopChild` moved to `proc.ts` in the same
+change, beside the `signalGroup` it is built on, which is also what lets a test
+force the `gone: false` branch: a real process group can always be emptied by a
+`SIGKILL`, so the case accept refuses on is not one a real process can stage.
+
 **And the refusal has somewhere to go.** S4 says a refused accept "offers to
 re-open the comparison", which needs the before side read again;
 `POST /api/jobs/{id}/compare` does that, against the committed file as it is

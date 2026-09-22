@@ -15,7 +15,7 @@ import {
   targetSvgPath,
   CANDIDATES_DIR,
 } from "../src/paths";
-import { stopChild } from "../src/mirrors";
+import { stopChild } from "../src/proc";
 import type { JobRecord } from "../src/store";
 import { fixtureDocument } from "./fixture-document";
 

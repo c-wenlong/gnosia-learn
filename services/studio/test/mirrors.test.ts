@@ -1,8 +1,29 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MirrorRefused, Mirrors, readyObject, stopChild } from "../src/mirrors";
+/**
+ * The stopper is mocked, and that is the point of it living in `proc.ts`.
+ *
+ * `gone: false` means a process outlived a `SIGTERM`, a grace window, a
+ * `SIGKILL` and a second window, which no test can arrange with a real process:
+ * a group can always be emptied by `SIGKILL`. The branch still has to be
+ * covered, because it is the one accept refuses on. `proc.test.ts` drives the
+ * real thing against real processes; this file drives what `Mirrors` does with
+ * its answer.
+ */
+const procMock = vi.hoisted(() => ({ stopChild: vi.fn() }));
+vi.mock("../src/proc", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/proc")>();
+  return { ...actual, stopChild: procMock.stopChild };
+});
+
+const { MirrorRefused, Mirrors, readyObject } = await import("../src/mirrors");
+
+beforeEach(() => {
+  procMock.stopChild.mockReset();
+  procMock.stopChild.mockResolvedValue(true);
+});
 
 /**
  * The mirror lifecycle, without starting a real `serve`.
@@ -124,6 +145,10 @@ describe("the idle sweep", () => {
     });
 
     expect(mirrors.sweep()).toEqual(["learn/assets/old.tldr"]);
+    // Dropped when the process is gone rather than when the sweep says so: a
+    // writer that will not die has to stay findable, so the map entry now
+    // outlives the call that closed it by however long the kill takes.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect([...held.open.keys()]).toEqual(["learn/assets/new.tldr"]);
   });
 
@@ -157,75 +182,104 @@ describe("the idle sweep", () => {
 });
 
 /**
- * Stopping a writer, against a real process that does not want to stop.
+ * A writer that will not die has to stay findable.
  *
- * The rest of this file deliberately avoids spawning anything, and this part
- * deliberately does not, because the bug it guards is entirely about a real
- * process's real exit. `stopChild` used to send `SIGTERM` and return, so accept
- * renamed the committed file with the mirror still up and able to save over it
- * (A6). Against a cooperative process that difference is microseconds and
- * invisible; against one that takes a moment to shut down it is the whole bug.
- * So these spawn a child that ignores `SIGTERM` for long enough to see.
+ * This is the trap the first version of the refusal walked a person into.
+ * `stop` deleted the entry before it knew whether the process died, so accept
+ * refused with `mirror-stuck`, the note said to press Accept again, and the
+ * retry found no mirror on that file, answered "nothing to close" and renamed
+ * behind the writer the first refusal was about. Caught in review on the
+ * phase 4 PR.
  */
-describe("waiting for a mirror's process to actually go", () => {
-  const spawned: ChildProcess[] = [];
+describe("a mirror that will not die", () => {
+  const fakeChild = { pid: 424242 } as unknown as ChildProcess;
 
-  afterEach(() => {
-    for (const child of spawned) {
-      try {
-        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
-      } catch {
-        /* already gone, which is the outcome every test here wants */
-      }
-    }
-    spawned.length = 0;
-  });
-
-  /**
-   * Detached, like a real mirror: `stopChild` signals the process group, so a
-   * child that is not a group leader would not be the thing under test.
-   */
-  async function stubborn(script: string): Promise<ChildProcess> {
-    const child = spawn(process.execPath, ["-e", script], {
-      detached: true,
-      stdio: ["ignore", "pipe", "ignore"],
+  function hold(mirrors: InstanceType<typeof Mirrors>, file: string): void {
+    const held = mirrors as unknown as { open: Map<string, unknown> };
+    held.open.set(file, {
+      file,
+      url: "http://127.0.0.1:7240/?mirror=1",
+      port: 7240,
+      startedAt: Date.now(),
+      lastSeenAt: Date.now(),
+      child: fakeChild,
+      closing: false,
     });
-    spawned.push(child);
-    // Wait for it to say so, or the signal can arrive before the handler that
-    // ignores it is installed and the test passes for the wrong reason.
-    await new Promise<void>((resolve) => child.stdout?.once("data", () => resolve()));
-    return child;
   }
 
-  it("does not resolve until the child has exited", async () => {
-    const child = await stubborn(
-      'process.on("SIGTERM", () => {}); setTimeout(() => process.exit(0), 250); console.log("up");',
-    );
-    let exitedAt: number | null = null;
-    child.on("exit", () => {
-      exitedAt = Date.now();
+  it("is still found by the next stop, so a retried accept refuses again", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: false,
     });
-
-    const started = Date.now();
-    await expect(stopChild(child, 5_000)).resolves.toBe(true);
-
-    // The assertion the old one-line `stop` fails: it returned while the child
-    // was still running, so nothing had exited by the time accept renamed.
-    expect(exitedAt).not.toBeNull();
-    expect(Date.now() - started).toBeGreaterThanOrEqual(200);
-    expect(child.exitCode).toBe(0);
+    // The retry accept's note asks for must not come back "nothing was
+    // mirroring that file" while the writer is still running.
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: false,
+    });
+    expect(procMock.stopChild).toHaveBeenCalledTimes(2);
   });
 
-  it("escalates to SIGKILL when the grace runs out, and waits for that too", async () => {
-    const child = await stubborn(
-      'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000); console.log("up");',
+  it("is not spawned over, because a second serve would be a second writer", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+    await mirrors.stop("learn/assets/stuck.tldr");
+
+    // Opening the canvas again is what the refusal note suggests, and a fresh
+    // `serve` beside the old one would take the map entry — so accept would
+    // close the new one, call it gone, and rename behind the old.
+    //
+    // The status and the words are both asserted, because this path also
+    // refuses a missing file with a 404 and that would pass for the wrong
+    // reason: an untracked stuck mirror gets as far as trying to spawn.
+    const refusal = (await mirrors
+      .start("learn/assets/stuck.tldr")
+      .catch((error: unknown) => error)) as { status: number; message: string };
+    expect(refusal).toBeInstanceOf(MirrorRefused);
+    expect(refusal.status).toBe(503);
+    expect(refusal.message).toContain("will not shut down");
+  });
+
+  it("is dropped once it is actually gone", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+    await mirrors.stop("learn/assets/stuck.tldr");
+
+    procMock.stopChild.mockResolvedValue(true);
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: true,
+    });
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: false,
+      gone: true,
+    });
+  });
+
+  it("joins a stop already in flight rather than starting a second one", async () => {
+    let release = (): void => {};
+    procMock.stopChild.mockImplementation(
+      () => new Promise<boolean>((resolve) => { release = () => resolve(true); }),
     );
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
 
-    await expect(stopChild(child, 300)).resolves.toBe(true);
-    expect(child.signalCode).toBe("SIGKILL");
-  });
-
-  it("returns straight away for a child that never got a pid", async () => {
-    await expect(stopChild({ pid: undefined } as ChildProcess, 5_000)).resolves.toBe(true);
+    const both = Promise.all([
+      mirrors.stop("learn/assets/stuck.tldr"),
+      mirrors.stop("learn/assets/stuck.tldr"),
+    ]);
+    release();
+    expect(await both).toEqual([
+      { found: true, gone: true },
+      { found: true, gone: true },
+    ]);
+    expect(procMock.stopChild).toHaveBeenCalledTimes(1);
   });
 });
