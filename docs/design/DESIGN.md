@@ -1,0 +1,272 @@
+# Redesign v1: lo-fi
+
+Status: lo-fi agreed in an interview on 2026-09-23, hi-fi not started.
+This document is the written half of the design. The drawn half is
+[self-learn-lofi.fig](self-learn-lofi.fig), an OpenPencil document, and the
+SVG exports of every screen under [lofi/](lofi/). The research the design
+draws on is under [research/](research/).
+
+## What the redesign is
+
+The app becomes a notebook with a habit layer on top of it and a focused
+teaching mode inside it. The notebook is NotebookLM's shape: a concept has
+its note and sources on the left, the tutor in the middle, and the things
+made from it (mastery, checks, assets, the neighbourhood graph) on the
+right. The habit layer is Duolingo's, with the pressure removed: a
+forgiving streak, a target the learner sets, no hearts, no leagues. The
+teaching mode is Brilliant's: one idea per screen, a widget in the prose,
+a question, an inline verdict with an opt-in "Why". Review is Anki's
+four-button rating. The front door is a Math Academy style dashboard that
+says what to do today.
+
+One model of "what you know" runs through all of it. The mastery p(L)
+from the `learn` pipeline is the only score; the tutor chat writes to it.
+
+## Decisions
+
+Sixteen decisions from the interview, each with the research that argued
+for it. Where a decision changes the API it is marked, and expanded under
+[API changes](#api-changes).
+
+| # | Decision | Choice | Why | Source |
+| --- | --- | --- | --- | --- |
+| 1 | Study screen shape | Hybrid: three-panel concept workspace plus a single-column focus mode | Keeps reading, asking and made things visually separate, without forcing quizzes into a chat column | [notebooklm.md](research/notebooklm.md), [brilliant.md](research/brilliant.md) |
+| 2 | Visual tone | Warm, calm, editorial | Serious enough for proofs, warm enough for a daily habit; NotebookLM's chrome overload and Duolingo's mascot both rejected | [brilliant.md](research/brilliant.md) visual language |
+| 3 | Density | Dense dashboard, roomy lessons | Status must fit on one screen; teaching must not | [others.md](research/others.md) Math Academy |
+| 4 | Theme | Light and dark designed together | The app already has a theme class; tokens are two-mode from day one | [notebooklm.md](research/notebooklm.md) |
+| 5 | Streak | Forgiving, no guilt | Duolingo's own data: leeway raised engagement more than strict rules; guilt notifications are the named dark pattern | [duolingo.md](research/duolingo.md) |
+| 6 | Effort counter | Self-set daily target; mastery is the score; no XP shown | XP rewards volume over understanding | [duolingo.md](research/duolingo.md) patterns to avoid |
+| 7 | Social | None: no hearts, no leagues, no friends | A solo adult learner has no reason to be ranked against strangers | [duolingo.md](research/duolingo.md) |
+| 8 | Feedback | Inline verdict with opt-in "Why", plus a session-close screen with real numbers | Both apps do the inline part; the Close phase of the loop needs a home | [brilliant.md](research/brilliant.md), [duolingo.md](research/duolingo.md) |
+| 9 | Home | A Today dashboard | Nothing on the current site surfaces due reviews, the next step or recent activity | [current-app.md](research/current-app.md) |
+| 10 | Course navigation | Linear path, one active node, mastery-coloured, guidebook per unit | Removes "what do I click next"; the guidebook is the concept note | [duolingo.md](research/duolingo.md), [others.md](research/others.md) Khan |
+| 11 | Review rating | Anki four buttons with the resulting interval under each | Maps onto the SM-2 state the database already holds | [others.md](research/others.md) Anki |
+| 12 | Mastery model (API) | One model: chat probes write BKT events | Today two notions of mastery coexist and never reconcile | [current-app.md](research/current-app.md) |
+| 13 | Concept graph | Neighbourhood by default, mastery-coloured; full course behind a toggle | A whole-vault graph is a hairball on first open | [others.md](research/others.md) Obsidian, Math Academy |
+| 14 | Scope | Redesign Library; Studio keeps the shared shell only | Library is learner-facing; Studio is an author tool behind a flag | [current-app.md](research/current-app.md) |
+| 15 | Mobile | Desktop first; phone layouts for Today, Review and Session | The screens a person would actually use on a phone | [notebooklm.md](research/notebooklm.md) mobile criticism |
+| 16 | Files | Commit the .fig, the SVGs and this doc; third-party screenshots stay local | They are other people's copyrighted UI | .gitignore |
+
+## Information architecture
+
+Five top-level destinations in the top bar, plus Settings behind the
+avatar and Studio behind its flag. The bar also carries the streak and the
+target so they are visible everywhere without owning a screen.
+
+```mermaid
+flowchart LR
+  Today -->|Continue| Session
+  Today -->|Start review| Review
+  Today -->|Open workspace| Workspace
+  Courses --> Path[Course path]
+  Path -->|node| Workspace
+  Path -->|Guidebook| Workspace
+  Workspace -->|Teach me| Session
+  Workspace -->|Review now| Review
+  Session --> Close[Session close]
+  Close -->|Back| Today
+  Close -->|Keep going| Session
+  Review --> Close
+  Learn[Learn index] --> Workspace
+  Library --> Asset[Library asset]
+  Asset -->|Explains| Workspace
+```
+
+The loop the repo already runs (Probe, Plan, Teach, Close) lives in
+Session. Probe and Teach are steps inside it; Close is its last screen.
+
+## Routes and screens
+
+| Route | Screen | Lo-fi | Replaces | Reads | Status |
+| --- | --- | --- | --- | --- | --- |
+| `/` | Today | [01-today](lofi/01-today.svg), [13-phone-today](lofi/13-phone-today.svg) | `/` course shortlist | due reviews, frontier, target, streak, recent events, course progress | New |
+| `/courses` | Courses | [02-courses](lofi/02-courses.svg) | `/` | `content/courses`, tags, progress | Redesigned |
+| `/courses/[slug]` | Course path | [03-course-path](lofi/03-course-path.svg) | `/courses/[slug]` and `/courses/[slug]/[module]` | modules, topics, concept mastery per topic, assets per module | Redesigned; the module page folds into the path as a unit |
+| `/learn` | Learn index | [09-learn-index](lofi/09-learn-index.svg) | `/learn` | concepts, mastery, due, last seen, course link; neighbourhood graph | Redesigned |
+| `/learn/[concept]` | Concept workspace | [04-concept-workspace](lofi/04-concept-workspace.svg) | none (concept notes had no page) | note, prerequisites, dependants, backlinks, sources, tutor thread, mastery and history, checks, assets, graph | New |
+| `/learn/[concept]/session` | Session focus mode | [05-session-focus](lofi/05-session-focus.svg), [06-session-feedback](lofi/06-session-feedback.svg), [07-session-close](lofi/07-session-close.svg), [15-phone-session](lofi/15-phone-session.svg) | `/courses/[slug]/[module]/session` | the tutor's step plan, the concept's checks, assets | Redesigned; moves from topic to concept |
+| `/review` | Review session | [08-review](lofi/08-review.svg), [14-phone-review](lofi/14-phone-review.svg) | nothing on the web (`/review` skill only) | due queue, SM-2 state per card, checks, citations | New |
+| `/library` | Library | [10-library](lofi/10-library.svg) | `/library` | assets by kind and topic, text search, concept links | Redesigned |
+| `/library/[id]` | Library asset | [11-library-asset](lofi/11-library-asset.svg) | `/library/[id]` | asset, chapters, transcript, `asset_concept`, derivations | Redesigned |
+| `/settings` | Settings | [12-settings](lofi/12-settings.svg) | none | preferences: target, leeway, reminders, theme, tutor style, BKT priors, providers | New |
+| `/studio`, `/studio/d/[name]` | Studio | none | same | same | Shared shell only |
+
+Every desktop frame is 1440 by 900; phone frames are 390 by 844. Content
+that runs past the bottom is clipped at the frame edge, the way a scrolling
+page would be (the course path is the one that does).
+
+### Today
+
+Left: Next up (the active path node with Continue and Open workspace),
+Reviews due (five rows, Start review, Snooze, estimated minutes), Recent
+activity (event rows with p(L) before and after). Right: Target (a ring the
+learner filled by their own definition), Streak (one number, a seven-day
+strip, the leeway remaining), Courses in progress. Nothing here is a game
+element the learner did not choose.
+
+### Course path
+
+One vertical path per course, grouped into unit cards (the modules). Each
+unit header carries Guidebook, which opens the concept note, and the
+assets that belong to the module. Nodes are the topic's concepts, coloured
+by mastery bucket, with one active node carrying Continue. A locked unit is
+drawn, not hidden. The right rail is the course header, the module
+progress list, and the assets for the current module.
+
+### Concept workspace
+
+Three panels, each collapsible. Note and sources (left): summary,
+prerequisites and dependants with mastery dots, sources, backlinks.
+Tutor (centre): the thread, every claim with a citation chip, Save to note
+and Why on tutor turns, suggested question chips, the input. Studio
+(right): the mastery card with the observation history, the checks the
+note holds, the assets that explain this concept, the neighbourhood
+graph. The header carries the two ways out: Teach me (focus mode) and
+Review now.
+
+### Session focus mode
+
+A thin progress bar, a step label, one column at 720 wide. A step is
+prose, an interactive widget (the manim or tldraw asset, or a live
+diagram), and a question. Feedback replaces the buttons in place: the
+verdict, one line of reason, the p(L) movement, and Why, Ask the tutor,
+Continue. The close screen shows four numbers (right, mastery moved,
+review cards added, target progress), what moved as before-and-after bars,
+what got scheduled, and two exits.
+
+### Review
+
+The card, the revealed answer with its citation, and the four ratings
+with their resulting interval. Keys 1 to 4 rate; space reveals. Check
+blocks from a note render as a question with options and the same
+inline verdict as a session step; recall cards render as prompt and answer.
+
+### Learn index, Library, Library asset, Settings
+
+Learn index is the table the current `/learn` page hides in prose, with
+search and mastery filters, and the graph docked beside it. Library gains
+text search over titles, transcripts and notes, a sort, and a concept
+chip on every card. The asset page gains Explains (the `asset_concept`
+rows with mastery), Mark watched, Add to note. Settings holds the habit
+controls the learner owns, the tutor style, and the BKT priors under an
+Advanced label.
+
+## Components
+
+The lo-fi kit draws every screen from these pieces; the hi-fi pass and the
+implementation should keep the same vocabulary.
+
+| Component | Used on | Notes |
+| --- | --- | --- |
+| Top bar | every desktop screen | wordmark, five destinations, streak pill, target pill, avatar |
+| Phone tab bar | phone screens | the same five destinations |
+| Card | everywhere | title, optional action link at the right |
+| Mastery dot | path, lists, workspace | three buckets: mastered, learning, untouched |
+| Progress bar | courses, path rail, close screen | fill proportional to a fraction |
+| Chip, Pill | filters, citations, top bar | citation chips carry `[n] source, locator` |
+| Button | everywhere | primary (filled) and secondary (outlined); one primary per region |
+| Path node, Unit card | course path | node = mastery dot in a ring; active ring in the accent colour |
+| Message | workspace | who, body, citation, Save to note, Why |
+| Rating row | review | four equal-weight buttons, interval under each |
+| Stat tile | close screen | a number and a label |
+| Widget placeholder | session, workspace, library | where an asset or interactive renders |
+| Step progress | session, review | the thin bar at the top of focus mode |
+
+### Mastery buckets
+
+The path, the lists and the graph colour by bucket, never by the raw
+probability: mastered, learning, untouched. The exact thresholds are the
+ones the `learn` pipeline already uses for its mastery label; the UI
+displays the label and shows the number beside it where there is room.
+
+## API changes
+
+The `--json` shapes of the `learn` CLI are a contract with the plugin and
+do not change. Everything below is on the web side, in
+`apps/web/src/app/api/`, and is proposed, not built.
+
+| Need | Screen | Change |
+| --- | --- | --- |
+| A due list, not a count | Today, Review | `GET /api/review/due` returning the `review due` shape, and `POST /api/review/grade` wrapping `review grade` |
+| Chat probes move mastery (decision 12) | Session, Workspace | the agent chat route returns graded probes as structured results, and the session calls `POST /api/learner/observe` (wrapping `learn observe`) per graded answer; the recap stays a note |
+| Next step, target, streak | Today, top bar | `GET /api/learner/today` aggregating frontier, target progress, streak (derived from the event log, with leeway from preferences), recent events |
+| Target and leeway are the learner's | Settings | new preference keys: `dailyTarget`, `streakLeewayPerWeek`, `reminders` |
+| Concept page data | Workspace | `GET /api/concepts/[slug]` returning note body, requires and assumes, dependants, backlinks, sources, checks, mastery with the event trajectory, `asset_concept` rows |
+| Assets explain concepts | Library asset, Workspace, Path | query `asset_concept` wherever an asset is shown; it is in the schema and unread today |
+| Save to note, Mark watched | Workspace, Library asset | extend `POST /api/learner/note`; a `watched` event kind on the asset |
+| Text search | Library, Learn | a search endpoint over asset titles, transcripts and note bodies |
+
+The session route moves from topic to concept
+(`/learn/[concept]/session`). The old topic session stays reachable from
+the path node until the concept-level one lands.
+
+## Before and after
+
+Current pages, captured on 2026-09-23 from a clean build of `origin/main`.
+
+| Now | Becomes |
+| --- | --- |
+| [home](research/assets/current-app/home.png): a course shortlist | Today, decision 9 |
+| [learn](research/assets/current-app/learn.png): stat cards, a full graph, prose per concept | Learn index plus the workspace, decisions 13 and 1 |
+| [library](research/assets/current-app/library.png): every asset, no search | Library with search and concept chips |
+| [course](research/assets/current-app/course.png) and [module](research/assets/current-app/module.png): rows and a checklist | Course path, decision 10 |
+| [session](research/assets/current-app/session.png): a chat that never touches mastery | Session focus mode, decisions 1, 8, 12 |
+| [library-asset](research/assets/current-app/library-asset.png): the asset alone | Library asset with Explains |
+| [studio](research/assets/current-app/studio.png) | unchanged, decision 14 |
+
+## Lo-fi tokens
+
+The lo-fi is greyscale with one accent, on purpose: the hi-fi pass picks
+the palette. What the lo-fi does fix is the scale.
+
+- Type: 32, 28 (numbers), 22 (page title), 20 (concept title), 16, 15
+  (lesson prose), 14 (card title), 13 (body), 12 (secondary), 11 (labels).
+- Space: 4, 6, 8, 10, 12, 14, 16, 18, 20, 24. Frame padding 24, card
+  padding 16, panel padding 18, focus column 720.
+- Radius: 8 (buttons, inputs), 10 (cards), 12 (unit cards, review cards),
+  full (chips, pills, nodes).
+- Colour roles: canvas, panel, box, line, ink, muted, accent, primary
+  button; mastery high, mid, low. The hi-fi assigns values per theme.
+
+## Regenerating the lo-fi
+
+The screens are code, so a change to a screen is a change to
+[kit/lofi.py](kit/lofi.py). It renders every screen into the open
+OpenPencil document over its local MCP, exports the SVGs, and saves the
+`.fig`.
+
+```bash
+python3 docs/design/kit/lofi.py            # all screens
+python3 docs/design/kit/lofi.py 01-today   # one screen
+node docs/design/kit/svg2png.mjs /tmp/out docs/design/lofi/*.svg   # PNGs to look at
+```
+
+OpenPencil must be running; the kit reads its port and token from
+`~/Library/Application Support/OpenPencil/mcp.json`. It exits non-zero and
+leaves the existing SVG alone if a render or export fails, and it refuses
+to report success when the `.fig` did not save. OpenPencil only saves
+under the home directory, so run the kit from a checkout inside it, not
+from a worktree under `/tmp`. The PNG step imports `playwright-core` from
+the tldrawkc submodule and uses the Chromium it caches, so the submodule
+has to be installed; it exists because OpenPencil's own raster export
+refuses ("no visible nodes") and Quick Look scales an SVG to a square and
+crops it.
+
+## Out of scope for v1
+
+Hi-fi and the palette. Dark variants of each frame (decision 4 says both
+are designed together; that happens in the hi-fi pass, on tokens). Studio
+screens. Phone layouts beyond the three drawn. Any change to the `learn`
+CLI's `--json` shapes.
+
+## Research index
+
+- [research/notebooklm.md](research/notebooklm.md), 13 assets
+- [research/duolingo.md](research/duolingo.md), 19 assets
+- [research/brilliant.md](research/brilliant.md), 17 assets
+- [research/others.md](research/others.md): Math Academy, Anki, RemNote, Obsidian, Khan Academy, 18 assets
+- [research/current-app.md](research/current-app.md): the inventory of pages, APIs and unsurfaced data, 8 captures
+
+Third-party assets live under `research/assets/<product>/` on the machine
+that gathered them and are gitignored. Our own captures under
+`research/assets/current-app/` are committed.
