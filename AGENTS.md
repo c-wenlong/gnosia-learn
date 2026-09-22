@@ -567,3 +567,17 @@ not have to be worked out again.
   under the OS temp directory and the setup file checks the tracked listing
   after every test file. A new suite that needs a tree to write into takes a
   temp one, the way `LEARN_ROOT` and `STUDIO_HOME` already do.
+- **A studio job reaching a terminal state does not mean the runner has
+  finished writing it.** `Runner.finish` in `services/studio/src/runner.ts`
+  does five things in order: put the new state in the store's in-memory map,
+  persist `job.json`, call `job finish` on the catalog, write any catalog error
+  back onto the record, and close the session. `JobStore.update` sets that map
+  synchronously and only then awaits the write, so a poll on
+  `store.get(id)?.state` sees `awaiting_review` with four of the five still
+  outstanding. A test that read `jobFinish.mock.calls` at that point found the
+  array empty, and one that edited `job.json` there had its edit overwritten by
+  the runner's own terminal record moments later. That was eight failures in
+  twenty runs of `services/studio/test/cap.test.ts` **on its own** with the
+  machine loaded, on `Cannot read properties of undefined (reading 'costUsd')`.
+  `Runner.settled(id)` resolves after the last of the five and is the thing to
+  wait on. A `setTimeout` is the same bet at longer odds, not a fix.

@@ -129,6 +129,30 @@ async function until(check: () => boolean, what: string, budgetMs = 5_000): Prom
   }
 }
 
+/**
+ * Wait for a job to reach `state` **and** for the runner to be done with it.
+ *
+ * The second half is the whole point. A terminal state is not the end of the
+ * runner's work on a record: `finish` writes the state into the store's
+ * in-memory map first, and then persists `job.json`, calls `jobFinish`, writes
+ * any catalog error back onto the record and closes the session. A test that
+ * stopped at the state flip was reading `jobFinish.mock.calls` before the call
+ * had been made, and editing a `job.json` the runner was about to overwrite
+ * with its own terminal record.
+ *
+ * It lost, too. Running this file alone on a loaded machine, eight runs in
+ * twenty failed on `jobFinish.mock.calls.at(-1)` being `undefined`, and a probe
+ * at the flip found `jobFinish` uncalled in three samples out of ten and
+ * `job.json` still saying `running` in a fourth.
+ *
+ * `runner.settled` resolves after the last of those writes, so this waits for
+ * the signal that actually means what the state flip was being read as.
+ */
+async function reached(id: string, state: string): Promise<void> {
+  await until(() => store.get(id)?.state === state, `it never reached ${state}`);
+  await runner.settled(id);
+}
+
 const SLUG = "studio-cap-fixture";
 
 async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
@@ -194,7 +218,7 @@ afterEach(async () => {
 describe("a job that finished cleanly", () => {
   it("records the agent's own figure and says it is exact", async () => {
     const { record } = await runner.enqueue(await brief());
-    await until(() => store.get(record.id)?.state === "awaiting_review", "it never finished");
+    await reached(record.id, "awaiting_review");
 
     const held = store.get(record.id)!;
     expect(held.costUsd).toBeCloseTo(EXACT_USD, 6);
@@ -220,7 +244,7 @@ describe("a job somebody cancelled mid-run", () => {
     );
 
     await runner.cancel(record.id);
-    await until(() => store.get(record.id)?.state === "cancelled", "it never acknowledged");
+    await reached(record.id, "cancelled");
 
     const held = store.get(record.id)!;
     expect(held.costUsd).toBeCloseTo(ESTIMATED_USD, 6);
@@ -240,7 +264,7 @@ describe("a job that ran past its ceiling", () => {
     // a job past forty-five minutes is `failed` with `timeout`, and only a job
     // somebody stopped is `cancelled`.
     await runner.cancel(record.id, "job-timeout");
-    await until(() => store.get(record.id)?.state === "failed", "it never stopped");
+    await reached(record.id, "failed");
 
     const held = store.get(record.id)!;
     expect(held.errorKind).toBe("timeout");
@@ -264,7 +288,11 @@ describe("a job whose runner died under it", () => {
     const id = record.id;
     await until(() => started.length === 1, "the agent never started");
     await runner.drain();
+    // `drain` stops the agent; it does not wait for the runner to write the
+    // verdict. `settled` does, and everything below here edits the record the
+    // runner would otherwise still be writing to.
     await until(() => store.get(id)?.state !== "running", "it never stopped");
+    await runner.settled(id);
 
     // Put it back the way a killed process leaves it: `running`, no cost, and
     // the whole transcript on disk.
@@ -345,7 +373,7 @@ describe("a record written before this column existed", () => {
     // nothing will ever rewrite: the reconcile pass touches `running` rows and
     // every one of these is terminal. Caught by Greptile on the phase 7 PR.
     const { record } = await runner.enqueue(await brief());
-    await until(() => store.get(record.id)?.state === "awaiting_review", "never finished");
+    await reached(record.id, "awaiting_review");
 
     const file = path.join(process.env.STUDIO_HOME ?? "", "jobs", record.id, "job.json");
     const held = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
@@ -371,7 +399,7 @@ describe("the cap", () => {
     // nothing to meter, which is the design's own reason for this phase being
     // last and optional.
     const first = await runner.enqueue(await brief());
-    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await reached(first.record.id, "awaiting_review");
     await store.update(first.record.id, { state: "discarded" });
 
     expect(runner.capStatus().capUsd).toBeNull();
@@ -383,7 +411,7 @@ describe("the cap", () => {
   it("refuses with a 429 once the rolling day's spend has crossed it", async () => {
     process.env.STUDIO_DAILY_USD = "0.10";
     const first = await runner.enqueue(await brief());
-    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await reached(first.record.id, "awaiting_review");
     await store.update(first.record.id, { state: "discarded" });
 
     const refused = await runner.enqueue(await brief({ slug: SLUG })).catch((error: unknown) => error);
@@ -416,7 +444,7 @@ describe("the cap", () => {
     await until(() => started.length === 1, "the agent never started");
     await until(() => (store.get(record.id)?.costUsd ?? 0) > 0, "the meter never saw the stream");
     await runner.cancel(record.id);
-    await until(() => store.get(record.id)?.state === "cancelled", "it never acknowledged");
+    await reached(record.id, "cancelled");
 
     expect(store.get(record.id)?.costSource).toBe("stream");
     const refused = await runner.enqueue(await brief({ slug: SLUG })).catch((error: unknown) => error);
@@ -427,7 +455,7 @@ describe("the cap", () => {
   it("stops counting an attempt once it is 24 hours old", async () => {
     process.env.STUDIO_DAILY_USD = "0.10";
     const first = await runner.enqueue(await brief());
-    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await reached(first.record.id, "awaiting_review");
     // Backdated a millisecond past the window: rolling, so the boundary is a
     // moving floor rather than a midnight everybody can spend against. Both
     // timestamps, because a job is counted from the later of the two.
@@ -486,7 +514,7 @@ describe("the cap", () => {
   it("reports the same window on capStatus that it refuses on", async () => {
     process.env.STUDIO_DAILY_USD = "5";
     const first = await runner.enqueue(await brief());
-    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await reached(first.record.id, "awaiting_review");
 
     const status = runner.capStatus();
     expect(status.capUsd).toBe(5);
@@ -522,7 +550,7 @@ describe("the cap", () => {
   it("counts a job from when it stopped spending, not when it started", async () => {
     process.env.STUDIO_DAILY_USD = "0.10";
     const first = await runner.enqueue(await brief());
-    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await reached(first.record.id, "awaiting_review");
 
     // A job whose first attempt began just outside the window and whose last
     // finished just inside it. Attributed to `started_at`, its whole bill —
