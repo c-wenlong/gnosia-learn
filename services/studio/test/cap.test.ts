@@ -336,6 +336,31 @@ describe("a job whose runner died under it", () => {
   });
 });
 
+describe("a record written before this column existed", () => {
+  it("loads with a null cost source rather than a missing one", async () => {
+    // `job.json` is a plain JSON.parse cast, so a field added after a job was
+    // written is absent on that record — and `undefined` is not `null`. The API
+    // then omits `costSource` instead of reporting it null, which breaks the
+    // shape the web app is typed against, for exactly the historical jobs
+    // nothing will ever rewrite: the reconcile pass touches `running` rows and
+    // every one of these is terminal. Caught by Greptile on the phase 7 PR.
+    const { record } = await runner.enqueue(await brief());
+    await until(() => store.get(record.id)?.state === "awaiting_review", "never finished");
+
+    const file = path.join(process.env.STUDIO_HOME ?? "", "jobs", record.id, "job.json");
+    const held = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+    delete held.costSource;
+    delete held.costUsd;
+    await writeFile(file, JSON.stringify(held, null, 1), "utf8");
+
+    const reborn = new JobStore();
+    await reborn.load();
+    const loaded = reborn.get(record.id)!;
+    expect("costSource" in loaded).toBe(true);
+    expect(loaded.costSource).toBeNull();
+  });
+});
+
 /* -------------------------------------------------------------------------- */
 /* The cap                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -404,9 +429,14 @@ describe("the cap", () => {
     const first = await runner.enqueue(await brief());
     await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
     // Backdated a millisecond past the window: rolling, so the boundary is a
-    // moving floor rather than a midnight everybody can spend against.
+    // moving floor rather than a midnight everybody can spend against. Both
+    // timestamps, because a job is counted from the later of the two.
     const old = new Date(Date.now() - 24 * 3_600_000 - 1).toISOString();
-    await store.update(first.record.id, { state: "discarded", startedAt: old });
+    await store.update(first.record.id, {
+      state: "discarded",
+      startedAt: old,
+      finishedAt: old,
+    });
 
     expect(runner.capStatus().totalUsd).toBe(0);
     await expect(runner.enqueue(await brief({ slug: SLUG }))).resolves.toBeDefined();
@@ -463,14 +493,49 @@ describe("the cap", () => {
     expect(status.exceeded).toBe(false);
     expect(status.totalUsd).toBeCloseTo(EXACT_USD, 6);
     expect(status.jobs).toBe(1);
-    expect(status.oldestStartedAt).toBe(store.get(first.record.id)?.startedAt);
+    // The instant it *stopped* spending, not the one it started at: `cost_usd`
+    // is every attempt summed, and hanging that on the first attempt expires a
+    // retry's spend early.
+    expect(status.oldestCountedAt).toBe(store.get(first.record.id)?.finishedAt);
   });
 
-  it("treats an unreadable STUDIO_DAILY_USD as unset rather than as zero", async () => {
-    // Refusing every job because a dotenv has a typo in it is the worst of both
-    // answers.
-    process.env.STUDIO_DAILY_USD = "ten dollars";
-    expect(runner.capStatus().capUsd).toBeNull();
-    await expect(runner.enqueue(await brief())).resolves.toBeDefined();
+  it.each(["ten dollars", "0.2oops", "1,50", "-5", "0", " ", "1e3", "NaN"])(
+    "treats STUDIO_DAILY_USD=%j as unset rather than as a cap",
+    async (value) => {
+      // Refusing every job because a dotenv has a typo in it is the worst of
+      // both answers. `0.2oops` is the one that matters: `parseFloat` takes a
+      // numeric prefix, so a typo used to become a real $0.20 budget that then
+      // started refusing jobs.
+      process.env.STUDIO_DAILY_USD = value;
+      expect(runner.capStatus().capUsd).toBeNull();
+      expect(runner.capStatus().exceeded).toBe(false);
+    },
+  );
+
+  it("still reads a plain number, with or without decimals", () => {
+    process.env.STUDIO_DAILY_USD = "5";
+    expect(runner.capStatus().capUsd).toBe(5);
+    process.env.STUDIO_DAILY_USD = "0.25";
+    expect(runner.capStatus().capUsd).toBe(0.25);
+  });
+
+  it("counts a job from when it stopped spending, not when it started", async () => {
+    process.env.STUDIO_DAILY_USD = "0.10";
+    const first = await runner.enqueue(await brief());
+    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+
+    // A job whose first attempt began just outside the window and whose last
+    // finished just inside it. Attributed to `started_at`, its whole bill —
+    // every attempt's — would have aged out already.
+    const now = Date.now();
+    await store.update(first.record.id, {
+      state: "discarded",
+      startedAt: new Date(now - 24 * 3_600_000 - 60_000).toISOString(),
+      finishedAt: new Date(now - 23 * 3_600_000).toISOString(),
+    });
+
+    expect(runner.capStatus().totalUsd).toBeCloseTo(EXACT_USD, 6);
+    const refused = await runner.enqueue(await brief({ slug: SLUG })).catch((e: unknown) => e);
+    expect((refused as InstanceType<typeof JobRefused>).status).toBe(429);
   });
 });

@@ -199,6 +199,57 @@ describe("a job that took more than one attempt", () => {
   });
 });
 
+describe("a model the rate table has never heard of", () => {
+  it("keeps pricing at the brief's model rather than dropping to no rate", () => {
+    // The hole this closes: the stream naming an unknown model used to replace
+    // the priceable one from the brief, after which the attempt priced at
+    // nothing and recorded zero — and `spendWindow` skips a zero, so a paid
+    // cancelled attempt would have walked past the cap the day a model
+    // generation changed. Caught by Greptile on the phase 7 PR.
+    const meter = new JobCostMeter("sonnet");
+    meter.observeEvent({
+      type: "assistant",
+      message: { id: "m1", model: "claude-something-6", usage: { input_tokens: 1_000_000 } },
+    });
+    const reading = meter.read();
+    expect(reading.usd).toBeCloseTo(2, 6);
+    // The row still says what the stream named; the price says what it was
+    // priced at. Those are two facts and they disagree here.
+    expect(reading.model).toBe("claude-something-6");
+    expect(reading.pricedAs).toBe("claude-sonnet-5");
+  });
+
+  it("reports unknown rather than zero when nothing can price it", () => {
+    const meter = new JobCostMeter(null);
+    meter.observeEvent({
+      type: "assistant",
+      message: { id: "m1", model: "claude-something-6", usage: { input_tokens: 1_000_000 } },
+    });
+    const reading = meter.read();
+    // A zero would be recorded as a zero-dollar job and then skipped by the
+    // window. Null says "unknown", which is true, and shows up as a cost that
+    // is missing rather than a cost that is free.
+    expect(reading.usd).toBeNull();
+    expect(reading.pricedAs).toBeNull();
+    expect(reading.usage.inputTokens).toBe(1_000_000);
+    // And no source, because there is no figure for a source to describe —
+    // which is also what `job_cost_source_paired_check` requires.
+    expect(reading.source).toBeNull();
+  });
+
+  it("still takes an exact figure from a result event for a model it cannot price", () => {
+    const meter = new JobCostMeter(null);
+    meter.observeEvent({
+      type: "assistant",
+      message: { id: "m1", model: "claude-something-6", usage: { input_tokens: 10 } },
+    });
+    meter.observeEvent({ type: "result", total_cost_usd: 0.42, usage: { input_tokens: 10 } });
+    // The CLI's own number needs no rate table.
+    expect(meter.read().usd).toBeCloseTo(0.42, 6);
+    expect(meter.read().source).toBe("result");
+  });
+});
+
 describe("the rolling 24 hour window", () => {
   const at = (hoursAgo: number, now: number): string =>
     new Date(now - hoursAgo * 3_600_000).toISOString();
@@ -217,7 +268,32 @@ describe("the rolling 24 hour window", () => {
     );
     expect(window.totalUsd).toBeCloseTo(0.75, 6);
     expect(window.jobs).toBe(2);
-    expect(window.oldestStartedAt).toBe(at(23, now));
+    expect(window.oldestCountedAt).toBe(at(23, now));
+  });
+
+  it("counts a finished job from when it stopped spending", () => {
+    const now = Date.parse("2026-09-22T12:00:00.000Z");
+    // `cost_usd` is every attempt summed and `started_at` is set before the
+    // first one, so attributing the aggregate to it expires a third attempt's
+    // spend up to three quarters of an hour early — and the cap lets another
+    // paid job through in the gap. Caught by Greptile on the phase 7 PR.
+    const window = spendWindow(
+      [{ startedAt: at(24.5, now), finishedAt: at(23.9, now), costUsd: 1 }],
+      DAY,
+      now,
+    );
+    expect(window.totalUsd).toBe(1);
+    expect(window.oldestCountedAt).toBe(at(23.9, now));
+  });
+
+  it("counts a running job from its start, because it has not stopped", () => {
+    const now = Date.parse("2026-09-22T12:00:00.000Z");
+    const window = spendWindow(
+      [{ startedAt: at(1, now), finishedAt: null, costUsd: 1 }],
+      DAY,
+      now,
+    );
+    expect(window.oldestCountedAt).toBe(at(1, now));
   });
 
   it("holds an attempt that started exactly 24 hours ago, and drops it a millisecond later", () => {
@@ -230,12 +306,26 @@ describe("the rolling 24 hour window", () => {
     expect(spendWindow([{ startedAt: edge, costUsd: 1 }], DAY, now + 1).totalUsd).toBe(0);
   });
 
-  it("says when the oldest counted attempt ages out", () => {
+  it("says when the oldest counted job ages out", () => {
     const now = Date.parse("2026-09-22T12:00:00.000Z");
     const window = spendWindow([{ startedAt: at(20, now), costUsd: 1 }], DAY, now);
     // Four hours from now: 24 hours after it started. The only honest answer to
     // "when can I try again", and a 429 without it is a dead end.
     expect(window.oldestAgesOutAt).toBe(new Date(now + 4 * 3_600_000).toISOString());
+  });
+
+  it("ignores a job whose cost could not be priced at all", () => {
+    // Null is the shape unpriceable usage takes, and it is skipped here for the
+    // same reason a queued job is: there is no figure to add. The protection
+    // against that becoming a free pass is upstream, in the meter keeping a
+    // priceable model.
+    const now = Date.now();
+    const window = spendWindow(
+      [{ startedAt: new Date(now).toISOString(), costUsd: null }],
+      DAY,
+      now,
+    );
+    expect(window.totalUsd).toBe(0);
   });
 
   it("ignores a job that never started and one that recorded no cost", () => {

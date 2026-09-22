@@ -129,6 +129,11 @@ export const VERB_TIMEOUT_MS = integer("STUDIO_VERB_TIMEOUT_MS", 180_000, 10_000
 export function dailyCapUsd(): number | null {
   const raw = process.env.STUDIO_DAILY_USD?.trim();
   if (raw === undefined || raw === "") return null;
+  // `Number.parseFloat` takes a numeric *prefix*, so it reads `0.2oops` as a
+  // $0.20 cap — a typo silently becoming a real budget that then refuses jobs,
+  // which is the opposite of the behaviour documented below. The whole trimmed
+  // value has to be a number. Caught by Greptile on the phase 7 PR.
+  if (!/^\d+(\.\d+)?$/.test(raw)) return null;
   const parsed = Number.parseFloat(raw);
   // A value that is not a number is not a cap of zero. Refusing every job
   // because a dotenv has a typo in it is the worst of both answers, so an

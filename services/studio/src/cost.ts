@@ -163,9 +163,20 @@ export const MODEL_ALIASES: Readonly<Record<string, string>> = {
  * number on a row that nothing backs up.
  */
 export function ratesFor(model: string | null): Rates | null {
+  return canonicalModel(model) === null ? null : (RATE_TABLE[canonicalModel(model)!] ?? null);
+}
+
+/**
+ * The rate table's own name for a model, or null when it has none.
+ *
+ * The brief says `sonnet` and the stream says `claude-sonnet-5`, and a figure
+ * that reports which of those it was priced at should say the one the table
+ * keyed on rather than whichever spelling happened to arrive first.
+ */
+export function canonicalModel(model: string | null): string | null {
   if (model === null) return null;
   const canonical = MODEL_ALIASES[model] ?? model;
-  return RATE_TABLE[canonical] ?? null;
+  return canonical in RATE_TABLE ? canonical : null;
 }
 
 /** Price one bag of tokens. Null when the model is not in the table. */
@@ -231,13 +242,31 @@ export function isEmptyUsage(usage: TokenUsage): boolean {
 }
 
 export interface CostReading {
-  /** Null when nothing priceable has been seen at all. */
+  /**
+   * Null when nothing priceable has been seen, **and when what was seen could
+   * not be priced at all**.
+   *
+   * The second case is the one worth stating. Usage the rate table cannot price
+   * is not usage that cost nothing, and a zero here would be recorded as a
+   * zero-dollar job and then skipped by the rolling window — which is a paid
+   * attempt that the cap never sees. Null says "unknown", which is true, and is
+   * visible on the row as a cost that is missing rather than a cost that is
+   * free.
+   */
   usd: number | null;
   source: CostSource | null;
   /** Everything seen, whether it was priced from a result event or from usage. */
   usage: TokenUsage;
-  /** The model the stream named, for the row and for a rate-table miss. */
+  /** The model the stream named, for the row. May be one this table cannot price. */
   model: string | null;
+  /**
+   * The model the figure was actually priced at.
+   *
+   * Differs from `model` only when the stream named something the rate table
+   * has never heard of and the brief's own model was used instead. Null when
+   * nothing could price it.
+   */
+  pricedAs: string | null;
   /** How many distinct assistant messages contributed. Diagnostics, not billing. */
   messages: number;
 }
@@ -269,8 +298,24 @@ export class JobCostMeter {
   private settledUsage: TokenUsage = EMPTY_USAGE;
   /** Usage no result event has accounted for yet. */
   private pending: TokenUsage = EMPTY_USAGE;
+  /** The last model the stream named, priceable or not. Reported, not used. */
   private model: string | null = null;
+  /**
+   * The last model named that this table can actually price.
+   *
+   * Kept apart from `model`, and this is the whole of the difference: a stream
+   * naming a model the table has never heard of used to *replace* the brief's
+   * own, after which the attempt priced at no rate at all and recorded zero —
+   * and a zero is skipped by the rolling window, so a paid cancelled attempt
+   * would have walked straight past the cap the day a model generation changed.
+   * An unknown name is now a reason to keep pricing at the model the brief
+   * asked for, which is the model `--model` was passed and is always one of the
+   * two this table knows. Caught by Greptile on the phase 7 PR.
+   */
+  private priceableModel: string | null = null;
   private sawResult = false;
+  /** True when something was seen that no rate could be found for. */
+  private unpriced = false;
   /**
    * Message ids already counted in *this attempt*: one event per content
    * block, one usage each.
@@ -284,9 +329,10 @@ export class JobCostMeter {
   private seen = new Set<string>();
   private messages = 0;
 
-  /** A model to fall back on when the stream never named one. */
+  /** A model to fall back on when the stream never names a priceable one. */
   constructor(fallbackModel: string | null = null) {
     this.model = fallbackModel;
+    this.priceableModel = canonicalModel(fallbackModel);
   }
 
   /** One raw line. Anything unparseable, or irrelevant, is ignored. */
@@ -314,7 +360,10 @@ export class JobCostMeter {
       const usage = readUsage(message.usage);
       if (usage === null || isEmptyUsage(usage)) return;
       if (id !== null) this.seen.add(id);
-      if (typeof message.model === "string") this.model = message.model;
+      if (typeof message.model === "string") {
+        this.model = message.model;
+        this.priceableModel = canonicalModel(message.model) ?? this.priceableModel;
+      }
       this.pending = addUsage(this.pending, usage);
       this.messages += 1;
       return;
@@ -333,7 +382,13 @@ export class JobCostMeter {
       // No `total_cost_usd` on a result event has not been seen in the wild,
       // but the field is optional in shape and a missing one should cost the
       // precision of that attempt rather than its whole cost.
-      this.settledUsd += exact ?? priceUsd(settled, this.model) ?? 0;
+      if (exact !== null) {
+        this.settledUsd += exact;
+      } else {
+        const priced = priceUsd(settled, this.priceableModel);
+        if (priced === null) this.unpriced = true;
+        else this.settledUsd += priced;
+      }
       if (exact !== null) this.sawResult = true;
       this.pending = EMPTY_USAGE;
       this.seen = new Set();
@@ -349,13 +404,24 @@ export class JobCostMeter {
   }
 
   read(): CostReading {
-    const pendingUsd = isEmptyUsage(this.pending) ? 0 : (priceUsd(this.pending, this.model) ?? 0);
+    const pendingUsd = isEmptyUsage(this.pending)
+      ? 0
+      : priceUsd(this.pending, this.priceableModel);
+    const unpriced = this.unpriced || pendingUsd === null;
     const anything = this.sawResult || this.settledUsd > 0 || !isEmptyUsage(this.pending);
+    const usd = !anything || unpriced ? null : round(this.settledUsd + (pendingUsd ?? 0));
     return {
-      usd: anything ? round(this.settledUsd + pendingUsd) : null,
-      source: anything ? (isEmptyUsage(this.pending) ? "result" : "stream") : null,
+      // Unknown beats zero. See the note on `usd` above.
+      usd,
+      // A source with no figure beside it says where a number came from and
+      // then does not have one, which is also what `job_cost_source_paired_check`
+      // refuses. No figure means no statement about its provenance; that
+      // something unpriceable was seen is carried by `pricedAs` being null with
+      // `usage` non-empty.
+      source: usd === null ? null : isEmptyUsage(this.pending) ? "result" : "stream",
       usage: addUsage(this.settledUsage, this.pending),
       model: this.model,
+      pricedAs: this.priceableModel,
       messages: this.messages,
     };
   }
@@ -380,21 +446,23 @@ export function costFromLog(body: string, fallbackModel: string | null = null): 
 /** All the window needs from a job. Structural, so this module imports no store. */
 export interface SpendEntry {
   startedAt: string | null;
+  /** When it stopped spending. Null while it still is. */
+  finishedAt?: string | null;
   costUsd: number | null;
 }
 
 export interface SpendWindow {
   /** What has been spent inside the window. */
   totalUsd: number;
-  /** How many attempts contributed a non-zero figure. */
+  /** How many jobs contributed a non-zero figure. */
   jobs: number;
-  /** When the oldest counted attempt started, or null when nothing counted. */
-  oldestStartedAt: string | null;
+  /** The instant the oldest counted job is attributed to. Null when none is. */
+  oldestCountedAt: string | null;
   /**
-   * The moment the oldest counted attempt leaves the window, which is the
-   * earliest the total can fall. Null when nothing is counted.
+   * The moment the oldest counted job leaves the window, which is the earliest
+   * the total can fall. Null when nothing is counted.
    *
-   * It is not a promise that the cap clears then — a second attempt inside the
+   * It is not a promise that the cap clears then — a second job inside the
    * window keeps holding it up — but it is the only honest answer to "when can
    * I try again", and a 429 that says nothing about that is a dead end.
    */
@@ -402,19 +470,32 @@ export interface SpendWindow {
 }
 
 /**
- * Sum what was spent in the last 24 hours, counting from when each attempt
- * *started*.
+ * Sum what was spent in the last 24 hours.
  *
  * **Rolling, not a calendar day.** A calendar cap resets at midnight in some
  * timezone, which means a run of expensive jobs at 23:50 is free again ten
  * minutes later, and a cap with a known free moment is not a cap.
  *
- * **Keyed on `started_at`, not `requested_at`.** Spending happens when a runner
- * claims a job and launches an agent. A job that sat queued for two days and
- * ran an hour ago spent an hour ago, and pricing it against the day it was
- * asked for would let a queue drained after a pause spend a second day's budget
- * on the first day's requests. A job that never started has no `started_at` and
- * no cost, so it never counts either way.
+ * **Never `requested_at`.** Spending happens when a runner claims a job and
+ * launches an agent. A job that sat queued for two days and ran an hour ago
+ * spent an hour ago, and pricing it against the day it was asked for would let
+ * a queue drained after a pause spend a second day's budget on the first day's
+ * requests. A job that never started has no timestamp and no cost, so it never
+ * counts either way.
+ *
+ * **A finished job is attributed to when it *stopped* spending, not when it
+ * started.** `cost_usd` is the sum of every attempt, and a job runs up to three
+ * of them across as much as forty-five minutes; `started_at` is set before the
+ * first and never moves. Hanging the whole aggregate on it expires a third
+ * attempt's spend up to three quarters of an hour early, and the cap can let
+ * another paid job through in that gap. Per-attempt timestamps would be exact,
+ * and would mean a second record shape for an error measured in minutes at the
+ * tail of a twenty-four hour window; `finished_at` costs one field and errs the
+ * other way — a little too long rather than a little too early, which is the
+ * direction a cap should err. A job still running has no `finished_at` and is
+ * counted from its start, which is right: it has not stopped spending yet.
+ *
+ * Caught by Greptile on the phase 7 PR.
  */
 export function spendWindow(
   entries: readonly SpendEntry[],
@@ -427,19 +508,19 @@ export function spendWindow(
   let oldest: number | null = null;
   for (const entry of entries) {
     if (entry.startedAt === null || entry.costUsd === null || entry.costUsd <= 0) continue;
-    const startedAt = Date.parse(entry.startedAt);
-    // A `started_at` that will not parse is a record this cannot reason about;
-    // counting it against an unknown instant would be worse than leaving it out,
-    // and it is a shape `job.json` has never had.
-    if (!Number.isFinite(startedAt) || startedAt < floor) continue;
+    const at = Date.parse(entry.finishedAt ?? entry.startedAt);
+    // A timestamp that will not parse is a record this cannot reason about;
+    // counting it against an unknown instant would be worse than leaving it
+    // out, and it is a shape `job.json` has never had.
+    if (!Number.isFinite(at) || at < floor) continue;
     totalUsd += entry.costUsd;
     jobs += 1;
-    if (oldest === null || startedAt < oldest) oldest = startedAt;
+    if (oldest === null || at < oldest) oldest = at;
   }
   return {
     totalUsd: round(totalUsd),
     jobs,
-    oldestStartedAt: oldest === null ? null : new Date(oldest).toISOString(),
+    oldestCountedAt: oldest === null ? null : new Date(oldest).toISOString(),
     oldestAgesOutAt: oldest === null ? null : new Date(oldest + windowMs).toISOString(),
   };
 }

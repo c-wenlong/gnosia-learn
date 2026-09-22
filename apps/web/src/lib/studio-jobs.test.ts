@@ -467,7 +467,7 @@ describe("a refused enqueue", () => {
       capUsd: 0.5,
       jobs: 4,
       windowHours: 24,
-      oldestStartedAt: "2026-09-21T22:00:00.000Z",
+      oldestCountedAt: "2026-09-21T22:00:00.000Z",
       oldestAgesOutAt: "2026-09-22T22:00:00.000Z",
     },
   };

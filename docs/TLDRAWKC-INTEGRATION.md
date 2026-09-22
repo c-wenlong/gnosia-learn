@@ -335,7 +335,7 @@ browser on this machine.
 
 | Method | Path | Purpose | Request | Response |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/jobs` | Queue a job from a frozen brief | `Brief` | `201 { jobId, state: "queued", jobsAhead, note }`, or `429` with `{ reason: "daily-cap", totalUsd, capUsd, jobs, windowHours, oldestStartedAt, oldestAgesOutAt }` when `STUDIO_DAILY_USD` is set and the rolling day is at or over it |
+| `POST` | `/api/jobs` | Queue a job from a frozen brief | `Brief` | `201 { jobId, state: "queued", jobsAhead, note }`, or `429` with `{ reason: "daily-cap", totalUsd, capUsd, jobs, windowHours, oldestCountedAt, oldestAgesOutAt }` when `STUDIO_DAILY_USD` is set and the rolling day is at or over it |
 | `GET` | `/api/jobs` | List jobs, newest first | `?limit=25&state=running` | `{ jobs: [{ jobId, title, target, state, turns, costUsd, updated }] }` |
 | `GET` | `/api/jobs/{id}` | One job, current state | none | `{ jobId, state, phase, brief, attempt, artifacts, gate, costUsd, costSource, error, note }` |
 | `GET` | `/api/jobs/{id}/events` | Live progress, SSE | `Last-Event-ID` on reconnect | `text/event-stream` of `phase`, `step`, `gate`, `done` |
@@ -1890,7 +1890,8 @@ honest about what every attempt cost rather than only the ones that finished.
 - [x] `job.cost_source` (`result` \| `stream`) and migration `0007`, so a
       reader can tell the agent's own figure from the runner's estimate
 - [x] `STUDIO_DAILY_USD`, unset meaning no cap, over a rolling 24 hour window
-      keyed on when each attempt **started**
+      that counts a finished job from when it **stopped** spending, since
+      `cost_usd` is every attempt summed and `started_at` never moves
 - [x] `POST /api/jobs` refuses with 429 once the total is at or over the cap,
       with the total, the cap and when the oldest counted attempt ages out
 - [x] `refusalReport` in `apps/web/src/lib/studio-jobs.ts` gives the 429 a code
@@ -1914,12 +1915,26 @@ factor would make the figure unauditable against the CLI's own, which is the
 one check that catches a stale rate table. So the row records where its number
 came from and every surface that shows a figure shows that beside it.
 
-**One thing this phase did not establish.** Whether a SIGTERM'd `claude -p`
-flushes a result event before it goes is not something this repo has evidence
-for: all nine sessions on disk exited cleanly and have one. The meter does not
-depend on the answer — it prefers a result event wherever one arrives and
-accumulates where one does not — which is why the question could be left open
-rather than guessed at.
+**A SIGTERM'd `claude -p` flushes no result event.** Left open while this was
+built, because all nine sessions on disk had exited cleanly and had one, and
+settled on the live run: the cancelled job's transcript has none. The meter
+never depended on the answer — it prefers a result event wherever one arrives
+and accumulates where one does not — which is why it could be left open rather
+than guessed at.
+
+**Four things review caught, each a way the cap could have been walked past or
+a shape that did not hold.** A model the rate table does not know used to
+*replace* the priceable one from the brief, after which the attempt priced at
+no rate and recorded zero — and the window skips a zero, so a model generation
+change would have made every cancelled attempt free. It now keeps pricing at
+the brief's own model, and reports `null` rather than `0` when nothing can
+price it, because unknown and free are different claims. The window counted a
+job's whole bill from `started_at`, which expired a third attempt's spend up to
+three quarters of an hour early; it counts from `finished_at` now, which errs
+the other way. `STUDIO_DAILY_USD=0.2oops` parsed as a $0.20 cap, because
+`parseFloat` takes a numeric prefix. And a `job.json` written before
+`cost_source` existed loaded without the field at all, so the API omitted it
+rather than reporting it null.
 
 ## Known gaps
 

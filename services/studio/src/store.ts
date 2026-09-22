@@ -194,6 +194,21 @@ const atomicWrite = async (file: string, body: string): Promise<void> => {
   }
 };
 
+/**
+ * A record written by an older build, brought up to the current shape.
+ *
+ * `job.json` is a plain `JSON.parse` cast, so a field added after a job was
+ * written is simply absent on that record — and `undefined` is not `null`. The
+ * API then omits `costSource` rather than reporting it as null, which breaks
+ * the shape the web app is typed against, and only for the historical jobs
+ * nothing will ever rewrite: the reconcile pass touches `running` rows and
+ * every one of these is terminal. One line here rather than a defensive read
+ * at each of the surfaces. Caught by Greptile on the phase 7 PR.
+ */
+function normalise(record: JobRecord): JobRecord {
+  return { ...record, costSource: record.costSource ?? null };
+}
+
 export class JobStore {
   private readonly records = new Map<string, JobRecord>();
   private readonly streams = new Map<string, Stream>();
@@ -221,7 +236,7 @@ export class JobStore {
     for (const entry of entries) {
       try {
         const raw = await readFile(jobJsonPath(entry), "utf8");
-        const record = JSON.parse(raw) as JobRecord;
+        const record = normalise(JSON.parse(raw) as JobRecord);
         this.records.set(record.id, record);
       } catch {
         // A directory with no readable job.json is a workspace that was created

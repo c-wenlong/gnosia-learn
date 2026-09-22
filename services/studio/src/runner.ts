@@ -383,18 +383,17 @@ export class Runner {
    * be a cap anybody could walk past by pressing Cancel.
    */
   spend(now: number = Date.now()): ReturnType<typeof spendWindow> {
+    // Whole records: `SpendEntry` is structural, so `startedAt`, `finishedAt`
+    // and `costUsd` are read off them directly and nothing has to be kept in
+    // step with a second shape.
     return spendWindow(this.store.list(), DAILY_WINDOW_MS, now);
   }
 
   /** What the cap is, and where it stands. For `/api/health` and the UI. */
   capStatus(now: number = Date.now()): {
     capUsd: number | null;
-    totalUsd: number;
-    jobs: number;
-    oldestStartedAt: string | null;
-    oldestAgesOutAt: string | null;
     exceeded: boolean;
-  } {
+  } & ReturnType<typeof spendWindow> {
     const window = this.spend(now);
     const cap = dailyCapUsd();
     return {
@@ -430,8 +429,8 @@ export class Runner {
     throw new JobRefused(
       429,
       `the studio has spent ${dollars(window.totalUsd)} in the last 24 hours, which is at or over ` +
-        `the ${dollars(cap)} STUDIO_DAILY_USD cap. Nothing was queued. The oldest attempt ` +
-        `counted here started ${window.oldestStartedAt ?? "(unknown)"} and leaves the window at ` +
+        `the ${dollars(cap)} STUDIO_DAILY_USD cap. Nothing was queued. The oldest job counted ` +
+        `here is dated ${window.oldestCountedAt ?? "(unknown)"} and leaves the window at ` +
         `${window.oldestAgesOutAt ?? "(unknown)"}, which is the earliest this total can fall. ` +
         `Raise STUDIO_DAILY_USD, or wait.`,
       {
@@ -440,7 +439,7 @@ export class Runner {
         capUsd: cap,
         jobs: window.jobs,
         windowHours: DAILY_WINDOW_MS / 3_600_000,
-        oldestStartedAt: window.oldestStartedAt,
+        oldestCountedAt: window.oldestCountedAt,
         oldestAgesOutAt: window.oldestAgesOutAt,
       },
     );
