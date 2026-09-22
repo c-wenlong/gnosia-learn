@@ -39,8 +39,21 @@ function findRepoRoot(start: string): string {
 /** services/studio/ */
 export const SERVICE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The repository root. Absolute, and the base of every other path here. */
-export const REPO_ROOT = findRepoRoot(SERVICE_ROOT);
+/**
+ * The repository root. Absolute, and the base of every other path here.
+ *
+ * `STUDIO_REPO_ROOT` overrides the walk and is read once, here, at import. It
+ * is for the tests and nothing else: no request, brief or settings file can
+ * reach it, and with the variable unset this resolves exactly as it did before
+ * it existed. Every path below is repo-relative, so without an override the
+ * suite writes its fixture diagrams into the checked-out `learn/assets/`, which
+ * `services/catalog`'s end-to-end test indexes from a parallel vitest worker. A
+ * fixture that exists for one index pass and is gone by the next is pruned by
+ * the second, and that suite fails on a deletion it has nothing to do with.
+ * `vitest.setup.ts` points this at a symlink farm under the OS temp directory.
+ */
+const configuredRoot = process.env.STUDIO_REPO_ROOT?.trim();
+export const REPO_ROOT = configuredRoot ? path.resolve(configuredRoot) : findRepoRoot(SERVICE_ROOT);
 
 /** Where committed diagrams live. Repo-relative, because the catalog speaks that. */
 export const ASSETS_DIR = "learn/assets";
