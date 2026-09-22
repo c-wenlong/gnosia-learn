@@ -34,6 +34,25 @@ export interface AcceptResult {
   indexed: boolean;
   note: string;
   error?: string;
+  /** True when a mirror on the target was closed on the way past. */
+  mirrorClosed?: boolean;
+}
+
+export interface AcceptHooks {
+  /**
+   * Close any human canvas on the target, and say whether it is actually gone.
+   * Called once, immediately before the last hash check and the renames, and
+   * only on an accept that is going to happen.
+   *
+   * A capability rather than an import: `review.ts` owns the ordering and knows
+   * *when* the writer has to go, and `Mirrors` is the API layer's object. A
+   * refusal must not disconnect an editor — a stale tab pressing Accept on a
+   * job somebody already discarded would otherwise close the canvas its owner
+   * is drawing on and then answer 409.
+   *
+   * `gone: false` is a refusal and not a warning: see step 3.
+   */
+  closeMirror?: () => Promise<{ found: boolean; gone: boolean }>;
 }
 
 async function sha256(file: string): Promise<string | null> {
@@ -79,11 +98,19 @@ function withJobLock<T>(jobId: string, fn: () => Promise<T>): Promise<T> {
  * The record is re-read inside the lock: the caller fetched it before the queue
  * was joined, and whatever ran in front may have moved it.
  */
-export function accept(store: JobStore, record: JobRecord): Promise<AcceptResult> {
-  return withJobLock(record.id, () => acceptLocked(store, store.get(record.id) ?? record));
+export function accept(
+  store: JobStore,
+  record: JobRecord,
+  hooks: AcceptHooks = {},
+): Promise<AcceptResult> {
+  return withJobLock(record.id, () => acceptLocked(store, store.get(record.id) ?? record, hooks));
 }
 
-async function acceptLocked(store: JobStore, record: JobRecord): Promise<AcceptResult> {
+async function acceptLocked(
+  store: JobStore,
+  record: JobRecord,
+  hooks: AcceptHooks,
+): Promise<AcceptResult> {
   if (record.state !== "awaiting_review") {
     return {
       ok: false,
@@ -144,16 +171,49 @@ async function acceptLocked(store: JobStore, record: JobRecord): Promise<AcceptR
     }
   }
 
-  /* 3. The same question again, immediately before the rename.
+  /* 3. The writer goes, and then the question is asked for the last time.
    *
-   *    The export and the verify above are each a Chromium launch, so the check
-   *    at the top of this function can be a minute or two old by now, and the
-   *    window it leaves open is the exact one S4 is about: a person editing the
-   *    committed file in the mirror while the job was running. Asking once was
-   *    asking early; the answer that matters is the one taken with nothing left
-   *    to await between it and the rename. */
+   *    A6: `serve` holds the document as its tab last loaded it, and Cmd+S in
+   *    that tab PUTs the whole thing back — so a human save landing after the
+   *    rename would silently revert the accepted diagram. The mirror is closed
+   *    here rather than at the top of the route, because everything above this
+   *    line can still refuse and a refusal must not disconnect an editor: a
+   *    stale tab pressing Accept on a job somebody already discarded would
+   *    otherwise close the canvas its owner is drawing on and then answer 409.
+   *    Caught in review on this PR.
+   *
+   *    The hash comes after the close and not before it, which is the order
+   *    that makes both of them mean something: the close stops any further
+   *    save, and the check then catches one that had already landed. The export
+   *    and the verify above are each a Chromium launch, so the answer from the
+   *    top of this function can be minutes old by now — and the window that
+   *    leaves open is the exact one S4 is about. */
+  const closed = (await hooks.closeMirror?.()) ?? { found: false, gone: true };
+  const mirrorClosed = closed.found;
+
+  /*    And a writer that will not die is a refusal, not a warning. `stopChild`
+   *    only answers `gone: false` after a `SIGTERM`, a grace window, a `SIGKILL`
+   *    and a second one, so this is a machine in trouble — but renaming anyway
+   *    would make the whole of that waiting decorative in the one case it
+   *    exists for. Nothing has moved at this point, so Discard, a retry and a
+   *    follow-up job are all still available, which is why refusing costs a
+   *    person a click and not their work. */
+  if (!closed.gone) {
+    return {
+      ok: false,
+      written: [],
+      indexed: false,
+      mirrorClosed,
+      note:
+        `the canvas open on ${record.targetPath} would not shut down, so nothing was moved: ` +
+        `renaming behind a writer that is still running is the save-after-rename loss this ` +
+        `close exists to prevent. Close the tab, check for a stuck process, and press Accept again.`,
+      error: "mirror-stuck",
+    };
+  }
+
   const movedLate = await targetMoved(record);
-  if (movedLate !== null) return movedLate;
+  if (movedLate !== null) return { ...movedLate, mirrorClosed };
 
   /* 4. The renames. Atomic, because the candidates directory is a sibling of
    *    the target and not the OS temp directory: each file is either the old
@@ -186,6 +246,7 @@ async function acceptLocked(store: JobStore, record: JobRecord): Promise<AcceptR
       ok: true,
       written,
       indexed: false,
+      mirrorClosed,
       note:
         `${written.join(" and ")} landed in learn/assets/, and the catalog did not record it: ` +
         `${indexed.error}. The files are the output and the index is derived, so this is ` +
@@ -199,6 +260,7 @@ async function acceptLocked(store: JobStore, record: JobRecord): Promise<AcceptR
     ok: true,
     written,
     indexed: true,
+    mirrorClosed,
     note:
       `${written.join(" and ")} landed in learn/assets/ and the catalog recorded ${written.length} ` +
       `output${written.length === 1 ? "" : "s"}. Committing is still yours: git add ${written.join(" ")}`,

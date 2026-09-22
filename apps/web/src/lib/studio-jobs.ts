@@ -1,5 +1,7 @@
 import { JOB_ACTIVE_STATES, type JobState } from "@self-learn/schema/shared";
 
+import type { Comparison } from "@/lib/studio-compare";
+
 /**
  * What a job looks like to the UI, decided here and nowhere else.
  *
@@ -35,6 +37,13 @@ export interface GateStep {
   exitCode?: number | null;
 }
 
+/** One `verify` check: the rule, whether it passed, and its own detail line. */
+export interface VerifyCheck {
+  rule: string;
+  ok: boolean;
+  detail: string;
+}
+
 export interface GateResult {
   ok: boolean;
   steps: GateStep[];
@@ -45,6 +54,11 @@ export interface GateResult {
   /** True when the document saved and the export did not: tldrawkc exit 4. */
   exportFailed: boolean;
   checkedAt: string;
+  /** Optional: a job recorded before phase 4 carries none of the three. */
+  bindings?: number | null;
+  /** `verify --json`'s four checks, which the comparison panel lists in full. */
+  verify?: VerifyCheck[];
+  shot?: boolean;
 }
 
 export interface BriefElement {
@@ -89,6 +103,14 @@ export interface Job {
   costUsd: number | null;
   exitCode: number | null;
   gate: GateResult | null;
+  /**
+   * Before, after, and the lint difference: the finished screen's content.
+   *
+   * Computed by the runner and read here. Optional on the wire because a runner
+   * one version behind does not send it, and a panel without it says what it
+   * has rather than throwing.
+   */
+  comparison?: Comparison | null;
   written: string[];
   indexed: boolean;
   error: string | null;
@@ -98,6 +120,14 @@ export interface Job {
   finished: string | null;
   updated: string;
   cancelRequestedAt: string | null;
+  /**
+   * Every catalog call that did not go through, newest last.
+   *
+   * The `indexed: false` banner shows the last one: "the catalog did not record
+   * it" is the fact, and the connection error underneath is the thing a person
+   * can act on. Optional on the wire for a runner one version behind.
+   */
+  catalogErrors?: string[];
   note: string;
   /** Only `GET /api/jobs/{id}` carries it. */
   brief?: Brief;

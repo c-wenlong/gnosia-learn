@@ -5,6 +5,8 @@ import path from "node:path";
 import type { JobState } from "@self-learn/schema";
 
 import type { ValidBrief } from "./brief";
+import type { CanvasLint, VerifyCheck } from "./canvas";
+import type { Comparison } from "./compare";
 import { SSE_BUFFER } from "./config";
 import {
   jobDir,
@@ -49,6 +51,24 @@ export interface GateResult {
   /** True when the document saved and the export did not: tldrawkc exit 4. */
   exportFailed: boolean;
   checkedAt: string;
+  /**
+   * The three things phase 4's comparison needs and phase 1 threw away.
+   *
+   * The gate already ran `inspect` and `verify` and already knows the answers;
+   * it recorded a count and a sentence. A panel that wanted the lint list or
+   * the four checks had to launch Chromium again to ask a question that had
+   * been answered minutes earlier, so the answers are kept.
+   *
+   * All three are optional on the type because a job recorded before this
+   * existed is still readable, and a panel reading one shows what it has.
+   */
+  bindings?: number | null;
+  /** Every lint `inspect` reported, verbatim. The comparison's after side. */
+  lintList?: CanvasLint[];
+  /** `verify --json`'s four checks, each with its detail line. */
+  verify?: VerifyCheck[];
+  /** True when the after screenshot was written to the job workspace. */
+  shot?: boolean;
 }
 
 export interface JobRecord {
@@ -94,6 +114,18 @@ export interface JobRecord {
   turns: number | null;
   costUsd: number | null;
   gate: GateResult | null;
+  /**
+   * Before and after, and the difference: the finished-job screen's whole
+   * content, computed once by the runner and read by the panel.
+   *
+   * Written twice. The before side is filled at job start, against the
+   * committed file as it was then, because that is the only moment it can be
+   * read — after an accept there is no before left on disk. The after side and
+   * the lint difference are filled when the gate has run.
+   *
+   * Optional on the type so a job recorded before phase 4 still parses.
+   */
+  comparison?: Comparison | null;
   errorKind: string | null;
   error: string | null;
   /** What landed, after an accept. */

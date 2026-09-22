@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 
 import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
 import { absolute, REPO_ROOT } from "./paths";
-import { NPM, signalGroup } from "./proc";
+import { NPM, stopChild } from "./proc";
 
 /**
  * One `canvas serve` per document, held open for as long as someone is looking.
@@ -57,6 +57,19 @@ export interface MirrorView {
    * than hard-coding a number that drifts from `STUDIO_MIRROR_IDLE_MS`.
    */
   idleMs: number;
+}
+
+/**
+ * What closing a mirror answers: whether there was one, and whether it died.
+ *
+ * `gone` is `true` when nothing is left in the process group. It is `false`
+ * only when a process outlived a `SIGTERM`, a grace window, a `SIGKILL` and a
+ * second grace window, which is a sick machine rather than a busy one — and it
+ * is the one case accept must refuse rather than rename behind.
+ */
+export interface MirrorStop {
+  found: boolean;
+  gone: boolean;
 }
 
 interface Mirror {
@@ -135,6 +148,8 @@ export function readyObject(buffer: string): { url: string; port: number } | nul
 export class Mirrors {
   private readonly open = new Map<string, Mirror>();
   private readonly starting = new Map<string, Promise<MirrorView>>();
+  /** The same in-flight trick as `starting`, for the other direction. */
+  private readonly stopping = new Map<string, Promise<MirrorStop>>();
   private sweeper: NodeJS.Timeout | null = null;
 
   /**
@@ -159,6 +174,28 @@ export class Mirrors {
       existing.lastSeenAt = Date.now();
       return this.view(existing);
     }
+
+    /* One that is on its way out is waited for, not spawned over.
+     *
+     * `stop` keeps a writer it could not kill in `open`, so this is also where
+     * a stuck one is found. Spawning beside it would be the two-writers case
+     * this method exists to prevent, and a worse version of it: the new mirror
+     * would take the map entry, accept would close *that* one, report it gone,
+     * and rename behind the old writer that is still running. `stop` dedupes,
+     * so the ordinary case — a sweep closing an idle canvas a moment before
+     * someone reopens it — just waits the close out. */
+    if (existing !== undefined) {
+      const closed = await this.stop(file);
+      if (!closed.gone) {
+        throw new MirrorRefused(
+          503,
+          `the canvas already open on ${file} will not shut down, so a second one would be a ` +
+            `second writer on the same document`,
+          "Look for a stuck `canvas serve` process, end it, and try again.",
+        );
+      }
+    }
+
     const inFlight = this.starting.get(file);
     if (inFlight !== undefined) return inFlight;
 
@@ -187,50 +224,13 @@ export class Mirrors {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const ready = await new Promise<{ url: string; port: number }>((resolve, reject) => {
-      let out = "";
-      let err = "";
-      const timer = setTimeout(() => {
-        finish(
-          new MirrorRefused(
-            504,
-            `serve did not say it was listening within ${Math.round(MIRROR_START_MS / 1000)}s`,
-            (err || out).trim().split("\n").slice(-4),
-          ),
-        );
-      }, MIRROR_START_MS);
-
-      let settled = false;
-      const finish = (error: Error | null, value?: { url: string; port: number }): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (error !== null) {
-          stop(child);
-          reject(error);
-        } else resolve(value as { url: string; port: number });
-      };
-
-      child.stdout?.on("data", (chunk: Buffer) => {
-        out += chunk.toString();
-        const found = readyObject(out);
-        if (found !== null) finish(null, found);
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        err += chunk.toString();
-      });
-      child.on("error", (error) => {
-        finish(new MirrorRefused(503, `could not start serve: ${error.message}`));
-      });
-      child.on("exit", (code) => {
-        finish(
-          new MirrorRefused(
-            503,
-            `serve exited ${code ?? "on a signal"} before it was listening`,
-            (err || out).trim().split("\n").slice(-4),
-          ),
-        );
-      });
+    const ready = await startup(child).catch(async (error: unknown) => {
+      // Awaited, because `stop` waits on this promise. The timeout case is the
+      // one that matters: `serve` not having said it is listening is not the
+      // same as it not running, and a process that binds the port a moment
+      // later is a writer nobody is tracking.
+      await stopChild(child);
+      throw error;
     });
 
     const now = Date.now();
@@ -245,7 +245,14 @@ export class Mirrors {
     };
     // A serve that dies on its own — a port stolen, a crash — must not be
     // handed out again as a URL nothing answers.
+    //
+    // But a stop in flight owns the entry, and this must not race it: `child`
+    // is the `npm` launcher, which exits on the `SIGTERM` while the `canvas
+    // serve` underneath it may not. Dropping the entry on that exit would hide
+    // a writer that is still running from the retry that has to refuse on it.
+    // `stop` deletes it when the group is actually empty.
     child.on("exit", () => {
+      if (mirror.closing) return;
       if (this.open.get(file) === mirror) this.open.delete(file);
     });
     this.open.set(file, mirror);
@@ -286,13 +293,60 @@ export class Mirrors {
     }
   }
 
-  async stop(file: string): Promise<boolean> {
+  /**
+   * Close one, and do not return until the writer is gone.
+   *
+   * Two facts and not one, because accept needs both. `found` is whether there
+   * was a canvas on that file at all, which is what `mirrorClosed` tells the
+   * UI; `gone` is whether the process actually died, which is the only thing
+   * that makes the rename behind it safe (A6). They are different answers and
+   * collapsing them into one boolean is how a stuck writer would get renamed
+   * over: `found` is true the moment a mirror existed, whatever happened next.
+   */
+  async stop(file: string): Promise<MirrorStop> {
+    const inFlight = this.stopping.get(file);
+    if (inFlight !== undefined) return inFlight;
+
+    /* A start that has not finished is a writer too.
+     *
+     * Between `starting.set` and `spawn` returning there is a `serve` coming
+     * up and nothing in `open` yet, so reading only `open` here answers
+     * "nothing to close" about a process that is about to hold the document.
+     * Accept would rename on that answer and the new canvas, which loaded the
+     * file as it was before the rename, reverts it on the next Cmd+S — A6
+     * again, one window along. So wait the start out and stop what it
+     * produced. A start that failed leaves nothing in `open` and nothing
+     * running, which is why the rejection is swallowed rather than thrown:
+     * "the mirror could not start" is not this method's answer to give.
+     * Caught in review on the phase 4 PR. */
+    const starting = this.starting.get(file);
+    if (starting !== undefined) await starting.catch(() => undefined);
+
     const mirror = this.open.get(file);
-    if (mirror === undefined) return false;
+    if (mirror === undefined) return { found: false, gone: true };
     mirror.closing = true;
-    this.open.delete(file);
-    stop(mirror.child);
-    return true;
+
+    const attempt = this.close(mirror).finally(() => {
+      this.stopping.delete(file);
+    });
+    this.stopping.set(file, attempt);
+    return attempt;
+  }
+
+  /**
+   * Untracked only once it is gone.
+   *
+   * Deleting the entry before knowing was the hole. Accept refused with
+   * `mirror-stuck` and told the person to try again; the retry found no mirror
+   * on that file, answered `found: false, gone: true`, and renamed behind the
+   * writer the first refusal was about. So one that will not die stays in
+   * `open`, and every later `stop` finds it, signals it again and refuses
+   * again until it is really gone. Caught in review on the phase 4 PR.
+   */
+  private async close(mirror: Mirror): Promise<MirrorStop> {
+    const gone = await stopChild(mirror.child);
+    if (gone && this.open.get(mirror.file) === mirror) this.open.delete(mirror.file);
+    return { found: true, gone };
   }
 
   async stopAll(): Promise<void> {
@@ -335,8 +389,55 @@ export class Mirrors {
   }
 }
 
-function stop(child: ChildProcess): void {
-  const pid = child.pid;
-  if (pid === undefined) return;
-  signalGroup(pid, "SIGTERM");
+/**
+ * Wait for `serve` to say it is listening, or for the reason it will not.
+ *
+ * Lifted out of `spawn` so the failure path can `await` the kill before it
+ * rejects. Inside the executor `finish` is synchronous, and the best it could
+ * do was fire the signal and forget it.
+ */
+function startup(child: ChildProcess): Promise<{ url: string; port: number }> {
+  return new Promise<{ url: string; port: number }>((resolve, reject) => {
+    let out = "";
+    let err = "";
+    const timer = setTimeout(() => {
+      finish(
+        new MirrorRefused(
+          504,
+          `serve did not say it was listening within ${Math.round(MIRROR_START_MS / 1000)}s`,
+          (err || out).trim().split("\n").slice(-4),
+        ),
+      );
+    }, MIRROR_START_MS);
+
+    let settled = false;
+    const finish = (error: Error | null, value?: { url: string; port: number }): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error !== null) reject(error);
+      else resolve(value as { url: string; port: number });
+    };
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      const found = readyObject(out);
+      if (found !== null) finish(null, found);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      err += chunk.toString();
+    });
+    child.on("error", (error) => {
+      finish(new MirrorRefused(503, `could not start serve: ${error.message}`));
+    });
+    child.on("exit", (code) => {
+      finish(
+        new MirrorRefused(
+          503,
+          `serve exited ${code ?? "on a signal"} before it was listening`,
+          (err || out).trim().split("\n").slice(-4),
+        ),
+      );
+    });
+  });
 }
