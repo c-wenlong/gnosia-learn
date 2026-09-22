@@ -1,3 +1,5 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +15,7 @@ import {
   targetSvgPath,
   CANDIDATES_DIR,
 } from "../src/paths";
+import { stopChild } from "../src/mirrors";
 import type { JobRecord } from "../src/store";
 import { fixtureDocument } from "./fixture-document";
 
@@ -225,6 +228,64 @@ describe("a human edit that landed while the job ran", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("target-moved");
     expect(await readFile(files.target, "utf8")).toBe("someone else's work");
+  });
+});
+
+/**
+ * A6, end to end: the rename happens behind a writer that is already gone.
+ *
+ * The three tests above mock the close, so they pin *when* accept asks for it
+ * and not whether asking achieves anything. This one wires `closeMirror` to the
+ * real `stopChild` over a real process that ignores `SIGTERM` for a quarter of
+ * a second, which is the shape of the bug: `serve` holds the document as its
+ * tab last loaded it, so a save landing between the close and the rename PUTs
+ * the old diagram back over the accepted one, silently, with a `git diff`
+ * nobody is looking at as the only evidence.
+ *
+ * The assertion is read from inside the child's own `exit` handler, because
+ * that is the one moment where "is the writer still alive?" and "has the file
+ * been replaced?" can be asked of each other. With the close sending a signal
+ * and returning, the rename had already happened by then.
+ */
+describe("the mirror on the target", () => {
+  let child: ChildProcess | null = null;
+
+  afterEach(() => {
+    try {
+      if (child?.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    child = null;
+  });
+
+  it("is gone before the candidate is renamed over it", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    // Detached, like a real mirror: the close signals the process group.
+    child = spawn(
+      process.execPath,
+      ["-e", 'process.on("SIGTERM", () => {}); setTimeout(() => process.exit(0), 250); console.log("up");'],
+      { detached: true, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const writer = child;
+    await new Promise<void>((resolve) => writer.stdout?.once("data", () => resolve()));
+
+    let targetWhenTheWriterDied: string | null = null;
+    writer.on("exit", () => {
+      targetWhenTheWriterDied = existsSync(files.target) ? "already renamed" : "not yet renamed";
+    });
+
+    const result = await accept(store, await place(), {
+      closeMirror: async () => {
+        await stopChild(writer, 5_000);
+        return true;
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.mirrorClosed).toBe(true);
+    expect(targetWhenTheWriterDied).toBe("not yet renamed");
+    expect(await exists(files.target)).toBe(true);
   });
 });
 

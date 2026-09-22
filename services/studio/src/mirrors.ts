@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { stat } from "node:fs/promises";
 
-import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
+import { KILL_GRACE_MS, MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
 import { absolute, REPO_ROOT } from "./paths";
 import { NPM, signalGroup } from "./proc";
 
@@ -132,6 +132,14 @@ export function readyObject(buffer: string): { url: string; port: number } | nul
   return null;
 }
 
+/**
+ * How often `stopChild` asks whether the group has emptied.
+ *
+ * Small enough that a close costs milliseconds rather than a visible pause on
+ * the accept path, and coarse enough not to be a spin.
+ */
+const GROUP_POLL_MS = 25;
+
 export class Mirrors {
   private readonly open = new Map<string, Mirror>();
   private readonly starting = new Map<string, Promise<MirrorView>>();
@@ -206,7 +214,9 @@ export class Mirrors {
         settled = true;
         clearTimeout(timer);
         if (error !== null) {
-          stop(child);
+          // Not awaited, and it does not need to be: nothing is renamed behind
+          // a serve that never came up, and this path is already rejecting.
+          void stopChild(child);
           reject(error);
         } else resolve(value as { url: string; port: number });
       };
@@ -286,12 +296,20 @@ export class Mirrors {
     }
   }
 
+  /**
+   * Close one, and do not return until the writer is gone.
+   *
+   * The returned boolean says whether there was a mirror on that file to close,
+   * which is what `mirrorClosed` reports to the UI. Whether the process
+   * actually died is `stopChild`'s answer, and the reason this awaits it at all
+   * is that accept renames the committed file the moment this resolves (A6).
+   */
   async stop(file: string): Promise<boolean> {
     const mirror = this.open.get(file);
     if (mirror === undefined) return false;
     mirror.closing = true;
     this.open.delete(file);
-    stop(mirror.child);
+    await stopChild(mirror.child);
     return true;
   }
 
@@ -335,8 +353,71 @@ export class Mirrors {
   }
 }
 
-function stop(child: ChildProcess): void {
+/**
+ * Signal the mirror's process group and do not come back until it is empty.
+ *
+ * The waiting is the whole of it. This used to send `SIGTERM` and return, which
+ * reads as a stop and is not one: accept closes the mirror precisely so that no
+ * save can land after the rename (A6), and a writer that has been asked to go
+ * is still listening for however long it takes to go. "Told it to stop" and
+ * "it has stopped" are different facts and only the second is safe to rename
+ * behind. Caught in review on the phase 4 PR.
+ *
+ * **The group is the authority, not the child object.** `child.pid` is the
+ * `npm` launcher; the process holding the port and writing the `.tldr` is the
+ * `canvas serve` underneath it, and the launcher can be reaped with its child
+ * still flushing. `kill(-pid, 0)` asks whether *anything* is left in the group,
+ * which is the question worth asking, and it is the same negated pid
+ * `signalGroup` signals. A descendant that made a group of its own is outside
+ * both, which is what `sweepOrphans` in `agent.ts` is for.
+ *
+ * `SIGTERM`, one grace window, `SIGKILL`, one more. Returns whether the group
+ * actually emptied. False means a process survived a `SIGKILL` for ten seconds,
+ * which is a sick machine rather than a busy one; the caller renames anyway,
+ * because refusing would leave a person with a stuck job and no way to close
+ * the canvas from the UI, and it is the honest residual window rather than a
+ * guarantee this function can make.
+ */
+export async function stopChild(child: ChildProcess, graceMs = KILL_GRACE_MS): Promise<boolean> {
   const pid = child.pid;
-  if (pid === undefined) return;
+  if (pid === undefined) return true;
+
   signalGroup(pid, "SIGTERM");
+  if (await groupGone(pid, graceMs)) return true;
+
+  // It sat through the polite ask. A SIGKILL that is sent and not waited for
+  // would be the same bug one signal further along, so this waits too.
+  signalGroup(pid, "SIGKILL");
+  return groupGone(pid, graceMs);
+}
+
+/** Poll until nothing in the group answers, or the window runs out. */
+async function groupGone(pid: number, withinMs: number): Promise<boolean> {
+  const until = Date.now() + withinMs;
+  for (;;) {
+    if (!groupAlive(pid)) return true;
+    if (Date.now() >= until) return false;
+    await new Promise((resolve) => setTimeout(resolve, GROUP_POLL_MS));
+  }
+}
+
+/**
+ * Is anything left of it?
+ *
+ * Both the group and the bare pid, because a child spawned without `detached`
+ * is not a group leader and `kill(-pid)` would answer `ESRCH` about a process
+ * that is very much alive. `EPERM` is an answer too: something is there and it
+ * is not ours, which is still not gone.
+ */
+function groupAlive(pid: number): boolean {
+  return answers(-pid) || answers(pid);
+}
+
+function answers(target: number): boolean {
+  try {
+    process.kill(target, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }

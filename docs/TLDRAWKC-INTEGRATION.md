@@ -662,6 +662,15 @@ The close comes *before* the last hash rather than after, which is what makes
 both of them mean something: the close stops any further save, and the check
 then catches one that had already landed.
 
+**And the close is waited out, not just sent.** The first version signalled the
+process group and returned, which reads as a stop and is not one: `SIGTERM` to
+a writer that takes a moment to shut down leaves it listening across exactly
+the window A6 is about. `stopChild` in `mirrors.ts` now asks `kill(-pid, 0)`
+until nothing in the group answers — the group and not the child object,
+because `child.pid` is the `npm` launcher and the process holding the port is
+the `canvas serve` underneath it — escalating to `SIGKILL` after
+`STUDIO_KILL_GRACE_MS` and waiting again. Caught in review on the phase 4 PR.
+
 **And the refusal has somewhere to go.** S4 says a refused accept "offers to
 re-open the comparison", which needs the before side read again;
 `POST /api/jobs/{id}/compare` does that, against the committed file as it is
@@ -1745,8 +1754,10 @@ with Postgres stopped still lands both files and reports `indexed: false`.
 - **The mirror is closed by the route, not by the page.** A6 is a rule about
   what must not happen between the close and the rename, and a close the browser
   is responsible for is one a `curl`, a reload mid-request or a second tab can
-  skip. `POST accept` calls `mirrors.stop(targetPath)` first and reports
-  `mirrorClosed` so the UI can put the canvas back.
+  skip. `POST accept` calls `mirrors.stop(targetPath)` inside step 3, on an
+  accept that is going to happen and not at the top of the route, waits for the
+  process group to actually empty, and reports `mirrorClosed` so the UI can put
+  the canvas back.
 - **Editing the repo while a job runs fails the job, by design.** The fourth job
   failed `wrote-outside` naming three files under `apps/web/` — this phase's own
   source, edited in another window while the agent drew. The A4 backstop
