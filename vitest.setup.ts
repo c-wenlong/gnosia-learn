@@ -5,6 +5,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,9 +32,17 @@ import { afterAll, expect } from "vitest";
  *    own repository root under the OS temp directory. It is a symlink farm
  *    rather than a copy: reads reach the real content and a write lands in the
  *    temp tree, on the file that shadows the link.
- * 2. Every test file, studio or not, has the tracked `learn/assets/` listing
- *    taken before it runs and checked after it. A suite that writes there fails
- *    with the stray filename rather than by breaking somebody else's counts.
+ * 2. The override is checked against the module that consumes it, not against
+ *    the variable. `services/studio/src/paths.ts` resolves the root once, at
+ *    import, so this imports it and compares. That is what catches the
+ *    regression this file exists to prevent, and it catches it whether or not a
+ *    fixture happens to still be on disk when anybody looks.
+ * 3. Every test file, studio or not, has the tracked `learn/assets/` listing
+ *    taken before it runs and checked after it, names with sizes and
+ *    modification times, so an edit in place counts as well as a new file. This
+ *    one is a backstop and samples at two points: a suite that writes a file and
+ *    deletes it again inside one test is invisible to it, which is exactly why
+ *    the check above it is not a sample.
  */
 
 const REPO_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -66,22 +75,46 @@ function studioRepoRoot(): string {
   return root;
 }
 
+/** Each entry with what would change if a test wrote to it, or over it. */
+function listing(directory: string): string[] {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory)
+    .map((entry) => {
+      const facts = statSync(path.join(directory, entry));
+      return `${entry} ${facts.size} ${facts.mtimeMs}`;
+    })
+    .sort();
+}
+
 const root = studioRepoRoot();
-// The guard the whole file rests on: `services/studio/src/paths.ts` resolves
-// this once, at import, and a value that had slipped back to the checkout would
-// put the fixtures back in `learn/assets/` with nothing saying so.
 const temp = realpathSync(tmpdir());
 if (!root.startsWith(`${temp}${path.sep}`)) {
   throw new Error(`the studio's test repository root must sit under ${temp}, and ${root} does not.`);
 }
 process.env.STUDIO_REPO_ROOT = root;
 
-const before = existsSync(TRACKED_ASSETS) ? readdirSync(TRACKED_ASSETS).sort() : [];
+// The variable being set proves nothing on its own, so ask the module that
+// reads it. A `paths.ts` that had stopped honouring the override would send
+// every fixture back into `learn/assets/` and the only symptom would be another
+// suite failing on counts it does not own.
+const studio = await import("./services/studio/src/paths");
+if (studio.REPO_ROOT !== root) {
+  throw new Error(
+    `services/studio/src/paths.ts resolved ${studio.REPO_ROOT} rather than ${root}: ` +
+      `STUDIO_REPO_ROOT is set and is not being honoured, so the studio's tests would ` +
+      `write their fixtures into the checkout.`,
+  );
+}
+
+const before = listing(TRACKED_ASSETS);
 
 afterAll(() => {
-  const after = existsSync(TRACKED_ASSETS) ? readdirSync(TRACKED_ASSETS).sort() : [];
+  const after = listing(TRACKED_ASSETS);
   try {
-    expect(after, `this test file wrote into the tracked ${path.relative(REPO_ROOT, TRACKED_ASSETS)}`).toEqual(before);
+    expect(
+      after,
+      `this test file wrote into the tracked ${path.relative(REPO_ROOT, TRACKED_ASSETS)}`,
+    ).toEqual(before);
   } finally {
     if (root.startsWith(`${temp}${path.sep}`)) rmSync(root, { recursive: true, force: true });
   }
