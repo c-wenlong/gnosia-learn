@@ -862,7 +862,11 @@ describe.skipIf(!reachable.ok)("migration 0006's backfill", () => {
   it("applies cleanly and leaves nothing pending", async () => {
     const status = await migrationStatus(scratch.db);
     expect(status.pending).toEqual([]);
-    expect(status.head).toBe("0006_studio_jobs");
+    // The head moves with every migration and this assertion is about the
+    // backfill in 0006 having *run*, not about it being the last thing in the
+    // folder. Pinning the name made every later migration fail a test about
+    // something else; pinning 0006's presence says what was meant.
+    expect(status.applied).toContain("0006_studio_jobs");
   });
 
   it("makes one tutor session per distinct session id, and none for the nulls", async () => {
