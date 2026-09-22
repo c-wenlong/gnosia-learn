@@ -40,17 +40,19 @@ export interface AcceptResult {
 
 export interface AcceptHooks {
   /**
-   * Close any human canvas on the target. Called once, immediately before the
-   * last hash check and the renames, and only on an accept that is going to
-   * happen.
+   * Close any human canvas on the target, and say whether it is actually gone.
+   * Called once, immediately before the last hash check and the renames, and
+   * only on an accept that is going to happen.
    *
    * A capability rather than an import: `review.ts` owns the ordering and knows
    * *when* the writer has to go, and `Mirrors` is the API layer's object. A
    * refusal must not disconnect an editor — a stale tab pressing Accept on a
    * job somebody already discarded would otherwise close the canvas its owner
    * is drawing on and then answer 409.
+   *
+   * `gone: false` is a refusal and not a warning: see step 3.
    */
-  closeMirror?: () => Promise<boolean>;
+  closeMirror?: () => Promise<{ found: boolean; gone: boolean }>;
 }
 
 async function sha256(file: string): Promise<string | null> {
@@ -186,7 +188,29 @@ async function acceptLocked(
    *    and the verify above are each a Chromium launch, so the answer from the
    *    top of this function can be minutes old by now — and the window that
    *    leaves open is the exact one S4 is about. */
-  const mirrorClosed = (await hooks.closeMirror?.()) ?? false;
+  const closed = (await hooks.closeMirror?.()) ?? { found: false, gone: true };
+  const mirrorClosed = closed.found;
+
+  /*    And a writer that will not die is a refusal, not a warning. `stopChild`
+   *    only answers `gone: false` after a `SIGTERM`, a grace window, a `SIGKILL`
+   *    and a second one, so this is a machine in trouble — but renaming anyway
+   *    would make the whole of that waiting decorative in the one case it
+   *    exists for. Nothing has moved at this point, so Discard, a retry and a
+   *    follow-up job are all still available, which is why refusing costs a
+   *    person a click and not their work. */
+  if (!closed.gone) {
+    return {
+      ok: false,
+      written: [],
+      indexed: false,
+      mirrorClosed,
+      note:
+        `the canvas open on ${record.targetPath} would not shut down, so nothing was moved: ` +
+        `renaming behind a writer that is still running is the save-after-rename loss this ` +
+        `close exists to prevent. Close the tab, check for a stuck process, and press Accept again.`,
+      error: "mirror-stuck",
+    };
+  }
 
   const movedLate = await targetMoved(record);
   if (movedLate !== null) return { ...movedLate, mirrorClosed };

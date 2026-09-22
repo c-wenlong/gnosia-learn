@@ -384,7 +384,7 @@ describe("accepting", () => {
     await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
     await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
     await store.create(record({ state: "awaiting_review", targetHashBefore: null }));
-    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue({ found: true, gone: true });
 
     const response = await fetch(`${base}/api/jobs/job-api/accept`, {
       method: "POST",
@@ -409,7 +409,7 @@ describe("accepting", () => {
     "leaves the mirror alone when the job is %s and nothing can move",
     async (state) => {
       await store.create(record({ state }));
-      const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+      const stop = vi.spyOn(mirrors, "stop").mockResolvedValue({ found: true, gone: true });
 
       const response = await fetch(`${base}/api/jobs/job-api/accept`, {
         method: "POST",
@@ -423,7 +423,7 @@ describe("accepting", () => {
 
   it("leaves the mirror alone when the candidate is gone", async () => {
     await store.create(record({ state: "awaiting_review" }));
-    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue(true);
+    const stop = vi.spyOn(mirrors, "stop").mockResolvedValue({ found: true, gone: true });
 
     const response = await fetch(`${base}/api/jobs/job-api/accept`, {
       method: "POST",

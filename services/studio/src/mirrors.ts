@@ -59,6 +59,19 @@ export interface MirrorView {
   idleMs: number;
 }
 
+/**
+ * What closing a mirror answers: whether there was one, and whether it died.
+ *
+ * `gone` is `true` when nothing is left in the process group. It is `false`
+ * only when a process outlived a `SIGTERM`, a grace window, a `SIGKILL` and a
+ * second grace window, which is a sick machine rather than a busy one — and it
+ * is the one case accept must refuse rather than rename behind.
+ */
+export interface MirrorStop {
+  found: boolean;
+  gone: boolean;
+}
+
 interface Mirror {
   file: string;
   url: string;
@@ -299,18 +312,19 @@ export class Mirrors {
   /**
    * Close one, and do not return until the writer is gone.
    *
-   * The returned boolean says whether there was a mirror on that file to close,
-   * which is what `mirrorClosed` reports to the UI. Whether the process
-   * actually died is `stopChild`'s answer, and the reason this awaits it at all
-   * is that accept renames the committed file the moment this resolves (A6).
+   * Two facts and not one, because accept needs both. `found` is whether there
+   * was a canvas on that file at all, which is what `mirrorClosed` tells the
+   * UI; `gone` is whether the process actually died, which is the only thing
+   * that makes the rename behind it safe (A6). They are different answers and
+   * collapsing them into one boolean is how a stuck writer would get renamed
+   * over: `found` is true the moment a mirror existed, whatever happened next.
    */
-  async stop(file: string): Promise<boolean> {
+  async stop(file: string): Promise<MirrorStop> {
     const mirror = this.open.get(file);
-    if (mirror === undefined) return false;
+    if (mirror === undefined) return { found: false, gone: true };
     mirror.closing = true;
     this.open.delete(file);
-    await stopChild(mirror.child);
-    return true;
+    return { found: true, gone: await stopChild(mirror.child) };
   }
 
   async stopAll(): Promise<void> {
@@ -373,10 +387,9 @@ export class Mirrors {
  *
  * `SIGTERM`, one grace window, `SIGKILL`, one more. Returns whether the group
  * actually emptied. False means a process survived a `SIGKILL` for ten seconds,
- * which is a sick machine rather than a busy one; the caller renames anyway,
- * because refusing would leave a person with a stuck job and no way to close
- * the canvas from the UI, and it is the honest residual window rather than a
- * guarantee this function can make.
+ * which is a sick machine rather than a busy one — and accept refuses on it
+ * rather than renaming anyway. Returning the answer and ignoring it would have
+ * left the whole of this waiting decorative in the one case it is for.
  */
 export async function stopChild(child: ChildProcess, graceMs = KILL_GRACE_MS): Promise<boolean> {
   const pid = child.pid;

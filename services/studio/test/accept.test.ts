@@ -276,15 +276,52 @@ describe("the mirror on the target", () => {
     });
 
     const result = await accept(store, await place(), {
-      closeMirror: async () => {
-        await stopChild(writer, 5_000);
-        return true;
-      },
+      closeMirror: async () => ({ found: true, gone: await stopChild(writer, 5_000) }),
     });
 
     expect(result.ok).toBe(true);
     expect(result.mirrorClosed).toBe(true);
     expect(targetWhenTheWriterDied).toBe("not yet renamed");
+    expect(await exists(files.target)).toBe(true);
+  });
+});
+
+/**
+ * A writer that will not die, which is the one case the waiting is for.
+ *
+ * `stopChild` only answers `gone: false` after a `SIGTERM`, a grace window, a
+ * `SIGKILL` and a second one. Renaming anyway at that point would make every
+ * line of that waiting decorative, so accept refuses: nothing has moved, and
+ * Discard, a retry and a follow-up job are all still there. Raised on the
+ * phase 4 PR after the first fix landed.
+ */
+describe("a mirror that will not shut down", () => {
+  it("refuses the accept rather than renaming behind a live writer", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place(), {
+      closeMirror: () => Promise.resolve({ found: true, gone: false }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("mirror-stuck");
+    expect(result.mirrorClosed).toBe(true);
+    expect(result.written).toHaveLength(0);
+    // Nothing moved, so every way out of this is still open.
+    expect(await exists(files.target)).toBe(false);
+    expect(await exists(files.candidate)).toBe(true);
+    expect(store.get("job-accept")?.state).toBe("awaiting_review");
+    expect(catalogMock.jobAccept).not.toHaveBeenCalled();
+  });
+
+  it("accepts normally when there was no mirror to close", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place(), {
+      closeMirror: () => Promise.resolve({ found: false, gone: true }),
+    });
+
+    expect(result.ok).toBe(true);
+    // `found` is what the UI reports, and nobody had a canvas open.
+    expect(result.mirrorClosed).toBe(false);
     expect(await exists(files.target)).toBe(true);
   });
 });

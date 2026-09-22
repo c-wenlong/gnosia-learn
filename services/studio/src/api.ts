@@ -870,11 +870,16 @@ async function mirrorRoutes(
 
   if (method === "DELETE") {
     if (named === null) return fail(response, 400, "name the file to stop mirroring: ?file=learn/assets/x.tldr");
-    const stopped = await mirrors.stop(named);
+    const { found, gone } = await mirrors.stop(named);
     return send(response, 200, {
       file: named,
-      stopped,
-      note: stopped ? "the canvas was closed" : "nothing was mirroring that file",
+      stopped: found,
+      gone,
+      note: !found
+        ? "nothing was mirroring that file"
+        : gone
+          ? "the canvas was closed"
+          : "the canvas was told to close and its process is still running",
     });
   }
 

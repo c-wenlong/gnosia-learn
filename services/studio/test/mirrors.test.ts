@@ -147,7 +147,12 @@ describe("the idle sweep", () => {
 
   it("says nothing was stopped when nothing was mirroring that file", async () => {
     const mirrors = new Mirrors();
-    await expect(mirrors.stop("learn/assets/never-opened.tldr")).resolves.toBe(false);
+    // `gone` is true because there is nothing left to be gone: a file nobody
+    // was mirroring is not a writer accept has to wait for.
+    await expect(mirrors.stop("learn/assets/never-opened.tldr")).resolves.toEqual({
+      found: false,
+      gone: true,
+    });
   });
 });
 

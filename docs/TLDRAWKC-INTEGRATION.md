@@ -671,6 +671,15 @@ because `child.pid` is the `npm` launcher and the process holding the port is
 the `canvas serve` underneath it — escalating to `SIGKILL` after
 `STUDIO_KILL_GRACE_MS` and waiting again. Caught in review on the phase 4 PR.
 
+**And a writer that will not die refuses the accept.** `Mirrors.stop` answers
+two things, `found` and `gone`: the first is what `mirrorClosed` tells the UI,
+the second is the only one that makes a rename safe. `gone: false` means a
+process outlived a `SIGTERM`, a grace window, a `SIGKILL` and a second window,
+so accept returns `mirror-stuck` and moves nothing. Renaming anyway would have
+made every line of that waiting decorative in the one case it is for, and
+nothing has moved at that point: Discard, a retry and a follow-up job are all
+still available, so the refusal costs a click rather than the work.
+
 **And the refusal has somewhere to go.** S4 says a refused accept "offers to
 re-open the comparison", which needs the before side read again;
 `POST /api/jobs/{id}/compare` does that, against the committed file as it is
