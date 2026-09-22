@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import { absolute, sessionLogPath, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
-import { until } from "./wait";
+import { allSettled, until } from "./wait";
 
 /**
  * The daily spend cap, and the half of it that is not the cap.
@@ -120,8 +120,6 @@ function stageAgent(fixture: string, hang: boolean): void {
   });
 }
 
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150));
-
 /**
  * Wait for a job to reach `state` **and** for the runner to be done with it.
  *
@@ -194,7 +192,10 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await runner.drain();
-  await settled();
+  // The job writes its terminal record after the agent stops, so the workspace
+  // has to outlive the drain by however long those writes take. `settled`
+  // knows that; the 150ms sleep this replaced only guessed.
+  await allSettled(runner, store);
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
