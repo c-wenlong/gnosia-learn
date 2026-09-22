@@ -693,6 +693,15 @@ change, beside the `signalGroup` it is built on, which is also what lets a test
 force the `gone: false` branch: a real process group can always be emptied by a
 `SIGKILL`, so the case accept refuses on is not one a real process can stage.
 
+**And "no mirror is open" has to include one that is still opening.** A start
+lives in `starting` until `spawn` returns, which is a Chromium launch long, and
+a `stop` reading only `open` across that window answered "nothing to close"
+about a `serve` that was about to hold the document — accept renamed on that
+answer, and the new canvas, which had loaded the file as it was before the
+rename, reverted it on the next Cmd+S. `stop` now waits the start out and stops
+what it produced, and `spawn` waits for its own child to die before rejecting,
+so a start that failed really does leave nothing running.
+
 **And the refusal has somewhere to go.** S4 says a refused accept "offers to
 re-open the comparison", which needs the before side read again;
 `POST /api/jobs/{id}/compare` does that, against the committed file as it is

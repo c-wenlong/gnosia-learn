@@ -224,52 +224,13 @@ export class Mirrors {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const ready = await new Promise<{ url: string; port: number }>((resolve, reject) => {
-      let out = "";
-      let err = "";
-      const timer = setTimeout(() => {
-        finish(
-          new MirrorRefused(
-            504,
-            `serve did not say it was listening within ${Math.round(MIRROR_START_MS / 1000)}s`,
-            (err || out).trim().split("\n").slice(-4),
-          ),
-        );
-      }, MIRROR_START_MS);
-
-      let settled = false;
-      const finish = (error: Error | null, value?: { url: string; port: number }): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (error !== null) {
-          // Not awaited, and it does not need to be: nothing is renamed behind
-          // a serve that never came up, and this path is already rejecting.
-          void stopChild(child);
-          reject(error);
-        } else resolve(value as { url: string; port: number });
-      };
-
-      child.stdout?.on("data", (chunk: Buffer) => {
-        out += chunk.toString();
-        const found = readyObject(out);
-        if (found !== null) finish(null, found);
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        err += chunk.toString();
-      });
-      child.on("error", (error) => {
-        finish(new MirrorRefused(503, `could not start serve: ${error.message}`));
-      });
-      child.on("exit", (code) => {
-        finish(
-          new MirrorRefused(
-            503,
-            `serve exited ${code ?? "on a signal"} before it was listening`,
-            (err || out).trim().split("\n").slice(-4),
-          ),
-        );
-      });
+    const ready = await startup(child).catch(async (error: unknown) => {
+      // Awaited, because `stop` waits on this promise. The timeout case is the
+      // one that matters: `serve` not having said it is listening is not the
+      // same as it not running, and a process that binds the port a moment
+      // later is a writer nobody is tracking.
+      await stopChild(child);
+      throw error;
     });
 
     const now = Date.now();
@@ -346,6 +307,21 @@ export class Mirrors {
     const inFlight = this.stopping.get(file);
     if (inFlight !== undefined) return inFlight;
 
+    /* A start that has not finished is a writer too.
+     *
+     * Between `starting.set` and `spawn` returning there is a `serve` coming
+     * up and nothing in `open` yet, so reading only `open` here answers
+     * "nothing to close" about a process that is about to hold the document.
+     * Accept would rename on that answer and the new canvas, which loaded the
+     * file as it was before the rename, reverts it on the next Cmd+S — A6
+     * again, one window along. So wait the start out and stop what it
+     * produced. A start that failed leaves nothing in `open` and nothing
+     * running, which is why the rejection is swallowed rather than thrown:
+     * "the mirror could not start" is not this method's answer to give.
+     * Caught in review on the phase 4 PR. */
+    const starting = this.starting.get(file);
+    if (starting !== undefined) await starting.catch(() => undefined);
+
     const mirror = this.open.get(file);
     if (mirror === undefined) return { found: false, gone: true };
     mirror.closing = true;
@@ -411,4 +387,57 @@ export class Mirrors {
       idleMs: MIRROR_IDLE_MS,
     };
   }
+}
+
+/**
+ * Wait for `serve` to say it is listening, or for the reason it will not.
+ *
+ * Lifted out of `spawn` so the failure path can `await` the kill before it
+ * rejects. Inside the executor `finish` is synchronous, and the best it could
+ * do was fire the signal and forget it.
+ */
+function startup(child: ChildProcess): Promise<{ url: string; port: number }> {
+  return new Promise<{ url: string; port: number }>((resolve, reject) => {
+    let out = "";
+    let err = "";
+    const timer = setTimeout(() => {
+      finish(
+        new MirrorRefused(
+          504,
+          `serve did not say it was listening within ${Math.round(MIRROR_START_MS / 1000)}s`,
+          (err || out).trim().split("\n").slice(-4),
+        ),
+      );
+    }, MIRROR_START_MS);
+
+    let settled = false;
+    const finish = (error: Error | null, value?: { url: string; port: number }): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error !== null) reject(error);
+      else resolve(value as { url: string; port: number });
+    };
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      const found = readyObject(out);
+      if (found !== null) finish(null, found);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      err += chunk.toString();
+    });
+    child.on("error", (error) => {
+      finish(new MirrorRefused(503, `could not start serve: ${error.message}`));
+    });
+    child.on("exit", (code) => {
+      finish(
+        new MirrorRefused(
+          503,
+          `serve exited ${code ?? "on a signal"} before it was listening`,
+          (err || out).trim().split("\n").slice(-4),
+        ),
+      );
+    });
+  });
 }
