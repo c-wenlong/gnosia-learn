@@ -9,6 +9,7 @@ import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import type { JobRecord } from "../src/store";
 import { absolute, jobDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
 import { fixtureDocument } from "./fixture-document";
+import { allSettled, until } from "./wait";
 
 /**
  * What the queue does when something other than the drawing goes wrong: the
@@ -134,47 +135,39 @@ function stageAgent(hang = false): void {
 }
 
 /**
- * Let the queue get on with it.
+ * Wait until the agent has been started `count` times, or say it never was.
  *
- * Twenty milliseconds was a bet that an enqueue, two `mkdir`s and a `writeFile`
- * land inside one tick, and on a laptop running eleven vitest workers that bet
- * loses every few runs — as a job that had not started yet, or a gate nothing
- * had called. The wait is longer now, and every assertion about *when*
- * something happened goes through `gateInput` or `agentsStarted` instead, which
- * wait for the thing rather than for a duration.
+ * Also the signal that the job is *running with an agent somebody can stop*.
+ * The runner persists `running` and awaits that write before it calls
+ * `startAgent`, and it assigns the returned run to the entry a microtask
+ * later, with no I/O in between. So a poll that sees the call from inside a
+ * timer callback, which only runs once the microtask queue has drained, is
+ * looking at a job a `cancel` can act on.
  */
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150));
-
-/** Wait until the agent has been started `count` times, or say it never was. */
 async function agentsStarted(count: number, budgetMs = 5_000): Promise<void> {
-  const until = Date.now() + budgetMs;
-  while (agentMock.startAgent.mock.calls.length < count) {
-    if (Date.now() > until) {
-      throw new Error(
-        `the agent was started ${agentMock.startAgent.mock.calls.length} times, not ${count}`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+  await until(
+    () => agentMock.startAgent.mock.calls.length >= count,
+    () => `the agent was started ${agentMock.startAgent.mock.calls.length} times, not ${count}`,
+    budgetMs,
+  );
 }
 
 /**
- * Wait for the gate to have been called, rather than for 20 milliseconds.
+ * Wait for the gate to have been called, and hand back what it was given.
  *
- * `settled()` is a fixed tick, and a fixed tick is a bet that one enqueue, two
- * `mkdir`s and a `writeFile` land inside it. On a laptop running eleven vitest
- * workers that bet loses every few runs, and the test then reads `calls[0]` of
- * a mock nothing has called yet. Every assertion about what the gate was handed
- * waits for the call instead.
+ * Every assertion about what the gate was handed goes through this. It is also
+ * the signal for everything the runner does *before* the gate: the claim, the
+ * copy-or-not decision on an extend, and the agent's whole run all happen
+ * first, so a gate call is proof that they are behind us. A sleep in their
+ * place was a bet on how long they take.
  */
 async function gateInput<T>(budgetMs = 5_000): Promise<T> {
-  const until = Date.now() + budgetMs;
-  for (;;) {
-    const call = gateMock.runGate.mock.calls.at(-1)?.[0];
-    if (call !== undefined) return call as T;
-    if (Date.now() > until) throw new Error("the gate was never called");
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+  await until(
+    () => gateMock.runGate.mock.calls.at(-1)?.[0] !== undefined,
+    "the gate was never called",
+    budgetMs,
+  );
+  return gateMock.runGate.mock.calls.at(-1)?.[0] as T;
 }
 
 /** The sha256 the reconcile pass would have recorded for this content. */
@@ -294,8 +287,10 @@ beforeEach(async () => {
 afterEach(async () => {
   await runner.drain();
   // The job writes its terminal record after the agent stops, so the workspace
-  // has to outlive the drain by a tick or the test deletes it mid-write.
-  await settled();
+  // has to outlive the drain or the test deletes it mid-write. Not "by a tick":
+  // by however long those writes take, which is what `settled` knows and a
+  // fixed sleep only guesses.
+  await allSettled(runner, store);
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
@@ -326,7 +321,6 @@ describe("a catalog that cannot be reached", () => {
     expect(store.get(record.id)).toBeDefined();
     expect(store.get(record.id)?.catalogErrors.join(" ")).toContain("ECONNREFUSED");
     // And it actually runs, which is the half of "keeps the job" that matters.
-    await settled();
     await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
@@ -363,7 +357,14 @@ describe("a database that is alive and refused this process", () => {
     it(`refuses rather than running lease-free: ${error.split(": ")[1]}`, async () => {
       catalogMock.jobEnqueue.mockResolvedValue({ ok: false, json: null, error, offline: false });
       await expect(runner.enqueue(await brief())).rejects.toBeInstanceOf(JobRefused);
-      await settled();
+      // "No agent was started" cannot be proved by waiting, and the sleep that
+      // used to sit here was proving nothing: `startAgent` is several awaits
+      // deep inside `execute`, so a runner that wrongly carried on would not
+      // have called it by the time a tick expired either. What makes the claim
+      // true is the state: the refusal forgot the job before it ever woke the
+      // queue, so there is nothing left for this or any later kick to find.
+      expect(store.list()).toHaveLength(0);
+      expect(runner.busy).toBe(0);
       expect(agentMock.startAgent).not.toHaveBeenCalled();
     });
   }
@@ -379,7 +380,12 @@ describe("a claim the catalog refuses", () => {
     });
 
     const { record } = await runner.enqueue(await brief());
-    await settled();
+    // A refused claim ends the attempt inside `execute`, so the thing to wait
+    // for is the runner being finished with the job. `enqueue` kicks the queue
+    // synchronously before it returns, so the job is registered by now and
+    // `settled` is this job's promise rather than the resolved stand-in a
+    // never-started id gets.
+    await runner.settled(record.id);
 
     expect(agentMock.startAgent).not.toHaveBeenCalled();
     expect(store.get(record.id)?.state).toBe("failed");
@@ -398,7 +404,6 @@ describe("a claim the catalog refuses", () => {
     });
 
     await runner.enqueue(await brief());
-    await settled();
     await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
@@ -413,12 +418,17 @@ describe("the job ceiling", () => {
 
   it("records a timeout, not a cancellation somebody never asked for", async () => {
     const { record } = await runner.enqueue(await brief());
-    await settled();
+    // `cancel` refuses a job that is not `running`, and it has nothing to stop
+    // until the runner holds the agent. Both are true once `startAgent` has
+    // been called: the runner awaits the `running` write before calling it.
+    await agentsStarted(1);
     expect(started).toHaveLength(1);
 
     // The path the 45-minute timer takes, without waiting 45 minutes for it.
     await runner.cancel(record.id, "job-timeout");
-    await settled();
+    // `cancel` returns once the agent has been asked to stop. The verdict is
+    // written after that, by the `execute` chain, and `settled` is its end.
+    await runner.settled(record.id);
 
     const finished = store.get(record.id);
     expect(finished?.state).toBe("failed");
@@ -430,9 +440,9 @@ describe("the job ceiling", () => {
 
   it("still calls a cancellation a cancellation", async () => {
     const { record } = await runner.enqueue(await brief());
-    await settled();
+    await agentsStarted(1);
     await runner.cancel(record.id);
-    await settled();
+    await runner.settled(record.id);
 
     expect(store.get(record.id)?.state).toBe("cancelled");
     expect(store.get(record.id)?.errorKind).toBe("cancelled");
@@ -458,13 +468,15 @@ describe("an agent that never started", () => {
     );
 
     const { record } = await runner.enqueue(await brief());
-    await settled();
+    // A spawn failure ends the job on the first attempt, so the runner being
+    // finished with it is the moment all three claims below are decided: no
+    // gate call, a terminal record, and no second attempt.
+    await runner.settled(record.id);
 
     expect(gateMock.runGate).not.toHaveBeenCalled();
     expect(store.get(record.id)?.state).toBe("failed");
     expect(store.get(record.id)?.errorKind).toBe("spawn");
     // One attempt, not three: two more would be two more missing binaries.
-    await agentsStarted(1);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
   });
 });
@@ -476,8 +488,6 @@ describe("a revision", () => {
       agentSessionId: "11111111-1111-4111-8111-111111111111",
       changes: "make the arrow labels bigger",
     });
-    await settled();
-
     await agentsStarted(1);
     const options = started[0]?.options ?? {};
     expect(options.sessionId).toBe("11111111-1111-4111-8111-111111111111");
@@ -489,8 +499,6 @@ describe("a revision", () => {
 
   it("mints its own session when the parent kept none, and draws from the brief", async () => {
     await runner.enqueue(await brief());
-    await settled();
-
     await agentsStarted(1);
     expect(started[0]?.options.resume).toBe(false);
     expect(String(started[0]?.options.prompt)).toContain("You are drawing one teaching diagram");
@@ -513,8 +521,6 @@ describe("a revision", () => {
       agentSessionId: "22222222-2222-4222-8222-222222222222",
       changes: "make it clearer",
     });
-    await settled();
-
     await agentsStarted(2);
     expect(agentMock.startAgent).toHaveBeenCalledTimes(2);
     const second = started[1]?.options ?? {};
@@ -531,8 +537,6 @@ describe("a resume", () => {
       agentSessionId: "44444444-4444-4444-8444-444444444444",
       changes: null,
     });
-    await settled();
-
     await agentsStarted(1);
     const options = started[0]?.options ?? {};
     expect(options.sessionId).toBe("44444444-4444-4444-8444-444444444444");
@@ -562,8 +566,6 @@ describe("a resume", () => {
       agentSessionId: "55555555-5555-4555-8555-555555555555",
       changes: null,
     });
-    await settled();
-
     const input = await gateInput<{ startedAtMs: number }>();
     expect(input.startedAtMs).toBeLessThanOrEqual(parentStart);
   });
@@ -589,12 +591,14 @@ describe("a resume", () => {
       agentSessionId: "88888888-8888-4888-8888-888888888888",
       changes: null,
     });
-    await settled();
-
+    // The gate call first, and then the file. The copy-or-not decision happens
+    // in `execute` before the agent runs and the gate runs after it, so a gate
+    // call is proof the decision has been made; reading the candidate before
+    // that is reading it while the runner may still be about to write it.
+    const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(await readFile(candidate, "utf8")).toContain("half-drawn");
     // And no `unchangedHash`: the candidate is not the runner's copy of
     // anything, so "byte-identical to the copy" is not a question about it.
-    const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(input.unchangedHash).toBeNull();
   });
 
@@ -621,12 +625,12 @@ describe("a resume", () => {
       agentSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       changes: null,
     });
-    await settled();
-
     // Treated as a fresh extend: the committed file is copied over it, and the
-    // gate measures freshness from this job rather than from the parent.
-    expect(await readFile(candidate, "utf8")).toContain("committed");
+    // gate measures freshness from this job rather than from the parent. The
+    // gate call comes first here for the same reason as above: it is what says
+    // the copy-or-not decision is behind us.
     const input = await gateInput<{ unchangedHash?: string | null; startedAtMs: number; }>();
+    expect(await readFile(candidate, "utf8")).toContain("committed");
     expect(typeof input.unchangedHash).toBe("string");
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
@@ -641,8 +645,6 @@ describe("a resume", () => {
       agentSessionId: "99999999-9999-4999-8999-999999999999",
       changes: "make it wider",
     });
-    await settled();
-
     const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(typeof input.unchangedHash).toBe("string");
   });
@@ -655,8 +657,6 @@ describe("a resume", () => {
       agentSessionId: "66666666-6666-4666-8666-666666666666",
       changes: "wider",
     });
-    await settled();
-
     const input = await gateInput<{ startedAtMs: number }>();
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
@@ -667,8 +667,6 @@ describe("extend mode", () => {
     await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
 
     await runner.enqueue(await brief({ mode: "extend" }));
-    await settled();
-
     const input = await gateInput<{ unchangedHash?: string | null }>();
     expect(typeof input.unchangedHash).toBe("string");
   });
@@ -680,8 +678,6 @@ describe("extend mode", () => {
         relations: [{ from: "vector a", to: "vector b", label: "projects onto" }],
       }),
     );
-    await settled();
-
     const input = await gateInput<{ elements: unknown[]; relations: unknown[]; }>();
     expect(input.elements).toHaveLength(2);
     expect(input.relations).toHaveLength(1);
