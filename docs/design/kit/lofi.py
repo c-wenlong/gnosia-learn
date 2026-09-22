@@ -39,9 +39,9 @@ def attrs(**kw):
     return " ".join(out)
 
 def F(*children, name=None, flex="col", w=None, h=None, gap=None, p=None, px=None, py=None,
-      bg=None, stroke=None, strokeWidth=None, rounded=None, justify=None, items=None, grow=None, opacity=None):
+      bg=None, stroke=None, strokeWidth=None, rounded=None, justify=None, items=None, grow=None, opacity=None, overflow=None):
     a = attrs(name=name, flex=flex, w=w, h=h, gap=gap, p=p, px=px, py=py, bg=bg, stroke=stroke,
-              strokeWidth=strokeWidth, rounded=rounded, justify=justify, items=items, grow=grow, opacity=opacity)
+              strokeWidth=strokeWidth, rounded=rounded, justify=justify, items=items, grow=grow, opacity=opacity, overflow=overflow)
     return f"<Frame {a}>" + "".join(children) + "</Frame>"
 
 def T(text, size=13, color=INK, weight=None, w=None, align=None, grow=None):
@@ -130,15 +130,15 @@ def TopBar(active):
              flex="row", w="fill", h=56, px=28, gap=32, items="center", bg=CANVAS, stroke=LINE)
 
 def Screen(slug, title, body, active, w=1440, h=900, bar=True):
-    """A desktop screen: caption above, then the 1440x900 frame."""
-    return F(TopBar(active) if bar else "", body, name=f"{slug}", flex="col", w=w, h=h, bg=PANEL, stroke="#9A9A9A")
+    """A desktop screen: a fixed 1440x900 frame; content past the bottom is clipped, as a scrolling page would be."""
+    return F(TopBar(active) if bar else "", body, name=f"{slug}", flex="col", w=w, h=h, bg=PANEL, stroke="#9A9A9A", overflow="hidden")
 
 def Phone(slug, title, body, active):
     tabs = [F(Dot(18, INK if n == active else BOX2), T(n, size=9, color=INK if n == active else MUTED), flex="col", gap=3, items="center", grow=1) for n in NAV]
     return F(F(T(title, size=16, weight="semibold"), Spacer(), Pill("14"), flex="row", w="fill", h=52, px=16, items="center", bg=CANVAS, stroke=LINE),
              body,
              F(*tabs, flex="row", w="fill", h=64, px=8, items="center", bg=CANVAS, stroke=LINE),
-             name=slug, flex="col", w=390, h=844, bg=PANEL, stroke="#9A9A9A")
+             name=slug, flex="col", w=390, h=844, bg=PANEL, stroke="#9A9A9A", overflow="hidden")
 
 # ---------- screens ----------
 def s_today():
@@ -399,7 +399,7 @@ def slug_of(fn): return fn().split('name="', 1)[1].split('"', 1)[0]
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    want = set(sys.argv[1:])
+    want = set(sys.argv[1:]); failures = []
     tree = call("get_page_tree", {})
     existing = {}
     def walk(n):
@@ -419,12 +419,21 @@ def main():
             call("delete_node", {"id": existing[slug]})
         res = call("render", {"x": x, "y": y, "jsx": jsx})
         if "id" not in res:
-            print(slug, "RENDER FAILED", json.dumps(res)[:400]); continue
+            failures.append(f"{slug}: render failed: {json.dumps(res)[:300]}"); print(failures[-1]); continue
         warn = res.get("warnings") or []
-        svg = call("export_svg", {"ids": [res["id"]]}).get("svg", "")
+        exported = call("export_svg", {"ids": [res["id"]]})
+        svg = exported.get("svg") or ""
+        if not svg.startswith("<?xml") or "<svg" not in svg:
+            failures.append(f"{slug}: export failed, existing SVG left alone: {json.dumps(exported)[:300]}"); print(failures[-1]); continue
         path = os.path.join(OUT, f"{slug}.svg"); open(path, "w").write(svg)
         print(f"{slug}: id={res['id']} svg={len(svg)}B warnings={len(warn)}", ("; ".join(warn[:3]) if warn else ""))
-    print("saved:", call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")}).get("saved"))
+    saved = call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")})
+    if not saved.get("saved"):
+        failures.append(f"save_file failed: {json.dumps(saved)[:300]}")
+    print("saved:", bool(saved.get("saved")))
+    if failures:
+        print(f"{len(failures)} failure(s):"); [print("  " + f) for f in failures]
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

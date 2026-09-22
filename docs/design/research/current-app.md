@@ -147,10 +147,22 @@ history independently even though the same subject may appear in both.
 
 ## Screenshots
 
-Not captured. `python3 -c "import playwright"` fails with
-`ModuleNotFoundError: No module named 'playwright'` and `pip3 show
-playwright` confirms it is not installed in the global Python environment
-this harness uses. Per the task's own fallback instruction, the build/serve
-step was skipped rather than spending time on a screenshot pipeline that
-cannot run. No `npm run build` or `next start` was attempted, since neither
-mattered without a way to capture the result.
+Eight captures under [assets/current-app/](assets/current-app/): `home`,
+`learn`, `library`, `course` (`/courses/cp4281`), `module`
+(`/courses/cp4281/m1-graphics-foundations-refresher`), `session` (the same
+module with `?topic=cp4281-m1-t1`, since the session page 404s without a
+topic), `library-asset` (`/library/diagram%3Alearn%2Fassets%2Fdot-product.svg`)
+and `studio`.
+
+How they were made, on 2026-09-23. The shared checkout had another
+session's uncommitted edit in `content/topics.yaml` that broke the build,
+so the capture ran from a clean `git worktree` of `origin/main`
+(commit c4ef4c8): `npm ci`, `npm run build`, then from `apps/web/`
+`STUDIO_ENABLED=1 node ../../node_modules/next/dist/bin/next start -p 3111`.
+Postgres was reachable, so the pages show real catalog rows and progress;
+`ASSET_FILES_ENABLED` was not set, so the library shows its "does not serve
+asset files" banner. Screenshots were taken with the `playwright-core`
+package the tldrawkc submodule installs (1.63.0) driving the Chromium it
+caches under `~/Library/Caches/ms-playwright/`, viewport 1440 by 900, full
+page. The global `python3` has no playwright package, which is why the
+first attempt at this step found nothing to capture with.

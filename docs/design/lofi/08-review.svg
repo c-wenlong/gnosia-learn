@@ -1,116 +1,123 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <clipPath id="clip0">
+      <rect width="1440" height="900"/>
+    </clipPath>
+  </defs>
   <g>
     <rect width="1440" height="900" fill="#F5F5F5" stroke="#9A9A9A" stroke-width="1"/>
-    <g>
+    <g clip-path="url(#clip0)">
       <g>
-        <rect width="1440" height="3" fill="#E6E6E6"/>
-        <rect width="100" height="3" fill="#1F1F1F"/>
-      </g>
-      <g transform="translate(0, 3)">
-        <g transform="translate(24, 10.5)">
-          <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Review · 3 of 12</text>
-        </g>
-        <g transform="translate(116, 17.5)"/>
-        <g transform="translate(1315, 10)">
-          <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Exit to workspace</text>
-        </g>
-      </g>
-      <g transform="translate(360, 38)">
         <g>
+          <rect width="1440" height="3" fill="#E6E6E6"/>
+          <rect width="100" height="3" fill="#1F1F1F"/>
+        </g>
+        <g transform="translate(0, 3)">
+          <g transform="translate(24, 10.5)">
+            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Review · 3 of 12</text>
+          </g>
+          <g transform="translate(116, 17.5)"/>
+          <g transform="translate(1315, 10)">
+            <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Exit to workspace</text>
+          </g>
+        </g>
+        <g transform="translate(360, 38)">
           <g>
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Review · 3 of 12 · CP4281 mostly</text>
-          </g>
-          <g transform="translate(180, 7)"/>
-          <g transform="translate(649, 0)">
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Est. 7 min left</text>
-          </g>
-        </g>
-        <g transform="translate(0, 36)">
-          <rect width="720" height="93" rx="12" ry="12" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
-          <g transform="translate(24, 24)">
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">RECALL · Cross product</text>
-          </g>
-          <g transform="translate(24, 44)">
-            <text x="0" y="20" font-family="Inter" font-size="20" fill="#1F1F1F">What does the magnitude of a × b equal?</text>
-          </g>
-        </g>
-        <g transform="translate(0, 151)">
-          <rect width="720" height="142" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
-          <g transform="translate(24, 24)">
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">ANSWER</text>
-          </g>
-          <g transform="translate(24, 44)">
-            <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">The area of the parallelogram spanned by a and b,</text>
-          </g>
-          <g transform="translate(24, 69)">
-            <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">which is |a||b| sin θ.</text>
-          </g>
-          <g transform="translate(24, 94)">
             <g>
-              <rect width="126" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
-              <g transform="translate(10, 5)">
-                <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">[1] Lecture 3, slide 8</text>
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Review · 3 of 12 · CP4281 mostly</text>
+            </g>
+            <g transform="translate(180, 7)"/>
+            <g transform="translate(649, 0)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Est. 7 min left</text>
+            </g>
+          </g>
+          <g transform="translate(0, 36)">
+            <rect width="720" height="93" rx="12" ry="12" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(24, 24)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">RECALL · Cross product</text>
+            </g>
+            <g transform="translate(24, 44)">
+              <text x="0" y="20" font-family="Inter" font-size="20" fill="#1F1F1F">What does the magnitude of a × b equal?</text>
+            </g>
+          </g>
+          <g transform="translate(0, 151)">
+            <rect width="720" height="142" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(24, 24)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">ANSWER</text>
+            </g>
+            <g transform="translate(24, 44)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">The area of the parallelogram spanned by a and b,</text>
+            </g>
+            <g transform="translate(24, 69)">
+              <text x="0" y="15" font-family="Inter" font-size="15" fill="#1F1F1F">which is |a||b| sin θ.</text>
+            </g>
+            <g transform="translate(24, 94)">
+              <g>
+                <rect width="126" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(10, 5)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">[1] Lecture 3, slide 8</text>
+                </g>
+              </g>
+              <g transform="translate(136, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Why?</text>
+              </g>
+              <g transform="translate(176, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Open concept</text>
               </g>
             </g>
-            <g transform="translate(136, 5)">
-              <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Why?</text>
-            </g>
-            <g transform="translate(176, 5)">
-              <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Open concept</text>
-            </g>
           </g>
-        </g>
-        <g transform="translate(0, 315)">
-          <g>
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">How well did you recall it?</text>
-          </g>
-          <g transform="translate(0, 22)">
+          <g transform="translate(0, 315)">
             <g>
-              <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
-              <g transform="translate(66.75, 14)">
-                <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Again</text>
-              </g>
-              <g transform="translate(69.25, 35)">
-                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">10 min</text>
-              </g>
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">How well did you recall it?</text>
             </g>
-            <g transform="translate(182.5, 0)">
-              <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
-              <g transform="translate(69.75, 14)">
-                <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Hard</text>
+            <g transform="translate(0, 22)">
+              <g>
+                <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(66.75, 14)">
+                  <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Again</text>
+                </g>
+                <g transform="translate(69.25, 35)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">10 min</text>
+                </g>
               </g>
-              <g transform="translate(72.75, 35)">
-                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">1 day</text>
+              <g transform="translate(182.5, 0)">
+                <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(69.75, 14)">
+                  <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Hard</text>
+                </g>
+                <g transform="translate(72.75, 35)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">1 day</text>
+                </g>
               </g>
-            </g>
-            <g transform="translate(365, 0)">
-              <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
-              <g transform="translate(67.75, 14)">
-                <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Good</text>
+              <g transform="translate(365, 0)">
+                <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(67.75, 14)">
+                  <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Good</text>
+                </g>
+                <g transform="translate(68.25, 35)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">4 days</text>
+                </g>
               </g>
-              <g transform="translate(68.25, 35)">
-                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">4 days</text>
-              </g>
-            </g>
-            <g transform="translate(547.5, 0)">
-              <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
-              <g transform="translate(70.25, 14)">
-                <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Easy</text>
-              </g>
-              <g transform="translate(68.75, 35)">
-                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">9 days</text>
+              <g transform="translate(547.5, 0)">
+                <rect width="172.5" height="63" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(70.25, 14)">
+                  <text x="0" y="14" font-family="Inter" font-size="14" font-weight="500" fill="#1F1F1F">Easy</text>
+                </g>
+                <g transform="translate(68.75, 35)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">9 days</text>
+                </g>
               </g>
             </g>
           </g>
-        </g>
-        <g transform="translate(0, 422)">
-          <g>
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Keys 1 to 4 · space reveals</text>
-          </g>
-          <g transform="translate(149, 7)"/>
-          <g transform="translate(516, 0)">
-            <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">ease 2.5 · 4 reps · last seen 4 days ago</text>
+          <g transform="translate(0, 422)">
+            <g>
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Keys 1 to 4 · space reveals</text>
+            </g>
+            <g transform="translate(149, 7)"/>
+            <g transform="translate(516, 0)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">ease 2.5 · 4 reps · last seen 4 days ago</text>
+            </g>
           </g>
         </g>
       </g>

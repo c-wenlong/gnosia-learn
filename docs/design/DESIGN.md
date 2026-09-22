@@ -91,8 +91,9 @@ Session. Probe and Teach are steps inside it; Close is its last screen.
 | `/settings` | Settings | [12-settings](lofi/12-settings.svg) | none | preferences: target, leeway, reminders, theme, tutor style, BKT priors, providers | New |
 | `/studio`, `/studio/d/[name]` | Studio | none | same | same | Shared shell only |
 
-Every desktop frame is 1440 by 900; phone frames are 390 by 844. A page
-whose content runs past the frame scrolls (the course path does).
+Every desktop frame is 1440 by 900; phone frames are 390 by 844. Content
+that runs past the bottom is clipped at the frame edge, the way a scrolling
+page would be (the course path is the one that does).
 
 ### Today
 
@@ -241,10 +242,15 @@ node docs/design/kit/svg2png.mjs /tmp/out docs/design/lofi/*.svg   # PNGs to loo
 ```
 
 OpenPencil must be running; the kit reads its port and token from
-`~/Library/Application Support/OpenPencil/mcp.json`. The PNG step uses the
-Chromium that the tldrawkc submodule already caches, because
-OpenPencil's own raster export refuses ("no visible nodes") and Quick Look
-scales an SVG to a square and crops it.
+`~/Library/Application Support/OpenPencil/mcp.json`. It exits non-zero and
+leaves the existing SVG alone if a render or export fails, and it refuses
+to report success when the `.fig` did not save. OpenPencil only saves
+under the home directory, so run the kit from a checkout inside it, not
+from a worktree under `/tmp`. The PNG step imports `playwright-core` from
+the tldrawkc submodule and uses the Chromium it caches, so the submodule
+has to be installed; it exists because OpenPencil's own raster export
+refuses ("no visible nodes") and Quick Look scales an SVG to a square and
+crops it.
 
 ## Out of scope for v1
 
