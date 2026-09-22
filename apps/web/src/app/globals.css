@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/*
+ * The theme is a cookie-driven `.dark` class on <html> (see layout.tsx and
+ * lib/theme-cookie.ts), not the OS preference. The custom properties below
+ * already follow that class; without this line Tailwind's `dark:` variant
+ * would follow `prefers-color-scheme` instead, so an element mixing a
+ * `var(--token)` with a `dark:` utility split in two whenever the cookie and
+ * the OS disagreed (dark background, light text, or the reverse).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f8f7f4;
   --foreground: #1c1917;
