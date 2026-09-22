@@ -237,6 +237,23 @@ export const JOB_STATES = [
 export type JobState = (typeof JOB_STATES)[number];
 
 /**
+ * Where a job's `cost_usd` came from.
+ *
+ * `result` is the agent's own `total_cost_usd`, which only exists when the
+ * session exited cleanly. `stream` is the runner's accumulation from the
+ * intermediate per-message `usage` events, which is what a cancelled, timed-out
+ * or interrupted attempt leaves behind — and which under-reports, because the
+ * `output_tokens` on those events is the value before the message finished
+ * generating. `services/studio/src/cost.ts` carries the measurements.
+ *
+ * Both are recorded, because a cap that counted only the clean finishes would
+ * be a cap anybody could walk past by pressing Cancel. They are told apart,
+ * because a reader who cannot do that cannot tell a bill from a guess.
+ */
+export const COST_SOURCES = ["result", "stream"] as const;
+export type CostSource = (typeof COST_SOURCES)[number];
+
+/**
  * The states that hold the lease on a committed path.
  *
  * A job in any of these owns `target_path` and no second job may take it: an
