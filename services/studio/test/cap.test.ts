@@ -1,0 +1,476 @@
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
+import { absolute, sessionLogPath, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+
+/**
+ * The daily spend cap, and the half of it that is not the cap.
+ *
+ * Phase 7's hard part is that `cost_usd` was only ever written on a clean
+ * finish, so a cap reading that column alone lets a cancelled, timed-out or
+ * interrupted attempt spend for free. Three of these tests are about that —
+ * each terminal path recording a figure — and the rest are about the cap
+ * itself: the rolling window at its boundary, the 429's shape, and unset
+ * meaning unset.
+ *
+ * The agent is stubbed, but not silently: the fake emits real `stream-json`
+ * lines from the committed fixture through `onLine`, which is the same path the
+ * real one uses, so the meter under test is doing its actual job rather than
+ * being handed a number.
+ */
+
+const catalogMock = vi.hoisted(() => ({
+  jobEnqueue: vi.fn(),
+  jobClaim: vi.fn(),
+  jobFinish: vi.fn(),
+  jobAccept: vi.fn(),
+  jobDiscard: vi.fn(),
+  sessionStart: vi.fn(),
+  sessionEnd: vi.fn(),
+  status: vi.fn(),
+}));
+vi.mock("../src/catalog", () => catalogMock);
+
+const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
+vi.mock("../src/gate", () => gateMock);
+
+const reviewMock = vi.hoisted(() => ({
+  dirtyFiles: vi.fn(async () => [] as string[]),
+  accept: vi.fn(),
+  discard: vi.fn(),
+  reindex: vi.fn(),
+}));
+vi.mock("../src/review", () => reviewMock);
+
+interface FakeAgent {
+  done: Promise<Record<string, unknown>>;
+  stop: (reason: string) => Promise<void>;
+  settle: (outcome: Record<string, unknown>) => void;
+  options: Record<string, unknown>;
+}
+
+const agentMock = vi.hoisted(() => ({
+  startAgent: vi.fn(),
+  sweepOrphans: vi.fn(async () => [] as number[]),
+  AgentRun: class {},
+}));
+vi.mock("../src/agent", () => agentMock);
+
+const { Runner, JobRefused } = await import("../src/runner");
+const { JobStore } = await import("../src/store");
+
+const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const ok = { ok: true, json: {}, error: null, offline: false };
+
+/** The exact figure the fixture's own result event reports. */
+const EXACT_USD = 0.131777;
+/** What its intermediate usage events add up to, with no result event. */
+const ESTIMATED_USD = 0.119827;
+
+const outcome = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  exitCode: 0,
+  signal: null,
+  turns: 9,
+  subtype: "success",
+  isError: false,
+  spawnFailed: false,
+  denials: [],
+  stopReason: null,
+  stderr: "",
+  ...over,
+});
+
+const started: FakeAgent[] = [];
+
+/**
+ * An agent that replays a recorded session down `onLine`, then stops.
+ *
+ * `hang` leaves it running after the lines are out, which is what a fifteen
+ * minute drawing looks like from the runner's side and what the cancel and
+ * ceiling tests need: the spend has happened, the process has not exited.
+ */
+function stageAgent(fixture: string, hang: boolean): void {
+  agentMock.startAgent.mockImplementation(async (options: Record<string, unknown>) => {
+    let settle: (value: Record<string, unknown>) => void = () => undefined;
+    const done = new Promise<Record<string, unknown>>((resolve) => {
+      settle = resolve;
+    });
+    const agent: FakeAgent = {
+      done,
+      options,
+      settle,
+      stop: async (reason: string) => {
+        settle(outcome({ stopReason: reason, exitCode: null }));
+      },
+    };
+    started.push(agent);
+    const body = await readFile(path.join(FIXTURES, `${fixture}.ndjson`), "utf8");
+    const onLine = options.onLine as (line: string) => void;
+    for (const line of body.split("\n")) {
+      if (line.trim() !== "") onLine(line);
+    }
+    if (!hang) settle(outcome());
+    return agent;
+  });
+}
+
+const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 150));
+
+async function until(check: () => boolean, what: string, budgetMs = 5_000): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(what);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+const SLUG = "studio-cap-fixture";
+
+async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
+  return validateBrief(
+    {
+      intent: "show how a dot product projects one vector onto another",
+      topic: "vector-and-linear-algebra-basics",
+      slug: SLUG,
+      title: "Dot product",
+      mode: "new",
+      elements: [{ label: "vector a" }, { label: "vector b" }],
+      relations: [],
+      idempotencyKey: `key-${Math.random()}`,
+      ...over,
+    },
+    await loadVocabulary(),
+  );
+}
+
+let store: InstanceType<typeof JobStore>;
+let runner: InstanceType<typeof Runner>;
+
+beforeEach(async () => {
+  process.env.STUDIO_HOME = path.join(tmpdir(), `studio-cap-${Date.now()}-${Math.random()}`);
+  delete process.env.STUDIO_DAILY_USD;
+  for (const fn of Object.values(catalogMock)) fn.mockReset().mockResolvedValue(ok);
+  agentMock.startAgent.mockReset();
+  agentMock.sweepOrphans.mockReset().mockResolvedValue([]);
+  gateMock.runGate.mockReset().mockResolvedValue({
+    ok: true,
+    steps: [],
+    findings: [],
+    shapes: 12,
+    lints: 0,
+    svg: null,
+    exportFailed: false,
+    checkedAt: new Date().toISOString(),
+  });
+  reviewMock.dirtyFiles.mockReset().mockResolvedValue([]);
+  started.length = 0;
+  stageAgent("session-clean", false);
+  store = new JobStore();
+  runner = new Runner(store);
+  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
+});
+
+afterEach(async () => {
+  await runner.drain();
+  await settled();
+  await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
+  await rm(absolute(targetPath(SLUG)), { force: true });
+  await rm(absolute(targetSvgPath(SLUG)), { force: true });
+  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
+  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.svg`), { force: true });
+  delete process.env.STUDIO_HOME;
+  delete process.env.STUDIO_DAILY_USD;
+});
+
+/* -------------------------------------------------------------------------- */
+/* Every attempt that spends, records                                         */
+/* -------------------------------------------------------------------------- */
+
+describe("a job that finished cleanly", () => {
+  it("records the agent's own figure and says it is exact", async () => {
+    const { record } = await runner.enqueue(await brief());
+    await until(() => store.get(record.id)?.state === "awaiting_review", "it never finished");
+
+    const held = store.get(record.id)!;
+    expect(held.costUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(held.costSource).toBe("result");
+    // And it reaches the catalog, which is the column the cap ultimately reads
+    // when somebody queries Postgres rather than the disk record.
+    const finish = catalogMock.jobFinish.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(finish.costUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(finish.costSource).toBe("result");
+  });
+});
+
+describe("a job somebody cancelled mid-run", () => {
+  it("records what it had spent, marked as an estimate", async () => {
+    // The whole point of the phase. Before it, this row said nothing at all
+    // for an agent that had already burned two hundred thousand cached tokens.
+    stageAgent("session-truncated", true);
+    const { record } = await runner.enqueue(await brief());
+    await until(() => started.length === 1, "the agent never started");
+    await until(
+      () => (store.get(record.id)?.costUsd ?? 0) > 0,
+      "the meter never saw the stream",
+    );
+
+    await runner.cancel(record.id);
+    await until(() => store.get(record.id)?.state === "cancelled", "it never acknowledged");
+
+    const held = store.get(record.id)!;
+    expect(held.costUsd).toBeCloseTo(ESTIMATED_USD, 6);
+    expect(held.costSource).toBe("stream");
+    expect(held.errorKind).toBe("cancelled");
+  });
+});
+
+describe("a job that ran past its ceiling", () => {
+  it("records what it had spent, and is still a timeout rather than a cancel", async () => {
+    stageAgent("session-truncated", true);
+    const { record } = await runner.enqueue(await brief());
+    await until(() => started.length === 1, "the agent never started");
+    await until(() => (store.get(record.id)?.costUsd ?? 0) > 0, "the meter never saw the stream");
+
+    // The ceiling and a person share one mechanism and not one verdict: A2 says
+    // a job past forty-five minutes is `failed` with `timeout`, and only a job
+    // somebody stopped is `cancelled`.
+    await runner.cancel(record.id, "job-timeout");
+    await until(() => store.get(record.id)?.state === "failed", "it never stopped");
+
+    const held = store.get(record.id)!;
+    expect(held.errorKind).toBe("timeout");
+    expect(held.costUsd).toBeCloseTo(ESTIMATED_USD, 6);
+    expect(held.costSource).toBe("stream");
+  });
+});
+
+describe("a job whose runner died under it", () => {
+  /**
+   * What a restart actually finds: a `job.json` still saying `running`, and a
+   * `session.ndjson` the dead process left behind.
+   *
+   * Built on disk rather than by killing a live runner, because a live runner
+   * goes on writing to that same `job.json` while the test reads it — which
+   * made this flake one run in five, and which is not the situation being
+   * modelled anyway. Nothing is running when a reconcile pass looks.
+   */
+  async function abandonedJob(fixture: string): Promise<string> {
+    const { record } = await runner.enqueue(await brief());
+    const id = record.id;
+    await until(() => started.length === 1, "the agent never started");
+    await runner.drain();
+    await until(() => store.get(id)?.state !== "running", "it never stopped");
+
+    // Put it back the way a killed process leaves it: `running`, no cost, and
+    // the whole transcript on disk.
+    await store.update(id, {
+      state: "running",
+      costUsd: null,
+      costSource: null,
+      finishedAt: null,
+      errorKind: null,
+      error: null,
+    });
+    await writeFile(
+      sessionLogPath(id),
+      await readFile(path.join(FIXTURES, `${fixture}.ndjson`), "utf8"),
+      "utf8",
+    );
+    return id;
+  }
+
+  it("rebuilds the spend from the write-ahead log on the next start", async () => {
+    // The reconcile pass is the only place a cost cannot be read live, because
+    // the process that would read it is the process that died. Phase 3 recorded
+    // this as a known gap and three interrupted rows saying $0.00.
+    const id = await abandonedJob("session-clean");
+
+    const reborn = new JobStore();
+    await reborn.load();
+    const { interrupted } = await new Runner(reborn).reconcile();
+
+    expect(interrupted).toContain(id);
+    const held = reborn.get(id)!;
+    expect(held.state).toBe("interrupted");
+    // This log carries a complete session, so the replay finds its result event
+    // and the figure is the exact one rather than an accumulation.
+    expect(held.costUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(held.costSource).toBe("result");
+    // And it reaches the catalog, which is where the gap was visible.
+    const finish = catalogMock.jobFinish.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(finish.state).toBe("interrupted");
+    expect(finish.costUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(finish.costSource).toBe("result");
+  });
+
+  it("estimates when the log stops before a result event", async () => {
+    const id = await abandonedJob("session-truncated");
+
+    const reborn = new JobStore();
+    await reborn.load();
+    await new Runner(reborn).reconcile();
+
+    const held = reborn.get(id)!;
+    expect(held.costUsd).toBeCloseTo(ESTIMATED_USD, 6);
+    expect(held.costSource).toBe("stream");
+  });
+
+  it("records nothing rather than zero when the log is gone", async () => {
+    const id = await abandonedJob("session-clean");
+    await rm(sessionLogPath(id), { force: true });
+
+    const reborn = new JobStore();
+    await reborn.load();
+    await new Runner(reborn).reconcile();
+
+    // Null, not zero. Zero is a claim that nothing was spent, and nobody knows
+    // that about a job whose only record of its spending has been deleted.
+    expect(reborn.get(id)?.state).toBe("interrupted");
+    expect(reborn.get(id)?.costUsd).toBeNull();
+    expect(reborn.get(id)?.costSource).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The cap                                                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("the cap", () => {
+  it("does nothing at all when STUDIO_DAILY_USD is unset", async () => {
+    // Unset is the default and stays the default: one user on one machine has
+    // nothing to meter, which is the design's own reason for this phase being
+    // last and optional.
+    const first = await runner.enqueue(await brief());
+    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await store.update(first.record.id, { state: "discarded" });
+
+    expect(runner.capStatus().capUsd).toBeNull();
+    expect(runner.capStatus().exceeded).toBe(false);
+    // Spent well past any plausible cap, and the next one is still taken.
+    await expect(runner.enqueue(await brief({ slug: SLUG }))).resolves.toBeDefined();
+  });
+
+  it("refuses with a 429 once the rolling day's spend has crossed it", async () => {
+    process.env.STUDIO_DAILY_USD = "0.10";
+    const first = await runner.enqueue(await brief());
+    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    await store.update(first.record.id, { state: "discarded" });
+
+    const refused = await runner.enqueue(await brief({ slug: SLUG })).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(JobRefused);
+    const error = refused as InstanceType<typeof JobRefused>;
+    // 429 rather than 409: nothing about this brief is wrong, and the same
+    // request succeeds later.
+    expect(error.status).toBe(429);
+    const detail = error.detail as Record<string, unknown>;
+    expect(detail.reason).toBe("daily-cap");
+    expect(detail.capUsd).toBe(0.1);
+    expect(detail.totalUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(detail.windowHours).toBe(24);
+    // The two facts that let somebody decide what to do: what is spent against
+    // what, and when the total can first fall.
+    expect(typeof detail.oldestAgesOutAt).toBe("string");
+    expect(error.message).toContain("$0.13");
+    expect(error.message).toContain("$0.10");
+    expect(error.message).toContain("STUDIO_DAILY_USD");
+    // And nothing was queued.
+    expect(store.list({ state: "queued" })).toHaveLength(0);
+  });
+
+  it("counts an estimated figure towards the cap", async () => {
+    // A cap that summed only the clean finishes would be a cap anybody could
+    // walk past by pressing Cancel, which is exactly what phase 7 is for.
+    process.env.STUDIO_DAILY_USD = "0.10";
+    stageAgent("session-truncated", true);
+    const { record } = await runner.enqueue(await brief());
+    await until(() => started.length === 1, "the agent never started");
+    await until(() => (store.get(record.id)?.costUsd ?? 0) > 0, "the meter never saw the stream");
+    await runner.cancel(record.id);
+    await until(() => store.get(record.id)?.state === "cancelled", "it never acknowledged");
+
+    expect(store.get(record.id)?.costSource).toBe("stream");
+    const refused = await runner.enqueue(await brief({ slug: SLUG })).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(JobRefused);
+    expect((refused as InstanceType<typeof JobRefused>).status).toBe(429);
+  });
+
+  it("stops counting an attempt once it is 24 hours old", async () => {
+    process.env.STUDIO_DAILY_USD = "0.10";
+    const first = await runner.enqueue(await brief());
+    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+    // Backdated a millisecond past the window: rolling, so the boundary is a
+    // moving floor rather than a midnight everybody can spend against.
+    const old = new Date(Date.now() - 24 * 3_600_000 - 1).toISOString();
+    await store.update(first.record.id, { state: "discarded", startedAt: old });
+
+    expect(runner.capStatus().totalUsd).toBe(0);
+    await expect(runner.enqueue(await brief({ slug: SLUG }))).resolves.toBeDefined();
+  });
+
+  it("does not stop a job that is already running", async () => {
+    // Killing paid work halfway is a bill with nothing to show for it, and the
+    // 45 minute ceiling is already the guard for a job that will not stop.
+    process.env.STUDIO_DAILY_USD = "0.01";
+    stageAgent("session-clean", true);
+    const { record } = await runner.enqueue(await brief());
+    await until(() => started.length === 1, "the agent never started");
+    await until(() => (store.get(record.id)?.costUsd ?? 0) > 0, "the meter never saw the stream");
+
+    expect(runner.capStatus().exceeded).toBe(true);
+    expect(store.get(record.id)?.state).toBe("running");
+  });
+
+  it("is checked after A10's own guards, not instead of them", async () => {
+    // One guard on top of five, in that order. The lease and the mode check
+    // both belong to this brief and both still answer first, so a cap does not
+    // turn "that path is spoken for" into "come back tomorrow".
+    process.env.STUDIO_DAILY_USD = "0.001";
+    stageAgent("session-clean", true);
+    const { record } = await runner.enqueue(await brief());
+    await until(() => started.length === 1, "the agent never started");
+    await until(() => (store.get(record.id)?.costUsd ?? 0) > 0, "the meter never saw the stream");
+    expect(runner.capStatus().exceeded).toBe(true);
+
+    // The lease: same slug, and the running job is holding it.
+    const held = await runner.enqueue(await brief({ slug: SLUG })).catch((e: unknown) => e);
+    expect((held as InstanceType<typeof JobRefused>).status).toBe(409);
+    expect((held as Error).message).toContain("already held");
+
+    // The mode check: a different slug with nothing at the target path.
+    const wrongMode = await runner
+      .enqueue(await brief({ slug: "studio-cap-absent", mode: "extend" }))
+      .catch((e: unknown) => e);
+    expect((wrongMode as InstanceType<typeof JobRefused>).status).toBe(409);
+    expect((wrongMode as Error).message).toContain("nothing to extend");
+
+    // And only a brief that passes all of them meets the cap.
+    const capped = await runner.enqueue(await brief({ slug: "studio-cap-other" })).catch((e: unknown) => e);
+    expect((capped as InstanceType<typeof JobRefused>).status).toBe(429);
+  });
+
+  it("reports the same window on capStatus that it refuses on", async () => {
+    process.env.STUDIO_DAILY_USD = "5";
+    const first = await runner.enqueue(await brief());
+    await until(() => store.get(first.record.id)?.state === "awaiting_review", "never finished");
+
+    const status = runner.capStatus();
+    expect(status.capUsd).toBe(5);
+    expect(status.exceeded).toBe(false);
+    expect(status.totalUsd).toBeCloseTo(EXACT_USD, 6);
+    expect(status.jobs).toBe(1);
+    expect(status.oldestStartedAt).toBe(store.get(first.record.id)?.startedAt);
+  });
+
+  it("treats an unreadable STUDIO_DAILY_USD as unset rather than as zero", async () => {
+    // Refusing every job because a dotenv has a typo in it is the worst of both
+    // answers.
+    process.env.STUDIO_DAILY_USD = "ten dollars";
+    expect(runner.capStatus().capUsd).toBeNull();
+    await expect(runner.enqueue(await brief())).resolves.toBeDefined();
+  });
+});

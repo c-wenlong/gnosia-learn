@@ -98,3 +98,44 @@ export const MIRROR_HEALTH_MS = integer("STUDIO_MIRROR_HEALTH_MS", 2_000, 200, 3
 
 /** A `canvas` verb the UI triggers: one Chromium launch, so generous but bounded. */
 export const VERB_TIMEOUT_MS = integer("STUDIO_VERB_TIMEOUT_MS", 180_000, 10_000, 900_000);
+
+/**
+ * The rolling-day spend cap, in US dollars. Unset means no cap at all.
+ *
+ * Phase 7, and the sixth guard on top of A10's five rather than a replacement
+ * for any of them: `sonnet` by default, sixty turns per attempt, three attempts
+ * with a specific finding attached to each retry, and the forty-five minute
+ * ceiling all still fire first and in that order. This one is checked last, at
+ * enqueue, and only ever refuses — it never stops a job that is already
+ * running, because killing paid work halfway is how a cap turns into a bill
+ * with nothing to show for it.
+ *
+ * A float, not an integer: the jobs this meters cost about thirteen cents each,
+ * so a cap that could only be whole dollars would have no useful setting
+ * between "seven jobs" and "fifteen".
+ *
+ * A function rather than a constant, unlike every other knob in this file.
+ * Those are read once because a runner's timers and concurrency cannot change
+ * under it; a cap is the one thing somebody raises *because* they have just
+ * been refused, and reading it per enqueue means a restart is enough rather
+ * than a restart at the right moment. It is also the only way a test can set
+ * one without controlling module import order.
+ *
+ * Unset is the default and stays the default. One user on one machine has
+ * nothing to meter, which is the design's own reason for putting this phase
+ * last; a knob that defaulted to a number would be this service inventing a
+ * budget nobody asked it to hold.
+ */
+export function dailyCapUsd(): number | null {
+  const raw = process.env.STUDIO_DAILY_USD?.trim();
+  if (raw === undefined || raw === "") return null;
+  const parsed = Number.parseFloat(raw);
+  // A value that is not a number is not a cap of zero. Refusing every job
+  // because a dotenv has a typo in it is the worst of both answers, so an
+  // unreadable value means unset — and `/api/health` reports what is in force.
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+/** The window the cap counts over. Rolling, never a calendar day. */
+export const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
