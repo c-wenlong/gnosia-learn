@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { JobState } from "@self-learn/schema";
@@ -8,6 +8,7 @@ import type { ValidBrief } from "./brief";
 import type { CanvasLint, VerifyCheck } from "./canvas";
 import type { Comparison } from "./compare";
 import { SSE_BUFFER } from "./config";
+import type { CostSource } from "./cost";
 import {
   jobDir,
   jobJsonPath,
@@ -113,6 +114,16 @@ export interface JobRecord {
   exitCode: number | null;
   turns: number | null;
   costUsd: number | null;
+  /**
+   * Where `costUsd` came from: the agent's own `total_cost_usd`, or this
+   * service's accumulation from the intermediate usage events.
+   *
+   * The two are different kinds of fact and a reader that cannot tell them
+   * apart cannot tell a bill from a guess. `stream` is an under-estimate for
+   * the reason `cost.ts` sets out, so every surface that shows a figure shows
+   * this beside it. Null when no cost is recorded at all.
+   */
+  costSource: CostSource | null;
   gate: GateResult | null;
   /**
    * Before and after, and the difference: the finished-job screen's whole
@@ -157,19 +168,46 @@ interface Stream {
   seq: number;
 }
 
+let writeCounter = 0;
+
 const atomicWrite = async (file: string, body: string): Promise<void> => {
   // A sibling temp file and a rename, the same discipline tldrawkc's own
   // `writeAtomic` keeps: a reader of job.json sees the old record or the new
   // one, never half of either, and a crash mid-write cannot leave a job
   // unreadable.
-  const temporary = `${file}.tmp`;
-  await writeFile(temporary, body, "utf8");
-  await rename(temporary, file);
+  //
+  // **The temp name is unique per write.** With a fixed `.tmp` two overlapping
+  // writes to one record share a path: both write it, the first rename takes
+  // it, and the second fails `ENOENT` on a file that is no longer there. That
+  // was survivable while a record was written a handful of times per job and
+  // stopped being when the running cost total started riding the agent's
+  // stdout. Seen as five unhandled `ENOENT`s in a green test run, which is
+  // exactly the shape of a bug that waits.
+  writeCounter += 1;
+  const temporary = `${file}.${process.pid}.${writeCounter}.tmp`;
+  try {
+    await writeFile(temporary, body, "utf8");
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
 };
 
 export class JobStore {
   private readonly records = new Map<string, JobRecord>();
   private readonly streams = new Map<string, Stream>();
+  /**
+   * One write at a time per record, chained.
+   *
+   * A unique temp name stops two overlapping writes fighting over a path, but
+   * not over an order: `update` merges against the in-memory map synchronously
+   * and then awaits, so without this the write that *started* last is not
+   * necessarily the write that *lands* last, and `job.json` can end up holding
+   * a snapshot older than the record it is supposed to mirror. Rule 7 makes
+   * that file the record, so it has to be the newest one.
+   */
+  private readonly writes = new Map<string, Promise<void>>();
 
   /** Read every job workspace back into memory. Called once, at start. */
   async load(): Promise<void> {
@@ -250,8 +288,19 @@ export class JobStore {
   }
 
   private async persist(record: JobRecord): Promise<void> {
-    await mkdir(jobDir(record.id), { recursive: true });
-    await atomicWrite(jobJsonPath(record.id), `${JSON.stringify(record, null, 1)}\n`);
+    const body = `${JSON.stringify(record, null, 1)}\n`;
+    const previous = this.writes.get(record.id) ?? Promise.resolve();
+    const next = previous
+      // The chain must not break on a failed write: one job whose workspace has
+      // been deleted out from under it should not wedge every later write to
+      // it. The error still reaches this call's own caller.
+      .catch(() => undefined)
+      .then(async () => {
+        await mkdir(jobDir(record.id), { recursive: true });
+        await atomicWrite(jobJsonPath(record.id), body);
+      });
+    this.writes.set(record.id, next.catch(() => undefined));
+    await next;
   }
 
   /** Note a failed catalog call on the record rather than throwing it away. */
