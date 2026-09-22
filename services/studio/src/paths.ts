@@ -130,6 +130,21 @@ export function tmpDir(jobId: string): string {
   return path.join(jobDir(jobId), "tmp");
 }
 
+/**
+ * The two screenshots the comparison screen shows, before and after.
+ *
+ * Inside the job workspace, which is under `$STUDIO_HOME` and gitignored, and
+ * never under `learn/assets/`. A picture taken so two versions can be compared
+ * is not a deliverable: the committed artifacts are the `.tldr` and the `.svg`,
+ * a person commits them by hand (D6), and a `git status` listing a PNG nobody
+ * asked for would be the studio lying about what a job produced. It also means
+ * the pictures go when the workspace goes, which is right — they are about one
+ * job and are meaningless without it.
+ */
+export function shotPath(jobId: string, which: "before" | "after"): string {
+  return path.join(jobDir(jobId), `${which}.png`);
+}
+
 /** Where a failed job's partial artifacts are moved, so a person can look. */
 export function rejectedDir(jobId: string): string {
   return path.join(jobDir(jobId), "rejected");

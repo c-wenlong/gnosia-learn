@@ -2,6 +2,8 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 
+import type { Comparison } from "@/lib/studio-compare";
+
 /**
  * The studio's gate, and the one way the app talks to the runner.
  *
@@ -128,4 +130,27 @@ export async function studioApi<T>(
     };
   }
   return { ok: true, data: body as T };
+}
+
+/**
+ * The one job a full-width picture is about, fetched only when one is open.
+ *
+ * `GET /api/jobs` carries neither the brief nor the comparison, and
+ * `ShotView` needs both: without them it linked to the other side whether or
+ * not that side exists, so a `new` job's "Show before" put a broken image
+ * across the main area while the thumbnail beside it correctly said there was
+ * no before. One extra call, made only on the render that shows a picture.
+ *
+ * A failure is `null` and the view falls back to showing the image and letting
+ * the 404 speak, which is the honest order: a runner that did not answer is not
+ * evidence that a picture is missing.
+ */
+export async function openShot(
+  jobId: string,
+): Promise<{ comparison: Comparison | null; brief?: { mode?: string } } | null> {
+  const result = await studioApi<{ comparison?: Comparison | null; brief?: { mode?: string } }>(
+    `/api/jobs/${encodeURIComponent(jobId)}`,
+  );
+  if (!result.ok) return null;
+  return { comparison: result.data.comparison ?? null, brief: result.data.brief };
 }

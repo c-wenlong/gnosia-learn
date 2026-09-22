@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
 import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
   failureReport,
-  finishedHeadline,
   formatDuration,
   isActive,
   narration,
@@ -30,10 +30,11 @@ import { panelHref } from "@/lib/studio-view";
  * phase marked, opens the log, and puts a message at the top keyed on the
  * runner's own failure codes rather than on the text of an error (U11).
  *
- * What this panel deliberately does **not** do is review. A finished job says
- * what it produced and stops there: the comparison screen, Accept and Discard
- * are phase 4, and a button that renamed a candidate into `learn/assets/` is the
- * one thing in this design that changes a committed file.
+ * A finished job hands the top of the panel to `ComparisonPanel`, which is the
+ * review: two pictures, the counts, the lints, the verify checks, Accept and
+ * Discard. That is the one place in the studio where a committed file changes,
+ * and it is still the same panel — the phase list and the log stay under it,
+ * because "what did it do to get here" is the other half of deciding.
  */
 
 export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
@@ -124,6 +125,10 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
   const rows = phaseRows(job, own);
   const failed = job.state === "failed" || job.state === "cancelled" || job.state === "interrupted";
   const report = failed ? failureReport(job) : null;
+  // The three states the comparison is about: one that can still be reviewed,
+  // and one that was. A discarded job has nothing left to show two pictures of,
+  // because the candidate is deleted.
+  const reviewing = job.state === "awaiting_review" || job.state === "accepted";
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
@@ -155,12 +160,17 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
       </div>
 
       {report !== null && <FailureMessage job={job} report={report} />}
-      {job.state === "awaiting_review" && (
-        <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
-          <p className="font-medium text-[var(--ok)]">{finishedHeadline(job)}</p>
+
+      {/* The comparison replaces nothing: it goes above the phase list, which
+          is still how a person checks what the job actually did on its way
+          here. `accepted` and `discarded` keep it too — after an accept it is
+          the record of what was compared, and the `git add` line lives in it. */}
+      {reviewing && <ComparisonPanel job={job} path={path} />}
+      {job.state === "discarded" && (
+        <div className="mb-3 rounded-md border border-[var(--border)] bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
+          <p className="font-medium">The candidate is gone.</p>
           <p className="mt-1">
-            Nothing under <Mono>learn/assets/</Mono> has changed: the candidate is at{" "}
-            <Mono>{job.candidate}</Mono>. Accept and Discard are phase 4.
+            Nothing under <Mono>learn/assets/</Mono> ever changed, so there is nothing to undo.
           </p>
         </div>
       )}

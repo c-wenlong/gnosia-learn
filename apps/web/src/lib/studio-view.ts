@@ -108,6 +108,16 @@ export interface StudioView {
    * is why the fallback is not a path that only runs when something breaks.
    */
   stream: boolean;
+  /**
+   * Which of the open job's two screenshots fills the main area, or null.
+   *
+   * The design's finished panel says "clicking either opens it full width in
+   * the main area", and that is a place a person can be, so it is in the URL
+   * beside `?job=` rather than in a component's state: the back button closes
+   * it, and a link to a picture is a link somebody can send. It means nothing
+   * without a job, and `shotHref` drops it when the job panel closes.
+   */
+  shot: "before" | "after" | null;
 }
 
 export const DEFAULT_VIEW: StudioView = {
@@ -123,6 +133,7 @@ export const DEFAULT_VIEW: StudioView = {
   job: null,
   brief: null,
   stream: true,
+  shot: null,
 };
 
 /** Next hands a repeated parameter as an array and a single one as a string. */
@@ -179,13 +190,21 @@ export function parseView(params: RawParams): StudioView {
  * meaningful here: `?new=` is a blank form and `?new=job-id` is a prefilled
  * one, and `one` returns null for both.
  */
-export function parsePanel(params: RawParams): Pick<StudioView, "job" | "brief" | "stream"> {
+export function parsePanel(
+  params: RawParams,
+): Pick<StudioView, "job" | "brief" | "stream" | "shot"> {
   const brief = params.new;
   const first = Array.isArray(brief) ? brief[0] : brief;
+  const shot = one(params.shot);
+  const job = one(params.job);
   return {
-    job: one(params.job),
+    job,
     brief: first === undefined ? null : first,
     stream: (one(params.stream) ?? "on") !== "off",
+    // A picture belongs to a job, so `?shot=after` on its own names nothing and
+    // is read as nothing rather than as a main area that cannot say whose
+    // screenshot it is showing.
+    shot: job !== null && (shot === "before" || shot === "after") ? shot : null,
   };
 }
 
@@ -210,6 +229,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.job !== null) params.set("job", next.job);
   if (next.brief !== null) params.set("new", next.brief);
   if (!next.stream) params.set("stream", "off");
+  if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
   const query = params.toString();
   return query === "" ? "/studio" : `/studio?${query}`;
 }
@@ -224,7 +244,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
  */
 export function panelHref(
   path: string,
-  patch: { job?: string | null; brief?: string | null },
+  patch: { job?: string | null; brief?: string | null; shot?: "before" | "after" | null },
 ): string {
   const [base, existing] = path.split("?");
   const params = new URLSearchParams(existing ?? "");
@@ -236,6 +256,18 @@ export function panelHref(
     if (patch.brief === null) params.delete("new");
     else params.set("new", patch.brief);
   }
+  if (patch.shot !== undefined) {
+    if (patch.shot === null) params.delete("shot");
+    else params.set("shot", patch.shot);
+  }
+  // A picture belongs to one job, so anything that changes which job the panel
+  // is about takes the picture with it: closing the panel, opening a brief form
+  // over it, or following a Resume to the job it queued. Only a patch that
+  // names a picture keeps one, which is the link that opens it.
+  if (patch.shot === undefined && (patch.job !== undefined || patch.brief != null)) {
+    params.delete("shot");
+  }
+  if (params.get("job") === null) params.delete("shot");
   // A stale verb outcome pinned beside a newly opened panel would read as
   // something the panel did, so opening one drops it.
   for (const key of ["v", "ok", "m"]) params.delete(key);

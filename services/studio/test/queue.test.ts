@@ -36,6 +36,33 @@ vi.mock("../src/catalog", () => catalogMock);
 const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
 vi.mock("../src/gate", () => gateMock);
 
+/**
+ * The before side of the comparison launches Chromium twice — `inspect` and
+ * `shot` over the committed file — and none of that is what these tests are
+ * about. Only the reader is stubbed: the arithmetic around it is pure, lives in
+ * `compare.test.ts`, and a runner calling a stubbed version of it would stop
+ * being the runner under test.
+ *
+ * It matters more than a speed-up. Left real, the two subprocesses hold the
+ * `execute` path open for seconds, and every assertion here about what happened
+ * *before the agent started* would pass by looking at a job that had not
+ * started yet — the extend tests would have gone green on nothing.
+ */
+const compareMock = vi.hoisted(() => ({
+  readSide: vi.fn(async () => ({
+    shapes: 3,
+    bindings: 1,
+    lints: [],
+    svgBytes: null,
+    shot: false,
+    at: new Date().toISOString(),
+  })),
+}));
+vi.mock("../src/compare", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/compare")>()),
+  ...compareMock,
+}));
+
 const reviewMock = vi.hoisted(() => ({
   dirtyFiles: vi.fn(async () => [] as string[]),
   accept: vi.fn(),
