@@ -142,8 +142,14 @@ test where a grep test is possible, a named reviewer check where it is not.
 
 ## The schema
 
-Three new tables and one changed column, as migration `0006`. Nothing else in
-the catalog moves.
+Three new tables and one changed column, as migration `0006`, plus one column
+added by migration `0007`. Nothing else in the catalog moves.
+
+`0007` adds `job.cost_source`, which says whether `cost_usd` is the agent's own
+`total_cost_usd` or the runner's accumulation from the stream. Phase 7 is why,
+and A10 has the reasoning; the column is nullable, checked against
+`result | stream`, and paired so a source can never sit beside a missing
+figure.
 
 What this deliberately leaves alone:
 
@@ -165,7 +171,7 @@ What this deliberately leaves alone:
 | Table | New or changed | Columns that carry meaning |
 | --- | --- | --- |
 | `session` | New | `id` PK (text, minted by the caller), `kind` (`tutor`\|`studio`), `learner_id` FK, `state`, `title`, `goal`, `agent_session_id` (the headless session, for resume), `log_asset_id` FK nullable, `started_at`, `ended_at`, `heartbeat_at`, `error_kind`, `error`, `metadata` jsonb |
-| `job` | New | `id` PK, `kind` (`diagram` today), `session_id` FK nullable, `parent_job_id` FK nullable, `state`, `phase`, `topic_slug` FK not null, `target_path`, `candidate_path`, `target_hash_before`, `brief` jsonb, `gate` jsonb, `idempotency_key` unique, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `error_kind`, `error`, `error_detail` jsonb |
+| `job` | New | `id` PK, `kind` (`diagram` today), `session_id` FK nullable, `parent_job_id` FK nullable, `state`, `phase`, `topic_slug` FK not null, `target_path`, `candidate_path`, `target_hash_before`, `brief` jsonb, `gate` jsonb, `idempotency_key` unique, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `cost_source`, `error_kind`, `error`, `error_detail` jsonb |
 | `asset_job` | New | `asset_id` PK FK, `job_id` PK FK, `content_hash` (what the job wrote), `bytes`, `written_at` |
 | `event` | Changed | `session_id` becomes a foreign key to `session(id)`, `ON DELETE RESTRICT ON UPDATE CASCADE`. The column, its type and its index are unchanged |
 
@@ -329,9 +335,9 @@ browser on this machine.
 
 | Method | Path | Purpose | Request | Response |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/jobs` | Queue a job from a frozen brief | `Brief` | `201 { jobId, state: "queued", jobsAhead, note }` |
+| `POST` | `/api/jobs` | Queue a job from a frozen brief | `Brief` | `201 { jobId, state: "queued", jobsAhead, note }`, or `429` with `{ reason: "daily-cap", totalUsd, capUsd, jobs, windowHours, oldestStartedAt, oldestAgesOutAt }` when `STUDIO_DAILY_USD` is set and the rolling day is at or over it |
 | `GET` | `/api/jobs` | List jobs, newest first | `?limit=25&state=running` | `{ jobs: [{ jobId, title, target, state, turns, costUsd, updated }] }` |
-| `GET` | `/api/jobs/{id}` | One job, current state | none | `{ jobId, state, phase, brief, attempt, artifacts, gate, costUsd, error, note }` |
+| `GET` | `/api/jobs/{id}` | One job, current state | none | `{ jobId, state, phase, brief, attempt, artifacts, gate, costUsd, costSource, error, note }` |
 | `GET` | `/api/jobs/{id}/events` | Live progress, SSE | `Last-Event-ID` on reconnect | `text/event-stream` of `phase`, `step`, `gate`, `done` |
 | `GET` | `/api/jobs/{id}/log` | Windowed raw log | `?from=0&limit=200` | `{ lines, from, next, total }` |
 | `POST` | `/api/jobs/{id}/cancel` | Stop a running or queued job | none | `{ jobId, state: "running" \| "cancelled", cancelRequestedAt }` |
@@ -343,7 +349,7 @@ browser on this machine.
 | `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
 
-| `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h }` |
+| `GET` | `/api/health` | What is and is not working right now | none | `{ ok, tldrawkc, chromium, claude, postgres, queueDepth, costLast24h, dailyCap }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
 | `GET` | `/api/mirrors` | What is open, and whether each is answering | `?file=…` to poll and touch one | `{ mirrors: [{ file, url, port, startedAt, lastSeenAt, healthy }] }` |
@@ -1114,7 +1120,7 @@ raised it: S schema, A API and runner, U interface.
 | A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `POST /api/jobs/{id}/resume`, which inherits the stored session id and asks for no change request — an interruption is the one case with nothing to change, and `revise` requires one. The row keeps the phase it died in, so the panel can mark it rather than showing seven blank rows. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
-| A10 | Cost | Five guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, and `turns` and `cost_usd` recorded on the row from the final `stream-json` result event and shown in the list and on `/api/health`. A sixth, a daily cap (`STUDIO_DAILY_USD`) that refuses new jobs with 429 once crossed, is optional and deferred to phase 7: one user on one machine has nothing to meter yet | Runner; `POST /api/jobs`; phase 7 |
+| A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
 | U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
 | U3 | Postgres is down | The studio keeps working. The asset list comes from `list --json`, the topics from `content/topics.yaml`, and the jobs from disk. An amber banner in the existing `StoreBanner` position says `not connected to the catalog, browsing and drawing still work`. Accept still renames, exports and verifies, and reports `indexed: false` with a Reindex button. The concept picker falls back to the slugs in `topics.yaml` | Accept step 4; `GET /api/health` |
@@ -1541,6 +1547,38 @@ more process; they buy each tool a queue shaped like its own work, and they
 keep the independence rule the root [`AGENTS.md`](../AGENTS.md) already states
 for these two submodules.
 
+### D26. An estimated cost is recorded and labelled, never corrected
+
+**Verdict:** a job's `cost_usd` is the agent's own `total_cost_usd` wherever
+one exists and the runner's accumulation from the stream where one does not,
+and `cost_source` says which. The accumulation is not scaled up to close its
+known gap, and a job with no priceable evidence records `null` rather than
+zero.
+
+**Why:** three things, each ruling out an alternative that looks tidier.
+
+Recording only the exact figure was the old behaviour and is what made a cap
+impossible: a cancelled attempt wrote `$0.00`, so the cheapest way past any cap
+would have been to press Cancel. Spending is spending whether or not a session
+got to say goodbye.
+
+Scaling the estimate up to its measured mean would make every figure look
+alike, which is the point at which nobody can check any of them. Pricing the
+result event's own tokens with the rate table and getting the CLI's number back
+is the one test that catches a rate that has drifted, and a correction factor
+in the middle breaks it. The gap is measured and written down in `cost.ts`
+instead: 80% to 93% of true, across nine real sessions, always low.
+
+Zero for an unknown is a claim, and a false one. A job whose transcript has
+been deleted spent something nobody can recover, and a column that says `$0.00`
+for it has stated that it spent nothing. `null` is the honest shape and the
+window arithmetic skips it.
+
+**The cost:** the cap is slightly permissive in exactly one case — a window
+made up mostly of killed attempts counts about a tenth low. That is the
+direction that lets a job through rather than the direction that refuses one
+wrongly, and it is visible on the row rather than hidden in the total.
+
 ## Roadmap
 
 Phases in order. Each has a definition of done an agent can verify without
@@ -1551,6 +1589,12 @@ open a PR per phase, following the shipping loop in the root
 
 Status key: `[ ]` not started, `[x]` done. Update this file in the same PR that
 completes an item.
+
+**Phases 0 to 4 and 7 are built. Phases 5 and 6 are not, by decision rather
+than by omission**, and each names its own gate: phase 5 waits on phases 0 to 4
+having real use, phase 6 on there being a second client. Phase 7 was taken out
+of order for the reason its own section gives. Neither gate is a scheduling
+question, so neither should be read as work in progress.
 
 ### Phase 0. The schema and the write path
 
@@ -1726,7 +1770,10 @@ the design, each because running it said so:
   agent's final `stream-json` result event, and a killed runner never reads one,
   so the three interrupted rows from this phase's testing say `$0.00` for work
   that was really paid for. The resumed job's own row carries only what the
-  resumed session spent. Known gap, not a bug to fix here.
+  resumed session spent. Known gap, not a bug to fix here. **Closed by phase 7**
+  for `cost_usd`, by replaying `session.ndjson`; `turns` still comes from the
+  result event alone, because there is no per-turn counter in the stream to
+  accumulate and a killed attempt genuinely does not know how many it took.
 
 ### Phase 4. Accept and reject
 
@@ -1798,7 +1845,14 @@ with Postgres stopped still lands both files and reports `indexed: false`.
   against two `canvas -- inspect` runs each time, and the counts matched: 44→46
   shapes and 12→13 bindings on the first, 46→48 and 13→14 on the last.
 
-### Phase 5. Optional: manimkc video jobs
+### Phase 5. Optional: manimkc video jobs — gated, not built
+
+**Unbuilt by decision, and its gate has not opened.** Phase 7 was taken ahead
+of it because a spend cap is the one thing that gets more useful the longer
+the studio runs, and a second generator is the one thing that gets more
+expensive if the first one has not been lived with. Phase 4 has only just
+landed, so "once phases 0 to 4 have real use" is a gate that has not been
+reached rather than one nobody has got round to.
 
 Only once phases 0 to 4 have real use. `job.kind` widens to `video`, but the
 video jobs run through their own manimkc runner and their own queue rather
@@ -1806,7 +1860,12 @@ than joining the diagrams one (D25), and the studio shows both side by side in
 the one job list, which is what phase 6 of the tool's own roadmap describes.
 Not designed here.
 
-### Phase 6. Optional: an MCP entry for the agent
+### Phase 6. Optional: an MCP entry for the agent — gated, not built
+
+**Unbuilt by decision, and its gate has not opened.** The gate is a second
+client, and there is still one. The project's own standing preference is a CLI
+with `--json` and MCP only as a thin wrapper over it, so nothing here is
+waiting on effort.
 
 Only if the typed-argument benefit is worth a second surface. Today "the agent
 wrote to a path the brief did not name" is policed by permission rules and
@@ -1815,15 +1874,52 @@ stops being representable. D6 in the tool's docs defers MCP, and the project's
 own preference is a CLI with `--json` and MCP only as a thin wrapper, so this
 earns its place when there is a second client and not before.
 
-### Phase 7. Optional: a daily spend cap
+### Phase 7. A daily spend cap
 
-Only if usage ever needs metering. `STUDIO_DAILY_USD` refuses new jobs with 429
-once a rolling day's `cost_usd` total crosses it, on top of the five guards A10
-already lists. One user on one machine has nothing to meter today, which is why
-this is last and optional rather than part of phase 1. A10's `cost_usd` is only
-ever written from the final `stream-json` result event, so a cap built on that
-column alone misses a cancelled, timed-out or interrupted attempt's spend;
-recording a cost for those too is part of this phase, not a footnote on it.
+Goal: a number the studio will not spend past, built on a column that is
+honest about what every attempt cost rather than only the ones that finished.
+
+- [x] `services/studio/src/cost.ts`: the rate table, one module, with its
+      provenance and its date in a comment, and a `JobCostMeter` that
+      accumulates from the intermediate per-message `usage` events
+- [x] A cost recorded on cancel, on the 45 minute ceiling, on a spawn failure
+      after a paid attempt, and on interrupt — the last by replaying
+      `session.ndjson`, since the process that would have read it is the one
+      that died
+- [x] Every attempt of a job counted, not just the last one
+- [x] `job.cost_source` (`result` \| `stream`) and migration `0007`, so a
+      reader can tell the agent's own figure from the runner's estimate
+- [x] `STUDIO_DAILY_USD`, unset meaning no cap, over a rolling 24 hour window
+      keyed on when each attempt **started**
+- [x] `POST /api/jobs` refuses with 429 once the total is at or over the cap,
+      with the total, the cap and when the oldest counted attempt ages out
+- [x] `refusalReport` in `apps/web/src/lib/studio-jobs.ts` gives the 429 a code
+      and no retry button, and the job panel marks an estimated figure
+- [x] `/api/health` reports `dailyCap`, and says so in its `note`
+
+Done when: a job run to completion records `cost_source: "result"` matching the
+CLI's own figure; a job cancelled mid-run records a non-zero `cost_usd` with
+`cost_source: "stream"`; enqueue then returns 429 with the total, the cap and
+the ageing-out instant; the studio shows the coded message with no retry; and
+`STUDIO_DAILY_USD` unset refuses nothing.
+
+**The estimate is an under-estimate, and is marked rather than corrected.**
+`cost.ts` has the measurements: accumulating the intermediate events
+reproduces the result event's input and cache token counts *exactly*, but its
+`output_tokens` is the value from the API's `message_start` frame — before the
+message finished generating — and nothing later in the stream corrects it.
+Across the nine real sessions phases 3 and 4 left on disk, the whole estimate
+lands between 80% and 93% of the true cost. Nothing scales it up: a fudge
+factor would make the figure unauditable against the CLI's own, which is the
+one check that catches a stale rate table. So the row records where its number
+came from and every surface that shows a figure shows that beside it.
+
+**One thing this phase did not establish.** Whether a SIGTERM'd `claude -p`
+flushes a result event before it goes is not something this repo has evidence
+for: all nine sessions on disk exited cleanly and have one. The meter does not
+depend on the answer — it prefers a result event wherever one arrives and
+accumulates where one does not — which is why the question could be left open
+rather than guessed at.
 
 ## Known gaps
 
