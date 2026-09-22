@@ -554,3 +554,16 @@ not have to be worked out again.
   `Sec-Fetch-*`, `Cookie` and `Host` before forwarding, and the only form that
   can read `STUDIO_ENABLED` at request time, since `rewrites()` is evaluated
   when the config loads.
+- **No test may write into the tracked tree, and `vitest.setup.ts` now fails one
+  that does.** vitest runs test files in parallel workers against one checkout,
+  so a fixture dropped into `learn/assets/` is visible to every other suite
+  while it is there. `services/catalog/test/catalog.test.ts` indexes that
+  directory three times and asserts the second pass deletes nothing, so a
+  `.tldr` the studio's tests wrote and removed between two passes was pruned by
+  the second one and failed a suite that had nothing to do with it, about once
+  in eight full runs and never when run alone. Two overlapping `npm test` runs
+  failed every time. The studio's paths are all repo-relative by design, so
+  `STUDIO_REPO_ROOT` points `services/studio/src/paths.ts` at a symlink farm
+  under the OS temp directory and the setup file checks the tracked listing
+  after every test file. A new suite that needs a tree to write into takes a
+  temp one, the way `LEARN_ROOT` and `STUDIO_HOME` already do.
