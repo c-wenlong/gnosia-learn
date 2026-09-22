@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <clipPath id="clip0">
+      <rect width="1440" height="900"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect width="1440" height="900" fill="#F5F5F5" stroke="#9A9A9A" stroke-width="1"/>
+    <g clip-path="url(#clip0)">
+      <g>
+        <rect width="1440" height="56" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(28, 18.5)">
+          <text x="0" y="15" font-family="Inter" font-size="15" font-weight="700" fill="#1F1F1F">self-learn</text>
+        </g>
+        <g transform="translate(132, 16)">
+          <g>
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Today</text>
+            </g>
+            <g transform="translate(5.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(67, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Courses</text>
+            </g>
+            <g transform="translate(12, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(147, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Learn</text>
+            </g>
+            <g transform="translate(3.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(210, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Library</text>
+            </g>
+            <g transform="translate(7.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#1F1F1F"/>
+            </g>
+          </g>
+          <g transform="translate(281, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Review</text>
+            </g>
+            <g transform="translate(8.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(490, 28)"/>
+        <g transform="translate(1151, 14)">
+          <rect width="78" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(12, 6.5)">
+            <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Streak 14</text>
+          </g>
+        </g>
+        <g transform="translate(1261, 14)">
+          <rect width="89" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(12, 6.5)">
+            <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Target 1 / 2</text>
+          </g>
+        </g>
+        <g transform="translate(1382, 13)">
+          <ellipse cx="15" cy="15" rx="15" ry="15" fill="#D6D6D6"/>
+        </g>
+      </g>
+      <g transform="translate(0, 56)">
+        <g transform="translate(24, 24)">
+          <g>
+            <rect width="992" height="400" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(444, 192.5)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">video player · 4:12</text>
+            </g>
+          </g>
+          <g transform="translate(0, 414)">
+            <g transform="translate(0, 5)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Chapters</text>
+            </g>
+            <g transform="translate(56, 0)">
+              <rect width="71" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(10, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Intro 0:00</text>
+              </g>
+            </g>
+            <g transform="translate(135, 0)">
+              <rect width="90" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(10, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Weights 0:48</text>
+              </g>
+            </g>
+            <g transform="translate(233, 0)">
+              <rect width="75" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(10, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Areas 2:10</text>
+              </g>
+            </g>
+            <g transform="translate(316, 0)">
+              <rect width="107" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(10, 5)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Edge cases 3:30</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 452)">
+            <rect width="992" height="114" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Transcript</text>
+            </g>
+            <g transform="translate(16, 38)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">0:00 A point inside a triangle can be described by three numbers.</text>
+            </g>
+            <g transform="translate(16, 60)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">0:48 Each weight is the area of the opposite sub-triangle over the whole.</text>
+            </g>
+            <g transform="translate(16, 82)">
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">2:10 That is why they sum to one.</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(1036, 24)">
+          <g>
+            <rect width="380" height="120" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">VIDEO · manim · rendered 2026-09-12</text>
+            </g>
+            <g transform="translate(16, 38)">
+              <text x="0" y="18" font-family="Inter" font-size="18" fill="#1F1F1F">Barycentric interpolation</text>
+            </g>
+            <g transform="translate(16, 68)">
+              <g>
+                <rect width="117" height="36" rx="8" ry="8" fill="#222222"/>
+                <g transform="translate(14, 10)">
+                  <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#FFFFFF">Mark watched</text>
+                </g>
+              </g>
+              <g transform="translate(127, 0)">
+                <rect width="101" height="36" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 10)">
+                  <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Add to note</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 136)">
+            <rect width="380" height="141" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <g>
+                <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Explains</text>
+              </g>
+              <g transform="translate(55, 8.5)"/>
+            </g>
+            <g transform="translate(16, 43)">
+              <g transform="translate(0, 1)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#9A9A9A"/>
+              </g>
+              <g transform="translate(24, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Barycentric coordinates</text>
+                </g>
+              </g>
+              <g transform="translate(324, 1)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">0.55</text>
+              </g>
+            </g>
+            <g transform="translate(16, 69)">
+              <g transform="translate(0, 1)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#3D3D3D"/>
+              </g>
+              <g transform="translate(24, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Dot product</text>
+                </g>
+              </g>
+              <g transform="translate(326, 1)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">0.91</text>
+              </g>
+            </g>
+            <g transform="translate(16, 95)">
+              <rect width="126" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(14, 7.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open workspace</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 293)">
+            <rect width="380" height="157" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <g>
+                <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Related</text>
+              </g>
+              <g transform="translate(50, 8.5)"/>
+            </g>
+            <g transform="translate(16, 43)">
+              <g>
+                <rect width="64" height="44" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(8.5, 14.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">diagram</text>
+                </g>
+              </g>
+              <g transform="translate(74, 14.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Triangle areas</text>
+              </g>
+            </g>
+            <g transform="translate(16, 97)">
+              <g>
+                <rect width="64" height="44" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(19, 14.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">note</text>
+                </g>
+              </g>
+              <g transform="translate(74, 14.5)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Barycentric coordinates</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 466)">
+            <rect width="380" height="73" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(16, 16)">
+              <g>
+                <text x="0" y="14" font-family="Inter" font-size="14" fill="#1F1F1F">Derived from</text>
+              </g>
+              <g transform="translate(87, 8.5)"/>
+            </g>
+            <g transform="translate(16, 43)">
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">source scene.py · narration.json · mirror ok</text>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

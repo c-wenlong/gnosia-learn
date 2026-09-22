@@ -71,3 +71,7 @@ learn/assets/.candidates/
 # permission file names this machine's home directory. STUDIO_HOME moves it
 # somewhere else entirely, the way MANIMKC_HOME moves manimkc's data root.
 /.studio/
+
+# Third-party product screenshots gathered for design research stay local (copyright); our own current-app captures are tracked.
+docs/design/research/assets/*
+!docs/design/research/assets/current-app/
