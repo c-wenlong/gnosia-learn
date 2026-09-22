@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <clipPath id="clip0">
+      <rect width="1440" height="900"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect width="1440" height="900" fill="#F5F5F5" stroke="#9A9A9A" stroke-width="1"/>
+    <g clip-path="url(#clip0)">
+      <g>
+        <rect width="1440" height="56" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+        <g transform="translate(28, 18.5)">
+          <text x="0" y="15" font-family="Inter" font-size="15" font-weight="700" fill="#1F1F1F">self-learn</text>
+        </g>
+        <g transform="translate(132, 16)">
+          <g>
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Today</text>
+            </g>
+            <g transform="translate(5.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(67, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Courses</text>
+            </g>
+            <g transform="translate(12, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(147, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Learn</text>
+            </g>
+            <g transform="translate(3.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#1F1F1F"/>
+            </g>
+          </g>
+          <g transform="translate(210, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Library</text>
+            </g>
+            <g transform="translate(7.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(281, 0)">
+            <g>
+              <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Review</text>
+            </g>
+            <g transform="translate(8.5, 22)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(490, 28)"/>
+        <g transform="translate(1151, 14)">
+          <rect width="78" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(12, 6.5)">
+            <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Streak 14</text>
+          </g>
+        </g>
+        <g transform="translate(1261, 14)">
+          <rect width="89" height="28" rx="14" ry="14" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(12, 6.5)">
+            <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Target 1 / 2</text>
+          </g>
+        </g>
+        <g transform="translate(1382, 13)">
+          <ellipse cx="15" cy="15" rx="15" ry="15" fill="#D6D6D6"/>
+        </g>
+      </g>
+      <g transform="translate(0, 56)">
+        <g>
+          <rect width="1440" height="69" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+          <g transform="translate(24, 14)">
+            <g>
+              <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">CP4281 · Module 2 · Transformations</text>
+            </g>
+            <g transform="translate(0, 16)">
+              <text x="0" y="20" font-family="Inter" font-size="20" fill="#1F1F1F">Barycentric coordinates</text>
+            </g>
+          </g>
+          <g transform="translate(575, 27)">
+            <g transform="translate(0, 0.5)">
+              <ellipse cx="7" cy="7" rx="7" ry="7" fill="#9A9A9A"/>
+            </g>
+            <g transform="translate(20, 0)">
+              <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">p(L) 0.42 · Learning</text>
+            </g>
+          </g>
+          <g transform="translate(1126, 16.5)">
+            <rect width="174" height="36" rx="8" ry="8" fill="#222222"/>
+            <g transform="translate(14, 10)">
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#FFFFFF">Teach me · focus mode</text>
+            </g>
+          </g>
+          <g transform="translate(1312, 16.5)">
+            <rect width="104" height="36" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(14, 10)">
+              <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#1F1F1F">Review now</text>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(0, 69)">
+          <g>
+            <rect width="300" height="775" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(18, 18)">
+              <g>
+                <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Note &amp; sources</text>
+              </g>
+              <g transform="translate(220, 1)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">collapse</text>
+              </g>
+            </g>
+            <g transform="translate(18, 52)">
+              <g>
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Summary</text>
+              </g>
+              <g transform="translate(0, 19)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Weights that express a point inside a</text>
+              </g>
+              <g transform="translate(0, 38)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">triangle as a mix of its three vertices.</text>
+              </g>
+            </g>
+            <g transform="translate(18, 123)">
+              <g>
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Prerequisites</text>
+              </g>
+              <g transform="translate(0, 21)">
+                <g transform="translate(0, 0.5)">
+                  <ellipse cx="7" cy="7" rx="7" ry="7" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(24, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Dot product</text>
+                </g>
+              </g>
+              <g transform="translate(0, 42)">
+                <g transform="translate(0, 0.5)">
+                  <ellipse cx="7" cy="7" rx="7" ry="7" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(24, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Vectors and spaces</text>
+                </g>
+              </g>
+              <g transform="translate(0, 63)">
+                <g transform="translate(0, 0.5)">
+                  <ellipse cx="7" cy="7" rx="7" ry="7" fill="#9A9A9A"/>
+                </g>
+                <g transform="translate(24, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Cross product</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(18, 219)">
+              <g>
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Leads to</text>
+              </g>
+              <g transform="translate(0, 21)">
+                <g transform="translate(0, 0.5)">
+                  <ellipse cx="7" cy="7" rx="7" ry="7" fill="#FFFFFF" stroke="#9A9A9A" stroke-width="1"/>
+                </g>
+                <g transform="translate(24, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Perspective-correct interpolation</text>
+                </g>
+              </g>
+              <g transform="translate(0, 42)">
+                <g transform="translate(0, 0.5)">
+                  <ellipse cx="7" cy="7" rx="7" ry="7" fill="#FFFFFF" stroke="#9A9A9A" stroke-width="1"/>
+                </g>
+                <g transform="translate(24, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Scan conversion</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(18, 294)">
+              <g>
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Sources</text>
+              </g>
+              <g transform="translate(0, 21)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#D6D6D6"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Lecture 4 slides (PDF)</text>
+                </g>
+              </g>
+              <g transform="translate(0, 42)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#D6D6D6"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Scratchapixel: rasterisation</text>
+                </g>
+              </g>
+              <g transform="translate(0, 63)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#D6D6D6"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Your note · 2 saved answers</text>
+                </g>
+              </g>
+              <g transform="translate(0, 84)">
+                <rect width="95" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Add source</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(18, 426)">
+              <g>
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Backlinks</text>
+              </g>
+              <g transform="translate(0, 19)">
+                <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">Referenced by 3 notes</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(300, 0)">
+            <g transform="translate(18, 18)">
+              <g>
+                <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Tutor</text>
+              </g>
+              <g transform="translate(656, 1)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Learning guide · concise</text>
+              </g>
+            </g>
+            <g transform="translate(18, 48)">
+              <g>
+                <rect width="784" height="113" rx="10" ry="10" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 14)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Tutor</text>
+                </g>
+                <g transform="translate(14, 34)">
+                  <g>
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Before we go on: a point P inside triangle ABC.</text>
+                  </g>
+                  <g transform="translate(0, 19)">
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">If the weights are (0.5, 0.5, 0), where is P?</text>
+                  </g>
+                </g>
+                <g transform="translate(14, 75)">
+                  <g>
+                    <rect width="131" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                    <g transform="translate(10, 5)">
+                      <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">[1] Lecture 4, slide 12</text>
+                    </g>
+                  </g>
+                  <g transform="translate(141, 12)"/>
+                </g>
+              </g>
+              <g transform="translate(0, 123)">
+                <rect width="784" height="70" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 14)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">You</text>
+                </g>
+                <g transform="translate(14, 34)">
+                  <g>
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Halfway along edge AB.</text>
+                  </g>
+                </g>
+                <g transform="translate(14, 56)"/>
+              </g>
+              <g transform="translate(0, 203)">
+                <rect width="784" height="132" rx="10" ry="10" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 14)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Tutor</text>
+                </g>
+                <g transform="translate(14, 34)">
+                  <g>
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Right. Zero weight on C means P sits on the edge</text>
+                  </g>
+                  <g transform="translate(0, 19)">
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">opposite C. That counts as a correct probe.</text>
+                  </g>
+                  <g transform="translate(0, 38)">
+                    <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">p(L) moved 0.42 to 0.55.</text>
+                  </g>
+                </g>
+                <g transform="translate(14, 94)">
+                  <g>
+                    <rect width="125" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                    <g transform="translate(10, 5)">
+                      <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">[2] Scratchapixel §3</text>
+                    </g>
+                  </g>
+                  <g transform="translate(135, 12)"/>
+                  <g transform="translate(650, 5)">
+                    <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Save to note</text>
+                  </g>
+                  <g transform="translate(726, 5)">
+                    <text x="0" y="11" font-family="Inter" font-size="11" fill="#2F6BE6">Why?</text>
+                  </g>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(18, 677)">
+              <g>
+                <rect width="156" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(10, 5)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Why do weights sum to 1?</text>
+                </g>
+              </g>
+              <g transform="translate(164, 0)">
+                <rect width="146" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(10, 5)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Show me the area proof</text>
+                </g>
+              </g>
+              <g transform="translate(318, 0)">
+                <rect width="107" height="24" rx="12" ry="12" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(10, 5)">
+                  <text x="0" y="11" font-family="Inter" font-size="11" fill="#1F1F1F">Give me a check</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(18, 715)">
+              <g>
+                <rect width="716" height="42" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 13)">
+                  <text x="0" y="13" font-family="Inter" font-size="13" fill="#7C7C7C">Ask about this concept</text>
+                </g>
+              </g>
+              <g transform="translate(724, 3)">
+                <rect width="60" height="36" rx="8" ry="8" fill="#222222"/>
+                <g transform="translate(14, 10)">
+                  <text x="0" y="13" font-family="Inter" font-size="13" font-weight="500" fill="#FFFFFF">Send</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(1120, 0)">
+            <rect width="320" height="775" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+            <g transform="translate(14, 14)">
+              <g>
+                <text x="0" y="13" font-family="Inter" font-size="13" fill="#1F1F1F">Studio</text>
+              </g>
+              <g transform="translate(248, 1)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">collapse</text>
+              </g>
+            </g>
+            <g transform="translate(14, 42)">
+              <rect width="292" height="107" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(12, 12)">
+                <g transform="translate(0, 0.5)">
+                  <text x="0" y="24" font-family="Inter" font-size="24" fill="#1F1F1F">0.55</text>
+                </g>
+                <g transform="translate(61, 0)">
+                  <g>
+                    <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">mastery p(L)</text>
+                  </g>
+                  <g transform="translate(0, 17)">
+                    <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">5 observations · 4 correct</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(12, 51)">
+                <g transform="translate(0, 14)">
+                  <rect width="6" height="8" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(10, 12)">
+                  <rect width="6" height="10" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(20, 8)">
+                  <rect width="6" height="14" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(30, 10)">
+                  <rect width="6" height="12" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(40, 4)">
+                  <rect width="6" height="18" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(50, 0)">
+                  <rect width="6" height="22" rx="1" ry="1" fill="#3D3D3D"/>
+                </g>
+              </g>
+              <g transform="translate(12, 81)">
+                <text x="0" y="11" font-family="Inter" font-size="11" fill="#7C7C7C">Next review Fri · interval 4d · ease 2.5</text>
+              </g>
+            </g>
+            <g transform="translate(14, 161)">
+              <rect width="292" height="138" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(12, 12)">
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Checks · 3</text>
+              </g>
+              <g transform="translate(12, 33)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Weights sum to one</text>
+                </g>
+              </g>
+              <g transform="translate(12, 54)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#3D3D3D"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Point on an edge</text>
+                </g>
+              </g>
+              <g transform="translate(12, 75)">
+                <g transform="translate(0, 3.5)">
+                  <ellipse cx="4" cy="4" rx="4" ry="4" fill="#FFFFFF" stroke="#9A9A9A" stroke-width="1"/>
+                </g>
+                <g transform="translate(18, 0)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#1F1F1F">Area ratio derivation</text>
+                </g>
+              </g>
+              <g transform="translate(12, 96)">
+                <rect width="76" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Quiz me</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(14, 311)">
+              <rect width="292" height="233" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(12, 12)">
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Assets</text>
+              </g>
+              <g transform="translate(12, 35)">
+                <rect width="268" height="70" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(26.5, 27.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">video · Barycentric interpolation · 4:12</text>
+                </g>
+              </g>
+              <g transform="translate(12, 113)">
+                <rect width="268" height="70" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(65, 27.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">diagram · Triangle areas</text>
+                </g>
+              </g>
+              <g transform="translate(12, 191)">
+                <rect width="145" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Generate flashcards</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(14, 556)">
+              <rect width="292" height="195" rx="10" ry="10" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+              <g transform="translate(12, 12)">
+                <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Neighbourhood</text>
+              </g>
+              <g transform="translate(12, 35)">
+                <rect width="268" height="110" rx="8" ry="8" fill="#F5F5F5" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(77, 28.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">graph: this concept,</text>
+                </g>
+                <g transform="translate(62, 47.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">3 prereqs, 2 dependants,</text>
+                </g>
+                <g transform="translate(83, 66.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" fill="#7C7C7C">mastery-coloured</text>
+                </g>
+              </g>
+              <g transform="translate(12, 153)">
+                <rect width="160" height="30" rx="8" ry="8" fill="#FFFFFF" stroke="#C9C9C9" stroke-width="1"/>
+                <g transform="translate(14, 7.5)">
+                  <text x="0" y="12" font-family="Inter" font-size="12" font-weight="500" fill="#1F1F1F">Open full course graph</text>
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
