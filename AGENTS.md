@@ -187,9 +187,13 @@ Rules of engagement:
 
 - Run it with `npm run studio` from the repository root; it binds
   `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
-  `STUDIO_ENABLED` is set, a separate flag from `ASSET_FILES_ENABLED`, which
-  studio thumbnails also depend on. `STUDIO_DAILY_USD` is a rolling 24-hour
-  spend cap in dollars; unset, the default, means no cap.
+  `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone,
+  not on `ASSET_FILES_ENABLED`: they are served from
+  `/api/diagrams/{name}/svg`, deliberately not from
+  `/api/assets/{id}/file`, because that route also needs the file indexed,
+  and the one diagram a person most needs a tile for is the untopiced one
+  with no asset row. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
+  dollars; unset, the default, means no cap.
 - The runner is the only thing that spawns an agent; the UI's job is HTTP
   calls to the runner and nothing else. The agent's Bash permission is an
   allowlist of one command prefix, `Bash(npm run --silent canvas:*)`, not a
@@ -214,8 +218,11 @@ Rules of engagement:
   measured between 80% and 93% of the true cost across the nine sessions on
   disk, and the runner never scales it up: a fudge factor would make the
   number unauditable against the CLI's own figure. An unpriceable model
-  records `null`, never zero, since a zero reads as a free job and the spend
-  cap would walk straight past it.
+  records `null`, never zero, so an unknown cost is not presented as a free
+  job; the spend cap's real protection is the fallback that keeps pricing at
+  the brief's own model when the stream names one the rate table has never
+  heard of, so an all-null reading is a rare edge case rather than the
+  ordinary path.
 - The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
   no channel to ask the live canvas anything; it derives the SVG-freshness
   pill by comparing file modification times instead. An open canvas sends a
