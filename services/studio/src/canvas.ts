@@ -132,11 +132,24 @@ export function doctorChecks(result: RunResult): DoctorCheck[] {
   });
 }
 
+/**
+ * One lint, as `inspect --json` reports it.
+ *
+ * `shapeIds` is the tool's own field name and it is a **list**: a rule can name
+ * two shapes that overlap, and a document-level rule such as `missing-topic`
+ * names none. Phase 1 declared a single `shape?: string` here, which nothing
+ * read and which would have made the phase 4 comparison key every lint on
+ * `undefined` — one bucket, so a lint that moved shapes would have looked
+ * unchanged. `Lint` in `tools/tldrawkc/src/lib/browser.ts` is the definition.
+ *
+ * `severity` is absent for an error, which is the severity that makes `inspect`
+ * exit 3; `warn` is printed and ignored by the exit code.
+ */
 export interface CanvasLint {
   rule?: string;
-  severity?: string;
+  severity?: "error" | "warn" | string;
   message?: string;
-  shape?: string;
+  shapeIds?: string[];
 }
 
 /**
@@ -184,6 +197,32 @@ export interface VerifyReport {
   svg?: string | null;
   png?: string | null;
   checks?: VerifyCheck[];
+}
+
+/** `shot --json`: where the PNG went, and how big it is. */
+export interface ShotReport {
+  file?: string;
+  shot?: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * A screenshot of a document, written where the caller asked.
+ *
+ * `shot` runs nothing and changes nothing: it loads the document, frames it and
+ * writes a PNG, which is the whole reason the before picture can be taken
+ * against the *committed* file without the studio's write rules coming into it.
+ * The output path is absolute and always inside the job workspace, never inside
+ * `learn/assets/`, because a picture taken to be compared is not a deliverable
+ * and a `git status` that listed one would be lying about what a job produced.
+ *
+ * Returns false rather than throwing. A missing picture costs a tile that says
+ * so, and there is no reading of a failed screenshot that should cost a job.
+ */
+export async function shot(file: string, out: string, timeoutMs = 180_000): Promise<boolean> {
+  const result = await canvas(["shot", file, "-o", out, "--json"], timeoutMs).catch(() => null);
+  return result !== null && result.code === EXIT.ok;
 }
 
 /**

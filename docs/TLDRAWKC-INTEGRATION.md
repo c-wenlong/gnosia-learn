@@ -4,6 +4,12 @@ A local screen for the diagrams in [`learn/assets/`](../learn/assets): browse
 them, open one on a live tldraw canvas, and ask an agent to draw a new version.
 One user, one machine, one job at a time.
 
+**Status: built and in use.** Phases 0 to 4 are done, which is the whole loop —
+brief, job, gate, comparison, Accept or Discard. Run it with `npm run studio`
+from the repository root and `STUDIO_ENABLED=1` on the app; the roadmap's
+remaining phases are all marked optional. Anything below that reads like a plan
+is the design's reasoning kept beside the code, not work outstanding.
+
 **What it is not.** Not a deployed surface: D7 in
 [`tools/tldrawkc/docs/DECISIONS.md`](../tools/tldrawkc/docs/DECISIONS.md) keeps
 the Vercel app the course encyclopedia, and a headless browser with filesystem
@@ -329,8 +335,10 @@ browser on this machine.
 | `GET` | `/api/jobs/{id}/events` | Live progress, SSE | `Last-Event-ID` on reconnect | `text/event-stream` of `phase`, `step`, `gate`, `done` |
 | `GET` | `/api/jobs/{id}/log` | Windowed raw log | `?from=0&limit=200` | `{ lines, from, next, total }` |
 | `POST` | `/api/jobs/{id}/cancel` | Stop a running or queued job | none | `{ jobId, state: "running" \| "cancelled", cancelRequestedAt }` |
-| `POST` | `/api/jobs/{id}/accept` | Land the candidate | none | `{ jobId, state: "accepted", written, indexed, note }` |
+| `GET` | `/api/jobs/{id}/shot` | Either half of the comparison, as a picture | `?which=before\|after` | `image/png`, or 404 when there is none |
+| `POST` | `/api/jobs/{id}/accept` | Close any mirror on the target, then land the candidate | none | `{ jobId, state: "accepted", written, indexed, mirrorClosed, note }` |
 | `POST` | `/api/jobs/{id}/discard` | Delete the candidate | none | `{ jobId, state: "discarded" }` |
+| `POST` | `/api/jobs/{id}/compare` | Re-read the before side against the committed file as it is now | none | `{ jobId, comparison, note }` |
 | `POST` | `/api/jobs/{id}/reindex` | Re-run the catalog half of an accept whose files landed | none | `{ jobId, written, indexed, note }` |
 | `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
@@ -558,6 +566,16 @@ runner now reads the phase about to run off the step that just finished, which
 is what makes the list advance on the runner's work rather than on the agent's
 habits.
 
+**The gate keeps its answers now, not a summary of them.** Phase 4 needed the
+lint list, the binding count and `verify`'s four checks to build the comparison,
+and the gate had all three in hand and stored a number and a sentence — so a
+panel wanting the list would have relaunched Chromium to ask a question answered
+minutes earlier. `GateResult` carries `bindings`, `lintList`, `verify` and
+`shot` as well, all optional, so a job recorded before phase 4 still reads. The
+after screenshot is taken right after step 2 rather than at the end, so an exit-4
+job — the document saved, the export did not — still has a picture of what it
+drew, which is the one case the SVG cannot supply one.
+
 **The agent's exit code is not a tldrawkc exit code.** The agent runs the CLI
 many times and the runner sees only the session's own exit. The tldrawkc codes
 that reach a job come from the gate's own calls, and they are stored in
@@ -622,6 +640,83 @@ exactly this case.
 
 Discard deletes both candidates and writes `discarded`. Neither is undoable
 inside the studio, and the panel says so in one line: git is the undo.
+
+**The mirror on the target is closed inside step 3, just before the hash.** A6
+names the close and phase 4 had to decide where it goes. Not the browser, even
+though the page knows which mirrors are open: A6 is a rule about what must not
+happen between the close and the rename, and a close a page is responsible for
+is one a `curl`, a reload mid-request or a second tab can skip. This is the one
+route in the studio that replaces a committed file.
+
+And **not** at the top of the route either, which is where phase 4 first put it.
+Everything above step 3 can still refuse — the state, the candidate, the early
+hash, the export, the verify — and a refusal must not disconnect an editor: a
+stale tab pressing Accept on a job somebody already discarded closed the canvas
+its owner was drawing on and then answered 409 about a job that never moved a
+file. Caught in review on the phase 4 PR. `accept` takes the close as a
+capability (`AcceptHooks.closeMirror`) so the ordering stays in the file that
+owns it, and `mirrorClosed` comes back on the result so the UI can put the
+canvas back.
+
+The close comes *before* the last hash rather than after, which is what makes
+both of them mean something: the close stops any further save, and the check
+then catches one that had already landed.
+
+**And the close is waited out, not just sent.** The first version signalled the
+process group and returned, which reads as a stop and is not one: `SIGTERM` to
+a writer that takes a moment to shut down leaves it listening across exactly
+the window A6 is about. `stopChild` in `mirrors.ts` now asks `kill(-pid, 0)`
+until nothing in the group answers — the group and not the child object,
+because `child.pid` is the `npm` launcher and the process holding the port is
+the `canvas serve` underneath it — escalating to `SIGKILL` after
+`STUDIO_KILL_GRACE_MS` and waiting again. Caught in review on the phase 4 PR.
+
+**And a writer that will not die refuses the accept.** `Mirrors.stop` answers
+two things, `found` and `gone`: the first is what `mirrorClosed` tells the UI,
+the second is the only one that makes a rename safe. `gone: false` means a
+process outlived a `SIGTERM`, a grace window, a `SIGKILL` and a second window,
+so accept returns `mirror-stuck` and moves nothing. Renaming anyway would have
+made every line of that waiting decorative in the one case it is for, and
+nothing has moved at that point: Discard, a retry and a follow-up job are all
+still available, so the refusal costs a click rather than the work.
+
+**A writer that will not die stays tracked, and that is not a detail.** The
+first version of the refusal dropped the mirror from `Mirrors.open` before
+knowing whether the process died, which turned the retry it recommends into the
+loss it prevents: the second Accept found no mirror on the file, answered
+"nothing to close", and renamed behind the writer the first refusal was about.
+So the entry survives until the group is empty, every later `stop` finds it and
+signals it again, and `start` waits for a closing mirror rather than spawning a
+second `serve` beside it — a new mirror would take the map entry and accept
+would then close the wrong one. `stopChild` moved to `proc.ts` in the same
+change, beside the `signalGroup` it is built on, which is also what lets a test
+force the `gone: false` branch: a real process group can always be emptied by a
+`SIGKILL`, so the case accept refuses on is not one a real process can stage.
+
+**And "no mirror is open" has to include one that is still opening.** A start
+lives in `starting` until `spawn` returns, which is a Chromium launch long, and
+a `stop` reading only `open` across that window answered "nothing to close"
+about a `serve` that was about to hold the document — accept renamed on that
+answer, and the new canvas, which had loaded the file as it was before the
+rename, reverted it on the next Cmd+S. `stop` now waits the start out and stops
+what it produced, and `spawn` waits for its own child to die before rejecting,
+so a start that failed really does leave nothing running.
+
+**And the refusal has somewhere to go.** S4 says a refused accept "offers to
+re-open the comparison", which needs the before side read again;
+`POST /api/jobs/{id}/compare` does that, against the committed file as it is
+now. It does **not** touch `job.target_hash_before`. Rewriting that hash would
+turn "show me what changed" into "agree to overwrite it", one click away from
+the loss the refusal exists to prevent, so accept goes on refusing and the way
+forward is Discard plus a new job over the current file. The panel says exactly
+that under the button.
+
+`compare` is refused on anything but `awaiting_review`. It launches two Chromium
+instances, overwrites the before picture and persists a new comparison, so on a
+`running` job it would race the runner's own writes to that field and on a
+terminal one it would replace the record of what was reviewed with a description
+of a file nobody looked at. Neither is a recovery. Caught in review on the phase
+4 PR.
 
 ### The canvas
 
@@ -897,6 +992,28 @@ The panel switches to the comparison. Nothing under `learn/assets/` has changed.
 
 There is no shape-level diff. tldrawkc does not produce one and this design is
 not inventing one from two `.tldr` files.
+
+**Where the two sides come from, settled in phase 4.** Both are `inspect --json`
+over one document: the committed file at job start, the candidate after the
+agent stops. Both answers are stored on the job record as `job.comparison`, and
+the panel formats them — it never runs a verb, which would be two Chromium
+launches per render for an answer already on disk and the UI doing the runner's
+work. The counts are those two reports; the pictures are two `shot` calls and
+are never counted.
+
+**Fixed and New are keyed on rule *and* shape id.** A lint that moved from one
+shape to another appears in both lists, which is the honest reading: fixed where
+it was, new where it is now. Keyed on the rule alone it would read as unchanged,
+which is the one thing a person scanning this list is trying to find out. Keyed
+on the message it would read as one fixed and one new every time a measurement
+in the text shifted by a pixel. A rule naming two shapes is two rows, and a
+document-level rule such as `missing-topic` is one row with no shape.
+
+**A job with no before says so in words.** A `new` job had no diagram to
+photograph, which is normal, and an `extend` job whose target was missing is a
+different sentence; both beat an empty tile beside a real one, which reads as a
+screenshot that failed. The deltas read `—` rather than `+48`, because a first
+drawing has no previous version to be bigger than.
 
 A gate that recorded exit 3 arrives here rather than in the failure state. The
 panel says `finished with 2 lints` and both buttons are live, because a diagram
@@ -1615,19 +1732,71 @@ the design, each because running it said so:
 
 Goal: the comparison screen, and the only place a committed file changes.
 
-- [ ] The before `shot` taken at job start, and the after `shot` from the gate
-- [ ] The comparison panel: the two thumbnails, the counts table, the Fixed and
+- [x] The before `shot` taken at job start, and the after `shot` from the gate
+- [x] The comparison panel: the two thumbnails, the counts table, the Fixed and
       New lint lists, the four verify checks
-- [ ] The full-width thumbnail view in the main area
-- [ ] Accept and Discard wired to their routes, with the open-mirror close and
+- [x] The full-width thumbnail view in the main area
+- [x] Accept and Discard wired to their routes, with the open-mirror close and
       the hash check from S4
-- [ ] The `indexed: false` banner and the Reindex button
-- [ ] The `git add` line the panel shows after an accept
+- [x] The `indexed: false` banner and the Reindex button
+- [x] The `git add` line the panel shows after an accept
 
 Done when: a finished job shows before and after side by side with an honest
 shape delta, Accept leaves exactly two dirty files in `git status` and one
 `asset_job` row per file, Discard leaves the working tree clean, and an Accept
 with Postgres stopped still lands both files and reports `indexed: false`.
+
+**Done, and what the five real jobs found.**
+
+- **The gate kept a count and a sentence, and phase 4 needed the answers.** The
+  design says the after `shot`, the lint lists and the four verify checks are
+  "already produced by the gate", and they were not: `GateResult` carried
+  `shapes`, `lints` as a number, and a `detail` string per step. No screenshot
+  was taken anywhere in the service. `bindings`, `lintList`, `verify` and `shot`
+  are new on it, all optional so a job recorded before this still parses.
+- **`CanvasLint` named the wrong field.** The tool reports `shapeIds: string[]`
+  (`Lint` in `tools/tldrawkc/src/lib/browser.ts`); `canvas.ts` declared
+  `shape?: string`. Nothing read it, so nothing was visibly broken — but the
+  comparison keys on the shape, and every lint would have keyed on `undefined`.
+  A lint that moved shapes would have looked unchanged, which is the one reading
+  this list exists to prevent.
+- **The before shot lives in the job workspace**, `$STUDIO_HOME/jobs/<id>/before.png`
+  and `after.png`, served by `GET /api/jobs/{id}/shot?which=`. Not under
+  `learn/assets/`: a picture taken so two versions can be compared is not a
+  deliverable, and a `git status` listing one would misstate what a job
+  produced. They go when the workspace goes, which is right — they are about
+  one job and mean nothing without it.
+- **A `new` job has no before, and the panel says which fact that is.** "This
+  diagram is new, so there is no before" and "the committed file was not there
+  when this job started" are different sentences, and the deltas read `—`
+  rather than `+48`, because a first drawing has no previous version to be
+  bigger than. The full-width view had to learn the same thing: it linked to the
+  other side whether or not that side existed, so a `new` job's "Show before"
+  put a broken image across the main area while the thumbnail beside it
+  correctly said there was none. It takes the comparison now, and the missing
+  side is a muted "no before" rather than a link. Caught in review on the PR.
+- **The refusal needed a third route.** S4 says accept "offers to re-open the
+  comparison", which needs the before side read again — so
+  `POST /api/jobs/{id}/compare` re-reads it against the file as it is now. It
+  deliberately does **not** touch `job.target_hash_before`: rewriting that would
+  turn "look at what changed" into "agree to overwrite it", one click from the
+  loss S4 is about. Accept goes on refusing, and the way forward is Discard and
+  a new job over the current file, which is what the panel says.
+- **The mirror is closed by the route, not by the page.** A6 is a rule about
+  what must not happen between the close and the rename, and a close the browser
+  is responsible for is one a `curl`, a reload mid-request or a second tab can
+  skip. `POST accept` calls `mirrors.stop(targetPath)` inside step 3, on an
+  accept that is going to happen and not at the top of the route, waits for the
+  process group to actually empty, and reports `mirrorClosed` so the UI can put
+  the canvas back.
+- **Editing the repo while a job runs fails the job, by design.** The fourth job
+  failed `wrote-outside` naming three files under `apps/web/` — this phase's own
+  source, edited in another window while the agent drew. The A4 backstop
+  compares `git status` before and after and does exactly what it says; it cost
+  one attempt and $0.44, and it is the check working rather than a bug.
+- Five real jobs, $1.48 total. The four scenarios above were checked by hand
+  against two `canvas -- inspect` runs each time, and the counts matched: 44→46
+  shapes and 12→13 bindings on the first, 46→48 and 13→14 on the last.
 
 ### Phase 5. Optional: manimkc video jobs
 

@@ -1,0 +1,421 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import {
+  catalogErrorLine,
+  countRows,
+  emptyLintLine,
+  gitAddLine,
+  lintLine,
+  missingShotReason,
+  shotSrc,
+  type Comparison,
+  type LintRef,
+} from "@/lib/studio-compare";
+import { finishedHeadline, type Job } from "@/lib/studio-jobs";
+import { panelHref } from "@/lib/studio-view";
+
+/**
+ * The comparison, and the only two buttons in the studio that change a
+ * committed file.
+ *
+ * The design's finished-job screen, in its order: two thumbnails, the counts,
+ * the Fixed and New lint lists, the four verify checks, then Accept filled and
+ * Discard bordered. Nothing under `learn/assets/` has changed while this is on
+ * screen — the job wrote a candidate (D2) — which is what makes both buttons
+ * safe to look at for as long as somebody wants.
+ *
+ * **Every number here was computed by the runner.** The two `inspect --json`
+ * runs behind the counts and the lint lists happened at job start and after the
+ * agent stopped; this reads `job.comparison` and formats it. A panel that
+ * recomputed would be a second Chromium launch per render for an answer already
+ * on the record, and it would be the UI running a verb, which layering rule 1
+ * forbids.
+ *
+ * **Accept's hash check belongs to the runner too.** The route re-reads the
+ * target's sha256 immediately before the rename and refuses when it moved (S4).
+ * This never reads the file: it calls the route and shows the answer, and when
+ * the answer is a refusal it offers to re-run the comparison rather than a
+ * retry, because a retry that got through would overwrite the edit the refusal
+ * is about.
+ */
+
+type Which = "before" | "after";
+
+export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
+  const { post, refresh } = useStudioJobs();
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [said, setSaid] = useState<{ ok: boolean; text: string; recompare?: boolean } | null>(null);
+
+  const comparison: Comparison = job.comparison ?? {
+    before: null,
+    after: null,
+    fixed: [],
+    added: [],
+    beforeHash: null,
+    refreshedAt: null,
+  };
+  const accepted = job.state === "accepted";
+  const reviewable = job.state === "awaiting_review";
+
+  const act = async (verb: string): Promise<void> => {
+    setBusy(verb);
+    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/${verb}`);
+    setBusy(null);
+    const note = typeof result.data.note === "string" ? result.data.note : null;
+    const error = typeof result.data.error === "string" ? result.data.error : null;
+    const detail = (result.data.detail ?? {}) as { recompare?: boolean };
+    setSaid({
+      ok: result.ok,
+      text: note ?? error ?? `${verb} returned ${result.status}`,
+      recompare: detail.recompare === true,
+    });
+    await refresh();
+    // The canvas this accept closed (A6) is reopened by the server render, and
+    // an accepted job's panel is a different screen from the one that was here.
+    router.refresh();
+  };
+
+  return (
+    <>
+      {accepted && <Accepted job={job} busy={busy !== null} onReindex={() => void act("reindex")} />}
+
+      {reviewable && (
+        <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
+          <p className="font-medium text-[var(--ok)]">{finishedHeadline(job)}</p>
+          <p className="mt-1">
+            Nothing under <Mono>learn/assets/</Mono> has changed yet. The candidate is at{" "}
+            <Mono>{job.candidate}</Mono>, and Accept is the rename.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-1">
+        <PanelHeading>Before and after</PanelHeading>
+        <div className="grid grid-cols-2 gap-2">
+          <Thumbnail which="before" job={job} comparison={comparison} path={path} />
+          <Thumbnail which="after" job={job} comparison={comparison} path={path} />
+        </div>
+        {comparison.refreshedAt !== null && (
+          <p className="mt-1.5 text-xs text-[var(--warn)]">
+            The before side was re-read after this job ran, so it shows the file as it is on disk
+            now and not the one the job started against.
+          </p>
+        )}
+        {job.gate?.exportFailed === true && (
+          <p className="mt-1.5 text-xs text-[var(--warn)]">
+            The document was saved, the export failed. Accept re-exports, so this is still a job
+            worth accepting.
+          </p>
+        )}
+      </div>
+
+      <Counts comparison={comparison} />
+      <Lints which="fixed" refs={comparison.fixed} comparison={comparison} />
+      <Lints which="added" refs={comparison.added} comparison={comparison} />
+      <Verify job={job} />
+
+      {reviewable && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          <Button type="button" filled disabled={busy !== null} onClick={() => void act("accept")}>
+            {busy === "accept" ? "Accepting…" : "Accept"}
+          </Button>
+          <Button type="button" disabled={busy !== null} onClick={() => void act("discard")}>
+            {busy === "discard" ? "Discarding…" : "Discard"}
+          </Button>
+        </div>
+      )}
+
+      {said !== null && (
+        <div
+          className={`mt-2 rounded-md border p-2 text-xs ${
+            said.ok
+              ? "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--muted-strong)]"
+              : "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
+          }`}
+        >
+          <p className="break-words">{said.text}</p>
+          {said.recompare === true && (
+            <div className="mt-2">
+              <Button type="button" disabled={busy !== null} onClick={() => void act("compare")}>
+                {busy === "compare" ? "Reading the file…" : "Compare with the file as it is now"}
+              </Button>
+              <p className="mt-1.5 text-[var(--muted-strong)]">
+                This re-reads the committed file and redraws the comparison. It does not make
+                Accept possible: the candidate was drawn against a version that is no longer
+                there, so the way forward is Discard and a new job over the current file.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {reviewable && (
+        <p className="mt-3 text-xs text-[var(--muted)]">
+          Neither button is undoable inside the studio. Accept moves two files into{" "}
+          <Mono>learn/assets/</Mono> and Discard deletes the candidate; git is the undo for the
+          first and there is nothing to undo for the second.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * What the panel says once the files have landed.
+ *
+ * Three things, and the third is the one the design insists on. The files that
+ * moved. Whether the catalog recorded them, which is a banner and not a failure
+ * when it did not — the files are the output and the index is derived. And the
+ * `git add` line naming exactly those files, because D6 says the person commits
+ * and nothing in the studio ever runs `git add`.
+ */
+function Accepted({
+  job,
+  busy,
+  onReindex,
+}: {
+  job: Job;
+  busy: boolean;
+  onReindex: () => void;
+}) {
+  const line = gitAddLine(job.written);
+  const lastCatalogError = catalogErrorLine(job.catalogErrors);
+  return (
+    <div className="mb-3 space-y-2">
+      <div className="rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs">
+        <p className="font-medium text-[var(--ok)]">
+          {job.written.length === 1 ? "One file landed" : `${job.written.length} files landed`} in
+          learn/assets/
+        </p>
+        <ul className="mt-1 space-y-0.5">
+          {job.written.map((file) => (
+            <li key={file} className="font-mono text-xs break-all text-[var(--muted-strong)]">
+              {file}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {!job.indexed && (
+        <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2 text-xs text-[var(--warn)]">
+          <p className="font-medium">
+            <Mono>indexed: false</Mono>
+          </p>
+          <p className="mt-1">
+            The files are in place; the catalog did not record them. That is a Postgres that was
+            not answering, not a failed accept — the files are the output and the index is
+            derived.
+          </p>
+          {lastCatalogError !== null && (
+            <p
+              className="mt-1 font-mono text-xs break-words opacity-90"
+              title={(job.catalogErrors ?? []).at(-1)}
+            >
+              {lastCatalogError}
+            </p>
+          )}
+          <div className="mt-2">
+            <Button type="button" disabled={busy} onClick={onReindex}>
+              {busy ? "Reindexing…" : "Reindex"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {line !== null && (
+        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
+          <p className="text-[var(--muted)]">
+            Committing is yours: the studio has no mutating git access and never runs{" "}
+            <Mono>git add</Mono>.
+          </p>
+          {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
+              column, and a line that runs off the edge is one a person copies
+              half of — which is the one mistake this box exists to prevent. */}
+          <pre className="mt-1.5 rounded-md bg-[var(--chip-bg)] p-2 font-mono text-xs break-all whitespace-pre-wrap text-[var(--foreground)]">
+            {line}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One 4:3 tile, contained and never cropped (D22), linking to the full-width view.
+ *
+ * A picture that is not there is said in words rather than left as an empty
+ * box: a `new` job has no before because there was no diagram to photograph,
+ * which is normal, and a screenshot that failed on a job that did have one is
+ * worth saying out loud. Those are different sentences.
+ */
+function Thumbnail({
+  which,
+  job,
+  comparison,
+  path,
+}: {
+  which: Which;
+  job: Job;
+  comparison: Comparison;
+  path: string;
+}) {
+  const side = which === "before" ? comparison.before : comparison.after;
+  const has = side?.shot === true;
+  const label = which === "before" ? "Before" : "After";
+  return (
+    <figure className="min-w-0">
+      <figcaption className="mb-1 flex items-center gap-1 text-xs text-[var(--muted)]">
+        <span>{label}</span>
+        {which === "before" && comparison.before === null && <Chip>none</Chip>}
+      </figcaption>
+      {has ? (
+        <Link
+          href={panelHref(path, { shot: which })}
+          scroll={false}
+          title={`Open the ${label.toLowerCase()} picture full width`}
+          className="block aspect-[4/3] w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shotSrc(job.jobId, which)}
+            alt={`${label}: ${job.target}`}
+            className="h-full w-full object-contain"
+          />
+        </Link>
+      ) : (
+        <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--chip-bg)] p-2 text-center text-xs text-[var(--muted)]">
+          {missingShotReason(which, comparison, job.brief?.mode)}
+        </div>
+      )}
+    </figure>
+  );
+}
+
+/** Shapes, bindings, SVG bytes: before, after, and the signed delta. */
+function Counts({ comparison }: { comparison: Comparison }) {
+  const rows = countRows(comparison);
+  return (
+    <div className="mt-4">
+      <PanelHeading>Counts</PanelHeading>
+      <table className="w-full text-xs tabular-nums">
+        <thead>
+          <tr className="text-[var(--muted)]">
+            <th className="w-1/3 py-1 text-left font-normal"> </th>
+            <th className="py-1 text-right font-normal">before</th>
+            <th className="py-1 text-right font-normal">after</th>
+            <th className="py-1 text-right font-normal">change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label} className="border-t border-[var(--border)]">
+              <th scope="row" className="py-1.5 text-left font-normal text-[var(--muted-strong)]">
+                {row.label}
+              </th>
+              <td className="py-1.5 text-right text-[var(--muted)]">{row.before}</td>
+              <td className="py-1.5 text-right text-[var(--foreground)]">{row.after}</td>
+              <td
+                className={`py-1.5 text-right ${
+                  row.direction === "flat" ? "text-[var(--muted)]" : "text-[var(--muted-strong)]"
+                }`}
+              >
+                {row.delta ?? "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Fixed and New, each row naming the rule and the shape it points at.
+ *
+ * The two lists come from the runner's diff of the two lint sets, keyed on rule
+ * and shape id. A lint that moved from one shape to another appears in both,
+ * which is the honest reading: it was fixed where it was and it is new where it
+ * is now.
+ */
+function Lints({
+  which,
+  refs,
+  comparison,
+}: {
+  which: "fixed" | "added";
+  refs: LintRef[];
+  comparison: Comparison;
+}) {
+  return (
+    <div className="mt-4">
+      <PanelHeading>{which === "fixed" ? "Fixed" : "New"}</PanelHeading>
+      {refs.length === 0 ? (
+        <p className="text-xs text-[var(--muted)]">{emptyLintLine(which, comparison)}</p>
+      ) : (
+        <ul className="space-y-1">
+          {refs.map((ref) => (
+            <li key={`${ref.rule}-${ref.shape ?? ""}`} className="text-xs">
+              <span
+                className={
+                  which === "fixed"
+                    ? "text-[var(--ok)]"
+                    : ref.severity === "warn"
+                      ? "text-[var(--muted-strong)]"
+                      : "text-[var(--warn)]"
+                }
+              >
+                <Mono>{lintLine(ref)}</Mono>
+              </span>
+              {ref.message !== "" && (
+                <span className="block text-[var(--muted)]">{ref.message}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The four checks `verify` makes, each a pass or a fail with its detail line. */
+function Verify({ job }: { job: Job }) {
+  const checks = job.gate?.verify ?? [];
+  return (
+    <div className="mt-4">
+      <PanelHeading>Verify</PanelHeading>
+      {checks.length === 0 ? (
+        <p className="text-xs text-[var(--muted)]">
+          {job.gate?.exportFailed === true
+            ? "There is no SVG to verify: the export failed. Accept runs both again."
+            : "No verify result was recorded for this job."}
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {checks.map((check) => (
+            <li key={check.rule} className="flex items-start gap-2 text-xs">
+              <span
+                aria-hidden
+                className={`w-3 shrink-0 ${check.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"}`}
+              >
+                {check.ok ? "✓" : "✕"}
+              </span>
+              <span className="min-w-0 flex-1">
+                <Mono>{check.rule}</Mono>
+                {check.detail !== "" && (
+                  <span className="block text-[var(--muted)]">{check.detail}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

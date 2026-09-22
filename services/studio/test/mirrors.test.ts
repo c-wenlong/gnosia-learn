@@ -1,6 +1,29 @@
-import { describe, expect, it } from "vitest";
+import type { ChildProcess } from "node:child_process";
 
-import { MirrorRefused, Mirrors, readyObject } from "../src/mirrors";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * The stopper is mocked, and that is the point of it living in `proc.ts`.
+ *
+ * `gone: false` means a process outlived a `SIGTERM`, a grace window, a
+ * `SIGKILL` and a second window, which no test can arrange with a real process:
+ * a group can always be emptied by `SIGKILL`. The branch still has to be
+ * covered, because it is the one accept refuses on. `proc.test.ts` drives the
+ * real thing against real processes; this file drives what `Mirrors` does with
+ * its answer.
+ */
+const procMock = vi.hoisted(() => ({ stopChild: vi.fn() }));
+vi.mock("../src/proc", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/proc")>();
+  return { ...actual, stopChild: procMock.stopChild };
+});
+
+const { MirrorRefused, Mirrors, readyObject } = await import("../src/mirrors");
+
+beforeEach(() => {
+  procMock.stopChild.mockReset();
+  procMock.stopChild.mockResolvedValue(true);
+});
 
 /**
  * The mirror lifecycle, without starting a real `serve`.
@@ -122,6 +145,10 @@ describe("the idle sweep", () => {
     });
 
     expect(mirrors.sweep()).toEqual(["learn/assets/old.tldr"]);
+    // Dropped when the process is gone rather than when the sweep says so: a
+    // writer that will not die has to stay findable, so the map entry now
+    // outlives the call that closed it by however long the kill takes.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect([...held.open.keys()]).toEqual(["learn/assets/new.tldr"]);
   });
 
@@ -145,6 +172,180 @@ describe("the idle sweep", () => {
 
   it("says nothing was stopped when nothing was mirroring that file", async () => {
     const mirrors = new Mirrors();
-    await expect(mirrors.stop("learn/assets/never-opened.tldr")).resolves.toBe(false);
+    // `gone` is true because there is nothing left to be gone: a file nobody
+    // was mirroring is not a writer accept has to wait for.
+    await expect(mirrors.stop("learn/assets/never-opened.tldr")).resolves.toEqual({
+      found: false,
+      gone: true,
+    });
   });
 });
+
+/**
+ * A writer that will not die has to stay findable.
+ *
+ * This is the trap the first version of the refusal walked a person into.
+ * `stop` deleted the entry before it knew whether the process died, so accept
+ * refused with `mirror-stuck`, the note said to press Accept again, and the
+ * retry found no mirror on that file, answered "nothing to close" and renamed
+ * behind the writer the first refusal was about. Caught in review on the
+ * phase 4 PR.
+ */
+describe("a mirror that will not die", () => {
+  const fakeChild = { pid: 424242 } as unknown as ChildProcess;
+
+  function hold(mirrors: InstanceType<typeof Mirrors>, file: string): void {
+    const held = mirrors as unknown as { open: Map<string, unknown> };
+    held.open.set(file, {
+      file,
+      url: "http://127.0.0.1:7240/?mirror=1",
+      port: 7240,
+      startedAt: Date.now(),
+      lastSeenAt: Date.now(),
+      child: fakeChild,
+      closing: false,
+    });
+  }
+
+  it("is still found by the next stop, so a retried accept refuses again", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: false,
+    });
+    // The retry accept's note asks for must not come back "nothing was
+    // mirroring that file" while the writer is still running.
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: false,
+    });
+    expect(procMock.stopChild).toHaveBeenCalledTimes(2);
+  });
+
+  it("is not spawned over, because a second serve would be a second writer", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+    await mirrors.stop("learn/assets/stuck.tldr");
+
+    // Opening the canvas again is what the refusal note suggests, and a fresh
+    // `serve` beside the old one would take the map entry — so accept would
+    // close the new one, call it gone, and rename behind the old.
+    //
+    // The status and the words are both asserted, because this path also
+    // refuses a missing file with a 404 and that would pass for the wrong
+    // reason: an untracked stuck mirror gets as far as trying to spawn.
+    const refusal = (await mirrors
+      .start("learn/assets/stuck.tldr")
+      .catch((error: unknown) => error)) as { status: number; message: string };
+    expect(refusal).toBeInstanceOf(MirrorRefused);
+    expect(refusal.status).toBe(503);
+    expect(refusal.message).toContain("will not shut down");
+  });
+
+  it("is dropped once it is actually gone", async () => {
+    procMock.stopChild.mockResolvedValue(false);
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+    await mirrors.stop("learn/assets/stuck.tldr");
+
+    procMock.stopChild.mockResolvedValue(true);
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: true,
+      gone: true,
+    });
+    await expect(mirrors.stop("learn/assets/stuck.tldr")).resolves.toEqual({
+      found: false,
+      gone: true,
+    });
+  });
+
+  it("joins a stop already in flight rather than starting a second one", async () => {
+    let release = (): void => {};
+    procMock.stopChild.mockImplementation(
+      () => new Promise<boolean>((resolve) => { release = () => resolve(true); }),
+    );
+    const mirrors = new Mirrors();
+    hold(mirrors, "learn/assets/stuck.tldr");
+
+    const both = Promise.all([
+      mirrors.stop("learn/assets/stuck.tldr"),
+      mirrors.stop("learn/assets/stuck.tldr"),
+    ]);
+    release();
+    expect(await both).toEqual([
+      { found: true, gone: true },
+      { found: true, gone: true },
+    ]);
+    expect(procMock.stopChild).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The window between "a serve is coming up" and "a serve is in `open`".
+ *
+ * `start` registers the attempt in `starting` and only writes `open` when
+ * `spawn` returns, so for the length of a Chromium launch there is a writer on
+ * the file that `open` knows nothing about. A `stop` that read only `open`
+ * answered "nothing to close" about a process that was about to hold the
+ * document, and accept renamed on that answer — the new canvas, which loaded
+ * the file as it was before the rename, then reverts it on the next Cmd+S.
+ * A6 again, one window along. Caught in review on the phase 4 PR.
+ */
+describe("a mirror that is still starting", () => {
+  interface Innards {
+    open: Map<string, unknown>;
+    starting: Map<string, Promise<unknown>>;
+  }
+
+  it("is waited for by a stop, rather than reported as nothing to close", async () => {
+    const mirrors = new Mirrors();
+    const held = mirrors as unknown as Innards;
+    const file = "learn/assets/coming-up.tldr";
+
+    // A start in flight: registered in `starting`, and it puts the mirror in
+    // `open` when it finishes, which is exactly what `spawn` does.
+    let arrive = (): void => {};
+    const inFlight = new Promise<void>((resolve) => {
+      arrive = resolve;
+    }).then(() => {
+      held.open.set(file, {
+        file,
+        url: "http://127.0.0.1:7240/?mirror=1",
+        port: 7240,
+        startedAt: Date.now(),
+        lastSeenAt: Date.now(),
+        child: { pid: 424242 } as unknown as ChildProcess,
+        closing: false,
+      });
+      held.starting.delete(file);
+    });
+    held.starting.set(file, inFlight);
+
+    const stopping = mirrors.stop(file);
+    arrive();
+
+    // Without the wait this resolves `{ found: false, gone: true }` before the
+    // serve is even in the map, and accept renames behind it.
+    await expect(stopping).resolves.toEqual({ found: true, gone: true });
+    expect(procMock.stopChild).toHaveBeenCalledTimes(1);
+    expect([...held.open.keys()]).toEqual([]);
+  });
+
+  it("does not wedge the stop when the start fails", async () => {
+    const mirrors = new Mirrors();
+    const held = mirrors as unknown as Innards;
+    const file = "learn/assets/never-came-up.tldr";
+
+    // `spawn` kills its own child before rejecting, so a failed start leaves
+    // nothing running and "nothing to close" is the honest answer. What must
+    // not happen is the rejection escaping through `stop`.
+    held.starting.set(file, Promise.reject(new Error("serve exited 1")));
+
+    await expect(mirrors.stop(file)).resolves.toEqual({ found: false, gone: true });
+  });
+});
+

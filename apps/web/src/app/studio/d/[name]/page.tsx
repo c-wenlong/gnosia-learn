@@ -8,6 +8,7 @@ import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspec
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
+import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import {
   Button,
@@ -19,7 +20,7 @@ import {
   VerbNotice,
 } from "@/components/studio/StudioChrome";
 import { topicOptions } from "@/data/topics";
-import { requireStudio, studioApi } from "@/lib/studio";
+import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import {
   canvasHref,
   displayTitle,
@@ -175,6 +176,10 @@ export default async function CanvasPage({
   });
 
   const jobList = await studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200");
+  // Only on the render that shows a picture: `GET /api/jobs` carries neither
+  // the brief nor the comparison, and the full-width view needs both to say why
+  // the other side is not there rather than linking to a 404.
+  const shown = panel.shot !== null && panel.job !== null ? await openShot(panel.job) : null;
   const jobs = (jobList.ok ? jobList.data.jobs : []).filter(
     (job) => job.target === diagram.tldr.path,
   );
@@ -192,7 +197,20 @@ export default async function CanvasPage({
       )}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          {mirror.ok && mirror.data.healthy !== false ? (
+          {panel.shot !== null && panel.job !== null ? (
+            /* The canvas keeps running behind this: `POST /api/mirrors` has
+               already been made above and the idle timer is pushed back by the
+               keep-alive on the next render, so closing the picture comes back
+               to the same document rather than to a cold start. */
+            <ShotView
+              jobId={panel.job}
+              which={panel.shot}
+              path={path}
+              title={diagram.tldr.path}
+              comparison={shown?.comparison ?? null}
+              mode={shown?.brief?.mode}
+            />
+          ) : mirror.ok && mirror.data.healthy !== false ? (
             <>
               {/* Editing happens between the browser and the serve port, which
                   this service never sees, so without a heartbeat the idle sweep

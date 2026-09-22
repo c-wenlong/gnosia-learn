@@ -9,6 +9,7 @@ import type { JobState } from "@self-learn/schema";
 
 import { type ValidBrief } from "./brief";
 import { AgentRun, startAgent, sweepOrphans } from "./agent";
+import { buildComparison, readSide, sideFromGate, type Side } from "./compare";
 import { CONCURRENCY, JOB_TIMEOUT_MS, MAX_ATTEMPTS, RUNNER_NAME } from "./config";
 import { jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
 import { narrate, runGate } from "./gate";
@@ -20,6 +21,7 @@ import {
   mermaidPath,
   rejectedDir,
   scratchDir,
+  shotPath,
   targetPath,
   targetSvgPath,
   CANDIDATES_DIR,
@@ -403,6 +405,19 @@ export class Runner {
     await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
     await mkdir(scratchDir(id), { recursive: true });
 
+    /* The before half of the comparison, and the only moment it can be read.
+     *
+     * After an accept there is no before left on disk: the rename replaces the
+     * committed file, and the picture of what was there is gone with it. So the
+     * screenshot and the counts are taken now, against the committed file as it
+     * is at this instant, and stored on the record.
+     *
+     * A job in `new` mode has no before at all, and the panel says so rather
+     * than showing an empty tile — there is nothing to compare a first drawing
+     * against, and an empty box beside a real one reads as a failure. */
+    const before = await this.readBefore(record);
+    await this.store.update(id, { comparison: buildComparison(before, null, { beforeHash: record.targetHashBefore }) });
+
     // Extend reads a copy, never the committed file. Lifting an existing
     // document is how every diagram ends up looking like the first one, which
     // is the reason manimkc's clean-room rule exists and the reason this one
@@ -560,6 +575,7 @@ export class Runner {
         elements: record.brief.elements,
         relations: record.brief.relations,
         unchangedHash,
+        shotPath: shotPath(id, "after"),
         onStep: (step) => {
           void this.store.emit(id, { type: "step", note: narrate(step), state: "running" });
           // The gate runs `export` and `verify` itself, and until phase 3 asked
@@ -572,7 +588,15 @@ export class Runner {
           if (next !== undefined && step.ok) void this.advancePhase(id, next);
         },
       });
-      await this.store.update(id, { gate });
+      // The comparison is rewritten on every attempt, so the panel of a job
+      // that looped twice shows what the last attempt actually produced rather
+      // than the first one's numbers.
+      await this.store.update(id, {
+        gate,
+        comparison: buildComparison(before, sideFromGate(gate), {
+          beforeHash: record.targetHashBefore,
+        }),
+      });
       findings = gate.findings;
       if (gate.ok) break;
       if (attempt === MAX_ATTEMPTS) break;
@@ -661,6 +685,37 @@ export class Runner {
       note: PHASE_NOTES[phase] ?? phase,
       state: "running",
     });
+  }
+
+  /**
+   * The committed diagram as it is right now: its counts, its lints, a picture.
+   *
+   * Null when there is nothing at the target path, which is every `new` job.
+   * That null is the honest answer and the panel prints it: a first drawing has
+   * no before, and an empty tile beside a real one reads as a screenshot that
+   * failed rather than as a diagram that did not exist.
+   *
+   * Two Chromium launches, both of them survivable: a document that will not
+   * inspect comes back with null counts and a picture that was not taken comes
+   * back as `shot: false`. Neither is a verdict on the job, because neither is
+   * about the job's own output.
+   */
+  private async readBefore(record: JobRecord): Promise<Side | null> {
+    if ((await stat(absolute(record.targetPath)).catch(() => null)) === null) return null;
+    const side = await readSide({
+      file: record.targetPath,
+      svgFile: record.targetSvgPath,
+      shotPath: shotPath(record.id, "before"),
+    });
+    await this.store.emit(record.id, {
+      type: "step",
+      state: "running",
+      note:
+        side.shapes === null
+          ? `the committed ${record.targetPath} would not inspect, so there is no before to compare against`
+          : `read the committed diagram: ${side.shapes} shapes, ${side.lints.length} lint${side.lints.length === 1 ? "" : "s"}`,
+    });
+    return side;
   }
 
   /**

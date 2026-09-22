@@ -6,9 +6,10 @@ import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./br
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
 import { CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
+import { recompare } from "./compare";
 import { isDiagramName, listDiagrams, readDiagram } from "./diagrams";
 import { MirrorRefused, type Mirrors } from "./mirrors";
-import { absolute, targetPath, targetSvgPath } from "./paths";
+import { absolute, shotPath, targetPath, targetSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -180,6 +181,11 @@ function view(record: JobRecord): Record<string, unknown> {
     costUsd: record.costUsd,
     exitCode: record.exitCode,
     gate: record.gate,
+    // The finished-job screen's whole content, computed by the runner when the
+    // gate ran and read here. The panel never recomputes it: the two `inspect`
+    // runs behind these numbers happened once, and asking again would be two
+    // more Chromium launches for an answer already on disk.
+    comparison: record.comparison ?? null,
     written: record.written,
     indexed: record.indexed,
     error: record.error,
@@ -252,7 +258,8 @@ async function handle(
         "/api/jobs/{id}",
         "/api/jobs/{id}/events",
         "/api/jobs/{id}/log",
-        "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume",
+        "/api/jobs/{id}/shot?which=before|after",
+        "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume|compare",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -313,15 +320,45 @@ async function handle(
     }
 
     case "POST accept": {
-      // `accept` writes the record itself, between the renames and the catalog
-      // call, so the route neither repeats nor reorders that.
-      const result = await accept(store, record);
-      if (!result.ok) return fail(response, 409, result.note, result.error ?? null);
+      /* A6: an open mirror on the target has to be closed before the rename.
+       *
+       * `serve` holds the document as the tab last loaded it, and Cmd+S in that
+       * tab PUTs the whole thing back. A human save landing after the rename
+       * would silently revert the accepted diagram to the version that was on
+       * screen before it — no error anywhere, and the only evidence a `git
+       * diff` nobody is looking at.
+       *
+       * Handed to `accept` as a capability rather than done here, because
+       * *when* is the whole question: this route cannot tell a refusal from an
+       * acceptance until `accept` has checked the state, the candidate, the
+       * hash, the export and the verify, and closing first meant a stale tab
+       * pressing Accept on a job somebody already discarded disconnected the
+       * canvas its owner was drawing on and then got a 409. Caught in review on
+       * this PR. It is still the runner that does it rather than the browser: a
+       * close a page is responsible for is one a curl or a reload can skip, and
+       * this is the one route that replaces a committed file.
+       *
+       * `accept` also writes the record itself, between the renames and the
+       * catalog call, so the route neither repeats nor reorders that. */
+      const result = await accept(store, record, {
+        closeMirror: () => mirrors.stop(record.targetPath),
+      });
+      if (!result.ok) {
+        return fail(response, 409, result.note, {
+          reason: result.error ?? null,
+          mirrorClosed: result.mirrorClosed ?? false,
+          // The refusal a person most needs to act on. S4: the committed file
+          // moved under the job, and re-running the comparison is the offer —
+          // never a second accept, which would overwrite the edit.
+          recompare: result.error === "target-moved",
+        });
+      }
       return send(response, 200, {
         jobId: id,
         state: store.get(id)?.state ?? "accepted",
         written: result.written,
         indexed: result.indexed,
+        mirrorClosed: result.mirrorClosed ?? false,
         note: result.note,
       });
     }
@@ -348,6 +385,53 @@ async function handle(
         written: result.written,
         indexed: result.indexed,
         note: result.note,
+      });
+    }
+
+    case "GET shot": {
+      const which = url.searchParams.get("which") === "before" ? "before" : "after";
+      return shotBytes(response, record, which);
+    }
+
+    case "POST compare": {
+      /* Only a job that is still waiting to be reviewed.
+       *
+       * This launches two Chromium instances, overwrites the before picture and
+       * persists a new comparison, so on a `running` job it would race the
+       * runner's own writes to the same field, and on a terminal one it would
+       * replace the record of what was reviewed with a description of a file
+       * nobody compared. Neither is a recovery; both are damage. The refusal it
+       * exists behind only happens in `awaiting_review`. Caught in review on
+       * this PR. */
+      if (record.state !== "awaiting_review") {
+        return fail(
+          response,
+          409,
+          `job ${record.id} is ${record.state}, and comparing again is for a job still waiting to ` +
+            `be reviewed. The comparison on a finished job is the record of what was reviewed, and ` +
+            `rewriting it would describe a file nobody looked at.`,
+          { state: record.state },
+        );
+      }
+
+      // The offer S4 names, and deliberately not a second accept.
+      //
+      // When the committed file has moved under a job, accept refuses and keeps
+      // refusing: `targetHashBefore` is the lease and nothing here rewrites it,
+      // so the edit cannot be overwritten by pressing a button twice. What this
+      // does is re-read the *before* side against the file as it is now, so the
+      // two thumbnails and the counts describe the choice that actually exists
+      // — the candidate, against what is on disk today.
+      const refreshed = await recompare(store, record);
+      return send(response, 200, {
+        jobId: id,
+        comparison: refreshed,
+        note:
+          refreshed.before === null
+            ? `${record.targetPath} is not there any more, so there is nothing left to compare against`
+            : `the before side now reads ${record.targetPath} as it is on disk. Accept still refuses ` +
+              `while the file differs from the one this job started against: discard this candidate ` +
+              `and run the brief again over the current file.`,
       });
     }
 
@@ -691,6 +775,48 @@ function verbResult(
   });
 }
 
+/**
+ * One of a job's two screenshots, straight off the job workspace.
+ *
+ * The files live under `$STUDIO_HOME/jobs/<id>/`, which is gitignored and
+ * outside `learn/assets/` — a picture taken so two versions can be compared is
+ * not a deliverable. `which` is checked against the two literals rather than
+ * used as a filename, so no request can name a path of its own.
+ *
+ * A missing picture is a 404 and the tile says so in words. The commonest
+ * reason is the honest one: a `new` job has no before, because there was no
+ * diagram to photograph.
+ */
+async function shotBytes(
+  response: ServerResponse,
+  record: JobRecord,
+  which: "before" | "after",
+): Promise<void> {
+  const file = shotPath(record.id, which);
+  const info = await stat(file).catch(() => null);
+  if (info === null || !info.isFile()) {
+    return fail(
+      response,
+      404,
+      which === "before"
+        ? `job ${record.id} has no before picture: ${record.targetPath} did not exist when it started`
+        : `job ${record.id} has no after picture yet`,
+      { which, state: record.state },
+    );
+  }
+  response.writeHead(200, {
+    "content-type": "image/png",
+    "content-length": info.size,
+    "x-content-type-options": "nosniff",
+    // A job's pictures never change once written — the after shot is taken
+    // once per attempt and the before once per job — but an attempt that loops
+    // rewrites the after one, so this is revalidated rather than held.
+    "cache-control": "no-cache",
+    "last-modified": info.mtime.toUTCString(),
+  });
+  createReadStream(file).pipe(response);
+}
+
 /** The committed SVG's bytes, for a thumbnail and for the inspector's preview. */
 async function svgBytes(response: ServerResponse, name: string): Promise<void> {
   const file = absolute(targetSvgPath(name));
@@ -744,11 +870,16 @@ async function mirrorRoutes(
 
   if (method === "DELETE") {
     if (named === null) return fail(response, 400, "name the file to stop mirroring: ?file=learn/assets/x.tldr");
-    const stopped = await mirrors.stop(named);
+    const { found, gone } = await mirrors.stop(named);
     return send(response, 200, {
       file: named,
-      stopped,
-      note: stopped ? "the canvas was closed" : "nothing was mirroring that file",
+      stopped: found,
+      gone,
+      note: !found
+        ? "nothing was mirroring that file"
+        : gone
+          ? "the canvas was closed"
+          : "the canvas was told to close and its process is still running",
     });
   }
 

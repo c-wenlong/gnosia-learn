@@ -1,3 +1,5 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +15,7 @@ import {
   targetSvgPath,
   CANDIDATES_DIR,
 } from "../src/paths";
+import { stopChild } from "../src/proc";
 import type { JobRecord } from "../src/store";
 import { fixtureDocument } from "./fixture-document";
 
@@ -225,6 +228,101 @@ describe("a human edit that landed while the job ran", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("target-moved");
     expect(await readFile(files.target, "utf8")).toBe("someone else's work");
+  });
+});
+
+/**
+ * A6, end to end: the rename happens behind a writer that is already gone.
+ *
+ * The three tests above mock the close, so they pin *when* accept asks for it
+ * and not whether asking achieves anything. This one wires `closeMirror` to the
+ * real `stopChild` over a real process that ignores `SIGTERM` for a quarter of
+ * a second, which is the shape of the bug: `serve` holds the document as its
+ * tab last loaded it, so a save landing between the close and the rename PUTs
+ * the old diagram back over the accepted one, silently, with a `git diff`
+ * nobody is looking at as the only evidence.
+ *
+ * The assertion is read from inside the child's own `exit` handler, because
+ * that is the one moment where "is the writer still alive?" and "has the file
+ * been replaced?" can be asked of each other. With the close sending a signal
+ * and returning, the rename had already happened by then.
+ */
+describe("the mirror on the target", () => {
+  let child: ChildProcess | null = null;
+
+  afterEach(() => {
+    try {
+      if (child?.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    child = null;
+  });
+
+  it("is gone before the candidate is renamed over it", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    // Detached, like a real mirror: the close signals the process group.
+    child = spawn(
+      process.execPath,
+      ["-e", 'process.on("SIGTERM", () => {}); setTimeout(() => process.exit(0), 250); console.log("up");'],
+      { detached: true, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const writer = child;
+    await new Promise<void>((resolve) => writer.stdout?.once("data", () => resolve()));
+
+    let targetWhenTheWriterDied: string | null = null;
+    writer.on("exit", () => {
+      targetWhenTheWriterDied = existsSync(files.target) ? "already renamed" : "not yet renamed";
+    });
+
+    const result = await accept(store, await place(), {
+      closeMirror: async () => ({ found: true, gone: await stopChild(writer, 5_000) }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.mirrorClosed).toBe(true);
+    expect(targetWhenTheWriterDied).toBe("not yet renamed");
+    expect(await exists(files.target)).toBe(true);
+  });
+});
+
+/**
+ * A writer that will not die, which is the one case the waiting is for.
+ *
+ * `stopChild` only answers `gone: false` after a `SIGTERM`, a grace window, a
+ * `SIGKILL` and a second one. Renaming anyway at that point would make every
+ * line of that waiting decorative, so accept refuses: nothing has moved, and
+ * Discard, a retry and a follow-up job are all still there. Raised on the
+ * phase 4 PR after the first fix landed.
+ */
+describe("a mirror that will not shut down", () => {
+  it("refuses the accept rather than renaming behind a live writer", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place(), {
+      closeMirror: () => Promise.resolve({ found: true, gone: false }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("mirror-stuck");
+    expect(result.mirrorClosed).toBe(true);
+    expect(result.written).toHaveLength(0);
+    // Nothing moved, so every way out of this is still open.
+    expect(await exists(files.target)).toBe(false);
+    expect(await exists(files.candidate)).toBe(true);
+    expect(store.get("job-accept")?.state).toBe("awaiting_review");
+    expect(catalogMock.jobAccept).not.toHaveBeenCalled();
+  });
+
+  it("accepts normally when there was no mirror to close", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place(), {
+      closeMirror: () => Promise.resolve({ found: false, gone: true }),
+    });
+
+    expect(result.ok).toBe(true);
+    // `found` is what the UI reports, and nobody had a canvas open.
+    expect(result.mirrorClosed).toBe(false);
+    expect(await exists(files.target)).toBe(true);
   });
 });
 
