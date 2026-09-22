@@ -120,10 +120,39 @@ export interface ParentJob {
 export class Runner {
   private readonly store: JobStore;
   private readonly running = new Map<string, Running>();
+  /**
+   * One promise per job this runner has started, resolved once it is finished
+   * with it. See `settled`.
+   *
+   * One resolved promise per job, kept for the life of the process, which is
+   * the growth the store already has: every record it has loaded or created
+   * stays in memory so the API can answer about it.
+   */
+  private readonly settledJobs = new Map<string, Promise<void>>();
   private draining = false;
 
   constructor(store: JobStore) {
     this.store = store;
+  }
+
+  /**
+   * Resolves once the runner has written everything it is going to write
+   * about `id`.
+   *
+   * A terminal state is not that moment, and the difference is a real window
+   * rather than a theoretical one. `finish` puts the new state in the store's
+   * in-memory map first and only then persists `job.json`, calls `job finish`
+   * on the catalog, records any catalog error back onto the record and closes
+   * the session. Anybody reading the state to decide the job is over is
+   * reading the first of those five and acting as though all five had
+   * happened.
+   *
+   * Resolves immediately for a job this runner never started. One still in
+   * the queue has had nothing written about it since it was created, and one
+   * a dead process ran is not this runner's to wait for.
+   */
+  settled(id: string): Promise<void> {
+    return this.settledJobs.get(id) ?? Promise.resolve();
   }
 
   /* ------------------------------------------------------------------ */
@@ -479,6 +508,14 @@ export class Runner {
         }, JOB_TIMEOUT_MS),
       };
       this.running.set(next.id, entry);
+      // A promise of its own rather than the attempt's, so that `settled`
+      // never hands out a verdict. Deriving one from the chain below would
+      // also attach a rejection handler to it, which would silence a throw
+      // inside the recovery handler that today is loud.
+      let jobSettled: () => void = () => undefined;
+      this.settledJobs.set(next.id, new Promise<void>((resolve) => {
+        jobSettled = resolve;
+      }));
       void this.execute(entry).catch(async (error: unknown) => {
         await this.store.update(next.id, {
           state: "failed",
@@ -490,6 +527,7 @@ export class Runner {
       }).finally(() => {
         clearTimeout(entry.jobTimer);
         this.running.delete(next.id);
+        jobSettled();
         void this.kick();
       });
     }
