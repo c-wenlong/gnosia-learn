@@ -174,6 +174,57 @@ Rules of engagement:
   against the installed one. An edit that leaves the version alone is an edit
   nobody's session ever sees.
 
+## Diagram studio: services/studio/
+
+`services/studio/` is a local job runner and loopback API for the diagram
+studio at `/studio`: a screen that browses `learn/assets/`, opens one on a
+live tldraw canvas, and lets a person brief an agent to draw or extend a
+diagram, review its work, and accept or discard it. It exists so drawing a
+diagram can be delegated to an agent without a candidate ever landing on a
+committed file until a person says so.
+
+Rules of engagement:
+
+- Run it with `npm run studio` from the repository root; it binds
+  `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
+  `STUDIO_ENABLED` is set, a separate flag from `ASSET_FILES_ENABLED`, which
+  studio thumbnails also depend on. `STUDIO_DAILY_USD` is a rolling 24-hour
+  spend cap in dollars; unset, the default, means no cap.
+- The runner is the only thing that spawns an agent; the UI's job is HTTP
+  calls to the runner and nothing else. The agent's Bash permission is an
+  allowlist of one command prefix, `Bash(npm run --silent canvas:*)`, not a
+  deny list, because a deny list over `rm`, `mv`, `git` and the rest does not
+  stop a shell redirect, `tee`, or a command substitution from writing
+  anywhere in the tree. Read and write rules in
+  `services/studio/src/settings.ts` are absolute paths resolved from
+  `REPO_ROOT` at spawn time, not relative ones, because manimkc already
+  shipped the bug where a relative rule stops matching the moment its data
+  root moves.
+- A job writes only to `learn/assets/.candidates/`; nothing under
+  `learn/assets/` changes until a person presses Accept, and Accept never runs
+  `git add`. It renames the candidate into place and tells the person the
+  `git add` line to run themselves. `indexed: false` after an accept is a
+  banner asking for a manual reindex, not a failure: the files are the output
+  and the catalog row is derived from them.
+- `job.cost_source` in `services/studio/src/cost.ts` says where `cost_usd`
+  came from: `result` when the agent's session exited cleanly and reported its
+  own `total_cost_usd`, `stream` when the runner accumulated it from
+  per-message usage after a cancel, timeout or interrupt killed the session
+  before it could report. A `stream` figure is always an under-estimate,
+  measured between 80% and 93% of the true cost across the nine sessions on
+  disk, and the runner never scales it up: a fudge factor would make the
+  number unauditable against the CLI's own figure. An unpriceable model
+  records `null`, never zero, since a zero reads as a free job and the spend
+  cap would walk straight past it.
+- The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
+  no channel to ask the live canvas anything; it derives the SVG-freshness
+  pill by comparing file modification times instead. An open canvas sends a
+  heartbeat, and a mirror nobody has asked about for `STUDIO_MIRROR_IDLE_MS`
+  (15 minutes by default) is closed.
+- Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
+  design this section is shortened from: the schema, the runner's full
+  constraints, the gate, and the edge cases behind each rule above.
+
 ## Workflows
 
 Procedures for the two submodules and the checkout they live in. Each step
@@ -234,6 +285,32 @@ checking out a branch in the shared tree, so nobody's branch moves under
 them. Never stage a submodule or a file you did not intend to change;
 `git status` in a shared checkout routinely shows someone else's work in
 progress.
+
+### Workflow 4: resuming a stalled agent's PR
+
+Twice in one session an agent building a phase was killed mid-review, once by
+a rate limit and once by a stall. Both times the branch and the open PR
+survived; the agent's own report of what it had done did not.
+
+1. Find the branch and the PR: `gh pr list` and `git ls-remote --heads`.
+2. Read the PR body and every review thread on GitHub itself, not from
+   memory. A report you never saw is not evidence of anything.
+3. Check the worktree for uncommitted changes before touching it further.
+4. Resume from the branch rather than restarting the phase from scratch.
+5. Re-verify the PR's own "Done when" checklist yourself. Do not merge on the
+   strength of a report nobody read.
+
+The one trap: a half-finished fix sitting in the worktree can look complete
+on a skim, such as an `await` on a function whose return type is `void`,
+which compiles clean and fixes nothing.
+
+### Workflow 5: give the review bot time
+
+PR #53 opened and merged in under seven minutes, and Greptile never ran on
+it. A PR is not reviewed until the bot has posted a review; a merge before
+that is a merge with no review at all. Check `gh pr view <n> --json reviews`
+before merging. An empty list minutes after opening means the review has not
+happened yet, not that the PR is clean.
 
 ### Where a submodule's commit lives
 
@@ -445,3 +522,27 @@ not have to be worked out again.
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
   at all. A low overall percentage is not a regression signal; the thresholds
   in `vitest.config.ts` are.
+- **Killing a spawned `npm run` child does not kill what it started.**
+  `child.pid` in `services/studio/src/mirrors.ts` is the `npm` launcher; the
+  process actually holding the port, `canvas serve`, is two levels down.
+  `stopChild` in `services/studio/src/proc.ts` signals the whole process
+  group, polls `kill(-pid, 0)` until nothing answers, and escalates to
+  `SIGKILL` after `STUDIO_KILL_GRACE_MS` (5 seconds by default) before waiting
+  again. "Told it to stop" and "it has stopped" are different facts, and only
+  the second is safe to rename a file behind.
+- **A GitHub Actions run that fails in single-digit seconds with zero steps
+  run, on `main` as well as on a PR, is the billing limit, not the code.** The
+  annotation reads "recent account payments have failed or your spending
+  limit needs to be increased." Every PR since 2026-09-14 has merged on the
+  local gate (`npm run lint && npm run typecheck && npm test && npm run
+  build`, with Postgres up). Greptile is a separate service and still runs.
+- **A `next.config.ts` rewrite does not strip the browser's `Origin` header;
+  only a route handler can.** Measured in phase 2 (PR #60): proxying
+  `/studio/api/*` to the runner through `rewrites()` forwards `Origin`
+  verbatim, and the runner's own guard then answers every POST with 403,
+  because a transparent proxy is byte-identical to the page behind it.
+  `apps/web/src/app/studio/api/[...segments]/route.ts` is a route handler for
+  two reasons together: it is the only form that can strip `Origin`,
+  `Sec-Fetch-*`, `Cookie` and `Host` before forwarding, and the only form that
+  can read `STUDIO_ENABLED` at request time, since `rewrites()` is evaluated
+  when the config loads.
