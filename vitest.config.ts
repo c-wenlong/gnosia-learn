@@ -14,6 +14,11 @@ export default defineConfig({
       "services/**/*.test.ts",
       "packages/**/*.test.ts",
     ],
+    // Test files run in parallel workers against one checkout, so a fixture a
+    // suite writes into the tree is visible to every other suite while it is
+    // there. The setup file keeps the studio's fixtures out of it and fails any
+    // test file that leaves something behind in `learn/assets/`.
+    setupFiles: ["./vitest.setup.ts"],
     // services/catalog's tests create and drop a scratch database and apply
     // every migration to it. That is slower than the in-process suites, and on
     // a cold Postgres the first connection can take a while.
