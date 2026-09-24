@@ -586,3 +586,123 @@ export function standaloneFigure(nodes: Inline[]): FigureNode | null {
   const only = meaningful[0];
   return only.kind === "embed" || only.kind === "image" ? only : null;
 }
+
+/**
+ * The reader-visible text of a run of inline nodes, with all the markup gone.
+ *
+ * A heading's link id has to come from what a reader sees, not from the
+ * markdown source, so this walks the same `Inline[]` tree the renderer walks
+ * and keeps only the words: a link or a wikilink contributes its label, an
+ * embed its caption (or its target with none), and math the symbols
+ * `parseMath` already substituted. That is what makes `` `softmax` `` and
+ * `**softmax**` slug the same: both reduce to the plain word before
+ * `slugify` ever sees them.
+ */
+export function inlineText(nodes: Inline[]): string {
+  return nodes
+    .map((node): string => {
+      switch (node.kind) {
+        case "text":
+        case "code":
+          return node.text;
+        case "strong":
+        case "em":
+          return inlineText(node.children);
+        case "link":
+          return node.label;
+        case "note":
+          return node.label;
+        case "embed":
+          return node.caption ?? node.target;
+        case "image":
+          return node.alt || node.src;
+        case "math":
+          return mathText(node.nodes);
+      }
+    })
+    .join("");
+}
+
+function mathText(nodes: MathNode[]): string {
+  return nodes.map((node) => (node.kind === "text" ? node.text : mathText(node.nodes))).join("");
+}
+
+/**
+ * A URL-fragment-safe id built from a heading's rendered text.
+ *
+ * Lowercased, accents folded off (`café` and `cafe` slug the same), and
+ * anything that is not a letter or digit collapsed to a single hyphen, so
+ * `The `softmax` step` and `The **softmax** step` land on the same id once
+ * `inlineText` has reduced both to the same word.
+ *
+ * A heading can fold to nothing: a title in a script this fold does not
+ * touch (it only knows the Latin diacritics `normalize("NFKD")` decomposes),
+ * or one that is pure punctuation like `???`, would otherwise slug to the
+ * empty string, which is not a link anyone could ever share. `section` is
+ * the fallback, and it goes through the same duplicate counter as any other
+ * heading, so a second unreadable title becomes `section-2` rather than
+ * silently reusing the first one's id.
+ */
+export function slugify(text: string): string {
+  const folded = text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return folded === "" ? "section" : folded;
+}
+
+/**
+ * A stable id for every heading in a document, keyed by the block object so
+ * the renderer can look one up without recomputing it.
+ *
+ * Two things make a shared link outlive the session that made it. First, the
+ * same note always produces the same ids: they are assigned by walking the
+ * document once, top to bottom, into list items and quotes as well as the
+ * top level, so the order never depends on anything but the file's own
+ * content. Second, a repeated heading (and session logs repeat headings
+ * constantly, one `## Probe` per question) gets a distinct id rather than
+ * clobbering the first: `the-idea`, then `the-idea-2`, then `the-idea-3`,
+ * counted from first occurrence.
+ *
+ * `prefix` namespaces one note's ids away from another's, for a page that
+ * renders more than one `NoteProse`. It is slugified too, since a caller's
+ * natural prefix is an asset id (`manimkc:out/...`) or a note slug, neither
+ * of which is a legal id fragment on its own. Left empty, the default, a
+ * page with exactly one note (the only case that exists today) gets plain
+ * ids straight off the heading text, which is what makes `#worked-example`
+ * a link worth sharing instead of `#note-1-worked-example`.
+ */
+export function headingIds(blocks: Block[], prefix = ""): Map<Block, string> {
+  const ids = new Map<Block, string>();
+  const seen = new Map<string, number>();
+  const namespace = prefix.trim() === "" ? "" : slugify(prefix);
+
+  function claim(slug: string): string {
+    const count = seen.get(slug) ?? 0;
+    seen.set(slug, count + 1);
+    return count === 0 ? slug : `${slug}-${count + 1}`;
+  }
+
+  function walk(list: Block[]): void {
+    for (const block of list) {
+      if (block.kind === "heading") {
+        const text = inlineText(parseInline(block.text));
+        const own = slugify(text);
+        ids.set(block, claim(namespace === "" ? own : `${namespace}-${own}`));
+        continue;
+      }
+      if (block.kind === "list") {
+        for (const item of block.items) walk(item);
+        continue;
+      }
+      if (block.kind === "quote") {
+        walk(block.blocks);
+      }
+    }
+  }
+
+  walk(blocks);
+  return ids;
+}

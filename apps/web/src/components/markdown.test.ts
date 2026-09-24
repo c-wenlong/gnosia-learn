@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  headingIds,
+  inlineText,
   isExternalHref,
   parseInline,
   parseNote,
   safeHref,
+  slugify,
   standaloneFigure,
   type Block,
 } from "./markdown";
@@ -362,6 +365,126 @@ describe("standaloneFigure", () => {
 
   it("ignores surrounding whitespace", () => {
     expect(standaloneFigure(parseInline("  ![[a.svg]]  "))).not.toBeNull();
+  });
+});
+
+describe("inlineText", () => {
+  it("reads the same visible word whether it is code or bold", () => {
+    expect(inlineText(parseInline("The `softmax` step"))).toBe("The softmax step");
+    expect(inlineText(parseInline("The **softmax** step"))).toBe("The softmax step");
+  });
+
+  it("takes a wikilink's label, not its target", () => {
+    expect(inlineText(parseInline("[[dot-product|the dot product]]"))).toBe("the dot product");
+    expect(inlineText(parseInline("[[dot-product]]"))).toBe("dot-product");
+  });
+
+  it("takes an embed's caption, or its target with none", () => {
+    expect(inlineText(parseInline("![[a.svg|Two bases]]"))).toBe("Two bases");
+    expect(inlineText(parseInline("![[a.svg]]"))).toBe("a.svg");
+  });
+
+  it("reads math as the symbols parseMath already substituted", () => {
+    expect(inlineText(parseInline("$\\alpha \\le \\beta$"))).toBe("α ≤ β");
+  });
+});
+
+describe("slugify", () => {
+  it("lowercases and hyphenates", () => {
+    expect(slugify("The Idea")).toBe("the-idea");
+  });
+
+  it("collapses any run of non-alphanumeric characters to one hyphen", () => {
+    expect(slugify("A, B & C -- D")).toBe("a-b-c-d");
+  });
+
+  it("trims a leading or trailing hyphen rather than keeping it", () => {
+    expect(slugify("-- The Idea --")).toBe("the-idea");
+  });
+
+  it("folds accents off, so a diacritic does not fork the id", () => {
+    expect(slugify("Café")).toBe("cafe");
+  });
+
+  it("falls back to a non-empty id for punctuation-only text", () => {
+    expect(slugify("???")).toBe("section");
+  });
+
+  it("falls back to a non-empty id for text with no ASCII letters or digits", () => {
+    expect(slugify("日本語")).toBe("section");
+  });
+});
+
+describe("headingIds", () => {
+  function headingsOf(source: string): Array<Block & { kind: "heading" }> {
+    return parseNote(source).blocks.filter(
+      (b): b is Block & { kind: "heading" } => b.kind === "heading",
+    );
+  }
+
+  it("gives a heading its own text as the id", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(headingIds([heading]).get(heading)).toBe("the-idea");
+  });
+
+  it("gives a repeated heading a distinct, numbered id rather than reusing the first", () => {
+    const [first, second, third] = headingsOf("## Probe\n\ntext\n\n## Probe\n\nmore\n\n## Probe");
+    const ids = headingIds([first, second, third]);
+    expect(ids.get(first)).toBe("probe");
+    expect(ids.get(second)).toBe("probe-2");
+    expect(ids.get(third)).toBe("probe-3");
+  });
+
+  it("produces the same ids for the same note parsed twice over", () => {
+    const source = "## The idea\n\nprose\n\n## The idea";
+    const first = [...headingIds(parseNote(source).blocks).values()];
+    const second = [...headingIds(parseNote(source).blocks).values()];
+    expect(first).toEqual(second);
+    expect(first).toEqual(["the-idea", "the-idea-2"]);
+  });
+
+  it("slugs the reader-visible text, not the markdown source", () => {
+    const [code] = headingsOf("## The `softmax` step");
+    const [bold] = headingsOf("## The **softmax** step");
+    expect(headingIds([code]).get(code)).toBe(headingIds([bold]).get(bold));
+  });
+
+  it("never produces an empty id for a punctuation-only heading", () => {
+    const [heading] = headingsOf("## ???");
+    expect(headingIds([heading]).get(heading)).toBe("section");
+  });
+
+  it("defaults to no namespace, so the one note on a page gets a plain id", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(headingIds([heading]).get(heading)).toBe("the-idea");
+  });
+
+  it("namespaces ids under a prefix, so two notes' matching headings do not collide", () => {
+    const [a] = headingsOf("## The idea");
+    const [b] = headingsOf("## The idea");
+    const idA = headingIds([a], "concept:softmax").get(a);
+    const idB = headingIds([b], "concept:dot-product").get(b);
+    expect(idA).not.toBe(idB);
+    expect(idA).toBe("concept-softmax-the-idea");
+    expect(idB).toBe("concept-dot-product-the-idea");
+  });
+
+  it("finds a heading nested inside a list item", () => {
+    const doc = parseNote("- Notes\n  ## Nested heading\n  more text").blocks;
+    const list = doc[0];
+    if (list.kind !== "list") throw new Error("expected a list");
+    const nested = list.items[0].find((b) => b.kind === "heading");
+    if (nested === undefined) throw new Error("expected a nested heading");
+    expect(headingIds(doc).get(nested)).toBe("nested-heading");
+  });
+
+  it("finds a heading nested inside a quote", () => {
+    const doc = parseNote("> ## Boxed\n> text").blocks;
+    const quote = doc[0];
+    if (quote.kind !== "quote") throw new Error("expected a quote");
+    const nested = quote.blocks.find((b) => b.kind === "heading");
+    if (nested === undefined) throw new Error("expected a nested heading");
+    expect(headingIds(doc).get(nested)).toBe("boxed");
   });
 });
 

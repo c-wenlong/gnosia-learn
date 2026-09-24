@@ -31,6 +31,18 @@ function render(source: string, props: Record<string, unknown> = {}) {
   return mount(createElement(NoteProse, { source, ...props }));
 }
 
+/**
+ * A heading's own words, without the copy-link that now sits after them.
+ * `textContent` on the element itself would include the anchor's "#", which
+ * is correct for the DOM but not what these tests mean by "the heading".
+ */
+function headingWords(el: Element | null): string {
+  if (el === null) return "";
+  const clone = el.cloneNode(true) as Element;
+  clone.querySelector("a")?.remove();
+  return clone.textContent ?? "";
+}
+
 describe("structure", () => {
   it("drops the frontmatter instead of setting it as a paragraph", () => {
     const host = render(
@@ -39,14 +51,14 @@ describe("structure", () => {
       ),
     );
     expect(host.textContent).not.toContain("tags: [transformers]");
-    expect(host.querySelector("h1")?.textContent).toBe("Self-attention");
+    expect(headingWords(host.querySelector("h1"))).toBe("Self-attention");
   });
 
   it("renders the heading levels as heading elements", () => {
     const host = render("# One\n\n## Two\n\n### Three");
-    expect(host.querySelector("h1")?.textContent).toBe("One");
-    expect(host.querySelector("h2")?.textContent).toBe("Two");
-    expect(host.querySelector("h3")?.textContent).toBe("Three");
+    expect(headingWords(host.querySelector("h1"))).toBe("One");
+    expect(headingWords(host.querySelector("h2"))).toBe("Two");
+    expect(headingWords(host.querySelector("h3"))).toBe("Three");
   });
 
   it("gives a heading more room above it than below it", () => {
@@ -178,6 +190,70 @@ describe("embeds", () => {
     const host = render("as in ![[a.svg]] above", { resolveEmbed: () => "/a.svg" });
     expect(host.querySelector("figure")).toBeNull();
     expect(host.querySelector("p")?.textContent).toContain("a.svg");
+  });
+});
+
+describe("heading anchors", () => {
+  it("gives each heading a stable id built from its own text", () => {
+    const host = render("## The idea");
+    expect(host.querySelector("h2")?.id).toBe("the-idea");
+  });
+
+  it("gives a repeated heading a distinct id instead of reusing the first", () => {
+    const host = render("## Probe\n\ntext\n\n## Probe");
+    const headings = host.querySelectorAll("h2");
+    expect(headings[0].id).toBe("probe");
+    expect(headings[1].id).toBe("probe-2");
+  });
+
+  it("slugs inline code and bold the same way, since both read as the same word", () => {
+    const code = render("## The `softmax` step");
+    const bold = render("## The **softmax** step");
+    expect(code.querySelector("h2")?.id).toBe(bold.querySelector("h2")?.id);
+  });
+
+  it("never emits an empty id, even for a punctuation-only heading", () => {
+    const host = render("## ???");
+    expect(host.querySelector("h2")?.id).toBe("section");
+  });
+
+  it("namespaces ids under idPrefix, so two notes on the same page do not collide", () => {
+    const a = render("## The idea", { idPrefix: "concept:softmax" });
+    const b = render("## The idea", { idPrefix: "concept:dot-product" });
+    const idA = a.querySelector("h2")?.id;
+    const idB = b.querySelector("h2")?.id;
+    expect(idA).not.toBe(idB);
+  });
+
+  it("gives no prefix by default, so the one note on a page gets a plain id", () => {
+    const host = render("## The idea");
+    expect(host.querySelector("h2")?.id).toBe("the-idea");
+  });
+
+  it("keeps every heading level clear of the sticky top bar", () => {
+    const host = render("# One\n\n## Two\n\n### Three\n\n#### Four");
+    for (const tag of ["h1", "h2", "h3", "h4"]) {
+      expect(host.querySelector(tag)?.className).toContain("scroll-mt-");
+    }
+  });
+
+  it("gives every heading a copy-link with an accessible name, after the heading's own text", () => {
+    const host = render("## The idea");
+    const heading = host.querySelector("h2")!;
+    const link = heading.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("#the-idea");
+    expect(link.getAttribute("aria-label")).toContain("The idea");
+    // Last child, not first: a screen reader meets the heading's own words
+    // before it ever reaches this link.
+    expect(heading.lastElementChild).toBe(link);
+  });
+
+  it("makes the heading itself reachable by id, with or without the copy-link", () => {
+    // The id lives on the heading element, which is what a shared URL
+    // fragment actually scrolls to. The small "#" beside it is a shortcut for
+    // finding that link, not the only way to land on the heading.
+    const host = render("## The idea");
+    expect(host.querySelector("#the-idea")?.tagName).toBe("H2");
   });
 });
 
