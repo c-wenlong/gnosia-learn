@@ -1,5 +1,6 @@
-const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
-const fs = require('fs');
+import fs from 'fs';
+const pw = await import(process.env.PLAYWRIGHT || 'playwright');
+const { chromium } = pw.default ?? pw;
 const html = fs.readFileSync(process.argv[2], 'utf8');
 (async () => {
   const b = await chromium.launch(); const out = [];
@@ -15,7 +16,7 @@ const html = fs.readFileSync(process.argv[2], 'utf8');
         const st = e.getAttribute('style');
         for (const m of st.matchAll(/var\((--[\w-]+)\)/g)) if (!getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim()) empty.push(m[1]);
       }
-      const used = new Set(); for (const sh of document.styleSheets) { try { for (const r of sh.cssRules) for (const m of r.cssText.matchAll(/var\((--[\w-]+)/g)) used.add(m[1]); } catch (e) {} }
+      const used = new Set(); for (const sh of document.styleSheets) { try { for (const r of sh.cssRules) for (const m of r.cssText.matchAll(/var\((--[\w-]+)/g)) used.add(m[1]); } catch {} }
       const missing = [...used].filter(v => !getComputedStyle(document.documentElement).getPropertyValue(v).trim() && !['--face', '--fg', '--lip', '--lift', '--x'].includes(v));
       return { emptyInline: [...new Set(empty)].slice(0, 20), missingInCss: missing.slice(0, 40), h: document.body.scrollHeight };
     });

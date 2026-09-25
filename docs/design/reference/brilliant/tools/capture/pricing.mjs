@@ -1,6 +1,7 @@
-const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
-const fs = require('fs');
-const OUT = process.env.SP + '/wt/docs/design/reference/brilliant/screenshots/';
+import fs from 'fs';
+const pw = await import(process.env.PLAYWRIGHT || 'playwright');
+const { chromium } = pw.default ?? pw;
+const OUT = new URL('../../screenshots/', import.meta.url).pathname;
 (async () => {
   const b = await chromium.launch(); const out = {};
   for (const scheme of ['light','dark']) {

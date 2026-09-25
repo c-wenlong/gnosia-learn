@@ -1,9 +1,11 @@
-const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
-const fs = require('fs'), crypto = require('crypto');
-const OUT = process.env.SP + '/wt/docs/design/reference/brilliant/icons/';
+import crypto from 'crypto';
+import fs from 'fs';
+const pw = await import(process.env.PLAYWRIGHT || 'playwright');
+const { chromium } = pw.default ?? pw;
+const OUT = new URL('../../icons/', import.meta.url).pathname;
 (async () => {
   const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage();
-  const seen = {}; const rows = [];
+  const seen = {};
   for (const path of ['/courses/', '/courses/linear-expressions-and-equations/', '/login/', '/subscribe/', '/']) {
     await p.goto('https://brilliant.org' + path, { waitUntil: 'load', timeout: 60000 }); await p.waitForTimeout(3500);
     const icons = await p.evaluate(() => [...document.querySelectorAll('svg')].filter(s => { const r = s.getBoundingClientRect(); return r.width >= 10 && r.width <= 48 && r.height >= 10 && r.height <= 48 && !s.closest('#onetrust-consent-sdk'); }).map(s => {

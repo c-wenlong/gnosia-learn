@@ -48,7 +48,7 @@ python3 tools/build_style_guide.py
 
 `build_tokens.py` reads `raw/css-vars-public.json` and `raw/text-styles.tsv` and writes `tokens.json`; component colours and their sources are listed in its `comp()` block. `build_style_guide.py` renders `style-guide.html` from `tokens.json` and `tools/style-guide.template.html`, turning every token into a CSS variable so the page cannot drift from the file. Both are deterministic: re-running them on this commit reproduces both files byte for byte. Edit the raw inputs or the builders, never the generated files.
 
-`tools/capture/` holds the kit the captures came from: the in-page helpers (`helpers.js`), the window screenshot cropper (`shot.sh`, with `wins.swift` to find the Chrome window), the sRGB converter (`srgb.py`), the crop list (`crops.py`), and headless Playwright scripts for the variable dump (`vars.cjs`), public pages (`public.cjs`), pricing (`pricing.cjs`), icons (`icons.cjs`) and the style guide check (`sg.cjs`). They were written for one session and take paths from their arguments or from `SP`.
+`tools/capture/` holds the kit the captures came from: the in-page helpers (`helpers.js`), the window screenshot cropper (`shot.sh`, with `wins.swift` to find the Chrome window), the sRGB converter (`srgb.py`), the crop list (`crops.py`), and headless Playwright scripts for the variable dump (`vars.mjs`), public pages (`public.mjs`), pricing (`pricing.mjs`), icons (`icons.mjs`) and the style guide check (`sg.mjs`). They were written for one session: the Playwright scripts write next to this folder and take `PLAYWRIGHT` as the path to a Playwright install when `playwright` is not resolvable, and `shot.sh` needs `SP` pointing at the compiled window lister.
 
 ## Use in Figma
 

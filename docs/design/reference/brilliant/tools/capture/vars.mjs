@@ -1,5 +1,6 @@
-const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
-const fs = require('fs');
+import fs from 'fs';
+const pw = await import(process.env.PLAYWRIGHT || 'playwright');
+const { chromium } = pw.default ?? pw;
 (async () => {
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
@@ -24,7 +25,7 @@ const fs = require('fs');
       }
       if (r.cssRules && r.style) walk(r.cssRules);
     }};
-    for (const ss of document.styleSheets) { try { walk(ss.cssRules) } catch (e) {} }
+    for (const ss of document.styleSheets) { try { walk(ss.cssRules) } catch {} }
     return { root, dark, other, fontfaces, keyframes: [...new Set(keyframes)], media: [...media] };
   });
   fs.writeFileSync(process.env.SP + '/cap/vars-home.json', JSON.stringify({ ...out, fonts: [...new Set(fonts)] }, null, 1));
