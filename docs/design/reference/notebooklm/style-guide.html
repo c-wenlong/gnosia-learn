@@ -1,0 +1,1293 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini Notebook Style Guide</title>
+<!-- Fonts: the product loads Google Sans / Google Sans Text / Google Symbols from fonts.gstatic.com.
+     Those exact families are not public, so this page asks for the closest public faces and falls back.
+     In Figma/Paper, use Google Sans + Google Sans Text if you have them installed. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400;6..144,500;6..144,600;6..144,700&family=Google+Sans+Code:wght@400;500&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap" rel="stylesheet">
+<style>
+/* ===== Generated from tokens.json (core) ===== */
+:root {
+  --palette-grey-0: #000000;
+  --palette-grey-10: #1b1b1c;
+  --palette-grey-20: #303030;
+  --palette-grey-30: #474747;
+  --palette-grey-40: #5e5e5e;
+  --palette-grey-50: #777777;
+  --palette-grey-60: #919191;
+  --palette-grey-70: #ababab;
+  --palette-grey-80: #c7c7c7;
+  --palette-grey-90: #e3e3e3;
+  --palette-grey-95: #f2f2f2;
+  --palette-grey-98: #f9f9f9;
+  --palette-grey-100: #ffffff;
+  --palette-blue-2: #17181c;
+  --palette-blue-5: #1d1e26;
+  --palette-blue-10: #232740;
+  --palette-blue-20: #2a3163;
+  --palette-blue-30: #2f3a8e;
+  --palette-blue-40: #384acf;
+  --palette-blue-50: #4259ff;
+  --palette-blue-60: #596cf7;
+  --palette-blue-70: #7c8bf3;
+  --palette-blue-80: #94a0f4;
+  --palette-blue-90: #c3cafc;
+  --palette-blue-95: #dbdfff;
+  --palette-blue-98: #edeffa;
+  --palette-blue-100: #ffffff;
+  --palette-green-50: #45ec6d;
+  --palette-green-60: #6df88e;
+  --palette-green-70: #9efab4;
+  --palette-green-80: #cefdd9;
+  --palette-green-100: #ffffff;
+  --palette-red-50: #db372d;
+  --palette-brand-black: #000000;
+  --palette-brand-white: #ffffff;
+  --palette-brand-green: #45ec6d;
+  --palette-brand-blue: #4259ff;
+  --palette-brand-dark-blue: #2f334b;
+  --palette-icon-blue: #3271ea;
+  --palette-icon-yellow: #fcbd00;
+  --palette-icon-red: #db372d;
+  --palette-icon-pink: #b741ff;
+  --palette-icon-green: #128937;
+  --palette-icon-youtube: #ff0000;
+  --palette-gradient-stop-green: #3cff52;
+  --palette-gradient-stop-periwinkle: #7182ff;
+  --fontFamily-display: "Google Sans";
+  --fontFamily-text: "Google Sans Text";
+  --fontFamily-code: "Google Sans Code";
+  --fontFamily-icon: "Google Symbols";
+  --fontFamily-math: "KaTeX_Main";
+  --fontWeight-regular: 400;
+  --fontWeight-medium: 500;
+  --fontWeight-semibold: 600;
+  --fontWeight-bold: 700;
+  --typography-display-large: 400 57px/64px var(--ff-display);
+  --typography-display-medium: 400 45px/52px var(--ff-display);
+  --typography-display-small: 400 36px/44px var(--ff-display);
+  --typography-headline-large: 400 32px/40px var(--ff-display);
+  --typography-headline-medium: 400 28px/36px var(--ff-display);
+  --typography-headline-small: 400 24px/32px var(--ff-display);
+  --typography-title-large: 400 22px/28px var(--ff-display);
+  --typography-title-medium: 500 16px/24px var(--ff-text);
+  --typography-title-small: 500 14px/20px var(--ff-text);
+  --typography-body-large: 400 16px/24px var(--ff-text);
+  --typography-body-medium: 400 14px/20px var(--ff-text);
+  --typography-body-small: 400 12px/16px var(--ff-text);
+  --typography-label-large: 500 14px/20px var(--ff-text);
+  --typography-label-medium: 500 12px/16px var(--ff-text);
+  --typography-label-small: 500 11px/16px var(--ff-text);
+  --typography-panel-header: 400 16px/52px var(--ff-display);
+  --typography-code-inline: 500 14px/24px var(--ff-code);
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-chat-bubble: 20px;
+  --radius-chip: 24px;
+  --radius-xl: 28px;
+  --radius-button: 96px;
+  --radius-full: 9999px;
+  --borderWidth-hairline: 1px;
+  --borderWidth-focus-field: 2px;
+  --borderWidth-dashed-dropzone: 2px;
+  --borderWidth-checkbox: 2px;
+  --borderWidth-focus-ring: 3px;
+  --shadow-level1: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12);
+  --shadow-menu: 0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12);
+  --shadow-level2: 0px 3px 3px -2px rgba(0,0,0,0.2), 0px 3px 4px 0px rgba(0,0,0,0.14), 0px 1px 8px 0px rgba(0,0,0,0.12);
+  --shadow-level3: 0px 3px 5px -1px rgba(0,0,0,0.2), 0px 6px 10px 0px rgba(0,0,0,0.14), 0px 1px 18px 0px rgba(0,0,0,0.12);
+  --shadow-level4: 0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12);
+  --shadow-level5: 0px 7px 8px -4px rgba(0,0,0,0.2), 0px 12px 17px 2px rgba(0,0,0,0.14), 0px 5px 22px 4px rgba(0,0,0,0.12);
+  --shadow-popover: 0px 1px 2px 0px rgba(60,64,67,0.3), 0px 1px 3px 1px rgba(60,64,67,0.15);
+  --blur-panel-glass: 14px;
+  --blur-glow: 81.1px;
+  --spacing-2: 2px;
+  --spacing-4: 4px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-48: 48px;
+  --size-header-height: 64px;
+  --size-header-height-mobile: 96px;
+  --size-panel-gutter: 16px;
+  --size-panel-header-height: 48px;
+  --size-panel-side-width: 289.8px;
+  --size-panel-studio-expanded: 450px;
+  --size-table-header-row: 56px;
+  --size-table-row: 52px;
+  --size-menu-item: 48px;
+  --size-list-option: 48px;
+  --size-source-row: 32px;
+  --size-artifact-row: 64px;
+  --size-studio-tile: 56px;
+  --size-button: 40px;
+  --size-button-small: 32px;
+  --size-icon-button: 40px;
+  --size-icon-button-small: 32px;
+  --size-text-field: 56px;
+  --size-notebook-card-width: 320px;
+  --size-notebook-card-height: 224px;
+  --size-chat-max-width: 700px;
+  --size-content-max-width: 1068px;
+  --size-icon-xs: 16px;
+  --size-icon-sm: 18px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-citation: 22px;
+  --size-checkbox: 18px;
+  --size-avatar: 32px;
+  --breakpoint-mobile-max: 599.98px;
+  --breakpoint-tablet-max: 959.98px;
+  --breakpoint-desktop-min: 1024px;
+  --breakpoint-wide: 1280px;
+  --breakpoint-xs-max: 359.98px;
+  --duration-instant: 45ms;
+  --duration-fast: 90ms;
+  --duration-short: 150ms;
+  --duration-short2: 200ms;
+  --duration-medium: 250ms;
+  --duration-medium2: 280ms;
+  --duration-medium3: 300ms;
+  --duration-long: 400ms;
+  --duration-long2: 500ms;
+  --duration-spinner: 1333ms;
+  --duration-shimmer: 1400ms;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --easing-accelerate-sharp: cubic-bezier(0.4, 0, 0.6, 1);
+  --easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --easing-backdrop: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --easing-search-expand: cubic-bezier(0.2, 0, 0, 1);
+  --opacity-hover: 0.08;
+  --opacity-focus: 0.12;
+  --opacity-pressed: 0.12;
+  --opacity-dragged: 0.16;
+  --opacity-disabled-container: 0.12;
+  --opacity-disabled-content: 0.38;
+}
+/* ===== Light theme ===== */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg-page: #edeffa;
+  --bg-page-grey: #f9f9f9;
+  --bg-landing: #ffffff;
+  --bg-scrim: rgba(0,0,0,0.32);
+  --surface-panel: #ffffff;
+  --surface-card: #fafafd;
+  --surface-panel-70: rgba(255,255,255,0.7);
+  --surface-panel-80: rgba(255,255,255,0.8);
+  --surface-dialog: #ffffff;
+  --surface-tint-blue: #edeffa;
+  --surface-subtle: #f9f9f9;
+  --surface-muted: #f2f2f2;
+  --surface-selected: #edeffa;
+  --surface-caution: #fef7e0;
+  --surface-select-panel: #f0f4f9;
+  --surface-inverse: #303030;
+  --surface-toast: #000000;
+  --surface-flashcard-front: #303030;
+  --border-default: #dde1eb;
+  --border-strong: #919191;
+  --border-outline-variant: #c4c7c5;
+  --border-outline: #747775;
+  --border-focus-ring: #4259ff;
+  --border-field-focus: #0b57d0;
+  --text-title: #1b1b1c;
+  --text-body: #303030;
+  --text-secondary: #5e5e5e;
+  --text-ghost: #777777;
+  --text-on-surface: #1f1f1f;
+  --text-on-surface-variant: #444746;
+  --text-warning: #b06000;
+  --text-link: #4259ff;
+  --text-on-accent: #ffffff;
+  --text-on-inverse: #f2f2f2;
+  --text-meta: #535559;
+  --accent-primary: #4259ff;
+  --accent-on-primary: #ffffff;
+  --accent-secondary: #000000;
+  --accent-on-secondary: #ffffff;
+  --accent-m3-primary: #0b57d0;
+  --accent-m3-on-primary: #ffffff;
+  --accent-pill: #edeffa;
+  --state-hover-on-surface: rgba(0,0,0,0.08);
+  --state-focus-on-surface: rgba(0,0,0,0.12);
+  --state-hover-on-accent: rgba(255,255,255,0.08);
+  --state-hover-tertiary: rgba(66,89,255,0.08);
+  --state-menu-hover: rgba(66,89,255,0.08);
+  --state-drag-over: rgba(66,89,255,0.08);
+  --state-tile-edit-hover: rgba(0,0,0,0.16);
+  --state-disabled-container: rgba(31,31,31,0.12);
+  --state-disabled-content: #5e5e5e;
+  --status-error: #b3261e;
+  --status-error-container: #f9dedc;
+  --status-on-error-container: #8c1d18;
+  --status-success: #006c35;
+  --status-success-container: #beefbb;
+  --status-on-success-container: #00522c;
+  --status-warning: #8f4e06;
+  --status-warning-container: #ffe07c;
+  --status-on-warning-container: #6d3a01;
+  --status-info: #1157ce;
+  --status-info-container: #d0e4ff;
+  --status-on-info-container: #04409f;
+  --tile-blue-bg: #edeffa;
+  --tile-blue-fg: #224484;
+  --tile-blue-hover: rgba(34,68,132,0.08);
+  --tile-green-bg: #e1f1e5;
+  --tile-green-fg: #0f5223;
+  --tile-green-hover: rgba(15,82,35,0.08);
+  --tile-yellow-bg: #f2f2e8;
+  --tile-yellow-fg: #796731;
+  --tile-yellow-hover: rgba(121,103,49,0.08);
+  --tile-orange-bg: #f7edeb;
+  --tile-orange-fg: #8c2e2a;
+  --tile-orange-hover: rgba(140,46,42,0.08);
+  --tile-pink-bg: #f0e9ef;
+  --tile-pink-fg: #802272;
+  --tile-pink-hover: rgba(128,34,114,0.08);
+  --tile-cyan-bg: #def1f7;
+  --tile-cyan-fg: #056a95;
+  --tile-cyan-hover: rgba(5,106,149,0.08);
+  --tile-grey-bg: #f2f2f2;
+  --tile-grey-fg: #f2f2f2;
+  --tile-grey-hover: rgba(242,242,242,0.08);
+  --pastel-purple: #edeffa;
+  --pastel-green: #e1f1e5;
+  --pastel-yellow: #f2f2e8;
+  --pastel-orange: #f7edeb;
+  --pastel-pink: #f0e9ef;
+  --pastel-blue: #e7f0fa;
+  --dataviz-blue: #1157ce;
+  --dataviz-blue-container: #d0e4ff;
+  --dataviz-red: #b3251e;
+  --dataviz-red-container: #ffdadc;
+  --dataviz-yellow: #8f4e06;
+  --dataviz-yellow-container: #ffe07c;
+  --dataviz-green: #006c35;
+  --dataviz-green-container: #beefbb;
+  --dataviz-orange: #9a4600;
+  --dataviz-orange-container: #ffdcc3;
+  --dataviz-pink: #b60d6e;
+  --dataviz-pink-container: #ffd8ef;
+  --dataviz-purple: #7438d2;
+  --dataviz-purple-container: #eedcfe;
+  --dataviz-cyan: #00687c;
+  --dataviz-cyan-container: #acedff;
+  --dataviz-grey: #5e5e5e;
+  --dataviz-grey-container: #e3e3e3;
+  --dataviz-mindmap-root: #c3cafc;
+  --dataviz-mindmap-node: #c2d3eb;
+  --dataviz-mindmap-edge: #7c8bf3;
+  --skeleton-base: #f2f2f2;
+  --skeleton-highlight: #ffffff;
+  --skeleton-loading-highlight: #edeffa;
+  --icon-default: #1b1b1c;
+  --gradient-promo: linear-gradient(267.52deg, rgba(60,255,82,0.15) -0.57%, rgba(113,130,255,0.15) 89.06%);
+  --gradient-live-badge: linear-gradient(257.08deg, rgba(60,255,82,0.1) 0.57%, rgba(113,130,255,0.1) 89.06%);
+  --gradient-headline-text: linear-gradient(270deg, #3cff52, #7182ff);
+  --gradient-cover-scrim: linear-gradient(to bottom, transparent 20.06%, rgba(0,0,0,0.6) 68.33%);
+}
+/* ===== Dark theme ===== */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-page: #1a1d22;
+  --bg-page-grey: #1a1d22;
+  --bg-landing: #22262b;
+  --bg-scrim: rgba(0,0,0,0.6);
+  --surface-panel: #22262b;
+  --surface-card: #262a30;
+  --surface-panel-70: rgba(34,38,43,0.7);
+  --surface-panel-80: rgba(34,38,43,0.8);
+  --surface-dialog: #131314;
+  --surface-tint-blue: #22262b;
+  --surface-subtle: #1a1d22;
+  --surface-muted: #3e4a59;
+  --surface-selected: #2f334b;
+  --surface-caution: #362e18;
+  --surface-select-panel: #1e1f20;
+  --surface-inverse: #e3e3e3;
+  --surface-toast: #ffffff;
+  --surface-flashcard-front: #2a2a2a;
+  --border-default: #37383b;
+  --border-strong: #5e5e5e;
+  --border-outline-variant: #444746;
+  --border-outline: #8e918f;
+  --border-focus-ring: #c3cafc;
+  --border-field-focus: #a8c7fa;
+  --text-title: #f2f2f2;
+  --text-body: #c7c7c7;
+  --text-secondary: #ababab;
+  --text-ghost: #919191;
+  --text-on-surface: #e3e3e3;
+  --text-on-surface-variant: #c4c7c5;
+  --text-warning: #ffba28;
+  --text-link: #c3cafc;
+  --text-on-accent: #ffffff;
+  --text-on-inverse: #303030;
+  --text-meta: #ababab;
+  --accent-primary: #4259ff;
+  --accent-on-primary: #ffffff;
+  --accent-secondary: #ffffff;
+  --accent-on-secondary: #22262b;
+  --accent-m3-primary: #a8c7fa;
+  --accent-m3-on-primary: #062e6f;
+  --accent-pill: #c3cafc;
+  --state-hover-on-surface: rgba(255,255,255,0.08);
+  --state-focus-on-surface: rgba(255,255,255,0.12);
+  --state-hover-on-accent: rgba(66,89,255,0.08);
+  --state-hover-tertiary: rgba(255,255,255,0.08);
+  --state-menu-hover: rgba(255,255,255,0.08);
+  --state-drag-over: rgba(195,202,255,0.08);
+  --state-tile-edit-hover: rgba(255,255,255,0.16);
+  --state-disabled-container: rgba(227,227,227,0.12);
+  --state-disabled-content: #ababab;
+  --status-error: #f2b8b5;
+  --status-error-container: #8c1d18;
+  --status-on-error-container: #f9dedc;
+  --status-success: #80da88;
+  --status-success-container: #00522c;
+  --status-on-success-container: #beefbb;
+  --status-warning: #fcbd00;
+  --status-warning-container: #6d3a01;
+  --status-on-warning-container: #ffe07c;
+  --status-info: #a1c9ff;
+  --status-info-container: #04409f;
+  --status-on-info-container: #d0e4ff;
+  --tile-blue-bg: #32343e;
+  --tile-blue-fg: #d4dafa;
+  --tile-blue-hover: rgba(212,218,250,0.08);
+  --tile-green-bg: #303632;
+  --tile-green-fg: #cdf1d6;
+  --tile-green-hover: rgba(205,241,214,0.08);
+  --tile-yellow-bg: #3a3a2f;
+  --tile-yellow-fg: #f2f2ce;
+  --tile-yellow-hover: rgba(242,242,206,0.08);
+  --tile-orange-bg: #3a3230;
+  --tile-orange-fg: #f7d8d2;
+  --tile-orange-hover: rgba(247,216,210,0.08);
+  --tile-pink-bg: #3a3139;
+  --tile-pink-fg: #f0cceb;
+  --tile-pink-hover: rgba(240,204,235,0.08);
+  --tile-cyan-bg: #32383e;
+  --tile-cyan-fg: #c9eff0;
+  --tile-cyan-hover: rgba(201,239,240,0.08);
+  --tile-grey-bg: #3e4a59;
+  --tile-grey-fg: #3e4a59;
+  --tile-grey-hover: rgba(62,74,89,0.08);
+  --pastel-purple: #20222d;
+  --pastel-green: #1e2520;
+  --pastel-yellow: #29291d;
+  --pastel-orange: #29201e;
+  --pastel-pink: #291f28;
+  --pastel-blue: #20272d;
+  --dataviz-blue: #a1c9ff;
+  --dataviz-blue-container: #04409f;
+  --dataviz-red: #ffb3ae;
+  --dataviz-red-container: #8a1a16;
+  --dataviz-yellow: #fcbd00;
+  --dataviz-yellow-container: #6d3a01;
+  --dataviz-green: #80da88;
+  --dataviz-green-container: #00522c;
+  --dataviz-orange: #ffb683;
+  --dataviz-orange-container: #753403;
+  --dataviz-pink: #ffaee4;
+  --dataviz-pink-container: #8d0053;
+  --dataviz-purple: #d9bafd;
+  --dataviz-purple-container: #5629a4;
+  --dataviz-cyan: #60d5f3;
+  --dataviz-cyan-container: #004e5d;
+  --dataviz-grey: #c7c7c7;
+  --dataviz-grey-container: #474747;
+  --dataviz-mindmap-root: #c3cafc;
+  --dataviz-mindmap-node: #c2d3eb;
+  --dataviz-mindmap-edge: #7c8bf3;
+  --skeleton-base: #3e4a59;
+  --skeleton-highlight: #2f334b;
+  --skeleton-loading-highlight: #2f334b;
+  --icon-default: #f2f2f2;
+  --gradient-promo: linear-gradient(267.52deg, rgba(60,255,82,0.15) -0.57%, rgba(113,130,255,0.15) 89.06%);
+  --gradient-live-badge: linear-gradient(257.08deg, rgba(60,255,82,0.1) 0.57%, rgba(113,130,255,0.1) 89.06%);
+  --gradient-headline-text: linear-gradient(270deg, #3cff52, #7182ff);
+  --gradient-cover-scrim: linear-gradient(to bottom, transparent 20.06%, rgba(0,0,0,0.6) 68.33%);
+}
+
+/* Font stacks: product families first, public stand-ins after */
+:root {
+  --ff-display: "Google Sans", "Google Sans Flex", "Product Sans", Roboto, system-ui, sans-serif;
+  --ff-text: "Google Sans Text", "Google Sans", "Google Sans Flex", Roboto, system-ui, sans-serif;
+  --ff-code: "Google Sans Code", ui-monospace, "SF Mono", Menlo, monospace;
+  --ff-icon: "Google Symbols", "Material Symbols Outlined";
+}
+/* re-point typography tokens at the stacks */
+:root {
+  --t-headline-small: 400 24px/32px var(--ff-display);
+  --t-title-large: 400 22px/36px var(--ff-display);
+  --t-title-medium: 500 16px/32px var(--ff-text);
+  --t-title-small: 500 14px/20px var(--ff-text);
+  --t-body-large: 400 16px/24px var(--ff-text);
+  --t-body-medium: 400 14px/20px var(--ff-text);
+  --t-body-small: 400 12px/16px var(--ff-text);
+  --t-label-large: 500 14px/20px var(--ff-text);
+  --t-label-medium: 500 12px/16px var(--ff-text);
+  --t-label-small: 500 11px/16px var(--ff-text);
+  --t-panel: 400 16px/52px var(--ff-display);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg-landing); color: var(--text-body); font: var(--t-body-medium); -webkit-font-smoothing: antialiased; }
+.mi { font-family: var(--ff-icon); font-weight: 400; font-style: normal; font-size: 24px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; font-feature-settings: "liga"; -webkit-font-smoothing: antialiased; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }
+.mi.s16 { font-size: 16px; } .mi.s18 { font-size: 18px; } .mi.s20 { font-size: 20px; }
+
+/* ===== Page chrome (not part of the product) ===== */
+.guide { max-width: 1200px; margin: 0 auto; padding: 32px 24px 96px; }
+.guide-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.guide h1 { font: 400 32px/40px var(--ff-display); color: var(--text-title); margin: 0; }
+.guide h2 { font: 400 24px/32px var(--ff-display); color: var(--text-title); margin: 56px 0 8px; padding-top: 16px; border-top: 1px solid var(--border-default); }
+.guide h3 { font: 500 16px/24px var(--ff-text); color: var(--text-title); margin: 28px 0 12px; }
+.guide p.lead, .note { color: var(--text-secondary); max-width: 760px; }
+.note { font-size: 13px; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 16px 0 0; font-size: 13px; }
+.toc a { color: var(--text-link); text-decoration: none; }
+.theme-switch { display: inline-flex; border: 1px solid var(--border-outline-variant); border-radius: 16px; overflow: hidden; }
+.theme-switch button { font: var(--t-label-large); padding: 0 16px; height: 40px; border: 0; background: transparent; color: var(--text-on-surface); cursor: pointer; }
+.theme-switch button[aria-pressed="true"] { background: var(--surface-selected); color: var(--text-title); }
+code { font-family: var(--ff-code); font-size: 12px; }
+table.spec { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.spec td, table.spec th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-default); vertical-align: top; }
+table.spec th { font-weight: 500; color: var(--text-title); }
+td.src { color: var(--text-ghost); font-size: 11px; }
+.scroll-x { overflow-x: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.spec-label { font-size: 11px; color: var(--text-ghost); margin-top: 6px; }
+.demo { background: var(--bg-page); border-radius: 16px; padding: 24px; }
+.demo.plain { background: var(--surface-panel); border: 1px solid var(--border-default); }
+.cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* swatches */
+.sw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.sw { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 8px; background: var(--surface-panel); border: 1px solid var(--border-default); }
+.chip { width: 44px; height: 44px; flex: none; border-radius: 8px; border: 1px solid var(--border-outline-variant); }
+.sw-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sw-meta code { color: var(--text-title); word-break: break-all; }
+.sw-meta span { font-family: var(--ff-code); font-size: 11px; color: var(--text-secondary); word-break: break-all; }
+.sw-meta small { font-size: 11px; color: var(--text-ghost); }
+.ramp { display: flex; flex-wrap: wrap; border-radius: 12px; overflow: hidden; }
+.ramp-step { flex: 1 0 72px; min-height: 64px; padding: 6px; display: flex; flex-direction: column; justify-content: flex-end; font: 11px/14px var(--ff-code); }
+.rad, .shd { width: 120px; height: 84px; background: var(--surface-panel); border: 1px solid var(--border-outline-variant); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; text-align: center; padding: 6px; }
+.shd { border: 0; border-radius: 8px; }
+.sp { display: flex; align-items: center; gap: 12px; } .sp div { height: 16px; background: var(--accent-primary); border-radius: 2px; }
+.ease-track { width: 160px; height: 8px; background: var(--surface-subtle); border-radius: 4px; position: relative; }
+.ease-dot { position: absolute; left: 0; top: -4px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-primary); transition: left 900ms; }
+.play .ease-dot { left: 144px; }
+
+/* ================= PRODUCT COMPONENTS ================= */
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 24px; border-radius: var(--radius-button); font: var(--t-label-large); border: 0; cursor: pointer; position: relative; white-space: nowrap; transition: box-shadow 280ms var(--easing-standard), border 280ms var(--easing-standard); }
+.btn::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; }
+.btn:hover::after, .btn.is-hover::after { opacity: var(--opacity-hover); }
+.btn:focus-visible, .btn.is-focus { outline: none; }
+.btn:focus-visible::before, .btn.is-focus::before { content: ""; position: absolute; inset: -5px; border: 3px solid var(--border-focus-ring); border-radius: inherit; }
+.btn .mi { font-size: 18px; }
+.btn-filled { background: var(--accent-primary); color: var(--accent-on-primary); }
+.btn-tonal { background: var(--accent-secondary); color: var(--accent-on-secondary); }
+.btn-outlined { background: transparent; color: var(--text-title); border: 1px solid var(--border-default); padding: 0 16px; }
+.btn-outlined.is-focus::before { inset: -6px; }
+.btn-text { background: transparent; color: var(--text-title); padding: 0 12px; }
+.btn-text.link { color: var(--accent-m3-primary); }
+.btn-text.is-hover::after { background: var(--accent-m3-primary); }
+.btn:disabled, .btn.is-disabled { background: var(--state-disabled-container); color: var(--state-disabled-content); cursor: default; border-color: transparent; }
+.btn:disabled::after, .btn.is-disabled::after { display: none; }
+.btn.sm { height: 32px; padding: 0 16px 0 12px; }
+.btn.sm-outlined { height: 32px; padding: 0 12px 0 8px; }
+.btn.rect { border-radius: 16px; }
+.btn.is-active::after { opacity: var(--opacity-pressed); }
+.split { display: inline-flex; }
+.split .btn:first-child { border-radius: 24px 0 0 24px; color: var(--text-link); }
+.split .btn:last-child { border-radius: 0 24px 24px 0; border-left: 0; padding: 0 10px; color: var(--text-link); }
+.ibtn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: transparent; color: var(--text-title); display: inline-flex; align-items: center; justify-content: center; position: relative; cursor: pointer; }
+.ibtn::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: 0; }
+.ibtn:hover::after, .ibtn.is-hover::after { opacity: var(--opacity-hover); }
+.ibtn.is-focus::before { content: ""; position: absolute; inset: 0; border: 3px solid var(--border-focus-ring); border-radius: 50%; }
+.ibtn.sm { width: 32px; height: 32px; color: var(--text-secondary); }
+.ibtn.sm .mi { font-size: 20px; }
+.ibtn.outlined { border: 1px solid var(--border-default); }
+.ibtn:disabled { color: var(--state-disabled-content); }
+.ibtn.send { background: var(--state-hover-on-surface); color: var(--text-secondary); }
+
+/* Badges / avatar */
+.badge-pro { font: 500 10px/16px var(--ff-text); padding: 1.6px 4px; border-radius: 8px; background: var(--surface-selected); color: var(--text-body); letter-spacing: .5px; }
+.badge-new { font: var(--t-label-small); letter-spacing: .096px; padding: 0 7px; height: 16px; border-radius: 9999px; background: var(--accent-secondary); color: var(--accent-on-secondary); display: inline-flex; align-items: center; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--palette-blue-70), var(--palette-green-60)); display: inline-flex; align-items: center; justify-content: center; color: #fff; font: 500 13px var(--ff-text); }
+
+/* Text field */
+.tf { position: relative; width: 320px; height: 56px; border: 1px solid var(--border-default); border-radius: 4px; padding: 0 16px; display: flex; align-items: center; font: var(--t-body-large); color: var(--text-on-surface); background: transparent; }
+.tf label { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); padding: 0 4px; color: var(--text-on-surface-variant); background: var(--surface-dialog); font: var(--t-body-large); }
+.tf.is-focus { border: 2px solid var(--border-field-focus); padding: 0 15px; }
+.tf.is-focus label, .tf.is-filled label { top: 0; font-size: 12px; line-height: 16px; }
+.tf.is-focus label { color: var(--border-field-focus); }
+.tf.is-disabled { opacity: .38; }
+.tf .caret { width: 1px; height: 20px; background: var(--border-field-focus); margin-left: 1px; }
+
+/* Select */
+.select { display: inline-flex; align-items: center; gap: 8px; font: var(--t-body-medium); line-height: 24px; color: var(--text-on-surface); }
+.select .arrow { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid currentColor; }
+.select-panel { width: 212px; background: var(--surface-select-panel); border-radius: 0 0 4px 4px; box-shadow: var(--shadow-menu); padding: 8px 0; }
+.opt { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font: 400 16px/20px var(--ff-text); color: var(--text-on-surface); }
+.opt.is-selected { background: var(--state-disabled-container); }
+.opt.is-selected .mi { color: var(--accent-m3-primary); font-size: 20px; }
+
+/* Checkbox / radio */
+.cbx { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.cbx i { width: 18px; height: 18px; border: 2px solid var(--text-on-surface-variant); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-style: normal; }
+.cbx.on i { background: var(--accent-m3-primary); border-color: var(--accent-m3-primary); }
+.cbx.on i::after { content: ""; width: 10px; height: 5px; border-left: 2px solid var(--accent-m3-on-primary); border-bottom: 2px solid var(--accent-m3-on-primary); transform: translateY(-1px) rotate(-45deg); }
+.cbx.source i { background: var(--border-default); border-color: var(--border-default); }
+.cbx.source i::after { content: ""; width: 10px; height: 5px; border-left: 2px solid var(--text-secondary); border-bottom: 2px solid var(--text-secondary); transform: translateY(-1px) rotate(-45deg); }
+.cbx.is-hover::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--text-on-surface); opacity: .08; }
+.cbx.is-disabled { opacity: .38; }
+.radio { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.radio i { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--state-disabled-content); display: flex; align-items: center; justify-content: center; }
+.radio.on i { border-color: var(--border-focus-ring); }
+.radio.on i::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--border-focus-ring); }
+.radio.is-hover i { border-color: var(--text-title); }
+
+/* Toggles */
+.seg { display: inline-flex; border: 1px solid var(--border-outline-variant); border-radius: 16px; overflow: hidden; height: 42px; }
+.seg span { width: 48px; display: flex; align-items: center; justify-content: center; color: var(--text-on-surface); }
+.seg span + span { border-left: 1px solid var(--border-outline-variant); }
+.seg span.on { background: var(--surface-selected); color: var(--text-title); width: 79px; gap: 4px; }
+.sect { display: inline-flex; gap: 0; }
+.sect span { height: 40px; margin: 4px; padding: 0 12px; border-radius: 24px; display: inline-flex; align-items: center; gap: 6px; font: var(--t-body-medium); color: var(--text-on-surface); }
+.sect span.on { background: var(--surface-selected); color: var(--text-title); outline: 1px solid var(--border-outline-variant); }
+.sect span.is-hover { background: color-mix(in srgb, var(--text-on-surface) 8%, transparent); }
+.chipt { height: 42px; padding: 0 16px; border: 1px solid var(--border-default); border-radius: 24px; display: inline-flex; align-items: center; gap: 6px; font: var(--t-label-large); color: var(--text-on-surface); background: transparent; }
+.chipt.on { background: var(--accent-primary); color: var(--accent-on-primary); }
+.chipt.is-hover { background: color-mix(in srgb, var(--text-on-surface) 8%, transparent); }
+.chipt .mi { font-size: 18px; }
+.menu-chip { height: 32px; padding: 0 8px; border: 1px solid var(--border-default); border-radius: var(--radius-button); display: inline-flex; align-items: center; gap: 2px; color: var(--text-title); }
+.menu-chip .mi { font-size: 20px; }
+
+/* Tabs (mobile) */
+.tabs { display: flex; border-bottom: 1px solid var(--border-default); width: 406px; max-width: 100%; }
+.tabs span { flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; font: var(--t-label-large); color: var(--text-on-surface); position: relative; }
+.tabs span.on::after { content: ""; position: absolute; bottom: 0; width: 32px; height: 2px; background: var(--accent-m3-primary); left: 50%; transform: translateX(-50%); border-radius: 2px 2px 0 0; }
+
+/* Tooltip */
+.tooltip { display: inline-block; background: var(--surface-inverse); color: var(--text-on-inverse); font: var(--t-body-small); letter-spacing: .096px; padding: 4px 8px; border-radius: 4px; }
+
+/* Menu */
+.menu { width: 225px; background: var(--surface-panel); border-radius: 8px; box-shadow: var(--shadow-menu); padding: 8px 0; }
+.mitem { height: 48px; padding: 0 12px; display: flex; align-items: center; gap: 12px; font: var(--t-label-large); color: var(--text-title); position: relative; }
+.mitem .mi { color: var(--text-on-surface-variant); }
+.mitem.is-hover { background: var(--state-menu-hover); }
+.mitem .grow { flex: 1; }
+.mdiv { height: 1px; background: var(--border-default); margin: 8px 0; }
+
+/* Dialog */
+.dialog { width: 544px; max-width: 100%; background: var(--surface-dialog); border-radius: 16px; overflow: hidden; }
+.dialog-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0 24px; }
+.dialog-title { font: var(--t-title-medium); color: var(--text-title); }
+.dialog-body { padding: 16px 24px 24px; font: 400 14px/24px var(--ff-text); color: var(--text-body); }
+.dialog-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid var(--border-default); }
+.scrim-demo { background: var(--bg-scrim); padding: 40px 24px; border-radius: 16px; display: flex; justify-content: center; }
+
+/* Toast */
+.toast { width: 344px; height: 48px; background: var(--surface-toast); color: var(--accent-on-secondary); border-radius: 16px; box-shadow: var(--shadow-level3); display: flex; align-items: center; padding: 14px 8px 14px 16px; font: 400 14px/20px var(--ff-text); }
+[data-theme="dark"] .toast { color: var(--palette-grey-10); }
+[data-theme="light"] .toast, :root .toast { }
+
+/* Table */
+.tbl { width: 100%; border-collapse: collapse; font: var(--t-body-medium); color: var(--text-on-surface); }
+.tbl th { height: 56px; text-align: left; padding: 0 16px; font-weight: 500; border-bottom: 1px solid var(--border-outline-variant); }
+.tbl td { height: 52px; padding: 0 16px; border-bottom: 1px solid var(--border-outline-variant); }
+.tbl tr.is-hover td { background: var(--state-hover-on-surface); }
+.tbl .t { display: flex; gap: 12px; align-items: center; }
+
+/* Notebook cards */
+.nb-card { width: 320px; height: 224px; border-radius: 12px; border: 1px solid transparent; padding: 24px 0; display: flex; flex-direction: column; justify-content: space-between; position: relative; color: var(--text-on-surface); }
+.nb-card .emoji { font-size: 40px; line-height: 48px; padding: 0 24px; }
+.nb-card .more { position: absolute; right: 16px; top: 20px; }
+.nb-card .title { font: var(--t-headline-small); padding: 0 24px; color: var(--text-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nb-card .sub { font: 400 12px/24px var(--ff-text); color: var(--text-meta); padding: 0 24px; }
+.nb-card .sub b { font-weight: 900; padding: 0 4px; }
+.nb-create { width: 320px; height: 224px; border: 1px solid var(--border-default); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.nb-create .circ { width: 64px; height: 64px; border-radius: 80px; background: var(--surface-selected); display: flex; align-items: center; justify-content: center; color: var(--text-link); }
+.nb-create .lbl { font: 400 22px/36px var(--ff-display); color: var(--text-title); }
+.nb-cover { width: 320px; height: 224px; border-radius: 12px; background: var(--gradient-cover-scrim), linear-gradient(135deg, #5b6b7a, #2b3440); color: #fff; padding: 24px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; position: relative; }
+.nb-cover .pub { display: flex; align-items: center; gap: 8px; font: 400 14px/24px var(--ff-text); }
+.nb-cover .pub i { width: 32px; height: 32px; border-radius: 16px; border: 1px solid var(--border-default); background: #fff; }
+.nb-cover .title { font: var(--t-headline-small); }
+.nb-cover .sub { font: 400 12px/24px var(--ff-text); opacity: .95; }
+
+/* ===== Product-specific ===== */
+.ws { background: var(--bg-page); border-radius: 16px; padding: 0 16px 8px; }
+.ws-head { height: 64px; display: flex; align-items: center; gap: 16px; }
+.ws-head .logo { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-panel); display: flex; align-items: center; justify-content: center; }
+.ws-head .logo::before { content: ""; width: 20px; height: 12px; border: 3px solid var(--palette-blue-50); border-bottom: 0; border-radius: 12px 12px 0 0; }
+.ws-head .ttl { font: var(--t-title-large); color: var(--text-title); flex: 1; }
+.ws-cols { display: grid; grid-template-columns: 290px minmax(0, 1fr) 290px; gap: 16px; }
+@media (max-width: 1000px) { .ws-cols { grid-template-columns: 1fr; } }
+.panel { background: var(--surface-panel); border-radius: 16px; overflow: hidden; min-height: 520px; display: flex; flex-direction: column; }
+.panel-h { height: 48px; border-bottom: 1px solid var(--border-default); display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px; box-sizing: content-box; }
+.panel-h h4 { margin: 0; font: var(--t-panel); color: var(--text-title); line-height: 48px; }
+.panel-h .mi { color: var(--text-on-surface-variant); }
+.panel-b { padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.disc { background: var(--surface-subtle); border: 1px solid var(--border-default); border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 16px; }
+.disc .ph { font: 400 14px/24px var(--ff-text); color: var(--text-ghost); padding: 4px 8px 0; }
+.disc .rowx { display: flex; align-items: center; gap: 8px; }
+.disc .rowx .ibtn { margin-left: auto; }
+.disc.is-focus { border-color: var(--accent-primary); background: transparent; }
+.src-row { height: 32px; padding: 0 8px; border-radius: 8px; display: flex; align-items: center; gap: 4px; font: 400 14px/24px var(--ff-text); color: var(--text-title); }
+.src-row .ic { width: 24px; margin: 0 6px; font-size: 20px; }
+.src-row .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-row.is-hover, .src-row.is-open { background: var(--surface-selected); }
+.src-row .cbx { width: 32px; height: 32px; }
+.pdf { color: var(--palette-icon-red); } .md { color: var(--palette-icon-blue); } .yt { color: var(--palette-icon-youtube); }
+.bubble-user { align-self: flex-end; max-width: 80%; background: var(--surface-selected); color: var(--text-title); border-radius: 20px 20px 0 20px; padding: 12px 18px 12px 14px; font: var(--t-body-large); }
+[data-theme="dark"] .bubble-user { background: var(--bg-page); }
+.bubble-model { font: var(--t-body-large); color: var(--text-body); }
+.bubble-model b { font-weight: 600; color: var(--text-body); }
+.bubble-model ul { margin: 8px 0; padding-left: 24px; } .bubble-model li { margin-bottom: 8px; }
+.code-i { font: 500 14px/24px var(--ff-code); background: var(--surface-muted); padding: 4px; border-radius: 4px; }
+.cite { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-subtle); color: var(--text-secondary); font: var(--t-label-small); letter-spacing: .096px; align-items: center; justify-content: center; vertical-align: middle; margin-left: 4px; }
+[data-theme="dark"] .cite { background: var(--bg-page); }
+.cite.is-hover { opacity: .5; }
+.msg-actions { display: flex; gap: 0; }
+.msg-actions .ibtn { width: 32px; height: 32px; } .msg-actions .mi { font-size: 18px; }
+.qbox { border: 1px solid var(--border-strong); border-radius: 16px; padding: 16px 16px 16px 24px; display: flex; align-items: center; gap: 12px; }
+[data-theme="dark"] .qbox { border-color: var(--border-default); }
+.qbox .ph { flex: 1; font: var(--t-body-large); color: var(--text-ghost); }
+.qbox .cnt { font: 400 12px/24px var(--ff-text); color: var(--text-secondary); }
+.disclaimer { text-align: center; font: 400 12px/20px var(--ff-text); letter-spacing: .096px; color: var(--text-body); padding: 4px 0; }
+.promo { border-radius: 8px; padding: 12px; background: var(--gradient-promo); display: flex; align-items: center; gap: 10px; font: var(--t-label-medium); letter-spacing: .096px; color: var(--text-title); }
+.promo .btn { height: 32px; padding: 0 12px; font-weight: 400; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile { height: 56px; border-radius: 12px; padding: 8px 8px 8px 12px; display: flex; justify-content: space-between; align-items: center; font: var(--t-label-medium); letter-spacing: .096px; position: relative; overflow: hidden; }
+.tile .l { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tile .l span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .mi { font-size: 16px; }
+.tile.is-hover::after { content: ""; position: absolute; inset: 0; background: var(--hover); }
+.tile.is-disabled { background: rgba(0,0,0,.08) !important; color: #919191 !important; }
+.art-row { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 0 0 8px; }
+.art-row .ic { width: 32px; display: flex; justify-content: center; }
+.art-row .tx { flex: 1; min-width: 0; }
+.art-row .t1 { font: 500 14px/16px var(--ff-text); color: var(--text-body); }
+.art-row .t2 { font: 400 12px/16px var(--ff-text); letter-spacing: .096px; color: var(--text-secondary); }
+.art-row.is-failed { background: var(--palette-grey-98); border-radius: 16px; }
+.fab-note { height: 40px; padding: 0 24px; border-radius: var(--radius-button); background: var(--accent-secondary); color: var(--accent-on-secondary); font: var(--t-label-large); display: inline-flex; align-items: center; gap: 8px; border: 0; }
+.popover { width: 420px; max-width: 100%; background: var(--surface-dialog); border-radius: 8px; box-shadow: var(--shadow-popover); overflow: hidden; }
+.popover .h { padding: 12px 16px; font: 500 14px/24px var(--ff-text); color: var(--text-title); border-bottom: 1px solid var(--border-default); }
+.popover .b { padding: 12px 16px; font: var(--t-body-large); color: var(--text-body); }
+.popover .f { padding: 8px 16px 12px; font: 400 14px/24px var(--ff-text); color: var(--text-link); }
+.hl { background: var(--surface-selected); font-weight: 700; color: var(--text-title); }
+[data-theme="dark"] .hl { background: var(--tile-blue-bg); }
+.guide-pill { height: 40px; border-radius: 16px; background: var(--surface-selected); display: flex; align-items: center; gap: 8px; padding: 0 16px; font: 500 16px/32px var(--ff-text); color: var(--text-title); }
+.flash { width: 418px; max-width: 100%; height: 300px; border-radius: 24px; background: var(--surface-flashcard-front); color: #fff; padding: 20px 24px; display: flex; flex-direction: column; justify-content: space-between; }
+.flash.back { background: var(--surface-panel); color: var(--text-title); border: 1px solid var(--border-default); }
+.flash .q { font: 400 28px/40px var(--ff-display); }
+.flash .meta { font: 400 12px/16px var(--ff-text); color: var(--text-ghost); }
+.fc-ctrl { display: flex; justify-content: space-between; width: 418px; max-width: 100%; margin-top: 12px; }
+.fc-ctrl .c { width: 48px; height: 40px; border-radius: 24px; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; }
+.fc-ctrl .p { width: 66px; height: 40px; border-radius: 24px; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; gap: 6px; font: var(--t-label-large); }
+.dark-gap { display: none; font-size: 12px; color: var(--text-warning); border: 1px dashed var(--text-warning); border-radius: 8px; padding: 6px 10px; }
+[data-theme="dark"] .dark-gap { display: block; }
+.quiz-opt { border-radius: 12px; padding: 16px; background: var(--palette-grey-98); font: var(--t-body-large); color: var(--palette-grey-20); max-width: 418px; }
+.quiz-opt.is-hover { background: var(--palette-grey-90); }
+.mm { display: flex; align-items: center; gap: 40px; position: relative; }
+.mm .root { background: var(--dataviz-mindmap-root); color: #000; font: 400 12px/16px var(--ff-text); padding: 8px 12px; border-radius: 6px; }
+.mm .kids { display: flex; flex-direction: column; gap: 10px; }
+.mm .kid { background: var(--dataviz-mindmap-node); color: #000; font: 400 11px/14px var(--ff-text); padding: 6px 10px; border-radius: 6px; }
+.toolbar { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); padding: 4px 0; }
+.toolbar .btn { height: 28px; padding: 0 16px; font: 500 14px/24px var(--ff-text); background: transparent; color: var(--text-title); }
+.dropzone { background: var(--surface-subtle); border: 2px dashed var(--border-default); border-radius: 16px; padding: 48px; text-align: center; }
+.dropzone .t { font: var(--t-title-large); color: var(--text-title); }
+.dropzone .s { font: 400 14px/24px var(--ff-text); color: var(--text-secondary); }
+.dropzone .row { justify-content: center; margin-top: 24px; gap: 12px; }
+.dropzone .btn { background: var(--surface-panel); }
+.pbar { height: 16px; border-radius: 16px; background: rgba(163,163,163,.2); overflow: hidden; flex: 1; }
+.pbar i { display: block; height: 100%; width: 7%; background: var(--accent-m3-primary); }
+.grad-text { background: var(--gradient-headline-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.skel { height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--skeleton-base) 0%, var(--skeleton-highlight) 50%, var(--skeleton-base) 100%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+</style>
+</head>
+<body>
+<div class="guide">
+  <div class="guide-head">
+    <h1>Gemini Notebook (NotebookLM) style guide</h1>
+    <div class="theme-switch" role="group" aria-label="Theme">
+      <button type="button" data-set="light" aria-pressed="true">Light</button>
+      <button type="button" data-set="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+  <p class="lead">Extracted from notebook.google.com on 2026-09-25 (legacy UI generation, which is the one live for this account). Values are CSS custom properties and computed styles read from the running product. Anything marked <b>estimated</b> was sampled from a screenshot because it renders inside a cross-origin iframe. Every colour on this page is a variable generated from <code>tokens.json</code>.</p>
+  <nav class="toc">
+    <a href="#colors">Colours</a><a href="#palette">Palettes</a><a href="#type">Typography</a><a href="#space">Spacing &amp; sizes</a><a href="#radius">Radii, borders, shadows</a><a href="#motion">Motion</a>
+    <a href="#buttons">Buttons</a><a href="#inputs">Inputs</a><a href="#selection">Checkbox, radio, toggles</a><a href="#tabs">Tabs</a><a href="#badges">Badges &amp; avatar</a><a href="#tooltip">Tooltip</a><a href="#menus">Menus</a><a href="#dialogs">Dialogs</a><a href="#toast">Toast</a><a href="#tables">Tables</a><a href="#cards">Cards</a>
+    <a href="#workspace">Workspace</a><a href="#sources">Sources</a><a href="#chat">Chat</a><a href="#studio">Studio</a><a href="#artifacts">Artifacts</a><a href="#addsrc">Add sources</a><a href="#icons">Icons</a>
+  </nav>
+
+  <h2 id="colors">Colours by role</h2>
+  <p class="note">Each swatch shows light / dark. Switch the theme above to see the dark set applied.</p>
+  <h3>Background</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--bg-page)"></div><div class="sw-meta"><code>bg-page</code><span>#edeffa / #1a1d22</span><small>Notebook workspace background</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--bg-page-grey)"></div><div class="sw-meta"><code>bg-page-grey</code><span>#f9f9f9 / #1a1d22</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--bg-landing)"></div><div class="sw-meta"><code>bg-landing</code><span>#ffffff / #22262b</span><small>Home page background and header</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--bg-scrim)"></div><div class="sw-meta"><code>bg-scrim</code><span>rgba(0,0,0,0.32) / rgba(0,0,0,0.6)</span><small>Dialog backdrop (computed .32 in both themes)</small></div></div></div>
+  <h3>Surface</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--surface-panel)"></div><div class="sw-meta"><code>surface-panel</code><span>#ffffff / #22262b</span><small>Sources/Chat/Studio panels, menus</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-card)"></div><div class="sw-meta"><code>surface-card</code><span>#fafafd / #262a30</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-panel-70)"></div><div class="sw-meta"><code>surface-panel-70</code><span>rgba(255,255,255,0.7) / rgba(34,38,43,0.7)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-panel-80)"></div><div class="sw-meta"><code>surface-panel-80</code><span>rgba(255,255,255,0.8) / rgba(34,38,43,0.8)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-dialog)"></div><div class="sw-meta"><code>surface-dialog</code><span>#ffffff / #131314</span><small>Dialogs and citation popover. Dark uses the M3 surface, darker than panels.</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-tint-blue)"></div><div class="sw-meta"><code>surface-tint-blue</code><span>#edeffa / #22262b</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-subtle)"></div><div class="sw-meta"><code>surface-subtle</code><span>#f9f9f9 / #1a1d22</span><small>Discovery box, drop zone, citation marker, quiz option</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-muted)"></div><div class="sw-meta"><code>surface-muted</code><span>#f2f2f2 / #3e4a59</span><small>Inline code (light #f2f2f2), skeleton base</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-selected)"></div><div class="sw-meta"><code>surface-selected</code><span>#edeffa / #2f334b</span><small>Selected toggle, user bubble (light), source hover, create icon circle</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-caution)"></div><div class="sw-meta"><code>surface-caution</code><span>#fef7e0 / #362e18</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-select-panel)"></div><div class="sw-meta"><code>surface-select-panel</code><span>#f0f4f9 / #1e1f20</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-inverse)"></div><div class="sw-meta"><code>surface-inverse</code><span>#303030 / #e3e3e3</span><small>Tooltip</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-toast)"></div><div class="sw-meta"><code>surface-toast</code><span>#000000 / #ffffff</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--surface-flashcard-front)"></div><div class="sw-meta"><code>surface-flashcard-front</code><span>#303030 / #2a2a2a</span><small> · <b>estimated</b></small></div></div></div>
+  <h3>Border</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--border-default)"></div><div class="sw-meta"><code>border-default</code><span>#dde1eb / #37383b</span><small>Outlined buttons, dividers, panel header rule, field outline</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--border-strong)"></div><div class="sw-meta"><code>border-strong</code><span>#919191 / #5e5e5e</span><small>Chat query box border</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--border-outline-variant)"></div><div class="sw-meta"><code>border-outline-variant</code><span>#c4c7c5 / #444746</span><small>Table rows, view toggle, sort button (light)</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--border-outline)"></div><div class="sw-meta"><code>border-outline</code><span>#747775 / #8e918f</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--border-focus-ring)"></div><div class="sw-meta"><code>border-focus-ring</code><span>#4259ff / #c3cafc</span><small>Keyboard focus ring (3px)</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--border-field-focus)"></div><div class="sw-meta"><code>border-field-focus</code><span>#0b57d0 / #a8c7fa</span><small>Focused text field outline (2px)</small></div></div></div>
+  <h3>Text</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--text-title)"></div><div class="sw-meta"><code>text-title</code><span>#1b1b1c / #f2f2f2</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-body)"></div><div class="sw-meta"><code>text-body</code><span>#303030 / #c7c7c7</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-secondary)"></div><div class="sw-meta"><code>text-secondary</code><span>#5e5e5e / #ababab</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-ghost)"></div><div class="sw-meta"><code>text-ghost</code><span>#777777 / #919191</span><small>Placeholders, hints</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-on-surface)"></div><div class="sw-meta"><code>text-on-surface</code><span>#1f1f1f / #e3e3e3</span><small>Table cells, inputs</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-on-surface-variant)"></div><div class="sw-meta"><code>text-on-surface-variant</code><span>#444746 / #c4c7c5</span><small>Menu icons, field labels</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-warning)"></div><div class="sw-meta"><code>text-warning</code><span>#b06000 / #ffba28</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-link)"></div><div class="sw-meta"><code>text-link</code><span>#4259ff / #c3cafc</span><small>Links, &#x27;View source&#x27;, create-card icon</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-on-accent)"></div><div class="sw-meta"><code>text-on-accent</code><span>#ffffff / #ffffff</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-on-inverse)"></div><div class="sw-meta"><code>text-on-inverse</code><span>#f2f2f2 / #303030</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--text-meta)"></div><div class="sw-meta"><code>text-meta</code><span>#535559 / #ababab</span><small> · <b>estimated</b></small></div></div></div>
+  <h3>Accent</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--accent-primary)"></div><div class="sw-meta"><code>accent-primary</code><span>#4259ff / #4259ff</span><small>Filled buttons, selected chips, primary CTA. Same in both themes.</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-on-primary)"></div><div class="sw-meta"><code>accent-on-primary</code><span>#ffffff / #ffffff</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-secondary)"></div><div class="sw-meta"><code>accent-secondary</code><span>#000000 / #ffffff</span><small>Tonal &#x27;Create new&#x27;, &#x27;Add note&#x27;, &#x27;New!&#x27; badge</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-on-secondary)"></div><div class="sw-meta"><code>accent-on-secondary</code><span>#ffffff / #22262b</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-m3-primary)"></div><div class="sw-meta"><code>accent-m3-primary</code><span>#0b57d0 / #a8c7fa</span><small>Material primary: checkbox, text-field focus, progress bar, mobile tab indicator, Cancel-search link</small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-m3-on-primary)"></div><div class="sw-meta"><code>accent-m3-on-primary</code><span>#ffffff / #062e6f</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--accent-pill)"></div><div class="sw-meta"><code>accent-pill</code><span>#edeffa / #c3cafc</span><small></small></div></div></div>
+  <h3>State layers</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--state-hover-on-surface)"></div><div class="sw-meta"><code>state-hover-on-surface</code><span>rgba(0,0,0,0.08) / rgba(255,255,255,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-focus-on-surface)"></div><div class="sw-meta"><code>state-focus-on-surface</code><span>rgba(0,0,0,0.12) / rgba(255,255,255,0.12)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-hover-on-accent)"></div><div class="sw-meta"><code>state-hover-on-accent</code><span>rgba(255,255,255,0.08) / rgba(66,89,255,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-hover-tertiary)"></div><div class="sw-meta"><code>state-hover-tertiary</code><span>rgba(66,89,255,0.08) / rgba(255,255,255,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-menu-hover)"></div><div class="sw-meta"><code>state-menu-hover</code><span>rgba(66,89,255,0.08) / rgba(255,255,255,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-drag-over)"></div><div class="sw-meta"><code>state-drag-over</code><span>rgba(66,89,255,0.08) / rgba(195,202,255,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-tile-edit-hover)"></div><div class="sw-meta"><code>state-tile-edit-hover</code><span>rgba(0,0,0,0.16) / rgba(255,255,255,0.16)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-disabled-container)"></div><div class="sw-meta"><code>state-disabled-container</code><span>rgba(31,31,31,0.12) / rgba(227,227,227,0.12)</span><small> · <b>estimated</b></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--state-disabled-content)"></div><div class="sw-meta"><code>state-disabled-content</code><span>#5e5e5e / #ababab</span><small></small></div></div></div>
+  <h3>Status / semantic</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--status-error)"></div><div class="sw-meta"><code>status-error</code><span>#b3261e / #f2b8b5</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-error-container)"></div><div class="sw-meta"><code>status-error-container</code><span>#f9dedc / #8c1d18</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-on-error-container)"></div><div class="sw-meta"><code>status-on-error-container</code><span>#8c1d18 / #f9dedc</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-success)"></div><div class="sw-meta"><code>status-success</code><span>#006c35 / #80da88</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-success-container)"></div><div class="sw-meta"><code>status-success-container</code><span>#beefbb / #00522c</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-on-success-container)"></div><div class="sw-meta"><code>status-on-success-container</code><span>#00522c / #beefbb</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-warning)"></div><div class="sw-meta"><code>status-warning</code><span>#8f4e06 / #fcbd00</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-warning-container)"></div><div class="sw-meta"><code>status-warning-container</code><span>#ffe07c / #6d3a01</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-on-warning-container)"></div><div class="sw-meta"><code>status-on-warning-container</code><span>#6d3a01 / #ffe07c</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-info)"></div><div class="sw-meta"><code>status-info</code><span>#1157ce / #a1c9ff</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-info-container)"></div><div class="sw-meta"><code>status-info-container</code><span>#d0e4ff / #04409f</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--status-on-info-container)"></div><div class="sw-meta"><code>status-on-info-container</code><span>#04409f / #d0e4ff</span><small></small></div></div></div>
+  <h3>Studio tiles &amp; notebook cards</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--tile-blue-bg)"></div><div class="sw-meta"><code>tile-blue-bg</code><span>#edeffa / #32343e</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-blue-fg)"></div><div class="sw-meta"><code>tile-blue-fg</code><span>#224484 / #d4dafa</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-blue-hover)"></div><div class="sw-meta"><code>tile-blue-hover</code><span>rgba(34,68,132,0.08) / rgba(212,218,250,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-green-bg)"></div><div class="sw-meta"><code>tile-green-bg</code><span>#e1f1e5 / #303632</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-green-fg)"></div><div class="sw-meta"><code>tile-green-fg</code><span>#0f5223 / #cdf1d6</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-green-hover)"></div><div class="sw-meta"><code>tile-green-hover</code><span>rgba(15,82,35,0.08) / rgba(205,241,214,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-yellow-bg)"></div><div class="sw-meta"><code>tile-yellow-bg</code><span>#f2f2e8 / #3a3a2f</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-yellow-fg)"></div><div class="sw-meta"><code>tile-yellow-fg</code><span>#796731 / #f2f2ce</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-yellow-hover)"></div><div class="sw-meta"><code>tile-yellow-hover</code><span>rgba(121,103,49,0.08) / rgba(242,242,206,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-orange-bg)"></div><div class="sw-meta"><code>tile-orange-bg</code><span>#f7edeb / #3a3230</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-orange-fg)"></div><div class="sw-meta"><code>tile-orange-fg</code><span>#8c2e2a / #f7d8d2</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-orange-hover)"></div><div class="sw-meta"><code>tile-orange-hover</code><span>rgba(140,46,42,0.08) / rgba(247,216,210,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-pink-bg)"></div><div class="sw-meta"><code>tile-pink-bg</code><span>#f0e9ef / #3a3139</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-pink-fg)"></div><div class="sw-meta"><code>tile-pink-fg</code><span>#802272 / #f0cceb</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-pink-hover)"></div><div class="sw-meta"><code>tile-pink-hover</code><span>rgba(128,34,114,0.08) / rgba(240,204,235,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-cyan-bg)"></div><div class="sw-meta"><code>tile-cyan-bg</code><span>#def1f7 / #32383e</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-cyan-fg)"></div><div class="sw-meta"><code>tile-cyan-fg</code><span>#056a95 / #c9eff0</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-cyan-hover)"></div><div class="sw-meta"><code>tile-cyan-hover</code><span>rgba(5,106,149,0.08) / rgba(201,239,240,0.08)</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-grey-bg)"></div><div class="sw-meta"><code>tile-grey-bg</code><span>#f2f2f2 / #3e4a59</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-grey-fg)"></div><div class="sw-meta"><code>tile-grey-fg</code><span>#f2f2f2 / #3e4a59</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--tile-grey-hover)"></div><div class="sw-meta"><code>tile-grey-hover</code><span>rgba(242,242,242,0.08) / rgba(62,74,89,0.08)</span><small></small></div></div></div>
+  <h3>Pastels</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--pastel-purple)"></div><div class="sw-meta"><code>pastel-purple</code><span>#edeffa / #20222d</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--pastel-green)"></div><div class="sw-meta"><code>pastel-green</code><span>#e1f1e5 / #1e2520</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--pastel-yellow)"></div><div class="sw-meta"><code>pastel-yellow</code><span>#f2f2e8 / #29291d</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--pastel-orange)"></div><div class="sw-meta"><code>pastel-orange</code><span>#f7edeb / #29201e</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--pastel-pink)"></div><div class="sw-meta"><code>pastel-pink</code><span>#f0e9ef / #291f28</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--pastel-blue)"></div><div class="sw-meta"><code>pastel-blue</code><span>#e7f0fa / #20272d</span><small></small></div></div></div>
+  <h3>Data visualisation</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--dataviz-blue)"></div><div class="sw-meta"><code>dataviz-blue</code><span>#1157ce / #a1c9ff</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-blue-container)"></div><div class="sw-meta"><code>dataviz-blue-container</code><span>#d0e4ff / #04409f</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-red)"></div><div class="sw-meta"><code>dataviz-red</code><span>#b3251e / #ffb3ae</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-red-container)"></div><div class="sw-meta"><code>dataviz-red-container</code><span>#ffdadc / #8a1a16</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-yellow)"></div><div class="sw-meta"><code>dataviz-yellow</code><span>#8f4e06 / #fcbd00</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-yellow-container)"></div><div class="sw-meta"><code>dataviz-yellow-container</code><span>#ffe07c / #6d3a01</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-green)"></div><div class="sw-meta"><code>dataviz-green</code><span>#006c35 / #80da88</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-green-container)"></div><div class="sw-meta"><code>dataviz-green-container</code><span>#beefbb / #00522c</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-orange)"></div><div class="sw-meta"><code>dataviz-orange</code><span>#9a4600 / #ffb683</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-orange-container)"></div><div class="sw-meta"><code>dataviz-orange-container</code><span>#ffdcc3 / #753403</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-pink)"></div><div class="sw-meta"><code>dataviz-pink</code><span>#b60d6e / #ffaee4</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-pink-container)"></div><div class="sw-meta"><code>dataviz-pink-container</code><span>#ffd8ef / #8d0053</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-purple)"></div><div class="sw-meta"><code>dataviz-purple</code><span>#7438d2 / #d9bafd</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-purple-container)"></div><div class="sw-meta"><code>dataviz-purple-container</code><span>#eedcfe / #5629a4</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-cyan)"></div><div class="sw-meta"><code>dataviz-cyan</code><span>#00687c / #60d5f3</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-cyan-container)"></div><div class="sw-meta"><code>dataviz-cyan-container</code><span>#acedff / #004e5d</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-grey)"></div><div class="sw-meta"><code>dataviz-grey</code><span>#5e5e5e / #c7c7c7</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-grey-container)"></div><div class="sw-meta"><code>dataviz-grey-container</code><span>#e3e3e3 / #474747</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-root)"></div><div class="sw-meta"><code>dataviz-mindmap-root</code><span>#c3cafc / #c3cafc</span><small>≈ palette.blue.90 · <b>estimated</b></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-node)"></div><div class="sw-meta"><code>dataviz-mindmap-node</code><span>#c2d3eb / #c2d3eb</span><small> · <b>estimated</b></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-edge)"></div><div class="sw-meta"><code>dataviz-mindmap-edge</code><span>#7c8bf3 / #7c8bf3</span><small>≈ palette.blue.70 · <b>estimated</b></small></div></div></div>
+  <h3>Loading</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--skeleton-base)"></div><div class="sw-meta"><code>skeleton-base</code><span>#f2f2f2 / #3e4a59</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--skeleton-highlight)"></div><div class="sw-meta"><code>skeleton-highlight</code><span>#ffffff / #2f334b</span><small></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--skeleton-loading-highlight)"></div><div class="sw-meta"><code>skeleton-loading-highlight</code><span>#edeffa / #2f334b</span><small></small></div></div></div>
+  <div class="row" style="margin-top:12px"><div style="width:240px" class="stack"><div class="skel"></div><div class="skel" style="width:70%"></div></div><span class="note">Skeleton shimmer, 1.4s linear</span></div>
+
+  <h2 id="palette">Primitive palettes</h2>
+  <h3>Grey</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-grey-0);color:#ffffff"><span>0</span><span>#000000</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-10);color:#ffffff"><span>10</span><span>#1b1b1c</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-20);color:#ffffff"><span>20</span><span>#303030</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-30);color:#ffffff"><span>30</span><span>#474747</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-40);color:#ffffff"><span>40</span><span>#5e5e5e</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-50);color:#ffffff"><span>50</span><span>#777777</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-60);color:#1b1b1c"><span>60</span><span>#919191</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-70);color:#1b1b1c"><span>70</span><span>#ababab</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-80);color:#1b1b1c"><span>80</span><span>#c7c7c7</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-90);color:#1b1b1c"><span>90</span><span>#e3e3e3</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-95);color:#1b1b1c"><span>95</span><span>#f2f2f2</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-98);color:#1b1b1c"><span>98</span><span>#f9f9f9</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Blue (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-blue-2);color:#ffffff"><span>2</span><span>#17181c</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-5);color:#ffffff"><span>5</span><span>#1d1e26</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-10);color:#ffffff"><span>10</span><span>#232740</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-20);color:#ffffff"><span>20</span><span>#2a3163</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-30);color:#ffffff"><span>30</span><span>#2f3a8e</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-40);color:#ffffff"><span>40</span><span>#384acf</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-50);color:#ffffff"><span>50</span><span>#4259ff</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-60);color:#ffffff"><span>60</span><span>#596cf7</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-70);color:#1b1b1c"><span>70</span><span>#7c8bf3</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-80);color:#1b1b1c"><span>80</span><span>#94a0f4</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-90);color:#1b1b1c"><span>90</span><span>#c3cafc</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-95);color:#1b1b1c"><span>95</span><span>#dbdfff</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-98);color:#1b1b1c"><span>98</span><span>#edeffa</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Green (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-green-50);color:#1b1b1c"><span>50</span><span>#45ec6d</span></div>
+<div class="ramp-step" style="background:var(--palette-green-60);color:#1b1b1c"><span>60</span><span>#6df88e</span></div>
+<div class="ramp-step" style="background:var(--palette-green-70);color:#1b1b1c"><span>70</span><span>#9efab4</span></div>
+<div class="ramp-step" style="background:var(--palette-green-80);color:#1b1b1c"><span>80</span><span>#cefdd9</span></div>
+<div class="ramp-step" style="background:var(--palette-green-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Brand</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-brand-black);color:#ffffff"><span>black</span><span>#000000</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-white);color:#1b1b1c"><span>white</span><span>#ffffff</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-green);color:#1b1b1c"><span>green</span><span>#45ec6d</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-blue);color:#ffffff"><span>blue</span><span>#4259ff</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-dark-blue);color:#ffffff"><span>dark-blue</span><span>#2f334b</span></div></div>
+  <h3>Icon colours</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-icon-blue);color:#ffffff"><span>blue</span><span>#3271ea</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-yellow);color:#1b1b1c"><span>yellow</span><span>#fcbd00</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-red);color:#ffffff"><span>red</span><span>#db372d</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-pink);color:#1b1b1c"><span>pink</span><span>#b741ff</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-green);color:#ffffff"><span>green</span><span>#128937</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-youtube);color:#1b1b1c"><span>youtube</span><span>#ff0000</span></div></div>
+  <h3>Gradients</h3>
+  <div class="row">
+    <div class="cell"><div style="width:260px;height:72px;border-radius:8px;background:var(--gradient-promo)"></div><span class="spec-label">gradient.promo · studio banner</span></div>
+    <div class="cell"><div style="width:260px;height:72px;border-radius:8px;background:var(--gradient-live-badge)"></div><span class="spec-label">gradient.live-badge</span></div>
+    <div class="cell"><div style="font:400 28px/36px var(--ff-display)" class="grad-text">your documents</div><span class="spec-label">gradient.headline-text (background-clip: text)</span></div>
+    <div class="cell"><div style="width:160px;height:112px;border-radius:12px;background:var(--gradient-cover-scrim),#8a9aa8"></div><span class="spec-label">gradient.cover-scrim over image</span></div>
+  </div>
+
+  <h2 id="type">Typography</h2>
+  <p class="note">Families: <b>Google Sans</b> (display, headline, title-large, panel headers; only 400 loaded), <b>Google Sans Text</b> (everything else; 400/500 loaded, 600/700 synthesised), <b>Google Sans Code</b> (inline code), <b>Google Symbols</b> (icons, ligatures, <code>font-feature-settings: "liga"</code>), <b>KaTeX</b> (math). No other font-feature-settings or variation axes are set; the type scale is Material 3 with Google's font swap. Tracking 0.006rem (0.096px) on small text.</p>
+  <div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Sample</th><th>Spec</th><th>Used for</th></tr><tr><td><code>display-large</code></td><td style="font:var(--typography-display-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 57px/64px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>display-medium</code></td><td style="font:var(--typography-display-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 45px/52px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>display-small</code></td><td style="font:var(--typography-display-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 36px/44px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>headline-large</code></td><td style="font:var(--typography-headline-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 32px/40px · 400 · 0px</td><td></td></tr>
+<tr><td><code>headline-medium</code></td><td style="font:var(--typography-headline-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 28px/36px · 400 · 0px</td><td></td></tr>
+<tr><td><code>headline-small</code></td><td style="font:var(--typography-headline-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 24px/32px · 400 · 0px</td><td>Page titles (&#x27;My notebooks&#x27;), grid card titles, dialog h1</td></tr>
+<tr><td><code>title-large</code></td><td style="font:var(--typography-title-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 22px/28px · 400 · 0px</td><td>Notebook title (rendered 22/36), source title, note title</td></tr>
+<tr><td><code>title-medium</code></td><td style="font:var(--typography-title-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 16px/24px · 500 · 0px</td><td>Dialog titles (rendered 16/32)</td></tr>
+<tr><td><code>title-small</code></td><td style="font:var(--typography-title-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 500 · 0px</td><td>Artifact titles, section labels</td></tr>
+<tr><td><code>body-large</code></td><td style="font:var(--typography-body-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 16px/24px · 400 · 0px</td><td>Chat messages, inputs, citation popover</td></tr>
+<tr><td><code>body-medium</code></td><td style="font:var(--typography-body-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 400 · 0px</td><td>Table cells, source rows (24 lh), helper text</td></tr>
+<tr><td><code>body-small</code></td><td style="font:var(--typography-body-small);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 12px/16px · 400 · 0.096px</td><td>Tooltips, captions, disclaimer (20 lh)</td></tr>
+<tr><td><code>label-large</code></td><td style="font:var(--typography-label-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 500 · 0px</td><td>Buttons, menu items, chips</td></tr>
+<tr><td><code>label-medium</code></td><td style="font:var(--typography-label-medium);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 12px/16px · 500 · 0.096px</td><td>Studio tile labels, promo text</td></tr>
+<tr><td><code>label-small</code></td><td style="font:var(--typography-label-small);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 11px/16px · 500 · 0.096px</td><td>Citation markers, &#x27;New!&#x27; badge</td></tr>
+<tr><td><code>panel-header</code></td><td style="font:var(--typography-panel-header);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 16px/52px · 400 · 0px</td><td>Sources / Chat / Studio headers</td></tr>
+<tr><td><code>code-inline</code></td><td style="font:var(--typography-code-inline);letter-spacing:0px">The quick brown fox</td><td>Google Sans Code · 14px/24px · 500 · 0px</td><td></td></tr></table></div>
+
+  <h2 id="space">Spacing, sizes and layout</h2>
+  <div class="row" style="align-items:flex-start;gap:40px">
+    <div class="stack"><div class="sp"><div style="width:var(--spacing-2)"></div><code>2</code></div>
+<div class="sp"><div style="width:var(--spacing-4)"></div><code>4</code></div>
+<div class="sp"><div style="width:var(--spacing-6)"></div><code>6</code></div>
+<div class="sp"><div style="width:var(--spacing-8)"></div><code>8</code></div>
+<div class="sp"><div style="width:var(--spacing-12)"></div><code>12</code></div>
+<div class="sp"><div style="width:var(--spacing-16)"></div><code>16</code></div>
+<div class="sp"><div style="width:var(--spacing-20)"></div><code>20</code></div>
+<div class="sp"><div style="width:var(--spacing-24)"></div><code>24</code></div>
+<div class="sp"><div style="width:var(--spacing-32)"></div><code>32</code></div>
+<div class="sp"><div style="width:var(--spacing-48)"></div><code>48</code></div></div>
+    <div class="note" style="max-width:520px">
+      <p><b>Grid.</b> Home: content column starts at 60px from the viewport edge at 1200px (table 1068px wide). Grid cards are 320×224 in auto-fill columns with ~41px gutters and ~16px row gaps. Workspace: three panels with a 16px gutter and 16px outer margin; side panels 289.8px at a 1200px viewport, chat takes the rest (max message width 700px). Opening a Studio artifact widens Studio to 450px.</p>
+      <p><b>Header.</b> 64px (96px on mobile, two rows). <b>Panel header</b> 48px + 1px rule. <b>Rows.</b> Table header 56, table row 52, menu item 48, list option 48, source row 32, artifact row 64, Studio tile 56.</p>
+      <p><b>Mobile (&lt;600px).</b> Panels collapse into three tabs (Sources / Chat / Studio), header gets a second row, chat box padding drops from 16 to 12, home list view forced with 20px side padding, section toggle scrolls sideways.</p>
+    </div>
+  </div>
+  <h3>Sizes</h3><div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Value</th><th>Note</th><th>Source</th></tr><tr><td><code>size.header-height</code></td><td>64px</td><td></td><td class="src">computed page-header / notebook-header</td></tr>
+<tr><td><code>size.header-height-mobile</code></td><td>96px</td><td></td><td class="src">computed notebook-header at 406px</td></tr>
+<tr><td><code>size.panel-gutter</code></td><td>16px</td><td></td><td class="src">computed section x positions</td></tr>
+<tr><td><code>size.panel-header-height</code></td><td>48px</td><td></td><td class="src">computed .panel-header</td></tr>
+<tr><td><code>size.panel-side-width</code></td><td>289.8px</td><td></td><td class="src">computed section.source-panel / studio-panel at 1200px viewport</td></tr>
+<tr><td><code>size.panel-studio-expanded</code></td><td>450px</td><td></td><td class="src">computed studio-panel with artifact open</td></tr>
+<tr><td><code>size.table-header-row</code></td><td>56px</td><td></td><td class="src">computed th.mat-mdc-header-cell</td></tr>
+<tr><td><code>size.table-row</code></td><td>52px</td><td></td><td class="src">computed tr.mat-mdc-row</td></tr>
+<tr><td><code>size.menu-item</code></td><td>48px</td><td></td><td class="src">computed .mat-mdc-menu-item</td></tr>
+<tr><td><code>size.list-option</code></td><td>48px</td><td></td><td class="src">computed mat-list-option</td></tr>
+<tr><td><code>size.source-row</code></td><td>32px</td><td></td><td class="src">computed .single-source-container (CSS says 3rem/3.25rem; rendered 32)</td></tr>
+<tr><td><code>size.artifact-row</code></td><td>64px</td><td></td><td class="src">computed .artifact-item-button</td></tr>
+<tr><td><code>size.studio-tile</code></td><td>56px</td><td></td><td class="src">computed .create-artifact-button-container</td></tr>
+<tr><td><code>size.button</code></td><td>40px</td><td></td><td class="src">css-var --mat-button-*-container-height 2.5rem</td></tr>
+<tr><td><code>size.button-small</code></td><td>32px</td><td></td><td class="src">computed .button-small, header buttons</td></tr>
+<tr><td><code>size.icon-button</code></td><td>40px</td><td></td><td class="src">computed mat-icon-button (dialog close, search)</td></tr>
+<tr><td><code>size.icon-button-small</code></td><td>32px</td><td></td><td class="src">computed row/card action buttons</td></tr>
+<tr><td><code>size.text-field</code></td><td>56px</td><td></td><td class="src">computed .mat-mdc-text-field-wrapper</td></tr>
+<tr><td><code>size.notebook-card-width</code></td><td>320px</td><td></td><td class="src">computed mat-card.project-button-card (max 20rem)</td></tr>
+<tr><td><code>size.notebook-card-height</code></td><td>224px</td><td></td><td class="src">computed (14rem)</td></tr>
+<tr><td><code>size.chat-max-width</code></td><td>700px</td><td></td><td class="src">css .to-user-message-card-content max-inline-size</td></tr>
+<tr><td><code>size.content-max-width</code></td><td>1068px</td><td></td><td class="src">computed project-table at 1200px viewport (page padding 60)</td></tr>
+<tr><td><code>size.icon-xs</code></td><td>16px</td><td></td><td class="src">computed studio tile icon</td></tr>
+<tr><td><code>size.icon-sm</code></td><td>18px</td><td></td><td class="src">computed button leading icon</td></tr>
+<tr><td><code>size.icon-md</code></td><td>20px</td><td></td><td class="src">computed card more icon</td></tr>
+<tr><td><code>size.icon-lg</code></td><td>24px</td><td></td><td class="src">computed menu/header icons</td></tr>
+<tr><td><code>size.citation</code></td><td>22px</td><td></td><td class="src">css .citation-marker 1.375rem</td></tr>
+<tr><td><code>size.checkbox</code></td><td>18px</td><td></td><td class="src">computed .mdc-checkbox__background</td></tr>
+<tr><td><code>size.avatar</code></td><td>32px</td><td></td><td class="src">computed avatar img</td></tr></table></div>
+  <h3>Breakpoints</h3><div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Value</th><th>Note</th><th>Source</th></tr><tr><td><code>breakpoint.mobile-max</code></td><td>599.98px</td><td></td><td class="src">@media (max-width: 599.98px), 28 rules</td></tr>
+<tr><td><code>breakpoint.tablet-max</code></td><td>959.98px</td><td></td><td class="src">@media (min-width: 600px) and (max-width: 959.98px)</td></tr>
+<tr><td><code>breakpoint.desktop-min</code></td><td>1024px</td><td></td><td class="src">@media (min-width: 1024px)</td></tr>
+<tr><td><code>breakpoint.wide</code></td><td>1280px</td><td></td><td class="src">@media (max-width: 1280px)</td></tr>
+<tr><td><code>breakpoint.xs-max</code></td><td>359.98px</td><td></td><td class="src">@media (max-width: 359.98px)</td></tr></table></div>
+
+  <h2 id="radius">Radii, borders, shadows, blur</h2>
+  <div class="row"><div class="rad" style="border-radius:var(--radius-none)"><code>none</code><span>0px</span></div>
+<div class="rad" style="border-radius:var(--radius-xs)"><code>xs</code><span>4px</span></div>
+<div class="rad" style="border-radius:var(--radius-sm)"><code>sm</code><span>8px</span></div>
+<div class="rad" style="border-radius:var(--radius-md)"><code>md</code><span>12px</span></div>
+<div class="rad" style="border-radius:var(--radius-lg)"><code>lg</code><span>16px</span></div>
+<div class="rad" style="border-radius:var(--radius-chat-bubble)"><code>chat-bubble</code><span>20px</span></div>
+<div class="rad" style="border-radius:var(--radius-chip)"><code>chip</code><span>24px</span></div>
+<div class="rad" style="border-radius:var(--radius-xl)"><code>xl</code><span>28px</span></div>
+<div class="rad" style="border-radius:var(--radius-button)"><code>button</code><span>96px</span></div>
+<div class="rad" style="border-radius:var(--radius-full)"><code>full</code><span>9999px</span></div></div>
+  <h3>Border widths</h3><div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Value</th><th>Note</th><th>Source</th></tr><tr><td><code>borderWidth.hairline</code></td><td>1px</td><td></td><td class="src">computed borders (stroke-default, outline-variant)</td></tr>
+<tr><td><code>borderWidth.focus-field</code></td><td>2px</td><td></td><td class="src">computed .mdc-text-field--focused outline</td></tr>
+<tr><td><code>borderWidth.dashed-dropzone</code></td><td>2px</td><td></td><td class="src">computed drop zone (dashed)</td></tr>
+<tr><td><code>borderWidth.checkbox</code></td><td>2px</td><td></td><td class="src">computed .mdc-checkbox__background</td></tr>
+<tr><td><code>borderWidth.focus-ring</code></td><td>3px</td><td></td><td class="src">css .mat-focus-indicator::before --mat-focus-indicator-border-width</td></tr></table></div>
+  <h3>Shadows</h3><p class="note">The product is almost flat: panels, cards and dialogs have no shadow. Shadows appear only on menus/select panels (menu), the citation popover (popover) and toasts (level3).</p>
+  <div class="row" style="gap:28px;padding:12px 0"><div class="shd" style="box-shadow:var(--shadow-level1)"><code>level1</code><small></small></div>
+<div class="shd" style="box-shadow:var(--shadow-menu)"><code>menu</code><small>Menus and select panels</small></div>
+<div class="shd" style="box-shadow:var(--shadow-level2)"><code>level2</code><small></small></div>
+<div class="shd" style="box-shadow:var(--shadow-level3)"><code>level3</code><small>Toast</small></div>
+<div class="shd" style="box-shadow:var(--shadow-level4)"><code>level4</code><small></small></div>
+<div class="shd" style="box-shadow:var(--shadow-level5)"><code>level5</code><small></small></div>
+<div class="shd" style="box-shadow:var(--shadow-popover)"><code>popover</code><small>Citation popover</small></div></div>
+  <h3>Blur</h3><div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Value</th><th>Note</th><th>Source</th></tr><tr><td><code>blur.panel-glass</code></td><td>14px</td><td></td><td class="src">css backdrop-filter: blur(0.875rem)</td></tr>
+<tr><td><code>blur.glow</code></td><td>81.1px</td><td></td><td class="src">css filter: blur(81.1003px) (add-sources header glow)</td></tr></table></div>
+
+  <h2 id="motion">Motion</h2>
+  <p class="note">Durations: <code>instant</code> 45ms · <code>fast</code> 90ms · <code>short</code> 150ms · <code>short2</code> 200ms · <code>medium</code> 250ms · <code>medium2</code> 280ms · <code>medium3</code> 300ms · <code>long</code> 400ms · <code>long2</code> 500ms · <code>spinner</code> 1333ms · <code>shimmer</code> 1400ms. Buttons animate border/box-shadow over 280ms standard; checkbox fill 90ms; menus and floating labels 150ms; dialog enter transform 150ms decelerate; backdrop opacity 400ms; panel resize 200ms ease-in-out; notebook card fade-in 400ms ease-in-out; citation hover opacity 200ms linear. <code>prefers-reduced-motion</code> turns card and search animations off.</p>
+  <div class="scroll-x"><table class="spec" id="ease"><tr><th>Easing</th><th>Curve</th><th>Source</th><th><button type="button" class="btn btn-outlined sm-outlined" id="play">Play</button></th></tr><tr><td><code>easing.standard</code></td><td>cubic-bezier(0.4, 0, 0.2, 1)</td><td class="src">css (34 uses)</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-standard)"></div></div></td></tr>
+<tr><td><code>easing.decelerate</code></td><td>cubic-bezier(0, 0, 0.2, 1)</td><td class="src">css (checkbox on, dialog enter)</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-decelerate)"></div></div></td></tr>
+<tr><td><code>easing.accelerate-sharp</code></td><td>cubic-bezier(0.4, 0, 0.6, 1)</td><td class="src">css (checkbox off)</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-accelerate-sharp)"></div></div></td></tr>
+<tr><td><code>easing.emphasized-decelerate</code></td><td>cubic-bezier(0.05, 0.7, 0.1, 1)</td><td class="src">css</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-emphasized-decelerate)"></div></div></td></tr>
+<tr><td><code>easing.backdrop</code></td><td>cubic-bezier(0.25, 0.8, 0.25, 1)</td><td class="src">computed .cdk-overlay-backdrop</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-backdrop)"></div></div></td></tr>
+<tr><td><code>easing.search-expand</code></td><td>cubic-bezier(0.2, 0, 0, 1)</td><td class="src">css .notebook-search-input-lumi</td><td><div class="ease-track"><div class="ease-dot" style="transition-timing-function:var(--easing-search-expand)"></div></div></td></tr></table></div>
+
+  <!-- ============ CORE COMPONENTS ============ -->
+  <h2 id="buttons">Buttons</h2>
+  <p class="note">Anatomy: container (pill, radius 96px) · optional 18px leading icon · label (label-large 14/20 500). Heights 40 (default) and 32 (small). State layer = currentColor at 8% hover / 12% pressed. Keyboard focus = 3px ring in <code>border.focus-ring</code>, drawn 5px outside (6px for outlined). Disabled = on-surface 12% container, <code>state.disabled-content</code> label.</p>
+  <div class="demo plain stack">
+    <div class="row"><b style="width:90px">Filled</b>
+      <div class="cell"><button class="btn btn-filled">Create</button><span class="spec-label">default</span></div>
+      <div class="cell"><button class="btn btn-filled is-hover">Create</button><span class="spec-label">hover</span></div>
+      <div class="cell"><button class="btn btn-filled is-focus">Create</button><span class="spec-label">focus</span></div>
+      <div class="cell"><button class="btn btn-filled is-active">Create</button><span class="spec-label">active</span></div>
+      <div class="cell"><button class="btn btn-filled" disabled>Create</button><span class="spec-label">disabled</span></div>
+    </div>
+    <div class="row"><b style="width:90px">Tonal</b>
+      <div class="cell"><button class="btn btn-tonal"><span class="mi">add</span>Create new</button><span class="spec-label">default</span></div>
+      <div class="cell"><button class="btn btn-tonal is-hover"><span class="mi">add</span>Create new</button><span class="spec-label">hover</span></div>
+      <div class="cell"><button class="btn btn-tonal is-focus"><span class="mi">add</span>Create new</button><span class="spec-label">focus</span></div>
+      <div class="cell"><button class="btn btn-tonal sm"><span class="mi">add</span>Create notebook</button><span class="spec-label">small 32</span></div>
+      <div class="cell"><button class="btn btn-tonal" disabled><span class="mi">add</span>Create new</button><span class="spec-label">disabled</span></div>
+    </div>
+    <div class="row"><b style="width:90px">Outlined</b>
+      <div class="cell"><button class="btn btn-outlined">Cancel</button><span class="spec-label">default</span></div>
+      <div class="cell"><button class="btn btn-outlined is-hover">Cancel</button><span class="spec-label">hover</span></div>
+      <div class="cell"><button class="btn btn-outlined is-focus">Cancel</button><span class="spec-label">focus</span></div>
+      <div class="cell"><button class="btn btn-outlined sm-outlined"><span class="mi">add</span>Add sources</button><span class="spec-label">small 32</span></div>
+      <div class="cell"><button class="btn btn-outlined rect"><span class="mi">thumb_up</span>Good content</button><span class="spec-label">rect variant (radius 16)</span></div>
+      <div class="cell"><button class="btn btn-outlined" disabled>Cancel</button><span class="spec-label">disabled</span></div>
+    </div>
+    <div class="row"><b style="width:90px">Text</b>
+      <div class="cell"><button class="btn btn-text">Cancel</button><span class="spec-label">default</span></div>
+      <div class="cell"><button class="btn btn-text is-hover">Cancel</button><span class="spec-label">hover (primary 8%)</span></div>
+      <div class="cell"><button class="btn btn-text link">Cancel</button><span class="spec-label">link-coloured (search)</span></div>
+      <div class="cell"><button class="btn btn-text">View all<span class="mi">chevron_right</span></button><span class="spec-label">trailing icon</span></div>
+    </div>
+    <div class="row"><b style="width:90px">Split</b>
+      <div class="cell"><span class="split"><button class="btn btn-outlined"><span class="mi">link</span>Copy link</button><button class="btn btn-outlined"><span class="mi">arrow_drop_down</span></button></span><span class="spec-label">share dialog</span></div>
+    </div>
+    <div class="row"><b style="width:90px">Icon</b>
+      <div class="cell"><button class="ibtn"><span class="mi">close</span></button><span class="spec-label">40 default</span></div>
+      <div class="cell"><button class="ibtn is-hover"><span class="mi">close</span></button><span class="spec-label">hover</span></div>
+      <div class="cell"><button class="ibtn is-focus"><span class="mi">close</span></button><span class="spec-label">focus</span></div>
+      <div class="cell"><button class="ibtn outlined"><span class="mi">search</span></button><span class="spec-label">outlined (search)</span></div>
+      <div class="cell"><button class="ibtn sm"><span class="mi">more_vert</span></button><span class="spec-label">32 small</span></div>
+      <div class="cell"><button class="ibtn send"><span class="mi">arrow_forward</span></button><span class="spec-label">send (idle)</span></div>
+      <div class="cell"><button class="ibtn" disabled><span class="mi">delete</span></button><span class="spec-label">disabled</span></div>
+    </div>
+  </div>
+
+  <h2 id="inputs">Inputs</h2>
+  <div class="demo plain" style="background:var(--surface-dialog)">
+    <div class="row" style="align-items:flex-start">
+      <div class="cell"><div class="tf"><label>Collection name*</label></div><span class="spec-label">default · outline 1px border.default · 56h</span></div>
+      <div class="cell"><div class="tf is-focus"><label>Collection name*</label><span class="caret"></span></div><span class="spec-label">focus · 2px m3-primary, label floats</span></div>
+      <div class="cell"><div class="tf is-filled"><label>Collection name*</label>Design test</div><span class="spec-label">filled</span></div>
+      <div class="cell"><div class="tf is-disabled"><label>Collection name*</label></div><span class="spec-label">disabled (38%)</span></div>
+    </div>
+    <h3>Select</h3>
+    <div class="row" style="align-items:flex-start">
+      <div class="cell"><span class="select">Restricted <i class="arrow"></i></span><span class="spec-label">trigger · 14/24</span></div>
+      <div class="cell"><span class="select" style="color:rgba(31,31,31,.38)">Owner <i class="arrow"></i></span><span class="spec-label">disabled</span></div>
+      <div class="cell"><div class="select-panel"><div class="opt is-selected">Restricted<span class="mi">check</span></div><div class="opt">Anyone with a link</div><div class="opt">Public</div></div><span class="spec-label">panel · surface.select-panel · shadow.menu</span></div>
+    </div>
+  </div>
+
+  <h2 id="selection">Checkbox, radio, toggles, chips</h2>
+  <div class="demo plain stack">
+    <div class="row"><b style="width:130px">Checkbox (M3)</b>
+      <div class="cell"><span class="cbx"><i></i></span><span class="spec-label">off</span></div>
+      <div class="cell"><span class="cbx is-hover"><i></i></span><span class="spec-label">hover</span></div>
+      <div class="cell"><span class="cbx on"><i></i></span><span class="spec-label">on</span></div>
+      <div class="cell"><span class="cbx on is-disabled"><i></i></span><span class="spec-label">disabled</span></div>
+      <b style="width:130px;margin-left:24px">Checkbox (source)</b>
+      <div class="cell"><span class="cbx source"><i></i></span><span class="spec-label">selected source</span></div>
+    </div>
+    <div class="row"><b style="width:130px">Radio</b>
+      <div class="cell"><span class="radio"><i></i></span><span class="spec-label">off</span></div>
+      <div class="cell"><span class="radio is-hover"><i></i></span><span class="spec-label">hover</span></div>
+      <div class="cell"><span class="radio on"><i></i></span><span class="spec-label">on</span></div>
+      <div class="cell"><span class="radio on" style="opacity:.38"><i></i></span><span class="spec-label">disabled</span></div>
+      <span class="note">Radio tokens come from <code>--mat-radio-*</code>; no radio was found on a reachable screen.</span>
+    </div>
+    <div class="row"><b style="width:130px">View toggle</b>
+      <span class="seg"><span><span class="mi s20">grid_view</span></span><span class="on"><span class="mi s18">check</span><span class="mi s20">view_list</span></span></span>
+      <b style="width:130px;margin-left:24px">Section toggle</b>
+      <span class="sect"><span>All</span><span class="on">My notebooks</span><span class="is-hover"><span class="mi s20">public</span>Discover</span><span>Collections</span></span>
+    </div>
+    <div class="row"><b style="width:130px">Choice chips</b>
+      <span class="chipt on"><span class="mi">check</span>Default</span><span class="chipt is-hover">Learning Guide</span><span class="chipt">Custom</span>
+      <span class="spec-label">selected · hover · default</span>
+    </div>
+    <div class="row"><b style="width:130px">Menu chips</b>
+      <span class="menu-chip"><span class="mi">language</span><span class="mi">keyboard_arrow_down</span></span>
+      <span class="menu-chip"><span class="mi">manage_search</span><span class="mi">keyboard_arrow_down</span></span>
+      <span class="spec-label">web-discovery source and mode pickers</span>
+    </div>
+    <p class="note">The product has no on/off switch control on any reachable screen; the segmented view toggle and chips above are its toggles.</p>
+  </div>
+
+  <h2 id="tabs">Tabs</h2>
+  <div class="demo plain"><div class="tabs"><span>Sources</span><span class="on">Chat</span><span>Studio</span></div><p class="spec-label">Mobile only (&lt;600px). 48h, label-large, indicator 2px m3-primary under the label (≈32px wide).</p></div>
+
+  <h2 id="badges">Badges &amp; avatar</h2>
+  <div class="demo plain row"><span class="badge-pro">PRO</span><span class="badge-new">New!</span><span class="avatar">K</span><span class="note">PRO: surface.selected, radius 8. New!: accent.secondary pill, label-small. Avatar 32 circle.</span></div>
+
+  <h2 id="tooltip">Tooltip</h2>
+  <div class="demo plain row"><span class="tooltip">CS3210 Midterms Prep</span><span class="note">surface.inverse · body-small 12/16 · padding 4 8 · radius 4 · shown after hover delay, below trigger.</span></div>
+
+  <h2 id="menus">Menus</h2>
+  <div class="demo row" style="align-items:flex-start">
+    <div class="menu">
+      <div class="mitem"><span class="mi">help</span>Gemini Notebook help</div>
+      <div class="mitem"><span class="mi">feedback</span>Send feedback</div>
+      <div class="mitem is-hover"><span class="mi">brightness_6</span><span class="grow">Device</span><span class="mi">arrow_right</span></div>
+      <div class="mdiv"></div>
+      <div class="mitem"><span class="mi">edit</span>Manage subscription</div>
+    </div>
+    <div class="menu" style="width:180px">
+      <div class="mitem"><span class="mi">edit</span>Edit title</div>
+      <div class="mitem"><span class="mi">library_add</span>Add to collection</div>
+      <div class="mitem"><span class="mi">keep</span>Pin to top</div>
+      <div class="mitem"><span class="mi">delete</span>Delete</div>
+    </div>
+    <p class="note" style="max-width:280px">Panel: surface.panel, radius 8, padding 8 0, shadow.menu. Item 48h, padding 0 12, 24px icon in on-surface-variant with 12px gap. Hover = state.menu-hover. Divider 1px, 8px margin. Submenus open to the left/right at the same styling.</p>
+  </div>
+
+  <h2 id="dialogs">Dialogs</h2>
+  <div class="scrim-demo">
+    <div class="dialog">
+      <div class="dialog-head"><span class="dialog-title">Delete this notebook?</span><button class="ibtn"><span class="mi">close</span></button></div>
+      <div class="dialog-body" style="border-top:1px solid var(--border-default);margin-top:12px">This notebook and all of its content will be permanently deleted across all locations, including Gemini.</div>
+      <div class="dialog-foot"><button class="btn btn-outlined">Cancel</button><button class="btn btn-filled" style="font-weight:400;padding:0 16px">Delete</button></div>
+    </div>
+  </div>
+  <p class="note">Surface: surface.dialog (white; <b>#131314</b> in dark, darker than panels), radius 16, no shadow, backdrop bg.scrim. Title title-medium 16/32 500 (Configure Chat uses Google Sans 22/36). Primary action is always the blue filled button, including destructive ones. Widths seen: 440 (share), 544 (create collection), 704 (delete), 720 (configure chat), 882 (add sources), 1000 (announcement).</p>
+
+  <h2 id="toast">Toast</h2>
+  <div class="demo"><div class="toast">Copied to clipboard.</div></div>
+  <p class="note">344×48 min, radius 16, surface.toast (black light / white dark), shadow level3, text 14/20 in inverse colour, bottom centre.</p>
+
+  <h2 id="tables">Tables &amp; lists</h2>
+  <div class="demo plain scroll-x">
+    <table class="tbl" style="min-width:640px"><tr><th>Title</th><th>Sources</th><th>Created</th><th>Role</th><th></th></tr>
+      <tr><td><span class="t"><span>🌱</span>Navigating Adulthood</span></td><td>92 Sources</td><td>Jan 22, 2026</td><td>Owner</td><td><button class="ibtn sm"><span class="mi">more_vert</span></button></td></tr>
+      <tr class="is-hover"><td><span class="t"><span>💻</span>CS3210 Midterms Prep</span></td><td>21 Sources</td><td>Mar 5, 2026</td><td>Owner</td><td><button class="ibtn sm"><span class="mi">more_vert</span></button></td></tr>
+      <tr><td><span class="t"><span>📅</span>CS3211 Concurrent &amp; Parallel Programming</span></td><td>15 Sources</td><td>Jan 5, 2026</td><td>Owner</td><td><button class="ibtn sm"><span class="mi">more_vert</span></button></td></tr>
+    </table>
+    <p class="spec-label">Header 56 (500), rows 52, 1px outline-variant rules, cursor pointer. The hover row tint shown is a documented state layer; the product defines no row hover rule (estimated).</p>
+  </div>
+
+  <h2 id="cards">Cards</h2>
+  <div class="demo row" style="background:var(--bg-landing);border:1px solid var(--border-default);align-items:flex-start">
+    <div class="cell"><div class="nb-create"><div class="circ"><span class="mi">add</span></div><div class="lbl">Create new notebook</div></div><span class="spec-label">create card (outlined)</span></div>
+    <div class="cell"><div class="nb-card" style="background:var(--tile-orange-bg)"><span class="emoji">🌱</span><button class="ibtn sm more"><span class="mi">more_vert</span></button><div><div class="title">Navigating Adulthood: Identity, Resilience, and Relationship Dynamics</div><div class="sub">Jan 22, 2026<b>·</b>92 sources</div></div></div><span class="spec-label">notebook card · tile.orange.bg</span></div>
+    <div class="cell"><div class="nb-card" style="background:var(--tile-green-bg)"><span class="emoji">📅</span><button class="ibtn sm more"><span class="mi">more_vert</span></button><div><div class="title">CS3211 Concurrent &amp; Parallel Programming</div><div class="sub">Jan 5, 2026<b>·</b>15 sources</div></div></div><span class="spec-label">tile.green.bg</span></div>
+    <div class="cell"><div class="nb-cover"><span class="mi" style="position:absolute;right:24px;bottom:24px;color:#fff">public</span><div class="pub"><i></i>The New York Times</div><div class="title">Trilobites</div><div class="sub">Mar 31, 2026 · 65 sources</div></div><span class="spec-label">featured cover card (image + cover-scrim)</span></div>
+  </div>
+  <p class="note">Notebook cards cycle tile colours (green, orange, pink, blue, cyan, yellow). No hover style is defined for them in the live UI; the more button gets a 32px state layer on hover.</p>
+
+  <!-- ============ PRODUCT-SPECIFIC ============ -->
+  <h2 id="workspace">Notebook workspace</h2>
+  <div class="ws">
+    <div class="ws-head"><span class="logo"></span><span class="ttl">CS3210 Midterms Prep</span><button class="btn btn-tonal sm"><span class="mi">add</span>Create notebook</button><button class="ibtn sm" style="color:var(--text-title)"><span class="mi">share</span></button><button class="ibtn sm" style="color:var(--text-title)"><span class="mi">settings</span></button><span class="badge-pro">PRO</span><span class="avatar">K</span></div>
+    <div class="ws-cols">
+      <section class="panel" id="sources">
+        <div class="panel-h"><h4>Sources</h4><button class="ibtn sm"><span class="mi">dock_to_right</span></button></div>
+        <div class="panel-b">
+          <button class="btn btn-outlined sm-outlined" style="width:100%"><span class="mi">add</span>Add sources</button>
+          <div class="disc"><div class="ph">Search the web for new sources</div><div class="rowx"><span class="menu-chip"><span class="mi">language</span><span class="mi">keyboard_arrow_down</span></span><span class="menu-chip"><span class="mi">manage_search</span><span class="mi">keyboard_arrow_down</span></span><button class="ibtn sm send"><span class="mi">search</span></button></div></div>
+          <div class="src-row"><span class="mi s18" style="color:var(--text-on-surface-variant)">new_label</span><span class="mi s18" style="color:var(--text-on-surface-variant);margin-left:8px">sort</span><span class="nm" style="text-align:right;padding-right:6px">Select all</span><span class="cbx source"><i></i></span></div>
+          <div class="src-row"><span class="mi ic md">markdown</span><span class="nm">A1_v2_7Feb.md</span><span class="cbx source"><i></i></span></div>
+          <div class="src-row is-hover"><span class="mi ic pdf">picture_as_pdf</span><span class="nm">CS3210 Tutorial 1 Jet.pptx.pdf</span><span class="mi s20" style="color:var(--text-secondary)">more_vert</span><span class="cbx source"><i></i></span></div>
+          <div class="src-row"><span class="mi ic pdf">picture_as_pdf</span><span class="nm">L00-Overview.pdf</span><span class="cbx source"><i></i></span></div>
+          <div class="src-row"><span class="mi ic yt">smart_display</span><span class="nm">Lecture recording</span><span class="cbx"><i></i></span></div>
+          <p class="spec-label">Row 32h radius 8; hover/open = surface.selected + more_vert. Type icons: pdf red, markdown blue, YouTube red, web favicon.</p>
+        </div>
+      </section>
+      <section class="panel" id="chat">
+        <div class="panel-h"><h4>Chat</h4><span><button class="ibtn sm"><span class="mi">tune</span></button><button class="ibtn sm"><span class="mi">more_vert</span></button></span></div>
+        <div class="panel-b">
+          <div class="bubble-user">Explain static scheduling in OpenMP.</div>
+          <div class="bubble-model">In OpenMP, work-sharing constructs use the <span class="code-i">schedule</span> clause to control how loop iterations are divided<span class="cite">1</span>.
+            <ul><li><b>Lowest Overhead:</b> work is assigned ahead of time<span class="cite">2</span><span class="cite is-hover">3</span>.</li><li><b>Cache Efficiency:</b> contiguous chunks per thread.</li></ul>
+          </div>
+          <div class="msg-actions"><button class="ibtn"><span class="mi">keep</span></button><button class="ibtn is-hover"><span class="mi">content_copy</span></button><button class="ibtn"><span class="mi">thumb_up</span></button><button class="ibtn"><span class="mi">thumb_down</span></button></div>
+          <div class="disclaimer" style="margin-top:auto">Today • 2:07 PM</div>
+          <div class="qbox"><span class="ph">Ask a question or create something</span><span class="cnt">21 sources</span><button class="ibtn send"><span class="mi">arrow_forward</span></button></div>
+        </div>
+      </section>
+      <section class="panel" id="studio">
+        <div class="panel-h"><h4>Studio</h4><button class="ibtn sm"><span class="mi">dock_to_left</span></button></div>
+        <div class="panel-b">
+          <div class="promo"><span style="font-size:20px">🎉</span><span style="flex:1">New: You can now create Interactive Reports!</span><button class="btn btn-tonal">Try it</button><span class="mi s20">close</span></div>
+          <div class="tiles">
+            <div class="tile" style="background:var(--tile-blue-bg);color:var(--tile-blue-fg)"><div class="l"><span class="mi">graphic_eq</span><span>Audio Overview</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-yellow-bg);color:var(--tile-yellow-fg)"><div class="l"><span class="mi">tablet</span><span>Slide Deck</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile is-hover" style="background:var(--tile-green-bg);color:var(--tile-green-fg);--hover:var(--tile-green-hover)"><div class="l"><span class="mi">subscriptions</span><span>Video Overview</span></div><span class="mi s20">edit</span></div>
+            <div class="tile" style="background:var(--tile-pink-bg);color:var(--tile-pink-fg)"><div class="l"><span class="mi">flowchart</span><span>Mind Map</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-yellow-bg);color:var(--tile-yellow-fg)"><div class="l"><span><span class="mi">note_stack</span> <span class="badge-new">New!</span></span><span>Reports</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-orange-bg);color:var(--tile-orange-fg)"><div class="l"><span class="mi">cards_star</span><span>Flashcards</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-cyan-bg);color:var(--tile-cyan-fg)"><div class="l"><span class="mi">quiz</span><span>Quiz</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-pink-bg);color:var(--tile-pink-fg)"><div class="l"><span class="mi">stacked_bar_chart</span><span>Infographic</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile" style="background:var(--tile-blue-bg);color:var(--tile-blue-fg)"><div class="l"><span class="mi">table_view</span><span>Data Table</span></div><span class="mi s20">chevron_forward</span></div>
+            <div class="tile is-disabled"><div class="l"><span class="mi">quiz</span><span>Disabled</span></div><span class="mi s20">chevron_forward</span></div>
+          </div>
+          <div style="height:1px;background:var(--border-default)"></div>
+          <div class="art-row"><span class="ic"><span class="mi" style="color:var(--text-title)">sticky_note_2</span></span><span class="tx"><div class="t1">New Note</div><div class="t2">204d ago</div></span><button class="ibtn sm"><span class="mi">more_vert</span></button></div>
+          <div class="art-row"><span class="ic"><span class="mi" style="color:var(--tile-orange-fg)">cards_star</span></span><span class="tx"><div class="t1">Parallel Flashcards</div><div class="t2">19 sources · 204d ago</div></span><button class="ibtn sm"><span class="mi">more_vert</span></button></div>
+          <div class="art-row"><span class="ic"><span class="mi" style="color:var(--tile-cyan-fg)">quiz</span></span><span class="tx"><div class="t1">Parallel Quiz</div><div class="t2">19 sources · 204d ago</div></span><button class="ibtn sm"><span class="mi">more_vert</span></button></div>
+          <div style="display:flex;justify-content:center"><button class="fab-note"><span class="mi s18">sticky_note_2</span>Add note</button></div>
+        </div>
+      </section>
+    </div>
+    <div class="disclaimer">Gemini Notebook can be inaccurate; please double check its responses.</div>
+  </div>
+
+  <h2 id="artifacts">Source viewer, citation popover, artifacts</h2>
+  <div class="demo row" style="align-items:flex-start">
+    <div class="stack" style="width:290px;background:var(--surface-panel);border-radius:16px;padding:16px">
+      <div style="font:var(--t-title-large);color:var(--text-title)">tutorial02.pdf</div>
+      <div class="guide-pill"><span class="mi s20">auto_awesome</span><span style="flex:1">Source guide</span><span class="mi">arrow_drop_down</span></div>
+      <div style="font:var(--t-body-large);color:var(--text-title)">These constructs are called work-sharing constructs. <span class="hl">One such clause is the schedule clause.</span></div>
+    </div>
+    <div class="popover"><div class="h">tutorial02.pdf</div><div class="b">One such clause is the schedule clause: the programmer can control the order and the number of iterations assigned to each thread.</div><div class="f">View source</div></div>
+  </div>
+  <h3>Flashcards, quiz, mind map, note editor <span class="note">(iframe content: estimated from screenshots)</span></h3>
+  <div class="demo row" style="align-items:flex-start">
+    <div><div class="flash"><div class="meta" style="color:#c7c7c7">1 / 55</div><div class="q">In the context of the OpenMP backend, which parallel pattern is utilized?</div><div class="meta" style="text-align:center">See answer</div></div>
+      <div class="fc-ctrl"><span class="c" style="color:#c7c7c7;border-color:#c7c7c7"><span class="mi s20">arrow_back</span></span><span class="p" style="color:var(--palette-icon-red)"><span class="mi s20">close</span>0</span><span class="p" style="color:var(--palette-icon-green)">0<span class="mi s20">check</span></span><span class="c" style="color:var(--accent-primary);border-color:var(--accent-primary)"><span class="mi s20">arrow_forward</span></span></div></div>
+    <div class="flash back"><div class="meta">&nbsp;</div><div class="q">The Fork-Join pattern.</div><div><button class="btn btn-outlined sm-outlined"><span class="mi">wand_stars</span>Explain</button></div></div>
+    <div class="stack" style="width:418px">
+      <div class="dark-gap">Quiz and mind map were captured in light only. The colours below are the light samples; the dark-theme values are unknown.</div>
+      <div class="quiz-opt is-hover">A. Fork-Join only applies to nested loops.</div>
+      <div class="quiz-opt">B. Fork-Join is how OpenMP manages threads in the backend.</div>
+      <button class="btn btn-filled rect" style="align-self:center;width:200px">Next</button>
+      <div class="mm" style="margin-top:12px"><span class="root">CS3210 Parallel Computing</span><span class="kids"><span class="kid">OpenMP</span><span class="kid">Memory Models</span><span class="kid">Performance and Tools</span></span></div>
+      <div class="toolbar"><button class="ibtn sm"><span class="mi">undo</span></button><button class="ibtn sm"><span class="mi">redo</span></button><button class="btn">Normal<span class="mi">arrow_drop_down</span></button><button class="ibtn sm"><span class="mi">format_bold</span></button><button class="ibtn sm"><span class="mi">format_italic</span></button><button class="ibtn sm"><span class="mi">more_horiz</span></button></div>
+    </div>
+  </div>
+
+  <h2 id="addsrc">Add sources</h2>
+  <div class="demo plain" style="background:var(--surface-dialog)">
+    <div style="text-align:center;font:400 24px/32px var(--ff-display);color:var(--text-on-surface);padding:16px 0">Create Audio and Video Overviews from<br><span class="grad-text">your documents</span></div>
+    <div class="disc is-focus" style="margin-bottom:16px"><div class="ph">Search the web for new sources</div><div class="rowx"><span class="menu-chip"><span class="mi">language</span>Web<span class="mi">keyboard_arrow_down</span></span><span class="menu-chip"><span class="mi">manage_search</span>Fast Research<span class="mi">keyboard_arrow_down</span></span><button class="ibtn sm"><span class="mi">search</span></button></div></div>
+    <div class="dropzone"><div class="t">or drop your files</div><div class="s">pdf, images, docs, audio, and more</div>
+      <div class="row"><button class="btn btn-outlined"><span class="mi">upload</span>Upload files</button><button class="btn btn-outlined"><span class="mi">link</span>Websites</button><button class="btn btn-outlined"><span class="mi">add_to_drive</span>Drive</button><button class="btn btn-outlined"><span class="mi">content_paste</span>Copied text</button></div></div>
+    <div class="row" style="margin-top:16px"><div class="pbar"><i></i></div><span style="font:400 14px/24px var(--ff-text)">21 / 300</span></div>
+  </div>
+
+  <h2 id="icons">Icons</h2>
+  <p class="note">Icon set: <b>Google Symbols</b> (Google's internal superset of Material Symbols), ligature font, <b>outlined</b> (FILL 0, wght 400, GRAD 0). Rendered here with the public Material Symbols Outlined. Five Google-only ligatures have no public glyph and are shown with the nearest public icon: search_spark (shown as manage_search), label_auto (new_label), drive_pdf (picture_as_pdf), audio_magic_eraser (graphic_eq), auto_tab_group (note_stack). Sizes: 16 (Studio tiles), 18 (button icons, toolbars), 20 (card/row actions), 24 (menus, header, source types). Colour follows text unless noted. Source-type icons are coloured with <code>palette.icon.*</code>.</p>
+  <div class="demo plain row" style="gap:18px">
+    <span class="mi">add</span><span class="mi">content_copy</span><span class="mi">trending_up</span><span class="mi">share</span><span class="mi">settings</span><span class="mi">dock_to_right</span><span class="mi">dock_to_left</span><span class="mi">language</span><span class="mi">search</span><span class="mi">sort</span><span class="mi">attach_file</span><span class="mi md">markdown</span><span class="mi">more_vert</span><span class="mi pdf">picture_as_pdf</span><span class="mi">tune</span><span class="mi">keep</span><span class="mi">thumb_up</span><span class="mi">thumb_down</span><span class="mi">arrow_forward</span><span class="mi">close</span><span class="mi">chevron_right</span><span class="mi">subscriptions</span><span class="mi">flowchart</span><span class="mi">cards_star</span><span class="mi">quiz</span><span class="mi">stacked_bar_chart</span><span class="mi">table_view</span><span class="mi">sticky_note_2</span><span class="mi">grid_view</span><span class="mi">view_list</span><span class="mi">public</span><span class="mi">edit</span><span class="mi">library_add</span><span class="mi">delete</span>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var buttons = document.querySelectorAll('.theme-switch button');
+  function set(t) {
+    root.setAttribute('data-theme', t);
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.set === t)); });
+    try { localStorage.setItem('nblm-guide-theme', t); } catch (e) {}
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { set(b.dataset.set); }); });
+  try { var saved = localStorage.getItem('nblm-guide-theme'); if (saved) set(saved); } catch (e) {}
+  var play = document.getElementById('play');
+  if (play) play.addEventListener('click', function () { document.getElementById('ease').classList.toggle('play'); });
+})();
+</script>
+</body>
+</html>
