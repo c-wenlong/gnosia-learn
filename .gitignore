@@ -75,3 +75,9 @@ learn/assets/.candidates/
 # Third-party product screenshots gathered for design research stay local (copyright); our own current-app captures are tracked.
 docs/design/research/assets/*
 !docs/design/research/assets/current-app/
+
+# Duolingo proprietary web fonts, used locally by the reference style guide; not ours to commit.
+docs/design/reference/duolingo/fonts/
+docs/design/reference/duolingo/tools/capture/winid
+docs/design/reference/duolingo/tools/capture/dumps/
+docs/design/reference/duolingo/tools/capture/out/
