@@ -1,8 +1,11 @@
 import {
+  headingIds,
+  inlineText,
   isExternalHref,
   parseInline,
   parseNote,
   safeHref,
+  slugify,
   standaloneFigure,
   type Block,
   type FigureNode,
@@ -74,6 +77,7 @@ export function NoteProse({
   source,
   resolveNote,
   resolveEmbed,
+  idPrefix = "",
   className = "",
 }: {
   /** The file as it is on disk, frontmatter and all. */
@@ -82,11 +86,30 @@ export function NoteProse({
   resolveNote?: (slug: string) => string | undefined;
   /** `![[name.svg]]` to a URL. Without one, the embed renders as a named gap. */
   resolveEmbed?: (name: string) => string | undefined;
+  /**
+   * Namespaces this note's heading ids away from another `NoteProse` on the
+   * same page. Left empty, the default, a heading's id is just its own slug
+   * (`#worked-example` rather than `#note-1-worked-example`), which is right
+   * for the one call site that exists today and for any page that only ever
+   * renders one note. A page holding two must pass each a distinct prefix,
+   * typically the asset id or note slug it already has on hand, so `The idea`
+   * in one note and `The idea` in the other resolve to different anchors:
+   * this module cannot enforce that distinctness itself, since it only ever
+   * sees one prefix at a time, so two notes given the same prefix (or two
+   * distinct-looking prefixes that happen to be identical once whitespace and
+   * case are ignored) will collide, silently. What it does check is that a
+   * non-empty prefix is even usable as one: no whitespace, starting with a
+   * letter. Outside production, a prefix that fails that throws immediately,
+   * so the mistake shows up at the page that passed it rather than as a link
+   * that lands on the wrong note.
+   */
+  idPrefix?: string;
   /** Merged onto the root, so a caller can give it padding or a scroll box. */
   className?: string;
 }) {
   const { blocks } = parseNote(source);
   const links: Resolvers = { resolveNote, resolveEmbed };
+  const ids = headingIds(blocks, idPrefix);
 
   if (blocks.length === 0) {
     return (
@@ -100,7 +123,7 @@ export function NoteProse({
     <article
       className={`max-w-[72ch] text-[15px] leading-[1.7] text-[var(--foreground)] [&>*:first-child]:mt-0 ${className}`}
     >
-      <Blocks blocks={blocks} links={links} />
+      <Blocks blocks={blocks} links={links} ids={ids} />
     </article>
   );
 }
@@ -166,17 +189,19 @@ const SPACE: { normal: Spacing; tight: Spacing } = {
 function Blocks({
   blocks,
   links,
+  ids,
   tight = false,
 }: {
   blocks: Block[];
   links: Resolvers;
+  ids: Map<Block, string>;
   tight?: boolean;
 }) {
   const space = tight ? SPACE.tight : SPACE.normal;
   return (
     <>
       {blocks.map((block, i) => (
-        <BlockView key={i} block={block} links={links} space={space} tight={tight} />
+        <BlockView key={i} block={block} links={links} ids={ids} space={space} tight={tight} />
       ))}
     </>
   );
@@ -185,17 +210,19 @@ function Blocks({
 function BlockView({
   block,
   links,
+  ids,
   space,
   tight,
 }: {
   block: Block;
   links: Resolvers;
+  ids: Map<Block, string>;
   space: Spacing;
   tight: boolean;
 }) {
   switch (block.kind) {
     case "heading":
-      return <Heading block={block} links={links} space={space} />;
+      return <Heading block={block} links={links} ids={ids} space={space} />;
 
     case "paragraph": {
       const nodes = parseInline(block.text);
@@ -215,10 +242,10 @@ function BlockView({
       return <hr className={`${space.rule} h-px border-0 bg-[var(--border)]`} />;
 
     case "list":
-      return <ListView block={block} links={links} className={space.list} tight={tight} />;
+      return <ListView block={block} links={links} ids={ids} className={space.list} tight={tight} />;
 
     case "quote":
-      return <QuoteView block={block} links={links} className={space.quote} tight={tight} />;
+      return <QuoteView block={block} links={links} ids={ids} className={space.quote} tight={tight} />;
   }
 }
 
@@ -228,41 +255,114 @@ function BlockView({
  * `## Teach` and `## Close` are the only way to find your place in two hundred
  * lines. Below that the steps are separated by weight alone; a second rule
  * would turn structure into stripes.
+ *
+ * Every level carries an `id`, so a link can drop a reader at this heading
+ * instead of the top of the page, and `scroll-mt-20` on the element that
+ * carries the id, not on the article around it, so the app's sticky top bar
+ * never covers what the link pointed at. `HeadingAnchor` is a second,
+ * discoverable way to get that link (a small `#` a reader can copy), never
+ * the only way: the id is on the heading whether or not anyone ever hovers it.
  */
 function Heading({
   block,
   links,
+  ids,
   space,
 }: {
   block: Block & { kind: "heading" };
   links: Resolvers;
+  ids: Map<Block, string>;
   space: Spacing;
 }) {
-  const children = <Inlines nodes={parseInline(block.text)} links={links} />;
+  const nodes = parseInline(block.text);
+  const text = inlineText(nodes);
+  // `ids` covers every heading in the document this block came from, so the
+  // lookup should never miss; slugifying on the spot is a safety net rather
+  // than the expected path, in case a caller ever renders a heading block
+  // `headingIds` did not see.
+  const id = ids.get(block) ?? slugify(text);
+  const children = <Inlines nodes={nodes} links={links} />;
+  const anchor = <HeadingAnchor id={id} text={text} />;
   const balance = "text-balance tracking-[-0.02em]";
 
   switch (block.level) {
     case 1:
-      return <h1 className={`${space.h1} text-[1.625rem] font-semibold ${balance}`}>{children}</h1>;
+      return (
+        <h1 id={id} className={`${space.h1} group scroll-mt-20 text-[1.625rem] font-semibold ${balance}`}>
+          {children}
+          {anchor}
+        </h1>
+      );
     case 2:
       return (
         <h2
-          className={`${space.h2} border-b border-[var(--border)] pb-2 text-[1.25rem] font-semibold ${balance}`}
+          id={id}
+          className={`${space.h2} group scroll-mt-20 border-b border-[var(--border)] pb-2 text-[1.25rem] font-semibold ${balance}`}
         >
           {children}
+          {anchor}
         </h2>
       );
     case 3:
       return (
-        <h3 className={`${space.h3} text-[1.0625rem] font-semibold ${balance}`}>{children}</h3>
+        <h3
+          id={id}
+          className={`${space.h3} group scroll-mt-20 text-[1.0625rem] font-semibold ${balance}`}
+        >
+          {children}
+          {anchor}
+        </h3>
       );
     default:
       return (
-        <h4 className={`${space.h4} text-[0.9375rem] font-semibold text-[var(--muted-strong)]`}>
+        <h4
+          id={id}
+          className={`${space.h4} group scroll-mt-20 text-[0.9375rem] font-semibold text-[var(--muted-strong)]`}
+        >
           {children}
+          {anchor}
         </h4>
       );
   }
+}
+
+/**
+ * The copyable link beside a heading: invisible until the heading is hovered
+ * or the link itself is focused, so the page does not carry a faint hash mark
+ * next to every one of twenty headings all the time. It comes after the
+ * heading's own text in the markup, so a screen reader always meets the
+ * heading before this, and it is purely a shortcut: the heading's `id` is
+ * what a shared link actually lands on, with or without this element.
+ *
+ * `opacity-0` alone would make it undiscoverable on a touch screen, which has
+ * no hover to reveal it and no keyboard to focus it: a reader could see the
+ * heading was there and never learn it had a link. `(hover: none)` is true
+ * exactly on that kind of device (a mouse, trackpad or pen reports `hover`),
+ * so the link stays visible there from the start, and the hide-until-hover
+ * behaviour is scoped to devices that can actually trigger hover.
+ *
+ * The padding plus the matching negative margin grow the tap target to at
+ * least 24px on a side (measured on a phone: about 27x43px on an `h2`) without
+ * moving the glyph or widening the gap it leaves in the heading's own text:
+ * padding grows the box a finger can hit, the negative margin on the same
+ * sides gives that growth straight back to the layout around it, so the
+ * visible "#" sits exactly where it did before.
+ */
+function HeadingAnchor({ id, text }: { id: string; text: string }) {
+  return (
+    <a
+      // Encoded, because a browser percent-decodes a fragment before it looks
+      // for the element. An id holding a literal `%20` (a prefix taken from an
+      // encoded note id) would otherwise be decoded to a space on the way in
+      // and match nothing. Encoding makes the round trip land on the id as
+      // written, whatever it contains; a Unicode id survives it the same way.
+      href={`#${encodeURIComponent(id)}`}
+      aria-label={`Link to "${text}"`}
+      className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-[var(--muted)] no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100"
+    >
+      #
+    </a>
+  );
 }
 
 /**
@@ -299,18 +399,20 @@ function CodeBlock({ info, text, className }: { info: string; text: string; clas
 function ListView({
   block,
   links,
+  ids,
   className,
   tight,
 }: {
   block: Block & { kind: "list" };
   links: Resolvers;
+  ids: Map<Block, string>;
   className: string;
   tight: boolean;
 }) {
   const shared = `${className} ${tight ? "space-y-1" : "space-y-2"} pl-5 marker:text-[var(--muted)]`;
   const items = block.items.map((item, i) => (
     <li key={i} className="pl-1 [&>*:first-child]:mt-0">
-      <Blocks blocks={item} links={links} tight />
+      <Blocks blocks={item} links={links} ids={ids} tight />
     </li>
   ));
 
@@ -362,11 +464,13 @@ const CALLOUT_TONE: Record<string, string> = {
 function QuoteView({
   block,
   links,
+  ids,
   className,
   tight,
 }: {
   block: Block & { kind: "quote" };
   links: Resolvers;
+  ids: Map<Block, string>;
   className: string;
   tight: boolean;
 }) {
@@ -375,7 +479,7 @@ function QuoteView({
       <blockquote
         className={`${className} border-l border-[var(--border)] pl-4 text-[var(--muted-strong)] [&>*:first-child]:mt-0`}
       >
-        <Blocks blocks={block.blocks} links={links} tight={tight} />
+        <Blocks blocks={block.blocks} links={links} ids={ids} tight={tight} />
       </blockquote>
     );
   }
@@ -393,7 +497,7 @@ function QuoteView({
         {block.title}
       </p>
       <div className="mt-1.5 [&>*:first-child]:mt-0">
-        <Blocks blocks={block.blocks} links={links} tight />
+        <Blocks blocks={block.blocks} links={links} ids={ids} tight />
       </div>
     </aside>
   );

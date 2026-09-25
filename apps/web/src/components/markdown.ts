@@ -586,3 +586,201 @@ export function standaloneFigure(nodes: Inline[]): FigureNode | null {
   const only = meaningful[0];
   return only.kind === "embed" || only.kind === "image" ? only : null;
 }
+
+/**
+ * The reader-visible text of a run of inline nodes, with all the markup gone.
+ *
+ * A heading's link id has to come from what a reader sees, not from the
+ * markdown source, so this walks the same `Inline[]` tree the renderer walks
+ * and keeps only the words: a link or a wikilink contributes its label, and
+ * math the symbols `parseMath` already substituted. That is what makes
+ * `` `softmax` `` and `**softmax**` slug the same: both reduce to the plain
+ * word before `slugify` ever sees them.
+ *
+ * An embed or an image inside a heading never becomes the `<figure>` the same
+ * node gets in a paragraph of its own: `InlineView` in `NoteProse.tsx` cannot
+ * put a block element inside an `h1`..`h4` any more than it can inside a
+ * `<p>`, so both render as their name in mono text instead - an embed's
+ * `target`, an image's `alt` or, with none, its `src`. This mirrors exactly
+ * that, not the figure's caption, because a reader looking at the actual page
+ * sees the filename, never the alias the note wrote for the picture.
+ */
+export function inlineText(nodes: Inline[]): string {
+  return nodes
+    .map((node): string => {
+      switch (node.kind) {
+        case "text":
+        case "code":
+          return node.text;
+        case "strong":
+        case "em":
+          return inlineText(node.children);
+        case "link":
+          return node.label;
+        case "note":
+          return node.label;
+        case "embed":
+          return node.target;
+        case "image":
+          return node.alt || node.src;
+        case "math":
+          return mathText(node.nodes);
+      }
+    })
+    .join("");
+}
+
+function mathText(nodes: MathNode[]): string {
+  return nodes.map((node) => (node.kind === "text" ? node.text : mathText(node.nodes))).join("");
+}
+
+/**
+ * A URL-fragment-safe id built from a heading's rendered text.
+ *
+ * `normalize("NFC")` composes rather than decomposes, so a precomposed é
+ * (one codepoint) and an "e" followed by a combining acute accent (two
+ * codepoints - the same visible word, and something a note copied from
+ * somewhere else can easily contain) land on the same id. Lowercased, and
+ * anything that is not a Unicode letter, digit or combining mark collapsed to
+ * a single hyphen, so `The `softmax` step` and `The **softmax** step` land on
+ * the same id once `inlineText` has reduced both to the same word.
+ *
+ * Keeping `\p{L}`, `\p{N}` and `\p{M}` rather than only `[a-z0-9]` is what
+ * lets a note written in any script keep its own words as its id instead of
+ * folding to the same meaningless `section` every ASCII-only rule would give
+ * it. `\p{M}` matters on its own: this used to also fold Latin accents off by
+ * decomposing and stripping them, which happened to make an accented word and
+ * its plain version slug alike, but the same step silently deleted the vowel
+ * signs out of a Devanagari word, since those are combining marks too, just
+ * ones that carry meaning rather than decoration - a base consonant lost its
+ * vowel sign and collided with the same consonant written alone. There is no
+ * accent fold any more, so an accented Latin word keeps its own accent in the
+ * id, which is still a real letter, a valid id, and a fragment a browser
+ * percent-encodes without help. An HTML id may hold any non-space character,
+ * which is what makes all of this legal in the first place.
+ *
+ * A heading can still fold to nothing: one that is pure punctuation, such as
+ * `???` or a dash on its own, has no letter, digit or mark in it at all. That
+ * would otherwise slug to the empty string, which is not a link anyone could
+ * ever share. `section` is the fallback, and it goes through the same
+ * duplicate counter as any other heading, so a second unreadable title
+ * becomes `section-2` rather than silently reusing the first one's id.
+ */
+export function slugify(text: string): string {
+  const folded = text
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  return folded === "" ? "section" : folded;
+}
+
+/**
+ * Refuses a `headingIds` prefix that cannot be a namespace: one with
+ * whitespace in it (an id cannot hold any at all), or one that does not open
+ * with a letter. Only runs outside production, the same trade-off React's own
+ * dev-mode checks make: the cost of the check is not worth paying on every
+ * request once the call sites are known good, but a caller who gets this
+ * wrong should see it immediately, as a thrown error at the page that passed
+ * a bad prefix, rather than as two notes' headings quietly landing on the
+ * same link with no error anywhere.
+ */
+function assertIdSafe(prefix: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (/\s/.test(prefix)) {
+    throw new Error(
+      `headingIds: idPrefix ${JSON.stringify(prefix)} contains whitespace, which an id cannot hold.`,
+    );
+  }
+  if (!/^\p{L}/u.test(prefix)) {
+    throw new Error(`headingIds: idPrefix ${JSON.stringify(prefix)} must start with a letter.`);
+  }
+}
+
+/**
+ * A stable id for every heading in a document, keyed by the block object so
+ * the renderer can look one up without recomputing it.
+ *
+ * Two things make a shared link outlive the session that made it. First, the
+ * same note always produces the same ids: they are assigned by walking the
+ * document once, top to bottom, into list items and quotes as well as the
+ * top level, so the order never depends on anything but the file's own
+ * content. Second, a repeated heading (and session logs repeat headings
+ * constantly, one `## Probe` per question) gets a distinct id rather than
+ * clobbering the first: `the-idea`, then `the-idea-2`, then `the-idea-3`,
+ * counted from first occurrence.
+ *
+ * That counter alone is not enough to promise every id is distinct: a
+ * document with both `## Probe` and a later, literal `## Probe-2` would slug
+ * both of them to `probe-2`, one from the counter and one from the text
+ * itself, and the second would silently steal the first's link. `claim`
+ * checks the id it is about to hand out against every id already issued, in
+ * either form, and keeps incrementing until it finds one that is free - the
+ * way GitHub's own heading slugger does it - rather than only counting how
+ * many times the base word has been seen.
+ *
+ * `prefix` namespaces one note's ids away from another's, for a page that
+ * renders more than one `NoteProse`. It is taken verbatim, not slugified:
+ * `slugify` is lossy on purpose - `A, B` and `A - B` are meant to read as the
+ * same heading - and that is exactly wrong for a prefix, whose only job is
+ * telling two notes apart. Making a prefix "nicer" by collapsing its
+ * separators can only destroy the distinction it exists to carry (`a/b` and
+ * `a-b` both becoming the namespace `a-b` is not a hypothetical, it is what
+ * `slugify(prefix)` used to do here), and no transform this function runs on
+ * one prefix can know what another `NoteProse` on the same page was given, so
+ * uniqueness across notes is the caller's job, not this one's. `assertIdSafe`
+ * only checks the shape a caller must already be able to guarantee - id-safe,
+ * not empty, no whitespace, starting with a letter - and, outside production,
+ * throws on a bad one so the mistake surfaces at the call site instead of as
+ * two notes' links silently landing on each other. Left empty, the default, a
+ * page with exactly one note (the only case that exists today) gets plain ids
+ * straight off the heading text, which is what makes `#worked-example` a link
+ * worth sharing instead of `#note-1-worked-example`.
+ */
+export function headingIds(blocks: Block[], prefix = ""): Map<Block, string> {
+  const ids = new Map<Block, string>();
+  const issued = new Set<string>();
+  // The next suffix to try for a given base, so a long run of repeats does
+  // not re-scan every earlier number it has already learned is taken.
+  const next = new Map<string, number>();
+
+  function claim(id: string): string {
+    if (!issued.has(id)) {
+      issued.add(id);
+      return id;
+    }
+    let n = next.get(id) ?? 2;
+    let candidate = `${id}-${n}`;
+    while (issued.has(candidate)) {
+      n += 1;
+      candidate = `${id}-${n}`;
+    }
+    next.set(id, n + 1);
+    issued.add(candidate);
+    return candidate;
+  }
+
+  if (prefix !== "") assertIdSafe(prefix);
+  const namespace = prefix;
+
+  function walk(list: Block[]): void {
+    for (const block of list) {
+      if (block.kind === "heading") {
+        const text = inlineText(parseInline(block.text));
+        const own = slugify(text);
+        ids.set(block, claim(namespace === "" ? own : `${namespace}-${own}`));
+        continue;
+      }
+      if (block.kind === "list") {
+        for (const item of block.items) walk(item);
+        continue;
+      }
+      if (block.kind === "quote") {
+        walk(block.blocks);
+      }
+    }
+  }
+
+  walk(blocks);
+  return ids;
+}

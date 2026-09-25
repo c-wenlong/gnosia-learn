@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  headingIds,
+  inlineText,
   isExternalHref,
   parseInline,
   parseNote,
   safeHref,
+  slugify,
   standaloneFigure,
   type Block,
 } from "./markdown";
@@ -362,6 +365,236 @@ describe("standaloneFigure", () => {
 
   it("ignores surrounding whitespace", () => {
     expect(standaloneFigure(parseInline("  ![[a.svg]]  "))).not.toBeNull();
+  });
+});
+
+describe("inlineText", () => {
+  it("reads the same visible word whether it is code or bold", () => {
+    expect(inlineText(parseInline("The `softmax` step"))).toBe("The softmax step");
+    expect(inlineText(parseInline("The **softmax** step"))).toBe("The softmax step");
+  });
+
+  it("takes a wikilink's label, not its target", () => {
+    expect(inlineText(parseInline("[[dot-product|the dot product]]"))).toBe("the dot product");
+    expect(inlineText(parseInline("[[dot-product]]"))).toBe("dot-product");
+  });
+
+  it("takes an embed's target, never its caption, matching how InlineView names it inline", () => {
+    // An embed inside a heading (or mid-sentence anywhere) cannot become the
+    // `<figure>` a standalone one gets, so `InlineView` names it by `target`
+    // regardless of any `|alias` the note wrote. The id has to agree, or the
+    // link's own accessible name would describe text nobody sees on the page.
+    expect(inlineText(parseInline("![[a.svg|Two bases]]"))).toBe("a.svg");
+    expect(inlineText(parseInline("![[a.svg]]"))).toBe("a.svg");
+  });
+
+  it("takes an image's alt, or its src with none, matching how InlineView names it inline", () => {
+    expect(inlineText(parseInline("![a picture](x.png)"))).toBe("a picture");
+    expect(inlineText(parseInline("![](x.png)"))).toBe("x.png");
+  });
+
+  it("reads math as the symbols parseMath already substituted", () => {
+    expect(inlineText(parseInline("$\\alpha \\le \\beta$"))).toBe("α ≤ β");
+  });
+});
+
+describe("slugify", () => {
+  it("lowercases and hyphenates", () => {
+    expect(slugify("The Idea")).toBe("the-idea");
+  });
+
+  it("collapses any run of non-alphanumeric characters to one hyphen", () => {
+    expect(slugify("A, B & C -- D")).toBe("a-b-c-d");
+  });
+
+  it("trims a leading or trailing hyphen rather than keeping it", () => {
+    expect(slugify("-- The Idea --")).toBe("the-idea");
+  });
+
+  it("keeps an accented letter rather than folding it to its plain form", () => {
+    // There used to be an accent fold here (café -> cafe). It is gone: the
+    // same decompose-then-strip step that can pull an accent off a Latin
+    // letter also strips a combining mark that is part of the word in other
+    // scripts, which is the bug the next few tests are about.
+    expect(slugify("Café")).toBe("café");
+  });
+
+  it("gives a precomposed and a decomposed form of the same accented letter the same id", () => {
+    // "\u00e9" is one codepoint, precomposed "e" with an acute accent.
+    // "e\u0301" is two codepoints, a plain "e" followed by a combining acute
+    // accent - the same visible word, and exactly the kind of difference a
+    // note pasted from somewhere else can carry without anyone noticing.
+    // normalize("NFC") composes the second form into the first before
+    // anything else runs.
+    const precomposed = "caf\u00e9";
+    const decomposed = "cafe\u0301";
+    expect(precomposed).not.toBe(decomposed);
+    expect(precomposed.length).not.toBe(decomposed.length);
+    expect(slugify(precomposed)).toBe(slugify(decomposed));
+    expect(slugify(precomposed)).toBe("caf\u00e9");
+  });
+
+  it("falls back to a non-empty id for punctuation-only text", () => {
+    expect(slugify("???")).toBe("section");
+  });
+
+  it("falls back to a non-empty id for punctuation in a non-Latin script too", () => {
+    // Three Japanese full stops: real characters, none of them a letter or a
+    // digit, so this exercises the fallback rather than the Unicode keep-list
+    // below.
+    expect(slugify("。。。")).toBe("section");
+  });
+
+  it("keeps a heading written in a non-Latin script instead of folding it away", () => {
+    // An HTML id may hold any non-space character, and a browser
+    // percent-encodes the fragment, so this is a real, working anchor and not
+    // a special case.
+    expect(slugify("概要")).toBe("概要");
+  });
+
+  it("keeps the Latin word in a heading that mixes scripts, hyphenated onto the rest", () => {
+    expect(slugify("第二章 Overview")).toBe("第二章-overview");
+  });
+
+  it("keeps a combining vowel sign, since it carries meaning rather than decoration", () => {
+    // किताब ("book", Hindi/Devanagari): consonant, vowel sign, consonant,
+    // vowel sign, consonant. Every vowel sign is a combining mark (\p{M}), the
+    // same general category the old accent fold stripped wholesale off Latin
+    // text - here that would delete two of the five characters, not four
+    // decorations off a base word.
+    expect(slugify("किताब")).toBe("किताब");
+  });
+
+  it("keeps a bare consonant and the same consonant plus a vowel sign apart", () => {
+    // The bug this guards: stripping \p{M} turned "कि" (क + the vowel sign
+    // ि) into the same string as "क" alone, so the second heading's link
+    // landed on the first.
+    const bare = slugify("क");
+    const withVowelSign = slugify("कि");
+    expect(bare).not.toBe(withVowelSign);
+    expect(bare).toBe("क");
+    expect(withVowelSign).toBe("कि");
+  });
+});
+
+describe("headingIds", () => {
+  function headingsOf(source: string): Array<Block & { kind: "heading" }> {
+    return parseNote(source).blocks.filter(
+      (b): b is Block & { kind: "heading" } => b.kind === "heading",
+    );
+  }
+
+  it("gives a heading its own text as the id", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(headingIds([heading]).get(heading)).toBe("the-idea");
+  });
+
+  it("gives a repeated heading a distinct, numbered id rather than reusing the first", () => {
+    const [first, second, third] = headingsOf("## Probe\n\ntext\n\n## Probe\n\nmore\n\n## Probe");
+    const ids = headingIds([first, second, third]);
+    expect(ids.get(first)).toBe("probe");
+    expect(ids.get(second)).toBe("probe-2");
+    expect(ids.get(third)).toBe("probe-3");
+  });
+
+  it("produces the same ids for the same note parsed twice over", () => {
+    const source = "## The idea\n\nprose\n\n## The idea";
+    const first = [...headingIds(parseNote(source).blocks).values()];
+    const second = [...headingIds(parseNote(source).blocks).values()];
+    expect(first).toEqual(second);
+    expect(first).toEqual(["the-idea", "the-idea-2"]);
+  });
+
+  it("slugs the reader-visible text, not the markdown source", () => {
+    const [code] = headingsOf("## The `softmax` step");
+    const [bold] = headingsOf("## The **softmax** step");
+    expect(headingIds([code]).get(code)).toBe(headingIds([bold]).get(bold));
+  });
+
+  it("never produces an empty id for a punctuation-only heading", () => {
+    const [heading] = headingsOf("## ???");
+    expect(headingIds([heading]).get(heading)).toBe("section");
+  });
+
+  it("defaults to no namespace, so the one note on a page gets a plain id", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(headingIds([heading]).get(heading)).toBe("the-idea");
+  });
+
+  it("namespaces ids under a prefix, so two notes' matching headings do not collide", () => {
+    const [a] = headingsOf("## The idea");
+    const [b] = headingsOf("## The idea");
+    const idA = headingIds([a], "concept:softmax").get(a);
+    const idB = headingIds([b], "concept:dot-product").get(b);
+    expect(idA).not.toBe(idB);
+    expect(idA).toBe("concept:softmax-the-idea");
+    expect(idB).toBe("concept:dot-product-the-idea");
+  });
+
+  it("keeps two prefixes that would collapse to the same slug apart", () => {
+    // "a/b" and "a-b" both slug to "a-b"; the namespace has exactly one job,
+    // telling these two notes apart, so it must not use `slugify` for this.
+    const [a] = headingsOf("## The idea");
+    const [b] = headingsOf("## The idea");
+    const idA = headingIds([a], "a/b").get(a);
+    const idB = headingIds([b], "a-b").get(b);
+    expect(idA).not.toBe(idB);
+  });
+
+  it("refuses a prefix with whitespace in it outside production, since an id cannot hold one", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "session 2026-08-20")).toThrow(/whitespace/);
+  });
+
+  it("refuses a prefix that does not start with a letter outside production", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "2026-08-20")).toThrow(/letter/);
+    expect(() => headingIds([heading], "-session")).toThrow(/letter/);
+  });
+
+  it("accepts a prefix that is id-safe: no whitespace, starting with a letter", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "session:2026-08-20")).not.toThrow();
+  });
+
+  it("keeps a literal heading and a counted one from colliding", () => {
+    // The second "Probe" would naively count to `probe-2`, which is also
+    // exactly what "Probe-2" slugs to on its own; `claim` has to notice the
+    // clash and move the counted one to `probe-3` rather than handing out an
+    // id the literal heading already holds.
+    const doc = parseNote("## Probe\n\n## Probe-2\n\n## Probe\n").blocks;
+    const ids = [...headingIds(doc).values()];
+    expect(ids).toEqual(["probe", "probe-2", "probe-3"]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps them apart whichever order the literal and the counted one appear in", () => {
+    // Same clash, but the literal `Probe-2` now comes after both repeats of
+    // `Probe` instead of between them, so the id it collides with was itself
+    // assigned by the counter rather than typed in the note.
+    const source = "## Probe\n\n## Probe\n\n## Probe-2\n";
+    const ids = [...headingIds(parseNote(source).blocks).values()];
+    expect(new Set(ids).size).toBe(ids.length);
+    // And still stable: parsing the same note twice gives the same answer.
+    expect([...headingIds(parseNote(source).blocks).values()]).toEqual(ids);
+  });
+
+  it("finds a heading nested inside a list item", () => {
+    const doc = parseNote("- Notes\n  ## Nested heading\n  more text").blocks;
+    const list = doc[0];
+    if (list.kind !== "list") throw new Error("expected a list");
+    const nested = list.items[0].find((b) => b.kind === "heading");
+    if (nested === undefined) throw new Error("expected a nested heading");
+    expect(headingIds(doc).get(nested)).toBe("nested-heading");
+  });
+
+  it("finds a heading nested inside a quote", () => {
+    const doc = parseNote("> ## Boxed\n> text").blocks;
+    const quote = doc[0];
+    if (quote.kind !== "quote") throw new Error("expected a quote");
+    const nested = quote.blocks.find((b) => b.kind === "heading");
+    if (nested === undefined) throw new Error("expected a nested heading");
+    expect(headingIds(doc).get(nested)).toBe("boxed");
   });
 });
 
