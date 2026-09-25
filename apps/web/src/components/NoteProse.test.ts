@@ -248,6 +248,24 @@ describe("heading anchors", () => {
     expect(heading.lastElementChild).toBe(link);
   });
 
+  it("encodes the fragment so a percent sign in the id survives the browser decoding it", () => {
+    // A prefix lifted from an encoded note id carries a literal `%20`. The
+    // browser percent-decodes a fragment before it looks for the element, so
+    // an unencoded `#note%20one-the-idea` would go looking for a space and
+    // find nothing. Decoding the href must give back the id exactly.
+    const host = render("## The idea", { idPrefix: "note%20one" });
+    const heading = host.querySelector("h2")!;
+    const href = heading.querySelector("a")!.getAttribute("href")!;
+    expect(heading.id).toBe("note%20one-the-idea");
+    expect(decodeURIComponent(href.slice(1))).toBe(heading.id);
+  });
+
+  it("encodes a Unicode id the same way, and it still decodes to the id", () => {
+    const heading = render("## 概要").querySelector("h2")!;
+    const href = heading.querySelector("a")!.getAttribute("href")!;
+    expect(decodeURIComponent(href.slice(1))).toBe(heading.id);
+  });
+
   it("stays visible by default on a device with no hover to reveal it", () => {
     // opacity-0 alone would leave the link undiscoverable on a touch screen:
     // no hover to reveal it, no keyboard to focus it. The hide-until-hover

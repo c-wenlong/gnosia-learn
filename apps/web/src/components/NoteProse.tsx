@@ -351,7 +351,12 @@ function Heading({
 function HeadingAnchor({ id, text }: { id: string; text: string }) {
   return (
     <a
-      href={`#${id}`}
+      // Encoded, because a browser percent-decodes a fragment before it looks
+      // for the element. An id holding a literal `%20` (a prefix taken from an
+      // encoded note id) would otherwise be decoded to a space on the way in
+      // and match nothing. Encoding makes the round trip land on the id as
+      // written, whatever it contains; a Unicode id survives it the same way.
+      href={`#${encodeURIComponent(id)}`}
       aria-label={`Link to "${text}"`}
       className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-[var(--muted)] no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100"
     >
