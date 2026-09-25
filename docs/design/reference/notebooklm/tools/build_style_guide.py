@@ -50,11 +50,19 @@ def swatches(group):
             f'<small>{html.escape(t.get("$description",""))}{" · <b>estimated</b>" if est else ""}</small></div></div>')
     return "\n".join(rows)
 
-def ink(hexv):
-    # dark label on light steps, light label on dark steps
+def luminance(hexv):
     h = hexv.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return "#1b1b1c" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
+    ch = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in ch]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+def contrast(a, b):
+    la, lb = sorted((luminance(a), luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+def ink(hexv):
+    # whichever label colour has the higher WCAG contrast against the swatch
+    return max(("#1b1b1c", "#ffffff"), key=lambda c: contrast(c, hexv))
 
 def palette(fam):
     return "\n".join(f'<div class="ramp-step" style="background:var(--palette-{fam}-{k});color:{ink(t["$value"])}"><span>{k}</span><span>{t["$value"]}</span></div>'
