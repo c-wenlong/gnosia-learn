@@ -16,8 +16,14 @@ import {
 } from "@self-learn/catalog/state";
 
 import { assetFilesEnabled, resolveAssetFile } from "@/lib/asset-files";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
-import { assetFileHref, assetPosterHref, compareByKindThenId } from "@/lib/library";
+import {
+  assetFileHref,
+  assetPosterHref,
+  assetStatusHref,
+  compareByKindThenId,
+} from "@/lib/library";
 
 /**
  * The library's door to the catalog, shaped exactly like
@@ -488,6 +494,58 @@ export function thumbnailFor(
   if (!accessFor(access, row.sourceRepo).ok) return null;
   if (row.kind === "diagram_svg") return assetFileHref(row.id);
   return row.kind === "video" ? assetPosterHref(row.id) : null;
+}
+
+/**
+ * Where a card asks why its thumbnail failed, beside `thumbnailFor` so the two
+ * cannot disagree about which route the picture came from: the file route for
+ * a diagram, the poster route (with its own ffmpeg refusals) for a video.
+ */
+export function thumbnailStatusFor(
+  row: AssetWithTopics,
+  access: { selfLearn: FileAccess; manimkc: FileAccess },
+): string | undefined {
+  if (thumbnailFor(row, access) === null) return undefined;
+  return assetStatusHref(row.id, row.kind === "video" ? "poster" : "file");
+}
+
+/**
+ * Why each of these assets' files would be refused, decided on the server
+ * before anything renders. `null` means the file resolves.
+ *
+ * The detail page calls this for the asset it shows and for every picture its
+ * note embeds, so a file that is already gone, a name the catalog has no row
+ * for, or a stale manimkc index renders the failure panel straight away rather
+ * than a player or an `<img>` that fails and then has to ask why. It is the
+ * same `resolveAssetFile` the route runs, so the page and the route cannot
+ * give one file two different answers. Only what nobody could know before the
+ * browser tried is left to the client's probe.
+ *
+ * A handful of ids per page (one asset, a few embeds), each a primary-key
+ * lookup and a `realpath`. The grid does not call this: thirty-odd resolutions
+ * on every render to save a probe on the rare card whose picture fails is the
+ * wrong trade, and the grid already says the deployment-wide answers once.
+ */
+export async function readFileProblems(
+  ids: readonly string[],
+): Promise<Map<string, RouteProblemCode | null>> {
+  const out = new Map<string, RouteProblemCode | null>();
+  if (ids.length === 0) return out;
+  if (!assetFilesEnabled()) {
+    for (const id of ids) out.set(id, "files-off");
+    return out;
+  }
+  try {
+    const db = await catalogDatabase();
+    for (const id of new Set(ids)) {
+      const resolved = await resolveAssetFile(db, id);
+      out.set(id, resolved.ok ? null : resolved.code);
+    }
+  } catch (error) {
+    warn("file problems", error);
+    for (const id of ids) if (!out.has(id)) out.set(id, "catalog-unreachable");
+  }
+  return out;
 }
 
 /**

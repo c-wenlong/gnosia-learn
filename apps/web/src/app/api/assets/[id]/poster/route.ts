@@ -65,7 +65,7 @@ export async function GET(
     // Worded exactly as the file route words it: on a deployment this route
     // does not exist, and a second phrasing would only advertise the switch.
     return NextResponse.json(
-      { error: "Not found.", detail: "Asset files are not served by this deployment." },
+      { error: "Not found.", code: "files-off", detail: "Asset files are not served by this deployment." },
       { status: 404 },
     );
   }
@@ -82,14 +82,18 @@ export async function GET(
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`asset poster: catalog unreachable: ${message}`);
     return NextResponse.json(
-      { error: "The catalog is unreachable.", detail: "Could not look this asset up." },
+      {
+        error: "The catalog is unreachable.",
+        code: "catalog-unreachable",
+        detail: "Could not look this asset up.",
+      },
       { status: 503 },
     );
   }
 
   if (target.ok === false) {
     return NextResponse.json(
-      { error: target.error, detail: target.detail },
+      { error: target.error, code: target.code, detail: target.detail },
       { status: target.status },
     );
   }
@@ -114,7 +118,7 @@ export async function GET(
   const poster = await posterBody(target);
   if (poster.ok === false) {
     return NextResponse.json(
-      { error: poster.error, detail: poster.detail },
+      { error: poster.error, code: poster.code, detail: poster.detail },
       { status: poster.status },
     );
   }

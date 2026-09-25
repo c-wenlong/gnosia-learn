@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import {
   assetDisplayTitle,
@@ -10,6 +10,8 @@ import {
   type AssetCardRef,
   type Family,
 } from "@/components/asset-meta";
+import { useAssetFailure } from "@/components/use-asset-failure";
+import { WidgetFailure } from "@/components/WidgetFailure";
 
 /**
  * One row of the catalog's asset table, as a card in a grid.
@@ -29,7 +31,9 @@ import {
  * with no poster shows a labelled placeholder, not a black hole. An asset with
  * no title falls back to its filename, in mono, because that is what it is
  * actually called, and to `Untitled <kind>` only when there is no name at all.
- * A preview that fails to load says so where the picture would have been.
+ * A preview that fails to load says so where the picture would have been,
+ * and says why: the compact form of the shared Widget placeholder failure,
+ * with the reason asked of `thumbnailStatusHref` after the image fails.
  *
  * **The naming and sizing live in `./asset-meta`**, which is React-free and
  * carries no `"use client"`. They were in this file and had to move: a
@@ -97,6 +101,7 @@ export function AssetCard({
   asset,
   topic,
   thumbnailSrc,
+  thumbnailStatusHref,
   href,
 }: {
   asset: AssetCardRef;
@@ -104,23 +109,19 @@ export function AssetCard({
   topic?: string;
   /** A poster for a video, or the diagram itself. Already resolved. */
   thumbnailSrc?: string | null;
+  /** Where to ask why the thumbnail failed. Without one the reason is unknown. */
+  thumbnailStatusHref?: string;
   /** Where clicking goes. Without one the card is a description, not a link. */
   href?: string;
 }) {
-  const [thumbFailed, setThumbFailed] = useState(false);
-
   // The failure belongs to the thumbnail that failed, so a new one gets its own
-  // attempt. As with `DiagramView`, a failed preview swaps the `<img>` out for
-  // the "Preview unavailable" glyph, so nothing is left to load the next file
-  // and the card would stay unavailable for every asset it is later given.
-  // Every list in the app keys its cards by asset id today, which is what has
-  // kept this from showing, and that is exactly the kind of guarantee the next
-  // caller does not inherit; the reset lives here instead.
-  const [renderedThumb, setRenderedThumb] = useState(thumbnailSrc);
-  if (renderedThumb !== thumbnailSrc) {
-    setRenderedThumb(thumbnailSrc);
-    setThumbFailed(false);
-  }
+  // attempt: a failed preview swaps the `<img>` out for the panel, so nothing
+  // would be left to load the next file and the card would stay unavailable
+  // for every asset it is later given. Every list in the app keys its cards by
+  // asset id today, which is the kind of guarantee the next caller does not
+  // inherit; `useAssetFailure` resets on a new `src` instead.
+  const { failure, fail, observe } = useAssetFailure(thumbnailSrc, thumbnailStatusHref);
+  const thumbFailed = failure !== null;
 
   const family = familyOf(asset.kind);
   const label = assetKindLabel(asset.kind);
@@ -156,23 +157,25 @@ export function AssetCard({
         {showThumb ? (
           // eslint-disable-next-line @next/next/no-img-element -- the poster and the diagram are files the app serves as-is, and a vector drawing must not be rasterised.
           <img
+            ref={observe}
             src={thumbnailSrc ?? undefined}
             alt=""
             loading="lazy"
             decoding="async"
-            onError={() => setThumbFailed(true)}
+            onError={fail}
             className={`h-full w-full ${family === "diagram" ? "object-contain p-2" : "object-cover"}`}
+          />
+        ) : thumbFailed ? (
+          <WidgetFailure
+            compact
+            headline="Preview unavailable"
+            code={failure.code}
+            className="h-full w-full"
           />
         ) : (
           <span className="flex flex-col items-center gap-1 text-[var(--muted)]">
             <KindGlyph family={family} className="h-7 w-7" />
-            <span className="text-[10px]">
-              {thumbFailed
-                ? "Preview unavailable"
-                : family === "video"
-                  ? "No poster"
-                  : "No preview"}
-            </span>
+            <span className="text-[10px]">{family === "video" ? "No poster" : "No preview"}</span>
           </span>
         )}
       </div>

@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useAssetFailure } from "@/components/use-asset-failure";
+import { WidgetFailure } from "@/components/WidgetFailure";
+
 /**
  * One exported teaching diagram.
  *
@@ -33,23 +36,31 @@ import { useEffect, useRef, useState } from "react";
  * near-white mat in both themes and framed like a plate in a book: the same
  * drawing in both themes, legible in both, glare-free because the mat is not
  * pure white and the frame separates it from the page.
+ *
+ * **A failure says why.** `onError` carries no reason, so the component asks
+ * `statusHref` (the status route for this asset) and shows the answer in the
+ * shared Widget placeholder failure panel, in place of the mat.
  */
 export function DiagramView({
   src,
+  statusHref,
   title,
   caption,
 }: {
   /** Already resolved by the caller. */
   src: string;
+  /** Where to ask why `src` failed. Without one a failure says it has no reason. */
+  statusHref?: string;
   /** The alt text and the visible heading. */
   title: string;
   caption?: string;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [status, setStatus] = useState<"loading" | "ready">("loading");
+  const { failure, fail, retry, attempt, observe } = useAssetFailure(src, statusHref);
 
   // The status describes one file, so a new `src` starts over. It has to,
-  // because `failed` renders the message *instead of* the `<img>`: with the
+  // because a failure renders the panel *instead of* the `<img>`: with the
   // old status kept there is no element left to fire `onLoad` for the new
   // file, and the component is stuck on "This diagram did not load" for every
   // diagram it is handed afterwards. A soft navigation between two library
@@ -73,7 +84,7 @@ export function DiagramView({
     // Only ever an upgrade: a picture that really failed still fires `onError`,
     // and a zero-width `complete` also describes an image not yet fetched.
     if (img?.complete && img.naturalWidth > 0) setStatus("ready");
-  }, [src]);
+  }, [src, attempt]);
 
   return (
     <figure className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
@@ -89,23 +100,17 @@ export function DiagramView({
         </a>
       </div>
 
-      {status === "failed" ? (
-        <div className="flex flex-col items-center gap-1 px-4 py-10 text-center">
-          <p className="text-sm font-medium text-[var(--foreground)]">
-            This diagram did not load.
-          </p>
-          <p className="max-w-prose text-xs text-[var(--muted)]">
-            The file may have moved since the catalog last indexed it.
-          </p>
-          <a
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 break-all font-mono text-[11px] text-[var(--accent-strong)] hover:underline"
-          >
-            {src}
-          </a>
-        </div>
+      {failure !== null ? (
+        <WidgetFailure
+          headline="This diagram did not load."
+          code={failure.code}
+          onRetry={() => {
+            setStatus("loading");
+            retry();
+          }}
+          inset
+          className="min-h-48"
+        />
       ) : (
         // A constant mat in both themes: see the note above on why the diagram
         // is never recoloured to match the page.
@@ -125,13 +130,17 @@ export function DiagramView({
               app serves as-is: next/image would rasterise a vector drawing
               whose whole job is to stay sharp at any zoom. */}
           <img
-            ref={imgRef}
+            key={attempt}
+            ref={(element) => {
+              imgRef.current = element;
+              observe(element);
+            }}
             src={src}
             alt={title}
             loading="lazy"
             decoding="async"
             onLoad={() => setStatus("ready")}
-            onError={() => setStatus("failed")}
+            onError={fail}
             className="relative mx-auto block max-h-[70vh] w-full object-contain"
           />
         </div>
