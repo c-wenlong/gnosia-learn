@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <clipPath id="clip0">
+      <rect width="1440" height="900"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect width="1440" height="900" fill="#F8F8F8"/>
+    <g clip-path="url(#clip0)">
+      <g>
+        <rect width="1440" height="64" fill="#FFFFFF" stroke="#EBEBEB" stroke-width="1"/>
+        <g transform="translate(28, 20.5)">
+          <text x="0" y="20" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#000000">self-learn</text>
+        </g>
+        <g transform="translate(159, 18)">
+          <g>
+            <g>
+              <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#000000">Today</text>
+            </g>
+            <g transform="translate(6.5, 26)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#000000"/>
+            </g>
+          </g>
+          <g transform="translate(69, 0)">
+            <g>
+              <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="500" fill="#666666">Courses</text>
+            </g>
+            <g transform="translate(14, 26)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(153, 0)">
+            <g>
+              <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="500" fill="#666666">Learn</text>
+            </g>
+            <g transform="translate(5, 26)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(219, 0)">
+            <g>
+              <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="500" fill="#666666">Library</text>
+            </g>
+            <g transform="translate(9.5, 26)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+          <g transform="translate(294, 0)">
+            <g>
+              <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="500" fill="#666666">Review</text>
+            </g>
+            <g transform="translate(10.5, 26)">
+              <rect width="28" height="2" rx="1" ry="1" fill="#FFFFFF"/>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(534, 32)"/>
+        <g transform="translate(1077, 14)">
+          <rect width="125" height="36" rx="18" ry="18" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+          <g transform="translate(14, 13)">
+            <ellipse cx="5" cy="5" rx="5" ry="5" fill="#FF9600"/>
+          </g>
+          <g transform="translate(32, 10)">
+            <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">14 day streak</text>
+          </g>
+        </g>
+        <g transform="translate(1234, 14)">
+          <rect width="112" height="36" rx="18" ry="18" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+          <g transform="translate(14, 13)">
+            <ellipse cx="5" cy="5" rx="5" ry="5" fill="#456DFF"/>
+          </g>
+          <g transform="translate(32, 10)">
+            <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Target 1 / 2</text>
+          </g>
+        </g>
+        <g transform="translate(1378, 15)">
+          <ellipse cx="17" cy="17" rx="17" ry="17" fill="#E5E5E5"/>
+        </g>
+      </g>
+      <g transform="translate(0, 64)">
+        <g transform="translate(24, 24)">
+          <g>
+            <rect width="992" height="142" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g transform="translate(0, 14)">
+                <g>
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999" letter-spacing="0.6">NEXT ON YOUR PATH · CP4281 · MODULE 2</text>
+                </g>
+                <g transform="translate(0, 21)">
+                  <text x="0" y="26" font-family="Georgia, serif" font-size="26" font-weight="700" fill="#000000">Barycentric coordinates</text>
+                </g>
+                <g transform="translate(0, 59)">
+                  <g transform="translate(0, 0.5)">
+                    <ellipse cx="7" cy="7" rx="7" ry="7" fill="#A9B9FF" stroke="#456DFF" stroke-width="2"/>
+                  </g>
+                  <g transform="translate(22, 0)">
+                    <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">Learning · p(L) 0.42</text>
+                  </g>
+                  <g transform="translate(141, 0)">
+                    <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">· last seen 3 days ago</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(762, 0)">
+                <g>
+                  <rect width="190" height="48" rx="24" ry="24" fill="#000000"/>
+                  <g>
+                    <rect width="190" height="44" rx="22" ry="22" fill="#111111"/>
+                    <g transform="translate(31, 13)">
+                      <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#FFFFFF">Continue teaching</text>
+                    </g>
+                  </g>
+                </g>
+                <g transform="translate(0, 58)">
+                  <rect width="190" height="44" rx="22" ry="22" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+                  <g transform="translate(35, 13)">
+                    <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#000000">Open workspace</text>
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 158)">
+            <rect width="992" height="265" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g>
+                <text x="0" y="16" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="16" font-weight="700" fill="#000000">Reviews due</text>
+              </g>
+              <g transform="translate(914, 2)">
+                <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="500" fill="#294BC6">See all</text>
+              </g>
+            </g>
+            <g transform="translate(20, 52)">
+              <g transform="translate(0, 1.5)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#456DFF"/>
+              </g>
+              <g transform="translate(26, 0)">
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" fill="#000000">Dot product</text>
+                </g>
+              </g>
+              <g transform="translate(854, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">due today</text>
+              </g>
+              <g transform="translate(921, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">recall</text>
+              </g>
+            </g>
+            <g transform="translate(20, 81)">
+              <g transform="translate(0, 1.5)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#A9B9FF" stroke="#456DFF" stroke-width="2"/>
+              </g>
+              <g transform="translate(26, 0)">
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" fill="#000000">Cross product</text>
+                </g>
+              </g>
+              <g transform="translate(833, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">due today</text>
+              </g>
+              <g transform="translate(900, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">check · 2</text>
+              </g>
+            </g>
+            <g transform="translate(20, 110)">
+              <g transform="translate(0, 1.5)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#A9B9FF" stroke="#456DFF" stroke-width="2"/>
+              </g>
+              <g transform="translate(26, 0)">
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" fill="#000000">Homogeneous coordinates</text>
+                </g>
+              </g>
+              <g transform="translate(848, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">overdue 1d</text>
+              </g>
+              <g transform="translate(921, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">recall</text>
+              </g>
+            </g>
+            <g transform="translate(20, 139)">
+              <g transform="translate(0, 1.5)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#456DFF"/>
+              </g>
+              <g transform="translate(26, 0)">
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" fill="#000000">Model-view matrix</text>
+                </g>
+              </g>
+              <g transform="translate(854, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">due today</text>
+              </g>
+              <g transform="translate(921, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">recall</text>
+              </g>
+            </g>
+            <g transform="translate(20, 168)">
+              <g transform="translate(0, 1.5)">
+                <ellipse cx="7" cy="7" rx="7" ry="7" fill="#A9B9FF" stroke="#456DFF" stroke-width="2"/>
+              </g>
+              <g transform="translate(26, 0)">
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" fill="#000000">Perspective divide</text>
+                </g>
+              </g>
+              <g transform="translate(836, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">due today</text>
+              </g>
+              <g transform="translate(903, 1)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">check · 1</text>
+              </g>
+            </g>
+            <g transform="translate(20, 197)">
+              <g>
+                <rect width="189" height="48" rx="24" ry="24" fill="#000000"/>
+                <g>
+                  <rect width="189" height="44" rx="22" ry="22" fill="#111111"/>
+                  <g transform="translate(24, 13)">
+                    <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#FFFFFF">Start review · 12 due</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(199, 2)">
+                <rect width="186" height="44" rx="22" ry="22" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+                <g transform="translate(22, 13)">
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#000000">Snooze to tomorrow</text>
+                </g>
+              </g>
+              <g transform="translate(395, 24)"/>
+              <g transform="translate(897, 16.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Est. 9 min</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 439)">
+            <rect width="992" height="172" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g>
+                <text x="0" y="16" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="16" font-weight="700" fill="#000000">Recent activity</text>
+              </g>
+              <g transform="translate(888, 2)">
+                <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="500" fill="#294BC6">Full history</text>
+              </g>
+            </g>
+            <g transform="translate(20, 52)">
+              <g transform="translate(0, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Yesterday</text>
+              </g>
+              <g transform="translate(80, 4)">
+                <ellipse cx="4" cy="4" rx="4" ry="4" fill="#A9B9FF"/>
+              </g>
+              <g transform="translate(98, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Teach · Cross product · 5 of 6 right</text>
+                </g>
+              </g>
+              <g transform="translate(861, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">p(L) 0.31 to 0.55</text>
+              </g>
+            </g>
+            <g transform="translate(20, 80)">
+              <g transform="translate(0, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Yesterday</text>
+              </g>
+              <g transform="translate(80, 4)">
+                <ellipse cx="4" cy="4" rx="4" ry="4" fill="#A9B9FF"/>
+              </g>
+              <g transform="translate(98, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Review · 9 cards · 2 again</text>
+                </g>
+              </g>
+              <g transform="translate(886, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">next due Fri</text>
+              </g>
+            </g>
+            <g transform="translate(20, 108)">
+              <g transform="translate(0, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Mon</text>
+              </g>
+              <g transform="translate(80, 4)">
+                <ellipse cx="4" cy="4" rx="4" ry="4" fill="#A9B9FF"/>
+              </g>
+              <g transform="translate(98, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Probe · Homogeneous coordinates · 2 of 4</text>
+                </g>
+              </g>
+              <g transform="translate(858, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">p(L) 0.20 to 0.28</text>
+              </g>
+            </g>
+            <g transform="translate(20, 136)">
+              <g transform="translate(0, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Mon</text>
+              </g>
+              <g transform="translate(80, 4)">
+                <ellipse cx="4" cy="4" rx="4" ry="4" fill="#A9B9FF"/>
+              </g>
+              <g transform="translate(98, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Watched · Dot product explainer (4:12)</text>
+                </g>
+              </g>
+              <g transform="translate(952, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666"></text>
+              </g>
+            </g>
+          </g>
+        </g>
+        <g transform="translate(1036, 24)">
+          <g>
+            <rect width="380" height="187" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g>
+                <g>
+                  <text x="0" y="16" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="16" font-weight="700" fill="#000000">Today's target</text>
+                </g>
+                <g transform="translate(0, 24)">
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#666666">One concept + due reviews</text>
+                </g>
+                <g transform="translate(0, 44)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#294BC6">Set by you · edit</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(20, 91)">
+              <g>
+                <rect width="303" height="20" rx="10" ry="10" fill="#E5E5E5"/>
+                <rect width="100" height="20" rx="10" ry="10" fill="#456DFF"/>
+              </g>
+              <g transform="translate(315, 2)">
+                <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#000000">1 / 2</text>
+              </g>
+            </g>
+            <g transform="translate(20, 123)">
+              <g transform="translate(0, 3)">
+                <ellipse cx="5" cy="5" rx="5" ry="5" fill="#29CC57"/>
+              </g>
+              <g transform="translate(20, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">Reviews cleared</text>
+                </g>
+              </g>
+              <g transform="translate(311, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">done</text>
+              </g>
+            </g>
+            <g transform="translate(20, 151)">
+              <g transform="translate(0, 3)">
+                <ellipse cx="5" cy="5" rx="5" ry="5" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+              </g>
+              <g transform="translate(20, 0)">
+                <g>
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">One concept taught</text>
+                </g>
+              </g>
+              <g transform="translate(311, 0.5)">
+                <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">open</text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 203)">
+            <rect width="380" height="204" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g>
+                <text x="0" y="16" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="16" font-weight="700" fill="#000000">Streak</text>
+              </g>
+              <g transform="translate(287, 1.5)">
+                <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="500" fill="#294BC6">Calendar</text>
+              </g>
+            </g>
+            <g transform="translate(20, 51)">
+              <g>
+                <text x="0" y="36" font-family="Georgia, serif" font-size="36" font-weight="700" fill="#FF9600">14</text>
+              </g>
+              <g transform="translate(52, 3)">
+                <g>
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" fill="#000000">day streak</text>
+                </g>
+                <g transform="translate(0, 20)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">1 free miss left this week</text>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(20, 104)">
+              <g>
+                <g transform="translate(12, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">M</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#FF9600"/>
+                  <g transform="translate(11, 9)">
+                    <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">✓</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(46, 0)">
+                <g transform="translate(13.5, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">T</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#FF9600"/>
+                  <g transform="translate(11, 9)">
+                    <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">✓</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(92, 0)">
+                <g transform="translate(11, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">W</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#FF9600"/>
+                  <g transform="translate(11, 9)">
+                    <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">✓</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(138, 0)">
+                <g transform="translate(13.5, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">T</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#FF9600"/>
+                  <g transform="translate(11, 9)">
+                    <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">✓</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(184, 0)">
+                <g transform="translate(13.5, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">F</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#FF9600"/>
+                  <g transform="translate(11, 9)">
+                    <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">✓</text>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(230, 0)">
+                <g transform="translate(13, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#FF9600">S</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="none" stroke="#FF9600" stroke-width="2"/>
+                  <g transform="translate(12, 12)">
+                    <ellipse cx="5" cy="5" rx="5" ry="5" fill="#FF9600"/>
+                  </g>
+                </g>
+              </g>
+              <g transform="translate(276, 0)">
+                <g transform="translate(13, 0)">
+                  <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#999999">S</text>
+                </g>
+                <g transform="translate(0, 19)">
+                  <rect width="34" height="34" rx="17" ry="17" fill="#E5E5E5"/>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(20, 169)">
+              <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#999999">Reminders state facts, never guilt</text>
+            </g>
+          </g>
+          <g transform="translate(0, 423)">
+            <rect width="380" height="198" rx="20" ry="20" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+            <g transform="translate(20, 20)">
+              <g>
+                <text x="0" y="16" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="16" font-weight="700" fill="#000000">Courses in progress</text>
+              </g>
+            </g>
+            <g transform="translate(20, 52)">
+              <g>
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" font-weight="500" fill="#000000">CP4281 Computer Graphics</text>
+                </g>
+                <g transform="translate(263, 1)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">8 of 20 topics</text>
+                </g>
+              </g>
+              <g transform="translate(0, 25)">
+                <rect width="340" height="8" rx="4" ry="4" fill="#E5E5E5"/>
+                <rect width="100" height="8" rx="4" ry="4" fill="#456DFF"/>
+              </g>
+            </g>
+            <g transform="translate(20, 97)">
+              <g>
+                <g>
+                  <text x="0" y="14" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="14" font-weight="500" fill="#000000">CS3216 Software Engineering</text>
+                </g>
+                <g transform="translate(266, 1)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#666666">3 of 17 topics</text>
+                </g>
+              </g>
+              <g transform="translate(0, 25)">
+                <rect width="340" height="8" rx="4" ry="4" fill="#E5E5E5"/>
+                <rect width="100" height="8" rx="4" ry="4" fill="#456DFF"/>
+              </g>
+            </g>
+            <g transform="translate(20, 142)">
+              <rect width="104" height="36" rx="18" ry="18" fill="#FFFFFF" stroke="#E5E5E5" stroke-width="2"/>
+              <g transform="translate(18, 10)">
+                <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#000000">All courses</text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
