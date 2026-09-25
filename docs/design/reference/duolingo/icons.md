@@ -1,10 +1,10 @@
 # Duolingo icon export
 
-All SVGs in `out/icons/` are Duolingo's property (exported from the live, logged-in web app at www.duolingo.com). They are kept here for design-reference use only, not redistribution.
+All SVGs in `icons/` are Duolingo's property (exported from the live, logged-in web app at www.duolingo.com). They are kept here for design-reference use only, not redistribution.
 
 ## Summary
 
-- **Exported:** 13 distinct inline SVGs (`out/icons/inline/`) + 210 distinct CDN SVGs (`out/icons/cdn/`, all from `d35aaqx5ub95lt.cloudfront.net` or `*.duolingo.com`).
+- **Exported:** 13 distinct inline SVGs (`icons/inline/`) + 210 distinct CDN SVGs (`icons/cdn/`, all from `d35aaqx5ub95lt.cloudfront.net` or `*.duolingo.com`).
 
 - **Two-tier system.** Inline SVGs are UI chrome: single-colour glyphs that inherit `currentColor` (chevrons, X, pencil, headphone/badge overlays on path nodes, the session progress-ring) so they retint with theme/state via CSS, not the SVG file. CDN-hosted SVGs are static illustration assets with colours baked into the file as literal `rgb()`/hex values (flags, gems, hearts, streak flame, league badges, achievement art, mascot poses); none of the 210 CDN files used `currentColor`.
 
@@ -34,7 +34,7 @@ All SVGs in `out/icons/` are Duolingo's property (exported from the live, logged
 | quests-circle-check-icon.svg | inline, icons-_quests.json svgs[0] | Daily Quests list, next to a quest's progress text – `quests-dark-default.json` node 152 | 16x16px | 0 0 16 16 | stroke: currentColor 2px (outer circle) / fill: currentColor (inner check marks) | #ffab33 (fox, dark) | stroke+fill UI glyph |
 | settings-select-chevron-icon.svg | inline, icons-_settings_account.json svgs[0] (identical file reused in icons-_settings_notifications.json) | Settings > Account list rows, e.g. a select/dropdown row – `settings-account-dark-default.json` node 142 | 15x9px | 0 0 15 9 | fill: currentColor (1 path) / stroke: none | #52656d (freetail / hare-always-dark, dark) | single-colour UI glyph |
 
-## CDN SVGs (210 distinct, downloaded to `out/icons/cdn/`)
+## CDN SVGs (210 distinct, downloaded to `icons/cdn/`)
 
 All from `d35aaqx5ub95lt.cloudfront.net` (205) or `*.duolingo.com` – specifically `friends.duolingo.com/kudos/assets/*` (3, kudos reaction/rank art) and root-relative `/images/error_pages/*` on `www.duolingo.com` (2). "Appears at" and "Size" come from the first matching `<img src>` or `background-image` node found across all page dumps; 3 files were referenced only in `dumps/icons-*.json` lists and never matched to a visible node in any captured page state.
 

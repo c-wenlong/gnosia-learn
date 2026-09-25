@@ -635,7 +635,7 @@ card with eclipse background + gamma/starlight/quasar radial gradient; Duo art s
 
 ## Icons
 
-- **Exported:** 13 distinct inline SVGs (`out/icons/inline/`) + 210 distinct CDN SVGs (`out/icons/cdn/`, all from `d35aaqx5ub95lt.cloudfront.net` or `*.duolingo.com`).
+- **Exported:** 13 distinct inline SVGs (`icons/inline/`) + 210 distinct CDN SVGs (`icons/cdn/`, all from `d35aaqx5ub95lt.cloudfront.net` or `*.duolingo.com`).
 
 - **Two-tier system.** Inline SVGs are UI chrome: single-colour glyphs that inherit `currentColor` (chevrons, X, pencil, headphone/badge overlays on path nodes, the session progress-ring) so they retint with theme/state via CSS, not the SVG file. CDN-hosted SVGs are static illustration assets with colours baked into the file as literal `rgb()`/hex values (flags, gems, hearts, streak flame, league badges, achievement art, mascot poses); none of the 210 CDN files used `currentColor`.
 

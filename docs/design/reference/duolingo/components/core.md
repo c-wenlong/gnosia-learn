@@ -163,7 +163,7 @@ Type style: Button label: duolingo-sans 700, 15px, line-height 1.2 (18px), lette
 
 Responsive (570px): Player buttons (_3DbUj) are width:100% with min-width 150px below 700px and auto width at >=700px; label 17px only at >=700px. Mobile profile CTA "GET STARTED" spans 506px (profile-dark-mobile#72). FOLLOW collapses to an icon-only 41x32 button with 6px 8px padding in the mobile friend list (profile-dark-mobile#115) vs 127x36 with 6px 18px padding (eiTQu) on desktop.
 
-Screenshots: dark: `out/screenshots/lesson-dark-challenge-tiles-partial.png`; light: `out/screenshots/lesson-light-challenge-tiles-partial.png`
+Screenshots: dark: `../screenshots/lesson-dark-challenge-tiles-partial.png`; light: `../screenshots/lesson-light-challenge-tiles-partial.png`
 
 Crops: [dark: button-dark.png](crops/button-dark.png) [light: button-light.png](crops/button-light.png)
 
@@ -242,7 +242,7 @@ Type style: Input: body (500, 20px/28px at desktop). Label: heading-small (700, 
 
 Responsive (570px): No mobile capture of settings/profile. --text-body-size is 1.25rem everywhere in the :root rule (css:7459), so the input stays 20px.
 
-Screenshots: dark: `out/screenshots/settings-profile-dark-input-focus.png`; light: `out/screenshots/settings-profile-light-default.png`
+Screenshots: dark: `../screenshots/settings-profile-dark-input-focus.png`; light: `../screenshots/settings-profile-light-default.png`
 
 Crops: [dark: text-input-dark.png](crops/text-input-dark.png) [light: text-input-light.png](crops/text-input-light.png)
 
@@ -302,7 +302,7 @@ Type style: 22px / weight 400 (desktop); 19px below 700px.
 
 Responsive (570px): @media (max-width:699px): font-size 19px, margin 0 16px 16px, padding 16px (css:2173 .JW88y). No 570px capture of this page.
 
-Screenshots: dark: `out/screenshots/user-search-dark-results.png`; light: `out/screenshots/user-search-light-results.png`
+Screenshots: dark: `../screenshots/user-search-dark-results.png`; light: `../screenshots/user-search-light-results.png`
 
 Crops: [dark: search-input-dark.png](crops/search-input-dark.png) [light: search-input-light.png](crops/search-input-light.png)
 
@@ -371,7 +371,7 @@ Type style: Value: 700 15px/18px uppercase 0.8px.
 
 Responsive (570px): Mobile (settings-account-dark-mobile#50): same 50px face, full column width 502px.
 
-Screenshots: dark: `out/screenshots/settings-account-dark-default.png`; light: `out/screenshots/settings-account-light-default.png`
+Screenshots: dark: `../screenshots/settings-account-dark-default.png`; light: `../screenshots/settings-account-light-default.png`
 
 Crops: [dark: select-dark.png](crops/select-dark.png) [light: select-light.png](crops/select-light.png) [light: select-disabled-light.png](crops/select-disabled-light.png)
 
@@ -432,7 +432,7 @@ Type style: n/a (icon only)
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/settings-notifications-dark-default.png`; light: `out/screenshots/settings-notifications-light-default.png`
+Screenshots: dark: `../screenshots/settings-notifications-dark-default.png`; light: `../screenshots/settings-notifications-light-default.png`
 
 Crops: [dark: checkbox-dark.png](crops/checkbox-dark.png) [light: checkbox-light.png](crops/checkbox-light.png)
 
@@ -501,7 +501,7 @@ Type style: Title body-spacious bold (700, 20px/32px here); caption 500 16px/24p
 
 Responsive (570px): Settings cards: padding 15px below 700px (css:4243 ._8YNCv), 30px at >=700px; mobile capture settings-account-dark-mobile#68 is 243x108.
 
-Screenshots: dark: `out/screenshots/lesson-dark-streak-goal-row-hover.png`; light: `out/screenshots/settings-account-light-default.png`
+Screenshots: dark: `../screenshots/lesson-dark-streak-goal-row-hover.png`; light: `../screenshots/settings-account-light-default.png`
 
 Crops: [dark: radio-card-dark.png](crops/radio-card-dark.png) [dark: radio-card-selected-dark.png](crops/radio-card-selected-dark.png) [light: radio-card-light.png](crops/radio-card-light.png)
 
@@ -566,7 +566,7 @@ Type style: n/a
 
 Responsive (570px): Same size on mobile (settings-account-dark-mobile#21, #39 off).
 
-Screenshots: dark: `out/screenshots/settings-account-dark-default.png`; light: `out/screenshots/settings-account-light-default.png`
+Screenshots: dark: `../screenshots/settings-account-dark-default.png`; light: `../screenshots/settings-account-light-default.png`
 
 Crops: [dark: toggle-dark.png](crops/toggle-dark.png) [dark: toggle-off-dark.png](crops/toggle-off-dark.png) [light: toggle-light.png](crops/toggle-light.png) [light: toggle-off-light.png](crops/toggle-off-light.png)
 
@@ -624,7 +624,7 @@ Type style: 700 17px/20px uppercase, 0.03em tracking.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/characters-dark-default.png`; light: `out/screenshots/characters-light-default.png`
+Screenshots: dark: `../screenshots/characters-dark-default.png`; light: `../screenshots/characters-light-default.png`
 
 Crops: [dark: tabs-underline-dark.png](crops/tabs-underline-dark.png) [light: tabs-underline-light.png](crops/tabs-underline-light.png)
 
@@ -679,7 +679,7 @@ Type style: 700 16px uppercase, 0.8px tracking.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/profile-dark-default.png`; light: `out/screenshots/profile-light-default.png`
+Screenshots: dark: `../screenshots/profile-dark-default.png`; light: `../screenshots/profile-light-default.png`
 
 Crops: [dark: tabs-list-dark.png](crops/tabs-list-dark.png) [light: tabs-list-light.png](crops/tabs-list-light.png)
 
@@ -736,7 +736,7 @@ Type style: label-medium: 700 16px/16px, 0.04em, uppercase.
 
 Responsive (570px): Only rendered below 700px (quests mobile); desktop Quests has no tabs.
 
-Screenshots: dark: `out/screenshots/quests-dark-mobile.png`; light: `out/screenshots/quests-light-mobile.png`
+Screenshots: dark: `../screenshots/quests-dark-mobile.png`; light: `../screenshots/quests-light-mobile.png`
 
 Crops: [dark: tabs-segmented-dark.png](crops/tabs-segmented-dark.png) [light: tabs-segmented-light.png](crops/tabs-segmented-light.png)
 
@@ -798,7 +798,7 @@ Type style: 700 15px uppercase (all three CSS pills).
 
 Responsive (570px): Shop mobile: same pill 110x25 (shop-dark-mobile#83).
 
-Screenshots: dark: `out/screenshots/learn-dark-path-end.png / practice-hub-dark-default.png / shop-dark-default.png`; light: `out/screenshots/learn-light-path-end.png / practice-hub-light-default.png / shop-light-default.png`
+Screenshots: dark: `../screenshots/learn-dark-path-end.png / practice-hub-dark-default.png / shop-dark-default.png`; light: `../screenshots/learn-light-path-end.png / practice-hub-light-default.png / shop-light-default.png`
 
 Crops: [dark: badge-upnext-dark.png](crops/badge-upnext-dark.png) [dark: badge-count-dark.png](crops/badge-count-dark.png) [dark: badge-equipped-dark.png](crops/badge-equipped-dark.png) [dark: badge-super-dark.png](crops/badge-super-dark.png) [light: badge-upnext-light.png](crops/badge-upnext-light.png) [light: badge-count-light.png](crops/badge-count-light.png) [light: badge-equipped-light.png](crops/badge-equipped-light.png) [light: badge-super-light.png](crops/badge-super-light.png)
 
@@ -861,7 +861,7 @@ Type style: Letter: 700, 0.46 x size.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/leaderboard-dark-top.png`; light: `out/screenshots/leaderboard-light-default.png`
+Screenshots: dark: `../screenshots/leaderboard-dark-top.png`; light: `../screenshots/leaderboard-light-default.png`
 
 Crops: [dark: avatar-dark.png](crops/avatar-dark.png) [dark: avatar-edit-dark.png](crops/avatar-edit-dark.png) [light: avatar-light.png](crops/avatar-light.png)
 
@@ -923,7 +923,7 @@ Type style: Dropdown title 700 24px/26px; body 17px/20px wolf. Path popover 700 
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/learn-dark-gems-dropdown.png`; light: `out/screenshots/learn-light-gems-dropdown.png`
+Screenshots: dark: `../screenshots/learn-dark-gems-dropdown.png`; light: `../screenshots/learn-light-gems-dropdown.png`
 
 Crops: [dark: popover-dark.png](crops/popover-dark.png) [dark: popover-path-dark.png](crops/popover-path-dark.png) [light: popover-light.png](crops/popover-light.png) [light: popover-path-light.png](crops/popover-path-light.png)
 
@@ -977,7 +977,7 @@ Type style: 700 17px, line-height 1, uppercase.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/learn-dark-default.png`; light: `out/screenshots/learn-light-default.png`
+Screenshots: dark: `../screenshots/learn-dark-default.png`; light: `../screenshots/learn-light-default.png`
 
 Crops: [dark: tooltip-dark.png](crops/tooltip-dark.png) [light: tooltip-light.png](crops/tooltip-light.png)
 
@@ -1048,7 +1048,7 @@ Type style: 700 15px/16px uppercase, 0.8px.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/learn-dark-more-menu.png`; light: `out/screenshots/learn-light-more-menu.png`
+Screenshots: dark: `../screenshots/learn-dark-more-menu.png`; light: `../screenshots/learn-light-more-menu.png`
 
 Crops: [dark: menu-dark.png](crops/menu-dark.png) [dark: menu-hover-dark.png](crops/menu-hover-dark.png) [dark: menu-courses-dark.png](crops/menu-courses-dark.png) [light: menu-light.png](crops/menu-light.png)
 
@@ -1122,7 +1122,7 @@ Type style: Title heading-medium (700 24px/32px); body caption (500 16px/24px).
 
 Responsive (570px): Below 700px the close button sits inside the corner (right/top 4px, no border) instead of straddling it (css:app .rXoiv vs @media (min-width:700px)). No mobile modal capture.
 
-Screenshots: dark: `out/screenshots/learn-dark-modal-notifications.png`; light: `out/screenshots/lesson-light-quit-modal.png`
+Screenshots: dark: `../screenshots/learn-dark-modal-notifications.png`; light: `../screenshots/lesson-light-quit-modal.png`
 
 Crops: [dark: modal-dark.png](crops/modal-dark.png) [dark: modal-invite-dark.png](crops/modal-invite-dark.png) [light: modal-light.png](crops/modal-light.png) [light: modal-invite-light.png](crops/modal-invite-light.png)
 
@@ -1186,7 +1186,7 @@ Type style: Title heading-medium 700 24px/32px; description 19px/24px.
 
 Responsive (570px): Below 700px the grid is a single centered column and the description gets 0 24px padding with line-height 1.4 (css:1060 ._1fZrK, ._3OWkn). No mobile capture.
 
-Screenshots: dark: `out/screenshots/settings-courses-dark-remove-confirm.png`; light: `out/screenshots/settings-courses-light-remove-confirm.png`
+Screenshots: dark: `../screenshots/settings-courses-dark-remove-confirm.png`; light: `../screenshots/settings-courses-light-remove-confirm.png`
 
 Crops: [dark: bottom-sheet-dark.png](crops/bottom-sheet-dark.png) [light: bottom-sheet-light.png](crops/bottom-sheet-light.png)
 
@@ -1248,7 +1248,7 @@ Type style: Row: heading-small 700 20px/24px. Title: heading-medium 700 24px/32p
 
 Responsive (570px): Side nav is desktop only; mobile settings (settings-account-dark-mobile) shows a back-arrow header instead.
 
-Screenshots: dark: `out/screenshots/settings-courses-dark-sidenav-hover.png`; light: `out/screenshots/settings-courses-light-default.png`
+Screenshots: dark: `../screenshots/settings-courses-dark-sidenav-hover.png`; light: `../screenshots/settings-courses-light-default.png`
 
 Crops: [dark: list-settings-nav-dark.png](crops/list-settings-nav-dark.png) [light: list-settings-nav-light.png](crops/list-settings-nav-light.png)
 
@@ -1312,7 +1312,7 @@ Type style: Course name heading-small 700 20px/24px; search name 700 24px; handl
 
 Responsive (570px): Below 700px: settings lists become one bordered group (2px swan, 12px radius) with 16px row padding and 2px dividers (css:settingsPage ._2QqPx, .hpqEH; settings-account-dark-mobile#16-#35); courses list gets the same border (._1GEp7) and 0 16px row padding.
 
-Screenshots: dark: `out/screenshots/settings-courses-dark-default.png`; light: `out/screenshots/settings-courses-light-default.png`
+Screenshots: dark: `../screenshots/settings-courses-dark-default.png`; light: `../screenshots/settings-courses-light-default.png`
 
 Crops: [dark: list-rows-courses-dark.png](crops/list-rows-courses-dark.png) [dark: list-rows-search-dark.png](crops/list-rows-search-dark.png) [dark: list-rows-following-dark.png](crops/list-rows-following-dark.png) [light: list-rows-courses-light.png](crops/list-rows-courses-light.png) [light: list-rows-search-light.png](crops/list-rows-search-light.png) [light: list-rows-following-light.png](crops/list-rows-following-light.png)
 
@@ -1377,7 +1377,7 @@ Type style: Title 700 19px/28px; body 17px/25px wolf; eyebrow 700 15px/18px uppe
 
 Responsive (570px): Stat tile below 700px: padding 12px 14px 10px, icon 15px wide with 7.5px gap, value 19px, caption 15px (css:5515 @media (max-width:699px); profile-dark-mobile#80 263x70). Right rail is hidden in the 570px captures.
 
-Screenshots: dark: `out/screenshots/characters-dark-default.png`; light: `out/screenshots/characters-light-default.png`
+Screenshots: dark: `../screenshots/characters-dark-default.png`; light: `../screenshots/characters-light-default.png`
 
 Crops: [dark: card-dark.png](crops/card-dark.png) [dark: card-stat-dark.png](crops/card-stat-dark.png) [dark: card-settings-dark.png](crops/card-settings-dark.png) [light: card-light.png](crops/card-light.png) [light: card-stat-light.png](crops/card-stat-light.png)
 
@@ -1425,7 +1425,7 @@ Type style: n/a
 
 Responsive (570px): hr._3D1uH is display:none below 700px (css:settingsPage @media not all and (min-width:700px)).
 
-Screenshots: dark: `out/screenshots/settings-account-dark-default.png`; light: `out/screenshots/settings-account-light-default.png`
+Screenshots: dark: `../screenshots/settings-account-dark-default.png`; light: `../screenshots/settings-account-light-default.png`
 
 Crops: [dark: divider-dark.png](crops/divider-dark.png) [light: divider-light.png](crops/divider-light.png)
 
@@ -1489,7 +1489,7 @@ Type style: Inner text 700 14px/18px uppercase.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/sections-dark-default.png`; light: `out/screenshots/sections-light-default.png`
+Screenshots: dark: `../screenshots/sections-dark-default.png`; light: `../screenshots/sections-light-default.png`
 
 Crops: [dark: progress-bar-dark.png](crops/progress-bar-dark.png) [light: progress-bar-light.png](crops/progress-bar-light.png)
 
@@ -1553,7 +1553,7 @@ Type style: 700 uppercase; see sizes.
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/characters-dark-default.png`; light: `out/screenshots/characters-light-default.png`
+Screenshots: dark: `../screenshots/characters-dark-default.png`; light: `../screenshots/characters-light-default.png`
 
 Crops: [dark: link-dark.png](crops/link-dark.png) [light: link-light.png](crops/link-light.png)
 
@@ -1612,7 +1612,7 @@ Type style: n/a
 
 Responsive (570px): No 570px capture of this component.
 
-Screenshots: dark: `out/screenshots/lesson-dark-challenge-default.png`; light: `out/screenshots/lesson-light-challenge-default.png`
+Screenshots: dark: `../screenshots/lesson-dark-challenge-default.png`; light: `../screenshots/lesson-light-challenge-default.png`
 
 Crops: [dark: icon-button-dark.png](crops/icon-button-dark.png) [dark: icon-button-fab-dark.png](crops/icon-button-fab-dark.png) [dark: icon-button-tile-dark.png](crops/icon-button-tile-dark.png) [light: icon-button-light.png](crops/icon-button-light.png) [light: icon-button-fab-light.png](crops/icon-button-fab-light.png) [light: icon-button-tile-light.png](crops/icon-button-tile-light.png)
 

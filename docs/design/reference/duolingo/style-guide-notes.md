@@ -19,14 +19,14 @@ registration code (webpack module 91009 in the captured `index.html`) shows:
 | `68d22534874c554b0c9ebabea379fc60.woff2` | feather 700 (feather 900 reuses the upright duolingo-sans file for ru/uk/vi) |
 
 The page declares the faces that way. With the brief's mapping every bold label rendered italic. The files in
-`$DUO/fonts/` are gzip-wrapped (saved with their transfer encoding); `out/fonts/` holds the decompressed woff2.
+The CDN serves the font files gzip-wrapped, so a local `fonts/` folder must hold the decompressed woff2 (it is gitignored).
 
 ## Verification
 
-Each specimen has a `.shot[data-shot][data-crop]` element. The harness (`$DUO/sg/shoot.js` +
-`$DUO/sg/compare.py`, Playwright chromium) renders the page at 2x in both themes with the product fonts loaded,
+Each specimen has a `.shot[data-shot][data-crop]` element. The harness (`shoot.js` +
+`compare.py` in the capture scratch directory, not shipped; Playwright chromium) renders the page at 2x in both themes with the product fonts loaded,
 screenshots each shot plus 4px on every side (the same framing as the crops) and writes
-specimen | crop sheets to `$DUO/sg/compare/`.
+specimen | crop sheets beside it.
 
 - 118 shot elements, 204 comparisons (97 light, 107 dark; one-theme shots only run in their theme).
 - 190 of 204 match the crop's CSS size within 1px.
@@ -74,5 +74,5 @@ Not shot
 
 ## Token build scripts
 
-The scripts in `$DUO/tk/` (build.py and helpers) were not copied into `tools/`: they read `palettes-raw.json`,
+The token build scripts (build.py and helpers) were not copied into `tools/`: they read `palettes-raw.json`,
 `css/`, `dumps/` and a pickled rule cache from the scratch root, so they cannot run from this folder.

@@ -10,6 +10,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n=int(self.headers.get('Content-Length',0)); b=self.rfile.read(n)
         name=self.path.strip('/').replace('/','_') or 'dump'
+        os.makedirs(D,exist_ok=True)
         open(os.path.join(D,name+'.json'),'wb').write(b)
         self.send_response(200); self.cors(); self.end_headers(); self.wfile.write(b'ok %d'%len(b))
     def log_message(self,*a): pass

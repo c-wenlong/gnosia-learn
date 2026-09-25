@@ -17,7 +17,7 @@ Core breakdown: palette 600, fontFamily 2, fontWeight 3, typography 39, space 18
 ## Importing into Tokens Studio
 
 1. Plugin settings: set token format to W3C DTCG (`$value`/`$type`).
-2. Load `out/tokens.json` as a single JSON file (Tools, Load from file, or a single-file sync provider). Sets and both themes appear.
+2. Load `tokens.json` as a single JSON file (Tools, Load from file, or a single-file sync provider). Sets and both themes appear.
 3. Pick the Light or Dark theme. `core` is a source set: its palette feeds references but is not exported unless you enable it.
 4. `background.scrim` and `border.onColor` are black with an alpha modifier in `$extensions["studio.tokens"].modify`. Colour modifiers are a paid Tokens Studio feature; without it they import as solid black.
 

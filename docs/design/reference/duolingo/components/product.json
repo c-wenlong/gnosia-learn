@@ -5,7 +5,7 @@
   "dumps": "dumps/<name>.json",
   "css": "css/<file>",
   "palette": "palettes-raw.json",
-  "screenshots": "out/screenshots/<name>.png (2x)"
+  "screenshots": "screenshots/<name>.png (2x)"
  },
  "groups": [
   "App shell",

@@ -11,7 +11,7 @@
    "colour": "\"#HEX (palette-name, theme)\"; \"@ a alpha\" when translucent. When several palette names share a hex, the name used by the CSS rule is shown.",
    "trace": "dump#node <tag> cl=... ; css:<file> [@media] <selector>",
    "body_defaults": "A missing font value in a dump equals the body default: duolingo-sans 500 17px/20px (css:app-f2ef02f8.css body); font-family is duolingo-sans for everything (css:app * {font-family:duolingo-sans,sans-serif}).",
-   "screenshots": "out/screenshots are 2x; crops use rect x2 with 8px padding.",
+   "screenshots": "screenshots/ are 2x; crops use rect x2 with 8px padding.",
    "caveat_overlay": "Captures include an injected agent overlay (orange inset glow at the viewport edges, a pointer svg). Ignore the orange tint near crop edges and the #D97757 / #111111 / #FAF9F5 values."
   },
   "global_rules": {
