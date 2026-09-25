@@ -5,6 +5,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asset, indexRun } from "@self-learn/schema";
 
+import type { RouteProblemCode } from "@/lib/asset-problems";
+
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
   createScratchDatabase,
@@ -49,9 +51,14 @@ type Handler = (
   context: { params: Promise<{ id: string }> },
 ) => Promise<Response>;
 
+/** The machine-readable reason a refusal carries, which is what a page switches on. */
+const codeOf = async (response: Response): Promise<unknown> =>
+  ((await response.clone().json()) as { code?: unknown }).code;
+
 describe.skipIf(!reachable.ok)("asset file route", () => {
   let scratch: Scratch;
   let GET: Handler;
+  let STATUS: Handler;
   /** manimkc's data root for this run: the base every `out/…` path resolves against. */
   let dataRoot: string;
   /** A directory beside it, standing in for anything the route must not reach. */
@@ -63,6 +70,23 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     GET(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/file`, { headers }), {
       params: Promise.resolve({ id }),
     });
+
+  /** `GET /api/assets/<id>/status`, the probe a failed element makes. */
+  const status = async (id: string) =>
+    STATUS(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status`), {
+      params: Promise.resolve({ id }),
+    });
+
+  /** The file route and the status route answer one broken state the same way. */
+  const expectRefusal = async (id: string, httpStatus: number, code: RouteProblemCode) => {
+    const file = await call(id);
+    expect(file.status, id).toBe(httpStatus);
+    expect(await codeOf(file), id).toBe(code);
+
+    const probe = await status(id);
+    expect(probe.status, id).toBe(httpStatus);
+    expect(await probe.json(), id).toEqual({ ok: false, code });
+  };
 
   const seed = async (row: {
     id: string;
@@ -119,6 +143,7 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     process.env.DATABASE_URL = scratch.url;
     process.env.ASSET_FILES_ENABLED = "1";
     ({ GET } = (await import("./[id]/file/route")) as { GET: Handler });
+    ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
 
     await seed({ id: VIDEO_ID, kind: "video", path: "out/algorithms/demo/demo.mp4", sourceRepo: "manimkc" });
     await seed({ id: "manimkc:out/empty.mp4", kind: "video", path: "out/empty.mp4", sourceRepo: "manimkc" });
@@ -239,14 +264,13 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
   });
 
   it("404s an id the catalog does not have", async () => {
-    const response = await call("manimkc:out/nothing-like-this.mp4");
-    expect(response.status).toBe(404);
+    await expectRefusal("manimkc:out/nothing-like-this.mp4", 404, "not-in-catalog");
   });
 
   it("404s a row whose file is not on disk, and one that has no file at all", async () => {
-    expect((await call("manimkc:out/gone.mp4")).status).toBe(404);
+    await expectRefusal("manimkc:out/gone.mp4", 404, "file-missing");
     // A link asset is a url and nothing else.
-    expect((await call("link:cs3230-notes")).status).toBe(404);
+    await expectRefusal("link:cs3230-notes", 404, "no-file");
   });
 
   it("never joins the id onto a path", async () => {
@@ -261,18 +285,19 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     const response = await call("manimkc:climb");
     expect(response.status).toBe(404);
     expect(await response.text()).not.toContain("not yours");
+    await expectRefusal("manimkc:climb", 404, "refused");
   });
 
   it("refuses a symlink inside the root that points out of it", async () => {
     const response = await call("manimkc:out/algorithms/demo/link.mp4");
     expect(response.status).toBe(404);
     expect(await response.text()).not.toContain("not yours");
+    await expectRefusal("manimkc:out/algorithms/demo/link.mp4", 404, "refused");
   });
 
   it("refuses an extension it has no declared type for", async () => {
     // A real committed file, so this is the refusal and not a missing file.
-    const response = await call("diagram:dot-product.tldr");
-    expect(response.status).toBe(404);
+    await expectRefusal("diagram:dot-product.tldr", 404, "unsupported-type");
   });
 
   it("says the index is stale rather than pretending the file is gone", async () => {
@@ -281,6 +306,7 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     expect(response.status).toBe(503);
     const body = (await response.json()) as { detail: string };
     expect(body.detail).toContain("npm run catalog -- index --only manimkc");
+    await expectRefusal(VIDEO_ID, 503, "manimkc-stale");
   });
 
   it("says so when manimkc has never been indexed here", async () => {
@@ -289,14 +315,59 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     expect(response.status).toBe(503);
     const body = (await response.json()) as { detail: string };
     expect(body.detail).toContain("never been indexed");
+    await expectRefusal(VIDEO_ID, 503, "manimkc-unindexed");
   });
 
   it("serves nothing at all when the deployment has not opted in", async () => {
     delete process.env.ASSET_FILES_ENABLED;
     const response = await call(VIDEO_ID);
     expect(response.status).toBe(404);
+    await expectRefusal(VIDEO_ID, 404, "files-off");
 
     process.env.ASSET_FILES_ENABLED = "false";
     expect((await call(VIDEO_ID)).status).toBe(404);
+  });
+
+  describe("the status route", () => {
+    it("answers ok for a file the route would serve, and sends none of it", async () => {
+      const response = await status(VIDEO_ID);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const text = await response.text();
+      expect(JSON.parse(text)).toEqual({ ok: true });
+      // A few bytes of JSON, never the 1 kB file.
+      expect(text.length).toBeLessThan(40);
+    });
+
+    it("never carries a stored path, only the category", async () => {
+      const response = await status("manimkc:out/gone.mp4");
+      const text = await response.text();
+      expect(text).not.toContain("out/gone.mp4");
+      expect(text).not.toContain(dataRoot);
+      expect(Object.keys(JSON.parse(text) as object).sort()).toEqual(["code", "ok"]);
+    });
+
+    it("adds the poster route's refusals when asked about a poster", async () => {
+      const poster = async (id: string) =>
+        STATUS(
+          new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status?for=poster`),
+          { params: Promise.resolve({ id }) },
+        );
+
+      const notVideo = await poster("diagram:dot-product");
+      expect(notVideo.status).toBe(404);
+      expect(await notVideo.json()).toEqual({ ok: false, code: "not-a-video" });
+
+      const previous = process.env.FFMPEG_PATH;
+      process.env.FFMPEG_PATH = path.join(base, "no-ffmpeg-here");
+      try {
+        const noFfmpeg = await poster(VIDEO_ID);
+        expect(noFfmpeg.status).toBe(503);
+        expect(await noFfmpeg.json()).toEqual({ ok: false, code: "no-ffmpeg" });
+      } finally {
+        if (previous === undefined) delete process.env.FFMPEG_PATH;
+        else process.env.FFMPEG_PATH = previous;
+      }
+    });
   });
 });

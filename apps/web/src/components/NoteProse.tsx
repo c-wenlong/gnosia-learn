@@ -9,6 +9,9 @@ import {
   type Inline,
   type MathNode,
 } from "@/components/markdown";
+import { EmbedImage } from "@/components/EmbedImage";
+import { WidgetFailure } from "@/components/WidgetFailure";
+import type { AssetProblemCode } from "@/lib/asset-problems";
 
 /**
  * A concept note or a session log, read as prose instead of as source.
@@ -42,6 +45,10 @@ import {
  * handed HTML. That is also the strongest argument against the alternative of
  * a client-side `react-markdown`, which would put its whole parser in the
  * bundle to produce a page that never changes after paint.
+ *
+ * The one exception is a picture. `EmbedImage` is a client island holding the
+ * `<img>` and its `onError`, so a failed embed can say why; a note with no
+ * pictures never renders it and still ships nothing.
  *
  * ## Sanitisation: safe because of what it cannot do, not because of what it strips
  *
@@ -81,7 +88,7 @@ export function NoteProse({
   /** `[[slug]]` to a URL. Without one, a wikilink renders as a marked-up name. */
   resolveNote?: (slug: string) => string | undefined;
   /** `![[name.svg]]` to a URL. Without one, the embed renders as a named gap. */
-  resolveEmbed?: (name: string) => string | undefined;
+  resolveEmbed?: (name: string) => EmbedResolution | undefined;
   /** Merged onto the root, so a caller can give it padding or a scroll box. */
   className?: string;
 }) {
@@ -107,8 +114,21 @@ export function NoteProse({
 
 interface Resolvers {
   resolveNote?: (slug: string) => string | undefined;
-  resolveEmbed?: (name: string) => string | undefined;
+  resolveEmbed?: (name: string) => EmbedResolution | undefined;
 }
+
+/**
+ * What a caller's `resolveEmbed` may answer for one `![[name]]`.
+ *
+ * A bare URL, or a URL with the status route to ask when it fails, or a
+ * problem the server already knows about (the file route switched off, the
+ * file gone, a name the catalog has no row for). The last renders the failure
+ * panel on the server, with no island and no request.
+ */
+export type EmbedResolution =
+  | string
+  | { src: string; statusHref?: string }
+  | { problem: AssetProblemCode };
 
 /** The margin every block kind takes, as Tailwind classes. */
 interface Spacing {
@@ -406,6 +426,11 @@ function QuoteView({
  * same reason: a tldrawkc export bakes its own colours in for a light ground,
  * and a diagram is the one picture where colour carries meaning, so it is
  * never recoloured or inverted to suit the theme.
+ *
+ * The frame and the caption are server markup. Inside it goes one of three
+ * things: the failure panel, when the caller already knows the embed cannot
+ * load; the `EmbedImage` island, which holds the `<img>` and asks why if it
+ * fails; or, with no resolver at all, a line naming the gap.
  */
 function Figure({
   node,
@@ -416,9 +441,8 @@ function Figure({
   links: Resolvers;
   className: string;
 }) {
-  const resolved =
+  const resolved: EmbedResolution | null =
     node.kind === "image" ? node.src : (links.resolveEmbed?.(node.target) ?? null);
-  const src = resolved === null ? null : safeHref(resolved);
   const name = node.kind === "image" ? node.alt || node.src : node.target;
   // The alt text falls back to the file's own name, which is a real
   // description in this corpus: `vector-as-a-list-of-numbers.svg` says what the
@@ -427,7 +451,22 @@ function Figure({
   const alt = node.kind === "image" ? node.alt || node.src : node.target;
   const caption = node.kind === "image" ? node.alt : node.caption;
 
-  if (src === null) {
+  const problem =
+    resolved !== null && typeof resolved !== "string" && "problem" in resolved
+      ? resolved.problem
+      : null;
+  const target =
+    resolved === null || typeof resolved === "string"
+      ? { src: resolved, statusHref: undefined }
+      : "src" in resolved
+        ? resolved
+        : { src: null, statusHref: undefined };
+  // Both URLs came out of a note by way of the caller, so both pass the gate.
+  const src = target.src === null ? null : safeHref(target.src);
+  const statusHref =
+    target.statusHref === undefined ? undefined : (safeHref(target.statusHref) ?? undefined);
+
+  if (problem === null && src === null) {
     return (
       <p
         className={`${className} rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-xs text-[var(--muted)]`}
@@ -438,22 +477,26 @@ function Figure({
     );
   }
 
-  const isVector = /\.svgz?(?:[?#]|$)/i.test(src);
+  const isVector = /\.svgz?(?:[?#]|$)/i.test(src ?? name);
 
   return (
     <figure className={`${className} overflow-hidden rounded-xl border border-[var(--border)]`}>
-      <div className={isVector ? "bg-[#f7f6f3] p-3" : "bg-[var(--sidebar-bg)] p-3"}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- the asset route
-            serves these bytes as they are on disk, and the common case is an
-            SVG that next/image would rasterise. */}
-        <img
-          src={src}
-          alt={alt}
-          loading="lazy"
-          decoding="async"
-          className="mx-auto block max-h-[60vh] w-full object-contain"
+      {problem !== null ? (
+        <WidgetFailure
+          inset
+          headline={
+            <>
+              <span className="font-mono">{name}</span> cannot be shown here.
+            </>
+          }
+          code={problem}
+          className="min-h-40"
         />
-      </div>
+      ) : (
+        src !== null && (
+          <EmbedImage src={src} statusHref={statusHref} alt={alt} name={name} vector={isVector} />
+        )
+      )}
       {caption !== null && caption !== "" && (
         <figcaption className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-strong)]">
           {caption}

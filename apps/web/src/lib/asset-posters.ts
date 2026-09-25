@@ -641,6 +641,7 @@ export async function posterTarget(
     return {
       ok: false,
       status: 404,
+      code: "not-a-video",
       error: "No such asset poster.",
       detail: `Asset ${id} is ${resolved.contentType}, and only a video has a poster.`,
     };
@@ -684,6 +685,7 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
     return {
       ok: false,
       status: 503,
+      code: "no-ffmpeg",
       error: "No poster can be made on this server.",
       detail:
         `ffmpeg is not on PATH, so no frame can be extracted. Install it, or set ` +
@@ -696,6 +698,7 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
     return {
       ok: false,
       status: 503,
+      code: "poster-failed",
       error: "No poster could be made for this video.",
       detail: `ffmpeg produced no frame for ${target.filename}; the file may be unreadable.`,
     };
