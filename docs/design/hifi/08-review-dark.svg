@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <clipPath id="clip0">
+      <rect width="1440" height="900"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect width="1440" height="900" fill="#141414"/>
+    <g clip-path="url(#clip0)">
+      <g>
+        <g>
+          <rect width="1440" height="12" fill="#4C4C4C"/>
+          <rect width="100" height="12" rx="6" ry="6" fill="#456DFF"/>
+        </g>
+        <g transform="translate(0, 12)">
+          <g transform="translate(24, 12)">
+            <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" font-weight="500" fill="#A3A3A3">Review · 3 of 12</text>
+          </g>
+          <g transform="translate(118, 19)"/>
+          <g transform="translate(1319, 12)">
+            <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" font-weight="500" fill="#A3A3A3">Exit to workspace</text>
+          </g>
+        </g>
+        <g transform="translate(360, 50)">
+          <g>
+            <g transform="translate(0, 0.5)">
+              <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" font-weight="500" fill="#A3A3A3">Review · 3 of 12 · CP4281 mostly</text>
+            </g>
+            <g transform="translate(185, 7.5)"/>
+            <g transform="translate(645, 0)">
+              <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">Est. 7 min left</text>
+            </g>
+          </g>
+          <g transform="translate(0, 37)">
+            <rect width="720" height="96" rx="20" ry="20" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="2"/>
+            <g transform="translate(24, 24)">
+              <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#7A7A7A" letter-spacing="0.6">RECALL · CROSS PRODUCT</text>
+            </g>
+            <g transform="translate(24, 45)">
+              <text x="0" y="24" font-family="Georgia, serif" font-size="24" font-weight="700" fill="#FFFFFF">What does the magnitude of a × b equal?</text>
+            </g>
+          </g>
+          <g transform="translate(0, 155)">
+            <rect width="720" height="143" rx="20" ry="20" fill="#232A4A"/>
+            <g transform="translate(24, 24)">
+              <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#7A7A7A" letter-spacing="0.6">ANSWER</text>
+            </g>
+            <g transform="translate(24, 47)">
+              <g>
+                <text x="0" y="17" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="17" fill="#FFFFFF">The area of the parallelogram spanned by a and b, which is |a||b| sin θ.</text>
+              </g>
+            </g>
+            <g transform="translate(24, 83)">
+              <g transform="translate(0, 5)">
+                <rect width="131" height="26" rx="13" ry="13" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="1"/>
+                <g transform="translate(4, 3)">
+                  <rect width="20" height="20" rx="10" ry="10" fill="#292929"/>
+                  <g transform="translate(7.5, 3.5)">
+                    <text x="0" y="11" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="11" font-weight="700" fill="#A3A3A3">1</text>
+                  </g>
+                </g>
+                <g transform="translate(30, 5.5)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#A3A3A3">Lecture 3, slide 8</text>
+                </g>
+              </g>
+              <g transform="translate(139, 0)">
+                <g transform="translate(8, 10)">
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#7491FF">Why?</text>
+                </g>
+              </g>
+              <g transform="translate(197, 0)">
+                <g transform="translate(8, 10)">
+                  <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" fill="#7491FF">Open concept</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 320)">
+            <g>
+              <text x="0" y="13" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="13" font-weight="500" fill="#A3A3A3">How well did you recall it?</text>
+            </g>
+            <g transform="translate(0, 26)">
+              <g>
+                <rect width="171" height="65" rx="16" ry="16" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="2"/>
+                <g transform="translate(64, 14)">
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Again</text>
+                </g>
+                <g transform="translate(67.5, 36)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">10 min</text>
+                </g>
+              </g>
+              <g transform="translate(183, 0)">
+                <rect width="171" height="65" rx="16" ry="16" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="2"/>
+                <g transform="translate(67.5, 14)">
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Hard</text>
+                </g>
+                <g transform="translate(71.5, 36)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">1 day</text>
+                </g>
+              </g>
+              <g transform="translate(366, 0)">
+                <rect width="171" height="65" rx="16" ry="16" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="2"/>
+                <g transform="translate(65.5, 14)">
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Good</text>
+                </g>
+                <g transform="translate(67, 36)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">4 days</text>
+                </g>
+              </g>
+              <g transform="translate(549, 0)">
+                <rect width="171" height="65" rx="16" ry="16" fill="#1E1E1E" stroke="#4C4C4C" stroke-width="2"/>
+                <g transform="translate(68, 14)">
+                  <text x="0" y="15" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="15" font-weight="700" fill="#FFFFFF">Easy</text>
+                </g>
+                <g transform="translate(67, 36)">
+                  <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">9 days</text>
+                </g>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(0, 433)">
+            <g>
+              <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">Keys 1 to 4 · space reveals</text>
+            </g>
+            <g transform="translate(156, 7.5)"/>
+            <g transform="translate(505, 0)">
+              <text x="0" y="12" font-family="Figtree, Nunito, system-ui, sans-serif" font-size="12" fill="#7A7A7A">ease 2.5 · 4 reps · last seen 4 days ago</text>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
