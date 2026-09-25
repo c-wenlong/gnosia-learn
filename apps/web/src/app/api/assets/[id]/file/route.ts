@@ -47,6 +47,12 @@ import { withLearnerStore } from "@/lib/learner-store";
  * Production has none of these files, so every request there is a 404 rather
  * than a stat of a path that cannot exist.
  *
+ * **Every refusal carries a `code`** from `@/lib/asset-problems` beside its
+ * prose `detail`. The detail is for a person reading the raw response and may
+ * name a stored path; the code is what a page switches on to say why a video
+ * or a diagram did not load, and the sibling status route reports the same
+ * code without sending the file.
+ *
  * `HEAD` needs no handler: Next implements it by calling `GET` and dropping
  * the body, so a player probing for a size and a range unit gets the same
  * headers this returns.
@@ -112,7 +118,7 @@ export async function GET(
     // so twice in two different words would only invite someone to look for
     // the switch.
     return NextResponse.json(
-      { error: "Not found.", detail: "Asset files are not served by this deployment." },
+      { error: "Not found.", code: "files-off", detail: "Asset files are not served by this deployment." },
       { status: 404 },
     );
   }
@@ -129,14 +135,18 @@ export async function GET(
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`asset file: catalog unreachable: ${message}`);
     return NextResponse.json(
-      { error: "The catalog is unreachable.", detail: "Could not look this asset up." },
+      {
+        error: "The catalog is unreachable.",
+        code: "catalog-unreachable",
+        detail: "Could not look this asset up.",
+      },
       { status: 503 },
     );
   }
 
   if (resolved.ok === false) {
     return NextResponse.json(
-      { error: resolved.error, detail: resolved.detail },
+      { error: resolved.error, code: resolved.code, detail: resolved.detail },
       { status: resolved.status },
     );
   }

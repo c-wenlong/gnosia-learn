@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asset, indexRun } from "@self-learn/schema";
 
-import { resolveFfmpeg } from "@/lib/asset-posters";
+import { POSTER_FAILURE_TTL_MS, resolveFfmpeg } from "@/lib/asset-posters";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
@@ -53,9 +53,14 @@ type Handler = (
 /** The real ffmpeg, if this machine has one. Resolved off PATH, never hard-coded. */
 const realFfmpeg = await resolveFfmpeg({ PATH: process.env.PATH });
 
+/** The machine-readable reason a refusal carries, which is what a card switches on. */
+const codeOf = async (response: Response): Promise<unknown> =>
+  ((await response.clone().json()) as { code?: unknown }).code;
+
 describe.skipIf(!reachable.ok)("asset poster route", () => {
   let scratch: Scratch;
   let GET: Handler;
+  let STATUS: Handler;
   /** The temporary tree holding everything this suite writes. */
   let base: string;
   /** manimkc's data root for this run. */
@@ -68,6 +73,12 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
 
   const call = async (id: string, headers: Record<string, string> = {}) =>
     GET(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/poster`, { headers }), {
+      params: Promise.resolve({ id }),
+    });
+
+  /** `GET /api/assets/<id>/status?for=poster`, what a card asks after its poster fails. */
+  const posterStatus = async (id: string) =>
+    STATUS(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status?for=poster`), {
       params: Promise.resolve({ id }),
     });
 
@@ -140,6 +151,7 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     process.env.ASSET_POSTER_CACHE_DIR = cacheDir;
     process.env.FFMPEG_PATH = fakeFfmpeg;
     ({ GET } = (await import("./[id]/poster/route")) as { GET: Handler });
+    ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
 
     const now = new Date();
     await scratch.db.insert(indexRun).values({
@@ -247,6 +259,7 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     ]) {
       const response = await call(id);
       expect(response.status, id).toBe(404);
+      expect(await codeOf(response), id).toBe(id.startsWith("link:") ? "no-file" : "not-a-video");
     }
     // A row the catalog does not have, for good measure: the id is a key here
     // as it is in the file route, never a path.
@@ -258,9 +271,131 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     process.env.FFMPEG_PATH = path.join(base, "no-ffmpeg-here");
     const response = await call(VIDEO_ID);
     expect(response.status).toBe(503);
-    const body = (await response.json()) as { detail: string };
+    const body = (await response.json()) as { detail: string; code: string };
     expect(body.detail).toContain("FFMPEG_PATH");
+    expect(body.code).toBe("no-ffmpeg");
     expect(await runs()).toBe(0);
+  });
+
+  /** An ffmpeg that runs, counts itself, and exits cleanly with no frame. */
+  const useSilentFfmpeg = async () => {
+    const silent = path.join(base, "silent-ffmpeg");
+    await writeFile(silent, `#!/bin/sh\necho run >> ${JSON.stringify(counter)}\nexit 0\n`, {
+      mode: 0o755,
+    });
+    process.env.FFMPEG_PATH = silent;
+  };
+
+  const markers = async () =>
+    (await readdir(cacheDir)).filter((name) => /^[0-9a-f]{40}\.fail$/.test(name));
+
+  it("records a genuine no-frame result, and says poster-failed from the record", async () => {
+    await useSilentFfmpeg();
+    const response = await call(VIDEO_ID);
+    expect(response.status).toBe(503);
+    expect(await codeOf(response)).toBe("poster-failed");
+    // One run per offset, then a marker beside where the poster would be.
+    expect(await runs()).toBe(3);
+    expect(await markers()).toHaveLength(1);
+
+    // Believed: neither a second request nor the card's probe runs ffmpeg.
+    await resetRuns();
+    expect(await codeOf(await call(VIDEO_ID))).toBe("poster-failed");
+    const probe = await posterStatus(VIDEO_ID);
+    expect(probe.status).toBe(503);
+    expect(await probe.json()).toEqual({ ok: false, code: "poster-failed" });
+    expect(await runs()).toBe(0);
+  });
+
+  it("drops a verdict once FFMPEG_PATH points at a different binary, and tries again", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    expect(await markers()).toHaveLength(1);
+
+    // The broken build was the problem, not the video.
+    process.env.FFMPEG_PATH = fakeFfmpeg;
+    await resetRuns();
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+    const response = await call(VIDEO_ID);
+    expect(response.status).toBe(200);
+    expect(await runs()).toBe(1);
+  });
+
+  it("drops a verdict once the binary is replaced at the same path", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    const silent = process.env.FFMPEG_PATH as string;
+
+    // Same path, rebuilt: now it produces a frame.
+    await writeFile(
+      silent,
+      `#!/bin/sh\necho run >> ${JSON.stringify(counter)}\ncat ${JSON.stringify(path.join(base, "payload.jpg"))}\n`,
+      { mode: 0o755 },
+    );
+    const later = new Date(Date.now() + 5_000);
+    await utimes(silent, later, later);
+
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+    const response = await call(VIDEO_ID);
+    expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(FAKE_JPEG);
+  });
+
+  it("answers the retryable poster-not-made for an empty cache with no marker", async () => {
+    // Nothing has been attempted, so absence is not a verdict about the video.
+    const probe = await posterStatus(VIDEO_ID);
+    expect(probe.status).toBe(503);
+    expect(await probe.json()).toEqual({ ok: false, code: "poster-not-made" });
+    expect(await runs()).toBe(0);
+  });
+
+  it("stops believing a marker once it expires", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    const [marker] = await markers();
+    const stale = new Date(Date.now() - POSTER_FAILURE_TTL_MS - 60_000);
+    await utimes(path.join(cacheDir, marker), stale, stale);
+
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+  });
+
+  it("ignores an old marker once the video changes, and makes the poster", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    expect(await markers()).toHaveLength(1);
+
+    // A re-render: new bytes, so a new size and mtime, so a new cache key.
+    const file = path.join(dataRoot, "out", "algorithms", "demo", "demo.mp4");
+    await appendFile(file, " re-rendered");
+    try {
+      expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+        ok: false,
+        code: "poster-not-made",
+      });
+      process.env.FFMPEG_PATH = fakeFfmpeg;
+      const response = await call(VIDEO_ID);
+      expect(response.status).toBe(200);
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(FAKE_JPEG);
+    } finally {
+      await writeFile(file, "not really an mp4, and never decoded");
+    }
+  });
+
+  it("answers ok for a poster that was made, so a failed image reads as not shown", async () => {
+    expect((await call(VIDEO_ID)).status).toBe(200);
+    const before = await runs();
+    const probe = await posterStatus(VIDEO_ID);
+    expect(await probe.json()).toEqual({ ok: true });
+    expect(await runs()).toBe(before);
   });
 
   it("refuses a relative FFMPEG_PATH rather than running whatever is beside it", async () => {
@@ -272,7 +407,9 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
 
   it("serves nothing at all when the deployment has not opted in", async () => {
     delete process.env.ASSET_FILES_ENABLED;
-    expect((await call(VIDEO_ID)).status).toBe(404);
+    const off = await call(VIDEO_ID);
+    expect(off.status).toBe(404);
+    expect(await codeOf(off)).toBe("files-off");
 
     process.env.ASSET_FILES_ENABLED = "false";
     expect((await call(VIDEO_ID)).status).toBe(404);

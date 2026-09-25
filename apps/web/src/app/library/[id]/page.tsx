@@ -8,16 +8,26 @@ import { DiagramView } from "@/components/DiagramView";
 import { NoteProse } from "@/components/NoteProse";
 import { formatTimecode, type VideoChapter } from "@/components/media";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { WidgetFailure } from "@/components/WidgetFailure";
 import {
   accessFor,
   loadAssetDetail,
   loadFileAccess,
   readAssetText,
+  readFileProblems,
   withCatalog,
-  type FileAccess,
   thumbnailFor,
+  thumbnailStatusFor,
 } from "@/lib/asset-library";
-import { assetFileHref, assetHref, decodeAssetId, libraryHref } from "@/lib/library";
+import { problemForAccess, type RouteProblemCode } from "@/lib/asset-problems";
+import {
+  assetFileHref,
+  assetHref,
+  assetStatusHref,
+  decodeAssetId,
+  libraryHref,
+} from "@/lib/library";
+import { embedTargets } from "@/lib/note-embeds";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
 
 /**
@@ -104,19 +114,22 @@ function Panel({
   );
 }
 
-/** The same three states the grid explains, said again where the player would be. */
-function AccessPanel({ access }: { access: FileAccess }) {
-  if (access.ok) return null;
+/**
+ * The asset itself could not be shown, for a reason the server already knows.
+ *
+ * The shared Widget placeholder failure panel, rendered here on the server with
+ * no probe: the switch being off, the manimkc index being missing or stale, and
+ * a file that is already gone are all decided before render, so the page never
+ * sends a player or an `<img>` that is certain to fail.
+ */
+function Unavailable({ kind, code }: { kind: string; code: RouteProblemCode }) {
+  const subject = kind === "video" ? "This video" : kind === "diagram_svg" ? "This diagram" : "This file";
   return (
-    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-5">
-      <h2 className="text-sm font-semibold text-[var(--foreground)]">{access.headline}</h2>
-      <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-[var(--muted-strong)]">
-        {access.detail}
-      </p>
-      <pre className="mt-2.5 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] px-3 py-2 font-mono text-xs text-[var(--muted-strong)]">
-        {access.fix}
-      </pre>
-    </div>
+    <WidgetFailure
+      headline={`${subject} cannot be shown here.`}
+      code={code}
+      className={kind === "video" ? "min-h-64 w-full sm:min-h-80" : "min-h-48"}
+    />
   );
 }
 
@@ -311,7 +324,18 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   const size = formatBytes(asset.bytes);
   const fileAccess = accessFor(access, asset.sourceRepo);
   const fileHref = assetFileHref(asset.id);
-  const servable = fileAccess.ok && asset.path !== null;
+  const statusHref = assetStatusHref(asset.id);
+
+  // Everything about this file the server can know before render, so the page
+  // sends a failure panel rather than a player that is certain to fail. The
+  // switch and the manimkc index are page-wide answers; a file that is gone is
+  // this row's own, and one `resolveAssetFile` finds it.
+  const fileProblem: RouteProblemCode | null = !fileAccess.ok
+    ? problemForAccess(fileAccess.reason)
+    : asset.path === null
+      ? null
+      : ((await readFileProblems([asset.id])).get(asset.id) ?? null);
+  const servable = fileAccess.ok && asset.path !== null && fileProblem === null;
 
   const sidecars =
     asset.kind === "video" && servable ? await videoSidecars(derivations.derived) : null;
@@ -327,6 +351,18 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     servable && !rendered.includes(asset.kind)
       ? await withCatalog((db) => readAssetText(db, asset.id))
       : null;
+
+  // The pictures a note embeds are `learn/assets/<name>`, the same files the
+  // diagram rows point at, so they resolve through the file route. Each one is
+  // checked here first, for the same reason as the asset itself: an embed
+  // whose file is gone, or whose name no row has, gets the failure panel from
+  // the server, and only an embed that fails for a reason nobody could predict
+  // costs the browser a probe.
+  const embedId = (name: string) => `diagram:learn/assets/${name}`;
+  const embedProblems =
+    text !== null && asset.path?.endsWith(".md")
+      ? await readFileProblems(embedTargets(text).map(embedId))
+      : new Map<string, RouteProblemCode | null>();
 
   return (
     <div data-layout="wide" className="space-y-8">
@@ -363,6 +399,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           <div className="space-y-2">
             <VideoPlayer
               src={fileHref}
+              statusHref={statusHref}
               title={name.text}
               chapters={sidecars?.state === "read" ? sidecars.chapters : undefined}
               transcript={sidecars?.state === "read" ? sidecars.cues : undefined}
@@ -387,13 +424,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
         ) : (
-          <AccessPanel access={fileAccess} />
+          fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
         )
       ) : asset.kind === "diagram_svg" ? (
         servable ? (
-          <DiagramView src={fileHref} title={name.text} />
+          <DiagramView src={fileHref} statusHref={statusHref} title={name.text} />
         ) : (
-          <AccessPanel access={fileAccess} />
+          fileProblem !== null && <Unavailable kind={asset.kind} code={fileProblem} />
         )
       ) : asset.kind === "link" ? (
         <LinkPanel url={asset.url} />
@@ -415,29 +452,30 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                   const id = notes[slug];
                   return id === undefined ? undefined : assetHref(id);
                 }}
-                // Embeds are `learn/assets/<name>`, the same files the diagram
-                // rows point at, so they resolve through the file route. It is
-                // gated, so an embed is only offered when that gate is open
-                // for this repo; otherwise the note shows the name instead of
-                // a picture that cannot load.
-                resolveEmbed={(name) =>
-                  fileAccess.ok ? assetFileHref(`diagram:learn/assets/${name}`) : undefined
-                }
+                // Checked above: a known problem renders the failure panel on
+                // the server, anything else is an `<img>` with somewhere to ask
+                // why if it fails anyway.
+                resolveEmbed={(name) => {
+                  if (!fileAccess.ok) return { problem: problemForAccess(fileAccess.reason) };
+                  const id = embedId(name);
+                  const problem = embedProblems.get(id) ?? null;
+                  if (problem !== null) return { problem };
+                  return { src: assetFileHref(id), statusHref: assetStatusHref(id) };
+                }}
               />
             ) : (
               <RawText text={text} />
             )}
           </TextPanel>
         )
-      ) : fileAccess.ok ? (
-        // The deployment serves files and this one still did not come back:
-        // moved since it was indexed, unreadable, an extension the route will
-        // not serve, or simply larger than the preview cap. `AccessPanel`
-        // renders nothing when access is fine, so without this branch the page
-        // would drop the body and the raw-file link without a word.
-        <UnreadableFile path={asset.path} href={fileHref} />
+      ) : fileProblem !== null ? (
+        <Unavailable kind={asset.kind} code={fileProblem} />
       ) : (
-        <AccessPanel access={fileAccess} />
+        // The file resolves and still did not come back as text: larger than
+        // the preview cap, not UTF-8, or gone in the moment since it was
+        // checked. Without this branch the page would drop the body and the
+        // raw-file link without a word.
+        <UnreadableFile path={asset.path} href={fileHref} />
       )}
 
       {/* What it came from, and what came out of it. */}
@@ -500,6 +538,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                 topic={row.topics[0] === undefined ? undefined : (titles[row.topics[0]] ?? row.topics[0])}
                 href={assetHref(row.id)}
                 thumbnailSrc={thumbnailFor(row, access)}
+                thumbnailStatusHref={thumbnailStatusFor(row, access)}
               />
             ))}
           </div>

@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import { assetsByIds, indexedRoot, type AssetRef, type CatalogDatabase } from "@self-learn/catalog/state";
 
 import { REPO_ROOT } from "@/data/repo-root";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 
 /**
  * Turning an `asset` row into bytes a browser can play.
@@ -123,6 +124,12 @@ export interface AssetFileProblem {
   ok: false;
   /** 404 for "no such file", 503 for "this server cannot answer yet". */
   status: 404 | 503;
+  /**
+   * Which failure this is, for a component to switch on. `detail` is prose
+   * for a person reading the raw response and may name a stored path; `code`
+   * names only the category, and is the one the page is allowed to show.
+   */
+  code: RouteProblemCode;
   error: string;
   detail: string;
 }
@@ -141,16 +148,18 @@ export interface AssetFile {
 
 export type AssetFileResult = AssetFile | AssetFileProblem;
 
-const missing = (detail: string): AssetFileProblem => ({
+const missing = (code: RouteProblemCode, detail: string): AssetFileProblem => ({
   ok: false,
   status: 404,
+  code,
   error: "No such asset file.",
   detail,
 });
 
-const unavailable = (detail: string): AssetFileProblem => ({
+const unavailable = (code: RouteProblemCode, detail: string): AssetFileProblem => ({
   ok: false,
   status: 503,
+  code,
   error: "The catalog cannot locate this file yet.",
   detail,
 });
@@ -190,12 +199,14 @@ async function rootFor(
     const run = await indexedRoot(db, "manimkc");
     if (run === null) {
       return unavailable(
+        "manimkc-unindexed",
         `The manimkc source has never been indexed on this machine, so nothing ` +
           `records where its rendered files are. Run \`npm run catalog -- index --only manimkc\`.`,
       );
     }
     if (run.dataRoot === null) {
       return unavailable(
+        "manimkc-stale",
         `The manimkc index on this machine predates the run recording its data ` +
           `root, so \`${row.path}\` has no base to resolve against. Re-run ` +
           `\`npm run catalog -- index --only manimkc\`.`,
@@ -208,6 +219,7 @@ async function rootFor(
   // A row that did claim it would have no root here, and inventing one is how
   // a route starts serving from a directory nobody decided on.
   return missing(
+    "refused",
     `Asset ${row.id} says its bytes live in ${row.sourceRepo}, which this route ` +
       `has no root for.`,
   );
@@ -226,11 +238,11 @@ export async function resolveAssetFile(
   id: string,
 ): Promise<AssetFileResult> {
   const [row] = await assetsByIds(db, [id]);
-  if (row === undefined) return missing(`No asset ${JSON.stringify(id)} in the catalog.`);
+  if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
   if (row.path === null) {
     // A `link` asset is a URL and nothing else. It is a row about something on
     // the web, so there is no file to serve and never will be.
-    return missing(`Asset ${row.id} is a ${row.kind} with no file; it has a url.`);
+    return missing("no-file", `Asset ${row.id} is a ${row.kind} with no file; it has a url.`);
   }
 
   const resolved = await rootFor(db, row);
@@ -239,13 +251,13 @@ export async function resolveAssetFile(
 
   if (path.isAbsolute(row.path)) {
     console.warn(`asset file: refusing ${row.id}, stored path is absolute`);
-    return missing(`Asset ${row.id} has an absolute stored path.`);
+    return missing("refused", `Asset ${row.id} has an absolute stored path.`);
   }
 
   const candidate = path.resolve(root, row.path);
   if (!contains(root, candidate)) {
     console.warn(`asset file: refusing ${row.id}, stored path escapes ${root}`);
-    return missing(`Asset ${row.id} resolves outside its source root.`);
+    return missing("refused", `Asset ${row.id} resolves outside its source root.`);
   }
 
   let file: string;
@@ -267,23 +279,23 @@ export async function resolveAssetFile(
       realpath(/* turbopackIgnore: true */ root),
     ]);
   } catch {
-    return missing(`Asset ${row.id} is indexed at ${row.path}, which is not on disk.`);
+    return missing("file-missing", `Asset ${row.id} is indexed at ${row.path}, which is not on disk.`);
   }
   if (!contains(realRoot, file)) {
     // A symlink inside the tree pointing out of it. The row looked fine; the
     // filesystem disagreed.
     console.warn(`asset file: refusing ${row.id}, ${candidate} links outside ${realRoot}`);
-    return missing(`Asset ${row.id} resolves outside its source root.`);
+    return missing("refused", `Asset ${row.id} resolves outside its source root.`);
   }
 
   const contentType = contentTypeFor(file);
   if (contentType === null) {
     console.warn(`asset file: refusing ${row.id}, unrecognised extension`);
-    return missing(`Asset ${row.id} has an extension this route will not serve.`);
+    return missing("unsupported-type", `Asset ${row.id} has an extension this route will not serve.`);
   }
 
   const stats = await stat(file);
-  if (!stats.isFile()) return missing(`Asset ${row.id} is not a regular file.`);
+  if (!stats.isFile()) return missing("refused", `Asset ${row.id} is not a regular file.`);
 
   return { ok: true, file, bytes: stats.size, contentType, filename: safeFilename(file) };
 }

@@ -1,0 +1,145 @@
+import type { ReactNode } from "react";
+
+import { ASSET_PROBLEMS, type AssetProblemCode } from "@/lib/asset-problems";
+
+/**
+ * The failure state of the Widget placeholder.
+ *
+ * `docs/design/DESIGN.md` names the Widget placeholder as the box an asset or
+ * an interactive renders into: a panel-coloured rectangle, a hairline border,
+ * a small radius, muted text centred in it. This is that same box when the
+ * asset could not be shown, so a failure keeps the footprint and the
+ * vocabulary of the thing it replaces and the hi-fi pass restyles one
+ * component, not four. Every surface that shows an asset uses it: the video
+ * player, the diagram view, a card's thumbnail and an embed in a note.
+ *
+ * **Three things, in reading order.** What failed (the caller's headline), why
+ * in plain words (from the code), and the one next step when there is one: a
+ * command to type, a sentence, or Try again. The words live in
+ * `@/lib/asset-problems`, keyed by code, so a failure reads the same wherever
+ * it happens.
+ *
+ * **Calm, not red.** A missing render on a laptop is a state with a fix, not
+ * an alarm, and most of these are the ordinary look of a fresh clone. The
+ * panel stays in the neutral tokens; the command is the only thing set apart,
+ * because it is the one thing to act on.
+ *
+ * **No `"use client"`, no hooks.** The detail page and `NoteProse` render it
+ * on the server for everything decidable before render, and the client
+ * islands render it after a probe. A module with no directive can be both.
+ * `onRetry` is the one function prop, and only a client parent passes one.
+ *
+ * `inset` is for a panel that fills a frame which already has a border, such
+ * as the diagram view's figure or a note's embedded figure, so the failure
+ * does not draw a box inside a box.
+ *
+ * `compact` is for a card's thumbnail: the short label instead of the
+ * sentence (the full one is its tooltip), a smaller glyph, and never a button, because the card is a link
+ * and a button inside a link is invalid and unreachable.
+ */
+export function WidgetFailure({
+  headline,
+  code,
+  compact = false,
+  inset = false,
+  onRetry,
+  className = "",
+}: {
+  /** What failed, as a full phrase: "This video did not load." */
+  headline: ReactNode;
+  /** Why. Null while the reason is still being asked for. */
+  code: AssetProblemCode | null;
+  compact?: boolean;
+  /** Fills a frame that already has its own border. */
+  inset?: boolean;
+  /** Offered only for a code where asking again could work. */
+  onRetry?: () => void;
+  /** Sizing from the caller, so the panel takes the footprint of its widget. */
+  className?: string;
+}) {
+  const problem = code === null ? null : ASSET_PROBLEMS[code];
+  const fix = problem?.fix;
+  const canRetry = !compact && onRetry !== undefined && problem?.retry === true;
+
+  if (compact) {
+    return (
+      <div
+        role="status"
+        data-problem={code ?? "checking"}
+        className={`flex flex-col items-center justify-center gap-1 px-3 py-2 text-center ${className}`}
+      >
+        <BrokenGlyph className="h-5 w-5 text-[var(--muted)]" />
+        <p className="text-[11px] font-medium text-[var(--foreground)]">{headline}</p>
+        <p className="text-[11px] leading-snug text-[var(--muted-strong)]" title={problem?.reason}>
+          {problem === null ? "Checking why…" : problem.label}
+        </p>
+        {(fix?.kind === "command" || fix?.kind === "env") && (
+          <code
+            title={fix.text}
+            className="max-w-full truncate rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]"
+          >
+            {fix.text}
+          </code>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      data-problem={code ?? "checking"}
+      className={`flex flex-col items-center justify-center gap-2 bg-[var(--sidebar-bg)] px-5 py-8 text-center ${
+        inset ? "" : "rounded-lg border border-[var(--border)]"
+      } ${className}`}
+    >
+      <BrokenGlyph className="h-6 w-6 text-[var(--muted)]" />
+      <p className="text-sm font-medium text-balance text-[var(--foreground)]">{headline}</p>
+      <p className="max-w-[52ch] text-[13px] leading-relaxed text-pretty text-[var(--muted-strong)]">
+        {problem === null ? "Checking why…" : problem.reason}
+      </p>
+      {(fix?.kind === "command" || fix?.kind === "env") && (
+        <div className="mt-1 flex max-w-full flex-col items-center gap-1">
+          <span className="text-[11px] text-[var(--muted)]">
+            {fix.kind === "env" ? "To fix it, start the server with" : "To fix it, run"}
+          </span>
+          <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-mono text-xs text-[var(--foreground)] select-all">
+            {fix.text}
+          </code>
+        </div>
+      )}
+      {fix?.kind === "note" && (
+        <p className="max-w-[52ch] text-xs text-[var(--muted-strong)]">{fix.text}</p>
+      )}
+      {canRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** A frame with a break through it: "something should be here". */
+function BrokenGlyph({ className }: { className: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <path d="M13 5h5.5A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5H15" />
+      <path d="M11 19H5.5A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5H9" />
+      <path d="m13 3-2 18" />
+    </svg>
+  );
+}
