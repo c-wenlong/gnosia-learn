@@ -1,0 +1,14 @@
+{
+  "meta": {"url": "/", "theme": "light (marketing page ignores data-duo-theme=dark)", "w": 525, "h": 620, "source": "built-in browser, logged out, computed styles read via getComputedStyle; no screenshot saved"},
+  "elements": [
+    {"name": "hero h1", "font-family": "duolingo-sans, sans-serif", "font-size": "32px", "font-weight": "700", "line-height": "normal", "color": "rgb(75, 75, 75)"},
+    {"name": "section h2 (green headline)", "font-family": "duolingo-sans / feather", "font-size": "36px", "font-weight": "700", "color": "rgb(88, 204, 2)"},
+    {"name": "section h1 feather", "font-family": "feather, sans-serif", "font-size": "36px", "font-weight": "700", "letter-spacing": "-0.72px", "color": "rgb(4, 44, 96)"},
+    {"name": "GET STARTED (primary, marketing)", "w": 330, "h": 50, "border-radius": "12px", "border-bottom-width": "4px (transparent, reserves lip space)", "padding": "0px 16px", "font-size": "15px", "font-weight": "700", "letter-spacing": "0.8px", "text-transform": "uppercase", "color": "rgb(255, 255, 255)", "::before": {"background": "rgb(88, 204, 2)", "border-bottom-color": "rgb(88, 167, 0)", "border-radius": "12px", "inset": "0px"}},
+    {"name": "I ALREADY HAVE AN ACCOUNT (secondary, marketing)", "w": 330, "h": 50, "border-top-width": "2px", "border-bottom-width": "4px", "border-radius": "12px", "color": "rgb(28, 176, 246)", "::before": {"background": "rgb(255, 255, 255)", "border-width": "2px", "border-color": "rgb(229, 229, 229)", "border-radius": "12px", "inset": "-2px"}},
+    {"name": "App Store / Google Play badge buttons", "w": 177, "h": 63, "padding": "9.5px 14px", "border-top-width": "2px", "border-bottom-width": "4px", "border-radius": "12px", "color": "rgb(75, 75, 75)"},
+    {"name": "TRY 1 WEEK FREE (super, marketing)", "h": 50, "color": "rgb(0, 4, 55)", "border-radius": "12px"},
+    {"name": "inline link", "font-size": "17px", "font-weight": "700", "line-height": "24px", "color": "rgb(28, 176, 246)"},
+    {"name": "footer link", "font-size": "15px", "font-weight": "700", "line-height": "22px", "color": "rgb(165, 237, 110)"}
+  ]
+}
