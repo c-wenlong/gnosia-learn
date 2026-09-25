@@ -4,8 +4,9 @@
 Usage: hifi.py [--theme light|dark] [--variables] [slug ...]
 Draws every screen in both themes onto the "Hi-fi v1" page of the open
 self-learn document, exports each as docs/design/hifi/<slug>-<theme>.svg
-and saves the .fig. --variables also writes the token set into the
-document as two OpenPencil variable collections (one per theme).
+and saves the .fig. A full run (no slugs) also rewrites the token set
+into the document as two OpenPencil variable collections (one per theme);
+--variables forces that on a partial run.
 
 Set OPENPENCIL_DOC to the tab id (see `op.py call list_documents '{}'`)
 when more than one document is open.
@@ -226,7 +227,7 @@ def Feedback(t, ok, title, detail, note, continue_label):
 
 def StatTile(t, value, label, colour):
     """Duolingo lesson-complete card: coloured frame, uppercase strip, value box."""
-    strip = F(T(label.upper(), size=11, weight="bold", color="#FFFFFF", ls=0.5), flex="row", w="fill", h=26, justify="center", items="center")
+    strip = F(T(label.upper(), size=11, weight="bold", color=t.btn_text, ls=0.5), flex="row", w="fill", h=26, justify="center", items="center")
     box = F(T(value, size=26, weight="bold", color=t.text), flex="row", w="fill", h=64, justify="center", items="center", bg=t.surface, rounded=13)
     return F(strip, box, flex="col", grow=1, gap=0, p=3, bg=colour, rounded=16)
 
@@ -363,12 +364,12 @@ def s_workspace(t):
                    w=776, gap=14)
     right = Panel(t, Row(T("Studio", size=15, weight="bold", color=t.text, grow=1), T("collapse", size=12, color=t.text3), h=32), HR(t),
                   Card(t, Row(T("0.55", size=30, weight="bold", color=t.accent_text, font=DISPLAY), Col(T("mastery p(L)", size=13, weight="medium", color=t.text), T("5 observations · 4 correct", size=12, color=t.text2), gap=2)),
-                       Row(*[R(8, h, t.accent, rounded=2) for h in [8, 10, 14, 12, 18, 22]], gap=4, items="end"), T("Next review Fri · interval 4d · ease 2.5", size=12, color=t.text3), tight=True),
+                       Row(*[R(8, h, t.accent, rounded=2) for h in [8, 10, 14, 12, 18, 22]], gap=4, items="end"), T("Next review Fri · interval 4d · ease 2.5", size=12, color=t.text3), tight=True, gap=8),
                   Card(t, T("Checks · 3", size=13, weight="bold", color=t.text), Row(Dot(8, t.ok), T("Weights sum to one", size=13, color=t.text), gap=8), Row(Dot(8, t.ok), T("Point on an edge", size=13, color=t.text), gap=8),
-                       Row(Dot(8, t.surface, stroke=t.m_lo, strokeWidth=2), T("Area ratio derivation", size=13, color=t.text), gap=8), Btn(t, "Quiz me", "secondary", small=True), tight=True, gap=8),
-                  Card(t, T("Assets", size=13, weight="bold", color=t.text), Placeholder(t, "video · Barycentric interpolation · 4:12", h=64), Placeholder(t, "diagram · Triangle areas", h=64), Btn(t, "Generate flashcards", "secondary", small=True), tight=True, gap=8),
-                  Card(t, T("Neighbourhood", size=13, weight="bold", color=t.text), Placeholder(t, "graph: this concept, | 3 prereqs, 2 dependants, | mastery-coloured", h=96), Btn(t, "Open full course graph", "secondary", small=True), tight=True, gap=8),
-                  w=310, gap=12)
+                       Row(Dot(8, t.surface, stroke=t.m_lo, strokeWidth=2), T("Area ratio derivation", size=13, color=t.text), gap=8), Btn(t, "Quiz me", "secondary", small=True), tight=True, gap=6),
+                  Card(t, T("Assets", size=13, weight="bold", color=t.text), Placeholder(t, "video · Barycentric interpolation · 4:12", h=44), Placeholder(t, "diagram · Triangle areas", h=44), Btn(t, "Generate flashcards", "secondary", small=True), tight=True, gap=6),
+                  Card(t, T("Neighbourhood", size=13, weight="bold", color=t.text), Placeholder(t, "graph: this concept, | 3 prereqs, 2 dependants, | mastery-coloured", h=68), Btn(t, "Open full course graph", "secondary", small=True), tight=True, gap=6),
+                  w=310, gap=10)
     body = Col(header, Row(left, centre, right, gap=16, w="fill", grow=1, items="start", px=16, py=0), F(h=16), gap=0, vgrow=1)
     return Screen(t, "04-concept-workspace", body, "Learn")
 
@@ -511,6 +512,7 @@ def main():
     do_vars = "--variables" in args
     if do_vars: args.remove("--variables")
     want = set(args); failures = []
+    if not want: do_vars = True  # a full run keeps the token collections in step with the screens
     pages = {p["name"]: p["id"] for p in call("list_pages", {}).get("pages", [])}
     if PAGE not in pages: pages[PAGE] = call("create_page", {"name": PAGE})["id"]
     call("switch_page", {"page": PAGE})

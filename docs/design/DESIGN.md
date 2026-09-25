@@ -287,6 +287,7 @@ dark". "derived" means a value we made from a reference one.
 | streak | `#FF9600` | `#FFAB33` | Duolingo fox |
 | btn_face, btn_lip, btn_text | `#111111`, `#000000`, `#FFFFFF` | `#E5E5E5`, `#B3B3B3`, `#000000` | Brilliant button3d primary |
 | m_hi, m_mid, m_lo | `#456DFF`, `#A9B9FF`, `#E5E5E5` | `#7491FF`, `#3A4A8F`, `#4C4C4C` | mastery buckets: accent, derived light accent, border |
+| lip_shade | `#D4D4D4` | `#0F0F0F` | derived: the lip under an untouched path node, after Duolingo's black at 20% |
 
 Type: Figtree 15/400 body (14 in dense rows, 17 in lesson prose), 16/700
 card titles, 11/700 uppercase tracked eyebrows, 15/600 button labels;
@@ -308,15 +309,17 @@ hairlines. No shadows on any surface.
 ### Regenerating the hi-fi
 
 ```bash
-OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py               # both themes, all screens
-OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py --theme dark 06 # one screen, one theme
+OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py               # both themes, all screens, and the variable collections
+OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py --theme dark 06 # one screen, one theme, tokens untouched
 OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py --variables 99  # rewrite the variable collections only
 node docs/design/kit/svg2png.mjs /tmp/out docs/design/hifi/*.svg     # PNGs to look at
 ```
 
 `OPENPENCIL_DOC` names the tab when more than one document is open (see
 `op.py call list_documents '{}'`). The kit draws onto the "Hi-fi v1" page,
-light frames in the top rows and dark frames 5000px below.
+light frames in the top rows and dark frames 5000px below. A full run rewrites the two variable collections from `TOKENS`, so
+a token change cannot leave the screens and the collections out of step; a
+partial run leaves the collections alone unless `--variables` is passed.
 
 ## Regenerating the lo-fi
 
