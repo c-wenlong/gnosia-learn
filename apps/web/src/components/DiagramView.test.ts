@@ -74,8 +74,10 @@ describe("DiagramView", () => {
     act(() => img.dispatchEvent(new Event("error")));
     expect(host.querySelector("img")).toBeNull();
     expect(host.textContent).toContain("This diagram did not load.");
-    // The path stays on screen, so the reader can see what was missing.
-    expect(host.textContent).toContain(props.src);
+    // The URL is not repeated in the panel: it names an asset id, and the
+    // reason (asked of the status route) is what the reader acts on. The
+    // header's Full size link still points at the file.
+    expect(host.querySelector("[role=status]")?.textContent).not.toContain(props.src);
   });
 
   it("tries again when it is handed a different diagram", () => {

@@ -153,6 +153,7 @@ interactive parts opt into the client one component at a time.
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
+| `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
 
 The asset route is the one place the app reads a file the deployment does not
 contain. A video sits under manimkc's data root and a diagram under
@@ -175,7 +176,13 @@ ffmpeg per video, never per request: the result is cached under the system temp
 root, outside the repository where no git operation can reach it, bounded by
 bytes and by count and written through a rename so a half-made poster cannot be
 served. A machine with no ffmpeg is an ordinary 503 that names the variable to
-set, and the card keeps the placeholder it already had.
+set, and the card keeps the placeholder it already had. A video ffmpeg finds
+no frame in is recorded, never inferred: only when every offset exits cleanly
+with nothing does a `<key>.fail` marker go beside where the poster would be,
+written through the same rename, pruned under the same bounds and believed for
+an hour, and only by the ffmpeg binary that wrote it (its path, size and mtime
+are in the marker), so fixing or replacing ffmpeg clears every verdict at once. A timeout, a spawn error or a killed process records nothing, so an
+empty cache reads as "not made yet" and a retry, never as a broken video.
 `apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
 concurrency reasoning.
 
@@ -209,6 +216,21 @@ one costs the transcript panel and leaves the video playing. Its cues are read
 on the server and passed to `TranscriptPanel` as props, so there is no loading
 state and no second round trip for text the render already had a request in
 which to read.
+
+**A failed asset says why, and the server decides it when it can.** A browser's
+`onError` carries no status and no body, so every refusal the file and poster
+routes make carries a machine-readable `code` (`@/lib/asset-problems`), and
+`/api/assets/[id]/status` reports that code in a few bytes of JSON without
+reading the file or starting ffmpeg. The detail page decides everything it can
+before render with `readFileProblems`: the switch, the manimkc index, a file
+already gone, an embed whose name no row has. Those render the failure panel on
+the server with no probe. Only a failure nobody could predict (a card's
+thumbnail, a file that is served but will not decode) costs the browser one
+probe, after `onError` and never before. Every surface renders the same
+`WidgetFailure` panel, the failure state of the Widget placeholder in
+[docs/design/DESIGN.md](docs/design/DESIGN.md). `NoteProse` stays a server
+component: only `EmbedImage`, the `<img>` inside an embed's figure, is a client
+island, and a note with no pictures never renders it.
 
 **A page's dynamic segment is not decoded.** `/library/[id]` is handed
 `"link%3Acs3216-m3-r1"`, not `"link:cs3216-m3-r1"`, so it calls `decodeAssetId`
@@ -528,6 +550,9 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
 | `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
 | `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
+| `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
+| `apps/web/src/lib/asset-problems.test.ts` | The reason table (no paths, no em dashes, a fix per fixable code) and the probe's mapping of every answer |
+| `apps/web/src/components/asset-failure.test.ts`, `NoteProse.island.test.ts` | Each asset surface falling back to the shared panel with its reason, and a note without pictures rendering no client island |
 | `apps/web/src/app/api/assets/asset-poster.test.ts` | The poster route, against a fake ffmpeg that counts its own runs: a hit, a second hit from cache, a 304, a non-video, no ffmpeg, the gate, and a burst of ten sharing one process |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |

@@ -8,6 +8,8 @@ import {
   type VideoChapter,
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
+import { useAssetFailure } from "@/components/use-asset-failure";
+import { WidgetFailure } from "@/components/WidgetFailure";
 
 /**
  * A narrated video with its chapters and its transcript beside it.
@@ -35,15 +37,25 @@ import { TranscriptPanel } from "@/components/TranscriptPanel";
  * 42rem and up  video, then chapters and transcript side by side beneath it
  * 64rem and up  video with the reading column beside it
  * ```
+ *
+ * **A video that fails says why.** Without an `onError` the reader got the
+ * browser's own dead player, with no hint whether the file was gone, the index
+ * was stale or the route was off. Now the player is replaced, at its own size,
+ * by the shared Widget placeholder failure panel, which asks `statusHref` for
+ * the reason. The chapters and the transcript stay: they are text the page
+ * already has, and still worth reading when the picture is missing.
  */
 export function VideoPlayer({
   src,
+  statusHref,
   poster,
   title,
   chapters,
   transcript,
 }: {
   src: string;
+  /** Where to ask why `src` failed. Without one a failure says it has no reason. */
+  statusHref?: string;
   /** Already resolved. Without one the browser shows the first frame instead. */
   poster?: string;
   /** Names the player for assistive technology, and titles the chapter rail. */
@@ -55,6 +67,7 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [time, setTime] = useState(0);
+  const { failure, fail, retry, attempt, observe } = useAssetFailure(src, statusHref);
   // A seek the element refused, held until it can be honoured. See `seek`.
   // It carries the load it was asked for rather than the URL: with the URL, a
   // reader who goes A to B and back to A before the first load reports itself
@@ -132,25 +145,39 @@ export function VideoPlayer({
           aside ? "@5xl:grid-cols-[minmax(0,1fr)_20rem] @5xl:items-start" : ""
         }`}
       >
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-sm transition-shadow duration-150 has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-[var(--accent)] has-[video:focus-visible]:ring-offset-2 has-[video:focus-visible]:ring-offset-[var(--background)]">
-          {/* The caption track is a separate asset row and a separate prop the
-              catalog has not been asked for yet; what this component is handed
-              is the transcript, and it renders that beside the picture. */}
-          <video
-            ref={videoRef}
-            src={src}
-            poster={poster}
-            controls
-            preload="metadata"
-            playsInline
-            aria-label={title}
-            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => setTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
-            onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
-            className="aspect-video w-full bg-black outline-none"
+        {failure !== null ? (
+          <WidgetFailure
+            headline="This video did not load."
+            code={failure.code}
+            onRetry={retry}
+            className="min-h-64 w-full sm:min-h-80"
           />
-        </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-sm transition-shadow duration-150 has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-[var(--accent)] has-[video:focus-visible]:ring-offset-2 has-[video:focus-visible]:ring-offset-[var(--background)]">
+            {/* The caption track is a separate asset row and a separate prop the
+                catalog has not been asked for yet; what this component is handed
+                is the transcript, and it renders that beside the picture. */}
+            <video
+              key={attempt}
+              ref={(element) => {
+                videoRef.current = element;
+                observe(element);
+              }}
+              src={src}
+              poster={poster}
+              controls
+              preload="metadata"
+              playsInline
+              aria-label={title}
+              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+              onSeeked={(e) => setTime(e.currentTarget.currentTime)}
+              onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
+              onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
+              onError={fail}
+              className="aspect-video w-full bg-black outline-none"
+            />
+          </div>
+        )}
 
         {aside && (
           <div className="grid content-start gap-4 @2xl:grid-cols-2 @5xl:grid-cols-1">

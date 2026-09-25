@@ -4,6 +4,7 @@ import {
   loadFileAccess,
   loadLibrary,
   thumbnailFor,
+  thumbnailStatusFor,
   type FileAccess,
 } from "@/lib/asset-library";
 import {
@@ -377,6 +378,7 @@ export default async function LibraryPage({
                           // can decode. Asking it to decode the `.mp4` is what
                           // the placeholder used to stand in for.
                           thumbnailSrc={thumbnailFor(row, access)}
+                          thumbnailStatusHref={thumbnailStatusFor(row, access)}
                         />
                       ))}
                     </div>

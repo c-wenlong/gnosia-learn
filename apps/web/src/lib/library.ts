@@ -259,6 +259,16 @@ export function assetPosterHref(id: string): string {
 }
 
 /**
+ * `/api/assets/<id>/status`, which says why the file or poster route would
+ * refuse an asset without sending it. What a failed `<img>` or `<video>` asks
+ * after `onError`, since that event carries no reason of its own.
+ */
+export function assetStatusHref(id: string, target: "file" | "poster" = "file"): string {
+  const base = `/api/assets/${encodeURIComponent(id)}/status`;
+  return target === "poster" ? `${base}?for=poster` : base;
+}
+
+/**
  * The first value of a search param, or null.
  *
  * Next hands a repeated key (`?kind=a&kind=b`) over as an array. Taking the
