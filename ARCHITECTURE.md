@@ -176,7 +176,12 @@ ffmpeg per video, never per request: the result is cached under the system temp
 root, outside the repository where no git operation can reach it, bounded by
 bytes and by count and written through a rename so a half-made poster cannot be
 served. A machine with no ffmpeg is an ordinary 503 that names the variable to
-set, and the card keeps the placeholder it already had.
+set, and the card keeps the placeholder it already had. A video ffmpeg finds
+no frame in is recorded, never inferred: only when every offset exits cleanly
+with nothing does a `<key>.fail` marker go beside where the poster would be,
+written through the same rename, pruned under the same bounds and believed for
+an hour. A timeout, a spawn error or a killed process records nothing, so an
+empty cache reads as "not made yet" and a retry, never as a broken video.
 `apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
 concurrency reasoning.
 

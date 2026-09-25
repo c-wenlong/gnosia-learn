@@ -41,6 +41,7 @@ export const ROUTE_PROBLEM_CODES = [
   "not-a-video",
   "no-ffmpeg",
   "poster-failed",
+  "poster-not-made",
 ] as const;
 
 export const CLIENT_PROBLEM_CODES = ["undecodable", "server-unreachable", "unknown"] as const;
@@ -148,9 +149,19 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
   },
   "poster-failed": {
     label: "No frame could be cut",
-    reason: "ffmpeg ran but could not cut a frame from this video. The file may be damaged.",
+    reason:
+      "ffmpeg ran at every point it tries and found no frame in this video. The file may be damaged.",
     fix: { kind: "note", text: "Open the video to see whether it plays." },
     retry: false,
+  },
+  // Not a verdict: nothing has recorded a failure for this video, so either no
+  // preview has been attempted yet or the last attempt was cut short.
+  "poster-not-made": {
+    label: "Preview not made yet",
+    reason:
+      "No preview frame has been made for this video yet, or the last attempt was cut short. Asking again will try once more.",
+    fix: { kind: "note", text: "Reload the page to try again." },
+    retry: true,
   },
   undecodable: {
     label: "The browser could not show it",

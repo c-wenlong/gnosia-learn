@@ -3,7 +3,12 @@ import { stat } from "node:fs/promises";
 import { NextResponse } from "next/server";
 
 import { assetFilesEnabled, resolveAssetFile, type AssetFileResult } from "@/lib/asset-files";
-import { posterTarget, resolveFfmpeg, type PosterTargetResult } from "@/lib/asset-posters";
+import {
+  freshPosterFailure,
+  posterTarget,
+  resolveFfmpeg,
+  type PosterTargetResult,
+} from "@/lib/asset-posters";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { withLearnerStore } from "@/lib/learner-store";
 
@@ -31,14 +36,21 @@ import { withLearnerStore } from "@/lib/learner-store";
  * same. There is deliberately no `detail`: this route exists to feed a page,
  * and a page shows categories, never a stored path.
  *
- * `?for=poster` adds the poster route's own refusals: a row that is not a
- * video, a machine with no ffmpeg, and a video ffmpeg could not cut a frame
- * from. That last one is read off the poster cache rather than by running
- * ffmpeg again: a card only asks after its poster failed, the poster route
- * writes every frame it makes to the cache before answering, so a video that
- * resolves, on a machine with ffmpeg, with nothing cached, is a video the
- * extraction failed on. A cached poster answers `ok`, and the card reads that
- * as "served, but not shown".
+ * `?for=poster` adds the poster route's own answers, read off the poster cache
+ * rather than by running ffmpeg again:
+ *
+ * | Cache holds | Answer |
+ * | --- | --- |
+ * | the poster | `ok`, which the card reads as "served, but not shown" |
+ * | a fresh failure marker | `poster-failed`: ffmpeg really found no frame |
+ * | neither, no ffmpeg | `no-ffmpeg` |
+ * | neither | `poster-not-made`, retryable |
+ *
+ * The last row is deliberately not `poster-failed`. An empty cache is also
+ * what a first load cut short by a timeout, a pruned cache or a fresh temp
+ * directory after a reboot looks like, and absence cannot tell those from a
+ * video with no frame. Only a marker, written when every offset exited cleanly
+ * with nothing, is evidence (`POSTER_FAILURE_EXTENSION` in `@/lib/asset-posters`).
  *
  * Same gate as the routes it describes: with `ASSET_FILES_ENABLED` off every
  * answer is `files-off`, which is exactly as much as the file route says.
@@ -80,8 +92,9 @@ export async function GET(
       () => false,
     );
     if (!cached) {
+      if (await freshPosterFailure(resolved.failureFile)) return answer(503, "poster-failed");
       if ((await resolveFfmpeg()) === null) return answer(503, "no-ffmpeg");
-      return answer(503, "poster-failed");
+      return answer(503, "poster-not-made");
     }
   }
 

@@ -167,18 +167,47 @@ export const POSTER_CACHE_ENV = "ASSET_POSTER_CACHE_DIR";
 export const POSTER_CACHE_BYTES = 64 * 1024 * 1024;
 export const POSTER_CACHE_ENTRIES = 1_024;
 
+/**
+ * The failure marker's extension, and how long one is believed.
+ *
+ * **A failure is recorded, never inferred.** An empty cache cannot tell "ffmpeg
+ * ran and there is no frame in this file" from "nobody has asked yet", and
+ * reading absence as the first would turn a one-off hiccup into a permanent
+ * "no frame could be cut". So when every offset has been tried and ffmpeg
+ * exited on its own each time without writing a frame, a `<key>.fail` marker is
+ * written beside where the `<key>.jpg` would have gone. `poster-failed` means
+ * that marker exists and is fresh; no marker and no poster means "not made
+ * yet", which is a retryable answer.
+ *
+ * **Only evidence about the video writes one.** A timeout, a spawn error, an
+ * ffmpeg killed by a signal, output past the byte cap, or no ffmpeg at all says
+ * something about the machine, so none of them records anything.
+ *
+ * **It expires two ways.** The key covers the video's resolved path, size,
+ * modification time and the recipe version (`posterKey`), so a video that is
+ * re-rendered gets a new key and never sees its old marker. The TTL covers what
+ * the key cannot see: a failure caused by something outside the file that
+ * still looked like a clean exit. An hour is long enough that a grid of broken
+ * videos does not re-run ffmpeg on every page load, and short enough that a
+ * fixed machine is believed the same afternoon.
+ */
+export const POSTER_FAILURE_EXTENSION = ".fail";
+export const POSTER_FAILURE_TTL_MS = 60 * 60 * 1000;
+
 /** Where to find ffmpeg when it is not on `PATH`. Absolute paths only. */
 export const FFMPEG_ENV = "FFMPEG_PATH";
 
 /**
- * The one name pattern the pruner will delete.
+ * The only name patterns the pruner will delete.
  *
- * Every cached file is `<40 hex>.jpg`, so an operator who points
- * `ASSET_POSTER_CACHE_DIR` at a directory that already holds something loses
- * nothing: a name this does not match is never unlinked, and is not counted
- * against the bounds either, since it is not ours to bound.
+ * Every cached file is `<40 hex>.jpg` or a failure marker `<40 hex>.fail`, so an
+ * operator who points `ASSET_POSTER_CACHE_DIR` at a directory that already
+ * holds something loses nothing: a name neither matches is never unlinked, and
+ * is not counted against the bounds either, since it is not ours to bound.
+ * Both are anchored at both ends, so `x.jpg.bak` or `<39 hex>.fail` is safe.
  */
 const CACHE_NAME = /^[0-9a-f]{40}\.jpg$/;
+const FAILURE_NAME = /^[0-9a-f]{40}\.fail$/;
 
 /* -------------------------------------------------------------------------- */
 /* Finding ffmpeg                                                              */
@@ -288,29 +317,45 @@ export function posterKey(file: string, bytes: number, modifiedMs: number): stri
 }
 
 /**
- * Keep the cache under both bounds, oldest first.
+ * Keep the cache under both bounds, oldest first, and drop expired markers.
  *
  * Runs after a write, which is the only moment the cache grows, and only ever
- * unlinks a name this module could have written. A failure here is logged and
- * swallowed: an un-pruned cache is a disk-space problem for later, while a
- * throw would turn a served poster into a 503.
+ * unlinks a name this module could have written. Posters and failure markers
+ * are counted together against the same bytes and entries, so markers cannot
+ * pile up beside a cache that looks bounded. A marker past its TTL is removed
+ * whatever the bounds say, since nothing will ever believe it again. A failure
+ * here is logged and swallowed: an un-pruned cache is a disk-space problem for
+ * later, while a throw would turn a served poster into a 503.
+ *
+ * Exported for its test, which is the only way to check it removes nothing it
+ * does not own.
  */
-async function prune(dir: string): Promise<void> {
+export async function prunePosterCache(dir: string, now = Date.now()): Promise<void> {
   try {
-    const names = (await readdir(dir)).filter((name) => CACHE_NAME.test(name));
+    const names = (await readdir(dir)).filter(
+      (name) => CACHE_NAME.test(name) || FAILURE_NAME.test(name),
+    );
     const entries = await Promise.all(
       names.map(async (name) => {
         const file = path.join(dir, name);
         try {
           const stats = await stat(file);
-          return { file, bytes: stats.size, at: stats.mtimeMs };
+          return { file, bytes: stats.size, at: stats.mtimeMs, marker: FAILURE_NAME.test(name) };
         } catch {
           return null;
         }
       }),
     );
 
-    const present = entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    const present: { file: string; bytes: number; at: number; marker: boolean }[] = [];
+    for (const entry of entries) {
+      if (entry === null) continue;
+      if (entry.marker && now - entry.at > POSTER_FAILURE_TTL_MS) {
+        await rm(entry.file, { force: true });
+        continue;
+      }
+      present.push(entry);
+    }
     let total = present.reduce((sum, entry) => sum + entry.bytes, 0);
     let count = present.length;
     if (total <= POSTER_CACHE_BYTES && count <= POSTER_CACHE_ENTRIES) return;
@@ -337,18 +382,42 @@ async function prune(dir: string): Promise<void> {
  * A failure to cache is not a failure to answer. The buffer is already in hand
  * and gets served; the next request pays for another extraction.
  */
-async function store(dir: string, key: string, body: Buffer): Promise<void> {
+async function store(
+  dir: string,
+  key: string,
+  body: Buffer | string,
+  extension: string = POSTER_EXTENSION,
+): Promise<void> {
   const temporary = path.join(dir, `.${randomUUID()}.tmp`);
   try {
     await mkdir(dir, { recursive: true });
     await writeFile(temporary, body, { mode: 0o600 });
-    await rename(temporary, path.join(dir, `${key}${POSTER_EXTENSION}`));
+    await rename(temporary, path.join(dir, `${key}${extension}`));
   } catch (error) {
-    console.warn(`asset poster: could not cache ${key}: ${describe(error)}`);
+    console.warn(`asset poster: could not cache ${key}${extension}: ${describe(error)}`);
     await rm(temporary, { force: true }).catch(() => {});
     return;
   }
-  await prune(dir);
+  if (extension === POSTER_EXTENSION) {
+    // A poster made after an expired marker supersedes it.
+    await rm(path.join(dir, `${key}${POSTER_FAILURE_EXTENSION}`), { force: true }).catch(() => {});
+  }
+  await prunePosterCache(dir);
+}
+
+/**
+ * Is there a failure marker for this key that is still believed?
+ *
+ * Read by the poster route before it spends an ffmpeg, and by the status route
+ * to tell "ffmpeg found no frame" from "not made yet".
+ */
+export async function freshPosterFailure(failureFile: string, now = Date.now()): Promise<boolean> {
+  try {
+    const stats = await stat(failureFile);
+    return stats.isFile() && now - stats.mtimeMs <= POSTER_FAILURE_TTL_MS;
+  } catch {
+    return false;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -403,18 +472,34 @@ export function ffmpegArgs(file: string, offsetSeconds: number): string[] {
 }
 
 /**
- * One ffmpeg run. Resolves with the JPEG, or with `null` for every way it can
- * fail to produce one — a seek past the end, a corrupt file, a timeout, a
- * binary that turned out not to be ffmpeg. It never rejects, because every one
- * of those is the same answer to the caller: try the next offset, then give up
- * politely.
+ * What one ffmpeg run showed.
+ *
+ * `frame` is a JPEG. `no-frame` is ffmpeg exiting on its own without one: a
+ * seek past the end, a corrupt file, a stream it cannot decode. That is
+ * evidence about the video. `inconclusive` is every way the run was cut short
+ * or never happened: a timeout, output past the byte cap, a spawn error, a
+ * death by signal. That is evidence about the machine, and is never recorded
+ * as a verdict on the video.
+ */
+export type FrameOutcome =
+  | { kind: "frame"; body: Buffer }
+  | { kind: "no-frame" }
+  | { kind: "inconclusive" };
+
+/**
+ * One ffmpeg run. Resolves with what it showed (see `FrameOutcome`). It never
+ * rejects: the caller tries the next offset, then gives up politely.
+ *
+ * `timeoutMs` is a parameter for the test that proves a timeout records no
+ * failure; nothing else passes it.
  */
 export async function extractFrame(
   ffmpeg: string,
   file: string,
   offsetSeconds: number,
-): Promise<Buffer | null> {
-  return new Promise<Buffer | null>((resolve) => {
+  timeoutMs: number = POSTER_TIMEOUT_MS,
+): Promise<FrameOutcome> {
+  return new Promise<FrameOutcome>((resolve) => {
     const child = spawn(ffmpeg, ffmpegArgs(file, offsetSeconds), {
       // Written out rather than left to the default. This is the line that
       // decides whether a filename can ever become a command.
@@ -442,7 +527,7 @@ export async function extractFrame(
      * cleared either way, and `exited` guards against a `close` that never
      * comes by settling on the next one that does.
      */
-    const finish = (value: Buffer | null): void => {
+    const finish = (value: FrameOutcome): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -456,23 +541,23 @@ export async function extractFrame(
 
     /** Set by the `close` handler, so a later `finish` resolves immediately. */
     let exited = false;
-    let pending: { value: Buffer | null } | null = null;
+    let pending: { value: FrameOutcome } | null = null;
 
     const timer = setTimeout(() => {
       // SIGKILL rather than SIGTERM: the point of the timeout is that this
       // process is not behaving, and a handler that ignores a polite signal is
       // exactly the case being defended against.
       child.kill("SIGKILL");
-      console.warn(`asset poster: ffmpeg timed out after ${POSTER_TIMEOUT_MS}ms on ${file}`);
-      finish(null);
-    }, POSTER_TIMEOUT_MS);
+      console.warn(`asset poster: ffmpeg timed out after ${timeoutMs}ms on ${file}`);
+      finish({ kind: "inconclusive" });
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > POSTER_MAX_BYTES) {
         child.kill("SIGKILL");
         console.warn(`asset poster: ffmpeg wrote more than ${POSTER_MAX_BYTES} bytes for ${file}`);
-        finish(null);
+        finish({ kind: "inconclusive" });
         return;
       }
       chunks.push(chunk);
@@ -487,15 +572,22 @@ export async function extractFrame(
     child.on("error", (error) => {
       // ENOENT or EACCES: the binary went away or was never one.
       console.warn(`asset poster: could not run ${ffmpeg}: ${describe(error)}`);
-      finish(null);
+      finish({ kind: "inconclusive" });
     });
 
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       exited = true;
       // A kill already decided the answer and was waiting for this moment.
       if (pending !== null) return;
       if (code === 0 && size > 0) {
-        finish(Buffer.concat(chunks));
+        finish({ kind: "frame", body: Buffer.concat(chunks) });
+        return;
+      }
+      if (code === null) {
+        // Killed by a signal nobody here sent: the OOM killer, a shutdown.
+        // That is the machine, not the video.
+        console.warn(`asset poster: ffmpeg killed by ${String(signal)} for ${file}`);
+        finish({ kind: "inconclusive" });
         return;
       }
       // A seek past the end of a short file lands here, which is why this is a
@@ -504,7 +596,7 @@ export async function extractFrame(
         `asset poster: ffmpeg exit ${String(code)} at ${offsetSeconds}s for ${file}` +
           (stderr.trim() === "" ? "" : `: ${stderr.trim().split("\n")[0]}`),
       );
-      finish(null);
+      finish({ kind: "no-frame" });
     });
   });
 }
@@ -552,28 +644,49 @@ function release(): void {
  * The entry is dropped once it settles, so the next request re-reads the cache
  * file the settled one just wrote rather than inheriting a stale buffer.
  */
-const inFlight = new Map<string, Promise<Buffer | null>>();
+const inFlight = new Map<string, Promise<FrameOutcome>>();
 
-async function extractOnce(
+/**
+ * Every offset until one yields a frame, once per key however many ask.
+ *
+ * A frame is cached. `no-frame` from *every* offset writes the failure marker,
+ * atomically through the same temp-and-rename as a poster. One inconclusive
+ * offset among them makes the whole attempt inconclusive and writes nothing:
+ * a timeout at fifteen seconds followed by two clean misses is not proof the
+ * video has no frame.
+ *
+ * Exported, with `timeoutMs`, for the test that proves that.
+ */
+export async function extractPoster(
   key: string,
   ffmpeg: string,
   file: string,
   dir: string,
-): Promise<Buffer | null> {
+  timeoutMs: number = POSTER_TIMEOUT_MS,
+): Promise<FrameOutcome> {
   const existing = inFlight.get(key);
   if (existing !== undefined) return existing;
 
-  const task = (async (): Promise<Buffer | null> => {
+  const task = (async (): Promise<FrameOutcome> => {
     await acquire();
     try {
+      let conclusive = true;
       for (const offset of POSTER_OFFSETS_SECONDS) {
-        const body = await extractFrame(ffmpeg, file, offset);
-        if (body !== null) {
-          await store(dir, key, body);
-          return body;
+        const outcome = await extractFrame(ffmpeg, file, offset, timeoutMs);
+        if (outcome.kind === "frame") {
+          await store(dir, key, outcome.body);
+          return outcome;
         }
+        if (outcome.kind === "inconclusive") conclusive = false;
       }
-      return null;
+      if (!conclusive) return { kind: "inconclusive" };
+      await store(
+        dir,
+        key,
+        `no frame at ${POSTER_OFFSETS_SECONDS.join(", ")}s\n`,
+        POSTER_FAILURE_EXTENSION,
+      );
+      return { kind: "no-frame" };
     } finally {
       release();
     }
@@ -598,6 +711,8 @@ export interface PosterTarget {
   key: string;
   /** Where the cached poster lives, or would. */
   cacheFile: string;
+  /** Where the failure marker lives, or would. See `POSTER_FAILURE_EXTENSION`. */
+  failureFile: string;
   /** A safe basename for `Content-Disposition`. */
   filename: string;
 }
@@ -655,6 +770,7 @@ export async function posterTarget(
     file: resolved.file,
     key,
     cacheFile: path.join(posterCacheDir(), `${key}${POSTER_EXTENSION}`),
+    failureFile: path.join(posterCacheDir(), `${key}${POSTER_FAILURE_EXTENSION}`),
     filename: `${base === "" ? "poster" : base}${POSTER_EXTENSION}`,
   };
 }
@@ -680,6 +796,10 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
     // Not cached yet, or the cache directory is gone. Both mean "extract".
   }
 
+  // A recorded verdict is believed until it expires, so a grid of broken videos
+  // does not re-run three ffmpegs each on every page load.
+  if (await freshPosterFailure(target.failureFile)) return POSTER_FAILED;
+
   const ffmpeg = await resolveFfmpeg();
   if (ffmpeg === null) {
     return {
@@ -693,18 +813,28 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
     };
   }
 
-  const body = await extractOnce(target.key, ffmpeg, target.file, posterCacheDir());
-  if (body === null) {
-    return {
-      ok: false,
-      status: 503,
-      code: "poster-failed",
-      error: "No poster could be made for this video.",
-      detail: `ffmpeg produced no frame for ${target.filename}; the file may be unreadable.`,
-    };
-  }
-  return { ok: true, body, cached: false };
+  const outcome = await extractPoster(target.key, ffmpeg, target.file, posterCacheDir());
+  if (outcome.kind === "frame") return { ok: true, body: outcome.body, cached: false };
+  if (outcome.kind === "no-frame") return POSTER_FAILED;
+  return POSTER_NOT_MADE;
 }
+
+const POSTER_FAILED: AssetFileProblem = {
+  ok: false,
+  status: 503,
+  code: "poster-failed",
+  error: "No poster could be made for this video.",
+  detail: "ffmpeg ran at every offset and produced no frame; the file may be unreadable.",
+};
+
+/** The attempt was cut short, so there is no verdict and asking again may work. */
+const POSTER_NOT_MADE: AssetFileProblem = {
+  ok: false,
+  status: 503,
+  code: "poster-not-made",
+  error: "No poster has been made for this video yet.",
+  detail: "The last attempt was cut short (a timeout, or ffmpeg failing to run). Ask again.",
+};
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

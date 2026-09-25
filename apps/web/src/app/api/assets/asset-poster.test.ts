@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asset, indexRun } from "@self-learn/schema";
 
-import { resolveFfmpeg } from "@/lib/asset-posters";
+import { POSTER_FAILURE_TTL_MS, resolveFfmpeg } from "@/lib/asset-posters";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {
@@ -277,20 +277,77 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     expect(await runs()).toBe(0);
   });
 
-  it("says ffmpeg ran and made nothing, rather than that it is missing", async () => {
+  /** An ffmpeg that runs, counts itself, and exits cleanly with no frame. */
+  const useSilentFfmpeg = async () => {
     const silent = path.join(base, "silent-ffmpeg");
-    await writeFile(silent, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    await writeFile(silent, `#!/bin/sh\necho run >> ${JSON.stringify(counter)}\nexit 0\n`, {
+      mode: 0o755,
+    });
     process.env.FFMPEG_PATH = silent;
+  };
+
+  const markers = async () =>
+    (await readdir(cacheDir)).filter((name) => /^[0-9a-f]{40}\.fail$/.test(name));
+
+  it("records a genuine no-frame result, and says poster-failed from the record", async () => {
+    await useSilentFfmpeg();
     const response = await call(VIDEO_ID);
     expect(response.status).toBe(503);
     expect(await codeOf(response)).toBe("poster-failed");
+    // One run per offset, then a marker beside where the poster would be.
+    expect(await runs()).toBe(3);
+    expect(await markers()).toHaveLength(1);
 
-    // The card's probe says the same, off the empty cache, without running
-    // ffmpeg a second time.
+    // Believed: neither a second request nor the card's probe runs ffmpeg.
     await resetRuns();
+    expect(await codeOf(await call(VIDEO_ID))).toBe("poster-failed");
     const probe = await posterStatus(VIDEO_ID);
     expect(probe.status).toBe(503);
     expect(await probe.json()).toEqual({ ok: false, code: "poster-failed" });
+    expect(await runs()).toBe(0);
+  });
+
+  it("answers the retryable poster-not-made for an empty cache with no marker", async () => {
+    // Nothing has been attempted, so absence is not a verdict about the video.
+    const probe = await posterStatus(VIDEO_ID);
+    expect(probe.status).toBe(503);
+    expect(await probe.json()).toEqual({ ok: false, code: "poster-not-made" });
+    expect(await runs()).toBe(0);
+  });
+
+  it("stops believing a marker once it expires", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    const [marker] = await markers();
+    const stale = new Date(Date.now() - POSTER_FAILURE_TTL_MS - 60_000);
+    await utimes(path.join(cacheDir, marker), stale, stale);
+
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+  });
+
+  it("ignores an old marker once the video changes, and makes the poster", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    expect(await markers()).toHaveLength(1);
+
+    // A re-render: new bytes, so a new size and mtime, so a new cache key.
+    const file = path.join(dataRoot, "out", "algorithms", "demo", "demo.mp4");
+    await appendFile(file, " re-rendered");
+    try {
+      expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+        ok: false,
+        code: "poster-not-made",
+      });
+      process.env.FFMPEG_PATH = fakeFfmpeg;
+      const response = await call(VIDEO_ID);
+      expect(response.status).toBe(200);
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(FAKE_JPEG);
+    } finally {
+      await writeFile(file, "not really an mp4, and never decoded");
+    }
   });
 
   it("answers ok for a poster that was made, so a failed image reads as not shown", async () => {
