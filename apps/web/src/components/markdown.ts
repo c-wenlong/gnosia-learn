@@ -637,34 +637,64 @@ function mathText(nodes: MathNode[]): string {
 /**
  * A URL-fragment-safe id built from a heading's rendered text.
  *
- * Lowercased, Latin accents folded off (`café` and `cafe` slug the same,
- * `normalize("NFKD")` is what can decompose them), and anything that is not a
- * Unicode letter or digit collapsed to a single hyphen, so `The `softmax`
- * step` and `The **softmax** step` land on the same id once `inlineText` has
- * reduced both to the same word.
+ * `normalize("NFC")` composes rather than decomposes, so a precomposed é
+ * (one codepoint) and an "e" followed by a combining acute accent (two
+ * codepoints - the same visible word, and something a note copied from
+ * somewhere else can easily contain) land on the same id. Lowercased, and
+ * anything that is not a Unicode letter, digit or combining mark collapsed to
+ * a single hyphen, so `The `softmax` step` and `The **softmax** step` land on
+ * the same id once `inlineText` has reduced both to the same word.
  *
- * Keeping `\p{L}` and `\p{N}` rather than only `[a-z0-9]` is what lets a note
- * written in Chinese, or any other script, keep its own words as its id
- * instead of folding to the same meaningless `section` every ASCII-only rule
- * would give it. An HTML id may hold any non-space character, and a browser
- * percent-encodes the fragment, so a heading in Chinese slugs to a real,
- * working link rather than to a number nobody can read.
+ * Keeping `\p{L}`, `\p{N}` and `\p{M}` rather than only `[a-z0-9]` is what
+ * lets a note written in any script keep its own words as its id instead of
+ * folding to the same meaningless `section` every ASCII-only rule would give
+ * it. `\p{M}` matters on its own: this used to also fold Latin accents off by
+ * decomposing and stripping them, which happened to make an accented word and
+ * its plain version slug alike, but the same step silently deleted the vowel
+ * signs out of a Devanagari word, since those are combining marks too, just
+ * ones that carry meaning rather than decoration - a base consonant lost its
+ * vowel sign and collided with the same consonant written alone. There is no
+ * accent fold any more, so an accented Latin word keeps its own accent in the
+ * id, which is still a real letter, a valid id, and a fragment a browser
+ * percent-encodes without help. An HTML id may hold any non-space character,
+ * which is what makes all of this legal in the first place.
  *
  * A heading can still fold to nothing: one that is pure punctuation, such as
- * `???` or a dash on its own, has no letter or digit in it at all. That would
- * otherwise slug to the empty string, which is not a link anyone could ever
- * share. `section` is the fallback, and it goes through the same duplicate
- * counter as any other heading, so a second unreadable title becomes
- * `section-2` rather than silently reusing the first one's id.
+ * `???` or a dash on its own, has no letter, digit or mark in it at all. That
+ * would otherwise slug to the empty string, which is not a link anyone could
+ * ever share. `section` is the fallback, and it goes through the same
+ * duplicate counter as any other heading, so a second unreadable title
+ * becomes `section-2` rather than silently reusing the first one's id.
  */
 export function slugify(text: string): string {
   const folded = text
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFC")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
   return folded === "" ? "section" : folded;
+}
+
+/**
+ * Refuses a `headingIds` prefix that cannot be a namespace: one with
+ * whitespace in it (an id cannot hold any at all), or one that does not open
+ * with a letter. Only runs outside production, the same trade-off React's own
+ * dev-mode checks make: the cost of the check is not worth paying on every
+ * request once the call sites are known good, but a caller who gets this
+ * wrong should see it immediately, as a thrown error at the page that passed
+ * a bad prefix, rather than as two notes' headings quietly landing on the
+ * same link with no error anywhere.
+ */
+function assertIdSafe(prefix: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  if (/\s/.test(prefix)) {
+    throw new Error(
+      `headingIds: idPrefix ${JSON.stringify(prefix)} contains whitespace, which an id cannot hold.`,
+    );
+  }
+  if (!/^\p{L}/u.test(prefix)) {
+    throw new Error(`headingIds: idPrefix ${JSON.stringify(prefix)} must start with a letter.`);
+  }
 }
 
 /**
@@ -690,12 +720,22 @@ export function slugify(text: string): string {
  * many times the base word has been seen.
  *
  * `prefix` namespaces one note's ids away from another's, for a page that
- * renders more than one `NoteProse`. It is slugified too, since a caller's
- * natural prefix is an asset id (`manimkc:out/...`) or a note slug, neither
- * of which is a legal id fragment on its own. Left empty, the default, a
- * page with exactly one note (the only case that exists today) gets plain
- * ids straight off the heading text, which is what makes `#worked-example`
- * a link worth sharing instead of `#note-1-worked-example`.
+ * renders more than one `NoteProse`. It is taken verbatim, not slugified:
+ * `slugify` is lossy on purpose - `A, B` and `A - B` are meant to read as the
+ * same heading - and that is exactly wrong for a prefix, whose only job is
+ * telling two notes apart. Making a prefix "nicer" by collapsing its
+ * separators can only destroy the distinction it exists to carry (`a/b` and
+ * `a-b` both becoming the namespace `a-b` is not a hypothetical, it is what
+ * `slugify(prefix)` used to do here), and no transform this function runs on
+ * one prefix can know what another `NoteProse` on the same page was given, so
+ * uniqueness across notes is the caller's job, not this one's. `assertIdSafe`
+ * only checks the shape a caller must already be able to guarantee - id-safe,
+ * not empty, no whitespace, starting with a letter - and, outside production,
+ * throws on a bad one so the mistake surfaces at the call site instead of as
+ * two notes' links silently landing on each other. Left empty, the default, a
+ * page with exactly one note (the only case that exists today) gets plain ids
+ * straight off the heading text, which is what makes `#worked-example` a link
+ * worth sharing instead of `#note-1-worked-example`.
  */
 export function headingIds(blocks: Block[], prefix = ""): Map<Block, string> {
   const ids = new Map<Block, string>();
@@ -720,7 +760,8 @@ export function headingIds(blocks: Block[], prefix = ""): Map<Block, string> {
     return candidate;
   }
 
-  const namespace = prefix.trim() === "" ? "" : slugify(prefix);
+  if (prefix !== "") assertIdSafe(prefix);
+  const namespace = prefix;
 
   function walk(list: Block[]): void {
     for (const block of list) {

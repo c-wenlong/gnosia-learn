@@ -88,12 +88,20 @@ export function NoteProse({
   resolveEmbed?: (name: string) => string | undefined;
   /**
    * Namespaces this note's heading ids away from another `NoteProse` on the
-   * same page. Left empty, the default, a heading's id is just its own
-   * slug — `#worked-example` rather than `#note-1-worked-example` — which is
-   * right for the one call site that exists today and for any page that only
-   * ever renders one note. A page holding two passes each a distinct prefix,
+   * same page. Left empty, the default, a heading's id is just its own slug
+   * (`#worked-example` rather than `#note-1-worked-example`), which is right
+   * for the one call site that exists today and for any page that only ever
+   * renders one note. A page holding two must pass each a distinct prefix,
    * typically the asset id or note slug it already has on hand, so `The idea`
-   * in one note and `The idea` in the other resolve to different anchors.
+   * in one note and `The idea` in the other resolve to different anchors:
+   * this module cannot enforce that distinctness itself, since it only ever
+   * sees one prefix at a time, so two notes given the same prefix (or two
+   * distinct-looking prefixes that happen to be identical once whitespace and
+   * case are ignored) will collide, silently. What it does check is that a
+   * non-empty prefix is even usable as one: no whitespace, starting with a
+   * letter. Outside production, a prefix that fails that throws immediately,
+   * so the mistake shows up at the page that passed it rather than as a link
+   * that lands on the wrong note.
    */
   idPrefix?: string;
   /** Merged onto the root, so a caller can give it padding or a scroll box. */
@@ -325,13 +333,27 @@ function Heading({
  * heading's own text in the markup, so a screen reader always meets the
  * heading before this, and it is purely a shortcut: the heading's `id` is
  * what a shared link actually lands on, with or without this element.
+ *
+ * `opacity-0` alone would make it undiscoverable on a touch screen, which has
+ * no hover to reveal it and no keyboard to focus it: a reader could see the
+ * heading was there and never learn it had a link. `(hover: none)` is true
+ * exactly on that kind of device (a mouse, trackpad or pen reports `hover`),
+ * so the link stays visible there from the start, and the hide-until-hover
+ * behaviour is scoped to devices that can actually trigger hover.
+ *
+ * The padding plus the matching negative margin grow the tap target to at
+ * least 24px on a side (measured on a phone: about 27x43px on an `h2`) without
+ * moving the glyph or widening the gap it leaves in the heading's own text:
+ * padding grows the box a finger can hit, the negative margin on the same
+ * sides gives that growth straight back to the layout around it, so the
+ * visible "#" sits exactly where it did before.
  */
 function HeadingAnchor({ id, text }: { id: string; text: string }) {
   return (
     <a
       href={`#${id}`}
       aria-label={`Link to "${text}"`}
-      className="ml-2 inline-block rounded-sm align-middle text-[0.8em] font-normal text-[var(--muted)] no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-[var(--muted)] no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100"
     >
       #
     </a>

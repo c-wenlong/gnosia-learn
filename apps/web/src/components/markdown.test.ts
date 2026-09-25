@@ -411,8 +411,27 @@ describe("slugify", () => {
     expect(slugify("-- The Idea --")).toBe("the-idea");
   });
 
-  it("folds accents off, so a diacritic does not fork the id", () => {
-    expect(slugify("Café")).toBe("cafe");
+  it("keeps an accented letter rather than folding it to its plain form", () => {
+    // There used to be an accent fold here (café -> cafe). It is gone: the
+    // same decompose-then-strip step that can pull an accent off a Latin
+    // letter also strips a combining mark that is part of the word in other
+    // scripts, which is the bug the next few tests are about.
+    expect(slugify("Café")).toBe("café");
+  });
+
+  it("gives a precomposed and a decomposed form of the same accented letter the same id", () => {
+    // "\u00e9" is one codepoint, precomposed "e" with an acute accent.
+    // "e\u0301" is two codepoints, a plain "e" followed by a combining acute
+    // accent - the same visible word, and exactly the kind of difference a
+    // note pasted from somewhere else can carry without anyone noticing.
+    // normalize("NFC") composes the second form into the first before
+    // anything else runs.
+    const precomposed = "caf\u00e9";
+    const decomposed = "cafe\u0301";
+    expect(precomposed).not.toBe(decomposed);
+    expect(precomposed.length).not.toBe(decomposed.length);
+    expect(slugify(precomposed)).toBe(slugify(decomposed));
+    expect(slugify(precomposed)).toBe("caf\u00e9");
   });
 
   it("falls back to a non-empty id for punctuation-only text", () => {
@@ -435,6 +454,26 @@ describe("slugify", () => {
 
   it("keeps the Latin word in a heading that mixes scripts, hyphenated onto the rest", () => {
     expect(slugify("第二章 Overview")).toBe("第二章-overview");
+  });
+
+  it("keeps a combining vowel sign, since it carries meaning rather than decoration", () => {
+    // किताब ("book", Hindi/Devanagari): consonant, vowel sign, consonant,
+    // vowel sign, consonant. Every vowel sign is a combining mark (\p{M}), the
+    // same general category the old accent fold stripped wholesale off Latin
+    // text - here that would delete two of the five characters, not four
+    // decorations off a base word.
+    expect(slugify("किताब")).toBe("किताब");
+  });
+
+  it("keeps a bare consonant and the same consonant plus a vowel sign apart", () => {
+    // The bug this guards: stripping \p{M} turned "कि" (क + the vowel sign
+    // ि) into the same string as "क" alone, so the second heading's link
+    // landed on the first.
+    const bare = slugify("क");
+    const withVowelSign = slugify("कि");
+    expect(bare).not.toBe(withVowelSign);
+    expect(bare).toBe("क");
+    expect(withVowelSign).toBe("कि");
   });
 });
 
@@ -488,8 +527,34 @@ describe("headingIds", () => {
     const idA = headingIds([a], "concept:softmax").get(a);
     const idB = headingIds([b], "concept:dot-product").get(b);
     expect(idA).not.toBe(idB);
-    expect(idA).toBe("concept-softmax-the-idea");
-    expect(idB).toBe("concept-dot-product-the-idea");
+    expect(idA).toBe("concept:softmax-the-idea");
+    expect(idB).toBe("concept:dot-product-the-idea");
+  });
+
+  it("keeps two prefixes that would collapse to the same slug apart", () => {
+    // "a/b" and "a-b" both slug to "a-b"; the namespace has exactly one job,
+    // telling these two notes apart, so it must not use `slugify` for this.
+    const [a] = headingsOf("## The idea");
+    const [b] = headingsOf("## The idea");
+    const idA = headingIds([a], "a/b").get(a);
+    const idB = headingIds([b], "a-b").get(b);
+    expect(idA).not.toBe(idB);
+  });
+
+  it("refuses a prefix with whitespace in it outside production, since an id cannot hold one", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "session 2026-08-20")).toThrow(/whitespace/);
+  });
+
+  it("refuses a prefix that does not start with a letter outside production", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "2026-08-20")).toThrow(/letter/);
+    expect(() => headingIds([heading], "-session")).toThrow(/letter/);
+  });
+
+  it("accepts a prefix that is id-safe: no whitespace, starting with a letter", () => {
+    const [heading] = headingsOf("## The idea");
+    expect(() => headingIds([heading], "session:2026-08-20")).not.toThrow();
   });
 
   it("keeps a literal heading and a counted one from colliding", () => {

@@ -248,6 +248,16 @@ describe("heading anchors", () => {
     expect(heading.lastElementChild).toBe(link);
   });
 
+  it("stays visible by default on a device with no hover to reveal it", () => {
+    // opacity-0 alone would leave the link undiscoverable on a touch screen:
+    // no hover to reveal it, no keyboard to focus it. The hide-until-hover
+    // behaviour has to be scoped to devices that can actually hover.
+    const host = render("## The idea");
+    const link = host.querySelector("h2 a")!;
+    expect(link.className).toContain("opacity-0");
+    expect(link.className).toContain("[@media(hover:none)]:opacity-100");
+  });
+
   it("makes the heading itself reachable by id, with or without the copy-link", () => {
     // The id lives on the heading element, which is what a shared URL
     // fragment actually scrolls to. The small "#" beside it is a shortcut for
