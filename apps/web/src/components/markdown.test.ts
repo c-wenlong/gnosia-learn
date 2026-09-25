@@ -379,9 +379,18 @@ describe("inlineText", () => {
     expect(inlineText(parseInline("[[dot-product]]"))).toBe("dot-product");
   });
 
-  it("takes an embed's caption, or its target with none", () => {
-    expect(inlineText(parseInline("![[a.svg|Two bases]]"))).toBe("Two bases");
+  it("takes an embed's target, never its caption, matching how InlineView names it inline", () => {
+    // An embed inside a heading (or mid-sentence anywhere) cannot become the
+    // `<figure>` a standalone one gets, so `InlineView` names it by `target`
+    // regardless of any `|alias` the note wrote. The id has to agree, or the
+    // link's own accessible name would describe text nobody sees on the page.
+    expect(inlineText(parseInline("![[a.svg|Two bases]]"))).toBe("a.svg");
     expect(inlineText(parseInline("![[a.svg]]"))).toBe("a.svg");
+  });
+
+  it("takes an image's alt, or its src with none, matching how InlineView names it inline", () => {
+    expect(inlineText(parseInline("![a picture](x.png)"))).toBe("a picture");
+    expect(inlineText(parseInline("![](x.png)"))).toBe("x.png");
   });
 
   it("reads math as the symbols parseMath already substituted", () => {
@@ -410,8 +419,22 @@ describe("slugify", () => {
     expect(slugify("???")).toBe("section");
   });
 
-  it("falls back to a non-empty id for text with no ASCII letters or digits", () => {
-    expect(slugify("日本語")).toBe("section");
+  it("falls back to a non-empty id for punctuation in a non-Latin script too", () => {
+    // Three Japanese full stops: real characters, none of them a letter or a
+    // digit, so this exercises the fallback rather than the Unicode keep-list
+    // below.
+    expect(slugify("。。。")).toBe("section");
+  });
+
+  it("keeps a heading written in a non-Latin script instead of folding it away", () => {
+    // An HTML id may hold any non-space character, and a browser
+    // percent-encodes the fragment, so this is a real, working anchor and not
+    // a special case.
+    expect(slugify("概要")).toBe("概要");
+  });
+
+  it("keeps the Latin word in a heading that mixes scripts, hyphenated onto the rest", () => {
+    expect(slugify("第二章 Overview")).toBe("第二章-overview");
   });
 });
 
@@ -467,6 +490,28 @@ describe("headingIds", () => {
     expect(idA).not.toBe(idB);
     expect(idA).toBe("concept-softmax-the-idea");
     expect(idB).toBe("concept-dot-product-the-idea");
+  });
+
+  it("keeps a literal heading and a counted one from colliding", () => {
+    // The second "Probe" would naively count to `probe-2`, which is also
+    // exactly what "Probe-2" slugs to on its own; `claim` has to notice the
+    // clash and move the counted one to `probe-3` rather than handing out an
+    // id the literal heading already holds.
+    const doc = parseNote("## Probe\n\n## Probe-2\n\n## Probe\n").blocks;
+    const ids = [...headingIds(doc).values()];
+    expect(ids).toEqual(["probe", "probe-2", "probe-3"]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps them apart whichever order the literal and the counted one appear in", () => {
+    // Same clash, but the literal `Probe-2` now comes after both repeats of
+    // `Probe` instead of between them, so the id it collides with was itself
+    // assigned by the counter rather than typed in the note.
+    const source = "## Probe\n\n## Probe\n\n## Probe-2\n";
+    const ids = [...headingIds(parseNote(source).blocks).values()];
+    expect(new Set(ids).size).toBe(ids.length);
+    // And still stable: parsing the same note twice gives the same answer.
+    expect([...headingIds(parseNote(source).blocks).values()]).toEqual(ids);
   });
 
   it("finds a heading nested inside a list item", () => {

@@ -592,11 +592,18 @@ export function standaloneFigure(nodes: Inline[]): FigureNode | null {
  *
  * A heading's link id has to come from what a reader sees, not from the
  * markdown source, so this walks the same `Inline[]` tree the renderer walks
- * and keeps only the words: a link or a wikilink contributes its label, an
- * embed its caption (or its target with none), and math the symbols
- * `parseMath` already substituted. That is what makes `` `softmax` `` and
- * `**softmax**` slug the same: both reduce to the plain word before
- * `slugify` ever sees them.
+ * and keeps only the words: a link or a wikilink contributes its label, and
+ * math the symbols `parseMath` already substituted. That is what makes
+ * `` `softmax` `` and `**softmax**` slug the same: both reduce to the plain
+ * word before `slugify` ever sees them.
+ *
+ * An embed or an image inside a heading never becomes the `<figure>` the same
+ * node gets in a paragraph of its own: `InlineView` in `NoteProse.tsx` cannot
+ * put a block element inside an `h1`..`h4` any more than it can inside a
+ * `<p>`, so both render as their name in mono text instead - an embed's
+ * `target`, an image's `alt` or, with none, its `src`. This mirrors exactly
+ * that, not the figure's caption, because a reader looking at the actual page
+ * sees the filename, never the alias the note wrote for the picture.
  */
 export function inlineText(nodes: Inline[]): string {
   return nodes
@@ -613,7 +620,7 @@ export function inlineText(nodes: Inline[]): string {
         case "note":
           return node.label;
         case "embed":
-          return node.caption ?? node.target;
+          return node.target;
         case "image":
           return node.alt || node.src;
         case "math":
@@ -630,25 +637,32 @@ function mathText(nodes: MathNode[]): string {
 /**
  * A URL-fragment-safe id built from a heading's rendered text.
  *
- * Lowercased, accents folded off (`café` and `cafe` slug the same), and
- * anything that is not a letter or digit collapsed to a single hyphen, so
- * `The `softmax` step` and `The **softmax** step` land on the same id once
- * `inlineText` has reduced both to the same word.
+ * Lowercased, Latin accents folded off (`café` and `cafe` slug the same,
+ * `normalize("NFKD")` is what can decompose them), and anything that is not a
+ * Unicode letter or digit collapsed to a single hyphen, so `The `softmax`
+ * step` and `The **softmax** step` land on the same id once `inlineText` has
+ * reduced both to the same word.
  *
- * A heading can fold to nothing: a title in a script this fold does not
- * touch (it only knows the Latin diacritics `normalize("NFKD")` decomposes),
- * or one that is pure punctuation like `???`, would otherwise slug to the
- * empty string, which is not a link anyone could ever share. `section` is
- * the fallback, and it goes through the same duplicate counter as any other
- * heading, so a second unreadable title becomes `section-2` rather than
- * silently reusing the first one's id.
+ * Keeping `\p{L}` and `\p{N}` rather than only `[a-z0-9]` is what lets a note
+ * written in Chinese, or any other script, keep its own words as its id
+ * instead of folding to the same meaningless `section` every ASCII-only rule
+ * would give it. An HTML id may hold any non-space character, and a browser
+ * percent-encodes the fragment, so a heading in Chinese slugs to a real,
+ * working link rather than to a number nobody can read.
+ *
+ * A heading can still fold to nothing: one that is pure punctuation, such as
+ * `???` or a dash on its own, has no letter or digit in it at all. That would
+ * otherwise slug to the empty string, which is not a link anyone could ever
+ * share. `section` is the fallback, and it goes through the same duplicate
+ * counter as any other heading, so a second unreadable title becomes
+ * `section-2` rather than silently reusing the first one's id.
  */
 export function slugify(text: string): string {
   const folded = text
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
   return folded === "" ? "section" : folded;
 }
@@ -666,6 +680,15 @@ export function slugify(text: string): string {
  * clobbering the first: `the-idea`, then `the-idea-2`, then `the-idea-3`,
  * counted from first occurrence.
  *
+ * That counter alone is not enough to promise every id is distinct: a
+ * document with both `## Probe` and a later, literal `## Probe-2` would slug
+ * both of them to `probe-2`, one from the counter and one from the text
+ * itself, and the second would silently steal the first's link. `claim`
+ * checks the id it is about to hand out against every id already issued, in
+ * either form, and keeps incrementing until it finds one that is free - the
+ * way GitHub's own heading slugger does it - rather than only counting how
+ * many times the base word has been seen.
+ *
  * `prefix` namespaces one note's ids away from another's, for a page that
  * renders more than one `NoteProse`. It is slugified too, since a caller's
  * natural prefix is an asset id (`manimkc:out/...`) or a note slug, neither
@@ -676,14 +699,28 @@ export function slugify(text: string): string {
  */
 export function headingIds(blocks: Block[], prefix = ""): Map<Block, string> {
   const ids = new Map<Block, string>();
-  const seen = new Map<string, number>();
-  const namespace = prefix.trim() === "" ? "" : slugify(prefix);
+  const issued = new Set<string>();
+  // The next suffix to try for a given base, so a long run of repeats does
+  // not re-scan every earlier number it has already learned is taken.
+  const next = new Map<string, number>();
 
-  function claim(slug: string): string {
-    const count = seen.get(slug) ?? 0;
-    seen.set(slug, count + 1);
-    return count === 0 ? slug : `${slug}-${count + 1}`;
+  function claim(id: string): string {
+    if (!issued.has(id)) {
+      issued.add(id);
+      return id;
+    }
+    let n = next.get(id) ?? 2;
+    let candidate = `${id}-${n}`;
+    while (issued.has(candidate)) {
+      n += 1;
+      candidate = `${id}-${n}`;
+    }
+    next.set(id, n + 1);
+    issued.add(candidate);
+    return candidate;
   }
+
+  const namespace = prefix.trim() === "" ? "" : slugify(prefix);
 
   function walk(list: Block[]): void {
     for (const block of list) {

@@ -255,6 +255,31 @@ describe("heading anchors", () => {
     const host = render("## The idea");
     expect(host.querySelector("#the-idea")?.tagName).toBe("H2");
   });
+
+  it("keeps a literal heading and a counted one from colliding", () => {
+    // "Probe-2" is also exactly what the second "Probe" would count to; the
+    // second one has to move rather than take the id "Probe-2" already holds.
+    const host = render("## Probe\n\n## Probe-2\n\n## Probe\n");
+    const ids = [...host.querySelectorAll("h2")].map((h) => h.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("slugs an embedded picture in a heading by its filename, matching what the page shows", () => {
+    // Mid-heading, an embed cannot become the `<figure>` a standalone one
+    // gets, so it renders as its filename - the id, and the copy-link's own
+    // accessible name, have to agree with that, not with a `|caption` alias
+    // nobody sees on the page.
+    const host = render("## ![[multiply-matrices.svg|Matrix multiplication]]");
+    const heading = host.querySelector("h2")!;
+    expect(heading.id).toBe("multiply-matrices-svg");
+    expect(heading.textContent).toContain("multiply-matrices.svg");
+    expect(heading.textContent).not.toContain("Matrix multiplication");
+  });
+
+  it("keeps a heading written in Chinese as its own real, readable id", () => {
+    const host = render("## 概要");
+    expect(host.querySelector("h2")?.id).toBe("概要");
+  });
 });
 
 describe("maths", () => {
