@@ -1,0 +1,17 @@
+// set window.__names = ['First Last', 'First', ...] before loading, to redact the signed-in account's name
+window.__scrub = (v) => { v=v.replace(/[\w.+-]+@[\w-]+\.[a-z]{2,}/gi,'learner@example.com'); for (const n of (window.__names||[])) v=v.split(n).join('Learner'); return v; };
+window.__redact = () => { const w=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n; while((n=w.nextNode())){ const v=n.nodeValue; if(!v||v.length>2000) continue; const nv=__scrub(v); if(nv!==v) n.nodeValue=nv; } document.querySelectorAll('input').forEach(i=>{ const nv=__scrub(i.value||''); if(nv!==i.value) i.value=nv; }); };
+if(!window.__mo){ let busy=false; window.__mo=new MutationObserver(()=>{ if(busy) return; busy=true; try{__redact()}catch{} busy=false; }); window.__mo.observe(document.body,{subtree:true,childList:true,characterData:true}); }
+window.__prep = () => { try{__redact()}catch{} let s=document.getElementById('__cap_hide'); if(!s){s=document.createElement('style');s.id='__cap_hide';document.head.appendChild(s);} s.textContent='#claude-agent-glow-border,#claude-phantom-cursor,#onetrust-consent-sdk{display:none!important}'; return [innerWidth, innerHeight]; };
+window.__cs = (e) => { if(!e) return null; const s=getComputedStyle(e), r=e.getBoundingClientRect(); const o={tag:e.tagName.toLowerCase(), cls:(e.className?.baseVal ?? e.className?.toString() ?? '').slice(0,400), data:Object.entries(e.dataset||{}).map(([k,v])=>k+':'+v).join(','), box:[r.x,r.y,r.width,r.height].map(n=>Math.round(n*10)/10).join(',')}; for (const p of ['font-family','font-size','font-weight','line-height','letter-spacing','text-transform','color','background-color','background-image','border','border-radius','box-shadow','padding','gap','transition','transform','opacity','outline','backdrop-filter']) { const v=s.getPropertyValue(p); if(v && !['none','normal','0px','rgba(0, 0, 0, 0)','all 0s ease 0s','1'].includes(v) && !(p==='border' && v.startsWith('0px'))) o[p]=v.slice(0,240);} return o; };
+window.__J=(label,e)=>label+' '+JSON.stringify(__cs(e));
+window.__tree = (e, depth=3) => { const out=[]; const walk=(n,d)=>{ out.push(' '.repeat(d)+JSON.stringify(__cs(n))); if(d<depth) for(const c of n.children) walk(c,d+1); }; walk(e,0); return out.join('\n'); };
+window.__clean = (s) => __scrub(s).replace(/url\([^)]*\)/g,'url(…)').replace(/https?:\/\/\S+/g,'<url>').replace(/=/g,':').replace(/;/g,' ');
+window.__out = (txt) => { let a=document.getElementById('__cap_out'); if(!a){a=document.createElement('article'); a.id='__cap_out'; a.style.cssText='position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden;white-space:pre'; document.body.appendChild(a);} a.textContent=__clean(txt); return txt.length; };
+window.__txt = (t) => [...document.querySelectorAll('body *')].find(e=>e.childElementCount===0&&e.textContent.trim()===t);
+window.__btn = (t) => [...document.querySelectorAll('button,a,[role=button],[role=tab],[role=radio],[role=menuitem]')].find(b=>b.innerText?.trim()===t);
+window.__chain=(e,n,k=6)=>{const o=[]; for(let i=0;i<k&&e;i++){const s=getComputedStyle(e); if(s.borderTopWidth!=='0px'||s.boxShadow!=='none'||s.backgroundColor!=='rgba(0, 0, 0, 0)'||s.backgroundImage!=='none'||s.backdropFilter!=='none') o.push(__J(n+i,e)); e=e.parentElement;} return o.join('\n');};
+__prep();
+// the last expression is the value the in-page JS runner hands back
+// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+'helpers ok ' + location.pathname + ' :: ' + __scrub(document.body.innerText.slice(0,700));

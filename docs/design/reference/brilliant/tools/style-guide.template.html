@@ -1,0 +1,664 @@
+<title>Brilliant style guide</title>
+<meta name="description" content="Brilliant (brilliant.org) design tokens and components, rendered from tokens.json with the real values, in light and dark.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;700&display=swap">
+<style>
+/* Proprietary faces: drop the woff2 files into a local fonts/ folder next to this page (gitignored).
+   Without them the page falls back to Figtree (sans) and Georgia (serif), and says so at the top. */
+@font-face { font-family: "CoFo Brilliant"; font-weight: 400; src: local("CoFo Brilliant"), url("fonts/cofo-brilliant-regular.woff2") format("woff2"); }
+@font-face { font-family: "CoFo Brilliant"; font-weight: 500; src: local("CoFo Brilliant Medium"), url("fonts/cofo-brilliant-medium.woff2") format("woff2"); }
+@font-face { font-family: "CoFo Brilliant"; font-weight: 700; src: local("CoFo Brilliant Bold"), url("fonts/cofo-brilliant-bold.woff2") format("woff2"); }
+@font-face { font-family: "CoFo Robert"; font-weight: 500; src: local("CoFo Robert Medium"), url("fonts/cofo-robert-medium.woff2") format("woff2"); }
+@font-face { font-family: "CoFo Semi Mono"; font-weight: 400 700; src: local("CoFo Semi Mono"), url("fonts/cofo-semi-mono-medium.woff2") format("woff2"); }
+
+:root {
+/*CORE*/
+/*LIGHT*/
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+/*DARK*/
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+/*DARK*/
+  color-scheme: dark;
+}
+
+/* ---------- guide chrome (built from the same tokens) ---------- */
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-primary); color: var(--text-primary); font: var(--typography-body-base); }
+.wrap { max-width: 1216px; margin: 0 auto; padding-inline: 24px; padding-block: 0 96px; }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg-elevated); border-bottom: 1px solid var(--border-primary); box-shadow: var(--shadow-subtle); }
+header.top .in { max-width: 1216px; margin: 0 auto; padding: 12px 24px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+header.top h1 { margin: 0; font: var(--typography-heading-md); }
+header.top nav { display: flex; gap: 4px 14px; flex-wrap: wrap; flex: 1; }
+header.top nav a { color: var(--text-secondary); text-decoration: none; font: var(--typography-body-sm); }
+header.top nav a:hover { color: var(--text-primary); }
+.notice { margin: 16px 0 0; padding: 10px 14px; border-radius: var(--radius-lg); background: var(--bg-yellow-tertiary); color: var(--text-warning-primary); font: var(--typography-body-sm); }
+.notice[hidden] { display: none; }
+section.s { padding-top: 48px; scroll-margin-top: 80px; }
+h2.sh { font: var(--typography-heading-xl); margin: 0 0 6px; }
+h3.sub { font: var(--typography-heading-md); margin: 32px 0 12px; }
+p.lead { color: var(--text-secondary); margin: 0 0 16px; max-width: 72ch; }
+.src { font: var(--typography-body-xs); color: var(--text-tertiary); }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.spec { border: 1px solid var(--border-primary); border-radius: var(--radius-xl); padding: 20px; background: var(--bg-primary); }
+.spec + .spec { margin-top: 12px; }
+.spec h4 { margin: 0 0 4px; font: var(--typography-heading-sm); }
+.spec .meta { font: var(--typography-body-sm); color: var(--text-secondary); margin: 0 0 16px; }
+.demo { display: flex; gap: 16px 20px; flex-wrap: wrap; align-items: flex-end; }
+.cap { font: var(--typography-body-xs); color: var(--text-tertiary); text-align: center; margin-top: 6px; }
+.cell { display: flex; flex-direction: column; align-items: center; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font: var(--typography-body-sm); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-secondary); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 500; }
+code { font-family: var(--ff-code); font-size: 13px; }
+.sw { width: 100%; height: 56px; border-radius: var(--radius-md); border: 1px solid var(--border-secondary); }
+.ramp { display: grid; grid-template-columns: 90px repeat(12, minmax(0, 1fr)); gap: 3px; align-items: stretch; margin-bottom: 3px; }
+.ramp .lbl { font: var(--typography-body-sm); font-weight: 500; align-self: center; }
+.ramp .chip { height: 52px; border-radius: 6px; display: flex; align-items: flex-end; padding: 4px; font: 500 10px/1.1 var(--ff-code); }
+.ramp-wrap { overflow-x: auto; }
+.ramp-wrap .inner { min-width: 860px; }
+.sem { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.sem .it { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; }
+.sem .dot { width: 44px; height: 44px; border-radius: var(--radius-md); border: 1px solid var(--border-primary); }
+.sem .nm { font: 500 12px/1.3 var(--ff-code); word-break: break-all; }
+.sem .vl { font: var(--typography-body-xs); color: var(--text-secondary); }
+.typerow { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-secondary); align-items: baseline; }
+.typerow .k { font: 500 12px/1.4 var(--ff-code); }
+.typerow .k small { display: block; color: var(--text-tertiary); font-weight: 400; }
+.boxes { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.boxes .b { background: var(--bg-blue-secondary); }
+.motion-dot { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-blue-primary); }
+.track { position: relative; height: 36px; background: var(--bg-secondary); border-radius: var(--radius-full); overflow: hidden; }
+.track .motion-dot { position: absolute; top: 4px; left: 4px; }
+.track.go .motion-dot { left: calc(100% - 32px); }
+.theme-btn { font: var(--typography-ui-actions-base); padding: 8px 14px; border-radius: var(--radius-button); border: 2px solid var(--border-primary); background: transparent; color: var(--text-primary); cursor: pointer; }
+.side-by-side { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.force-dark { --x: 0; }
+
+/* ---------- COMPONENTS (values from tokens) ---------- */
+/* Button3d: a face lifted 4px over a same-hue lip; press drops the face onto the lip. */
+.b3d { display: inline-flex; border: 0; padding: 0; background: none; border-radius: var(--radius-button3d); cursor: pointer; position: relative; outline: 2px solid transparent; }
+.b3d > .face { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 160px; padding: 14px 24px; border-radius: 60px;
+  font: var(--typography-ui-actions-base); letter-spacing: var(--typography-ui-actions-base-ls);
+  background: var(--face); color: var(--fg); box-shadow: 0 var(--lift) 0 0 var(--lip); transform: translateY(calc(-1 * var(--lift)));
+  transition: transform var(--duration-instant) ease-out, box-shadow var(--duration-instant) ease-out; }
+.b3d { --lift: var(--size-button3d-lift); --face: var(--component-button3d-primary-face); --fg: var(--component-button3d-primary-text); --lip: var(--component-button3d-primary-lip); }
+.b3d.secondary { --face: var(--component-button3d-secondary-face); --fg: var(--text-primary); --lip: var(--component-button3d-secondary-lip); }
+.b3d.green { --face: var(--component-button3d-green-face); --fg: #fff; --lip: var(--component-button3d-green-lip); }
+.b3d.blue { --face: var(--component-button3d-blue-face); --fg: #fff; --lip: var(--component-button3d-blue-lip); }
+.b3d.yellow { --face: var(--component-button3d-yellow-face); --fg: var(--component-button3d-yellow-text); --lip: var(--component-button3d-yellow-lip); }
+.b3d:active > .face, .b3d.is-pressed > .face { --lift: 0px; }
+/* Brilliant applies the hover tint only in Safari (@supports (-webkit-hyphens:none)); Chrome and Firefox show no hover change */
+.b3d.is-hover > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--autoflip-white-200); pointer-events: none; }
+@supports (-webkit-hyphens:none) { .b3d:hover > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--autoflip-white-200); pointer-events: none; } }
+.b3d > .face { position: relative; }
+.b3d:focus-visible, .b3d.is-focus { box-shadow: var(--shadow-outline); }
+.b3d[disabled], .b3d.is-disabled { opacity: var(--opacity-disabled-button3d); cursor: default; --lift: 0px; --face: var(--component-button3d-disabled-face); --fg: var(--component-button3d-disabled-text); --lip: transparent; }
+.b3d[disabled] > .face::after { display: none; }
+.b3d.wide > .face { min-width: 280px; }
+.b3d.premium > .face { background: var(--gradient-hue-shift-upgrade-iridescent-primary); color: var(--component-button3d-premium-text); transform: none; padding: 14px 24px 18px;
+  box-shadow: inset 0 -4px 0 0 var(--component-button3d-premium-inset); transition: box-shadow var(--duration-instant) ease-out, padding-bottom var(--duration-instant) ease-out, margin-top var(--duration-instant) ease-out; }
+.b3d.premium:hover { opacity: var(--opacity-hover-premium); }
+.b3d.premium.is-pressed > .face, .b3d.premium:active > .face { box-shadow: inset 0 0 0 0 transparent; padding-bottom: 14px; margin-top: 4px; }
+
+/* Flat button (data-slot=button) */
+.fb { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--size-button-height); padding: 12px 22px; border-radius: var(--radius-button);
+  border: var(--borderWidth-default) solid transparent; font: var(--typography-ui-actions-base); cursor: pointer; background: transparent; color: var(--text-primary); transition: opacity var(--duration-fast); }
+.fb.primary { background: var(--bg-inverse-primary); color: var(--text-inverse); }
+.fb.primary:hover, .fb.primary.is-hover { opacity: var(--opacity-hover-flat-button); }
+.fb.outline { border-color: var(--border-primary); }
+.fb.outline:hover, .fb.outline.is-hover { border-color: var(--border-hover); }
+.fb.ghost:hover, .fb.ghost.is-hover { background: var(--bg-hover); }
+.fb.danger { color: var(--text-danger-primary); }
+.fb.danger:hover, .fb.danger.is-hover { background: var(--bg-danger-secondary-hover); }
+.fb.green { background: var(--bg-green-primary); color: #fff; }
+.fb:focus-visible, .fb.is-focus { box-shadow: var(--shadow-outline); outline: none; }
+.fb[disabled], .fb.is-disabled { background: var(--bg-disabled); color: var(--text-disabled); border-color: transparent; cursor: default; opacity: 1; }
+.fb.danger.is-disabled { background: var(--bg-danger-disabled); color: var(--text-danger-disabled); }
+.fb.compact { height: 40px; padding: 8px 14px; }
+
+/* Hue-shift pill (No / Maybe / Yes) */
+.hs { height: 52px; min-width: 96px; padding: 16px 24px; border-radius: var(--radius-full); border: 0; font: var(--typography-ui-actions-base); color: var(--text-primary);
+  background: var(--gradient-hue-shift-action-gray); cursor: pointer; }
+.hs:hover, .hs.is-hover { background: var(--bg-hover); }
+.hs.is-selected { background: var(--gradient-hue-shift-color-blue-primary); box-shadow: var(--shadow-outline); }
+
+/* Premium header button: gradient border */
+.premium-btn { height: 41px; padding: 8px 16px; border-radius: var(--radius-full); border: 2px solid transparent; font: 500 14px/21px var(--ff-brilliant); color: var(--text-iridescent-secondary);
+  background: linear-gradient(var(--bg-primary), var(--bg-primary)) padding-box, linear-gradient(86deg, var(--palette-blue-400) 0%, var(--palette-pink-400) 50%, var(--palette-yellow-400) 100%) border-box; cursor: pointer; }
+
+/* Stat pill (keys, streak) */
+.stat-pill { display: inline-flex; align-items: center; gap: 8px; height: 47px; padding: 9px 20px; border-radius: var(--radius-button); border: 2px solid var(--border-primary);
+  background: transparent; color: var(--text-primary); font: var(--typography-ui-actions-base); }
+
+/* Icon buttons */
+.ib { display: inline-grid; place-items: center; width: 48px; height: 48px; border: 2px solid transparent; border-radius: var(--radius-xs); background: transparent; color: var(--text-primary); cursor: pointer; padding: 0; }
+.ib:hover, .ib.is-hover { background: var(--bg-hover); }
+.ib.round { width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--bg-hover); }
+.ib.glass { border: .5px solid transparent; border-radius: var(--radius-button); color: var(--text-disabled); backdrop-filter: blur(var(--blur-glass)) saturate(1.8); }
+.ib.send { width: 32px; height: 32px; border-radius: var(--radius-full); color: var(--text-disabled); }
+.ib.send.is-active { background: var(--gradient-koji-send-button); color: #fff; }
+.ib svg { width: 24px; height: 24px; }
+.ib.send svg { width: 16px; height: 16px; }
+
+/* Inputs */
+.field { display: flex; flex-direction: column; gap: 8px; width: 320px; max-width: 100%; }
+.field label { font: 500 16px/20px var(--ff-brilliant); }
+.inp { height: var(--size-input-height); padding: 12px 16px; border-radius: var(--radius-md); border: 2px solid var(--border-primary); background: transparent;
+  color: var(--text-primary); font: var(--typography-body-base); outline: none; width: 100%; }
+.inp::placeholder { color: var(--text-disabled); }
+.inp:hover, .inp.is-hover { border-color: var(--border-hover); }
+.inp:focus, .inp.is-focus { border-color: var(--border-active); box-shadow: var(--shadow-input-focus); }
+.inp[disabled] { background: var(--bg-secondary); border-color: transparent; color: var(--text-secondary); cursor: not-allowed; }
+.field.invalid label, .field.invalid .help { color: var(--text-danger-primary); }
+.field.invalid .inp { border-color: var(--border-danger-primary); }
+.help { font: var(--typography-body-sm); color: var(--text-secondary); }
+
+/* Chat input and ask-Koji pill */
+.chat-in { position: relative; width: 317px; min-height: 53px; border-radius: 24px; padding: 0 52px 0 20px; background: var(--autoflip-black-100); border: .5px solid var(--autoflip-black-200); display: flex; align-items: center; }
+.chat-in .ph { color: var(--text-placeholder); font: var(--typography-body-base); }
+.chat-in .val { color: var(--text-primary); font: var(--typography-body-base); }
+.chat-in .ib.send { position: absolute; right: 10px; top: 10px; }
+.ask { width: 552px; max-width: 100%; border-radius: var(--radius-3xl); border: 2px solid var(--border-secondary); padding: 14px 14px 14px 26px; box-shadow: var(--shadow-base);
+  background: color-mix(in srgb, var(--autoflip-white-1000) 95%, transparent); display: flex; align-items: center; gap: 12px; color: var(--text-secondary); }
+:root[data-theme="dark"] .ask { background: color-mix(in srgb, var(--autoflip-black-1000) 15%, transparent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ask { background: color-mix(in srgb, var(--autoflip-black-1000) 15%, transparent); } }
+.ask.idle { opacity: var(--opacity-ask-pill-idle); }
+.ask .grow { flex: 1; }
+
+/* kbd keycap */
+kbd.kc { display: inline-flex; align-items: center; height: 21px; padding: 0 6px 2px; border: 1px solid var(--bg-tertiary); border-bottom-width: 2px; border-radius: 5px; font: 400 12px/12px var(--ff-brilliant); color: var(--text-disabled); }
+
+/* Switch */
+.switch { position: relative; display: inline-flex; width: 48px; height: 32px; padding: 4px; border-radius: var(--radius-full); background: var(--component-switch-off); transition: background var(--duration-fast) ease; cursor: pointer; border: 0; }
+.switch .thumb { width: 24px; aspect-ratio: 1; border-radius: var(--radius-full); background: var(--component-switch-thumb); transition: transform var(--duration-fast) ease; }
+.switch.on { background: var(--component-switch-on); }
+.switch.on .thumb { transform: translateX(16px); }
+.switch.teal.on { background: linear-gradient(0deg, rgb(160,220,213) 0%, rgb(18,71,64) 100%); }
+.switch.is-focus { box-shadow: var(--shadow-outline); }
+.switch.is-disabled { cursor: not-allowed; background: var(--bg-disabled); }
+.switch.is-disabled .thumb { background: var(--bg-primary); }
+
+/* Segmented control */
+.seg { display: inline-flex; gap: 4px; padding: 6px; height: 44px; border-radius: var(--radius-full); background: var(--bg-secondary); }
+.seg span { display: flex; align-items: center; justify-content: center; min-width: 64px; height: 32px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid transparent;
+  font: var(--typography-ui-nav-selected); color: var(--text-tertiary); transition: background-color var(--duration-fast) ease-out, color var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out; cursor: pointer; }
+.seg span:hover { color: var(--text-secondary); }
+.seg span.on { background: var(--bg-primary); border-color: var(--border-primary); color: var(--text-primary); box-shadow: var(--shadow-base); }
+.seg.sm { height: auto; padding: 4px; } .seg.sm span { height: auto; padding: 8px 12px; font: var(--typography-body-sm); }
+
+/* Tabs (pricing billing) */
+.tabs { display: inline-flex; border-bottom: 1px solid var(--border-secondary); }
+.tabs span { position: relative; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 24px; font: var(--typography-body-base); color: var(--text-primary); cursor: pointer; }
+.tabs span.on { font-weight: 500; color: var(--text-purple-primary); }
+.tabs span.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text-purple-primary); }
+.vtabs { display: flex; flex-direction: column; gap: 8px; width: 320px; }
+.vtabs span { height: 56px; display: flex; align-items: center; padding: 0 16px; border-radius: var(--radius-md); font: var(--typography-body-base); }
+.vtabs span.on { background: var(--autoflip-black-100); }
+
+/* Header nav tabs */
+.navtabs { display: flex; gap: 32px; height: 64px; padding: 0 24px; background: var(--bg-elevated); border: 1px solid var(--border-primary); border-radius: var(--radius-md); overflow: hidden; align-items: stretch; }
+.navtabs a { position: relative; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); text-decoration: none; font: var(--typography-ui-nav-default); overflow: hidden; }
+.navtabs a::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 2px; background: var(--text-disabled); transition: transform var(--duration-instant) linear; }
+.navtabs a:hover, .navtabs a.is-hover { color: var(--text-primary); }
+.navtabs a:hover::after, .navtabs a.is-hover::after { transform: translateY(-2px); }
+.navtabs a.on { color: var(--text-primary); font-weight: 500; }
+.navtabs a.on::after { background: var(--text-primary); transform: translateY(-2px); }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: var(--radius-lg); font: var(--typography-ui-actions-sm); letter-spacing: .48px; text-transform: uppercase; }
+.badge.solid-green { background: var(--palette-green-600); color: #fff; }
+.badge.solid-purple { background: var(--palette-purple-500); color: #fff; }
+.badge.subtle-blue { background: var(--palette-blue-100); color: var(--palette-blue-700); }
+.badge.subtle-yellow { background: var(--palette-yellow-100); color: var(--palette-yellow-700); }
+.badge.subtle-green { background: var(--palette-green-100); color: var(--palette-green-700); }
+.badge.minimal { padding: 0; color: var(--text-tertiary); }
+.badge.premium { padding: 6px 20px; border-radius: 12px; color: #000; background: linear-gradient(80.7deg, var(--palette-pink-300) 4.7%, var(--palette-yellow-400) 94.9%); }
+.badge.pill-blue { border-radius: var(--radius-full); background: var(--palette-blue-200); color: var(--palette-blue-700); }
+.delta { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font: 700 12px/18px var(--ff-brilliant); background: var(--bg-green-secondary); color: var(--text-green-primary); }
+.eyebrow { font: var(--typography-ui-actions-sm); letter-spacing: .48px; text-transform: uppercase; color: var(--text-secondary); }
+.starthere { display: inline-flex; padding: 6px 8px; border-radius: 176px; background: var(--palette-gray-900); }
+.starthere span { font: var(--typography-ui-actions-sm); letter-spacing: .04em; text-transform: uppercase; background: linear-gradient(90deg, var(--palette-gray-100) 0%, rgba(242,242,242,0) 100%), linear-gradient(180deg, var(--palette-teal-100) 0%, var(--palette-blue-400) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Progress */
+.prog { position: relative; width: 320px; border-radius: var(--radius-full); background: var(--bg-tertiary); overflow: hidden; }
+.prog > i { display: block; height: 100%; border-radius: var(--radius-full); background: var(--bg-green-primary); transition: width var(--duration-normal) ease; }
+.prog.sm { height: var(--size-progress-sm); } .prog.md { height: var(--size-progress-default); } .prog.lg { height: var(--size-progress-lg); }
+.segprog { display: flex; gap: 4px; width: 320px; } .segprog .prog { flex: 1; height: 8px; width: auto; }
+.dots { display: flex; gap: 8px; } .dots i { width: 16px; height: 12px; border-radius: var(--radius-full); background: var(--bg-disabled); }
+
+/* Spinner */
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; animation: spin 600ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shakeX { 0%{transform:translate(0)} 12%{transform:translate(-9px)} 30%{transform:translate(9px)} 48%{transform:translate(-7px)} 65%{transform:translate(5px)} 80%{transform:translate(-3px)} 90%{transform:translate(2px)} to{transform:translate(0)} }
+@keyframes skel { from { background: var(--component-skeleton-from); } to { background: var(--component-skeleton-to); } }
+.skeleton { height: 16px; border-radius: var(--radius-md); animation: skel var(--duration-skeleton) linear infinite alternate; }
+
+/* Tooltip, menu, popover, modal */
+.tip { position: relative; max-width: 280px; padding: 12px 16px; border-radius: var(--radius-lg); background: var(--bg-elevated); box-shadow: var(--shadow-base); display: flex; flex-direction: column; gap: 4px; }
+.tip b { font: var(--typography-heading-sm); } .tip p { margin: 0; font: var(--typography-body-sm); color: var(--text-secondary); }
+.tip::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: var(--bg-elevated); transform: translateX(-50%) rotate(45deg); border-radius: var(--radius-sm); }
+.menu { width: 280px; border-radius: var(--radius-md); background: var(--bg-elevated); box-shadow: var(--shadow-base); display: flex; flex-direction: column; overflow: hidden; }
+.menu a { height: var(--size-menu-item); display: flex; align-items: center; padding: 12px 16px; font: var(--typography-body-base); color: var(--text-primary); text-decoration: none; }
+.menu a:hover, .menu a.is-hover { background: var(--bg-hover); }
+.menu hr { margin: 0; border: 0; border-top: 1px solid var(--border-secondary); }
+.pop { position: relative; width: 353px; max-width: 100%; border-radius: var(--radius-md); background: var(--bg-elevated); box-shadow: var(--shadow-base); padding: 24px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.pop::before { content: ""; position: absolute; top: -6px; right: 40px; width: 12px; height: 12px; background: var(--bg-elevated); transform: rotate(45deg); }
+.pop .big { font: var(--typography-heading-4xl); }
+.pop h4 { margin: 8px 0 0; font: var(--typography-heading-md); }
+.overlay { position: relative; padding: 40px 16px; border-radius: var(--radius-xl); background: var(--special-overlay-default); display: grid; place-items: center; }
+.modal { width: 390px; max-width: 100%; border-radius: var(--radius-2xl); background: var(--bg-elevated); box-shadow: var(--shadow-md); padding: 32px 20px 16px; display: flex; flex-direction: column; gap: 24px; text-align: center; }
+.modal h3 { margin: 0; font: var(--typography-heading-md); } .modal p { margin: 0; font: var(--typography-body-base); }
+.modal .acts { display: flex; flex-direction: column; gap: 16px; } .modal .acts .b3d > .face, .modal .acts .fb { width: 100%; }
+
+/* Cards */
+.card { border-radius: var(--radius-2xl); border: 2px solid var(--border-primary); background: var(--bg-primary); padding: 16px 24px; }
+.stat { min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.stat .l { font: var(--typography-body-sm); color: var(--text-secondary); } .stat .v { font: var(--typography-heading-xl); }
+.choice { position: relative; width: 158px; height: 228px; border-radius: var(--radius-xl); padding: 32px 24px 24px; background: var(--gradient-hue-shift-action-gray); color: var(--text-secondary);
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center; font: var(--typography-ui-actions-base); overflow: hidden; cursor: pointer; border: 0; }
+.choice:hover, .choice.is-hover { background: var(--bg-hover); }
+.choice.is-selected { color: var(--text-primary); background: var(--gradient-hue-shift-color-blue-primary); box-shadow: var(--shadow-outline); }
+.choice .art { width: 72px; height: 72px; border-radius: 24px; margin-bottom: auto; background: var(--bg-green-primary); opacity: .9; }
+.tile3d { width: 152px; aspect-ratio: 1; border-radius: var(--radius-2xl); border: 2px solid var(--border-solid); background: var(--bg-primary); box-shadow: var(--shadow-tile3d); transform: translateY(-4px); position: relative;
+  transition: transform var(--duration-instant) ease-out, box-shadow var(--duration-instant) ease-out, border-color var(--duration-normal); display: grid; place-items: center; }
+.tile3d.is-hover, .tile3d:hover { border-color: var(--border-hover); box-shadow: 0 4px 0 0 var(--border-hover); }
+.tile3d .gr { position: absolute; top: 12px; left: 12px; }
+.tile3d .nw { position: absolute; top: 12px; right: 12px; }
+.tile3d .art { width: 64px; height: 64px; border-radius: 12px; background: linear-gradient(135deg, var(--palette-blue-500), var(--palette-yellow-400)); }
+.figure { width: 220px; aspect-ratio: 1; border-radius: var(--radius-3xl); border: 1px solid var(--border-primary); background: var(--bg-elevated); box-shadow: var(--shadow-base); padding: 24px; display: grid; place-items: center; color: var(--text-tertiary); }
+.home-card { width: 360px; max-width: 100%; border-radius: 24px; border: 2px solid var(--border-solid); background: var(--bg-primary); padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.home-card h3 { margin: 0; font: 700 28px/35px var(--ff-brilliant); }
+.lrow { width: 100%; display: flex; align-items: center; gap: 14px; font: var(--typography-body-base); }
+.lrow .node { width: 36px; height: 26px; border-radius: 50%; background: var(--bg-tertiary); box-shadow: 0 4px 0 0 var(--border-solid); }
+.lrow.cur { font-weight: 700; } .lrow.cur .node { background: var(--bg-blue-primary); box-shadow: 0 4px 0 0 var(--palette-blue-700); }
+.lrow .st { margin-left: auto; width: 16px; height: 16px; border-radius: 50%; background: var(--bg-tertiary); }
+.level { position: relative; width: 420px; max-width: 100%; height: 72px; }
+.level .sh { position: absolute; inset: -2px 14px 0; border-radius: var(--radius-2xl); background: var(--palette-blue-700); }
+.level .btn { position: absolute; inset: 0 0 8px; border-radius: 18px; background: var(--bg-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.level .btn .eyebrow { color: var(--palette-blue-700); }
+.level .btn b { font: 500 16px/1.4 var(--ff-brilliant); }
+.chip { display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 8px 16px; border-radius: var(--radius-full); border: 1px solid var(--border-primary); background: var(--bg-primary); font: var(--typography-body-sm); }
+.setrow { width: 592px; max-width: 100%; border: 1px solid var(--border-primary); border-radius: var(--radius-xl); padding: 18px 16px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.sidenav { width: 280px; padding: 16px; border: 1px solid var(--border-primary); border-radius: var(--radius-lg); display: flex; flex-direction: column; gap: 4px; }
+.sidenav span { height: 40px; padding: 8px 16px; border-radius: var(--radius-md); font: var(--typography-ui-nav-default); color: var(--text-secondary); }
+.sidenav span.on { font: var(--typography-ui-nav-selected); color: var(--text-primary); background: var(--bg-tertiary); }
+.plan { width: 250px; padding: 18px; border-radius: var(--radius-xl); border: 2px solid var(--border-primary); text-align: center; background: var(--bg-primary); }
+.plan.on { border-color: transparent; background: linear-gradient(var(--bg-primary), var(--bg-primary)) padding-box, var(--gradient-iridescent-frame) border-box; }
+.plan b { display: block; font: 700 20px/24px var(--ff-brilliant); } .plan small { color: var(--text-secondary); font: var(--typography-body-sm); }
+
+/* Lesson (product specific) */
+.lesson { position: relative; width: 100%; max-width: 820px; border-radius: 24px; border: 2px solid var(--border-primary); background: var(--bg-primary); padding: 28px 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 18px;
+  transition: border-color var(--duration-slow) ease; }
+.lesson.correct { border-color: var(--component-lesson-frame-correct); box-shadow: 0 0 20px 8px color-mix(in srgb, var(--component-lesson-glow-correct) 30%, transparent); }
+.lesson.retry { border-color: var(--component-lesson-frame-retry); }
+.lesson.retry.shake { animation: shakeX var(--duration-slower); }
+.topbar { width: 100%; display: flex; align-items: center; gap: 16px; }
+.topbar .prog { flex: 1; width: auto; }
+.topbar .xp { font: 500 16px/1.4 var(--ff-brilliant); color: var(--text-disabled); }
+.lesson .prompt { width: 100%; max-width: 540px; font: 400 16px/25.6px var(--ff-brilliant); }
+.tray { display: flex; gap: 16px; padding: 16px; border-radius: var(--radius-lg); background: var(--bg-hover); flex-wrap: wrap; justify-content: center; }
+.ttile { width: 32px; height: 32px; border-radius: 5px; border: 2px solid var(--component-lesson-tile-edge); background: var(--component-lesson-tile-face); box-shadow: 0 1px 0 0 var(--component-lesson-tile-edge);
+  display: grid; place-items: center; font: 500 16px/16px var(--ff-semiMono); color: var(--text-primary); position: relative; }
+.ttile.op { border-radius: 999px; }
+.ttile.var span { padding: 0 2px 2px; border-radius: 2px; background: var(--component-lesson-variable-chip); border: 1px solid var(--component-lesson-variable-chip-border); color: #fff; }
+.tray { background: var(--component-lesson-tile-tray) !important; }
+.ttile.slot { background: var(--component-lesson-tile-slot); border: 2px dashed var(--component-lesson-tile-slot-dash); box-shadow: none; border-radius: 4px; }
+.ttile.slot.op { border-radius: 999px; }
+.ttile.placed-ok { outline: 2px solid var(--palette-green-500); }
+.answer { display: flex; gap: 4px; align-items: center; padding: 12px 18px; border: 2px solid rgba(128,128,128,.4); border-radius: 12px; position: relative; }
+.answer .mark { position: absolute; top: -9px; right: -9px; width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font: 700 12px/1 var(--ff-brilliant); color: #fff; }
+.foot { width: 100%; display: flex; align-items: flex-end; gap: 16px; justify-content: center; position: relative; min-height: 64px; }
+.bubble { max-width: 262px; padding: 12px 20px; border-radius: 16px 16px 16px 4px; font: var(--typography-body-base); background: var(--component-lesson-bubble-tutor); border: .5px solid var(--component-lesson-bubble-tutor-border); color: #fff; text-align: left; }
+.bubble.correct { background: var(--component-lesson-bubble-correct); border-color: var(--component-lesson-bubble-correct-border); color: #fff; font-weight: 500; }
+.bubble.retry { background: var(--component-lesson-bubble-retry); border-color: var(--component-lesson-bubble-retry); color: #fff; font-weight: 500; }
+.bubble.user { border-radius: 16px; background: var(--bg-tertiary); border-color: var(--palette-gray-700); color: var(--text-secondary); margin-left: auto; }
+.koji { width: 56px; height: 56px; flex: none; border-radius: 18px; background: radial-gradient(circle at 50% 35%, #c7f06e, var(--palette-green-500) 70%); display: grid; place-items: center; }
+.koji::after { content: ""; width: 18px; height: 16px; background: #fff; border-radius: 4px; box-shadow: inset 0 0 0 5px #fff, inset 0 0 0 9px #000; }
+.week { display: flex; gap: 8px; }
+.week .d { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 48px; }
+.week .c { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-tertiary); display: grid; place-items: center; }
+.week .c.done { background: var(--palette-pear-500); }
+.week .c.today { box-shadow: inset 0 0 0 1.5px var(--text-primary); }
+.week .n { font: var(--typography-body-base); line-height: 1.25; color: var(--text-secondary); padding: 4px; } .week .n.today { font-weight: 700; color: var(--text-primary); }
+.bars { display: flex; align-items: flex-end; gap: 0; height: 140px; width: 100%; max-width: 560px; border-bottom: 1px solid var(--border-secondary); }
+.bars div { flex: 1; display: flex; justify-content: center; align-items: flex-end; height: 100%; }
+.bars i { width: 62.5%; max-width: 56px; background: var(--component-chart-bar); border-radius: 4px 4px 0 0; }
+.xlab { display: flex; width: 100%; max-width: 560px; } .xlab span { flex: 1; text-align: center; font: var(--typography-body-sm); color: var(--text-secondary); }
+.toast-gap { border: 2px dashed var(--border-primary); border-radius: var(--radius-lg); padding: 16px; color: var(--text-tertiary); font: var(--typography-body-sm); }
+@media (max-width: 600px) { .ramp { grid-template-columns: 70px repeat(12, minmax(0, 1fr)); } .typerow { grid-template-columns: 1fr; } }
+</style>
+
+<header class="top"><div class="in">
+  <h1>Brilliant</h1>
+  <nav>
+    <a href="#color">Colour</a><a href="#semantic">Semantic</a><a href="#type">Type</a><a href="#space">Space</a><a href="#radius">Radius &amp; borders</a>
+    <a href="#elevation">Elevation</a><a href="#motion">Motion</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#nav">Navigation</a>
+    <a href="#feedback">Feedback</a><a href="#overlays">Overlays</a><a href="#cards">Cards</a><a href="#lesson">Lesson</a><a href="#gamification">Gamification</a>
+  </nav>
+  <button class="theme-btn" id="themeBtn" type="button">Theme: auto</button>
+</div></header>
+
+<main class="wrap">
+  <p class="notice" id="fontNotice" hidden>CoFo Brilliant and CoFo Robert are not installed, so this page falls back to Figtree and Georgia. Metrics and weights follow the tokens, but letterforms differ. See README → Fonts.</p>
+
+  <section class="s" id="intro">
+    <h2 class="sh">Brilliant design reference</h2>
+    <p class="lead">Every value on this page is a CSS variable generated from <code>tokens.json</code>. The tokens were read from brilliant.org on 2026-09-25 (Panda CSS custom properties, text-style rules and computed styles). The product has two themes, light and dark; use the switch at the top right. Hover the swatches for their source.</p>
+  </section>
+
+  <section class="s" id="color">
+    <h2 class="sh">Palette</h2>
+    <p class="lead">14 hues with 11 steps (50 to 950, yellow adds 850) plus white and black alpha ramps. The palette itself does not change between themes; the semantic roles below do.</p>
+    <div class="ramp-wrap"><div class="inner" id="ramps"></div></div>
+  </section>
+
+  <section class="s" id="semantic">
+    <h2 class="sh">Semantic colour</h2>
+    <p class="lead">Roles as Panda names them. Each swatch shows the value for the current theme.</p>
+    <div id="semantic-groups"></div>
+    <h3 class="sub">Gradients</h3>
+    <div class="grid" id="gradients"></div>
+  </section>
+
+  <section class="s" id="type">
+    <h2 class="sh">Typography</h2>
+    <p class="lead">Two proprietary families: <b>CoFo Brilliant</b> (sans, 400/500/700) for everything in the UI and <b>CoFo Robert</b> (serif, 500) for display headlines. CoFo Semi Mono sets interactive tiles, Source Code Pro code, KaTeX maths. No font-feature-settings are applied. These 33 styles are the product's own <code>textStyles</code>.</p>
+    <div id="typescale"></div>
+  </section>
+
+  <section class="s" id="space">
+    <h2 class="sh">Spacing, sizes and breakpoints</h2>
+    <p class="lead">A 4px scale (Panda defaults, rem based). The layout switches at <code>lg = 769px</code>; content is 432px wide below it and 1216px above.</p>
+    <div class="boxes" id="spacing"></div>
+    <h3 class="sub">Layout and component sizes</h3>
+    <div class="tbl"><table id="sizes"></table></div>
+    <h3 class="sub">Breakpoints and z-index</h3>
+    <div class="side-by-side"><div class="tbl"><table id="bps"></table></div><div class="tbl"><table id="zidx"></table></div></div>
+  </section>
+
+  <section class="s" id="radius">
+    <h2 class="sh">Radius and borders</h2>
+    <p class="lead">Brilliant's default border is 2px. Hairlines (0.5px) are used on chat bubbles and glass buttons.</p>
+    <div class="boxes" id="radii"></div>
+    <div class="tbl" style="margin-top:16px"><table id="borders"></table></div>
+  </section>
+
+  <section class="s" id="elevation">
+    <h2 class="sh">Elevation</h2>
+    <p class="lead">Shadows are soft and centred (no y-offset) for floating surfaces, and hard 4px lips for anything that should look pressable.</p>
+    <div class="grid" id="shadows"></div>
+  </section>
+
+  <section class="s" id="motion">
+    <h2 class="sh">Motion</h2>
+    <p class="lead">No duration tokens exist in the product (its <code>fast</code>/<code>normal</code> classes compile to invalid CSS), so these are the durations actually used. Press a row to play it.</p>
+    <div class="stack" id="motionrows"></div>
+    <div class="tbl" style="margin-top:16px"><table id="durations"></table></div>
+  </section>
+
+  <section class="s" id="buttons">
+    <h2 class="sh">Buttons</h2>
+    <div class="spec"><h4>Button3d</h4><p class="meta">Primary action everywhere (Continue, Check, Start). Face lifted 4px on a same-hue lip; press drops it. h48, padding 14/24, radius 56, ui.actions.base. Hover adds an autoflip.white.200 tint (Safari rule; other browsers show no change in the capture).</p>
+      <div class="demo" id="b3d-variants"></div>
+      <div class="demo" style="margin-top:20px">
+        <div class="cell"><button class="b3d"><span class="face">Default</span></button><div class="cap">default</div></div>
+        <div class="cell"><button class="b3d is-hover"><span class="face">Hover</span></button><div class="cap">hover (Safari only)</div></div>
+        <div class="cell"><button class="b3d is-focus"><span class="face">Focus</span></button><div class="cap">focus-visible</div></div>
+        <div class="cell"><button class="b3d is-pressed"><span class="face">Active</span></button><div class="cap">active / pressed</div></div>
+        <div class="cell"><button class="b3d" disabled><span class="face">Disabled</span></button><div class="cap">disabled</div></div>
+        <div class="cell"><button class="b3d premium"><span class="face">Subscribe now</span></button><div class="cap">premium (flat, inset lip)</div></div>
+        <div class="cell"><button class="b3d premium is-pressed"><span class="face">Subscribe now</span></button><div class="cap">premium active</div></div>
+      </div></div>
+    <div class="spec"><h4>Flat button</h4><p class="meta"><code>data-slot=button</code>. h48, padding 12/22, radius 54, 2px border. Primary hover drops opacity to .78.</p>
+      <div class="demo">
+        <div class="cell"><button class="fb primary">Add another email</button><div class="cap">primary</div></div>
+        <div class="cell"><button class="fb primary is-hover">Hover</button><div class="cap">primary hover</div></div>
+        <div class="cell"><button class="fb outline">Sign in</button><div class="cap">outline</div></div>
+        <div class="cell"><button class="fb outline is-hover">Hover</button><div class="cap">outline hover</div></div>
+        <div class="cell"><button class="fb green">Sign up</button><div class="cap">green (public)</div></div>
+        <div class="cell"><button class="fb ghost"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Start over</button><div class="cap">ghost</div></div>
+        <div class="cell"><button class="fb ghost is-hover">Hover</button><div class="cap">ghost hover</div></div>
+        <div class="cell"><button class="fb danger">Quit</button><div class="cap">danger</div></div>
+        <div class="cell"><button class="fb danger is-hover">Quit</button><div class="cap">danger hover</div></div>
+        <div class="cell"><button class="fb is-focus outline">Focus</button><div class="cap">focus-visible</div></div>
+        <div class="cell"><button class="fb" disabled>Update personal info</button><div class="cap">disabled</div></div>
+        <div class="cell"><button class="fb danger is-disabled">Remove</button><div class="cap">danger disabled</div></div>
+        <div class="cell"><button class="fb outline compact">Sign in</button><div class="cap">compact h40</div></div>
+      </div></div>
+    <div class="spec"><h4>Pills, premium, stat and icon buttons</h4><p class="meta">Hue-shift pills answer yes/no questions (h52). The premium header button has a 2px iridescent border. Stat pills open popovers. Icon buttons are 48 (radius 6), 44 round, 48 glass (blur 20, saturate 1.8) and 32 send.</p>
+      <div class="demo">
+        <div class="cell"><button class="hs">Maybe</button><div class="cap">pill default</div></div>
+        <div class="cell"><button class="hs is-hover">Maybe</button><div class="cap">pill hover</div></div>
+        <div class="cell"><button class="hs is-selected">Yes</button><div class="cap">pill selected</div></div>
+        <div class="cell"><button class="premium-btn">Go Premium</button><div class="cap">premium header</div></div>
+        <div class="cell"><span class="stat-pill">2 <svg width="18" height="18" viewBox="0 0 24 24" fill="#f9d25c"><circle cx="8" cy="8" r="5"/><rect x="11" y="10" width="3" height="12" rx="1.5"/></svg></span><div class="cap">stat pill</div></div>
+        <div class="cell"><button class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="cap">icon 48</div></div>
+        <div class="cell"><button class="ib is-hover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="cap">icon hover</div></div>
+        <div class="cell"><button class="ib round"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button><div class="cap">round 44</div></div>
+        <div class="cell"><button class="ib glass"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3h2v18H5zM8 4h11l-3 4 3 4H8z"/></svg></button><div class="cap">glass</div></div>
+        <div class="cell"><button class="ib send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button><div class="cap">send empty</div></div>
+        <div class="cell"><button class="ib send is-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button><div class="cap">send active</div></div>
+        <div class="cell"><div class="spinner" style="color:var(--text-primary)"></div><div class="cap">spinner (loading)</div></div>
+      </div></div>
+  </section>
+
+  <section class="s" id="forms">
+    <h2 class="sh">Form controls</h2>
+    <div class="spec"><h4>Text input</h4><p class="meta"><code>data-slot=form-input</code>: h52, padding 12/16, radius 8, 2px border.primary. Focus: border.active plus an inset 1px ring. The product has no select, checkbox or radio component; choice cards and plan cards act as radios.</p>
+      <div class="demo">
+        <div class="field"><label>First name</label><input class="inp" placeholder="Placeholder"><span class="help">default</span></div>
+        <div class="field"><label>Hover</label><input class="inp is-hover" value="Learner"><span class="help">hover</span></div>
+        <div class="field"><label>Focus</label><input class="inp is-focus" value="Learner"><span class="help">focus</span></div>
+        <div class="field"><label>Disabled</label><input class="inp" value="Learner" disabled><span class="help">disabled</span></div>
+        <div class="field invalid"><label>Email</label><input class="inp" value="learner@"><span class="help">invalid (text.danger.primary)</span></div>
+      </div></div>
+    <div class="spec"><h4>Chat input and ask-Koji pill</h4><p class="meta">Chat input: radius 24, autoflip.black.100 fill, 0.5px border, send button inside. Ask pill: radius 32, 2px border.secondary, elevation.base, idle opacity .65.</p>
+      <div class="demo">
+        <div class="cell"><div class="chat-in"><span class="ph">How can I help?</span><button class="ib send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div><div class="cap">empty</div></div>
+        <div class="cell"><div class="chat-in"><span class="val">I put 8 in the first slot</span><button class="ib send is-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div><div class="cap">filled</div></div>
+        <div class="cell"><div class="ask idle"><span class="grow">What do you need help with?</span><span>＋</span><span>🎙</span></div><div class="cap">ask pill idle</div></div>
+        <div class="cell"><div class="row" style="gap:6px;font:var(--typography-body-xs);color:var(--text-disabled)">to type <kbd class="kc">/</kbd> · for voice <kbd class="kc">v</kbd></div><div class="cap">kbd hints</div></div>
+      </div></div>
+    <div class="spec"><h4>Switch and segmented control</h4><p class="meta">Switch 48x32, thumb 24, on = bg.green.primary (the onboarding voice switch uses a teal gradient). Segmented control track bg.secondary, checked segment bg.primary + elevation.base.</p>
+      <div class="demo">
+        <div class="cell"><button class="switch"><span class="thumb"></span></button><div class="cap">off</div></div>
+        <div class="cell"><button class="switch on"><span class="thumb"></span></button><div class="cap">on</div></div>
+        <div class="cell"><button class="switch on teal"><span class="thumb"></span></button><div class="cap">on (onboarding)</div></div>
+        <div class="cell"><button class="switch on is-focus"><span class="thumb"></span></button><div class="cap">focus</div></div>
+        <div class="cell"><button class="switch is-disabled"><span class="thumb"></span></button><div class="cap">disabled</div></div>
+        <div class="cell"><div class="seg"><span class="on">Auto</span><span>Light</span><span>Dark</span></div><div class="cap">segmented (settings)</div></div>
+        <div class="cell"><div class="seg sm"><span class="on">All time</span><span>Week</span><span>Month</span><span>Year</span></div><div class="cap">segmented small (/you)</div></div>
+      </div></div>
+  </section>
+
+  <section class="s" id="nav">
+    <h2 class="sh">Navigation</h2>
+    <div class="spec"><h4>Header nav tabs</h4><p class="meta">64px app bar on bg.elevated. Tabs use ui.nav.default; the selected one is 500 with a 2px underline that slides up 2px (100ms linear).</p>
+      <div class="navtabs"><a class="on" href="#nav">⌂ Home</a><a href="#nav" class="is-hover">▤ Courses</a><a href="#nav">◯ You</a></div></div>
+    <div class="spec"><h4>Tabs</h4><p class="meta">Pricing billing tabs (Base UI): active tab 500 in text.purple.primary with an underline. Vertical feature tabs: 56px rows, active fill.</p>
+      <div class="demo"><div class="tabs"><span>Monthly</span><span class="on">Annual <span class="badge solid-purple">Save 33%</span></span></div>
+        <div class="vtabs"><span class="on">Master concepts in 15 minutes a day</span><span>Effective, hands-on learning</span></div></div></div>
+    <div class="spec"><h4>Settings side menu and dropdown menu</h4><p class="meta">Side menu: 280 wide, radius 12, items h40 radius 8, selected bg.tertiary. Dropdown: 280 wide, radius 8, items h48, highlight bg.hover, separators border.secondary.</p>
+      <div class="demo"><div class="sidenav"><span class="on">Account</span><span>Premium</span><span>Preferences</span></div>
+        <div class="menu"><a href="#nav">Settings</a><hr><a class="is-hover" href="#nav">About</a><a href="#nav">Help</a><hr><a href="#nav">Log out</a></div></div></div>
+  </section>
+
+  <section class="s" id="feedback">
+    <h2 class="sh">Badges, progress and status</h2>
+    <div class="spec"><h4>Badges</h4><p class="meta"><code>.panda-badge</code>: 12/13.2 700 caps, tracking .48px, padding 4/8, radius 12. Variants solid, subtle (dark swaps to 950 fill / 400 text), minimal.</p>
+      <div class="demo">
+        <span class="badge solid-green">New</span><span class="badge solid-purple">Save 33%</span><span class="badge subtle-blue">Primary</span><span class="badge pill-blue">Recommended</span>
+        <span class="badge subtle-yellow">Unverified</span><span class="badge subtle-green">Correct</span><span class="badge minimal">Grades 4–7</span><span class="badge premium">Today only</span>
+        <span class="delta">+1</span><span class="eyebrow">Your learning plan</span><span class="starthere"><span>Start here</span></span>
+      </div></div>
+    <div class="spec"><h4>Progress</h4><p class="meta"><code>.panda-progress</code>: track bg.tertiary, indicator bg.green.primary, sizes sm 4, default 8, lg 12 (lesson), width transition 200ms.</p>
+      <div class="stack"><div class="prog sm"><i style="width:30%"></i></div><div class="prog md"><i style="width:55%"></i></div><div class="prog lg"><i style="width:15%"></i></div>
+        <div class="segprog"><div class="prog"><i style="width:100%"></i></div><div class="prog"><i style="width:100%"></i></div><div class="prog"><i style="width:20%"></i></div></div>
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="skeleton" style="width:320px"></div></div></div>
+    <div class="spec"><h4>Status colours</h4><div class="demo" id="status"></div></div>
+    <div class="spec"><h4>Toasts</h4><div class="toast-gap">The product ships Sonner toasts (<code>[data-sonner-toaster]</code>) but none fired during capture, so no toast is specified. See Gaps.</div></div>
+  </section>
+
+  <section class="s" id="overlays">
+    <h2 class="sh">Overlays</h2>
+    <div class="demo" style="align-items:flex-start">
+      <div class="cell"><div class="tip"><b>Resilience</b><p>You asked for help 1 time after getting a wrong answer</p></div><div class="cap" style="margin-top:14px">tooltip</div></div>
+      <div class="cell"><div class="pop"><div class="big">2 🔑</div><h4>You have 2 keys left today</h4><div>Use keys to unlock lessons</div><div style="height:8px"></div><button class="b3d premium" style="width:100%"><span class="face" style="width:100%">Unlock all lessons now</span></button></div><div class="cap">popover (keys)</div></div>
+    </div>
+    <div class="overlay" style="margin-top:16px"><div class="modal"><h3>Are you sure?</h3><p>If you quit, you will lose your progress and XP.</p>
+      <div class="acts"><button class="b3d" style="width:100%"><span class="face" style="width:100%">Keep learning</span></button><button class="fb danger">Quit</button></div></div></div>
+    <p class="src">Modal over special.overlay.default; enter/exit 150ms ease-in-out (opacity + scale .95).</p>
+  </section>
+
+  <section class="s" id="cards">
+    <h2 class="sh">Cards and tiles</h2>
+    <div class="demo" style="align-items:flex-start">
+      <div class="cell"><button class="choice"><span class="art"></span>Melodic</button><div class="cap">choice default</div></div>
+      <div class="cell"><button class="choice is-hover"><span class="art"></span>Melodic</button><div class="cap">choice hover</div></div>
+      <div class="cell"><button class="choice is-selected"><span class="art"></span>Melodic</button><div class="cap">choice selected</div></div>
+      <div class="cell"><div class="tile3d"><span class="badge minimal gr">GR 4–5</span><span class="badge solid-green nw">New</span><span class="art"></span></div><div class="cap" style="margin-top:10px">course tile</div></div>
+      <div class="cell"><div class="tile3d is-hover"><span class="badge minimal gr">GR 5–6</span><span class="art"></span></div><div class="cap" style="margin-top:10px">course tile hover</div></div>
+      <div class="cell"><div class="figure">figure</div><div class="cap">figure card</div></div>
+    </div>
+    <div class="demo" style="margin-top:20px;align-items:flex-start">
+      <div class="card stat"><span class="l">Activities completed</span><span class="v">0</span></div>
+      <div class="card stat"><span class="l">Assessment accuracy</span><span class="v">0.0%</span></div>
+      <div class="home-card"><span class="badge pill-blue">Recommended</span><h3>Fractions</h3><span class="eyebrow" style="color:var(--palette-blue-700)">Level 1</span>
+        <div class="lrow cur"><span class="node"></span>Finding Half<span class="st"></span></div><div class="lrow"><span class="node"></span>Combining Parts<span class="st"></span></div>
+        <button class="b3d blue" style="width:100%"><span class="face" style="width:100%">Start</span></button></div>
+      <div class="stack"><div class="level"><div class="sh"></div><div class="btn"><span class="eyebrow">Level 1</span><b>Linear Expressions</b></div></div>
+        <div class="setrow"><span>Choose your preferred color mode</span><div class="seg"><span class="on">Auto</span><span>Light</span><span>Dark</span></div></div>
+        <div class="row"><div class="plan on"><b>Annual</b><small>SGD 25/month*</small></div><div class="plan"><b>Family</b><small>SGD 50/month</small></div></div>
+        <span class="chip">↑ Resilience <span class="delta">+1</span></span></div>
+    </div>
+  </section>
+
+  <section class="s" id="lesson">
+    <h2 class="sh">Lesson player</h2>
+    <p class="lead">The product's core surface. A 24px-radius frame whose 2px border turns green (with a glow) or yellow (with a shake) after Check. Tiles live in a <code>&lt;custom-interactive&gt;</code> web component set in CoFo Semi Mono.</p>
+    <div class="stack">
+      <div class="lesson" id="lesson-neutral"><div class="topbar"><span>✕</span><div class="prog lg"><i style="width:8%"></i></div><div class="dots"><i></i><i></i><i></i></div><span class="xp">0 ✧</span></div>
+        <div class="prompt">Write an expression that represents the tiles.</div>
+        <div class="answer"><span class="ttile slot"></span><span class="ttile slot op"></span><span class="ttile slot"></span></div>
+        <div class="tray"><span class="ttile var"><span>m</span></span><span class="ttile var"><span>n</span></span><span class="ttile">3</span><span class="ttile">5</span><span class="ttile op">+</span><span class="ttile op">·</span></div>
+        <div class="foot"><div class="koji"></div><div class="bubble">Welcome to Linear Equations.</div><div style="flex:1"></div><button class="b3d" disabled><span class="face" style="min-width:300px">Check</span></button></div>
+        <div class="src">neutral: answer empty, Check disabled</div></div>
+      <div class="lesson correct"><div class="prompt">Write an expression that represents the tiles.</div>
+        <div class="answer"><span class="ttile var placed-ok"><span>n</span></span><span class="ttile op placed-ok">+</span><span class="ttile placed-ok">5</span><span class="mark" style="background:var(--palette-green-500)">✓</span></div>
+        <div class="foot"><div class="koji"></div><div class="bubble correct">That's right.</div><div style="flex:1"></div><button class="b3d secondary"><span class="face" style="min-width:90px">Why?</span></button><button class="b3d green"><span class="face" style="min-width:220px">Continue</span></button></div>
+        <div class="src">correct: frame green.700 + borderGlow green.400, bubble tutor-correct</div></div>
+      <div class="lesson retry" id="lesson-retry"><div class="prompt">Find the total when n is 2.</div>
+        <div class="answer"><span class="ttile">8</span><span style="font:16px var(--ff-semiMono)">+5=</span><span class="ttile">2</span><span class="mark" style="background:var(--palette-yellow-500);color:#5c4400">✕</span></div>
+        <div class="foot"><div class="koji"></div><div class="bubble retry">Not quite, but that's okay!</div><div style="flex:1"></div><button class="b3d secondary"><span class="face" style="min-width:110px">Get help</span></button><button class="b3d yellow"><span class="face" style="min-width:210px">Try again</span></button></div>
+        <div class="src">incorrect-retry: frame yellow.700 + shakeX .45s (press the frame to replay), bubble tutor-incorrect</div></div>
+      <div class="spec"><h4>Tutor chat</h4><p class="meta">Tutor bubbles have a 4px bottom-left corner; user bubbles are fully rounded, right aligned, bg.tertiary. Older messages fade to .5.</p>
+        <div class="stack" style="max-width:420px"><div class="bubble" style="opacity:.5">Now, find the total when n is 2.</div><div class="bubble user">Why was my answer wrong?</div><div class="bubble">Let's look together. What did you place in the first slot?</div></div></div>
+    </div>
+  </section>
+
+  <section class="s" id="gamification">
+    <h2 class="sh">Gamification and data</h2>
+    <div class="demo" style="align-items:flex-start">
+      <div class="spec"><h4>Streak week</h4><div class="week">
+        <div class="d"><div class="c done today">⚡</div><div class="n today">F</div></div><div class="d"><div class="c">⚡</div><div class="n">S</div></div><div class="d"><div class="c">⚡</div><div class="n">Su</div></div><div class="d"><div class="c">⚡</div><div class="n">M</div></div><div class="d"><div class="c">⚡</div><div class="n">T</div></div></div></div>
+      <div class="spec" style="flex:1;min-width:300px"><h4>Bar chart (Problems solved)</h4>
+        <div class="bars"><div><i style="height:25%"></i></div><div><i style="height:2px"></i></div><div><i style="height:2px"></i></div><div><i style="height:60%"></i></div><div><i style="height:2px"></i></div><div><i style="height:25%"></i></div></div>
+        <div class="xlab"><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span></div></div>
+    </div>
+    <h3 class="sub">Data visualisation colours</h3>
+    <div class="demo" id="dataviz"></div>
+  </section>
+</main>
+
+<script>
+const TOKENS = /*TOKENS*/null;
+const $ = (s) => document.querySelector(s);
+const getTheme = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+function cssVar(path) { return getComputedStyle(document.documentElement).getPropertyValue('--' + path.replace(/\./g, '-')).trim(); }
+function walk(node, prefix, out) { for (const [k, v] of Object.entries(node)) { if (v && v.t) out.push([prefix + k, v]); else if (v && typeof v === 'object') walk(v, prefix + k + '.', out); } return out; }
+function lum(c) { const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d); const m = getComputedStyle(d).color.match(/[\d.]+/g).map(Number); d.remove();
+  const a = m[3] ?? 1; const [r, g, b] = m.slice(0, 3).map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return { L: .2126 * r + .7152 * g + .0722 * b, a }; }
+function ink(c) { const { L, a } = lum(c); if (a < .5) return getTheme() === 'dark' ? '#fff' : '#000'; const cw = 1.05 / (L + .05), cb = (L + .05) / .05; return cw >= cb ? '#fff' : '#000'; }
+
+function drawRamps() {
+  const pal = TOKENS.core.palette, host = $('#ramps'); host.innerHTML = '';
+  for (const [fam, steps] of Object.entries(pal)) {
+    if (steps.t) continue;
+    const row = document.createElement('div'); row.className = 'ramp';
+    row.innerHTML = `<span class="lbl">${fam}</span>`;
+    for (const [s, tk] of Object.entries(steps)) { const c = document.createElement('div'); c.className = 'chip'; c.style.background = tk.v; c.style.color = ink(tk.v); c.title = `palette.${fam}.${s} ${tk.v}\n${tk.s}`; c.textContent = s; row.appendChild(c); }
+    host.appendChild(row);
+  }
+}
+function drawSemantic() {
+  const t = TOKENS[getTheme()], host = $('#semantic-groups'); host.innerHTML = '';
+  const groups = [['bg', 'Background and surface'], ['text', 'Text'], ['icon', 'Icon'], ['border', 'Border'], ['status', 'Status'], ['shadowColor', 'Shadow colours'], ['special', 'Special (lesson, end state, overlay)'], ['autoflip', 'Autoflip (inverts between themes)'], ['component', 'Component colours']];
+  for (const [g, title] of groups) {
+    const items = walk(t[g], g + '.', []); if (!items.length) continue;
+    const h = document.createElement('h3'); h.className = 'sub'; h.textContent = `${title} (${items.length})`; host.appendChild(h);
+    const wrap = document.createElement('div'); wrap.className = 'sem';
+    for (const [name, tk] of items) { const val = cssVar(name); const el = document.createElement('div'); el.className = 'it'; el.title = tk.s + (tk.d ? '\n' + tk.d : '');
+      el.innerHTML = `<div class="dot" style="background:var(--${name.replace(/\./g, '-')})"></div><div><div class="nm">${name}</div><div class="vl">${tk.v.startsWith('{') ? tk.v + ' → ' : ''}${val}${tk.d ? ' · ' + tk.d : ''}</div></div>`; wrap.appendChild(el); }
+    host.appendChild(wrap);
+  }
+  const gh = $('#gradients'); gh.innerHTML = '';
+  for (const [name, tk] of walk(t.gradient, 'gradient.', [])) { const el = document.createElement('div'); el.title = tk.s;
+    el.innerHTML = `<div class="sw" style="background:var(--${name.replace(/\./g, '-')});height:72px"></div><div class="nm" style="font:500 12px/1.3 var(--ff-code);margin-top:6px">${name}</div>`; gh.appendChild(el); }
+  const st = $('#status'); st.innerHTML = '';
+  for (const [name] of walk(t.status, 'status.', [])) st.insertAdjacentHTML('beforeend', `<div class="cell"><div class="sw" style="width:96px;background:var(--${name.replace(/\./g, '-')})"></div><div class="cap">${name}</div></div>`);
+  const dv = $('#dataviz'); dv.innerHTML = '';
+  for (const n of ['component.chart.bar', 'component.lesson.graph-series-1', 'component.lesson.graph-series-2', 'component.lesson.algebra-bar', 'component.lesson.variable-chip', 'bg.pear-primary', 'bg.orange-primary', 'bg.purple-primary'])
+    dv.insertAdjacentHTML('beforeend', `<div class="cell"><div class="sw" style="width:96px;background:var(--${n.replace(/\./g, '-')})"></div><div class="cap">${n}</div></div>`);
+}
+function drawType() {
+  const host = $('#typescale'), ty = walk(TOKENS.core.typography, '', []);
+  const order = ['display', 'headline', 'heading', 'body', 'ui'];
+  ty.sort((a, b) => order.indexOf(a[0].split('.')[0]) - order.indexOf(b[0].split('.')[0]) || parseFloat(b[1].v.fontSize) - parseFloat(a[1].v.fontSize));
+  for (const [name, tk] of ty) { const v = tk.v, fam = v.fontFamily.replace(/[{}]/g, '').split('.')[1]; const cls = name.replace(/\./g, '-');
+    const sample = name.startsWith('ui.actions.sm') || v.textCase ? 'Level 1 · Start here' : name.startsWith('ui.interactives.math') ? 'x² + 4x + 4 = 0' : name.startsWith('ui.interactives.code') ? 'for i in range(10):' : name.includes('semiMono') ? '2x + 5 = 11' : name.startsWith('display') ? 'Your personal tutor' : name.startsWith('heading') || name.startsWith('headline') ? 'Linear Equations' : 'Build a solid foundation in algebra through hands-on exploration.';
+    host.insertAdjacentHTML('beforeend', `<div class="typerow" title="${tk.s}"><div class="k">${name}<small>${fam} · ${v.fontSize}/${v.lineHeight} · ${v.fontWeight}${v.letterSpacing !== '0px' ? ' · ' + v.letterSpacing : ''}${v.textCase ? ' · ' + v.textCase : ''}</small><small>${tk.d || ''}</small></div>
+      <div style="font:var(--typography-${cls});letter-spacing:var(--typography-${cls}-ls);text-transform:${v.textCase || 'none'}">${sample}</div></div>`); }
+}
+function table(sel, head, rows) { $(sel).innerHTML = `<tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>` + rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join(''); }
+function drawSpace() {
+  const sp = $('#spacing'); for (const [k, tk] of Object.entries(TOKENS.core.spacing)) { if (parseFloat(tk.v) > 4) continue; sp.insertAdjacentHTML('beforeend', `<div class="cell" title="${tk.s}"><div class="b" style="width:${tk.v};height:${tk.v};min-width:1px;min-height:1px"></div><div class="cap">${k}<br>${parseFloat(tk.v) * 16}px</div></div>`); }
+  table('#sizes', ['Token', 'Value', 'Source'], walk(TOKENS.core.size, 'size.', []).map(([n, tk]) => [`<code>${n}</code>`, tk.v, `<span class="src">${tk.s}${tk.d ? ' · ' + tk.d : ''}</span>`]));
+  table('#bps', ['Breakpoint', 'Min width', 'Note'], walk(TOKENS.core.breakpoint, '', []).map(([n, tk]) => [n, tk.v, `<span class="src">${tk.d || ''}</span>`]));
+  table('#zidx', ['Layer', 'z-index'], walk(TOKENS.core.zIndex, '', []).filter(([n]) => !n.startsWith('in-content') && !n.startsWith('lesson') && !n.includes('debug')).map(([n, tk]) => [n, tk.v]));
+  const r = $('#radii'); for (const [n, tk] of walk(TOKENS.core.radius, '', [])) r.insertAdjacentHTML('beforeend', `<div class="cell" title="${tk.s}${tk.d ? '\n' + tk.d : ''}"><div style="width:72px;height:72px;border:2px solid var(--border-active);border-radius:${tk.v};background:var(--bg-secondary)"></div><div class="cap">${n}<br>${tk.v}</div></div>`);
+  table('#borders', ['Border width', 'Value', 'Used on'], walk(TOKENS.core.borderWidth, '', []).map(([n, tk]) => [n, tk.v, `<span class="src">${tk.s}</span>`]));
+  const sh = $('#shadows'); for (const [n, tk] of walk(TOKENS[getTheme()].shadow, 'shadow.', [])) sh.insertAdjacentHTML('beforeend', `<div title="${tk.s}"><div style="height:96px;border-radius:var(--radius-xl);background:var(--bg-elevated);border:1px solid var(--border-secondary);box-shadow:var(--${n.replace(/\./g, '-')})"></div><div class="cap" style="text-align:left">${n}<br>${cssVar(n)}</div></div>`);
+}
+function drawMotion() {
+  const host = $('#motionrows');
+  for (const [n, tk] of walk(TOKENS.core.easing, 'easing.', []).concat(walk(TOKENS.core['easing-linear'], 'easing-linear.', []))) {
+    const el = document.createElement('div'); el.innerHTML = `<div class="track" style="cursor:pointer"><div class="motion-dot" style="transition:left var(--duration-spring) var(--${n.replace(/\./g, '-')})"></div></div><div class="src">${n} · ${tk.t === 'cubicBezier' ? 'cubic-bezier(' + tk.v.join(', ') + ')' : 'linear(…)'} · ${tk.s}</div>`;
+    el.querySelector('.track').addEventListener('click', e => e.currentTarget.classList.toggle('go')); host.appendChild(el);
+  }
+  table('#durations', ['Duration', 'Value', 'Used for'], walk(TOKENS.core.duration, 'duration.', []).map(([n, tk]) => [n, tk.v, `<span class="src">${tk.s}</span>`]));
+}
+function drawB3d() {
+  const host = $('#b3d-variants');
+  for (const [cls, label] of [['', 'Continue'], ['secondary', 'Why?'], ['green', 'Continue'], ['blue', 'Start'], ['yellow', 'Try again']])
+    host.insertAdjacentHTML('beforeend', `<div class="cell"><button class="b3d ${cls}"><span class="face">${label}</span></button><div class="cap">${cls || 'primary'}</div></div>`);
+}
+function redrawThemed() { drawSemantic(); $('#shadows').innerHTML = ''; walk(TOKENS[getTheme()].shadow, 'shadow.', []); drawSpaceShadowsOnly(); $('#ramps') && drawRamps(); }
+function drawSpaceShadowsOnly() { const sh = $('#shadows'); for (const [n, tk] of walk(TOKENS[getTheme()].shadow, 'shadow.', [])) sh.insertAdjacentHTML('beforeend', `<div title="${tk.s}"><div style="height:96px;border-radius:var(--radius-xl);background:var(--bg-elevated);border:1px solid var(--border-secondary);box-shadow:var(--${n.replace(/\./g, '-')})"></div><div class="cap" style="text-align:left">${n}<br>${cssVar(n)}</div></div>`); }
+
+const modes = ['auto', 'light', 'dark'];
+let mode = (() => { try { return localStorage.getItem('brilliant-guide-theme') || 'auto'; } catch (e) { return 'auto'; } })();
+function applyMode() { if (mode === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = mode; $('#themeBtn').textContent = 'Theme: ' + mode; redrawThemed(); }
+$('#themeBtn').addEventListener('click', () => { mode = modes[(modes.indexOf(mode) + 1) % 3]; try { localStorage.setItem('brilliant-guide-theme', mode); } catch (e) {} applyMode(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => mode === 'auto' && redrawThemed());
+$('#lesson-retry').addEventListener('click', e => { const l = e.currentTarget; l.classList.remove('shake'); void l.offsetWidth; l.classList.add('shake'); });
+drawRamps(); drawType(); drawSpace(); drawMotion(); drawB3d(); applyMode();
+document.fonts.ready.then(() => { if (!document.fonts.check('500 16px "CoFo Brilliant"') || ![...document.fonts].some(f => f.family.replace(/"/g, '') === 'CoFo Brilliant' && f.status === 'loaded')) $('#fontNotice').hidden = false; });
+</script>

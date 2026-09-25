@@ -81,3 +81,6 @@ docs/design/reference/duolingo/fonts/
 docs/design/reference/duolingo/tools/capture/winid
 docs/design/reference/duolingo/tools/capture/dumps/
 docs/design/reference/duolingo/tools/capture/out/
+
+# Brilliant proprietary web fonts (CoFo), used locally by the reference style guide; not ours to commit.
+docs/design/reference/brilliant/fonts/
