@@ -17,6 +17,9 @@ def flat(node, prefix=""):
         elif isinstance(v, dict):
             yield from flat(v, prefix + k + "-")
 
+def family_key(v):
+    return v["fontFamily"].strip("{}").split(".")[1]
+
 def css_val(t):
     v, ty = t["$value"], t["$type"]
     if ty == "cubicBezier":
@@ -24,8 +27,9 @@ def css_val(t):
     if ty == "shadow":
         return ", ".join(f'{s["offsetX"]} {s["offsetY"]} {s["blur"]} {s["spread"]} {s["color"]}' for s in v)
     if ty == "typography":
-        fam = T["core"]["fontFamily"][v["fontFamily"].strip("{}").split(".")[1]]["$value"]
-        return f'{v["fontWeight"]} {v["fontSize"]}/{v["lineHeight"]} "{fam}"'
+        # Point at the page's font stack (--ff-*), not the bare family, so the public
+        # fallbacks apply when Google Sans is not installed.
+        return f'{v["fontWeight"]} {v["fontSize"]}/{v["lineHeight"]} var(--ff-{family_key(v)})'
     if ty == "fontFamily":
         return f'"{v}"'
     return str(v)
@@ -46,13 +50,19 @@ def swatches(group):
             f'<small>{html.escape(t.get("$description",""))}{" · <b>estimated</b>" if est else ""}</small></div></div>')
     return "\n".join(rows)
 
+def ink(hexv):
+    # dark label on light steps, light label on dark steps
+    h = hexv.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return "#1b1b1c" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
+
 def palette(fam):
-    return "\n".join(f'<div class="ramp-step" style="background:var(--palette-{fam}-{k})"><span>{k}</span><span>{t["$value"]}</span></div>'
+    return "\n".join(f'<div class="ramp-step" style="background:var(--palette-{fam}-{k});color:{ink(t["$value"])}"><span>{k}</span><span>{t["$value"]}</span></div>'
                      for k, t in T["core"]["palette"][fam].items())
 
 type_rows = "\n".join(
     f'<tr><td><code>{k}</code></td><td style="font:var(--typography-{k});letter-spacing:{t["$value"]["letterSpacing"]}">The quick brown fox</td>'
-    f'<td>{t["$value"]["fontFamily"].split(".")[1]} · {t["$value"]["fontSize"]}/{t["$value"]["lineHeight"]} · {t["$value"]["fontWeight"]} · {t["$value"]["letterSpacing"]}</td>'
+    f'<td>{T["core"]["fontFamily"][family_key(t["$value"])]["$value"]} · {t["$value"]["fontSize"]}/{t["$value"]["lineHeight"]} · {t["$value"]["fontWeight"]} · {t["$value"]["letterSpacing"]}</td>'
     f'<td>{html.escape(t.get("$description",""))}</td></tr>'
     for k, t in T["core"]["typography"].items())
 

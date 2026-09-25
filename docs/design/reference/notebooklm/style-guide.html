@@ -68,23 +68,23 @@
   --fontWeight-medium: 500;
   --fontWeight-semibold: 600;
   --fontWeight-bold: 700;
-  --typography-display-large: 400 57px/64px "Google Sans";
-  --typography-display-medium: 400 45px/52px "Google Sans";
-  --typography-display-small: 400 36px/44px "Google Sans";
-  --typography-headline-large: 400 32px/40px "Google Sans";
-  --typography-headline-medium: 400 28px/36px "Google Sans";
-  --typography-headline-small: 400 24px/32px "Google Sans";
-  --typography-title-large: 400 22px/28px "Google Sans";
-  --typography-title-medium: 500 16px/24px "Google Sans Text";
-  --typography-title-small: 500 14px/20px "Google Sans Text";
-  --typography-body-large: 400 16px/24px "Google Sans Text";
-  --typography-body-medium: 400 14px/20px "Google Sans Text";
-  --typography-body-small: 400 12px/16px "Google Sans Text";
-  --typography-label-large: 500 14px/20px "Google Sans Text";
-  --typography-label-medium: 500 12px/16px "Google Sans Text";
-  --typography-label-small: 500 11px/16px "Google Sans Text";
-  --typography-panel-header: 400 16px/52px "Google Sans";
-  --typography-code-inline: 500 14px/24px "Google Sans Code";
+  --typography-display-large: 400 57px/64px var(--ff-display);
+  --typography-display-medium: 400 45px/52px var(--ff-display);
+  --typography-display-small: 400 36px/44px var(--ff-display);
+  --typography-headline-large: 400 32px/40px var(--ff-display);
+  --typography-headline-medium: 400 28px/36px var(--ff-display);
+  --typography-headline-small: 400 24px/32px var(--ff-display);
+  --typography-title-large: 400 22px/28px var(--ff-display);
+  --typography-title-medium: 500 16px/24px var(--ff-text);
+  --typography-title-small: 500 14px/20px var(--ff-text);
+  --typography-body-large: 400 16px/24px var(--ff-text);
+  --typography-body-medium: 400 14px/20px var(--ff-text);
+  --typography-body-small: 400 12px/16px var(--ff-text);
+  --typography-label-large: 500 14px/20px var(--ff-text);
+  --typography-label-medium: 500 12px/16px var(--ff-text);
+  --typography-label-small: 500 11px/16px var(--ff-text);
+  --typography-panel-header: 400 16px/52px var(--ff-display);
+  --typography-code-inline: 500 14px/24px var(--ff-code);
   --radius-none: 0px;
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -445,7 +445,6 @@
   --t-label-small: 500 11px/16px var(--ff-text);
   --t-panel: 400 16px/52px var(--ff-display);
 }
-[style*="--typography-"] { font-family: var(--ff-text); }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -488,7 +487,7 @@ td.src { color: var(--text-ghost); font-size: 11px; }
 .sw-meta span { font-family: var(--ff-code); font-size: 11px; color: var(--text-secondary); word-break: break-all; }
 .sw-meta small { font-size: 11px; color: var(--text-ghost); }
 .ramp { display: flex; flex-wrap: wrap; border-radius: 12px; overflow: hidden; }
-.ramp-step { flex: 1 0 72px; min-height: 64px; padding: 6px; display: flex; flex-direction: column; justify-content: flex-end; font: 11px/14px var(--ff-code); color: #fff; mix-blend-mode: normal; text-shadow: 0 0 2px rgba(0,0,0,.6); }
+.ramp-step { flex: 1 0 72px; min-height: 64px; padding: 6px; display: flex; flex-direction: column; justify-content: flex-end; font: 11px/14px var(--ff-code); }
 .rad, .shd { width: 120px; height: 84px; background: var(--surface-panel); border: 1px solid var(--border-outline-variant); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; text-align: center; padding: 6px; }
 .shd { border: 0; border-radius: 8px; }
 .sp { display: flex; align-items: center; gap: 12px; } .sp div { height: 16px; background: var(--accent-primary); border-radius: 2px; }
@@ -705,6 +704,8 @@ td.src { color: var(--text-ghost); font-size: 11px; }
 .fc-ctrl { display: flex; justify-content: space-between; width: 418px; max-width: 100%; margin-top: 12px; }
 .fc-ctrl .c { width: 48px; height: 40px; border-radius: 24px; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; }
 .fc-ctrl .p { width: 66px; height: 40px; border-radius: 24px; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; gap: 6px; font: var(--t-label-large); }
+.dark-gap { display: none; font-size: 12px; color: var(--text-warning); border: 1px dashed var(--text-warning); border-radius: 8px; padding: 6px 10px; }
+[data-theme="dark"] .dark-gap { display: block; }
 .quiz-opt { border-radius: 12px; padding: 16px; background: var(--palette-grey-98); font: var(--t-body-large); color: var(--palette-grey-20); max-width: 418px; }
 .quiz-opt.is-hover { background: var(--palette-grey-90); }
 .mm { display: flex; align-items: center; gap: 40px; position: relative; }
@@ -852,58 +853,58 @@ td.src { color: var(--text-ghost); font-size: 11px; }
 <div class="sw"><div class="chip" style="background:var(--dataviz-cyan-container)"></div><div class="sw-meta"><code>dataviz-cyan-container</code><span>#acedff / #004e5d</span><small></small></div></div>
 <div class="sw"><div class="chip" style="background:var(--dataviz-grey)"></div><div class="sw-meta"><code>dataviz-grey</code><span>#5e5e5e / #c7c7c7</span><small></small></div></div>
 <div class="sw"><div class="chip" style="background:var(--dataviz-grey-container)"></div><div class="sw-meta"><code>dataviz-grey-container</code><span>#e3e3e3 / #474747</span><small></small></div></div>
-<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-root)"></div><div class="sw-meta"><code>dataviz-mindmap-root</code><span>#c3cafc / #c3cafc</span><small> · <b>estimated</b></small></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-root)"></div><div class="sw-meta"><code>dataviz-mindmap-root</code><span>#c3cafc / #c3cafc</span><small>≈ palette.blue.90 · <b>estimated</b></small></div></div>
 <div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-node)"></div><div class="sw-meta"><code>dataviz-mindmap-node</code><span>#c2d3eb / #c2d3eb</span><small> · <b>estimated</b></small></div></div>
-<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-edge)"></div><div class="sw-meta"><code>dataviz-mindmap-edge</code><span>#7c8bf3 / #7c8bf3</span><small> · <b>estimated</b></small></div></div></div>
+<div class="sw"><div class="chip" style="background:var(--dataviz-mindmap-edge)"></div><div class="sw-meta"><code>dataviz-mindmap-edge</code><span>#7c8bf3 / #7c8bf3</span><small>≈ palette.blue.70 · <b>estimated</b></small></div></div></div>
   <h3>Loading</h3><div class="sw-grid"><div class="sw"><div class="chip" style="background:var(--skeleton-base)"></div><div class="sw-meta"><code>skeleton-base</code><span>#f2f2f2 / #3e4a59</span><small></small></div></div>
 <div class="sw"><div class="chip" style="background:var(--skeleton-highlight)"></div><div class="sw-meta"><code>skeleton-highlight</code><span>#ffffff / #2f334b</span><small></small></div></div>
 <div class="sw"><div class="chip" style="background:var(--skeleton-loading-highlight)"></div><div class="sw-meta"><code>skeleton-loading-highlight</code><span>#edeffa / #2f334b</span><small></small></div></div></div>
   <div class="row" style="margin-top:12px"><div style="width:240px" class="stack"><div class="skel"></div><div class="skel" style="width:70%"></div></div><span class="note">Skeleton shimmer, 1.4s linear</span></div>
 
   <h2 id="palette">Primitive palettes</h2>
-  <h3>Grey</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-grey-0)"><span>0</span><span>#000000</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-10)"><span>10</span><span>#1b1b1c</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-20)"><span>20</span><span>#303030</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-30)"><span>30</span><span>#474747</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-40)"><span>40</span><span>#5e5e5e</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-50)"><span>50</span><span>#777777</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-60)"><span>60</span><span>#919191</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-70)"><span>70</span><span>#ababab</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-80)"><span>80</span><span>#c7c7c7</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-90)"><span>90</span><span>#e3e3e3</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-95)"><span>95</span><span>#f2f2f2</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-98)"><span>98</span><span>#f9f9f9</span></div>
-<div class="ramp-step" style="background:var(--palette-grey-100)"><span>100</span><span>#ffffff</span></div></div>
-  <h3>Blue (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-blue-2)"><span>2</span><span>#17181c</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-5)"><span>5</span><span>#1d1e26</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-10)"><span>10</span><span>#232740</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-20)"><span>20</span><span>#2a3163</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-30)"><span>30</span><span>#2f3a8e</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-40)"><span>40</span><span>#384acf</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-50)"><span>50</span><span>#4259ff</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-60)"><span>60</span><span>#596cf7</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-70)"><span>70</span><span>#7c8bf3</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-80)"><span>80</span><span>#94a0f4</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-90)"><span>90</span><span>#c3cafc</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-95)"><span>95</span><span>#dbdfff</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-98)"><span>98</span><span>#edeffa</span></div>
-<div class="ramp-step" style="background:var(--palette-blue-100)"><span>100</span><span>#ffffff</span></div></div>
-  <h3>Green (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-green-50)"><span>50</span><span>#45ec6d</span></div>
-<div class="ramp-step" style="background:var(--palette-green-60)"><span>60</span><span>#6df88e</span></div>
-<div class="ramp-step" style="background:var(--palette-green-70)"><span>70</span><span>#9efab4</span></div>
-<div class="ramp-step" style="background:var(--palette-green-80)"><span>80</span><span>#cefdd9</span></div>
-<div class="ramp-step" style="background:var(--palette-green-100)"><span>100</span><span>#ffffff</span></div></div>
-  <h3>Brand</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-brand-black)"><span>black</span><span>#000000</span></div>
-<div class="ramp-step" style="background:var(--palette-brand-white)"><span>white</span><span>#ffffff</span></div>
-<div class="ramp-step" style="background:var(--palette-brand-green)"><span>green</span><span>#45ec6d</span></div>
-<div class="ramp-step" style="background:var(--palette-brand-blue)"><span>blue</span><span>#4259ff</span></div>
-<div class="ramp-step" style="background:var(--palette-brand-dark-blue)"><span>dark-blue</span><span>#2f334b</span></div></div>
-  <h3>Icon colours</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-icon-blue)"><span>blue</span><span>#3271ea</span></div>
-<div class="ramp-step" style="background:var(--palette-icon-yellow)"><span>yellow</span><span>#fcbd00</span></div>
-<div class="ramp-step" style="background:var(--palette-icon-red)"><span>red</span><span>#db372d</span></div>
-<div class="ramp-step" style="background:var(--palette-icon-pink)"><span>pink</span><span>#b741ff</span></div>
-<div class="ramp-step" style="background:var(--palette-icon-green)"><span>green</span><span>#128937</span></div>
-<div class="ramp-step" style="background:var(--palette-icon-youtube)"><span>youtube</span><span>#ff0000</span></div></div>
+  <h3>Grey</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-grey-0);color:#ffffff"><span>0</span><span>#000000</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-10);color:#ffffff"><span>10</span><span>#1b1b1c</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-20);color:#ffffff"><span>20</span><span>#303030</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-30);color:#ffffff"><span>30</span><span>#474747</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-40);color:#ffffff"><span>40</span><span>#5e5e5e</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-50);color:#ffffff"><span>50</span><span>#777777</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-60);color:#ffffff"><span>60</span><span>#919191</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-70);color:#1b1b1c"><span>70</span><span>#ababab</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-80);color:#1b1b1c"><span>80</span><span>#c7c7c7</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-90);color:#1b1b1c"><span>90</span><span>#e3e3e3</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-95);color:#1b1b1c"><span>95</span><span>#f2f2f2</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-98);color:#1b1b1c"><span>98</span><span>#f9f9f9</span></div>
+<div class="ramp-step" style="background:var(--palette-grey-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Blue (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-blue-2);color:#ffffff"><span>2</span><span>#17181c</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-5);color:#ffffff"><span>5</span><span>#1d1e26</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-10);color:#ffffff"><span>10</span><span>#232740</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-20);color:#ffffff"><span>20</span><span>#2a3163</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-30);color:#ffffff"><span>30</span><span>#2f3a8e</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-40);color:#ffffff"><span>40</span><span>#384acf</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-50);color:#ffffff"><span>50</span><span>#4259ff</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-60);color:#ffffff"><span>60</span><span>#596cf7</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-70);color:#ffffff"><span>70</span><span>#7c8bf3</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-80);color:#1b1b1c"><span>80</span><span>#94a0f4</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-90);color:#1b1b1c"><span>90</span><span>#c3cafc</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-95);color:#1b1b1c"><span>95</span><span>#dbdfff</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-98);color:#1b1b1c"><span>98</span><span>#edeffa</span></div>
+<div class="ramp-step" style="background:var(--palette-blue-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Green (brand)</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-green-50);color:#1b1b1c"><span>50</span><span>#45ec6d</span></div>
+<div class="ramp-step" style="background:var(--palette-green-60);color:#1b1b1c"><span>60</span><span>#6df88e</span></div>
+<div class="ramp-step" style="background:var(--palette-green-70);color:#1b1b1c"><span>70</span><span>#9efab4</span></div>
+<div class="ramp-step" style="background:var(--palette-green-80);color:#1b1b1c"><span>80</span><span>#cefdd9</span></div>
+<div class="ramp-step" style="background:var(--palette-green-100);color:#1b1b1c"><span>100</span><span>#ffffff</span></div></div>
+  <h3>Brand</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-brand-black);color:#ffffff"><span>black</span><span>#000000</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-white);color:#1b1b1c"><span>white</span><span>#ffffff</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-green);color:#1b1b1c"><span>green</span><span>#45ec6d</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-blue);color:#ffffff"><span>blue</span><span>#4259ff</span></div>
+<div class="ramp-step" style="background:var(--palette-brand-dark-blue);color:#ffffff"><span>dark-blue</span><span>#2f334b</span></div></div>
+  <h3>Icon colours</h3><div class="ramp"><div class="ramp-step" style="background:var(--palette-icon-blue);color:#ffffff"><span>blue</span><span>#3271ea</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-yellow);color:#1b1b1c"><span>yellow</span><span>#fcbd00</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-red);color:#ffffff"><span>red</span><span>#db372d</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-pink);color:#ffffff"><span>pink</span><span>#b741ff</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-green);color:#ffffff"><span>green</span><span>#128937</span></div>
+<div class="ramp-step" style="background:var(--palette-icon-youtube);color:#ffffff"><span>youtube</span><span>#ff0000</span></div></div>
   <h3>Gradients</h3>
   <div class="row">
     <div class="cell"><div style="width:260px;height:72px;border-radius:8px;background:var(--gradient-promo)"></div><span class="spec-label">gradient.promo · studio banner</span></div>
@@ -914,23 +915,23 @@ td.src { color: var(--text-ghost); font-size: 11px; }
 
   <h2 id="type">Typography</h2>
   <p class="note">Families: <b>Google Sans</b> (display, headline, title-large, panel headers; only 400 loaded), <b>Google Sans Text</b> (everything else; 400/500 loaded, 600/700 synthesised), <b>Google Sans Code</b> (inline code), <b>Google Symbols</b> (icons, ligatures, <code>font-feature-settings: "liga"</code>), <b>KaTeX</b> (math). No other font-feature-settings or variation axes are set; the type scale is Material 3 with Google's font swap. Tracking 0.006rem (0.096px) on small text.</p>
-  <div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Sample</th><th>Spec</th><th>Used for</th></tr><tr><td><code>display-large</code></td><td style="font:var(--typography-display-large);letter-spacing:0px">The quick brown fox</td><td>display} · 57px/64px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
-<tr><td><code>display-medium</code></td><td style="font:var(--typography-display-medium);letter-spacing:0px">The quick brown fox</td><td>display} · 45px/52px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
-<tr><td><code>display-small</code></td><td style="font:var(--typography-display-small);letter-spacing:0px">The quick brown fox</td><td>display} · 36px/44px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
-<tr><td><code>headline-large</code></td><td style="font:var(--typography-headline-large);letter-spacing:0px">The quick brown fox</td><td>display} · 32px/40px · 400 · 0px</td><td></td></tr>
-<tr><td><code>headline-medium</code></td><td style="font:var(--typography-headline-medium);letter-spacing:0px">The quick brown fox</td><td>display} · 28px/36px · 400 · 0px</td><td></td></tr>
-<tr><td><code>headline-small</code></td><td style="font:var(--typography-headline-small);letter-spacing:0px">The quick brown fox</td><td>display} · 24px/32px · 400 · 0px</td><td>Page titles (&#x27;My notebooks&#x27;), grid card titles, dialog h1</td></tr>
-<tr><td><code>title-large</code></td><td style="font:var(--typography-title-large);letter-spacing:0px">The quick brown fox</td><td>display} · 22px/28px · 400 · 0px</td><td>Notebook title (rendered 22/36), source title, note title</td></tr>
-<tr><td><code>title-medium</code></td><td style="font:var(--typography-title-medium);letter-spacing:0px">The quick brown fox</td><td>text} · 16px/24px · 500 · 0px</td><td>Dialog titles (rendered 16/32)</td></tr>
-<tr><td><code>title-small</code></td><td style="font:var(--typography-title-small);letter-spacing:0px">The quick brown fox</td><td>text} · 14px/20px · 500 · 0px</td><td>Artifact titles, section labels</td></tr>
-<tr><td><code>body-large</code></td><td style="font:var(--typography-body-large);letter-spacing:0px">The quick brown fox</td><td>text} · 16px/24px · 400 · 0px</td><td>Chat messages, inputs, citation popover</td></tr>
-<tr><td><code>body-medium</code></td><td style="font:var(--typography-body-medium);letter-spacing:0px">The quick brown fox</td><td>text} · 14px/20px · 400 · 0px</td><td>Table cells, source rows (24 lh), helper text</td></tr>
-<tr><td><code>body-small</code></td><td style="font:var(--typography-body-small);letter-spacing:0.096px">The quick brown fox</td><td>text} · 12px/16px · 400 · 0.096px</td><td>Tooltips, captions, disclaimer (20 lh)</td></tr>
-<tr><td><code>label-large</code></td><td style="font:var(--typography-label-large);letter-spacing:0px">The quick brown fox</td><td>text} · 14px/20px · 500 · 0px</td><td>Buttons, menu items, chips</td></tr>
-<tr><td><code>label-medium</code></td><td style="font:var(--typography-label-medium);letter-spacing:0.096px">The quick brown fox</td><td>text} · 12px/16px · 500 · 0.096px</td><td>Studio tile labels, promo text</td></tr>
-<tr><td><code>label-small</code></td><td style="font:var(--typography-label-small);letter-spacing:0.096px">The quick brown fox</td><td>text} · 11px/16px · 500 · 0.096px</td><td>Citation markers, &#x27;New!&#x27; badge</td></tr>
-<tr><td><code>panel-header</code></td><td style="font:var(--typography-panel-header);letter-spacing:0px">The quick brown fox</td><td>display} · 16px/52px · 400 · 0px</td><td>Sources / Chat / Studio headers</td></tr>
-<tr><td><code>code-inline</code></td><td style="font:var(--typography-code-inline);letter-spacing:0px">The quick brown fox</td><td>code} · 14px/24px · 500 · 0px</td><td></td></tr></table></div>
+  <div class="scroll-x"><table class="spec"><tr><th>Token</th><th>Sample</th><th>Spec</th><th>Used for</th></tr><tr><td><code>display-large</code></td><td style="font:var(--typography-display-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 57px/64px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>display-medium</code></td><td style="font:var(--typography-display-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 45px/52px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>display-small</code></td><td style="font:var(--typography-display-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 36px/44px · 400 · 0px</td><td>Declared, not seen on any captured screen</td></tr>
+<tr><td><code>headline-large</code></td><td style="font:var(--typography-headline-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 32px/40px · 400 · 0px</td><td></td></tr>
+<tr><td><code>headline-medium</code></td><td style="font:var(--typography-headline-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 28px/36px · 400 · 0px</td><td></td></tr>
+<tr><td><code>headline-small</code></td><td style="font:var(--typography-headline-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 24px/32px · 400 · 0px</td><td>Page titles (&#x27;My notebooks&#x27;), grid card titles, dialog h1</td></tr>
+<tr><td><code>title-large</code></td><td style="font:var(--typography-title-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 22px/28px · 400 · 0px</td><td>Notebook title (rendered 22/36), source title, note title</td></tr>
+<tr><td><code>title-medium</code></td><td style="font:var(--typography-title-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 16px/24px · 500 · 0px</td><td>Dialog titles (rendered 16/32)</td></tr>
+<tr><td><code>title-small</code></td><td style="font:var(--typography-title-small);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 500 · 0px</td><td>Artifact titles, section labels</td></tr>
+<tr><td><code>body-large</code></td><td style="font:var(--typography-body-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 16px/24px · 400 · 0px</td><td>Chat messages, inputs, citation popover</td></tr>
+<tr><td><code>body-medium</code></td><td style="font:var(--typography-body-medium);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 400 · 0px</td><td>Table cells, source rows (24 lh), helper text</td></tr>
+<tr><td><code>body-small</code></td><td style="font:var(--typography-body-small);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 12px/16px · 400 · 0.096px</td><td>Tooltips, captions, disclaimer (20 lh)</td></tr>
+<tr><td><code>label-large</code></td><td style="font:var(--typography-label-large);letter-spacing:0px">The quick brown fox</td><td>Google Sans Text · 14px/20px · 500 · 0px</td><td>Buttons, menu items, chips</td></tr>
+<tr><td><code>label-medium</code></td><td style="font:var(--typography-label-medium);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 12px/16px · 500 · 0.096px</td><td>Studio tile labels, promo text</td></tr>
+<tr><td><code>label-small</code></td><td style="font:var(--typography-label-small);letter-spacing:0.096px">The quick brown fox</td><td>Google Sans Text · 11px/16px · 500 · 0.096px</td><td>Citation markers, &#x27;New!&#x27; badge</td></tr>
+<tr><td><code>panel-header</code></td><td style="font:var(--typography-panel-header);letter-spacing:0px">The quick brown fox</td><td>Google Sans · 16px/52px · 400 · 0px</td><td>Sources / Chat / Studio headers</td></tr>
+<tr><td><code>code-inline</code></td><td style="font:var(--typography-code-inline);letter-spacing:0px">The quick brown fox</td><td>Google Sans Code · 14px/24px · 500 · 0px</td><td></td></tr></table></div>
 
   <h2 id="space">Spacing, sizes and layout</h2>
   <div class="row" style="align-items:flex-start;gap:40px">
@@ -1249,6 +1250,7 @@ td.src { color: var(--text-ghost); font-size: 11px; }
       <div class="fc-ctrl"><span class="c" style="color:#c7c7c7;border-color:#c7c7c7"><span class="mi s20">arrow_back</span></span><span class="p" style="color:var(--palette-icon-red)"><span class="mi s20">close</span>0</span><span class="p" style="color:var(--palette-icon-green)">0<span class="mi s20">check</span></span><span class="c" style="color:var(--accent-primary);border-color:var(--accent-primary)"><span class="mi s20">arrow_forward</span></span></div></div>
     <div class="flash back"><div class="meta">&nbsp;</div><div class="q">The Fork-Join pattern.</div><div><button class="btn btn-outlined sm-outlined"><span class="mi">wand_stars</span>Explain</button></div></div>
     <div class="stack" style="width:418px">
+      <div class="dark-gap">Quiz and mind map were captured in light only. The colours below are the light samples; the dark-theme values are unknown.</div>
       <div class="quiz-opt is-hover">A. Fork-Join only applies to nested loops.</div>
       <div class="quiz-opt">B. Fork-Join is how OpenMP manages threads in the backend.</div>
       <button class="btn btn-filled rect" style="align-self:center;width:200px">Next</button>

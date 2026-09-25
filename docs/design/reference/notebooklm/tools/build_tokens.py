@@ -269,9 +269,10 @@ def theme(i):
         c(["pastel", col], *N(f"nlm-pastel-{col}"))
     for col in ("blue", "red", "yellow", "green", "orange", "pink", "purple", "cyan", "grey"):
         c(["dataviz", col], *M(col)); c(["dataviz", col + "-container"], *M(col + "-container"))
-    c(["dataviz", "mindmap-root"], "#c3cafc", "estimated from screenshot (iframe) ≈ palette.blue.90")
-    c(["dataviz", "mindmap-node"], "#c2d3eb", "estimated from screenshot (iframe)")
-    c(["dataviz", "mindmap-edge"], "#7c8bf3", "estimated from screenshot (iframe) ≈ palette.blue.70")
+    mm = "estimated from screenshot (iframe)" if i == 0 else "estimated: not captured in dark; light sample repeated"
+    c(["dataviz", "mindmap-root"], "#c3cafc", mm, "≈ palette.blue.90")
+    c(["dataviz", "mindmap-node"], "#c2d3eb", mm)
+    c(["dataviz", "mindmap-edge"], "#7c8bf3", mm, "≈ palette.blue.70")
     c(["skeleton", "base"], *N("nlm-skeleton-shimmer-base"))
     c(["skeleton", "highlight"], *N("nlm-skeleton-shimmer-highlight"))
     c(["skeleton", "loading-highlight"], *N("nlm-loading-shimmer-highlight"))
