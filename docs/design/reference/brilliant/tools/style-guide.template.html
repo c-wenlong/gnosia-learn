@@ -94,7 +94,9 @@ code { font-family: var(--ff-code); font-size: 13px; }
 .b3d.blue { --face: var(--component-button3d-blue-face); --fg: #fff; --lip: var(--component-button3d-blue-lip); }
 .b3d.yellow { --face: var(--component-button3d-yellow-face); --fg: var(--component-button3d-yellow-text); --lip: var(--component-button3d-yellow-lip); }
 .b3d:active > .face, .b3d.is-pressed > .face { --lift: 0px; }
-.b3d:hover > .face::after, .b3d.is-hover > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--autoflip-white-200); pointer-events: none; }
+/* Brilliant applies the hover tint only in Safari (@supports (-webkit-hyphens:none)); Chrome and Firefox show no hover change */
+.b3d.is-hover > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--autoflip-white-200); pointer-events: none; }
+@supports (-webkit-hyphens:none) { .b3d:hover > .face::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--autoflip-white-200); pointer-events: none; } }
 .b3d > .face { position: relative; }
 .b3d:focus-visible, .b3d.is-focus { box-shadow: var(--shadow-outline); }
 .b3d[disabled], .b3d.is-disabled { opacity: var(--opacity-disabled-button3d); cursor: default; --lift: 0px; --face: var(--component-button3d-disabled-face); --fg: var(--component-button3d-disabled-text); --lip: transparent; }
@@ -407,7 +409,7 @@ kbd.kc { display: inline-flex; align-items: center; height: 21px; padding: 0 6px
       <div class="demo" id="b3d-variants"></div>
       <div class="demo" style="margin-top:20px">
         <div class="cell"><button class="b3d"><span class="face">Default</span></button><div class="cap">default</div></div>
-        <div class="cell"><button class="b3d is-hover"><span class="face">Hover</span></button><div class="cap">hover</div></div>
+        <div class="cell"><button class="b3d is-hover"><span class="face">Hover</span></button><div class="cap">hover (Safari only)</div></div>
         <div class="cell"><button class="b3d is-focus"><span class="face">Focus</span></button><div class="cap">focus-visible</div></div>
         <div class="cell"><button class="b3d is-pressed"><span class="face">Active</span></button><div class="cap">active / pressed</div></div>
         <div class="cell"><button class="b3d" disabled><span class="face">Disabled</span></button><div class="cap">disabled</div></div>

@@ -1,6 +1,20 @@
+"""Cut the per-component crops from the screenshots.
+
+usage: python3 tools/capture/crops.py [SRC_DIR] [--sheet SHEET.png]
+
+SRC_DIR holds full-colour sRGB screenshots (from srgb.py); it defaults to screenshots/, which are
+already sRGB but 256-colour, so crops cut from them are slightly coarser. Crops are written as
+256-colour PNGs to components/crops/. Boxes are CSS px: signed-in captures are 1384 wide, public 1440.
+"""
 from PIL import Image, ImageDraw
-import os, sys
-S='cap/srgb_'
+import os, sys, pathlib
+REF = pathlib.Path(__file__).resolve().parent.parent.parent
+args = [a for a in sys.argv[1:]]
+sheet_path = None
+if '--sheet' in args:
+    i = args.index('--sheet'); sheet_path = args[i + 1]; del args[i:i + 2]
+SRC = pathlib.Path(args[0]) if args else REF / 'screenshots'
+OUT = REF / 'components' / 'crops'
 C=[ # name, file, x0,y0,x1,y1 in CSS px
 ('button3d-primary-dark','onboarding-dark-intro.png',530,715,855,795),
 ('button3d-disabled-dark','onboarding-dark-voice-choice.png',530,715,855,795),
@@ -87,17 +101,19 @@ P=[ # public, 1440 css wide at 2x
 ('course-path-light','course-public-light-default.png',690,80,1210,900),
 ('notfound-legacy-light','notfound-light-404.png',100,40,1340,500),
 ]
-os.makedirs('wt/docs/design/reference/brilliant/components/crops', exist_ok=True)
+OUT.mkdir(parents=True, exist_ok=True)
 out=[]
 for name,f,x0,y0,x1,y1 in C+P:
-    im=Image.open(S+f); base=1440 if (name,f,x0,y0,x1,y1) in P else 1384; s=im.size[0]/base
+    im=Image.open(SRC / f).convert('RGB'); base=1440 if (name,f,x0,y0,x1,y1) in P else 1384; s=im.size[0]/base
     box=tuple(int(round(v*s)) for v in (x0,y0,x1,y1)); box=(box[0],box[1],min(box[2],im.size[0]),min(box[3],im.size[1]))
     c=im.crop(box)
     if c.size[0]>1600: c=c.resize((1600,int(c.size[1]*1600/c.size[0])), Image.LANCZOS)
-    c.save(f'cap/crops/{name}.png'); out.append((name,c))
-# contact sheet
-W=4; cell=(340,240)
-sheet=Image.new('RGB',(W*cell[0],((len(out)+W-1)//W)*(cell[1]+16)),'white'); d=ImageDraw.Draw(sheet)
-for i,(n,c) in enumerate(out):
-    t=c.copy(); t.thumbnail(cell); x=(i%W)*cell[0]; y=(i//W)*(cell[1]+16); sheet.paste(t,(x,y+14)); d.text((x+2,y),n,fill='red')
-sheet.save('cap/crops_sheet.png'); print(len(out), sheet.size)
+    c.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(OUT / f'{name}.png', optimize=True)
+    out.append((name,c))
+print(len(out), 'crops ->', OUT)
+if sheet_path:  # contact sheet for eyeballing every box at once
+    W=4; cell=(340,240)
+    sheet=Image.new('RGB',(W*cell[0],((len(out)+W-1)//W)*(cell[1]+16)),'white'); d=ImageDraw.Draw(sheet)
+    for i,(n,c) in enumerate(out):
+        t=c.copy(); t.thumbnail(cell); x=(i%W)*cell[0]; y=(i//W)*(cell[1]+16); sheet.paste(t,(x,y+14)); d.text((x+2,y),n,fill='red')
+    sheet.save(sheet_path)

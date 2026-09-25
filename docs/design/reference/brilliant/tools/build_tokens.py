@@ -215,7 +215,8 @@ def parse_shadow(s):
     layers = []
     for part in re.split(r",(?![^(]*\))", s):
         part = part.strip()
-        inset = part.startswith("inset")
+        inset = re.search(r"\binset\b", part) is not None
+        part = re.sub(r"\binset\b", "", part).strip()
         nums = re.findall(r"-?[\d.]+(?:px)?", re.sub(r"(#[0-9a-fA-F]+|rgba?\([^)]*\)|var\([^)]*\))", "", part))
         col = re.search(r"(#[0-9a-fA-F]+|rgba?\([^)]*\)|var\([^)]*\))", part)
         nums = [n if n.endswith("px") else n + "px" for n in nums] + ["0px"] * 4

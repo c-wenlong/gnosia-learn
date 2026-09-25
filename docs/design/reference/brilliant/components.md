@@ -423,7 +423,7 @@ App icons are a custom set of filled glyphs drawn at 16 (nav, menu), 24 (stats),
 | `lesson-report-flag-48`, `lesson-sound-48`, `lesson-chat-48`, `lesson-mic-18` | lesson rail and Koji dock |
 | `play-16`, `close-16`, `arrow-up-16`, `arrow-down-16` | voice sample, close, strength deltas |
 
-[icons/public/](icons/public) holds 33 SVGs pulled from the public pages by a script, named by content hash:
+[icons/public/](icons/public) holds 32 SVGs pulled from the public pages by a script, named by content hash:
 
 | Files | What | Size | Style |
 |---|---|---|---|
@@ -432,7 +432,7 @@ App icons are a custom set of filled glyphs drawn at 16 (nav, menu), 24 (stats),
 | `93e06c447c`, `4fc06a14a3`, `38197ce722`, `197d4e7d65` | footer Facebook, Instagram, Twitter, LinkedIn | 20–22 | fill #999 |
 | `f65ff86b03`, `9f2b7ed8f1` | Google and Apple login | 20, 17 | fill, brand colours |
 | `b4ce175fcd`, `c6f4f6cb5b` | landing video pause and play | 16 | fill 30% black |
-| `5ed2cd3d2e`, `99aace2974` | Koji peeking over the plan card | 40x26 | fill |
+| `5ed2cd3d2e` | Koji peeking over the plan card | 40x26 | fill |
 | `b7865a5607`, `6b48e24473`, `a38292d801`, `5baf88ce65`, `61a5187a65` | pricing feature list icons | 20–24 | fill with gradients |
 | `13e7b9f445`, `2239dabbae`, `9d5342950c`, `f78cff109f` | pricing benefits | 32 | stroke 2.4px plus fills |
 | `0cfb527962`, `f9abc0b2e7`, `c8b322698c`, `1c94002d26` | pricing tab icons | 20 | fill 60% black |

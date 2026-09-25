@@ -17,7 +17,7 @@ const pages = [['landing','/'],['login','/login/'],['signup','/signup/'],['cours
           const info = await p.evaluate(() => ({ url: location.pathname, theme: document.documentElement.dataset.theme || '(none)', bg: getComputedStyle(document.body).backgroundColor, title: document.title }));
           report[`${tag}${name}-${scheme}`] = { status: r && r.status(), ...info };
           await p.screenshot({ path: `${OUT}${tag}${name}-${scheme}-default.png` });
-        } catch { report[`${tag}${name}-${scheme}`] = 'ERR ' + e.message.slice(0,100); }
+        } catch (e) { report[`${tag}${name}-${scheme}`] = 'ERR ' + e.message.slice(0,100); }
       }
       await ctx.close();
     }
