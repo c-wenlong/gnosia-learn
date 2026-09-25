@@ -1,10 +1,13 @@
 # Redesign v1: lo-fi
 
-Status: lo-fi agreed in an interview on 2026-09-23, hi-fi not started.
+Status: lo-fi agreed in an interview on 2026-09-23; hi-fi v1 drawn on
+2026-09-26 from the three captured design systems under [reference/](reference/).
 This document is the written half of the design. The drawn half is
-[self-learn-lofi.fig](self-learn-lofi.fig), an OpenPencil document, and the
-SVG exports of every screen under [lofi/](lofi/). The research the design
-draws on is under [research/](research/).
+[self-learn-lofi.fig](self-learn-lofi.fig), an OpenPencil document with a
+lo-fi page and a hi-fi page, and the SVG exports of every screen under
+[lofi/](lofi/) and [hifi/](hifi/). The research the design draws on is under
+[research/](research/); the three captured design systems it takes real
+components from are under [reference/](reference/).
 
 ## What the redesign is
 
@@ -228,6 +231,93 @@ the palette. What the lo-fi does fix is the scale.
 - Colour roles: canvas, panel, box, line, ink, muted, accent, primary
   button; mastery high, mid, low. The hi-fi assigns values per theme.
 
+## Hi-fi v1
+
+Every lo-fi screen exists in light and dark under [hifi/](hifi/), drawn by
+[kit/hifi.py](kit/hifi.py) from the three design systems captured under
+[reference/](reference/). Each system was read against our component list
+first; those readings are [hifi/notes/brilliant.md](hifi/notes/brilliant.md),
+[hifi/notes/notebooklm.md](hifi/notes/notebooklm.md) and
+[hifi/notes/duolingo.md](hifi/notes/duolingo.md), and they say per component
+which crop or screenshot the value came from. The split follows the
+interview: Brilliant is the base, NotebookLM is the workspace, Duolingo is
+the habit layer.
+
+### Which system supplies what
+
+| Ours | Taken from | What was kept | What was changed |
+| --- | --- | --- | --- |
+| Palette, type, spacing | Brilliant | white on `#141414`, black and white text with 60% and 40% steps, blue `#456dff`, green for correct, yellow for "not quite", Figtree with Georgia for display (the reference's own fallbacks for CoFo Brilliant and CoFo Robert) | alphas flattened to hex; one accent, so the black CTA and the blue accent coexist only as button versus link |
+| Card | Brilliant card | flat surface, 2px `border.solid`, radius 20, no shadow | padding 20 instead of 24 on the dense dashboard |
+| Primary button | Brilliant button3d | pill, 44px face over a 4px same-hue lip, black face in light and `#e5e5e5` in dark | no hover in the reference (Safari-only tint), ours is left for implementation |
+| Secondary button, input, search | Brilliant flat button and form input | 2px border, pill for buttons and search, radius 8 for inputs | height 44 instead of 48 and 52 |
+| Top bar, stat pills | Brilliant app header | selected tab in text colour with a 2px underline, stat pills at pill radius with 2px border | pills carry the streak and target instead of keys and Premium |
+| Eyebrow labels | Brilliant badge | 11px, 700, uppercase, tracked | used as section labels, not badges |
+| Workspace shell | NotebookLM | three panels on the page colour, radius 16, no border, 16px gutter, side panels about 290px, 48px panel header with a hairline | our side panels are 290 and 310 at 1440 wide |
+| Chat | NotebookLM | user bubble tinted with radius 20, tutor prose bare, citation as a numbered circle | the circle grows into a short pill holding the source and locator |
+| Filter and suggestion chips | NotebookLM choice chip | pill, 1px border, accent fill when selected | 34px tall instead of 40 |
+| Path node | Duolingo | disc over a lip, active node in a ring | 56px face and 6px lip instead of 57 and 8; no zig-zag, a straight connector |
+| Unit header, Guidebook | Duolingo unit banner | tinted banner with the Guidebook button on it | accent tint instead of the unit colour |
+| Streak calendar | Duolingo streak week | 34px discs, orange `#ff9600` done with a check, grey future | the leeway line replaces the paid freeze |
+| Target bar | Duolingo goal bar | 20px track at radius 10 with the "x / y" label | label beside the bar; accent fill, not gold |
+| Feedback footer | Duolingo lesson footer | tinted bar, icon circle, title, ghost actions, coloured 3D continue | Brilliant's green and yellow, since our "not quite" is not red |
+| Choice rows | Duolingo choice row | 56px row with a keyboard-number badge, tinted when selected, recoloured when graded | Brilliant tokens for the colours |
+| Stat tiles | Duolingo lesson-complete cards | coloured frame, uppercase strip, value box | one colour per metric: green, accent, purple, orange |
+| Rating row, mastery dot, step bar, table | none | designed here from the palette; the extracts confirm no reference has them | |
+
+### Hi-fi tokens
+
+`TOKENS` in [kit/hifi.py](kit/hifi.py) is the source; the same values are in
+the `.fig` as two variable collections, "self-learn light" and "self-learn
+dark". "derived" means a value we made from a reference one.
+
+| Token | Light | Dark | From |
+| --- | --- | --- | --- |
+| page | `#F8F8F8` | `#141414` | Brilliant bg.secondary / bg.primary |
+| surface | `#FFFFFF` | `#1E1E1E` | Brilliant bg.primary / bg.elevated |
+| surface2 | `#F3F3F3` | `#292929` | derived, one step off surface |
+| tint | `#EEF1FF` | `#232A4A` | derived from the accent, after NotebookLM surface.selected |
+| border | `#E5E5E5` | `#4C4C4C` | Brilliant border.solid |
+| hair | `#EBEBEB` | `#333333` | derived hairline |
+| text, text2, text3 | `#000000`, `#666666`, `#999999` | `#FFFFFF`, `#A3A3A3`, `#7A7A7A` | Brilliant text.primary, secondary, tertiary, alphas flattened |
+| accent, accent_text | `#456DFF`, `#294BC6` | `#456DFF`, `#7491FF` | Brilliant bg.blue-primary, text.blue-primary |
+| ok, ok_lip, ok_text, ok_tint | `#29CC57`, `#15B441`, `#009B2B`, `#E6F8EC` | same, same, `#5ED981`, `#17331F` | Brilliant green; tint derived |
+| warn, warn_lip, warn_text, warn_tint | `#F7C325`, `#B78900`, `#B78900`, `#FFF5D6` | `#F9D25C`, `#B78900`, `#F9D25C`, `#33300F` | Brilliant yellow; tint derived |
+| danger | `#C43939` | `#FF8585` | Brilliant text.danger-primary |
+| streak | `#FF9600` | `#FFAB33` | Duolingo fox |
+| btn_face, btn_lip, btn_text | `#111111`, `#000000`, `#FFFFFF` | `#E5E5E5`, `#B3B3B3`, `#000000` | Brilliant button3d primary |
+| m_hi, m_mid, m_lo | `#456DFF`, `#A9B9FF`, `#E5E5E5` | `#7491FF`, `#3A4A8F`, `#4C4C4C` | mastery buckets: accent, derived light accent, border |
+
+Type: Figtree 15/400 body (14 in dense rows, 17 in lesson prose), 16/700
+card titles, 11/700 uppercase tracked eyebrows, 15/600 button labels;
+Georgia 26 to 32/700 for page and concept titles. Radius: 20 cards, 16
+panels and unit headers, 12 choice rows, pill for buttons, chips, pills and
+search, 8 inputs. Borders: 2px on cards, inputs and secondary buttons, 1px
+hairlines. No shadows on any surface.
+
+### What the references could not give us
+
+- A hover state for the primary button (Brilliant's only renders in Safari).
+- A per-option graded state (Brilliant grades the whole panel; ours colours
+  the row, with Duolingo's choice-row recolour as the precedent).
+- The four-button rating row, the mastery dot, the step bar and the table,
+  which no reference has; they use the palette only.
+- The dark "incorrect" values in Duolingo were derived from CSS, never
+  captured, so the feedback footer takes its colours from Brilliant instead.
+
+### Regenerating the hi-fi
+
+```bash
+OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py               # both themes, all screens
+OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py --theme dark 06 # one screen, one theme
+OPENPENCIL_DOC=tab-2 python3 docs/design/kit/hifi.py --variables 99  # rewrite the variable collections only
+node docs/design/kit/svg2png.mjs /tmp/out docs/design/hifi/*.svg     # PNGs to look at
+```
+
+`OPENPENCIL_DOC` names the tab when more than one document is open (see
+`op.py call list_documents '{}'`). The kit draws onto the "Hi-fi v1" page,
+light frames in the top rows and dark frames 5000px below.
+
 ## Regenerating the lo-fi
 
 The screens are code, so a change to a screen is a change to
@@ -252,11 +342,10 @@ has to be installed; it exists because OpenPencil's own raster export
 refuses ("no visible nodes") and Quick Look scales an SVG to a square and
 crops it.
 
-## Out of scope for v1
+## Out of scope
 
-Hi-fi and the palette. Dark variants of each frame (decision 4 says both
-are designed together; that happens in the hi-fi pass, on tokens). Studio
-screens. Phone layouts beyond the three drawn. Any change to the `learn`
+Studio screens. Phone layouts beyond the three drawn. Interaction states
+beyond the ones drawn (hover, focus, pressed). Any change to the `learn`
 CLI's `--json` shapes.
 
 ## Research index
@@ -266,6 +355,10 @@ CLI's `--json` shapes.
 - [research/brilliant.md](research/brilliant.md), 17 assets
 - [research/others.md](research/others.md): Math Academy, Anki, RemNote, Obsidian, Khan Academy, 18 assets
 - [research/current-app.md](research/current-app.md): the inventory of pages, APIs and unsurfaced data, 8 captures
+
+The three captured design systems (tokens, style guides, component specs,
+screenshots) are under [reference/](reference/), one folder each for
+NotebookLM, Duolingo and Brilliant.
 
 Third-party assets live under `research/assets/<product>/` on the machine
 that gathered them and are gitignored. Our own captures under
