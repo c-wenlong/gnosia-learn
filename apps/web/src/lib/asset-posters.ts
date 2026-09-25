@@ -3,7 +3,17 @@ import "server-only";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as FS } from "node:fs";
-import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -183,11 +193,17 @@ export const POSTER_CACHE_ENTRIES = 1_024;
  * ffmpeg killed by a signal, output past the byte cap, or no ffmpeg at all says
  * something about the machine, so none of them records anything.
  *
- * **It expires two ways.** The key covers the video's resolved path, size,
- * modification time and the recipe version (`posterKey`), so a video that is
- * re-rendered gets a new key and never sees its old marker. The TTL covers what
- * the key cannot see: a failure caused by something outside the file that
- * still looked like a clean exit. An hour is long enough that a grid of broken
+ * **A marker asserts only what it covers.** What it claims is "this ffmpeg
+ * binary, running this recipe, found no frame in this file". The filename key
+ * covers the file (resolved path, size, modification time) and the recipe
+ * version (`posterKey`), so a re-rendered video gets a new key and never sees
+ * its old marker. The binary is recorded inside the marker (`FfmpegIdentity`:
+ * absolute path, size, modification time), and a marker is believed only by
+ * that same binary: a codec-less build, a broken binary or a wrong
+ * `FFMPEG_PATH` also exits nonzero on a perfectly good video, and fixing any of
+ * them must clear the verdict at once rather than after the TTL. The TTL covers
+ * the rest, which neither can see: a transient cause outside both, such as
+ * memory pressure, that still ended in a clean nonzero exit. An hour is long enough that a grid of broken
  * videos does not re-run ffmpeg on every page load, and short enough that a
  * fixed machine is believed the same afternoon.
  */
@@ -406,15 +422,64 @@ async function store(
 }
 
 /**
- * Is there a failure marker for this key that is still believed?
+ * Which ffmpeg this is, cheaply: the path it was found at, the file that path
+ * resolves to through any symlinks, and that file's size and modification
+ * time. Changing `FFMPEG_PATH` changes the path. A Homebrew upgrade repoints
+ * the `bin/ffmpeg` symlink at a new Cellar version, which changes the resolved
+ * file. Replacing the binary in place (a rebuild with the codec it was missing)
+ * changes the size or the time. No process is spawned, so the status route can
+ * ask on every check.
+ *
+ * Null when the binary cannot be stat'd, which is also a binary that cannot be
+ * run; nothing is recorded against it and nothing recorded is believed.
+ */
+export interface FfmpegIdentity {
+  path: string;
+  real: string;
+  bytes: number;
+  mtimeMs: number;
+}
+
+export async function ffmpegIdentity(ffmpeg: string): Promise<FfmpegIdentity | null> {
+  try {
+    const real = await realpath(/* turbopackIgnore: true */ ffmpeg);
+    const stats = await stat(real);
+    return { path: ffmpeg, real, bytes: stats.size, mtimeMs: Math.trunc(stats.mtimeMs) };
+  } catch {
+    return null;
+  }
+}
+
+function sameFfmpeg(a: unknown, b: FfmpegIdentity): boolean {
+  if (typeof a !== "object" || a === null) return false;
+  const x = a as Partial<FfmpegIdentity>;
+  return x.path === b.path && x.real === b.real && x.bytes === b.bytes && x.mtimeMs === b.mtimeMs;
+}
+
+/**
+ * Is there a failure marker for this key that this ffmpeg should believe?
+ *
+ * Three conditions, one per thing the marker could be wrong about: it exists
+ * and is younger than the TTL, it parses, and it was written by the same binary
+ * that would run now (`ffmpeg`, as `resolveFfmpeg` finds it: the poster route
+ * and the status route both resolve it that one way, so they cannot disagree).
+ * A marker written before binaries were recorded has no identity and is not
+ * believed.
  *
  * Read by the poster route before it spends an ffmpeg, and by the status route
  * to tell "ffmpeg found no frame" from "not made yet".
  */
-export async function freshPosterFailure(failureFile: string, now = Date.now()): Promise<boolean> {
+export async function freshPosterFailure(
+  failureFile: string,
+  ffmpeg: FfmpegIdentity | null,
+  now = Date.now(),
+): Promise<boolean> {
+  if (ffmpeg === null) return false;
   try {
     const stats = await stat(failureFile);
-    return stats.isFile() && now - stats.mtimeMs <= POSTER_FAILURE_TTL_MS;
+    if (!stats.isFile() || now - stats.mtimeMs > POSTER_FAILURE_TTL_MS) return false;
+    const record = JSON.parse(await readFile(failureFile, "utf8")) as { ffmpeg?: unknown };
+    return sameFfmpeg(record.ffmpeg, ffmpeg);
   } catch {
     return false;
   }
@@ -670,7 +735,18 @@ export async function extractPoster(
   const task = (async (): Promise<FrameOutcome> => {
     await acquire();
     try {
-      let conclusive = true;
+      // Taken before the first run, so the marker names the binary that
+      // actually produced the verdict even if it is replaced mid-extraction.
+      const identity = await ffmpegIdentity(ffmpeg);
+      // A video this process cannot read makes ffmpeg exit nonzero exactly as
+      // a frameless one does, and a `chmod` that fixes it changes no mtime, so
+      // the key would never notice. Unreadable is a fact about the server's
+      // permissions, not the video, and is never recorded as a verdict.
+      const readable = await access(file, FS.R_OK).then(
+        () => true,
+        () => false,
+      );
+      let conclusive = identity !== null && readable;
       for (const offset of POSTER_OFFSETS_SECONDS) {
         const outcome = await extractFrame(ffmpeg, file, offset, timeoutMs);
         if (outcome.kind === "frame") {
@@ -679,11 +755,11 @@ export async function extractPoster(
         }
         if (outcome.kind === "inconclusive") conclusive = false;
       }
-      if (!conclusive) return { kind: "inconclusive" };
+      if (!conclusive || identity === null) return { kind: "inconclusive" };
       await store(
         dir,
         key,
-        `no frame at ${POSTER_OFFSETS_SECONDS.join(", ")}s\n`,
+        `${JSON.stringify({ ffmpeg: identity, offsets: POSTER_OFFSETS_SECONDS })}\n`,
         POSTER_FAILURE_EXTENSION,
       );
       return { kind: "no-frame" };
@@ -796,10 +872,6 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
     // Not cached yet, or the cache directory is gone. Both mean "extract".
   }
 
-  // A recorded verdict is believed until it expires, so a grid of broken videos
-  // does not re-run three ffmpegs each on every page load.
-  if (await freshPosterFailure(target.failureFile)) return POSTER_FAILED;
-
   const ffmpeg = await resolveFfmpeg();
   if (ffmpeg === null) {
     return {
@@ -811,6 +883,13 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
         `ffmpeg is not on PATH, so no frame can be extracted. Install it, or set ` +
         `${FFMPEG_ENV} to its absolute path.`,
     };
+  }
+
+  // A verdict this same binary recorded is believed until it expires, so a
+  // grid of broken videos does not re-run three ffmpegs each on every page
+  // load. A different binary, or this one replaced, tries again.
+  if (await freshPosterFailure(target.failureFile, await ffmpegIdentity(ffmpeg))) {
+    return POSTER_FAILED;
   }
 
   const outcome = await extractPoster(target.key, ffmpeg, target.file, posterCacheDir());

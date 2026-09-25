@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import {
   POSTER_CACHE_ENTRIES,
   POSTER_FAILURE_TTL_MS,
   extractPoster,
+  ffmpegIdentity,
   freshPosterFailure,
   prunePosterCache,
 } from "./asset-posters";
@@ -57,7 +58,9 @@ describe("what writes a failure marker", () => {
     expect(outcome.kind).toBe("no-frame");
     // The marker and nothing else: no temp file left behind by the rename.
     expect(await listing()).toEqual([`${key(1)}.fail`]);
-    expect(await freshPosterFailure(path.join(dir, `${key(1)}.fail`))).toBe(true);
+    expect(
+      await freshPosterFailure(path.join(dir, `${key(1)}.fail`), await ffmpegIdentity(ffmpeg)),
+    ).toBe(true);
   });
 
   it("a timeout writes nothing", async () => {
@@ -89,6 +92,22 @@ describe("what writes a failure marker", () => {
     expect(await listing()).toEqual([]);
   });
 
+  it("a video this process cannot read writes nothing", async () => {
+    // Skipped as root, who can read anything whatever the mode says.
+    if (process.getuid?.() === 0) return;
+    const locked = path.join(base, "locked.mp4");
+    await writeFile(locked, "not a real video");
+    await chmod(locked, 0o000);
+    try {
+      const ffmpeg = await fake("no-frame-locked", "exit 1");
+      const outcome = await extractPoster(key(12), ffmpeg, locked, dir);
+      expect(outcome.kind).toBe("inconclusive");
+      expect(await listing()).toEqual([]);
+    } finally {
+      await chmod(locked, 0o600);
+    }
+  });
+
   it("a poster made later removes the marker it supersedes", async () => {
     await writeFile(path.join(dir, `${key(6)}.fail`), "old");
     const ffmpeg = await fake("works", "printf '\\377\\330\\377frame\\377\\331'");
@@ -98,19 +117,72 @@ describe("what writes a failure marker", () => {
   });
 });
 
-describe("how long a marker is believed", () => {
-  it("until its TTL, and not after", async () => {
-    const marker = path.join(dir, `${key(7)}.fail`);
-    await writeFile(marker, "no frame");
-    expect(await freshPosterFailure(marker)).toBe(true);
+describe("who believes a marker", () => {
+  /** A real no-frame run by `ffmpeg`, leaving its marker for `key(n)`. */
+  const markerBy = async (ffmpeg: string, n: number) => {
+    expect((await extractPoster(key(n), ffmpeg, video(), dir)).kind).toBe("no-frame");
+    return path.join(dir, `${key(n)}.fail`);
+  };
 
-    const stale = new Date(Date.now() - POSTER_FAILURE_TTL_MS - 60_000);
-    await utimes(marker, stale, stale);
-    expect(await freshPosterFailure(marker)).toBe(false);
+  it("the same binary does, so the ordinary case is unchanged", async () => {
+    const ffmpeg = await fake("same", "exit 1");
+    const marker = await markerBy(ffmpeg, 20);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(ffmpeg))).toBe(true);
   });
 
-  it("not at all when there is no marker", async () => {
-    expect(await freshPosterFailure(path.join(dir, `${key(8)}.fail`))).toBe(false);
+  it("a different binary does not, as when FFMPEG_PATH is pointed elsewhere", async () => {
+    const broken = await fake("broken", "exit 1");
+    const other = await fake("other", "exit 1");
+    const marker = await markerBy(broken, 21);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(other))).toBe(false);
+  });
+
+  it("the same path replaced in place does not", async () => {
+    const ffmpeg = await fake("replaced", "exit 1");
+    const marker = await markerBy(ffmpeg, 22);
+    // An upgrade at the same path: new bytes, new mtime.
+    await writeFile(ffmpeg, "#!/bin/sh\n# rebuilt with the codec\nexit 1\n", { mode: 0o755 });
+    const later = new Date(Date.now() + 5_000);
+    await utimes(ffmpeg, later, later);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(ffmpeg))).toBe(false);
+  });
+
+  it("nobody does once it expires", async () => {
+    const ffmpeg = await fake("ttl", "exit 1");
+    const marker = await markerBy(ffmpeg, 23);
+    const stale = new Date(Date.now() - POSTER_FAILURE_TTL_MS - 60_000);
+    await utimes(marker, stale, stale);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(ffmpeg))).toBe(false);
+  });
+
+  it("nobody does when there is no ffmpeg to compare with, or no marker", async () => {
+    const ffmpeg = await fake("none", "exit 1");
+    const marker = await markerBy(ffmpeg, 24);
+    expect(await freshPosterFailure(marker, null)).toBe(false);
+    expect(
+      await freshPosterFailure(path.join(dir, `${key(25)}.fail`), await ffmpegIdentity(ffmpeg)),
+    ).toBe(false);
+  });
+
+  it("a symlink repointed at another build does not, even at the same path", async () => {
+    const v1 = await fake("ffmpeg-7.0", "exit 1");
+    const v2 = await fake("ffmpeg-7.1", "exit 1");
+    const link = path.join(base, "bin-ffmpeg");
+    await symlink(v1, link);
+    const marker = await markerBy(link, 27);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(link))).toBe(true);
+
+    await rm(link);
+    await symlink(v2, link);
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(link))).toBe(false);
+  });
+
+  it("nobody does for a marker that names no binary", async () => {
+    // The shape written before binaries were recorded.
+    const ffmpeg = await fake("legacy", "exit 1");
+    const marker = path.join(dir, `${key(26)}.fail`);
+    await writeFile(marker, "no frame at 15, 3, 0s\n");
+    expect(await freshPosterFailure(marker, await ffmpegIdentity(ffmpeg))).toBe(false);
   });
 });
 

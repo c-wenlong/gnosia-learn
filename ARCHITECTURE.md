@@ -180,7 +180,8 @@ set, and the card keeps the placeholder it already had. A video ffmpeg finds
 no frame in is recorded, never inferred: only when every offset exits cleanly
 with nothing does a `<key>.fail` marker go beside where the poster would be,
 written through the same rename, pruned under the same bounds and believed for
-an hour. A timeout, a spawn error or a killed process records nothing, so an
+an hour, and only by the ffmpeg binary that wrote it (its path, size and mtime
+are in the marker), so fixing or replacing ffmpeg clears every verdict at once. A timeout, a spawn error or a killed process records nothing, so an
 empty cache reads as "not made yet" and a retry, never as a broken video.
 `apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
 concurrency reasoning.

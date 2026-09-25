@@ -307,6 +307,46 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     expect(await runs()).toBe(0);
   });
 
+  it("drops a verdict once FFMPEG_PATH points at a different binary, and tries again", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    expect(await markers()).toHaveLength(1);
+
+    // The broken build was the problem, not the video.
+    process.env.FFMPEG_PATH = fakeFfmpeg;
+    await resetRuns();
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+    const response = await call(VIDEO_ID);
+    expect(response.status).toBe(200);
+    expect(await runs()).toBe(1);
+  });
+
+  it("drops a verdict once the binary is replaced at the same path", async () => {
+    await useSilentFfmpeg();
+    await call(VIDEO_ID);
+    const silent = process.env.FFMPEG_PATH as string;
+
+    // Same path, rebuilt: now it produces a frame.
+    await writeFile(
+      silent,
+      `#!/bin/sh\necho run >> ${JSON.stringify(counter)}\ncat ${JSON.stringify(path.join(base, "payload.jpg"))}\n`,
+      { mode: 0o755 },
+    );
+    const later = new Date(Date.now() + 5_000);
+    await utimes(silent, later, later);
+
+    expect(await posterStatus(VIDEO_ID).then((r) => r.json())).toEqual({
+      ok: false,
+      code: "poster-not-made",
+    });
+    const response = await call(VIDEO_ID);
+    expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(FAKE_JPEG);
+  });
+
   it("answers the retryable poster-not-made for an empty cache with no marker", async () => {
     // Nothing has been attempted, so absence is not a verdict about the video.
     const probe = await posterStatus(VIDEO_ID);
