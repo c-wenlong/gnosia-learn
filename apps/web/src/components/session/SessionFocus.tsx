@@ -13,6 +13,7 @@ import { cx } from "@/components/ui/classes";
 import {
   feedbackNote,
   newSessionId,
+  NOTHING_TO_ASK,
   STEP_NAME,
   stepLabel,
   tutorPrefill,
@@ -32,7 +33,9 @@ import { SessionClose } from "./SessionClose";
  * when the plan has one; otherwise it asks the tutor model for a question
  * (`POST /api/agent/session`), and when the model is not configured or answers
  * in prose it falls back to the plan's fallback, or says there is no question
- * and lets the learner go on.
+ * and lets the learner go on. A step the server already knows cannot be
+ * filled (no check, no model) is not in the plan at all; `nothingToAsk` says
+ * the plan asks nothing, and the teach step and the close screen say why.
  *
  * Picking is 1 to 4 or a click; Check (or Enter) grades. Every graded answer is
  * one `POST /api/learner/observe`, and the verdict shows only once it is
@@ -78,6 +81,7 @@ export function SessionFocus({
   mode,
   plan,
   modelAvailable,
+  nothingToAsk,
   teach,
   asset,
   assetCompact,
@@ -89,6 +93,8 @@ export function SessionFocus({
   mode: SessionMode;
   plan: SessionStep[];
   modelAvailable: boolean;
+  /** The plan has no question step: nothing in the note to ask, and no model to write one. */
+  nothingToAsk: boolean;
   /** The teaching prose, rendered on the server. */
   teach: ReactNode;
   /** The widget slot on the teach step; null draws the placeholder. */
@@ -136,15 +142,14 @@ export function SessionFocus({
       const s = plan[i];
       if (s === undefined || (s.kind !== "probe" && s.kind !== "check")) return { status: "none", note: "" };
       if (s.question !== null) return { status: "ready", question: s.question };
-      const noModel = "This note has no check to ask, and no tutor model is configured on this server to write one.";
       if (!modelAvailable) {
-        return s.fallback !== null ? { status: "ready", question: s.fallback } : { status: "none", note: noModel };
+        return s.fallback !== null ? { status: "ready", question: s.fallback } : { status: "none", note: NOTHING_TO_ASK };
       }
       const r = resolved[i];
       if (r === undefined) return { status: "loading" };
       if (r.question !== null) return { status: "ready", question: r.question };
       if (s.fallback !== null) return { status: "ready", question: s.fallback };
-      return { status: "none", note: r.note ?? noModel };
+      return { status: "none", note: r.note ?? NOTHING_TO_ASK };
     },
     [plan, modelAvailable, resolved],
   );
@@ -368,6 +373,7 @@ export function SessionFocus({
           minutes={Math.max(1, Math.round(((closedAt ?? startedAt) - startedAt) / 60_000))}
           target={target}
           next={next}
+          reason={nothingToAsk ? NOTHING_TO_ASK : null}
         />
       </Frame>
     );
@@ -384,6 +390,14 @@ export function SessionFocus({
         <>
           <div className="min-w-0">{teach}</div>
           {asset ?? <Placeholder label="No diagram or video explains this concept yet" height={170} className="md:h-[220px]!" />}
+          {nothingToAsk && (
+            <div role="status" className="flex flex-col gap-2 rounded-2xl bg-surface2 p-5">
+              <p className="text-[15px] font-semibold text-text">No question this session</p>
+              <p className="text-[14px] leading-[1.5] text-text2">
+                {NOTHING_TO_ASK} Nothing is recorded; Continue closes the session.
+              </p>
+            </div>
+          )}
           <div className="mt-auto flex items-center justify-end gap-3 md:mt-0">
             <Button onClick={advance} className="md:min-w-40">
               Continue
