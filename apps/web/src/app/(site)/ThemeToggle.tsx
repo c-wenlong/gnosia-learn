@@ -15,7 +15,8 @@ import { siteLink } from "./site";
  * reload and is this browser's theme everywhere: the signed-in layout lets
  * the cookie win over the saved `preference` row ("what the browser last
  * chose"), so switching here also switches the app on this browser. The row,
- * and so every other device, is left alone; only Settings writes it.
+ * and so every other device, is left alone: only the app's own theme
+ * control (Settings and the avatar menu) saves it.
  *
  * Only two states here. `gnosia` looks the same as light on these pages (the
  * brand tokens are not redefined by it) and `system` resolves to one of the
