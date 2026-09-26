@@ -113,15 +113,22 @@ in [content/README.md](content/README.md).
 git clone --recursive https://github.com/c-wenlong/self-learn   # two submodules under tools/
 cd self-learn
 npm ci
-cp .env.example apps/web/.env.local              # Next reads it from apps/web/, never the root
-echo ASSET_FILES_ENABLED=1 >> apps/web/.env.local   # serve videos and diagrams from disk
-createdb self_learn                                 # local Postgres 17; DATABASE_URL in the example points at it
-npm run catalog -- migrate                          # create the tables
-npm run catalog -- index --only manimkc             # once, so the catalog knows where the renders are
+cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `tools/manimkc/` and the manim clone nested inside it. Pulling a clone that predates the move needs `git submodule sync --recursive` first, because both submodules changed path.
+Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. That is enough for the courses and the tutor. Without Postgres the app shows a banner saying nothing you change is saved, and the Library has no files to serve.
+
+Learner state and the videos need Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). With it up:
+
+```bash
+createdb self_learn                                 # first checkout only; a second checkout reuses it
+npm run catalog -- migrate                          # creates the tables, or brings them up to date
+npm run catalog -- index --only manimkc             # once, so the catalog knows where the renders are
+echo ASSET_FILES_ENABLED=1 >> apps/web/.env.local   # serve videos and diagrams from disk
+```
+
+Both the app and the catalog CLI default to `postgres://localhost:5432/self_learn`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another. Already cloned without `--recursive`? Run `git submodule update --init --recursive` to fetch `tools/manimkc/` and the manim clone nested inside it. Pulling a clone that predates the move needs `git submodule sync --recursive` first, because both submodules changed path.
 
 The diagram tool in `tools/tldrawkc/` needs one extra step, because `npm run canvas` runs a compiled CLI that is not committed:
 

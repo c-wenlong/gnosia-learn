@@ -30,7 +30,10 @@ and `npm test` still passes.
 `apps/web/`, and Next loads `.env*` files from the directory it starts in, so
 a copy at the repository root is never read. Set `ASSET_FILES_ENABLED=1`
 there to serve videos and diagrams locally, and `DATABASE_URL` if yours is
-not the default. The file matters for the agent chat too, which needs at least one
+not the default. A non-default `DATABASE_URL` also goes in
+`services/catalog/.env` (copy `services/catalog/.env.example`), because the
+catalog CLI reads that file and never `apps/web/.env.local`; set in one place
+only, `migrate` and the app talk to different databases. The file matters for the agent chat too, which needs at least one
 provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
