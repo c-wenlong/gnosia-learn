@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { ConceptGraph } from "@/components/ConceptGraph";
+import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/classes";
@@ -98,7 +99,7 @@ export function StudioCards({
             {checks.map((c) => (
               <li key={c.id} className="flex min-w-0 items-center gap-2 text-[13px] text-text" title={c.question}>
                 <span aria-hidden className={cx("size-2 shrink-0 rounded-full", CHECK_DOT[c.status])} />
-                <span className="min-w-0 truncate">{c.question}</span>
+                <MathText text={c.question} className="min-w-0 truncate" />
                 <span className="sr-only">, {CHECK_WORD[c.status]}</span>
               </li>
             ))}

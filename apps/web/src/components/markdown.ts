@@ -20,8 +20,8 @@
  * these files use". The subset is small and closed — it is written by one
  * person and by the tutor, both following the same templates — and the repo's
  * standing rule is that a new runtime dependency has to earn itself
- * (CONTRIBUTING.md, guideline 1: the web app's whole dependency list is four
- * packages). `marked` was the other candidate and is the worst fit of the
+ * (CONTRIBUTING.md, guideline 1: the web app's dependency list is short and
+ * each entry is justified). `marked` was the other candidate and is the worst fit of the
  * three: it returns an HTML string, which means `dangerouslySetInnerHTML`,
  * which means a sanitiser as a second dependency and a correct configuration
  * of it forever after.
@@ -40,13 +40,24 @@
  * typed, which is ugly and readable; it never silently disappears. That is the
  * property to preserve if this grows.
  *
- * ## Backslash escapes are deliberately not supported
+ * ## Backslash escapes are deliberately not supported, with one exception
  *
  * CommonMark lets `\*` stand for a literal asterisk. Honouring that here would
- * mean eating backslashes, and a third of the concept notes are full of TeX —
- * `\log`, `\Theta`, `\le` — where the backslash is the content. Escapes are
- * worth less in this corpus than backslashes are, so a backslash is always
- * itself.
+ * mean eating backslashes, and a third of the concept notes are full of TeX,
+ * `\log`, `\Theta`, `\le`, where the backslash is the content. Escapes are
+ * worth less in this corpus than backslashes are, so a backslash is itself.
+ *
+ * The exception is `\$`, which is a literal dollar sign. Without it there is no
+ * way to write a price next to a formula, and `\$` is also what TeX itself
+ * means by it, so a note that writes it is asking for exactly this.
+ *
+ * ## Maths: this module finds it, KaTeX sets it
+ *
+ * `$...$` and `$$...$$` come out of here as the raw LaTeX source, untouched.
+ * Typesetting it is `lib/math.ts`, which runs KaTeX, and `components/Math.tsx`,
+ * which puts the result on the page. The rules for where a span starts and
+ * ends live here, in `mathSpanAt`, so a note and a plain string (a quiz
+ * question, a summary) agree about what counts as maths.
  */
 
 /** One spoken-for piece of a line. */
@@ -66,17 +77,14 @@ export type Inline =
   | { kind: "embed"; target: string; caption: string | null }
   /** `![alt](src)` with a src this module has already vetted. */
   | { kind: "image"; src: string; alt: string }
-  /** `$...$`, transformed just enough to read as notation. */
-  | { kind: "math"; nodes: MathNode[] };
+  /**
+   * `$...$`, or `$$...$$` in the middle of a line. `source` is the LaTeX
+   * between the delimiters, exactly as written; `display` is true for `$$`.
+   */
+  | { kind: "math"; source: string; display: boolean };
 
 /** The two inline nodes that are a picture, and so can stand as a `<figure>`. */
 export type FigureNode = Extract<Inline, { kind: "embed" } | { kind: "image" }>;
-
-/** A piece of a formula. `roman` marks a function name, which stays upright. */
-export type MathNode =
-  | { kind: "text"; text: string; roman?: boolean }
-  | { kind: "sub"; nodes: MathNode[] }
-  | { kind: "sup"; nodes: MathNode[] };
 
 export type Block =
   | { kind: "heading"; level: number; text: string }
@@ -86,7 +94,9 @@ export type Block =
   | { kind: "rule" }
   | { kind: "list"; ordered: boolean; start: number; items: Block[][] }
   /** `callout` is null for a plain `>` quote and the lowercased kind otherwise. */
-  | { kind: "quote"; callout: string | null; title: string; blocks: Block[] };
+  | { kind: "quote"; callout: string | null; title: string; blocks: Block[] }
+  /** `$$ ... $$` as a paragraph of its own. `source` is the LaTeX inside. */
+  | { kind: "math"; source: string };
 
 export interface NoteDocument {
   /** The YAML between the opening and closing `---`, verbatim, or null. */
@@ -189,8 +199,21 @@ function parseBlocks(lines: string[]): Block[] {
       continue;
     }
 
+    const display = displayMathAt(lines, i);
+    if (display) {
+      blocks.push({ kind: "math", source: display[0] });
+      i = display[1];
+      continue;
+    }
+
     const paragraph: string[] = [];
-    while (i < lines.length && !interrupts(lines[i])) {
+    while (
+      i < lines.length &&
+      !interrupts(lines[i]) &&
+      // `$$` on a line of its own ends the sentence above it, the way it does
+      // in Obsidian, but only when it really opens a closed display block.
+      !(paragraph.length > 0 && displayMathAt(lines, i) !== null)
+    ) {
       paragraph.push(lines[i].trim());
       i += 1;
     }
@@ -198,6 +221,41 @@ function parseBlocks(lines: string[]): Block[] {
   }
 
   return blocks;
+}
+
+/**
+ * A display formula standing as a paragraph: a run of lines whose first one
+ * starts with `$$` and whose last one ends with `$$`, with no blank line in
+ * between. Answers the LaTeX inside and the line after the block, or null.
+ *
+ * Null covers every way that shape can fail: no closing `$$` before a blank
+ * line or the end of the file, nothing between the delimiters, a second `$$`
+ * pair inside (`$$a$$ and $$b$$` is a sentence with two formulas in it, not
+ * one formula), or a heading, a code fence or a thematic break before the
+ * close. The caller then reads the lines as an ordinary paragraph, so an
+ * unfinished block shows as the text it is rather than vanishing.
+ *
+ * Those three stop the scan because no line of LaTeX starts with one, so an
+ * unclosed `$$` cannot swallow the note's structure up to some later `$$`.
+ * A list marker and a `>` do not: `- b` and `> 0` are ordinary continuation
+ * lines of a multi-line formula, and stopping there would break real maths.
+ */
+function displayMathAt(lines: string[], from: number): [string, number] | null {
+  if (!lines[from].trim().startsWith("$$")) return null;
+  const body: string[] = [];
+  for (let i = from; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (line === "") return null;
+    if (i > from && (HEADING.test(lines[i]) || FENCE.test(lines[i]) || RULE.test(lines[i]))) return null;
+    body.push(line);
+    const joined = body.join("\n");
+    // The opening line on its own is `$$`, which also ends with `$$`.
+    if (joined.length <= 2 || !joined.endsWith("$$")) continue;
+    const inner = joined.slice(2, -2);
+    if (inner.trim() === "" || /(?<!\\)\$\$/.test(inner)) return null;
+    return [inner.trim(), i + 1];
+  }
+  return null;
 }
 
 const CALLOUT = /^\[!([A-Za-z][\w-]*)\][-+]?\s*(.*)$/;
@@ -326,136 +384,56 @@ export function isExternalHref(href: string): boolean {
   return /^https?:/i.test(href);
 }
 
-const MATH_SYMBOLS: Record<string, string> = {
-  alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", varepsilon: "ε",
-  zeta: "ζ", eta: "η", theta: "θ", iota: "ι", kappa: "κ", lambda: "λ", mu: "μ",
-  nu: "ν", xi: "ξ", pi: "π", rho: "ρ", sigma: "σ", tau: "τ", upsilon: "υ",
-  phi: "φ", varphi: "φ", chi: "χ", psi: "ψ", omega: "ω",
-  Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π",
-  Sigma: "Σ", Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
-  infty: "∞", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠",
-  approx: "≈", equiv: "≡", sim: "∼", prec: "≺", succ: "≻", preceq: "⪯", succeq: "⪰",
-  in: "∈", notin: "∉", subset: "⊂", subseteq: "⊆", cup: "∪", cap: "∩",
-  times: "×", cdot: "·", cdots: "⋯", ldots: "…", dots: "…", pm: "±", div: "÷",
-  to: "→", rightarrow: "→", leftarrow: "←", mapsto: "↦", forall: "∀", exists: "∃",
-  sum: "∑", prod: "∏", int: "∫", sqrt: "√", partial: "∂", nabla: "∇", ell: "ℓ",
-};
-
-/** Upright in real typesetting, so upright here. */
-const MATH_FUNCTIONS = new Set([
-  "log", "lg", "ln", "exp", "max", "min", "sin", "cos", "tan",
-  "lim", "inf", "sup", "deg", "gcd", "det", "dim", "arg", "mod",
-]);
-
-/** Macros that are purely horizontal space. `\!` is negative space: nothing. */
-const MATH_SPACING: Record<string, string> = {
-  ",": "\u2009", ";": "\u2005", ":": "\u2009", " ": " ", "!": "",
-  quad: "\u2003", qquad: "\u2003\u2003", thinspace: "\u2009", enspace: "\u2002",
-};
-
-/**
- * Turn a TeX fragment into something a reader can follow, with no dependency.
- *
- * This is not a typesetting engine and is not trying to be one. It maps the
- * greek letters, relations and function names these notes use to their Unicode
- * equivalents, turns `_` and `^` into real `<sub>` and `<sup>`, and collapses
- * the spacing macros. KaTeX was the alternative and would be strictly better
- * output: it can even run in a server component with zero client JavaScript.
- * It was passed over because it renders to an HTML string, so it would put
- * exactly one `dangerouslySetInnerHTML` into this renderer and undo the reason
- * the rest of it is safe by construction, and because it ships a stylesheet
- * and six font files to set `$f(n)$`.
- *
- * Anything it does not recognise is emitted verbatim, backslash and all. A
- * `\frac{a}{b}` looks unrendered because it is, which is the honest signal;
- * quietly printing `frac{a}{b}` would look like a rendering rather than a gap.
- */
-function parseMath(src: string): MathNode[] {
-  let i = 0;
-
-  function group(): MathNode[] {
-    if (src[i] === "{") {
-      const start = (i += 1);
-      let depth = 1;
-      while (i < src.length && depth > 0) {
-        if (src[i] === "{") depth += 1;
-        else if (src[i] === "}") depth -= 1;
-        i += 1;
-      }
-      return parseMath(src.slice(start, depth === 0 ? i - 1 : i));
-    }
-    if (src[i] === "\\") {
-      const macro = /^\\([a-zA-Z]+|.)/.exec(src.slice(i));
-      if (macro) {
-        i += macro[0].length;
-        return [macroNode(macro[1])];
-      }
-    }
-    const char = src[i];
-    if (char === undefined) return [];
-    i += 1;
-    return [{ kind: "text", text: char }];
-  }
-
-  function macroNode(name: string): MathNode {
-    const space = MATH_SPACING[name];
-    if (space !== undefined) return { kind: "text", text: space };
-    if (MATH_SYMBOLS[name]) return { kind: "text", text: MATH_SYMBOLS[name] };
-    if (MATH_FUNCTIONS.has(name)) return { kind: "text", text: name, roman: true };
-    return { kind: "text", text: `\\${name}` };
-  }
-
-  const nodes: MathNode[] = [];
-  let text = "";
-  const flush = () => {
-    if (text !== "") nodes.push({ kind: "text", text });
-    text = "";
-  };
-
-  while (i < src.length) {
-    const char = src[i];
-    if (char === "\\") {
-      const macro = /^\\([a-zA-Z]+|.)/.exec(src.slice(i));
-      if (macro) {
-        i += macro[0].length;
-        const node = macroNode(macro[1]);
-        if (node.kind === "text" && node.roman !== true) {
-          text += node.text;
-        } else {
-          flush();
-          nodes.push(node);
-        }
-        continue;
-      }
-    }
-    if (char === "_" || char === "^") {
-      flush();
-      i += 1;
-      nodes.push({ kind: char === "_" ? "sub" : "sup", nodes: group() });
-      continue;
-    }
-    // Bare braces are TeX grouping and have no visible width.
-    if (char === "{" || char === "}") {
-      i += 1;
-      continue;
-    }
-    text += char;
-    i += 1;
-  }
-  flush();
-
-  return nodes;
+/** One maths span found at the start of a string, with how far it runs. */
+export interface MathSpan {
+  /** The LaTeX between the delimiters, as written. */
+  source: string;
+  /** `$$...$$` rather than `$...$`. */
+  display: boolean;
+  /** Delimiters included, so a scanner can step past the whole span. */
+  length: number;
 }
 
 /**
- * `$...$`, but only when it is really a formula.
- *
- * The delimiters have to hug their content — no space just inside either one —
- * and the content cannot hold another `$`. That is what keeps "it costs $5 and
- * saves $3" out of the maths renderer: the span between those two dollars ends
- * in a space, so it is not one.
+ * `$$...$$`: anything up to the next unescaped `$$`, newlines included, since
+ * a formula in a plain string may be laid out over several lines.
  */
-const MATH_SPAN = /^\$(\S(?:[^$\n]*\S)?)\$/;
+const DISPLAY_SPAN = /^\$\$((?:\\[\s\S]|[^\\$]|\$(?!\$))+?)\$\$/;
+
+/**
+ * `$...$`, but only when it is really a formula. These are Pandoc's rules:
+ *
+ * - the delimiters hug their content: no space just inside either one;
+ * - the content holds no unescaped `$` and no newline (`\$` inside is TeX's
+ *   own dollar sign, and stays in the source for KaTeX);
+ * - the closing `$` is not followed by a digit.
+ *
+ * The first two keep "it costs $5 and saves $3" out of the maths renderer:
+ * the span between those two dollars ends in a space, so it is not one. The
+ * third catches the price range the first two miss, "$5-$10", where both
+ * dollars hug a character.
+ */
+const INLINE_SPAN =
+  /^\$((?:\\[^\n]|[^\\$\s])(?:(?:\\[^\n]|[^\\$\n])*(?:\\[^\n]|[^\\$\s]))?)\$(?!\d)/;
+
+/**
+ * The maths span `src` opens with, or null when it does not open one.
+ *
+ * The one definition of where maths starts and ends, shared by `parseInline`
+ * here and by `splitMath` in `lib/math.ts`, which runs the same rules over a
+ * plain string. A `$$` that does not close is never retried as a `$...$`
+ * starting at its second dollar; the callers step past both dollars as text.
+ */
+export function mathSpanAt(src: string): MathSpan | null {
+  if (src[0] !== "$") return null;
+  if (src[1] === "$") {
+    const display = DISPLAY_SPAN.exec(src);
+    if (display === null || display[1].trim() === "") return null;
+    return { source: display[1].trim(), display: true, length: display[0].length };
+  }
+  const inline = INLINE_SPAN.exec(src);
+  return inline === null ? null : { source: inline[1], display: false, length: inline[0].length };
+}
 
 const INLINE_CODE = /^(`+)([\s\S]*?)\1/;
 const EMBED = /^!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/;
@@ -501,10 +479,22 @@ export function parseInline(src: string): Inline[] {
       }
     }
 
+    // `\$` is a literal dollar, the one backslash escape this parser honours.
+    if (char === "\\" && src[i + 1] === "$") {
+      text += "$";
+      i += 2;
+      continue;
+    }
+
     if (char === "$") {
-      const math = MATH_SPAN.exec(rest);
+      const math = mathSpanAt(rest);
       if (math) {
-        push({ kind: "math", nodes: parseMath(math[1]) }, math[0].length);
+        push({ kind: "math", source: math.source, display: math.display }, math.length);
+        continue;
+      }
+      if (src[i + 1] === "$") {
+        text += "$$";
+        i += 2;
         continue;
       }
     }
@@ -593,7 +583,8 @@ export function standaloneFigure(nodes: Inline[]): FigureNode | null {
  * A heading's link id has to come from what a reader sees, not from the
  * markdown source, so this walks the same `Inline[]` tree the renderer walks
  * and keeps only the words: a link or a wikilink contributes its label, and
- * math the symbols `parseMath` already substituted. That is what makes
+ * maths its LaTeX source, which `slugify` then reduces to its letters and
+ * digits (`$\Theta(n)$` slugs as `theta-n`). That is what makes
  * `` `softmax` `` and `**softmax**` slug the same: both reduce to the plain
  * word before `slugify` ever sees them.
  *
@@ -624,14 +615,10 @@ export function inlineText(nodes: Inline[]): string {
         case "image":
           return node.alt || node.src;
         case "math":
-          return mathText(node.nodes);
+          return node.source;
       }
     })
     .join("");
-}
-
-function mathText(nodes: MathNode[]): string {
-  return nodes.map((node) => (node.kind === "text" ? node.text : mathText(node.nodes))).join("");
 }
 
 /**

@@ -10,9 +10,9 @@ import {
   type Block,
   type FigureNode,
   type Inline,
-  type MathNode,
 } from "@/components/markdown";
 import { EmbedImage } from "@/components/EmbedImage";
+import { DisplayMath, InlineMath } from "@/components/Math";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import type { AssetProblemCode } from "@/lib/asset-problems";
 
@@ -64,11 +64,13 @@ import type { AssetProblemCode } from "@/lib/asset-problems";
  * So there is no sanitiser here, because there is nothing to sanitise:
  *
  * 1. **No HTML ever becomes markup.** This renderer builds React elements and
- *    never an HTML string, so `dangerouslySetInnerHTML` appears nowhere in it.
- *    A `<script>` in a note is text, and React escapes text. That is a property
- *    of the shape of the code, not a rule someone has to remember, which is
- *    exactly what a sanitiser is not: an allowlist is one bad configuration
- *    away from letting something through, and it has to be maintained.
+ *    never an HTML string. A `<script>` in a note is text, and React escapes
+ *    text. That is a property of the shape of the code, not a rule someone has
+ *    to remember, which is exactly what a sanitiser is not: an allowlist is one
+ *    bad configuration away from letting something through, and it has to be
+ *    maintained. The one HTML string on the page is KaTeX's rendering of a
+ *    formula, built from the LaTeX alone with untrusted commands switched off;
+ *    `components/Math.tsx` says why that is safe.
  * 2. **The one attribute built from note text is checked.** `href` and `src`
  *    go through `safeHref`, which admits relative URLs and `http`, `https` and
  *    `mailto`, and refuses everything else — `javascript:` and `data:`
@@ -267,6 +269,9 @@ function BlockView({
 
     case "quote":
       return <QuoteView block={block} links={links} ids={ids} className={space.quote} tight={tight} />;
+
+    case "math":
+      return <DisplayMath source={block.source} className={space.paragraph} />;
   }
 }
 
@@ -681,11 +686,7 @@ function InlineView({ node, links }: { node: Inline; links: Resolvers }) {
       );
 
     case "math":
-      return (
-        <span className="italic">
-          <MathNodes nodes={node.nodes} />
-        </span>
-      );
+      return node.display ? <DisplayMath source={node.source} /> : <InlineMath source={node.source} />;
   }
 }
 
@@ -699,37 +700,5 @@ function Anchor({ href, children }: { href: string; children: React.ReactNode })
     >
       {children}
     </a>
-  );
-}
-
-function MathNodes({ nodes }: { nodes: MathNode[] }) {
-  return (
-    <>
-      {nodes.map((node, i) => {
-        if (node.kind === "sub") {
-          return (
-            <sub key={i}>
-              <MathNodes nodes={node.nodes} />
-            </sub>
-          );
-        }
-        if (node.kind === "sup") {
-          return (
-            <sup key={i}>
-              <MathNodes nodes={node.nodes} />
-            </sup>
-          );
-        }
-        // Variables lean, function names stand up: the one convention that
-        // makes `n log n` look like notation rather than like a typo.
-        return node.roman === true ? (
-          <span key={i} className="not-italic">
-            {node.text}
-          </span>
-        ) : (
-          <span key={i}>{node.text}</span>
-        );
-      })}
-    </>
   );
 }
