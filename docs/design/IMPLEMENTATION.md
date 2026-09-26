@@ -289,6 +289,7 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Library card meta | "4:12 · manim" | the tool and the size ("manim · 9.6 MB") | the catalog records no duration |
 | Library card concept | a concept with a mastery dot on every card | the first concept from `asset_concept` with its dot and "+n" for more; with none, the asset's topic in plain text and no dot | only notes, sessions and the two diagrams have `asset_concept` rows; no video does yet |
 | Library grid | fixed 300px cards | an auto-fill grid, 280px minimum | four across at 1392px and one on a phone |
+| Library search | DESIGN.md's API table proposed a search endpoint | the page's own `?q=`, searched on the server during render; no JSON endpoint | the library is the only caller today; phase 1c's Learn search can lift `searchHits` and `readSearchText` behind a route when it needs one |
 | Asset page eyebrow | "RENDERED 2026-09-12" | "INDEXED" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
 | Asset page Mark watched | on a video | on every asset, reading "Mark read" for anything that is not a video | one `watched` event kind either way; watching a video and reading a note are both study |
 | Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
