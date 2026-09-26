@@ -141,6 +141,14 @@ describe("activeDays", () => {
     ];
     expect([...activeDays(events, UTC)].sort()).toEqual(["2026-09-23", "2026-09-24"]);
   });
+
+  it("counts a watched asset as a study day, and not as a concept done", () => {
+    const events: HabitEvent[] = [
+      { at: "2026-09-26T08:00:00Z", type: "watched", asset: "manimkc:out/a.mp4", kind: "video" },
+    ];
+    expect([...activeDays(events, UTC)]).toEqual(["2026-09-26"]);
+    expect(conceptsStudied(events, SAT, UTC)).toBe(0);
+  });
 });
 
 describe("the daily target", () => {
