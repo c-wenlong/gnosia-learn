@@ -1,4 +1,4 @@
-import { closeTutorSession, readConceptGraph, recordObservation } from "@self-learn/catalog/state";
+import { readConceptGraph, recordObservation } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, optionalBoolean, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
@@ -116,15 +116,12 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
     // studio one) refuses the answer. Idempotent for every later answer.
     openSession: input.sessionId === null ? undefined : { title: titleOf(input.conceptSlug), goal: input.conceptSlug },
     requestId: input.requestId,
+    // A page going away with an answer still saving sends it again with this:
+    // the answer and the close commit together, so neither lands without the
+    // other. The answer is idempotent by its request id, so whichever copy
+    // arrives first records it and the other replays.
+    closeSession: input.closeSession,
   });
-
-  // After the answer, in the same request, so the two cannot arrive out of
-  // order: this is how a page that is going away closes a session while an
-  // answer is still saving. The answer is idempotent by its request id, so
-  // whichever of this and the original request lands first records it and
-  // the other replays.
-  const closed =
-    input.closeSession && input.sessionId !== null ? (await closeTutorSession(db, input.sessionId)).closed : false;
 
   return {
     concept: recorded.concept,
@@ -142,6 +139,6 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
         : { due: recorded.card.due, intervalDays: recorded.card.intervalDays, created: recorded.cardCreated },
     session: input.sessionId,
     replayed: recorded.replayed,
-    closed,
+    closed: recorded.closed,
   };
 });

@@ -402,9 +402,10 @@ reaching the close screen (with one retry), and with `keepalive` when the
 learner leaves mid-session (Exit, Ask the tutor, a closed tab), so an
 answered session does not stay `running`. When an answer is still saving,
 leaving sends that answer again with `closeSession: true` instead of a bare
-close: the observe route records it (or replays it, by its request id) and
-then closes, in one request, so the close can never land first and have the
-answer refused by a closed session, and nothing has to run after `pagehide`.
+close: `recordObservation` records it (or replays it, by its request id) and
+closes the session in the same locked transaction, so the close can never
+land first and have the answer refused, the two commit together or not at
+all, and nothing has to run after `pagehide`.
 Checked in a browser for Exit and for a tab closed mid-save. A tab that dies before either
 still leaves one running, as a `learn session start` never closed does.
 

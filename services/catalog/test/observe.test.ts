@@ -392,6 +392,33 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
       expect(types.indexOf("session-close")).toBeGreaterThan(types.lastIndexOf("observation"));
     });
 
+    it("closes in the answer's own transaction with closeSession, replay or not", async () => {
+      const graph = fixtureGraph();
+      const base = { conceptId: "alpha", correct: true, graph, session: "s-5", openSession: {}, requestId: "c-1" };
+      const first = await recordObservation(scratch.db, { ...base, closeSession: true, now: NOW });
+      expect(first).toMatchObject({ replayed: false, closed: true });
+      expect((await readEvents(scratch.db)).map((e) => e.type)).toEqual(["session-start", "observation", "session-close"]);
+      // The original copy arriving after: a replay, and nothing more to close.
+      expect(await recordObservation(scratch.db, base)).toMatchObject({ replayed: true, closed: false });
+      expect(await readEvents(scratch.db)).toHaveLength(3);
+    });
+
+    it("writes nothing when the session cannot take the answer, closeSession or not", async () => {
+      await ensureSession(scratch.db, { id: "studio-2", kind: "studio", startedAt: NOW });
+      await expect(
+        recordObservation(scratch.db, {
+          conceptId: "alpha",
+          correct: true,
+          graph: fixtureGraph(),
+          session: "studio-2",
+          openSession: {},
+          closeSession: true,
+          now: NOW,
+        }),
+      ).rejects.toThrow(StateError);
+      expect(await readEvents(scratch.db)).toEqual([]);
+    });
+
     it("leaves chosen out of the event when the caller does not know it, as the CLI does", async () => {
       await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph: fixtureGraph(), now: NOW });
       expect(Object.keys((await readEvents(scratch.db))[0] ?? {})).not.toContain("chosen");

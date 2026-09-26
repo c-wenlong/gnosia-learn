@@ -72,6 +72,12 @@ export interface ObserveInput {
    * racing the first answer from landing between the two.
    */
   openSession?: { title?: string | null; goal?: string | null };
+  /**
+   * Close `session` after recording (or replaying) this answer, in the same
+   * transaction: the page sends it when it is leaving with an answer still
+   * saving, and has no second chance to send a close.
+   */
+  closeSession?: boolean;
   /** One clock for the event, the model's `lastSeen` and the card. */
   now?: Date;
   learnerId?: string;
@@ -112,6 +118,8 @@ export interface ObserveResult {
   due: string | null;
   /** True when `requestId` had already been recorded and nothing was written. */
   replayed: boolean;
+  /** True when `closeSession` closed the session in this call. */
+  closed: boolean;
 }
 
 /** The request ids the page makes: letters, digits, `-` and `_`. */
@@ -164,6 +172,16 @@ export async function recordObservation(
   const at = now.toISOString();
 
   return withLearnerLock(db, learnerId, async (tx) => {
+    const result = await record(tx);
+    // After the answer and in its transaction: both land, or neither does.
+    const sessionId = input.session ?? null;
+    if (input.closeSession === true && sessionId !== null) {
+      result.closed = (await closeInTransaction(tx, sessionId, now, learnerId)).closed;
+    }
+    return result;
+  });
+
+  async function record(tx: CatalogDatabase): Promise<ObserveResult> {
     // Inside the lock, so two copies of one request cannot both miss the
     // other: the second waits for the first to commit and then finds it.
     // Before the session check, so a replay writes nothing and never fails.
@@ -253,8 +271,9 @@ export async function recordObservation(
       cardCreated: card !== null && existing === undefined,
       due: card?.due ?? existing?.due ?? null,
       replayed: false,
+      closed: false,
     };
-  });
+  }
 }
 
 /** What the first write of `requestId` recorded, as a result, or null if nothing did. */
@@ -300,6 +319,7 @@ async function replayOf(
     cardCreated: false,
     due: card?.due ?? null,
     replayed: true,
+    closed: false,
   };
 }
 
@@ -408,7 +428,17 @@ export async function closeTutorSession(
   options: { now?: Date; learnerId?: string } = {},
 ): Promise<CloseSessionResult> {
   const { now = new Date(), learnerId = LOCAL_LEARNER_ID } = options;
-  return withLearnerLock(db, learnerId, async (tx) => {
+  return withLearnerLock(db, learnerId, (tx) => closeInTransaction(tx, id, now, learnerId));
+}
+
+/** `closeTutorSession`'s write, inside the caller's locked transaction. */
+async function closeInTransaction(
+  tx: CatalogDatabase,
+  id: string,
+  now: Date,
+  learnerId: string,
+): Promise<CloseSessionResult> {
+  {
     const rows = await tx
       .select()
       .from(event)
@@ -435,5 +465,5 @@ export async function closeTutorSession(
     await appendEvent(tx, { at: now.toISOString(), type: "session-close", session: id, concepts }, learnerId);
     const { moved } = await endSession(tx, id, "closed");
     return { ...summary, closed: moved };
-  });
+  }
 }
