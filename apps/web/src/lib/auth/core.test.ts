@@ -5,6 +5,7 @@ import {
   HOME_PATH,
   isApiPath,
   isPublicPath,
+  originFromHeaders,
   passwordMatches,
   readAuthConfig,
   safeNextPath,
@@ -116,6 +117,33 @@ describe("safeNextPath", () => {
     ]) {
       expect(safeNextPath(bad)).toBe(HOME_PATH);
     }
+  });
+});
+
+describe("originFromHeaders", () => {
+  const fallback = "http://localhost:3000";
+  const of = (h: Record<string, string>) => originFromHeaders(new Headers(h), fallback);
+
+  it("names the host the browser addressed, with the request's own scheme", () => {
+    expect(of({ host: "192.168.1.20:3000" })).toBe("http://192.168.1.20:3000");
+    expect(of({ host: "gnosia.example" })).toBe("http://gnosia.example");
+  });
+
+  it("takes the scheme from a TLS-terminating proxy, and ignores X-Forwarded-Host", () => {
+    expect(of({ host: "gnosia.example", "x-forwarded-proto": "https" })).toBe("https://gnosia.example");
+    expect(of({ host: "gnosia.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" })).toBe("https://gnosia.example");
+    expect(of({ host: "gnosia.example", "x-forwarded-proto": "javascript" })).toBe("http://gnosia.example");
+  });
+
+  it("uses only the first value of a forwarding chain", () => {
+    expect(of({ host: "a.example, b.example", "x-forwarded-proto": "https, http" })).toBe("https://a.example");
+  });
+
+  it("falls back rather than throwing on a missing or malformed host", () => {
+    expect(of({})).toBe(fallback);
+    expect(of({ host: "" })).toBe(fallback);
+    expect(of({ host: "not a host" })).toBe(fallback);
+    expect(of({ host: "[::1" })).toBe(fallback);
   });
 });
 
