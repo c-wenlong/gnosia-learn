@@ -1,0 +1,165 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { EmbedImage } from "@/components/EmbedImage";
+import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
+import { SessionFocus } from "@/components/session/SessionFocus";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { WidgetFailure } from "@/components/WidgetFailure";
+import { accessFor, loadFileAccess, readFileProblems } from "@/lib/asset-library";
+import { problemForAccess } from "@/lib/asset-problems";
+import { isConceptSlug } from "@/lib/concept-workspace-core";
+import { loadConceptWorkspace } from "@/lib/concept-workspace";
+import { loadHabit } from "@/lib/habit";
+import { assetFileHref, assetStatusHref } from "@/lib/library";
+import { embedTargets } from "@/lib/note-embeds";
+import { parseMode, teachProse } from "@/lib/session-core";
+import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
+
+/**
+ * Session focus mode (hi-fi 05, 06 and 07, and 15 on a phone): one concept
+ * taught as a short scripted loop, probe, teach, check, close, in focus mode
+ * with no top bar.
+ *
+ * Everything is read here, on the server: the workspace (the note, its
+ * checks, its assets, the learner's p(L)), the step plan built from the
+ * checks, the teaching prose cut from the note and rendered by `NoteProse`,
+ * the asset for the widget slot, and the habit numbers the close screen's
+ * target tile shows. The client session receives it whole and writes one
+ * `POST /api/learner/observe` per graded answer, then `router.refresh()`, which
+ * re-runs this and moves the streak and target pills.
+ *
+ * `?mode=check` (Quiz me) skips the probe and the teaching and asks the note's
+ * checks.
+ */
+
+type Props = {
+  params: Promise<{ concept: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { concept } = await params;
+  const read = isConceptSlug(concept) ? await loadConceptWorkspace(concept) : null;
+  return { title: read?.state === "ok" ? `${read.workspace.title} · Session` : "Session" };
+}
+
+export default async function SessionPage({ params, searchParams }: Props) {
+  // A concept id is lowercase letters, digits and hyphens, so a segment with
+  // an escape in it was never one; the page's segment is not decoded.
+  const { concept: slug } = await params;
+  if (!isConceptSlug(slug)) notFound();
+  const query = await searchParams;
+  const mode = parseMode(Array.isArray(query.mode) ? query.mode[0] : query.mode);
+
+  const read = await loadConceptWorkspace(slug);
+  if (read.state === "not-found") notFound();
+  if (read.state === "unreachable") return <Unreachable slug={slug} />;
+  const w = read.workspace;
+
+  const [data, habit, access] = await Promise.all([loadSessionPage(w, mode), loadHabit(), loadFileAccess()]);
+
+  // The note's own `![[embeds]]`, decided on the server exactly as the
+  // workspace decides them, so the prose never renders a broken picture.
+  const prose = w.note.available ? teachProse(w.note.source) : "";
+  const embedId = (name: string) => `diagram:learn/assets/${name}`;
+  const selfLearn = accessFor(access, "self-learn");
+  const embedProblems =
+    prose !== "" && selfLearn.ok ? await readFileProblems(embedTargets(prose).map(embedId)) : new Map();
+  const resolveEmbed = (name: string): EmbedResolution => {
+    if (!selfLearn.ok) return { problem: problemForAccess(selfLearn.reason) };
+    const id = embedId(name);
+    const problem = embedProblems.get(id) ?? null;
+    if (problem !== null) return { problem };
+    return { src: assetFileHref(id), statusHref: assetStatusHref(id) };
+  };
+  const known = new Set([w.slug, ...[...w.requires, ...w.assumes, ...w.dependants].map((r) => r.slug)]);
+
+  const teach =
+    prose !== "" ? (
+      <NoteProse
+        source={prose}
+        idPrefix="teach-"
+        resolveNote={(target) => (known.has(target) ? `/learn/${target}` : undefined)}
+        resolveEmbed={resolveEmbed}
+        className="md:text-[17px] md:leading-[27px]"
+      />
+    ) : (
+      <p className="text-[15px] leading-[1.5] text-text md:text-[17px] md:leading-[27px]">
+        {w.summary || "This note has no body yet. Read the summary in the workspace, then check yourself below."}
+      </p>
+    );
+
+  return (
+    <div data-layout="focus">
+      {/* Keyed, so Keep going to another concept's session starts a fresh one
+          rather than carrying this one's answers across the navigation. */}
+      <SessionFocus
+        key={`${w.slug}:${mode}`}
+        slug={w.slug}
+        title={w.title}
+        mode={mode}
+        plan={data.plan}
+        modelAvailable={data.modelAvailable}
+        teach={teach}
+        asset={assetElement(data.asset, false)}
+        assetCompact={assetElement(data.asset, true)}
+        next={data.next}
+        target={{ done: habit.target.done, total: habit.target.total, reachable: habit.reachable }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The widget slot's content, or null for the placeholder. The check step shows
+ * a diagram again, smaller, so the question can be answered against it; a
+ * video is not replayed there.
+ */
+function assetElement(asset: TeachAsset, compact: boolean) {
+  if (asset.kind === "none") return null;
+  if (asset.kind === "failed") {
+    if (compact) return null;
+    return (
+      <WidgetFailure
+        headline={
+          <>
+            <span className="font-medium">{asset.title}</span> cannot be shown here.
+          </>
+        }
+        code={asset.code}
+        className="min-h-[180px]"
+      />
+    );
+  }
+  if (asset.kind === "video") {
+    if (compact) return null;
+    return <VideoPlayer src={asset.src} statusHref={asset.statusHref} poster={asset.poster} title={asset.title} />;
+  }
+  return (
+    <div className={compact ? "overflow-hidden rounded-xl [&_img]:max-h-[126px]" : "overflow-hidden rounded-xl [&_img]:max-h-[360px]"}>
+      <EmbedImage src={asset.src} statusHref={asset.statusHref} alt={asset.title} name={asset.title} vector />
+    </div>
+  );
+}
+
+function Unreachable({ slug }: { slug: string }) {
+  return (
+    <div data-layout="focus">
+      <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
+        <h1 className="font-display text-[28px] font-bold text-text">The session cannot start</h1>
+        <p className="text-[14px] text-text2">
+          The database could not be reached, so there is no note to teach from and nowhere to record an answer. Nothing
+          is lost. Start Postgres and reload.
+        </p>
+        <Link
+          href={`/learn/${slug}`}
+          className="text-[14px] font-medium text-accent-text underline-offset-4 hover:underline"
+        >
+          Back to the workspace
+        </Link>
+      </div>
+    </div>
+  );
+}

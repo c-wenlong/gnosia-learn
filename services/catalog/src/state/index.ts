@@ -74,6 +74,16 @@ export {
   type Model,
 } from "./mastery";
 export {
+  closeTutorSession,
+  openTutorSession,
+  recordObservation,
+  type CloseSessionResult,
+  type ObserveInput,
+  type ObserveResult,
+  type OpenSessionInput,
+  type Propagation,
+} from "./observe";
+export {
   conceptSummaries,
   dueReviews,
   emptyReviews,
@@ -147,6 +157,7 @@ export {
 export {
   domainOf,
   dueConcepts,
+  readConceptGraph,
   readKnowledgeBase,
   EMPTY_KNOWLEDGE_BASE,
   type KbConcept,

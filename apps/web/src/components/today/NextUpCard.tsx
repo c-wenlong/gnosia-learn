@@ -35,10 +35,7 @@ export function NextUpCard({
           </p>
         </div>
         <div className="flex flex-col gap-2.5 md:w-[190px] md:shrink-0">
-          {/* Not prefetched until phase 1d builds the session route: a
-              prefetch of a 404 never settles, which holds the page's
-              network open. */}
-          <Button href={`/learn/${encoded}/session`} prefetch={false} block>
+          <Button href={`/learn/${encoded}/session`} block>
             <span className="md:hidden">Continue</span>
             <span className="max-md:hidden">Continue teaching</span>
           </Button>

@@ -85,11 +85,14 @@ export function TutorChat({
   title,
   sources: initialSources,
   suggestions,
+  initialDraft,
 }: {
   slug: string;
   title: string;
   sources: CitationSource[];
   suggestions: string[];
+  /** Put in the input, not sent: a session's "Ask the tutor" (`?ask=`). */
+  initialDraft?: string;
 }) {
   const key = threadKey(slug);
   const raw = useSyncExternalStore(
@@ -100,7 +103,7 @@ export function TutorChat({
   const turns = useMemo(() => parseThread(raw), [raw]);
   const setTurns = (next: TutorTurn[]) => writeTurns(key, next);
   const [sources, setSources] = useState(initialSources);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -255,6 +258,7 @@ export function TutorChat({
           <span className="sr-only">Ask the tutor about {title}</span>
           <input
             ref={inputRef}
+            autoFocus={initialDraft !== undefined}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             maxLength={INPUT_LIMIT}
