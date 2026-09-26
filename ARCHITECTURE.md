@@ -136,7 +136,7 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Eleven pages, a 404, and the API handlers below. Pages are server components;
+Twelve pages, a 404, and the API handlers below. Pages are server components;
 the interactive parts opt into the client one component at a time. The app
 is mid-redesign: [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)
 says which pages are on the new design and which phase replaces the rest.
@@ -148,7 +148,8 @@ says which pages are on the new design and which phase replaces the rest.
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
 | `/settings` | `settings/page.tsx` | The daily target, streak leeway, theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
-| `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph |
+| `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
+| `/learn/[concept]/session` | `learn/[concept]/session/page.tsx` | Session focus mode: probe, teach (the note's prose and its diagram or video), check, close. Every graded answer is evidence through `POST /api/learner/observe`; the close screen shows what moved and what got scheduled. `?mode=check` asks the note's checks only |
 | `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset (a player with chapters and transcript, a diagram, a file's words, or a link) with Mark watched, the concepts it explains, related assets and its derivations |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
@@ -156,6 +157,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
 | not found | `not-found.tsx` | The 404 |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn, for a course topic or, with `conceptSlug`, for one concept note |
+| `POST /api/agent/session` | `api/agent/session/route.ts` | One multiple-choice question for a session step, written by the tutor model as JSON and refused if it is not; writes nothing |
 | `GET /api/concepts/[slug]` | `api/concepts/[slug]/route.ts` | Everything the concept workspace shows about one concept, as JSON |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
 | `GET /api/review/due` | `api/review/due/route.ts` | The due cards as the review page renders them (`?concept=` first), with the next due instant |
@@ -166,6 +168,8 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
 | `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study for the streak, never evidence |
+| `POST /api/learner/observe` | `api/learner/observe/route.ts` | One graded session answer recorded as `learn observe` records it (`recordObservation`): the event, the mastery with propagation, the card. The first answer opens the session |
+| `POST /api/learner/session/close` | `api/learner/session/close/route.ts` | Close a session: one `session-close` event and the row to `closed`, once |
 
 The asset route is the one place the app reads a file the deployment does not
 contain. A video sits under manimkc's data root and a diagram under
@@ -819,9 +823,10 @@ Postgres would put a staler one in front of the agent.
     through `packages/content`, reads `concept`, `mastery` and `review` through
     the store, and writes `progress`, `recap` and `preference`. `event`,
     `mastery` and `review` are written only through the store's own evidence
-    functions, never assembled by a caller: the CLI's commands, and the one
-    page-facing write, `POST /api/review/grade`, which calls the same
-    `gradeReview` that `learn review grade` does. The only
+    functions, never assembled by a caller: the CLI's commands, and the two
+    page-facing evidence writes, `POST /api/review/grade`, which calls the same
+    `gradeReview` that `learn review grade` does, and `POST /api/learner/observe`,
+    which calls the same `recordObservation` that `learn observe` does. The only
     writer of the content tables is `npm run catalog -- index`, and the only
     thing it writes from is files in git. A page that could write a derived
     table would make it a source of truth no index run could reproduce.

@@ -38,7 +38,6 @@ import {
   MASTERY_THRESHOLD,
   expectedInfoGain,
   masteryLabel,
-  update as bktUpdate,
 } from "../../../../scripts/learn/lib/bkt.mjs";
 import {
   buildGraph,
@@ -53,9 +52,6 @@ import {
 import {
   dueCards,
   forecast,
-  gradeFromOutcome,
-  newCard,
-  review as reviewCard,
 } from "../../../../scripts/learn/lib/schedule.mjs";
 import {
   buildIndex,
@@ -74,7 +70,6 @@ import {
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
 import { ContentError, TOPICS_FILE } from "@self-learn/content";
-import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -87,16 +82,13 @@ import {
   ensureSession,
   assertKnownConcepts,
   gradeReview,
-  ensureEntry,
   ensureLearner,
-  propagateCorrect,
   readEvents,
   readModel,
   readReviews,
+  recordObservation,
   replayMastery,
   StateError,
-  upsertReview,
-  withLearnerLock,
   writeModel,
   writeReviews,
   type BktParams,
@@ -742,92 +734,31 @@ commands.observe = async ({ values }, session) => {
 
   const correct = bool(values.correct);
   const source = values.source ?? "probe";
-  // A probe measures; it does not teach. Only teaching and review get the
-  // BKT transit step, otherwise probing alone would inflate mastery.
-  const opportunity = bool(values.opportunity, source !== "probe");
 
-  // One clock for the whole write. The card's `now`, the model's `lastSeen`
-  // and the event's `at` were three separate `new Date()` calls before, which
-  // put them a few milliseconds apart and made a replay of the schedule
-  // almost-but-not-quite reproduce the stored due dates.
-  const now = new Date();
-  const at = now.toISOString();
-
-  const schedule = bool(values.schedule, true);
-
-  // Read, compute and write under a lock on the learner row. The whole thing
-  // is a read-modify-write on `mastery`: without the lock two concurrent
-  // `observe` calls both read the same prior and the second write silently
-  // discards the first, leaving two events in the log and one of them absent
-  // from the projection until somebody rebuilds.
-  const { before, after, propagated, due } = await withLearnerLock(
-    db,
-    LOCAL_LEARNER_ID,
-    async (tx) => {
-      const model = await readModel(tx);
-      const entry = ensureEntry(model, id);
-      const priorPL = entry.pL;
-      const nextPL = bktUpdate(priorPL, correct, {
-        params: bktParams(model.params),
-        opportunity,
-      }) as number;
-
-      entry.pL = nextPL;
-      entry.observations += 1;
-      if (correct) entry.correct += 1;
-      entry.lastSeen = at;
-
-      const spread =
-        correct && !bool(values.noPropagate) ? propagateCorrect(model, graph, id) : [];
-
-      // Whether an answer teaches and whether it should come back for review
-      // are different questions, and tying both to `source` conflated them: a
-      // probe correctly skips the learning step, but that also meant a concept
-      // you already knew was never scheduled and would silently rot. Every
-      // answered question now earns a review slot, whatever the source.
-      const reviews = await readReviews(tx);
-      const nextGrade =
-        values.grade !== undefined
-          ? Number(values.grade)
-          : (gradeFromOutcome(correct, nextPL) as number);
-      const card: ReviewCard | null = !schedule
-        ? null
-        : (reviewCard(reviews.cards[id] ?? newCard(id, now), nextGrade, { now }) as ReviewCard);
-
-      // The event first, then the projections. `event` is the only copy;
-      // `mastery` and `review` can be replayed from it, so a failure between
-      // the two costs a `model --rebuild` rather than the observation itself.
-      await appendEvent(tx, {
-        at,
-        type: "observation",
-        concept: id,
-        correct,
-        propagated: spread.map((x) => ({ concept: x.concept, hops: x.hops })),
-        source,
-        opportunity,
-        grade: nextGrade,
-        // New in bundle 5, and the reason the schedule is replayable: without
-        // it a rebuild cannot tell an answer that scheduled a card from one
-        // that was recorded with `--schedule false`.
-        scheduled: schedule,
-        pLBefore: priorPL,
-        pLAfter: nextPL,
-        question: values.question ?? null,
-        answer: values.answer ?? null,
-        session: values.session ?? null,
-      });
-
-      await writeModel(tx, model);
-      if (card !== null) await upsertReview(tx, card);
-
-      return {
-        before: priorPL,
-        after: nextPL,
-        propagated: spread,
-        due: card?.due ?? reviews.cards[id]?.due ?? null,
-      };
-    },
-  );
+  // The write itself is `recordObservation` in `state/observe.ts`, the same
+  // function `POST /api/learner/observe` runs: the event, the mastery update
+  // with propagation, and the card, under the learner lock in one
+  // transaction. What stays here is what only a terminal has: the notes on
+  // disk as the graph, the markdown log, and the printing.
+  const recorded = await recordObservation(db, {
+    conceptId: id,
+    correct,
+    graph,
+    source,
+    // A probe measures; it does not teach. Only teaching and review get the
+    // BKT transit step, otherwise probing alone would inflate mastery.
+    opportunity: bool(values.opportunity, source !== "probe"),
+    propagate: !bool(values.noPropagate),
+    schedule: bool(values.schedule, true),
+    grade: values.grade !== undefined ? Number(values.grade) : undefined,
+    question: values.question ?? null,
+    answer: values.answer ?? null,
+    session: values.session ?? null,
+  });
+  const before = recorded.pLBefore;
+  const after = recorded.pLAfter;
+  const propagated = recorded.propagated;
+  const due = recorded.due;
 
   // Recording evidence and writing the log are one act. Keeping them separate
   // is how the first real session ended up with five observations and an empty

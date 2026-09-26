@@ -69,6 +69,12 @@ in [`learn/README.md`](../../learn/README.md#the-json-shapes) and pinned by
   scheduled.
 - `observe --force` can no longer record evidence about a concept the catalog
   has never seen. There is nowhere to put it.
+- `observe`'s write is `recordObservation` in `src/state/observe.ts`, the
+  function the web app's session also calls (`POST /api/learner/observe`), the
+  way `review grade` became `gradeReview`. The `--json` shape did not move. An
+  observation from the page carries a `requestId` in its payload, so a retried
+  request is found rather than recorded twice; one from the terminal carries
+  none, so its payload is what it always was.
 - `concept add --topic <slug>` is new, and it is the other half of that refusal.
   It validates the slug against `content/topics.yaml` before writing anything,
   appends the new id to that topic's `maps.concepts`, and runs the concepts
