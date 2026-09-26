@@ -610,7 +610,9 @@ async function run() {
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {
     if (!page.url().endsWith('/settings')) await go('/settings');
-    const dark = main.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Dark' });
+    // The theme is two radio groups since #101, Palette and Appearance; dark is an appearance.
+    const appearance = main.getByRole('group', { name: 'Theme' }).getByRole('radiogroup', { name: 'Appearance' });
+    const dark = appearance.getByRole('radio', { name: 'Dark' });
     await clickHydrated(page, dark);
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
   });
