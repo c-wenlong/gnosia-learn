@@ -9,6 +9,7 @@ import {
   feedbackNote,
   formatMove,
   formatSigned,
+  formatTotalsMove,
   isSessionToken,
   newSessionId,
   noteQuestion,
@@ -260,13 +261,25 @@ const answer = (overrides: Partial<RecordedAnswer> = {}): RecordedAnswer => ({
 describe("the feedback and close arithmetic", () => {
   const NOW = new Date(2026, 8, 26, 12);
 
-  it("signs a movement and prints zero plainly", () => {
+  it("signs a movement, zero included, so it never reads as a p(L)", () => {
     expect(formatSigned(0.13)).toBe("+0.13");
     expect(formatSigned(-0.064)).toBe("-0.06");
-    expect(formatSigned(0.001)).toBe("0.00");
+    expect(formatSigned(0.001)).toBe("+0.00");
+    // Rounds to zero from below: no "-0.00".
+    expect(formatSigned(-0.001)).toBe("+0.00");
+    expect(formatSigned(0)).toBe("+0.00");
     // Printed beside 0.36 and 0.36, the movement is none, not -0.01.
-    expect(formatMove(0.3614, 0.3555)).toBe("0.00");
+    expect(formatMove(0.3614, 0.3555)).toBe("+0.00");
     expect(formatMove(0.42, 0.55)).toBe("+0.13");
+    expect(formatMove(0.3, 0.18)).toBe("-0.12");
+  });
+
+  it("prints the close screen's move, or a dash when nothing was answered", () => {
+    expect(formatTotalsMove({ before: 0.42, after: 0.5 })).toBe("+0.08");
+    expect(formatTotalsMove({ before: 0.15, after: 0.15 })).toBe("+0.00");
+    expect(formatTotalsMove(sessionTotals("dot-product", []))).toBe("–");
+    // An answer about another concept moves nothing this tile reports.
+    expect(formatTotalsMove(sessionTotals("dot-product", [answer({ concept: "vector" })]))).toBe("–");
   });
 
   it("says a new card is new, and an existing one when it is next due", () => {
