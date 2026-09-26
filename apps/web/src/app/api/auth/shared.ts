@@ -1,3 +1,7 @@
+import { NextResponse } from "next/server";
+
+import { originFromHeaders } from "@/lib/auth/core";
+
 /**
  * What the two auth routes share: the same-origin check and the cookie
  * attributes, so sign-in and sign-out cannot drift into setting and clearing
@@ -19,7 +23,31 @@ export function sameOrigin(request: Request): boolean {
   if (site !== null) return site === "same-origin" || site === "none";
   const origin = request.headers.get("origin");
   if (origin === null) return true;
-  return origin === new URL(request.url).origin;
+  // Compare against the host the browser addressed (`originFromHeaders`),
+  // never `request.url`: under `next start` that URL says `localhost`
+  // whatever the page was opened on, so a sign-in from a phone on the LAN
+  // (`192.168.x.x:3000`) would be refused as cross-site. The scheme is left
+  // out of the comparison: behind a proxy that terminated TLS the page is
+  // https and the hop to Node is http, and the host is what identifies the
+  // site.
+  try {
+    return new URL(origin).host === new URL(originFromHeaders(request.headers, request.url)).host;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A 303 to a same-origin path, with a *relative* `Location`. The absolute
+ * form would need an origin, and the only one a route handler has is
+ * `request.url`, which `next start` always reports as `localhost`; a browser
+ * that opened the app on a LAN address or through a tunnel would be sent to
+ * a host it cannot reach. A relative Location is resolved by the browser
+ * against the page it posted from, which is the one origin that is always
+ * right.
+ */
+export function redirectTo(path: string): NextResponse {
+  return new NextResponse(null, { status: 303, headers: { Location: path } });
 }
 
 /**
@@ -32,7 +60,7 @@ export function sessionCookie(request: Request) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: new URL(request.url).protocol === "https:",
+    secure: request.headers.get("x-forwarded-proto") === "https" || new URL(request.url).protocol === "https:",
     path: "/",
   };
 }

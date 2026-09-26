@@ -80,6 +80,26 @@ describe("proxy", () => {
     expect((await proxy(get("/api/learner/reset", token))).status).toBe(401);
   });
 
+  it("redirects to the host the browser asked for, not the one request.url reports", async () => {
+    const headers = new Headers({ host: "192.168.1.20:3000" });
+    const lan = await proxy(new NextRequest(`${ORIGIN}/today`, { headers }));
+    expect(lan.headers.get("location")).toBe("http://192.168.1.20:3000/sign-in?next=%2Ftoday");
+    const proxied = await proxy(
+      new NextRequest(`${ORIGIN}/`, {
+        headers: new Headers({ host: "gnosia.example", "x-forwarded-proto": "https", cookie: `${SESSION_COOKIE}=${token}` }),
+      }),
+    );
+    expect(proxied.headers.get("location")).toBe("https://gnosia.example/today");
+  });
+
+  it("never lets a client-supplied X-Forwarded-Host choose the redirect host, and survives a malformed Host", async () => {
+    const spoofed = await proxy(new NextRequest(`${ORIGIN}/today`, { headers: new Headers({ host: "localhost:3000", "x-forwarded-host": "evil.example" }) }));
+    expect(spoofed.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Ftoday`);
+    const broken = await proxy(new NextRequest(`${ORIGIN}/today`, { headers: new Headers({ host: "not a host", "x-forwarded-proto": "https, http" }) }));
+    expect(broken.status).toBe(307);
+    expect(broken.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Ftoday`);
+  });
+
   it("matcher skips static output and image files but covers the API", () => {
     const pattern = new RegExp(`^${config.matcher[0]}$`);
     for (const skipped of ["/_next/static/chunks/a.js", "/_next/image?url=x", "/icon.png", "/opengraph-image.png", "/banner.png", "/file.svg"]) {
