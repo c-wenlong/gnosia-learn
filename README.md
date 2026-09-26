@@ -115,6 +115,8 @@ cd self-learn
 npm ci
 cp .env.example apps/web/.env.local              # Next reads it from apps/web/, never the root
 echo ASSET_FILES_ENABLED=1 >> apps/web/.env.local   # serve videos and diagrams from disk
+createdb self_learn                                 # local Postgres 17; DATABASE_URL in the example points at it
+npm run catalog -- migrate                          # create the tables
 npm run catalog -- index --only manimkc             # once, so the catalog knows where the renders are
 npm run dev
 ```
