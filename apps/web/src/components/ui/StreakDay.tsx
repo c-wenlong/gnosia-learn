@@ -9,7 +9,9 @@ import { cx } from "./classes";
  * `--border` disc. A miss the weekly leeway covered, which the kit does not
  * draw, is a dashed `--streak` ring: kept, but not earned.
  *
- * The letter is `--streak` on today and `--text3` otherwise. `description` is
+ * The letter is `--streak-text` on today and `--text3` otherwise: the
+ * streak's own hue, darkened in each palette until 11px text clears 4.5:1
+ * on the card, which the `--streak` fill does not. `description` is
  * what a screen reader hears in place of the drawing ("Monday, studied");
  * `streakStrip` in `@/lib/today-core` writes it.
  */
@@ -28,7 +30,7 @@ export function StreakDay({
 }) {
   return (
     <span className={cx("flex flex-col items-center gap-1.5", className)}>
-      <span aria-hidden className={cx("text-[11px] font-bold leading-4", isToday ? "text-streak" : "text-text3")}>
+      <span aria-hidden className={cx("text-[11px] font-bold leading-4", isToday ? "text-streak-text" : "text-text3")}>
         {letter}
       </span>
       <span

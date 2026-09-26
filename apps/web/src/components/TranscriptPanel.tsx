@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { activeCueIndex, formatTimecode, type TranscriptCue } from "@/components/media";
+import {
+  activeCueIndex,
+  formatTimecode,
+  transcriptCounter,
+  type TranscriptCue,
+} from "@/components/media";
 
 /**
  * The spoken lines of a video, following playback.
@@ -50,13 +55,7 @@ export function TranscriptPanel({
   const expectedTop = useRef<number | null>(null);
 
   const active = activeCueIndex(cues, currentTime);
-  // `active` is `-1` before the first cue starts: nothing has been said yet,
-  // so there is no line to report a position for. "0" would claim the reader
-  // is on a line that does not exist, and clamping to "1" would claim they
-  // are already on the first line before anyone has pressed play. Neither is
-  // true, so the position reads as a dash instead, same shape as a real
-  // number so the label does not resize once playback actually starts.
-  const position = active < 0 ? "-" : active + 1;
+  const counter = transcriptCounter(active, cues.length);
 
   const activeVisible = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -100,7 +99,7 @@ export function TranscriptPanel({
         {cues.length > 0 &&
           (following ? (
             <span className="text-[12px] tabular-nums text-text3">
-              {position} / {cues.length}
+              {counter}
             </span>
           ) : (
             <button
