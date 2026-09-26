@@ -4,6 +4,7 @@ import {
   PREFERENCE_KEYS,
   type LastVisited,
   type LearnerState,
+  asThemeMode,
   type ThemeMode,
   type UserResource,
 } from "@self-learn/schema";
@@ -28,7 +29,7 @@ import { readRecaps } from "./recap";
  */
 
 function asTheme(value: unknown): ThemeMode {
-  return value === "dark" ? "dark" : "light";
+  return asThemeMode(value) ?? "light";
 }
 
 function asEpoch(value: unknown): number {
