@@ -146,7 +146,7 @@ export function SettingsForm({
       </Card>
 
       <Card title="Appearance and tutor">
-        <Field label="Theme" note="Gnosia is the brand palette as a light theme. System follows your device between Light and Dark.">
+        <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
           {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
         </Field>
         <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>

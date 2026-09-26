@@ -1,30 +1,45 @@
 import { describe, expect, it } from "vitest";
 
-import { asThemeMode, followTheme, SYSTEM_THEME_SCRIPT, THEME_LABELS, THEME_MODES, themeClass } from "./theme-cookie";
+import {
+  APPEARANCE_LABELS,
+  asThemeMode,
+  followTheme,
+  PALETTE_LABELS,
+  SYSTEM_THEME_SCRIPT,
+  THEME_APPEARANCES,
+  THEME_MODES,
+  THEME_PALETTES,
+  themeClass,
+} from "./theme-cookie";
 
 describe("asThemeMode", () => {
-  it("accepts exactly the four modes", () => {
+  it("accepts exactly the six modes", () => {
+    expect(THEME_MODES).toHaveLength(6);
     for (const mode of THEME_MODES) expect(asThemeMode(mode)).toBe(mode);
-    for (const bad of [undefined, null, "", "Dark", "chartreuse", 1, {}]) expect(asThemeMode(bad)).toBeNull();
+    for (const bad of [undefined, null, "", "Dark", "chartreuse", "classic", 1, {}]) expect(asThemeMode(bad)).toBeNull();
   });
 
-  it("has a label for every mode", () => {
-    for (const mode of THEME_MODES) expect(THEME_LABELS[mode]).toBeTruthy();
+  it("has a label for every palette and every appearance", () => {
+    for (const palette of THEME_PALETTES) expect(PALETTE_LABELS[palette]).toBeTruthy();
+    for (const appearance of THEME_APPEARANCES) expect(APPEARANCE_LABELS[appearance]).toBeTruthy();
   });
 });
 
 describe("themeClass", () => {
-  it("resolves the three fixed modes regardless of the device", () => {
+  it("resolves the four fixed modes regardless of the device", () => {
     for (const prefersDark of [false, true]) {
-      expect(themeClass("light", prefersDark)).toBe("");
-      expect(themeClass("gnosia", prefersDark)).toBe("gnosia");
-      expect(themeClass("dark", prefersDark)).toBe("dark");
+      expect(themeClass("light", prefersDark)).toEqual([]);
+      expect(themeClass("gnosia", prefersDark)).toEqual(["gnosia"]);
+      expect(themeClass("dark", prefersDark)).toEqual(["dark"]);
+      expect(themeClass("gnosia-dark", prefersDark)).toEqual(["gnosia", "dark"]);
     }
   });
 
-  it("lets the device decide under system", () => {
-    expect(themeClass("system", false)).toBe("");
-    expect(themeClass("system", true)).toBe("dark");
+  it("lets the device decide the appearance under both system modes, and keeps the palette", () => {
+    expect(themeClass("system", false)).toEqual([]);
+    expect(themeClass("system", true)).toEqual(["dark"]);
+    expect(themeClass("gnosia-system", false)).toEqual(["gnosia"]);
+    expect(themeClass("gnosia-system", true)).toEqual(["gnosia", "dark"]);
   });
 });
 
@@ -40,8 +55,10 @@ describe("SYSTEM_THEME_SCRIPT", () => {
   it("adds dark only for a system mode on a dark device", () => {
     expect(run("system", true)).toEqual(["dark"]);
     expect(run("system", false)).toEqual([]);
-    expect(run("light", true)).toEqual([]);
-    expect(run("gnosia", true)).toEqual([]);
+    expect(run("gnosia-system", true)).toEqual(["dark"]);
+    expect(run("gnosia-system", false)).toEqual([]);
+    // The fixed modes were resolved on the server; the script leaves them be.
+    for (const theme of ["light", "gnosia", "dark", "gnosia-dark"]) expect(run(theme, true)).toEqual([]);
   });
 
   it("swallows a browser without matchMedia", () => {
@@ -113,6 +130,21 @@ describe("followTheme", () => {
     });
   });
 
+  it("follows the device under gnosia-system, and keeps gnosia on throughout", async () => {
+    const b = fakeBrowser(false);
+    await withBrowser(b, () => {
+      const stop = followTheme("gnosia-system", b.win);
+      expect([...b.classes]).toEqual(["gnosia"]);
+      expect(b.doc.documentElement.dataset.theme).toBe("gnosia-system");
+      b.setDark(true);
+      expect([...b.classes].sort()).toEqual(["dark", "gnosia"]);
+      b.setDark(false);
+      expect([...b.classes]).toEqual(["gnosia"]);
+      stop();
+      expect(b.listeners.size).toBe(0);
+    });
+  });
+
   it("applies a fixed mode once and registers no listener", async () => {
     const b = fakeBrowser(true);
     await withBrowser(b, () => {
@@ -120,9 +152,10 @@ describe("followTheme", () => {
         ["light", []],
         ["gnosia", ["gnosia"]],
         ["dark", ["dark"]],
+        ["gnosia-dark", ["dark", "gnosia"]],
       ] as const) {
         const stop = followTheme(mode, b.win);
-        expect([...b.classes]).toEqual([...expected]);
+        expect([...b.classes].sort()).toEqual([...expected]);
         expect(b.listeners.size).toBe(0);
         stop();
       }
