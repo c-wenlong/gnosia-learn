@@ -15,7 +15,7 @@ export interface Destination {
 }
 
 export const DESTINATIONS: readonly Destination[] = [
-  { key: "today", label: "Today", href: "/" },
+  { key: "today", label: "Today", href: "/today" },
   { key: "courses", label: "Courses", href: "/courses" },
   { key: "learn", label: "Learn", href: "/learn" },
   { key: "library", label: "Library", href: "/library" },
@@ -27,15 +27,13 @@ export const DESTINATIONS: readonly Destination[] = [
  *
  * A prefix match on a whole segment, so `/courses/cp4281/m1` is still Courses
  * (a nav item that unhighlights the moment you open something from it reads as
- * having navigated away) and `/learning` would not be Learn. Today is `/`
- * exactly, since every path starts with `/`.
+ * having navigated away) and `/learning` would not be Learn. `/` itself is the
+ * public landing page and belongs to no destination.
  */
 export function activeDestination(pathname: string | null | undefined): DestinationKey | null {
   if (!pathname) return null;
   const path = pathname.split(/[?#]/)[0];
-  if (path === "/") return "today";
   for (const d of DESTINATIONS) {
-    if (d.href === "/") continue;
     if (path === d.href || path.startsWith(`${d.href}/`)) return d.key;
   }
   return null;

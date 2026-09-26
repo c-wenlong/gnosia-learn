@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/studio/actions";
+import { exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
 import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
 import { JobPanel } from "@/components/studio/JobPanel";

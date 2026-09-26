@@ -1,0 +1,237 @@
+# Gnosia: the brand
+
+The product was called self-learn; it is now **Gnosia**. This document is the
+brand: what it should feel like, the palette and why each value was chosen,
+how the mark is built, the rules for the mascot, and where each piece appears.
+The app's own token and component contract is still
+[IMPLEMENTATION.md](IMPLEMENTATION.md); the brand sits beside it.
+
+## The idea
+
+One sentence carries the whole brand: **"A book that grows as you do."**
+
+Gnosia is a personal tome that changes as its owner learns. Underneath, it is
+a knowledge system: it keeps a model of what you know, one concept at a time,
+picks what you are ready for next, and folds notes, tutor conversations,
+resources and study sessions back into that model. The feeling to aim for is
+tending a body of knowledge over years, closer to a garden than to a database.
+
+It should look like modern software that happens to be slightly magical:
+calm, spacious, precise. The magic is carried by light, by slow motion and by
+one recurring star, never by decoration.
+
+| Do | Don't |
+| --- | --- |
+| Deep teal and navy, warm cream, a little gold | Parchment, leather, wax seals, ornate borders |
+| Lots of white space, rounded geometry, soft gradients | Heavy grimoire or fantasy styling |
+| Large type, short copy, one idea per section | "AI-powered", "second brain", feature soup |
+| The star for insight and for "this one is active" | Stars sprinkled as decoration everywhere |
+| Say what the product does, and only that | Invented features, testimonials, metrics |
+
+**Copy.** Short sentences. No em dashes (use a comma, a colon or a full
+stop), no exclamation marks, no "AI-powered". The product is single-owner
+for now, so there is no sign-up, pricing or email capture: the one call to
+action is "Open your book", which goes to `/sign-in`.
+
+## Palette
+
+Seven tokens, declared at the end of
+[globals.css](../../apps/web/src/app/globals.css): light on `:root`, dark on
+`.dark` (the theme cookie's class on `<html>`). Each is also a Tailwind colour
+(`bg-brand-cream`, `text-brand-ink`, `border-brand-ink/10`), so a component
+never writes a hex value.
+
+They are roles, not only hues. `ink` and `mist` are the text colours and flip
+between themes. `teal` lightens in dark so it still reads as text and as a
+mark on navy. `cream` and `navy` are the two grounds: the public layout paints
+cream in light and navy in dark.
+
+| Token | Light | Dark | Role | Why this value |
+| --- | --- | --- | --- | --- |
+| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, eyebrows, icon chips | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
+| `--brand-navy` | `#0d1c2b` | `#0a1621` | The dark ground, the brand button's lip, the label on a dark-mode teal button | A blue-black with enough blue to sit beside teal without looking like plain black; the dark value is a shade deeper so glass cards can lighten from it |
+| `--brand-cream` | `#faf6ec` | `#f4ecdc` | The light ground, the mark's pages, the label on a light-mode teal button | Warm but close to white, so it reads as paper without becoming parchment. The dark value is the pages' colour on navy, a touch warmer so it does not glare |
+| `--brand-gold` | `#b3842c` | `#e2b95e` | The star in the mark and wherever it appears alone | Graphics only, never body text. Light was darkened from a brighter gold until the star clears the 3:1 non-text minimum on cream (3.11:1); dark is the brighter gold at 9.9:1 |
+| `--brand-gold-soft` | `#efd9a1` | `#e8c877` | Glows: behind the mascot, the warm wash on the page, the closing panel | Only ever used with transparency (radial gradients, `color-mix`), so it tints rather than fills |
+| `--brand-ink` | `#15283a` | `#eee8dc` | Headings and body text on the brand grounds | A navy-tinted near-black on cream and a cream-tinted near-white on navy: softer than pure black or white, still 13.9:1 and 15.0:1 |
+| `--brand-mist` | `#4f6173` | `#a3b2bf` | Secondary text: the hero sentence, card bodies, the footer | The quietest grey-blue that still clears AA (4.5:1) on every surface it sits on, including the teal glow |
+
+### Contrast, checked
+
+Computed with the WCAG 2 relative-luminance formula against each surface the
+colour actually sits on. "Glass" is the translucent card (`.gnosia-glass`:
+white at 62% over cream in light, teal at 7% over navy in dark, `#fdfcf8` and
+`#10212b`); "glow" is the strongest point of the teal wash on the ground
+(`#e0e5dd` and `#173038`).
+
+| Pair | Light | Dark | Needs |
+| --- | --- | --- | --- |
+| `ink` on ground | 13.93 | 14.97 | 4.5 (text) |
+| `ink` on glass | 14.65 | 13.50 | 4.5 |
+| `mist` on ground | 5.91 | 8.42 | 4.5 |
+| `mist` on glass | 6.22 | 7.59 | 4.5 |
+| `mist` on the teal glow | 4.99 | 6.38 | 4.5 |
+| `teal` on ground (eyebrows, mark) | 6.88 | 7.94 | 4.5 |
+| `teal` on glass | 7.23 | 7.16 | 4.5 |
+| Brand button label on its face (cream on teal, navy on teal) | 6.88 | 7.94 | 4.5 |
+| `gold` star on ground | 3.11 | 9.86 | 3 (non-text) |
+| Teal mark in the app's top bar (on `--surface`) | 7.42 | 7.25 | 3 (non-text) |
+
+## The source art
+
+The owner's art is the reference. Everything drawn in code is a flat
+reduction of it, and where the two disagree the art wins.
+
+| File | What it is | Used for |
+| --- | --- | --- |
+| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The canonical mark and wordmark; `GnosiaMark` is drawn from it |
+| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of the three icon files below |
+| [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Source of the pose cut-outs below |
+| [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
+| [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
+| [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
+| [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page |
+| [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `app-icon.png`, transparent corners | Favicon and PWA icon |
+| [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | Cut from `app-icon.png` | Home-screen icon |
+| [apps/web/public/brand/app-icon-256.png](../../apps/web/public/brand/app-icon-256.png) | Cut from `app-icon.png` | Anywhere a 256px icon is wanted |
+| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses, background knocked out, 340 to 430px wide, each with its soft shadow baked in | `GnosiaMascot` |
+| [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Made from `hero-lockup.png` | The social card |
+| [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
+
+The three icon files, the social card and the banner are cut by hand from
+the art; do not regenerate them from code. [kit/render.mjs](kit/render.mjs)
+(SVG or HTML to PNG, fonts loaded, optional transparent ground) and
+[kit/gen-icons.mjs](kit/gen-icons.mjs) (the flat mark on a tile, read from
+`GnosiaMark.tsx`) exist for previews and for any size the art does not cover.
+
+## The mark
+
+The symbol on the logo sheet: a **G drawn as a ribbon** in deep teal, cut
+at the top right into a flag-shaped terminal, sweeping round the left, with
+an arm coming in from the right to a pointed tip. Its lower half **fans out
+into an open book**: cream pages spread from a spine at the bottom centre,
+thin at the spine and wide at the outer edges, and the ribbon closes under
+them into a point. A **gold four-point star** sits in the counter, above the
+spine. The book is accumulated knowledge, the star is insight rising out of
+it, and the G makes the symbol Gnosia's own.
+
+The art is rendered with gradients (teal into a lighter green along the
+ribbon, a glow on the star). [GnosiaMark.tsx](../../apps/web/src/components/brand/GnosiaMark.tsx)
+is the flat, three-fill reduction for the interface, on a 64 unit grid:
+
+| Part | Fill | Construction |
+| --- | --- | --- |
+| The ribbon (`MARK_G`) | `currentColor` | One closed contour: the flag terminal at the top right (62, 4 to 54, 13), the outer bowl round to the left edge at x = 4, the two leaves meeting at (32, 61), the right side up to the arm, the arm's tip at (46, 21), and the counter traced back along the inside. No strokes, so it holds at 16px |
+| The book (`MARK_BOOK`) | `--brand-cream` | Two pages a side, each thin at the spine (x = 32) and about 6 units wide at the outer end, the upper pair reaching to x = 5.5 and 58.5. Always inside the ribbon, never over the ground, because cream on the cream page would vanish |
+| The star (`MARK_STAR`) | `--brand-gold` | Four points with concave sides, 19 units wide and 20 tall, centred in the counter at (32, 29) |
+
+The pages stay cream in both themes (`--brand-cream` is `#faf6ec` and
+`#f4ecdc`). The ribbon takes its colour from the caller: `text-brand-teal`
+in the wordmark, which is the deep teal on cream and the lifted teal on
+navy, as the logo sheet's dark card does.
+
+**Sizes.** Smallest is the 16px favicon, where it reads as a teal shield
+with a notch, a pale band and a gold point. At 44px (the sign-in lockup) and
+up, the flag terminal, the arm and the two pages are all legible. Leave clear
+space of at least a quarter of the mark's width on every side.
+
+**Don't** outline it, add a drop shadow, rotate it, recolour the star to
+anything but gold, or let the pages spill outside the ribbon.
+
+### The wordmark and the lockup
+
+The sheet's `GNOSIA` is a light geometric sans with a wide, open G and an A
+with no crossbar. The interface sets it in Figtree semibold, uppercase,
+tracked at 0.3em: the closest the loaded face allows. The letters are live
+text, not paths, so the A keeps its crossbar; the sheet's letterforms appear
+only where the art itself is used (the social card, the icons).
+[GnosiaWordmark](../../apps/web/src/components/brand/GnosiaWordmark.tsx) puts
+the mark at 1.9em beside the letters and is sized by font size (15px in the
+app bar, 13px in the footer). `GnosiaLockup` stacks the mark over the
+letters, for the sign-in card. A screen reader hears "Gnosia" once: the mark
+is hidden and the capitals are CSS.
+
+## The mascot
+
+A small living tome: teal covers folded into a **dark hood**, cream pages
+fanned behind it, gold line accents along the cover, the **star sigil**
+glowing on the brow, **two glowing crescent eyes** in the hood's shadow, two
+small cloth hands, and a **ribbon tail** in teal and green trailing below.
+Its expression lives in the eyes: closed smiles for neutral and happy,
+round for reading and curious, squeezed shut for excited, half-lidded for
+sleepy.
+
+[GnosiaMascot](../../apps/web/src/components/brand/GnosiaMascot.tsx) renders
+a pose from `public/brand/mascot/` with `next/image`, `alt=""`, sized by
+height with a class.
+
+| Pose | Where it goes |
+| --- | --- |
+| `neutral` | The landing hero, the default |
+| `happy` | Sign-in; later, a session closed or a concept mastered |
+| `reading` | Beside the "Built on" strip on the landing page; later, a lesson or a note being read |
+| `curious` | The landing page's closing panel; later, a probe question |
+| `excited` | Reserved for a real milestone (a course finished) |
+| `sleepy` | Reserved for an empty state (nothing due today) |
+
+Rules:
+
+1. **Always decorative.** `alt=""` and `aria-hidden`, never the only carrier
+   of meaning, never a button.
+2. **One large mascot per screen.** Secondary poses are small (120 to 160px)
+   and never two in the same phone viewport: the landing page hides its
+   `reading` pose below 768px so the closing panel's `curious` is the only
+   one a phone sees there.
+3. **Slow.** Only the hero and sign-in mascots float (`float` prop: 9
+   seconds, 10px, under `prefers-reduced-motion: no-preference`).
+4. **The baked shadow.** Each cut-out has a pale shadow ellipse under it. On
+   cream it reads as a shadow; on navy it reads as a spotlight, so in dark
+   the component clips the bottom 8.5% of the picture, which can shave the very tip of a tail.
+5. **Never redrawn.** Use the cut-outs. A new pose comes from the owner's
+   art, not from an SVG approximation.
+
+## Motion and surfaces
+
+The public pages allow what the app kit does not: soft shadows and
+translucent cards (`.gnosia-glass`, frosted white on cream, a teal-tinted pane
+on navy). The app keeps its flat, border-only kit. Motion is limited to the
+mascot's float and a single 0.9 second rise on the hero text, all of it
+behind `prefers-reduced-motion: no-preference`. Nothing moves on scroll.
+
+**The star as a state.** The mark's star, drawn alone, marks the steps of
+"How it works", the next concept on the frontier, and a feature card on hover.
+Reuse it the same way in the app: the active item, a mastered concept, an
+insight. Not as a bullet or an ornament.
+
+## Where each piece appears
+
+| Piece | Where |
+| --- | --- |
+| `GnosiaWordmark` | The app's top bar (links to `/today`), the public header (links to `/`) and footer |
+| `GnosiaLockup` | The sign-in card |
+| `GnosiaMascot` | Landing hero (`neutral`), "Built on" strip (`reading`, 768px and up), closing panel (`curious`), sign-in (`happy`) |
+| The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Teal face, navy lip and cream label in light; in dark the lip is teal sunk halfway into navy and the label turns navy |
+| `.gnosia-ground`, `.gnosia-glass` | The `(site)` layout, the landing page and the sign-in card |
+| Icons, social card, banner | See [The source art](#the-source-art) |
+
+## What the landing page may claim
+
+Every line on `/` maps to something the product does today. Keep it that way
+when editing the copy.
+
+| Claim on the page | What backs it |
+| --- | --- |
+| A probability per concept that you know it | Bayesian Knowledge Tracing mastery, updated by graded answers, reviews and tutor probes |
+| The frontier picks what comes next | The prerequisite graph; a concept is ready once its `requires` prerequisites clear the readiness bar |
+| Spaced review with Again, Hard, Good, Easy; missed cards flagged | SM-2 scheduling and leech detection |
+| A tutor that knows the concept and cites your notes | The concept-aware chat, whose source `[1]` is always the concept's note |
+| Ten computer science courses from NUS | The course files in `content/courses/` |
+| Animations, diagrams, notes, links, transcripts, with watched state | The library and the `watched` event |
+| Next up, reviews due, a forgiving streak, a self-set target; no XP, hearts or leagues | The Today dashboard and the habit data |
+| One append-only event log; notes and model derived from it | The `event` table |
+
+The two small cards beside the hero mascot (three concepts with their
+probabilities, and "Attention weights" as the next concept on the frontier)
+are illustrations built from real concept names in `learn/concepts/`, not a
+live reading. They show from 1280px up only, and sit clear of the mascot's
+face.

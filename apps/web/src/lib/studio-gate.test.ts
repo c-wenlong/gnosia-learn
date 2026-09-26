@@ -17,11 +17,11 @@ import { STUDIO_ENV, studioEnabled, studioOrigin } from "./studio";
  *
  * So the test does not check the two routes that exist today. It walks the
  * directory and requires the call in every entry point it finds, which means
- * adding `apps/web/src/app/studio/jobs/page.tsx` without the gate turns this
+ * adding `apps/web/src/app/(app)/studio/jobs/page.tsx` without the gate turns this
  * red rather than quietly shipping an ungated surface.
  */
 
-const STUDIO_DIR = path.resolve(import.meta.dirname, "..", "app", "studio");
+const STUDIO_DIR = path.resolve(import.meta.dirname, "..", "app", "(app)", "studio");
 
 /**
  * The filenames Next will invoke on its own.
