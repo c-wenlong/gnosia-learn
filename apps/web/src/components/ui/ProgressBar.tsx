@@ -5,18 +5,23 @@ import { cx } from "./classes";
 
 /**
  * Kit `Bar`: an 8px track in `--border` with a fill proportional to a
- * fraction. The accent by default; `tone` picks the ok green or the
- * learning-mastery tint for the close screen's before-and-after bars.
+ * fraction. The accent by default; `tone` picks the ok green, or a mastery
+ * colour (`hi` mastered, `mid` learning) for a bar that stands for p(L), as on
+ * the close screen and the Learn index.
+ *
+ * The bar is `w-full` of its container. Size it with a wrapper: a width passed
+ * in `className` sits beside that `w-full` and loses to it (docs/design/IMPLEMENTATION.md, Gotchas).
  *
  * Takes either `percent` (0 to 100) or the older `progress` counts. With
  * `progress` it prints the "3/17 · 18%" line above the bar, as it always did,
  * unless `showLabel` is false; with `percent` it prints nothing unless asked.
  */
-export type ProgressTone = "accent" | "ok" | "mid";
+export type ProgressTone = "accent" | "ok" | "hi" | "mid";
 
 const TONE: Record<ProgressTone, string> = {
   accent: "bg-accent",
   ok: "bg-ok",
+  hi: "bg-m-hi",
   mid: "bg-m-mid",
 };
 

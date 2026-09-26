@@ -154,7 +154,7 @@ export function SettingsForm({
             </Select>
           )}
         </Field>
-        <Field label="Tutor style" note="Saved now; the tutor does not read it yet." status={tutor.status}>
+        <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
           {(id) => (
             <Select id={id} value={tutor.value} onChange={(v) => tutor.save(v as TutorStyle)}>
               {TUTOR_STYLES.map((s) => (
@@ -165,7 +165,7 @@ export function SettingsForm({
             </Select>
           )}
         </Field>
-        <Field label="Motion" note="Saved now; the system setting is what applies today." status={motion.status}>
+        <Field label="Motion" note="Saved, not applied yet: only your system's reduced-motion setting is honoured today." status={motion.status}>
           {(id) => (
             <Select id={id} value={motion.value} onChange={(v) => motion.save(v as MotionMode)}>
               {MOTION_MODES.map((m) => (

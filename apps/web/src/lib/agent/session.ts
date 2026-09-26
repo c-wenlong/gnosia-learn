@@ -1,4 +1,5 @@
 import { CONCEPT_BODY_LIMIT, type ConceptPromptInput } from "@/lib/agent/prompt";
+import { DEFAULT_TUTOR_STYLE, type TutorStyle } from "@/lib/preferences";
 import { seedOf } from "@/lib/review-core";
 import type { SessionQuestion } from "@/lib/session-core";
 
@@ -18,15 +19,44 @@ export type QuestionStep = "probe" | "check";
 export const QUESTION_LIMITS = { prompt: 400, option: 240, explanation: 800 } as const;
 
 /**
+ * The explanation length the prompt asks for, well under the parser's limit:
+ * an explanation over `QUESTION_LIMITS.explanation` is dropped, and the
+ * learner then gets neither the reason line nor Why?. Models overshoot a
+ * stated length, so the margin is deliberate.
+ */
+export const EXPLANATION_TARGET = 500;
+
+/**
+ * How the explanation is written, per Settings tutor style. The explanation is
+ * the only prose a session question carries (the feedback bar prints its first
+ * sentence, Why? opens the rest), so it is where the style shows. Every rule
+ * keeps the rationale (why the right option is right, what the tempting wrong
+ * one gets wrong), since the verdict has already been given when it is read;
+ * the style only changes how much is said and in what order.
+ */
+export const SESSION_EXPLANATION_RULES: Record<TutorStyle, string> = {
+  "guide-concise":
+    "The explanation is one or two short sentences: why the correct option is right and what the most tempting wrong one gets wrong. No preamble.",
+  "guide-detailed":
+    "The explanation is three or four sentences: why the correct option is right, what the most tempting wrong one gets wrong, and one small example or consequence.",
+  socratic:
+    "The explanation's first sentence says why the correct option is right. Then, in one or two sentences, it walks the reasoning a learner could follow to reach it themselves and names what the most tempting wrong option gets wrong, ending with one short question that pushes one step further.",
+  direct:
+    "The explanation opens with why the correct option is right, in its first sentence, then says what the most tempting wrong one gets wrong.",
+};
+
+/**
  * The system prompt. Grounded in the note (the same body the concept tutor
  * reads, clipped the same way), with the step's purpose spelled out: a probe
  * asks before any teaching and must be answerable by someone who already
  * holds the idea; a check asks after it. The reply is JSON and nothing else.
+ * `style` is the learner's `tutorStyle` preference and shapes the explanation.
  */
 export function buildSessionQuestionPrompt(
   input: ConceptPromptInput,
   step: QuestionStep,
   avoid: readonly string[] = [],
+  style: TutorStyle = DEFAULT_TUTOR_STYLE,
 ): string {
   const body = input.body?.trim() ?? "";
   const clipped = body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
@@ -54,7 +84,7 @@ ${avoidLines}
 1. Exactly four options. One is correct. The three wrong ones are plausible mistakes a learner actually makes, not jokes, and not "all of the above".
 2. Options are short: one line each, no numbering, no letters.
 3. The question stands alone; do not refer to "the note" or "the text".
-4. The explanation says in one or two sentences why the correct option is right and what the most tempting wrong one gets wrong.
+4. ${SESSION_EXPLANATION_RULES[style]} This follows the tutor style the learner chose in Settings. Whatever the style, keep the explanation under ${EXPLANATION_TARGET} characters.
 5. Stay inside what the note says. If it cannot support a question, ask about the summary.
 
 ## Output

@@ -206,13 +206,15 @@ function ConceptTable({
                 </td>
                 <td className="px-3 py-2.5 sm:px-4">
                   <span className="flex items-center gap-2">
-                    <span className="hidden sm:block">
+                    {/* The width goes on the wrapper, not the bar: the bar's own
+                        w-full wins over a width passed in className, and inside
+                        a flex row that left this span sized to nothing. */}
+                    <span className="hidden w-[160px] shrink-0 sm:block">
                       <ProgressBar
                         percent={r.bucket === "untouched" ? 0 : r.pL * 100}
                         size="sm"
-                        tone={r.bucket === "mastered" ? "accent" : "mid"}
+                        tone={r.bucket === "mastered" ? "hi" : "mid"}
                         label={`${r.title} mastery`}
-                        className="w-[160px]"
                       />
                     </span>
                     <span className="w-8 text-[12px] text-text2 tabular-nums">{r.bucket === "untouched" ? "–" : r.pL.toFixed(2)}</span>
