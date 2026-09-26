@@ -12,7 +12,7 @@ the shell), and how to check a page against its hi-fi frame.
 | 0 | Foundation: tokens, primitives, habit data, the shell, Courses, the screenshot tool | `/courses`, `/` (redirect), `/review` and `/settings` (placeholders) | Done |
 | 1a | Today and Settings | `/`, `/settings` | Not started |
 | 1b | Course path, absorbing the module page | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit) | Done |
-| 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]` | Not started |
+| 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]`, `GET /api/concepts/[slug]`, `conceptSlug` on `POST /api/agent/chat` | Done |
 | 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session` | Not started, needs 1c |
 | 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Done |
 | 1f | Library and the asset page: concept links, Mark watched, text search | `/library`, `/library/[id]`, `POST /api/learner/watched` | Done |
@@ -250,6 +250,92 @@ installed (a fresh worktree), point `PLAYWRIGHT_CORE` at another checkout's
 route answered 400 or more. Read every picture beside its hi-fi frame before
 calling a page done; a build that passes proves nothing about how it looks.
 
+## Phase 1c: Learn index, workspace, concept tutor
+
+What 1c shipped, and the contract 1d (session focus mode) builds on.
+
+### Modules
+
+| Module | What it is |
+| --- | --- |
+| [`@/lib/concept-note-core`](../../apps/web/src/lib/concept-note-core.ts) | Pure. `parseConceptNote(source)` gives the frontmatter fields (`title`, `summary`, `requires`, `assumes`, `tags`, `topics`, `sources`) and the ```` ```check ```` blocks as `ConceptCheck { id, question, answer, why, source }`, the shape `review due --json` prints. A port of the CLI's parser (the web app never imports `scripts/`), pinned by its test |
+| [`@/lib/concept-note`](../../apps/web/src/lib/concept-note.ts) | Server. `readConceptNote(slug)` finds the concept's `note:` asset through `asset_concept` and reads it with `resolveAssetFile`, so the asset route's containment checks apply. Not gated by `ASSET_FILES_ENABLED`: notes are in git. Never throws; a failure is `{ ok: false, code: "no-note" \| "file-missing" \| "unreachable" }`. Phase 1e reads checks through it too |
+| [`@/lib/concept-workspace-core`](../../apps/web/src/lib/concept-workspace-core.ts) | Pure. `buildConceptWorkspace(...)` assembles `ConceptWorkspace`; `toConceptPromptInput(workspace)` is the tutor's view of it; `isConceptSlug` guards every entry point |
+| [`@/lib/concept-workspace`](../../apps/web/src/lib/concept-workspace.ts) | Server. `readConceptWorkspace(slug)` (and `loadConceptWorkspace` for pages) does the reads: the knowledge base, the note, the event log, the review card, the asset links. The page, `GET /api/concepts/[slug]` and the tutor all go through it |
+| [`@/lib/concept-graph`](../../apps/web/src/lib/concept-graph.ts) | Pure. `neighbourhood`, `courseScope` (course, or the note's folder when it is in no course, with the transitive reduction applied), `dependantsOf`, `backlinksOf`, `defaultSelection`, `layoutGraph` |
+| [`ConceptGraph`](../../apps/web/src/components/ConceptGraph.tsx) | The graph drawing, rewritten: mastery-bucket dots, prerequisites above, the selected concept ringed, its own edges in the accent. Nodes are links (`hrefFor`, server) or buttons (`onSelect`, client) |
+| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files |
+
+**Backlinks** are the concepts whose `requires` or `assumes` names this one;
+**dependants** ("Leads to") are the `requires` half only. **Check status** in
+the Studio card comes from the latest observation whose question text equals
+the check's question (whitespace and case folded): an observation records its
+question as text, not a check id, so a reworded check reads as untried.
+
+### `GET /api/concepts/[slug]`
+
+200 with a `ConceptWorkspace` (every field is documented on the type):
+`slug`, `title`, `summary`, `domain`, `bucket`, `pL`, `mastery`,
+`observations`, `correct`, `lastSeen`, `place` (course, module and topic, or
+null), `note` (`{ available: true, path, source }` or
+`{ available: false, code, message }`), `sources`, `tags`, `requires`,
+`assumes`, `dependants`, `backlinks` (each `{ slug, title, bucket, pL }`),
+`checks` (`ConceptCheck` plus `status: "passed" | "missed" | "untried"`),
+`history` (every direct observation outside a voided session, oldest first:
+`{ at, correct, pLBefore, pLAfter, question, source }`), `review`
+(`{ due, intervalDays, ease, repetitions, lapses, leech }` or null), `assets`
+(`AssetRef[]`, the concept's own note left out), `graph` (the neighbourhood
+as `{ nodes, edges }`), `frontier`. 400 `BAD_CONCEPT_SLUG`, 404
+`CONCEPT_NOT_FOUND`, 503 `CONCEPT_UNAVAILABLE`. `Cache-Control: no-store`.
+
+### The concept tutor API
+
+`POST /api/agent/chat`, same route, same guards (same origin, the payload
+bounds, 20 calls a minute per client), with `conceptSlug` in the body. When
+`conceptSlug` is present the topic fields are ignored and not required.
+
+```ts
+// request
+{
+  conceptSlug: string;          // a concept id: /^[a-z0-9][a-z0-9-]{0,99}$/
+  messages: { role: "user" | "assistant"; content: string }[];  // oldest first; a "system" entry is dropped
+  learnerNote?: string;         // optional, appended to the system prompt, counted in the payload bound
+}
+
+// 200
+{
+  message: { role: "assistant"; content: string };  // may contain [n] citation markers
+  model: string; provider: string; providerLabel: string; fallbackAttempts: number;
+  concept: { slug: string; title: string };
+  sources: { n: number; label: string; href: string | null }[];  // [1] is always the note ("Your note: <title>", href /learn/<slug>); frontmatter sources follow from [2]
+}
+```
+
+Errors: 400 `BAD_REQUEST` (slug or messages malformed, checked before
+anything is read), 403 `ORIGIN_MISMATCH`, 413 and 429 from the guards, 404
+`CONCEPT_NOT_FOUND`, 503 `CONCEPT_UNAVAILABLE` (database down), 503
+`MISSING_API_KEY`, 502 `ALL_PROVIDERS_FAILED`.
+
+The system prompt is built on the server by `buildConceptSessionContext` in
+`lib/agent/prompt.ts` from `toConceptPromptInput(workspace)`: title,
+summary, where it sits, requires, assumes and dependants with their mastery
+labels, the learner's p(L), counts, last seen and next review, the five most
+recent answers, the note body (frontmatter stripped, clipped at 8000
+characters), and the numbered sources with an instruction to cite as `[n]`.
+Nothing about the concept is taken from the browser. `conceptCitationSources`
+and `conceptSuggestedQuestions` are exported so a page renders the same
+numbering and chips before the first turn. Citing is best effort: the page
+turns a `[n]` that is in `sources` into a `Cite` chip (`citedNumbers` in
+`lib/tutor-thread.ts`) and leaves any other number as text.
+
+The chat writes no evidence. Grading a probe and calling `learn observe` is
+1d's (`POST /api/learner/observe`), per DESIGN.md decision 12.
+
+**The thread lives in `sessionStorage`** under `self-learn:tutor:<slug>`,
+per tab, mirrored in memory when storage is refused, and cleared by "Start a
+new thread". The browser sends at most the last 30 turns and 20000
+characters (`trimForRequest`). Moving it to the database is future work.
+
 ## Deviations from the hi-fi
 
 | Where | Hi-fi | Built | Why |
@@ -278,6 +364,17 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
 | Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
 | Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
+| Learn index header | "Add concept" button | rendered disabled, with a title naming the CLI command; hidden on a phone | concepts are added by the `learn` CLI; the web app never writes the content half |
+| Learn index graph card | a placeholder with "toggle: full course" | a Neighbourhood / Course chip pair in the card header; Course reads "Folder" for a concept in no course | 24 of 32 concepts link to no curriculum item, so "course" falls back to the note's folder |
+| Learn index table | no selected row | the selected row is tinted `--surface2`; clicking a row selects it, the title links to the workspace | the graph follows the selection, so the selection has to show |
+| Course graph | not drawn | the transitive reduction of the edges | the algorithms folder drawn with every edge was a hairball |
+| Workspace left panel | summary, links, sources, backlinks only | the same, plus the whole note behind "Read the whole note" | the panel is "Note & sources"; the note is closed by default to keep the drawn layout |
+| Workspace sources | three coloured sources | "Your note" is always source [1], frontmatter sources follow | no note in the corpus fills `sources:` yet, so the note is the one source every concept has |
+| Workspace tutor | "Learning guide · concise" | "Grounded in your note" | there is no tutor style setting yet |
+| Tutor turns | Save to note and Why? | Why? sends "Why?"; Save to note is disabled with a title | extending `POST /api/learner/note` is not in 1c |
+| Studio cards | "Generate flashcards", "Add source" | disabled, with a title | no feature behind them yet |
+| Workspace header | Teach me links to focus mode | the link is not prefetched | until 1d ships the route, the 404 prefetch never settles and the page never goes network-idle |
+| Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
 
 ### Library and the asset page (phase 1f)
 
@@ -326,7 +423,9 @@ catalog grows by an order of magnitude.
   open in Playwright's eyes, so the course path (whose Continue and Guidebook
   point at `/learn/<concept>` before 1c and 1d land) timed out at 30s. A copy
   of the tool waiting for `load` plus a second works; the real fix is the
-  routes existing.
+  routes existing. Until then, `prefetch={false}` on the link avoids it: the
+  workspace passes it on Teach me and Quiz me, which point at
+  `/learn/<slug>/session` before 1d lands. Drop it once the route exists.
 - **The habit numbers are read on every request,** `readEvents` in full. The
   log is small for one learner; if it grows into the tens of thousands, add a
   date-bounded read to the catalog rather than caching in the layout.
