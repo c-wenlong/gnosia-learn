@@ -19,9 +19,9 @@ vi.mock("@/lib/kb/load", () => ({
   dueConcepts: () => [],
 }));
 
-async function render(): Promise<string> {
+async function render(params: Record<string, string> = {}): Promise<string> {
   const { default: LearnPage } = await import("./page");
-  return renderToStaticMarkup(await LearnPage());
+  return renderToStaticMarkup(await LearnPage({ searchParams: Promise.resolve(params) }));
 }
 
 describe("/learn", () => {
@@ -77,8 +77,43 @@ describe("/learn", () => {
     });
     const html = await render();
 
+    // The row, its link to the workspace, and the graph card with the frontier
+    // concept selected by default.
     expect(html).toContain("Alpha");
-    expect(html).toContain("The first one.");
-    expect(html).toContain("frontier");
+    expect(html).toContain('href="/learn/alpha"');
+    expect(html).toContain("1 concept · 0 mastered · 1 learning · 0 untouched");
+    expect(html).toContain("Neighbourhood graph of Alpha");
+  });
+
+  it("selects the concept the query string names", async () => {
+    loadKnowledgeBase.mockResolvedValue({
+      reachable: true,
+      kb: {
+        indexedAt: null,
+        stats: { total: 2, mastered: 0, learning: 0, untouched: 2 },
+        frontier: ["alpha"],
+        edges: [{ from: "alpha", to: "beta", kind: "requires" }],
+        concepts: ["alpha", "beta"].map((id) => ({
+          id,
+          title: id === "alpha" ? "Alpha" : "Beta",
+          summary: "",
+          requires: id === "beta" ? ["alpha"] : [],
+          assumes: [],
+          pL: 0.1,
+          mastery: "gap" as const,
+          observations: 0,
+          correct: 0,
+          lastSeen: null,
+          due: null,
+          lapses: 0,
+          leech: false,
+          topics: [],
+          domain: null,
+        })),
+      },
+    });
+    const html = await render({ concept: "beta", view: "graph" });
+
+    expect(html).toContain("Course graph of Beta");
   });
 });

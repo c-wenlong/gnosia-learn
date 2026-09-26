@@ -1,197 +1,165 @@
-import type { KbConcept, KbEdge, MasteryLabel } from "@/lib/kb/types";
+import Link from "next/link";
+
+import { cx } from "@/components/ui/classes";
+import { layoutGraph, wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
- * Layered DAG renderer, in plain SVG.
+ * A layered prerequisite graph in plain SVG, coloured by mastery bucket.
  *
- * No graph library: the layout is a longest-path layering, which is all a
- * prerequisite graph needs and keeps the page dependency-free. Server-safe,
- * so the whole graph ships as static markup.
+ * Which concepts to draw is the caller's choice (`neighbourhood` or
+ * `courseScope` in `@/lib/concept-graph`); this only lays them out and draws
+ * them. Prerequisites sit above what needs them, so every line runs downward
+ * and no arrowhead is needed. A solid line is a hard prerequisite, a dashed one
+ * background (`assumes`), which orders teaching without gating it.
+ *
+ * No hooks, so it renders on the server for the workspace, where a node is a
+ * link (`hrefFor`), and in the browser for the Learn index, where a node
+ * selects a row (`onSelect`). Every colour is a token utility, so both themes
+ * come from one drawing.
  */
 
-const NODE_W = 168;
-const NODE_H = 52;
-const GAP_X = 28;
-const GAP_Y = 76;
-const PAD = 20;
-
-const FILL: Record<MasteryLabel, { bg: string; border: string; text: string }> = {
-  mastered: { bg: "#dcfce7", border: "#16a34a", text: "#14532d" },
-  solid: { bg: "#e0f2fe", border: "#0284c7", text: "#0c4a6e" },
-  shaky: { bg: "#fef9c3", border: "#ca8a04", text: "#713f12" },
-  weak: { bg: "#ffedd5", border: "#ea580c", text: "#7c2d12" },
-  gap: { bg: "#fee2e2", border: "#dc2626", text: "#7f1d1d" },
+const DOT: Record<MasteryBucket, string> = {
+  mastered: "fill-m-hi stroke-m-hi",
+  learning: "fill-m-mid stroke-m-hi",
+  untouched: "fill-surface stroke-m-lo",
 };
 
-/**
- * Longest-path layering: a node sits one level below its deepest
- * prerequisite, so every edge points strictly downward.
- */
-function assignLayers(concepts: KbConcept[], edges: KbEdge[]): Map<string, number> {
-  const incoming = new Map<string, string[]>();
-  for (const c of concepts) incoming.set(c.id, []);
-  // Both kinds constrain layout: a background edge still means "comes before".
-  for (const e of edges) incoming.get(e.to)?.push(e.from);
-
-  const layer = new Map<string, number>();
-  const visiting = new Set<string>();
-
-  const depth = (id: string): number => {
-    const cached = layer.get(id);
-    if (cached !== undefined) return cached;
-    // A cycle would otherwise recurse forever; doctor reports these, but the
-    // renderer must not hang because of one.
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
-
-    const parents = incoming.get(id) ?? [];
-    const value = parents.length === 0 ? 0 : Math.max(...parents.map(depth)) + 1;
-
-    visiting.delete(id);
-    layer.set(id, value);
-    return value;
-  };
-
-  for (const c of concepts) depth(c.id);
-  return layer;
-}
-
 export function ConceptGraph({
-  concepts,
+  nodes,
   edges,
-  frontier = [],
+  focus = null,
+  hrefFor,
+  onSelect,
+  fit = true,
+  compact = false,
+  label,
+  className,
 }: {
-  concepts: KbConcept[];
-  edges: KbEdge[];
-  frontier?: string[];
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** The selected concept, drawn larger inside an accent ring. */
+  focus?: string | null;
+  /** Makes each node a link. */
+  hrefFor?: (id: string) => string;
+  /** Makes each node a button. Ignored when `hrefFor` is given. */
+  onSelect?: (id: string) => void;
+  /** Scale to the container's width (a neighbourhood) or keep the natural size and scroll (a course). */
+  fit?: boolean;
+  /** Narrower columns and shorter label lines, for a graph in a side card. */
+  compact?: boolean;
+  /** Accessible name for the drawing. */
+  label?: string;
+  className?: string;
 }) {
-  if (concepts.length === 0) return null;
-
-  const layers = assignLayers(concepts, edges);
-  const byLayer = new Map<number, KbConcept[]>();
-  for (const c of concepts) {
-    const l = layers.get(c.id) ?? 0;
-    if (!byLayer.has(l)) byLayer.set(l, []);
-    byLayer.get(l)!.push(c);
-  }
-  for (const row of byLayer.values()) row.sort((a, b) => a.title.localeCompare(b.title));
-
-  const depths = [...byLayer.keys()].sort((a, b) => a - b);
-  const widest = Math.max(...[...byLayer.values()].map((r) => r.length));
-  const width = PAD * 2 + widest * NODE_W + (widest - 1) * GAP_X;
-  const height = PAD * 2 + depths.length * NODE_H + (depths.length - 1) * GAP_Y;
-
-  const pos = new Map<string, { x: number; y: number }>();
-  for (const d of depths) {
-    const row = byLayer.get(d)!;
-    const rowWidth = row.length * NODE_W + (row.length - 1) * GAP_X;
-    const startX = (width - rowWidth) / 2;
-    row.forEach((c, i) => {
-      pos.set(c.id, {
-        x: startX + i * (NODE_W + GAP_X),
-        y: PAD + depths.indexOf(d) * (NODE_H + GAP_Y),
-      });
-    });
+  if (nodes.length === 0) {
+    return <p className={cx("text-[13px] text-text3", className)}>Nothing to draw.</p>;
   }
 
-  const frontierSet = new Set(frontier);
+  const { width, height, positions } = layoutGraph(nodes, edges, compact ? { columnWidth: 84, rowHeight: 96 } : {});
+  const labels = new Map(nodes.map((n) => [n.id, wrapLabel(n.title, compact ? 12 : 16)]));
+  const fontSize = compact ? 12 : 11.5;
+  const name = label ?? `Concept graph, ${nodes.length} concept${nodes.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+    <div className={cx("overflow-x-auto", className)}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width={width}
         height={height}
-        role="img"
-        aria-label={`Concept dependency graph with ${concepts.length} concepts`}
-        style={{ maxWidth: "100%", height: "auto" }}
+        role="group"
+        aria-label={name}
+        className="mx-auto block"
+        style={fit ? { width: "100%", maxWidth: width, height: "auto" } : undefined}
       >
-        <defs>
-          <marker
-            id="kb-arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
-          </marker>
-        </defs>
-
         {edges.map((e) => {
-          const from = pos.get(e.from);
-          const to = pos.get(e.to);
+          const from = positions.get(e.from);
+          const to = positions.get(e.to);
           if (!from || !to) return null;
-          const x1 = from.x + NODE_W / 2;
-          const y1 = from.y + NODE_H;
-          const x2 = to.x + NODE_W / 2;
-          const y2 = to.y;
+          // From under the prerequisite's label to just above the dot it feeds.
+          const y1 = from.y + 22 + (labels.get(e.from)?.length ?? 1) * 14;
+          const y2 = to.y - (e.to === focus ? 18 : 12);
           const mid = (y1 + y2) / 2;
-          // Background edges read as dotted: they order the plan without
-          // gating it, so they should not look like a hard dependency.
-          const background = e.kind === "assumes";
           return (
             <path
-              key={`${e.from}-${e.to}-${e.kind}`}
-              d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
+              key={`${e.from}>${e.to}>${e.kind}`}
+              d={`M ${from.x} ${y1} C ${from.x} ${mid}, ${to.x} ${mid}, ${to.x} ${y2}`}
               fill="none"
-              stroke="#94a3b8"
-              strokeWidth={background ? 1 : 1.5}
-              strokeDasharray={background ? "4 4" : undefined}
-              opacity={background ? 0.6 : 1}
-              markerEnd="url(#kb-arrow)"
+              // The selected concept's own lines in the accent, the rest quieter.
+              className={e.from === focus || e.to === focus ? "stroke-accent" : "stroke-text3 opacity-70"}
+              strokeWidth={e.kind === "assumes" ? 1 : 1.5}
+              strokeDasharray={e.kind === "assumes" ? "4 4" : undefined}
             />
           );
         })}
 
-        {concepts.map((c) => {
-          const p = pos.get(c.id);
+        {nodes.map((n) => {
+          const p = positions.get(n.id);
           if (!p) return null;
-          const colour = FILL[c.mastery];
-          const onFrontier = frontierSet.has(c.id);
-          const label =
-            c.title.length > 24 ? `${c.title.slice(0, 23)}…` : c.title;
-
-          return (
-            <g key={c.id}>
-              <rect
-                x={p.x}
-                y={p.y}
-                width={NODE_W}
-                height={NODE_H}
-                rx={8}
-                fill={colour.bg}
-                stroke={colour.border}
-                strokeWidth={onFrontier ? 3 : 1.5}
-                strokeDasharray={onFrontier ? "5 3" : undefined}
-              />
-              <text
-                x={p.x + NODE_W / 2}
-                y={p.y + 21}
-                textAnchor="middle"
-                fontSize={13}
-                fontWeight={600}
-                fill={colour.text}
-                fontFamily="system-ui, sans-serif"
-              >
-                {label}
-              </text>
-              <text
-                x={p.x + NODE_W / 2}
-                y={p.y + 38}
-                textAnchor="middle"
-                fontSize={11}
-                fill={colour.text}
-                fontFamily="system-ui, sans-serif"
-                opacity={0.75}
-              >
-                {Math.round(c.pL * 100)}% · {c.mastery}
-              </text>
-            </g>
+          const isFocus = n.id === focus;
+          const lines = labels.get(n.id) ?? [n.title];
+          const caption = `${n.title}, ${MASTERY_BUCKET_LABEL[n.bucket]}${n.bucket === "untouched" ? "" : `, p(L) ${n.pL.toFixed(2)}`}`;
+          const body = (
+            <>
+              <title>{caption}</title>
+              {isFocus && <circle cx={p.x} cy={p.y} r={16} fill="none" className="stroke-accent" strokeWidth={2} />}
+              <circle cx={p.x} cy={p.y} r={isFocus ? 10 : 8} className={DOT[n.bucket]} strokeWidth={2} />
+              {lines.map((line, i) => (
+                <text
+                  key={i}
+                  x={p.x}
+                  y={p.y + 30 + i * 14}
+                  textAnchor="middle"
+                  fontSize={fontSize}
+                  fontWeight={isFocus ? 700 : 500}
+                  className={isFocus ? "fill-text" : "fill-text2"}
+                >
+                  {line}
+                </text>
+              ))}
+            </>
           );
+          const focusRing = "outline-none [&:focus-visible>circle:last-of-type]:stroke-accent";
+          if (hrefFor) {
+            return (
+              <Link key={n.id} href={hrefFor(n.id)} aria-label={caption} className={focusRing}>
+                {body}
+              </Link>
+            );
+          }
+          if (onSelect) {
+            return (
+              <g
+                key={n.id}
+                role="button"
+                tabIndex={0}
+                aria-label={caption}
+                aria-pressed={isFocus}
+                className={cx("cursor-pointer", focusRing)}
+                onClick={() => onSelect(n.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(n.id);
+                  }
+                }}
+              >
+                {body}
+              </g>
+            );
+          }
+          return <g key={n.id}>{body}</g>;
         })}
       </svg>
     </div>
+  );
+}
+
+/** The two-line key under a graph: what the line styles and the ring mean. */
+export function ConceptGraphKey({ className }: { className?: string }) {
+  return (
+    <p className={cx("text-[11px] leading-4 text-text3", className)}>
+      Prerequisites sit above. Solid: required. Dashed: background. Ringed: selected.
+    </p>
   );
 }
