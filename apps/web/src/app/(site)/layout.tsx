@@ -1,9 +1,21 @@
+import { Literata } from "next/font/google";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { GnosiaWordmark } from "@/components/brand";
 
 import { GITHUB_URL, siteLink } from "./site";
+
+// The public pages' title face. Literata was drawn for reading books on
+// screens, which is the product's one idea; loading it here rather than in the
+// root layout keeps it off every signed-in page. The `font-book` utility
+// (globals.css) names it.
+const literata = Literata({
+  variable: "--font-literata",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+});
 
 /**
  * The public pages' frame: the landing page at `/` and the sign-in page.
@@ -19,7 +31,9 @@ import { GITHUB_URL, siteLink } from "./site";
  */
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="group/site gnosia-ground flex min-h-dvh flex-col overflow-x-clip font-sans">
+    <div
+      className={`${literata.variable} group/site gnosia-ground flex min-h-dvh flex-col overflow-x-clip font-sans`}
+    >
       <a
         href="#main"
         className="sr-only rounded-full bg-brand-teal px-4 py-2 text-[14px] font-semibold text-brand-cream focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 dark:text-brand-navy"
