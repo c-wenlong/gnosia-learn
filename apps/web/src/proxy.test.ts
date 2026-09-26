@@ -15,14 +15,16 @@ function get(path: string, cookie?: string): NextRequest {
 }
 
 describe("proxy", () => {
-  const saved = process.env.AUTH_SECRET;
+  const saved = { secret: process.env.AUTH_SECRET, password: process.env.OWNER_PASSWORD };
   let token: string;
   beforeEach(async () => {
     process.env.AUTH_SECRET = SECRET;
+    process.env.OWNER_PASSWORD = "correct horse battery staple";
     token = await signSession(SECRET, Math.floor(Date.now() / 1000));
   });
   afterEach(() => {
-    process.env.AUTH_SECRET = saved;
+    process.env.AUTH_SECRET = saved.secret;
+    process.env.OWNER_PASSWORD = saved.password;
   });
 
   it("lets an anonymous visitor see the landing page, sign-in and the auth routes", async () => {
@@ -70,6 +72,12 @@ describe("proxy", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Ftoday`);
     expect((await proxy(get("/"))).status).toBe(200);
+  });
+
+  it("fails closed when OWNER_PASSWORD is unset, so removing it ends every session", async () => {
+    delete process.env.OWNER_PASSWORD;
+    expect((await proxy(get("/today", token))).status).toBe(307);
+    expect((await proxy(get("/api/learner/reset", token))).status).toBe(401);
   });
 
   it("matcher skips static output and image files but covers the API", () => {

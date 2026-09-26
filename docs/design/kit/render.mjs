@@ -10,9 +10,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const core = process.env.PLAYWRIGHT_CORE ?? join(here, '../../../tools/tldrawkc/node_modules/playwright-core/index.mjs');
 const { chromium } = await import(pathToFileURL(core).href);
-const cache = join(homedir(), 'Library/Caches/ms-playwright');
-const dir = readdirSync(cache).filter((d) => d.startsWith('chromium-')).sort().pop();
-const exe = process.env.CHROMIUM ?? join(cache, dir, 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+// CHROMIUM wins outright; the macOS Playwright cache is only consulted without
+// it, so a Linux machine with its own browser never reads a folder it lacks.
+function findChromium() {
+  if (process.env.CHROMIUM) return process.env.CHROMIUM;
+  const cache = join(homedir(), 'Library/Caches/ms-playwright');
+  const dir = readdirSync(cache).filter((d) => d.startsWith('chromium-')).sort().pop();
+  return join(cache, dir, 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+}
+const exe = findChromium();
 
 const args = process.argv.slice(2);
 const transparent = args.includes('--transparent');
