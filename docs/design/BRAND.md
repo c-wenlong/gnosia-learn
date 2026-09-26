@@ -92,7 +92,7 @@ reduction of it, and where the two disagree the art wins.
 | File | What it is | Used for |
 | --- | --- | --- |
 | [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. `GnosiaMark`, the flat SVG reduction, is drawn from it and now only feeds the preview kit |
-| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of the three icon files below |
+| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of `apple-icon.png` and `app-icon-256.png` below (the favicon is cut from `logo/mark.png`) |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
