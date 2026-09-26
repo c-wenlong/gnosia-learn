@@ -44,9 +44,9 @@ export function Chip({
   const tones = {
     muted: "border-[var(--border)] bg-[var(--chip-bg)] text-[var(--muted-strong)]",
     accent: "border-[var(--accent)]/40 bg-[var(--nav-active-bg)] text-[var(--accent-strong)]",
-    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]",
+    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]",
     danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
   } as const;
   return (
     <span
@@ -173,9 +173,9 @@ export function Notice({
   children: ReactNode;
 }) {
   const tones = {
-    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]",
+    warn: "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]",
     danger: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
   } as const;
   return (
     <div role="status" className={`border-b px-3 py-1.5 text-xs ${tones[tone]}`}>
@@ -200,7 +200,7 @@ export function VerbNotice({
   clearHref: string;
 }) {
   const tones = {
-    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]",
+    ok: "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]",
     bad: "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]",
   } as const;
   return (

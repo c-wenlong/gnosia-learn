@@ -125,7 +125,7 @@ function SelectedDiagram({
       </div>
 
       {diagram.topic === null && (
-        <p className="mt-2 text-xs text-[var(--warn)]">
+        <p className="mt-2 text-xs text-[var(--warn-text)]">
           The indexer refuses a document with no topic by name, so this one is in no catalog. Set
           one with{" "}
           <Mono>npm run --silent canvas -- meta set {diagram.tldr.path} --topic &lt;slug&gt;</Mono>,
@@ -176,7 +176,7 @@ function SelectedDiagram({
               </span>
             </>
           ) : (
-            <span className="text-[var(--warn)]">never exported</span>
+            <span className="text-[var(--warn-text)]">never exported</span>
           )}
         </MetaRow>
       </div>

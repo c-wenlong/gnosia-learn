@@ -11,80 +11,167 @@
  */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * The hi-fi palette. Values and provenance are `TOKENS` in
+ * docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md; the
+ * names are the contract every redesigned page is written against, listed in
+ * docs/design/IMPLEMENTATION.md. Light is on :root, dark on `.dark`.
+ */
 :root {
-  --background: #f8f7f4;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --muted-strong: #57534e;
-  --border: #e7e5e4;
+  --page: #f8f8f8;
   --surface: #ffffff;
-  --surface-hover: #f5f5f4;
-  --sidebar-bg: #f3f2ee;
-  --header-bg: color-mix(in srgb, var(--background) 88%, transparent);
-  --chip-bg: #f5f5f4;
-  --nav-active-bg: #e8f0fe;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
+  --surface2: #f3f3f3;
+  --tint: #eef1ff;
+  --border: #e5e5e5;
+  --hair: #ebebeb;
+  --text: #000000;
+  --text2: #666666;
+  --text3: #999999;
+  --accent: #456dff;
+  --accent-text: #294bc6;
+  --ok: #29cc57;
+  --ok-lip: #15b441;
+  --ok-text: #009b2b;
+  --ok-tint: #e6f8ec;
+  --warn: #f7c325;
+  --warn-lip: #b78900;
+  --warn-text: #b78900;
+  --warn-tint: #fff5d6;
+  --danger: #c43939;
+  --streak: #ff9600;
+  --btn-face: #111111;
+  --btn-lip: #000000;
+  --btn-text: #ffffff;
+  --m-hi: #456dff;
+  --m-mid: #a9b9ff;
+  --m-lo: #e5e5e5;
+  --lip-shade: #d4d4d4;
 
-  /* One step above --surface, for a panel sitting over a canvas. In light mode
-     the two are equal: paper on paper needs a border, not a lighter paper. */
-  --surface-raised: #ffffff;
+  /* Button faces and lips the kit hard-codes rather than naming: the accent
+     button's lip, the label on a green or yellow face, and the lips under a
+     mastered and a learning path node. Named here so no component carries a
+     literal. */
+  --accent-lip: #2e4fd1;
+  --ok-on: #ffffff;
+  --warn-on: #5c4400;
+  --m-hi-lip: #2e4fd1;
+  /* The close screen's review-cards tile; the kit's one literal colour. */
+  --violet: #8b5cf6;
+  --m-mid-lip: #7e93e6;
 
-  /* The amber the shell's store banner and the course cards already used
-     inline, named once. Tailwind's amber-900 / amber-50 / amber-300. */
-  --warn: #78350f;
-  --warn-bg: #fffbeb;
-  --warn-border: #fcd34d;
+  /* Also a Tailwind font (`font-display`, below); declared here as well so
+     inline styles and arbitrary values can name it. */
+  --font-display: Georgia, "Times New Roman", serif;
 
-  /* A red at the same lightness as the amber triple. A failed job and a failed
-     verify check had no colour before the studio. */
-  --danger: #7f1d1d;
-  --danger-bg: #fef2f2;
-  --danger-border: #fca5a5;
-
-  /* Green, used only for a passed verify check and a done phase glyph. */
-  --ok: #166534;
+  /*
+   * The old palette's names, kept as aliases so the pages not yet redesigned
+   * (the course and module pages, the library, the studio) keep rendering.
+   * Defined once: every alias is a var() of a token, and both :root and .dark
+   * sit on <html>, so an alias resolves against whichever theme is active.
+   * `--border`, `--surface`, `--accent`, `--ok`, `--warn` and `--danger` are
+   * both old and new names; the new meaning won, and the old uses of `--warn`
+   * and `--ok` as a text colour now read `--warn-text` and `--ok-text`.
+   * Delete an alias once nothing reads it.
+   */
+  --background: var(--page);
+  --foreground: var(--text);
+  --muted: var(--text2);
+  --muted-strong: color-mix(in srgb, var(--text) 45%, var(--text2));
+  --surface-hover: var(--surface2);
+  --sidebar-bg: var(--surface2);
+  --header-bg: var(--surface);
+  --chip-bg: var(--surface2);
+  --nav-active-bg: var(--tint);
+  --accent-strong: var(--accent-text);
+  --surface-raised: var(--surface);
+  --warn-bg: var(--warn-tint);
+  --warn-border: var(--warn);
+  --danger-bg: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  --danger-border: color-mix(in srgb, var(--danger) 45%, var(--surface));
 }
 
 .dark {
-  --background: #0f1115;
-  --foreground: #e7e5e4;
-  --muted: #a8a29e;
-  --muted-strong: #d6d3d1;
-  --border: #2a2e37;
-  --surface: #171a21;
-  --surface-hover: #1e232c;
-  --sidebar-bg: #12151b;
-  --header-bg: color-mix(in srgb, var(--background) 88%, transparent);
-  --chip-bg: #1e232c;
-  --nav-active-bg: #1a2744;
-  --accent: #60a5fa;
-  --accent-strong: #93c5fd;
+  --page: #141414;
+  --surface: #1e1e1e;
+  --surface2: #292929;
+  --tint: #232a4a;
+  --border: #4c4c4c;
+  --hair: #333333;
+  --text: #ffffff;
+  --text2: #a3a3a3;
+  --text3: #7a7a7a;
+  --accent: #456dff;
+  --accent-text: #7491ff;
+  --ok: #29cc57;
+  --ok-lip: #15b441;
+  --ok-text: #5ed981;
+  --ok-tint: #17331f;
+  --warn: #f9d25c;
+  --warn-lip: #b78900;
+  --warn-text: #f9d25c;
+  --warn-tint: #33300f;
+  --danger: #ff8585;
+  --streak: #ffab33;
+  --btn-face: #e5e5e5;
+  --btn-lip: #b3b3b3;
+  --btn-text: #000000;
+  --m-hi: #7491ff;
+  --m-mid: #3a4a8f;
+  --m-lo: #4c4c4c;
+  --lip-shade: #0f0f0f;
 
-  /* Elevation by lightening the surface rather than by shadow, which is the
-     Material dark-theme rule the research table adopted: a shadow does not
-     carry on a dark ground. */
-  --surface-raised: #1e232c;
+  --ok-on: #0b2e14;
 
-  /* The dark half of the banner the shell already drew inline. --warn-bg is
-     amber-950 at 40% resolved over --background, since a panel that sits over
-     a canvas cannot be translucent. */
-  --warn: #fde68a;
-  --warn-bg: #25150e;
-  --warn-border: #78350f;
-
-  --danger: #fecaca;
-  --danger-bg: #2a1113;
-  --danger-border: #7f1d1d;
-
-  --ok: #86efac;
+  /* Elevation by lightening rather than by shadow: a shadow does not carry on
+     a dark ground. In light the two are equal, paper on paper needs a border. */
+  --surface-raised: var(--surface2);
 }
 
+/*
+ * Every token is also a Tailwind colour of the same name, so a component can
+ * write `bg-surface2 text-text2 border-border` instead of
+ * `bg-[var(--surface2)]`. `inline` keeps the utility pointing at the variable,
+ * so it follows the theme class rather than baking in the light value.
+ */
 @theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-tint: var(--tint);
+  --color-border: var(--border);
+  --color-hair: var(--hair);
+  --color-text: var(--text);
+  --color-text2: var(--text2);
+  --color-text3: var(--text3);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-ok: var(--ok);
+  --color-ok-lip: var(--ok-lip);
+  --color-ok-text: var(--ok-text);
+  --color-ok-tint: var(--ok-tint);
+  --color-warn: var(--warn);
+  --color-warn-lip: var(--warn-lip);
+  --color-warn-text: var(--warn-text);
+  --color-warn-tint: var(--warn-tint);
+  --color-danger: var(--danger);
+  --color-streak: var(--streak);
+  --color-btn-face: var(--btn-face);
+  --color-btn-lip: var(--btn-lip);
+  --color-btn-text: var(--btn-text);
+  --color-m-hi: var(--m-hi);
+  --color-m-mid: var(--m-mid);
+  --color-m-lo: var(--m-lo);
+  --color-lip-shade: var(--lip-shade);
+  --color-violet: var(--violet);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Figtree for the interface (next/font, see layout.tsx); Georgia for page
+     titles, concept titles and the wordmark, from the system, no download. */
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 html {
@@ -96,9 +183,11 @@ html.dark {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 /* Docs-style prose tweaks */

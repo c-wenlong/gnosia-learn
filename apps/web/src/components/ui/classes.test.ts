@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+
+import { buttonClasses, cardClasses, chipClasses, cx, inputClasses } from "./classes";
+
+describe("cx", () => {
+  it("drops falsy parts", () => {
+    expect(cx("a", false, null, undefined, "", "b")).toBe("a b");
+  });
+});
+
+describe("buttonClasses", () => {
+  it("gives the 3D variants a lip that the press removes", () => {
+    for (const variant of ["primary", "ok", "warn", "accent"] as const) {
+      const c = buttonClasses({ variant });
+      expect(c).toMatch(/shadow-\[0_4px_0_var\(--[a-z-]+\)\]/);
+      expect(c).toContain("active:shadow-none");
+      expect(c).toContain("mb-1");
+    }
+  });
+
+  it("gives secondary a 2px border and no lip", () => {
+    const c = buttonClasses({ variant: "secondary" });
+    expect(c).toContain("border-2");
+    expect(c).not.toContain("shadow-[");
+    expect(c).toContain("px-[22px]");
+  });
+
+  it("sizes md at 44px and sm at 36px", () => {
+    expect(buttonClasses()).toContain("h-11");
+    expect(buttonClasses({ size: "sm" })).toContain("h-9");
+    expect(buttonClasses({ size: "sm", variant: "secondary" })).toContain("px-[18px]");
+  });
+
+  it("keeps the ghost padding tight and adds width and extra classes on request", () => {
+    expect(buttonClasses({ variant: "ghost" })).toContain("px-2");
+    expect(buttonClasses({ block: true, className: "mt-4" })).toMatch(/w-full mt-4$/);
+  });
+});
+
+describe("chipClasses", () => {
+  it("fills an active chip with the accent", () => {
+    expect(chipClasses({ active: true })).toContain("bg-accent");
+    expect(chipClasses()).toContain("border-border");
+  });
+
+  it("gives a static chip no hover or focus ring", () => {
+    const c = chipClasses({ interactive: false });
+    expect(c).not.toContain("hover:");
+    expect(c).not.toContain("focus-visible");
+  });
+
+  it("has a small size", () => {
+    expect(chipClasses({ size: "sm" })).toContain("h-7");
+  });
+});
+
+describe("inputClasses and cardClasses", () => {
+  it("rounds an input to 8px or a pill", () => {
+    expect(inputClasses()).toContain("rounded-lg");
+    expect(inputClasses({ pill: true })).toContain("rounded-full");
+  });
+
+  it("pads a card 20px, or 14 when tight", () => {
+    expect(cardClasses()).toContain("p-5");
+    expect(cardClasses({ tight: true })).toContain("p-3.5");
+  });
+});
