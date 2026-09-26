@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import type { EmbedResolution } from "@/components/NoteProse";
@@ -10,7 +11,7 @@ import { NoteAndSources } from "@/components/workspace/NoteAndSources";
 import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCards";
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
-import { buildConceptSessionContext } from "@/lib/agent/prompt";
+import { buildConceptSessionContext, tutorStyleLabel } from "@/lib/agent/prompt";
 import { accessFor, loadFileAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
 import { problemForAccess } from "@/lib/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@/lib/concept-workspace-core";
@@ -19,6 +20,7 @@ import { habitTimeZone } from "@/lib/habit";
 import { dueLabel } from "@/lib/learn-index";
 import { assetFileHref, assetStatusHref, isCompanionKind } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
+import { readTutorStyle } from "@/lib/settings";
 
 /**
  * The concept workspace (hi-fi 04): a concept's note and sources on the left,
@@ -61,7 +63,8 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const query = await searchParams;
   const rawAsk = Array.isArray(query.ask) ? query.ask[0] : query.ask;
   const ask = typeof rawAsk === "string" && rawAsk.trim() !== "" ? rawAsk.slice(0, ASK_LIMIT) : undefined;
-  const session = buildConceptSessionContext(toConceptPromptInput(w));
+  const style = await readTutorStyle();
+  const session = buildConceptSessionContext(toConceptPromptInput(w), { style });
   const timeZone = habitTimeZone();
   const nextReview = w.review ? dueLabel(w.review.due, new Date(), timeZone).label : null;
 
@@ -117,7 +120,17 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
             resolveEmbed={resolveEmbed}
           />
         }
-        tutorAside={<span className="text-[12px] text-text3">Grounded in your note</span>}
+        tutorAside={
+          // The style the tutor is told to use (hi-fi 04's "Learning guide ·
+          // concise"), linking to where it is changed.
+          <Link
+            href="/settings"
+            title="Tutor style, set in Settings"
+            className="rounded-sm text-[12px] text-text3 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {tutorStyleLabel(style)}
+          </Link>
+        }
         tutor={
           <TutorChat
             slug={w.slug}

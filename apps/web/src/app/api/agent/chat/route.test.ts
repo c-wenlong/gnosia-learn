@@ -10,8 +10,10 @@ import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
  */
 const readConceptWorkspace = vi.hoisted(() => vi.fn());
 const completeWithFallback = vi.hoisted(() => vi.fn());
+const readTutorStyle = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
+vi.mock("@/lib/settings", () => ({ readTutorStyle }));
 vi.mock("@/lib/agent/providers", () => ({
   completeWithFallback,
   availableProviderSummary: () => [],
@@ -72,6 +74,8 @@ describe("POST /api/agent/chat with conceptSlug", () => {
   beforeEach(() => {
     readConceptWorkspace.mockReset();
     completeWithFallback.mockReset();
+    readTutorStyle.mockReset();
+    readTutorStyle.mockResolvedValue("guide-concise");
   });
 
   it("refuses a slug that could not be a concept before any read", async () => {
@@ -133,6 +137,19 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[0].content).toContain("The body of the note.");
     expect(sent.filter((m) => m.role === "system")).toHaveLength(1);
     expect(sent[1]).toEqual({ role: "user", content: "What is it?" });
+  });
+
+  it("reads the learner's tutor style on the server and puts it in the prompt", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    readTutorStyle.mockResolvedValue("socratic");
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "What do you think?", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "What is it?" }] });
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain("Ask before telling");
   });
 
   it("still serves the topic path unchanged", async () => {
