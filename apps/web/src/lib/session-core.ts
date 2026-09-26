@@ -383,18 +383,21 @@ export function formatPL(pL: number): string {
 }
 
 /**
- * "+0.13", "-0.06", "0.00": a mastery movement, signed. Pass the two ends when
- * they are printed beside it, so 0.36 to 0.36 reads "0.00" rather than the
+ * "+0.13", "-0.06", "+0.00": a mastery movement, signed. Pass the two ends when
+ * they are printed beside it, so 0.36 to 0.36 reads "+0.00" rather than the
  * "-0.01" the unrounded difference would round to.
  */
 export function formatMove(before: number, after: number): string {
   return formatSigned(Number(formatPL(after)) - Number(formatPL(before)));
 }
 
+/**
+ * A change, always with its sign, zero included: "+0.00" beside a p(L) of
+ * 0.15 reads as no change, where a bare "0.00" reads as the mastery itself.
+ */
 export function formatSigned(delta: number): string {
   const rounded = Math.round(delta * 100) / 100;
-  if (rounded === 0) return "0.00";
-  return `${rounded > 0 ? "+" : "-"}${Math.abs(rounded).toFixed(2)}`;
+  return `${rounded < 0 ? "-" : "+"}${Math.abs(rounded).toFixed(2)}`;
 }
 
 /** The feedback bar's note: "p(L) 0.55 to 0.49 · this becomes a review card". */
@@ -458,6 +461,15 @@ export interface SessionTotals {
   after: number | null;
   /** Review cards this session created or rescheduled, one per concept. */
   cards: number;
+}
+
+/**
+ * The close screen's "mastery moved" tile: the session concept's p(L) change,
+ * signed, or "–" when nothing about it was answered. A session that recorded
+ * nothing measured nothing, so it does not claim a change of zero.
+ */
+export function formatTotalsMove(totals: Pick<SessionTotals, "before" | "after">): string {
+  return totals.before === null || totals.after === null ? "–" : formatMove(totals.before, totals.after);
 }
 
 export function sessionTotals(slug: string, answers: readonly RecordedAnswer[]): SessionTotals {
