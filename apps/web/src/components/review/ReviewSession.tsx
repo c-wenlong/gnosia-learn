@@ -81,6 +81,13 @@ export function ReviewSession({
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [close, setClose] = useState<CloseData | null>(null);
   const ratingsRef = useRef<HTMLDivElement>(null);
+  // `pending` is state, so two key presses inside one frame both read it as
+  // false and would grade the card twice, skipping the next one. The ref is
+  // the guard; the state is only for the disabled look.
+  const inFlight = useRef(false);
+  // The card the queue is really on. A key handler still holding the previous
+  // render's card between a recorded grade and the re-render finds it stale.
+  const current = useRef(0);
 
   const now = useMemo(() => new Date(asOf), [asOf]);
   const item: ReviewItem | undefined = items[index];
@@ -100,7 +107,8 @@ export function ReviewSession({
 
   const rate = useCallback(
     async (rating: Rating) => {
-      if (item === undefined || pending) return;
+      if (item === undefined || inFlight.current || current.current !== index) return;
+      inFlight.current = true;
       setPending(true);
       setError(null);
       try {
@@ -114,6 +122,7 @@ export function ReviewSession({
           setError(body?.error ?? `Not saved (${res.status}).`);
           return;
         }
+        current.current = index + 1;
         setOutcomes((list) => [...list, { conceptId: item.conceptId, rating }]);
         setIndex((i) => i + 1);
         setPhase("ask");
@@ -123,10 +132,11 @@ export function ReviewSession({
       } catch {
         setError("Not saved: the server could not be reached.");
       } finally {
+        inFlight.current = false;
         setPending(false);
       }
     },
-    [item, pending, router],
+    [item, index, router],
   );
 
   const reveal = useCallback(() => setPhase("shown"), []);
