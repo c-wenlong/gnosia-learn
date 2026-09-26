@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { buttonClasses } from "@/components/ui/classes";
 import { ASSET_PROBLEMS, type AssetProblemCode } from "@/lib/asset-problems";
 
 /**
@@ -68,15 +69,15 @@ export function WidgetFailure({
         data-problem={code ?? "checking"}
         className={`flex flex-col items-center justify-center gap-1 px-3 py-2 text-center ${className}`}
       >
-        <BrokenGlyph className="h-5 w-5 text-[var(--muted)]" />
-        <p className="text-[11px] font-medium text-[var(--foreground)]">{headline}</p>
-        <p className="text-[11px] leading-snug text-[var(--muted-strong)]" title={problem?.reason}>
+        <BrokenGlyph className="h-5 w-5 text-text3" />
+        <p className="text-[11px] font-medium text-text">{headline}</p>
+        <p className="text-[11px] leading-snug text-text2" title={problem?.reason}>
           {problem === null ? "Checking why…" : problem.label}
         </p>
         {(fix?.kind === "command" || fix?.kind === "env") && (
           <code
             title={fix.text}
-            className="max-w-full truncate rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]"
+            className="max-w-full truncate rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-text2"
           >
             {fix.text}
           </code>
@@ -89,33 +90,33 @@ export function WidgetFailure({
     <div
       role="status"
       data-problem={code ?? "checking"}
-      className={`flex flex-col items-center justify-center gap-2 bg-[var(--sidebar-bg)] px-5 py-8 text-center ${
-        inset ? "" : "rounded-lg border border-[var(--border)]"
+      className={`flex flex-col items-center justify-center gap-2 bg-surface2 px-5 py-8 text-center ${
+        inset ? "" : "rounded-xl border-2 border-border"
       } ${className}`}
     >
-      <BrokenGlyph className="h-6 w-6 text-[var(--muted)]" />
-      <p className="text-sm font-medium text-balance text-[var(--foreground)]">{headline}</p>
-      <p className="max-w-[52ch] text-[13px] leading-relaxed text-pretty text-[var(--muted-strong)]">
+      <BrokenGlyph className="h-6 w-6 text-text3" />
+      <p className="text-sm font-medium text-balance text-text">{headline}</p>
+      <p className="max-w-[52ch] text-[13px] leading-relaxed text-pretty text-text2">
         {problem === null ? "Checking why…" : problem.reason}
       </p>
       {(fix?.kind === "command" || fix?.kind === "env") && (
         <div className="mt-1 flex max-w-full flex-col items-center gap-1">
-          <span className="text-[11px] text-[var(--muted)]">
+          <span className="text-[11px] text-text3">
             {fix.kind === "env" ? "To fix it, start the server with" : "To fix it, run"}
           </span>
-          <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-mono text-xs text-[var(--foreground)] select-all">
+          <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-xs text-text select-all">
             {fix.text}
           </code>
         </div>
       )}
       {fix?.kind === "note" && (
-        <p className="max-w-[52ch] text-xs text-[var(--muted-strong)]">{fix.text}</p>
+        <p className="max-w-[52ch] text-xs text-text2">{fix.text}</p>
       )}
       {canRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="mt-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          className={buttonClasses({ variant: "secondary", size: "sm", className: "mt-1" })}
         >
           Try again
         </button>

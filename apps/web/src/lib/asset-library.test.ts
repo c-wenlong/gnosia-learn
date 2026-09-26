@@ -40,11 +40,18 @@ vi.mock("@self-learn/catalog/state", () => ({
   topicTitles: async () => {
     throw new Error("titles unavailable");
   },
+  // Fails the same way, for the concept chips: a card with no concept is a
+  // correct card, so this must not cost the rows either.
+  conceptsForAssets: async () => {
+    throw new Error("concept links unavailable");
+  },
 }));
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { readLibrary, readAssetDetail } = await import("@/lib/asset-library");
+const { readLibrary, readAssetDetail, readSearchText, searchableText } = await import(
+  "@/lib/asset-library"
+);
 
 describe("a failing topic-title lookup", () => {
   it("still returns the rows, and reports the catalog as reachable", async () => {
@@ -65,5 +72,61 @@ describe("a failing topic-title lookup", () => {
     expect(detail.asset?.id).toBe("manimkc:out/x/y.mp4");
     expect(detail.reachable).toBe(true);
     expect(detail.titles).toEqual({});
+  });
+});
+
+describe("a failing concept-link lookup", () => {
+  it("still returns the rows, with no concept chips", async () => {
+    const snapshot = await readLibrary();
+    expect(snapshot.reachable).toBe(true);
+    expect(snapshot.rows).toHaveLength(1);
+    expect(snapshot.concepts).toEqual({});
+  });
+
+  it("leaves the detail page its asset, explaining nothing", async () => {
+    const detail = await readAssetDetail("manimkc:out/x/y.mp4");
+    expect(detail.asset?.id).toBe("manimkc:out/x/y.mp4");
+    expect(detail.concepts).toEqual([]);
+  });
+});
+
+describe("the words search reads", () => {
+  it("searches a transcript by what was said and its chapter titles, not its JSON", () => {
+    const raw = JSON.stringify({
+      chapters: [{ scene: "T1", title: "Weights", start: 0, end: 5 }],
+      segments: [{ start: 0, end: 3, text: "Each weight is an AREA." }],
+    });
+    const text = searchableText("transcript", raw);
+    expect(text).toContain("weights");
+    expect(text).toContain("each weight is an area.");
+    expect(text).not.toContain("segments");
+  });
+
+  it("searches a transcript that does not parse as it is written", () => {
+    expect(searchableText("transcript", "not json at all")).toBe("not json at all");
+  });
+
+  it("reads a note as it is written, lowercased", () => {
+    expect(searchableText("note", "# Dot Product\n\nA projection.")).toBe("# dot product\n\na projection.");
+  });
+
+  it("reads nothing, and says so, when this deployment does not serve files", async () => {
+    const previous = process.env.ASSET_FILES_ENABLED;
+    delete process.env.ASSET_FILES_ENABLED;
+    try {
+      const out = await readSearchText(
+        [{ ...rows[0]!, id: "note:a.md", kind: "note", path: "learn/a.md", createdAt: "" }],
+        ["dot"],
+      );
+      expect(out.searchedText).toBe(false);
+      expect(out.texts.size).toBe(0);
+    } finally {
+      if (previous !== undefined) process.env.ASSET_FILES_ENABLED = previous;
+    }
+  });
+
+  it("reads nothing for an empty query", async () => {
+    const out = await readSearchText([], []);
+    expect(out.searchedText).toBe(false);
   });
 });

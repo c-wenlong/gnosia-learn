@@ -9,8 +9,16 @@ import {
   kindFacets,
   kindNoun,
   kindRank,
+  conceptHref,
+  courseFacets,
+  explainedConcepts,
+  filterRows,
   libraryHref,
-  topicFacets,
+  matchesAll,
+  parseSort,
+  searchHits,
+  searchTerms,
+  sortRows,
 } from "./library";
 
 /** The catalog's real per-kind counts, which the default view is designed against. */
@@ -142,27 +150,6 @@ describe("kindNoun", () => {
   });
 });
 
-describe("topicFacets", () => {
-  it("counts a row once per topic it is filed under, biggest first", () => {
-    expect(
-      topicFacets([
-        { topics: ["vectors", "algorithms"] },
-        { topics: ["algorithms"] },
-        { topics: [] },
-        { topics: ["zebras"] },
-      ]),
-    ).toEqual([
-      { slug: "algorithms", count: 2 },
-      { slug: "vectors", count: 1 },
-      { slug: "zebras", count: 1 },
-    ]);
-  });
-
-  it("has nothing to offer when nothing is filed", () => {
-    expect(topicFacets([{ topics: [] }])).toEqual([]);
-  });
-});
-
 describe("libraryHref", () => {
   it("drops an absent filter rather than writing an empty value", () => {
     expect(libraryHref({})).toBe("/library");
@@ -174,6 +161,227 @@ describe("libraryHref", () => {
     expect(libraryHref({ kind: "note", topic: "vectors" })).toBe(
       "/library?kind=note&topic=vectors",
     );
+  });
+
+  it("carries the course, the query and a non-default sort, and never writes the default", () => {
+    expect(libraryHref({ course: "cp4281", q: "  dot product ", sort: "title" })).toBe(
+      "/library?course=cp4281&q=dot+product&sort=title",
+    );
+    expect(libraryHref({ q: "   ", sort: "newest" })).toBe("/library");
+    // A literal plus survives as %2B, distinct from the + that spells a space.
+    expect(libraryHref({ q: "c++ templates" })).toBe("/library?q=c%2B%2B+templates");
+  });
+});
+
+describe("parseSort", () => {
+  it("reads title, and anything else as the default", () => {
+    expect(parseSort("title")).toBe("title");
+    expect(parseSort("newest")).toBe("newest");
+    expect(parseSort(null)).toBe("newest");
+    expect(parseSort("ascending; drop table")).toBe("newest");
+  });
+});
+
+/** A row as `listAssets` returns it, trimmed to what the view functions read. */
+function row(
+  id: string,
+  over: Partial<{
+    kind: string;
+    title: string | null;
+    path: string | null;
+    url: string | null;
+    topics: string[];
+    createdAt: string;
+  }> = {},
+) {
+  return {
+    id,
+    kind: "video",
+    title: null,
+    path: `out/${id}.mp4`,
+    url: null,
+    bytes: null,
+    topics: [],
+    createdAt: "2026-09-13T00:00:00.000Z",
+    ...over,
+  };
+}
+
+describe("searchTerms", () => {
+  it("lowercases, splits on whitespace and drops repeats", () => {
+    expect(searchTerms("  Dot   PRODUCT dot\tprojection ")).toEqual(["dot", "product", "projection"]);
+  });
+
+  it("is empty for no query, which means no search rather than no results", () => {
+    expect(searchTerms(null)).toEqual([]);
+    expect(searchTerms("")).toEqual([]);
+    expect(searchTerms("   ")).toEqual([]);
+  });
+
+  it("stops at eight words and two hundred characters", () => {
+    expect(searchTerms("a b c d e f g h i j")).toHaveLength(8);
+    expect(searchTerms(`${"x".repeat(300)}`)[0]).toHaveLength(200);
+  });
+});
+
+describe("matchesAll", () => {
+  it("wants every word, in any order, anywhere", () => {
+    expect(matchesAll("The Dot Product, projected", ["product", "dot"])).toBe(true);
+    expect(matchesAll("The Dot Product", ["dot", "cross"])).toBe(false);
+    expect(matchesAll("anything", [])).toBe(true);
+  });
+});
+
+describe("searchHits", () => {
+  const rows = [
+    row("v1", { title: "Barycentric interpolation" }),
+    row("t1", { kind: "transcript", path: "out/v1.transcript.json" }),
+    row("n1", { kind: "note", title: "Dot product", path: "learn/concepts/la/dot-product.md" }),
+    row("n2", { kind: "note", title: "Cross product", path: "learn/concepts/la/cross-product.md" }),
+    row("l1", { kind: "link", title: null, path: null, url: "https://www.scratchapixel.com/raster" }),
+  ];
+
+  it("matches a title, whatever the case", () => {
+    expect([...searchHits(rows, ["barycentric"], new Map(), {})]).toEqual(["v1"]);
+  });
+
+  it("matches a filename or a URL when the row has no title", () => {
+    expect([...searchHits(rows, ["scratchapixel"], new Map(), {})]).toEqual(["l1"]);
+    expect([...searchHits(rows, ["transcript.json"], new Map(), {})]).toEqual(["t1"]);
+  });
+
+  it("matches what a note says, when its words were read", () => {
+    const texts = new Map([["n2", "the cross product is perpendicular to both"]]);
+    expect([...searchHits(rows, ["perpendicular"], texts, {})]).toEqual(["n2"]);
+  });
+
+  it("wants every word, and lets them come from the title and the text together", () => {
+    const texts = new Map([["n1", "a projection onto a line"]]);
+    expect([...searchHits(rows, ["dot", "projection"], texts, {})]).toEqual(["n1"]);
+    expect([...searchHits(rows, ["cross", "projection"], texts, {})]).toEqual([]);
+  });
+
+  it("lifts a line said in a transcript to the video it belongs to", () => {
+    const texts = new Map([["t1", "each weight is the area of the opposite sub-triangle"]]);
+    const hits = searchHits(rows, ["sub-triangle"], texts, { t1: ["v1"] });
+    expect([...hits].sort()).toEqual(["t1", "v1"]);
+  });
+
+  it("finds nothing when nothing matches", () => {
+    expect(searchHits(rows, ["quaternion"], new Map(), {}).size).toBe(0);
+  });
+});
+
+describe("filterRows", () => {
+  const rows = [
+    row("v1", { topics: ["barycentric"] }),
+    row("t1", { kind: "transcript", topics: ["barycentric"] }),
+    row("n1", { kind: "note", topics: ["dot-product"] }),
+    row("l1", { kind: "link", topics: [] }),
+  ];
+  const none = { kind: null, topic: null, courseTopics: null, hits: null };
+  const ids = (out: { id: string }[]) => out.map((r) => r.id);
+
+  it("shows every standalone row by default, and no companion", () => {
+    expect(ids(filterRows(rows, none))).toEqual(["v1", "n1", "l1"]);
+  });
+
+  it("shows a companion kind when it is the one asked for", () => {
+    expect(ids(filterRows(rows, { ...none, kind: "transcript" }))).toEqual(["t1"]);
+  });
+
+  it("narrows to a course through its modules' topics", () => {
+    expect(ids(filterRows(rows, { ...none, courseTopics: new Set(["dot-product", "nothing"]) }))).toEqual([
+      "n1",
+    ]);
+    // A course with no topics (an unknown slug) matches nothing, not everything.
+    expect(filterRows(rows, { ...none, courseTopics: new Set() })).toEqual([]);
+  });
+
+  it("narrows to a topic", () => {
+    expect(ids(filterRows(rows, { ...none, topic: "barycentric" }))).toEqual(["v1"]);
+  });
+
+  it("keeps a search hit only if it passes the other filters too", () => {
+    const hits = new Set(["v1", "t1", "n1"]);
+    expect(ids(filterRows(rows, { ...none, hits }))).toEqual(["v1", "n1"]);
+    expect(ids(filterRows(rows, { ...none, hits, kind: "note" }))).toEqual(["n1"]);
+    expect(filterRows(rows, { ...none, hits: new Set() })).toEqual([]);
+  });
+});
+
+describe("sortRows", () => {
+  const rows = [
+    row("b", { title: "beta", createdAt: "2026-09-13T00:00:00.000Z" }),
+    row("a", { title: "Alpha", createdAt: "2026-09-14T00:00:00.000Z" }),
+    row("c", { title: "gamma 10", createdAt: "2026-09-12T00:00:00.000Z" }),
+    row("d", { title: "gamma 9", createdAt: "2026-09-12T00:00:00.000Z" }),
+    row("e", { kind: "note", title: "Epsilon", createdAt: "2026-09-13T00:00:00.000Z" }),
+  ];
+  const ids = (out: { id: string }[]) => out.map((r) => r.id);
+
+  it("puts the newest first, and breaks a tie by kind then id", () => {
+    // b and e entered together; video ranks before note.
+    expect(ids(sortRows(rows, "newest"))).toEqual(["a", "b", "e", "c", "d"]);
+  });
+
+  it("sorts by the name on the card, ignoring case and reading numbers as numbers", () => {
+    expect(ids(sortRows(rows, "title"))).toEqual(["a", "b", "e", "d", "c"]);
+  });
+
+  it("does not reorder its input", () => {
+    const copy = [...rows];
+    sortRows(rows, "title");
+    expect(rows).toEqual(copy);
+  });
+});
+
+describe("courseFacets", () => {
+  const courses = [
+    { slug: "cp4281", code: "CP4281", title: "Graphics", topics: ["barycentric", "rasterisation"] },
+    { slug: "cs3216", code: "CS3216", title: "Apps", topics: ["product-design"] },
+    { slug: "empty", code: "EMPTY", title: "Nothing filed", topics: ["nowhere"] },
+  ];
+  const rows = [
+    row("v1", { topics: ["barycentric"] }),
+    row("t1", { kind: "transcript", topics: ["barycentric"] }),
+    row("n1", { kind: "note", topics: ["rasterisation", "barycentric"] }),
+    row("l1", { kind: "link", topics: ["product-design"] }),
+  ];
+
+  it("counts standalone rows under any of a course's topics, once each, in the order given", () => {
+    expect(courseFacets(courses, rows)).toEqual([
+      { slug: "cp4281", code: "CP4281", title: "Graphics", count: 2 },
+      { slug: "cs3216", code: "CS3216", title: "Apps", count: 1 },
+    ]);
+  });
+});
+
+describe("explainedConcepts", () => {
+  const kb = new Map([
+    ["dot-product", { title: "Dot product", mastery: "mastered" as const, pL: 0.96, observations: 4 }],
+    ["cross-product", { title: "Cross product", mastery: "shaky" as const, pL: 0.55, observations: 2 }],
+    ["norm", { title: "Norm", mastery: "gap" as const, pL: 0.25, observations: 0 }],
+  ]);
+
+  it("titles each slug and buckets it by mastery, in the order given", () => {
+    expect(explainedConcepts(["dot-product", "cross-product", "norm"], kb)).toEqual([
+      { slug: "dot-product", title: "Dot product", bucket: "mastered", pL: 0.96, observations: 4 },
+      { slug: "cross-product", title: "Cross product", bucket: "learning", pL: 0.55, observations: 2 },
+      { slug: "norm", title: "Norm", bucket: "untouched", pL: 0.25, observations: 0 },
+    ]);
+  });
+
+  it("keeps a slug the knowledge base does not know, as an untouched concept named by its slug", () => {
+    expect(explainedConcepts(["ghost"], kb)).toEqual([
+      { slug: "ghost", title: "ghost", bucket: "untouched", pL: null, observations: 0 },
+    ]);
+  });
+});
+
+describe("conceptHref", () => {
+  it("points at the concept's workspace", () => {
+    expect(conceptHref("dot-product")).toBe("/learn/dot-product");
   });
 });
 

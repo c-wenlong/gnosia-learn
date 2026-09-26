@@ -94,21 +94,19 @@ export function TranscriptPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Transcript
-        </h3>
+    <section className="flex min-w-0 flex-col gap-1.5 rounded-[20px] border-2 border-border bg-surface px-3 pt-4 pb-3 sm:px-4">
+      <div className="flex items-center justify-between gap-3 px-2">
+        <h3 className="text-[16px] font-bold text-text">Transcript</h3>
         {cues.length > 0 &&
           (following ? (
-            <span className="text-[11px] tabular-nums text-[var(--muted)]">
+            <span className="text-[12px] tabular-nums text-text3">
               {position} / {cues.length}
             </span>
           ) : (
             <button
               type="button"
               onClick={() => setFollowing(true)}
-              className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-[var(--accent-strong)] transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              className="rounded-md px-1.5 py-0.5 text-[12px] font-semibold text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Follow along
             </button>
@@ -116,9 +114,9 @@ export function TranscriptPanel({
       </div>
 
       {cues.length === 0 ? (
-        <p className="px-3 py-6 text-center text-sm text-[var(--muted)]">
+        <p className="px-2 py-4 text-[14px] text-text2">
           No transcript beside this video.
-          <span className="mt-1 block text-xs">
+          <span className="mt-1 block text-[12px] text-text3">
             Narrated cuts ship one; a silent render has nothing to say.
           </span>
         </p>
@@ -127,28 +125,24 @@ export function TranscriptPanel({
           ref={scrollerRef}
           onScroll={onScroll}
           aria-label="Transcript"
-          className={`relative overflow-y-auto overscroll-contain p-1.5 ${scrollerClassName}`}
+          className={`relative overflow-y-auto overscroll-contain ${scrollerClassName}`}
         >
           {cues.map((cue, i) => {
             const isActive = i === active;
             const spoken = i < active;
             const content = (
               <>
-                <span
-                  className={`pt-px font-mono text-[11px] tabular-nums ${
-                    isActive ? "text-[var(--accent-strong)]" : "text-[var(--muted)]"
-                  }`}
-                >
+                <span className="pt-px text-[12px] tabular-nums text-text3">
                   {formatTimecode(cue.start)}
                 </span>
-                <span className={isActive ? "font-medium" : undefined}>{cue.text}</span>
+                <span>{cue.text}</span>
               </>
             );
             const tone = isActive
-              ? "bg-[var(--nav-active-bg)] text-[var(--foreground)]"
+              ? "bg-tint font-medium text-text"
               : spoken
-                ? "text-[var(--muted)]"
-                : "text-[var(--muted-strong)]";
+                ? "text-text3"
+                : "text-text2";
             return (
               <li key={`${cue.start}-${i}`} ref={isActive ? activeRef : undefined}>
                 {onSeek ? (
@@ -156,14 +150,14 @@ export function TranscriptPanel({
                     type="button"
                     onClick={() => seekTo(cue.start)}
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1.5 text-left text-sm leading-relaxed transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${tone}`}
+                    className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-100 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${tone}`}
                   >
                     {content}
                   </button>
                 ) : (
                   <p
                     aria-current={isActive ? "true" : undefined}
-                    className={`grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1.5 text-sm leading-relaxed ${tone}`}
+                    className={`grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] ${tone}`}
                   >
                     {content}
                   </p>

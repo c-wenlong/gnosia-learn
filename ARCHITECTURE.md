@@ -148,8 +148,8 @@ says which pages are on the new design and which phase replaces the rest.
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
 | `/settings` | `settings/page.tsx` | The daily target, streak leeway, theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
-| `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
-| `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
+| `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
+| `/library/[id]` | `library/[id]/page.tsx` | One asset (a player with chapters and transcript, a diagram, a file's words, or a link) with Mark watched, the concepts it explains, related assets and its derivations |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
@@ -163,6 +163,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
 | `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
+| `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study for the streak, never evidence |
 
 The asset route is the one place the app reads a file the deployment does not
 contain. A video sits under manimkc's data root and a diagram under
@@ -237,6 +238,17 @@ derives", which would keep the sidecars and drop the two drawings, since a video
 is the *source* of its companions and an SVG is *derived* from its canvas. Every
 companion kind keeps its chip, its count, its `?kind=` view and its place on the
 page of what it belongs to.
+
+**Search, concepts and watching.** `?q=` is searched on the server, over every
+row's title, filename and URL and over the words of each note and transcript,
+read through `readAssetText` with its switch and byte cap; a line inside a
+transcript finds the transcript's video through `derivationSources`. The limits
+are in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md). The
+concept chip on a card and the asset page's Explains card come from
+`conceptsForAssets`, the reverse of `assetsForConcept`, joined to the knowledge
+base for the mastery dot. Mark watched appends a `watched` event through
+`POST /api/learner/watched`: it counts as a study day for the streak and is
+never evidence, since both replays read only `observation` and `review`.
 
 **Both pages treat unavailable files as a state.** `ASSET_FILES_ENABLED` unset,
 manimkc never indexed here, and a manimkc index older than the run that recorded

@@ -10,6 +10,9 @@ import {
   assetsForConcept,
   assetsForTopic,
   clearRecap,
+  conceptsForAsset,
+  conceptsForAssets,
+  derivationSources,
   dueReviews,
   emptyReviews,
   importLegacyState,
@@ -34,6 +37,7 @@ import {
   type ReviewCard,
 } from "../src/state";
 import { conceptsIndexer } from "../src/index/concepts";
+import { replayReviews } from "../src/learn/replay";
 import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
 import { createScratchDatabase, probe, SQLSTATE, sqlstate, type Scratch } from "./scratch-database";
@@ -263,6 +267,28 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(sqlstate(remove)).toBe(SQLSTATE.restrictViolation);
     });
 
+    it("accepts a watched event, which names an asset and no concept", async () => {
+      await appendEvent(scratch.db, {
+        at: "2026-09-26T08:00:00.000Z",
+        type: "watched",
+        asset: "fx:video",
+        kind: "video",
+      });
+      const [record] = await readEvents(scratch.db);
+      expect(record).toEqual({
+        at: "2026-09-26T08:00:00.000Z",
+        type: "watched",
+        asset: "fx:video",
+        kind: "video",
+      });
+    });
+
+    it("still refuses a type the log does not know", async () => {
+      await expect(
+        appendEvent(scratch.db, { type: "skimmed" as never, asset: "fx:video" }),
+      ).rejects.toThrow(/unknown event type "skimmed"/);
+    });
+
     it("refuses evidence about a concept the catalog does not have", async () => {
       await expect(
         appendEvent(scratch.db, { type: "observation", concept: "ghost", correct: true }),
@@ -288,6 +314,32 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(skipped).toBe(1);
       expect(model.concepts.alpha?.observations).toBe(1);
       expect(model.concepts.beta).toBeUndefined();
+    });
+
+    it("replays past a watched event without counting it as evidence", async () => {
+      await appendEvent(scratch.db, {
+        at: "2026-08-01T00:00:00.000Z",
+        type: "observation",
+        concept: "alpha",
+        correct: true,
+        opportunity: false,
+      });
+      await appendEvent(scratch.db, {
+        at: "2026-08-01T00:05:00.000Z",
+        type: "watched",
+        asset: "fx:video",
+        kind: "video",
+      });
+      const events = await readEvents(scratch.db);
+      expect(events.map((e) => e.type)).toEqual(["observation", "watched"]);
+      const { model, skipped } = replayMastery(
+        events,
+        fixtureGraph(),
+        (await readModel(scratch.db)).params,
+      );
+      expect(skipped).toBe(0);
+      expect(model.concepts.alpha?.observations).toBe(1);
+      expect(Object.keys(model.concepts).sort()).toEqual(["alpha"]);
     });
 
     it("writeModel deletes the rows a rebuild no longer produces", async () => {
@@ -504,6 +556,49 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(rows.filter((r) => r.id === ASSETS.diagram)).toHaveLength(1);
     });
 
+    it("finds the concepts an asset explains, the reverse of assetsForConcept", async () => {
+      expect(await conceptsForAsset(scratch.db, ASSETS.diagram)).toEqual(["alpha", "beta"]);
+      expect(await conceptsForAsset(scratch.db, ASSETS.video)).toEqual(["alpha"]);
+      // Filed under a topic and explaining nothing is the normal case for a
+      // link, and the answer is an empty list, not a throw.
+      expect(await conceptsForAsset(scratch.db, ASSETS.link)).toEqual([]);
+      expect(await conceptsForAsset(scratch.db, "fx:gone")).toEqual([]);
+    });
+
+    it("answers for many assets in one call, leaving out the ones with no concept", async () => {
+      const out = await conceptsForAssets(scratch.db, [
+        ASSETS.video,
+        ASSETS.diagram,
+        ASSETS.link,
+        ASSETS.video,
+      ]);
+      expect(out).toEqual({ [ASSETS.video]: ["alpha"], [ASSETS.diagram]: ["alpha", "beta"] });
+      expect(await conceptsForAssets(scratch.db, [])).toEqual({});
+    });
+
+    it("agrees with assetsForConcept in the other direction", async () => {
+      const all = await listAssets(scratch.db);
+      const forward = await conceptsForAssets(
+        scratch.db,
+        all.map((a) => a.id),
+      );
+      for (const slug of ["alpha", "beta", "gamma"]) {
+        const reverse = (await assetsForConcept(scratch.db, slug)).map((a) => a.id).sort();
+        const derived = Object.entries(forward)
+          .filter(([, slugs]) => slugs.includes(slug))
+          .map(([id]) => id)
+          .sort();
+        expect(derived).toEqual(reverse);
+      }
+    });
+
+    it("reads derivation upward for many assets at once", async () => {
+      expect(
+        await derivationSources(scratch.db, [ASSETS.transcript, ASSETS.video, ASSETS.link]),
+      ).toEqual({ [ASSETS.transcript]: [ASSETS.video] });
+      expect(await derivationSources(scratch.db, [])).toEqual({});
+    });
+
     it("returns an empty list rather than throwing for something with no assets", async () => {
       expect(await assetsForTopic(scratch.db, "no-such-topic")).toEqual([]);
       expect(await assetsForConcept(scratch.db, "gamma")).toEqual([]);
@@ -569,6 +664,14 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         expect(byId.get(ASSETS.orphan)).toEqual([]);
         expect(Array.isArray(byId.get(ASSETS.orphan))).toBe(true);
         expect(byId.get(ASSETS.pinned)).toEqual([]);
+      });
+
+      it("says when each row entered the catalog, as an ISO instant", async () => {
+        const rows = await listAssets(scratch.db);
+        for (const row of rows) {
+          expect(typeof row.createdAt).toBe("string");
+          expect(new Date(row.createdAt).toISOString()).toBe(row.createdAt);
+        }
       });
 
       it("filters by kind", async () => {
@@ -770,5 +873,55 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(result.recaps).toBe(0);
       expect((await readLearnerSnapshot(scratch.db)).theme).toBe("light");
     });
+  });
+});
+
+/**
+ * `watched` is study, not evidence. Both replays are pure, so this needs no
+ * database: whatever else is in the log, a watched event moves no p(L) and
+ * schedules no card, and a rebuild from a log full of them is the same rebuild
+ * as one without.
+ */
+describe("replaying a log with watched events in it", () => {
+  const evidence = [
+    {
+      at: "2026-08-01T00:00:00.000Z",
+      type: "observation" as const,
+      concept: "alpha",
+      correct: true,
+      grade: 4,
+      opportunity: false,
+    },
+    { at: "2026-08-02T00:00:00.000Z", type: "review" as const, concept: "beta", grade: 3 },
+  ];
+  const watched = [
+    { at: "2026-08-01T12:00:00.000Z", type: "watched" as const, asset: "fx:video", kind: "video" },
+    // A watched event that happens to name a concept is still not evidence.
+    {
+      at: "2026-08-03T00:00:00.000Z",
+      type: "watched" as const,
+      asset: "fx:diagram",
+      kind: "diagram_svg",
+      concept: "gamma",
+      correct: true,
+      grade: 5,
+    },
+  ];
+  const mixed = [...evidence, ...watched].sort((a, b) => (a.at < b.at ? -1 : 1));
+  const params = { pL0: 0.25, pT: 0.15, pG: 0.2, pS: 0.1 };
+
+  it("leaves the mastery model as if they were not there", () => {
+    const with_ = replayMastery(mixed, fixtureGraph(), params);
+    const without = replayMastery(evidence, fixtureGraph(), params);
+    expect(with_).toEqual(without);
+    expect(with_.model.concepts.gamma).toBeUndefined();
+  });
+
+  it("leaves the review schedule as if they were not there", () => {
+    const with_ = replayReviews(mixed);
+    const without = replayReviews(evidence);
+    expect(with_).toEqual(without);
+    expect(with_.applied).toBe(2);
+    expect(with_.reviews.cards.gamma).toBeUndefined();
   });
 });

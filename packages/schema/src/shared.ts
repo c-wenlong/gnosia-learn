@@ -36,13 +36,24 @@ export const DEFAULT_P_L = 0.25;
 /** The default single learner. One row until auth exists; not a UUID so it stays readable. */
 export const LOCAL_LEARNER_ID = "local";
 
-/** Event types the `learn` CLI writes. */
+/**
+ * Event types in the log. The `learn` CLI writes the first five; the web app
+ * writes `watched`, when the learner marks a library asset watched or read
+ * (payload `{ asset, kind }`, no concept).
+ *
+ * `watched` is study for the streak (`STUDY_EVENT_TYPES` in
+ * `apps/web/src/lib/habit-core.ts`) and is not evidence: both replays,
+ * `replayMastery` and `replayReviews`, read only `observation` and `review`,
+ * so watching a video never moves p(L) or schedules a card. Adding a type here
+ * also changes the `event_type_check` constraint, so it needs a migration.
+ */
 export const EVENT_TYPES = [
   "session-start",
   "observation",
   "review",
   "session-close",
   "void",
+  "watched",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

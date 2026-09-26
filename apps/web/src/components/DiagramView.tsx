@@ -87,14 +87,14 @@ export function DiagramView({
   }, [src, attempt]);
 
   return (
-    <figure className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2">
-        <h3 className="truncate text-sm font-medium text-[var(--foreground)]">{title}</h3>
+    <figure className="overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
+        <h3 className="truncate text-[16px] font-bold text-text">{title}</h3>
         <a
           href={src}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-[var(--accent-strong)] transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           Full size
         </a>
@@ -147,7 +147,7 @@ export function DiagramView({
       )}
 
       {caption && (
-        <figcaption className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-strong)]">
+        <figcaption className="border-t border-hair px-4 py-2.5 text-[12px] text-text2">
           {caption}
         </figcaption>
       )}
