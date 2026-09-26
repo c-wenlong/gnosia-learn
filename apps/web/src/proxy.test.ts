@@ -38,7 +38,7 @@ describe("proxy", () => {
   it("sends an anonymous visitor to sign-in, remembering where they were going", async () => {
     const response = await proxy(get("/learn/bkt?tab=note"));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("/sign-in?next=%2Flearn%2Fbkt%3Ftab%3Dnote");
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Flearn%2Fbkt%3Ftab%3Dnote`);
   });
 
   it("answers an anonymous API call with 401 JSON, not a redirect", async () => {
@@ -55,7 +55,7 @@ describe("proxy", () => {
     for (const path of ["/", "/sign-in"]) {
       const response = await proxy(get(path, token));
       expect(response.status, path).toBe(307);
-      expect(response.headers.get("location"), path).toBe("/today");
+      expect(response.headers.get("location"), path).toBe(`${ORIGIN}/today`);
     }
   });
 
@@ -70,7 +70,7 @@ describe("proxy", () => {
     delete process.env.AUTH_SECRET;
     const response = await proxy(get("/today", token));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("/sign-in?next=%2Ftoday");
+    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Ftoday`);
     expect((await proxy(get("/"))).status).toBe(200);
   });
 
@@ -78,6 +78,18 @@ describe("proxy", () => {
     delete process.env.OWNER_PASSWORD;
     expect((await proxy(get("/today", token))).status).toBe(307);
     expect((await proxy(get("/api/learner/reset", token))).status).toBe(401);
+  });
+
+  it("redirects to the host the browser asked for, not the one request.url reports", async () => {
+    const headers = new Headers({ host: "192.168.1.20:3000" });
+    const lan = await proxy(new NextRequest(`${ORIGIN}/today`, { headers }));
+    expect(lan.headers.get("location")).toBe("http://192.168.1.20:3000/sign-in?next=%2Ftoday");
+    const proxied = await proxy(
+      new NextRequest(`${ORIGIN}/`, {
+        headers: new Headers({ host: "localhost:3000", "x-forwarded-host": "gnosia.example", "x-forwarded-proto": "https", cookie: `${SESSION_COOKIE}=${token}` }),
+      }),
+    );
+    expect(proxied.headers.get("location")).toBe("https://gnosia.example/today");
   });
 
   it("matcher skips static output and image files but covers the API", () => {

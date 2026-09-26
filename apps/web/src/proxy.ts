@@ -30,24 +30,31 @@ export async function proxy(request: NextRequest) {
   const signedIn = config.ok && (await verifySession(config.config.secret, token, Math.floor(Date.now() / 1000)));
 
   if (pathname === "/" || pathname === "/sign-in") {
-    return signedIn ? redirect(HOME_PATH) : NextResponse.next();
+    return signedIn ? redirect(request, HOME_PATH) : NextResponse.next();
   }
   if (isPublicPath(pathname) || signedIn) return NextResponse.next();
 
   if (isApiPath(pathname)) {
     return NextResponse.json({ error: "UNAUTHENTICATED", signIn: "/sign-in" }, { status: 401 });
   }
-  return redirect(`/sign-in?${new URLSearchParams({ next: `${pathname}${search}` })}`);
+  return redirect(request, `/sign-in?${new URLSearchParams({ next: `${pathname}${search}` })}`);
 }
 
 /**
- * A 307 with a relative `Location`. `request.url` under `next start` names
- * `localhost` whatever host the browser used, so an absolute redirect built
- * from it sends a LAN or tunnelled visitor to a host they cannot reach; the
- * browser resolves a relative one against the address it actually asked for.
+ * A 307 to a path on the host the browser actually asked for.
+ *
+ * `request.url` under `next start` names `localhost` whatever address the
+ * browser used, so a redirect built from it sends a LAN or tunnelled visitor
+ * to a host they cannot reach. The route handlers answer with a relative
+ * `Location` for the same reason; the proxy runtime refuses one (it parses
+ * the header as a URL and throws `Invalid URL`), so here the origin is
+ * rebuilt from `Host` and, behind a proxy that terminated TLS,
+ * `X-Forwarded-Proto` and `X-Forwarded-Host`.
  */
-function redirect(path: string): NextResponse {
-  return new NextResponse(null, { status: 307, headers: { Location: path } });
+function redirect(request: NextRequest, path: string): NextResponse {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
+  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(/:$/, "");
+  return NextResponse.redirect(new URL(path, `${proto}://${host}`), 307);
 }
 
 export const config = {
