@@ -11,7 +11,7 @@ the shell), and how to check a page against its hi-fi frame.
 | --- | --- | --- | --- |
 | 0 | Foundation: tokens, primitives, habit data, the shell, Courses, the screenshot tool | `/courses`, `/` (redirect), `/review` and `/settings` (placeholders) | Done |
 | 1a | Today and Settings | `/`, `/settings` | Not started |
-| 1b | Course path, absorbing the module page | `/courses/[slug]` | Not started |
+| 1b | Course path, absorbing the module page | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit) | Done |
 | 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]` | Not started |
 | 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session` | Not started, needs 1c |
 | 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Not started |
@@ -129,8 +129,10 @@ The pure helpers beside them:
 stays mastered, no observations is untouched, everything else is learning.
 Pass `observations`; a missing count reads as zero.
 
+`PathNode` (`bucket`, `active?`, `glyph?: "dot" | "check"`: the 72 by 78 node with its 6px lip and the accent ring) and `UnitHeader` (`eyebrow`, `title`, `subtitle?`, `actions?`, `muted?` for a locked unit, `headingLevel?`) shipped with 1b.
+
 Not built yet, because one phase each needs them and none of the others do:
-`StreakDay` (1a), `PathNode` and the unit header (1b), the tutor message and
+`StreakDay` (1a), the tutor message and
 the citation pill (1c), the choice row and the feedback footer (1d), the
 rating row (1e). Build them in `components/ui/` from the kit function of the
 same name, with the same rules.
@@ -256,6 +258,13 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Store banner | not drawn | `--text` on `--warn-tint` with a `--warn` rule | `--warn-text` on `--warn-tint` is under 3:1 in light, too low for a sentence |
 | Preference key | DESIGN.md's API table said `streakLeewayPerWeek` | `dailyLeeway` | the name the phase-0 brief set; DESIGN.md now matches |
 | Stat tile label | white on the coloured strip in light | black (`--on-tone`) in both themes | white on the streak orange is about 2:1, and under 4.5:1 on the other three; black is at least 4.8:1 on all four |
+| Path nodes | one node per concept | one node per course topic, coloured by the concepts whose notes name it (all mastered is mastered, none observed is untouched, anything else learning; p(L) is the minimum) | the phase-1b brief; a course's topics are the unit of progress everywhere else. `content/topics.yaml` maps modules, not topics, so the per-topic link is the note's `topics:` frontmatter (`KbConcept.topics`) and `maps.concepts` only orders them |
+| Path, topic with no concept | not drawn | the node shows the learner's tick: a check on the mastered face when done, untouched otherwise, captioned "Completed" or "Not started" | most courses have no concept notes yet; without this their paths would be all grey |
+| Unit and header wording | "4 of 4 mastered", "40% mastered" | "mastered" only when every topic has a concept, else "done" | a tick is not mastery |
+| Path, per-node tools | not drawn | a chevron at the right of each row opens the topic's concepts, subtopics, done tick, note, recap and tutor chat; each unit ends in a Resources disclosure | the module page's checklist and resource list folded in, so nothing it had is lost |
+| Guidebook with no concept | a link | toggles the module's outline (topics and subtopics) inline under the unit header | the brief: no concept note to open |
+| Rail | three cards | a fourth, "About this course" (credits, prerequisites, notes, capstone, related courses), and an inferred-roadmap note in the header card | what the old course page showed, kept |
+| Path node dot | `#FFFFFF` | `bg-white` / `text-white` | the kit's literal in both themes; the accent button already uses `text-white` |
 
 ## Gotchas
 
@@ -271,6 +280,12 @@ calling a page done; a build that passes proves nothing about how it looks.
 - **`next start` runs as `next-server`,** so `pkill -f "next start"` misses
   it and the next `start` fails with `EADDRINUSE` while the old build keeps
   serving. Stop it by port: `lsof -ti :3121 | xargs kill`.
+- **`shots.mjs` hangs on a page that links to a route that does not exist yet.**
+  It waits for `networkidle`, and Next's prefetch of a 404 leaves the request
+  open in Playwright's eyes, so the course path (whose Continue and Guidebook
+  point at `/learn/<concept>` before 1c and 1d land) timed out at 30s. A copy
+  of the tool waiting for `load` plus a second works; the real fix is the
+  routes existing.
 - **The habit numbers are read on every request,** `readEvents` in full. The
   log is small for one learner; if it grows into the tens of thousands, add a
   date-bounded read to the catalog rather than caching in the layout.

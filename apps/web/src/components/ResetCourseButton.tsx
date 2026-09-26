@@ -1,13 +1,16 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
 import { useLearner } from "@/lib/learner-context";
 
+/** The course header's Reset: clears the course's ticks and notes after a confirm. */
 export function ResetCourseButton({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      title="Reset course progress"
       onClick={() => {
         if (
           window.confirm(
@@ -17,9 +20,8 @@ export function ResetCourseButton({ topicIds }: { topicIds: string[] }) {
           resetCourse(topicIds);
         }
       }}
-      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted-strong)] hover:border-red-300 hover:text-red-700 dark:hover:border-red-700 dark:hover:text-red-300"
     >
-      Reset course progress
-    </button>
+      Reset
+    </Button>
   );
 }
