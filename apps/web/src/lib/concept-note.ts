@@ -44,13 +44,16 @@ export type ConceptNoteRead =
 /** The largest note this will read. The longest in the corpus is under 20kB. */
 export const NOTE_READ_LIMIT = 256 * 1024;
 
-/** The note asset for a slug: the `note` row whose file is `<slug>.md`. */
+/**
+ * The note asset for a slug. The concepts indexer links each note to the id in
+ * its frontmatter, which usually matches the filename but need not (the id
+ * wins), so the filename is a preference, not a requirement: a `<slug>.md`
+ * first, otherwise the one concept note linked to this slug.
+ */
 export async function findNoteAsset(db: CatalogDatabase, slug: string) {
   const rows = await assetsForConcept(db, slug);
-  return (
-    rows.find((row) => row.kind === "note" && row.path !== null && row.path.endsWith(`/${slug}.md`)) ??
-    null
-  );
+  const notes = rows.filter((row) => row.kind === "note" && row.path !== null && row.path.startsWith("learn/concepts/"));
+  return notes.find((row) => row.path?.endsWith(`/${slug}.md`)) ?? (notes.length === 1 ? notes[0] : null);
 }
 
 /** Read and parse one concept's note. Degrades to a reason, never throws. */
