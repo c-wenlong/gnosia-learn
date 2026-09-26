@@ -190,7 +190,7 @@ function KnownArt() {
           <li key={r.name} className="flex flex-col gap-1.5">
             <span className="flex items-baseline justify-between gap-3 text-[14px] text-brand-ink">
               <span className="truncate">{r.name}</span>
-              <span className="font-mono text-[12px] text-brand-mist tabular-nums">{r.p.toFixed(2)}</span>
+              <span className="text-[13px] font-medium text-brand-mist tabular-nums">{r.p.toFixed(2)}</span>
             </span>
             <span className="h-1.5 overflow-hidden rounded-full bg-brand-ink/10">
               <span
@@ -289,27 +289,22 @@ const CONTENTS = [
   {
     title: "Today",
     body: "Next up, reviews due, a forgiving streak and a target you set. No XP, no hearts, no leagues.",
-    where: "/today",
   },
   {
     title: "Courses as paths",
     body: "Ten computer science courses from NUS, each a path through one shared graph of concepts.",
-    where: "/courses",
   },
   {
     title: "A tutor that knows the page",
     body: "Ask about the concept you are on. The tutor knows what you already know and cites your own notes.",
-    where: "/learn",
   },
   {
     title: "Reviews at the right moment",
     body: "Again, Hard, Good, Easy. The cards you keep missing get flagged.",
-    where: "/review",
   },
   {
     title: "A library that remembers",
     body: "Narrated animations, diagrams, notes, links and transcripts, tied to concepts, with what you have watched.",
-    where: "/library",
   },
 ];
 
@@ -332,11 +327,7 @@ function Contents() {
             <li key={c.title} className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-brand-ink/10 py-6 md:grid-cols-[3rem_1fr]">
               <span className="pt-1 font-book text-[18px] text-brand-teal italic">{ROMAN[i]}.</span>
               <div>
-                <p className="flex items-baseline gap-3">
-                  <span className="font-book text-[21px] font-medium text-brand-ink md:text-[24px]">{c.title}</span>
-                  <span aria-hidden className="h-0 min-w-6 flex-1 translate-y-[-4px] border-b-2 border-dotted border-brand-ink/20" />
-                  <span className="font-mono text-[13px] text-brand-mist">{c.where}</span>
-                </p>
+                <p className="font-book text-[21px] font-medium text-brand-ink md:text-[24px]">{c.title}</p>
                 <p className="mt-2 max-w-[36rem] text-[15px] leading-relaxed text-brand-mist">{c.body}</p>
               </div>
             </li>
