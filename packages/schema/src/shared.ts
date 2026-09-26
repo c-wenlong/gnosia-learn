@@ -71,6 +71,17 @@ export const PREFERENCE_KEYS = {
   userResources: "userResources",
   /** BKT parameters, overriding `DEFAULT_PARAMS`. Was `model.json`'s `params`. */
   bktParams: "bktParams",
+  /**
+   * `{ concepts: number; reviews: boolean }`: the learner's own daily target,
+   * concepts to teach or probe plus whether clearing the due queue counts.
+   * Read by `apps/web/src/lib/habit.ts`; default `{ concepts: 1, reviews: true }`.
+   */
+  dailyTarget: "dailyTarget",
+  /**
+   * A whole number of free misses per Monday-to-Sunday week before the streak
+   * breaks, 0 to 7. Read by `apps/web/src/lib/habit.ts`; default 1.
+   */
+  dailyLeeway: "dailyLeeway",
 } as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[keyof typeof PREFERENCE_KEYS];

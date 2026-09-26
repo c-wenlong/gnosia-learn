@@ -244,7 +244,7 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
       </div>
 
       {said !== null && (
-        <p className={`mt-2 text-xs ${said.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"}`}>{said.text}</p>
+        <p className={`mt-2 text-xs ${said.ok ? "text-[var(--ok-text)]" : "text-[var(--danger)]"}`}>{said.text}</p>
       )}
 
       <div className="mt-4">

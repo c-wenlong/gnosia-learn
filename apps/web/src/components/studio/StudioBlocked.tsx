@@ -45,7 +45,7 @@ export function BlockedCard({
               <li key={line.name} className="flex gap-2 text-xs">
                 <span
                   className={`w-10 shrink-0 font-medium ${
-                    line.status === "fail" ? "text-[var(--danger)]" : "text-[var(--warn)]"
+                    line.status === "fail" ? "text-[var(--danger)]" : "text-[var(--warn-text)]"
                   }`}
                 >
                   {line.status === "fail" ? "fail" : "warn"}

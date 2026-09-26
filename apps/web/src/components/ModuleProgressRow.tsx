@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { Module } from "@/lib/types";
 import { moduleProgress } from "@/lib/progress";
 import { useLearner } from "@/lib/learner-context";
-import { ProgressBar } from "@/components/ProgressBar";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export function ModuleProgressRow({
   courseSlug,

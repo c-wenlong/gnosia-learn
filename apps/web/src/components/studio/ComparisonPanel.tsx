@@ -88,7 +88,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
 
       {reviewable && (
         <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
-          <p className="font-medium text-[var(--ok)]">{finishedHeadline(job)}</p>
+          <p className="font-medium text-[var(--ok-text)]">{finishedHeadline(job)}</p>
           <p className="mt-1">
             Nothing under <Mono>learn/assets/</Mono> has changed yet. The candidate is at{" "}
             <Mono>{job.candidate}</Mono>, and Accept is the rename.
@@ -103,13 +103,13 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
           <Thumbnail which="after" job={job} comparison={comparison} path={path} />
         </div>
         {comparison.refreshedAt !== null && (
-          <p className="mt-1.5 text-xs text-[var(--warn)]">
+          <p className="mt-1.5 text-xs text-[var(--warn-text)]">
             The before side was re-read after this job ran, so it shows the file as it is on disk
             now and not the one the job started against.
           </p>
         )}
         {job.gate?.exportFailed === true && (
-          <p className="mt-1.5 text-xs text-[var(--warn)]">
+          <p className="mt-1.5 text-xs text-[var(--warn-text)]">
             The document was saved, the export failed. Accept re-exports, so this is still a job
             worth accepting.
           </p>
@@ -190,7 +190,7 @@ function Accepted({
   return (
     <div className="mb-3 space-y-2">
       <div className="rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs">
-        <p className="font-medium text-[var(--ok)]">
+        <p className="font-medium text-[var(--ok-text)]">
           {job.written.length === 1 ? "One file landed" : `${job.written.length} files landed`} in
           learn/assets/
         </p>
@@ -204,7 +204,7 @@ function Accepted({
       </div>
 
       {!job.indexed && (
-        <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2 text-xs text-[var(--warn)]">
+        <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-2 text-xs text-[var(--warn-text)]">
           <p className="font-medium">
             <Mono>indexed: false</Mono>
           </p>
@@ -365,10 +365,10 @@ function Lints({
               <span
                 className={
                   which === "fixed"
-                    ? "text-[var(--ok)]"
+                    ? "text-[var(--ok-text)]"
                     : ref.severity === "warn"
                       ? "text-[var(--muted-strong)]"
-                      : "text-[var(--warn)]"
+                      : "text-[var(--warn-text)]"
                 }
               >
                 <Mono>{lintLine(ref)}</Mono>
@@ -402,7 +402,7 @@ function Verify({ job }: { job: Job }) {
             <li key={check.rule} className="flex items-start gap-2 text-xs">
               <span
                 aria-hidden
-                className={`w-3 shrink-0 ${check.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"}`}
+                className={`w-3 shrink-0 ${check.ok ? "text-[var(--ok-text)]" : "text-[var(--danger)]"}`}
               >
                 {check.ok ? "✓" : "✕"}
               </span>

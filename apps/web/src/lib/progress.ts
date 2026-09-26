@@ -5,9 +5,9 @@ import type { Course, Module, ProgressCounts } from "@/lib/types";
  * Progress arithmetic over a course a caller already holds.
  *
  * Every one of these runs inside a `"use client"` component, so nothing here
- * may reach `@/data/courses`: that module reads the filesystem. Whole-shortlist
- * progress is `countsFromIds(navTopicIds(nav), completed)` in `AppShell`, where
- * the server layout has already handed down the ids.
+ * may reach `@/data/courses`: that module reads the filesystem. The Courses
+ * page's cards use `courseStatus` in `@/lib/course-summary` instead, over a
+ * projection the server page hands down.
  */
 
 export function countsFromIds(
