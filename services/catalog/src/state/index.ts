@@ -155,3 +155,4 @@ export {
   type MasteryLabel,
 } from "./knowledge-base";
 export { topicTitles, type TopicTitles } from "./topics";
+export { notePaths, type NotePaths } from "./notes";
