@@ -33,6 +33,13 @@ stop), no exclamation marks, no "AI-powered". The product is single-owner
 for now, so there is no sign-up, pricing or email capture: the one call to
 action is "Open your book", which goes to `/sign-in`.
 
+**No all-caps labels.** Small tracked uppercase labels ("PROBE", "WHAT YOU
+KNOW") read as generated. Of the four references, Brilliant and Khan Academy
+use none; Duolingo uppercases only its buttons, and Masterclass only its one
+hero headline. Labels, kickers and card headings on the public pages are
+sentence case. The one exception is the wordmark, whose spaced capitals are
+the logo's own lettering.
+
 ## Palette
 
 Seven tokens, declared at the end of
@@ -48,7 +55,7 @@ cream in light and navy in dark.
 
 | Token | Light | Dark | Role | Why this value |
 | --- | --- | --- | --- | --- |
-| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, eyebrows, icon chips | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
+| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, chapter kickers, links | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
 | `--brand-navy` | `#0d1c2b` | `#0a1621` | The dark ground, the brand button's lip, the label on a dark-mode teal button | A blue-black with enough blue to sit beside teal without looking like plain black; the dark value is a shade deeper so glass cards can lighten from it |
 | `--brand-cream` | `#faf6ec` | `#f4ecdc` | The light ground, the mark's pages, the label on a light-mode teal button | Warm but close to white, so it reads as paper without becoming parchment. The dark value is the pages' colour on navy, a touch warmer so it does not glare |
 | `--brand-gold` | `#b3842c` | `#e2b95e` | The star in the mark and wherever it appears alone | Graphics only, never body text. Light was darkened from a brighter gold until the star clears the 3:1 non-text minimum on cream (3.11:1); dark is the brighter gold at 9.9:1 |
@@ -71,7 +78,7 @@ white at 62% over cream in light, teal at 7% over navy in dark, `#fdfcf8` and
 | `mist` on ground | 5.91 | 8.42 | 4.5 |
 | `mist` on glass | 6.22 | 7.59 | 4.5 |
 | `mist` on the teal glow | 4.99 | 6.38 | 4.5 |
-| `teal` on ground (eyebrows, mark) | 6.88 | 7.94 | 4.5 |
+| `teal` on ground (kickers, mark) | 6.88 | 7.94 | 4.5 |
 | `teal` on glass | 7.23 | 7.16 | 4.5 |
 | Brand button label on its face (cream on teal, navy on teal) | 6.88 | 7.94 | 4.5 |
 | `gold` star on ground | 3.11 | 9.86 | 3 (non-text) |

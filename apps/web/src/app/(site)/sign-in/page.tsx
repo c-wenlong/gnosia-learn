@@ -58,7 +58,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         <form method="post" action="/api/auth/sign-in" className="mt-8 flex w-full flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <label className="flex flex-col gap-2">
-            <span className="text-[12px] font-semibold tracking-[0.16em] text-brand-mist uppercase">Password</span>
+            <span className="text-[14px] font-medium text-brand-mist">Password</span>
             <input
               type="password"
               name="password"
