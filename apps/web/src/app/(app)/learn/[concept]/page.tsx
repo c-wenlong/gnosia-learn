@@ -20,12 +20,19 @@ import { habitTimeZone } from "@/lib/habit";
 import { dueLabel } from "@/lib/learn-index";
 import { assetFileHref, assetStatusHref, isCompanionKind } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
+import { NOTHING_TO_ASK } from "@/lib/session-core";
+import { sessionWillAsk } from "@/lib/session-page";
 import { readTutorStyle } from "@/lib/settings";
 
 /**
  * The concept workspace (hi-fi 04): a concept's note and sources on the left,
  * the tutor in the middle, the things made from it on the right, and the two
  * ways out (Teach me, Review now) in the header.
+ *
+ * When a session could ask nothing (no check in the note, no tutor model
+ * configured) the header says so under Teach me, before the learner starts.
+ * The button stays live: the session still teaches, and a disabled kit button
+ * takes no pointer events, so a `title` on it would never show.
  *
  * Everything is read on the server through `loadConceptWorkspace`, the same
  * object `GET /api/concepts/[slug]` returns. Dynamic, like every page: it
@@ -91,6 +98,9 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   // workspace), so the neighbours are the links worth resolving.
   const known = new Set([w.slug, ...[...w.requires, ...w.assumes, ...w.dependants, ...w.backlinks].map((r) => r.slug)]);
 
+  // Decided here, on the server: the provider keys never reach the client.
+  const canAsk = await sessionWillAsk(w);
+
   const eyebrow = placeLabel(w.place) ?? (w.domain ? `${w.domain} · not in a course yet` : "Not in a course yet");
 
   return (
@@ -102,13 +112,18 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         </div>
         <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
         <div className="flex flex-wrap items-center gap-3.5">
-          <Button href={`/learn/${w.slug}/session`}>
+          <Button href={`/learn/${w.slug}/session`} aria-describedby={canAsk ? undefined : "session-asks-nothing"}>
             Teach me · focus mode
           </Button>
           <Button variant="secondary" href={`/review?concept=${w.slug}`}>
             Review now
           </Button>
         </div>
+        {!canAsk && (
+          <p id="session-asks-nothing" className="basis-full text-[13px] text-text2">
+            {NOTHING_TO_ASK} A session here teaches and asks nothing, so nothing is recorded.
+          </p>
+        )}
       </header>
 
       <WorkspacePanels

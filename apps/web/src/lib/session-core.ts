@@ -231,6 +231,59 @@ export function buildSessionPlan(input: {
   ];
 }
 
+/**
+ * Why a session asks nothing: the one sentence the session, its close screen
+ * and the workspace all print, so the three cannot drift apart.
+ */
+export const NOTHING_TO_ASK =
+  "This note has no check the session can ask, and no tutor model is configured on this server to write one.";
+
+/**
+ * A probe or check step that nothing can fill: no question from the note, no
+ * fallback, and no tutor model to ask. With a model configured the step still
+ * asks it, since only a request finds out whether the model answers.
+ */
+export function isEmptyStep(step: SessionStep, modelAvailable: boolean): boolean {
+  return (
+    (step.kind === "probe" || step.kind === "check") &&
+    step.question === null &&
+    step.fallback === null &&
+    !modelAvailable
+  );
+}
+
+/**
+ * The plan the page walks: `plan` without the steps `isEmptyStep` finds, so
+ * the learner is never walked through a card saying there is no question.
+ * Teach me becomes Teach, then Close; Quiz me becomes Close alone. Nothing is
+ * recorded either way, since only a graded answer writes. A plan with a model
+ * or a note question comes back unchanged.
+ */
+export function withoutEmptySteps(plan: readonly SessionStep[], modelAvailable: boolean): SessionStep[] {
+  return plan.filter((step) => !isEmptyStep(step, modelAvailable));
+}
+
+/** True when the plan has no probe or check left, so the session asks nothing. */
+export function asksNothing(plan: readonly SessionStep[]): boolean {
+  return !plan.some((step) => step.kind === "probe" || step.kind === "check");
+}
+
+/**
+ * Whether a session on this concept can ask anything, for the workspace
+ * before one starts. Decided from the same plan the session page walks, so
+ * the two cannot disagree: a model can always be asked, and without one the
+ * question is whether any check survives as a question, which also needs two
+ * wrong options from `pool`. Teach me and Quiz me agree here, since the
+ * variant a check is asked under changes only the order of its options.
+ */
+export function sessionCanAsk(
+  input: { slug: string; checks: readonly ConceptCheck[]; pool: DistractorPool; summary?: string },
+  modelAvailable: boolean,
+): boolean {
+  if (modelAvailable) return true;
+  return !asksNothing(withoutEmptySteps(buildSessionPlan({ ...input, mode: "learn" }), false));
+}
+
 export const STEP_NAME: Record<StepKind, string> = {
   probe: "Probe",
   teach: "Teach",
