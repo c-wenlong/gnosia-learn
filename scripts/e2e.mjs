@@ -4,7 +4,7 @@
 // usage: npm run e2e [-- --keep-db] [-- --headed]
 //
 // What it does, in order:
-//   1. Copies `self_learn` into `self_learn_e2e_<pid>` with `createdb -T`.
+//   1. Copies `self_learn` into `self_learn_e2e_<pid>_<time>` with `createdb -T`.
 //      Every flow below that grades (a review rating, a session answer, Mark
 //      watched, a settings change) writes real rows, and AGENTS.md is plain
 //      that anything which grades runs against a copy, never `self_learn`.
@@ -56,7 +56,9 @@ if (flags.size > 0) {
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
 const TEMPLATE_DB = 'self_learn';
-const COPY_DB = `self_learn_e2e_${process.pid}`;
+// The pid and the start time, so a later run that happens to get the same pid
+// can never collide with (or drop) a copy an earlier run kept with --keep-db.
+const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
 
 // ---------------------------------------------------------------------------
 // Prerequisites. Each one names what is missing and how to get it, then exits 2.
@@ -116,6 +118,8 @@ console.log(`e2e: screenshots and the server log go to ${OUT}`);
 const held = { browser: null, server: null, copying: null };
 let teardown = null;
 let interrupted = false;
+/** Why the teardown did not finish cleanly, if it did not. A leftover copy fails the run. */
+let teardownProblem = null;
 
 function cleanup() {
   teardown ??= (async () => {
@@ -133,7 +137,10 @@ function cleanup() {
         // die cannot leave the copy behind.
         const drop = await pg('dropdb', ['--if-exists', '--force', COPY_DB]);
         if (drop.status === 0) console.log(`e2e: dropped ${COPY_DB}`);
-        else console.error(`e2e: could not drop ${COPY_DB}: ${drop.stderr.trim()}`);
+        else {
+          teardownProblem = `could not drop ${COPY_DB}: ${drop.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${COPY_DB}`;
+          console.error(`e2e: ${teardownProblem}`);
+        }
       }
     }
   })();
@@ -177,6 +184,33 @@ function exec(command, args) {
 const pg = (tool, args) => exec(join(PG_BIN, tool), args);
 
 /**
+ * `pg_dump from | psql into`, piped here rather than in a shell so both exit
+ * codes are checked: a shell pipeline reports only psql's, and a dump that died
+ * halfway would load as a quietly incomplete copy.
+ */
+function dumpInto(from, into) {
+  return new Promise((resolve) => {
+    const dump = spawn(join(PG_BIN, 'pg_dump'), ['--no-owner', from], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const load = spawn(join(PG_BIN, 'psql'), ['-q', '-v', 'ON_ERROR_STOP=1', '-d', into], {
+      detached: true,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    for (const child of [dump, load]) {
+      child.stderr.on('data', (chunk) => (stderr += chunk));
+      child.once('error', (error) => (stderr += `${error.message}\n`));
+    }
+    // psql exiting early closes the pipe under pg_dump; that exit code says why.
+    load.stdin.on('error', () => {});
+    dump.stdout.pipe(load.stdin);
+    const exited = (child) => new Promise((done) => child.once('close', (code) => done(code)));
+    void Promise.all([exited(dump), exited(load)]).then(([dumped, loaded]) =>
+      resolve({ ok: dumped === 0 && loaded === 0, stderr: `${stderr}pg_dump exited ${dumped}, psql exited ${loaded}` }),
+    );
+  });
+}
+
+/**
  * Signal the server's whole process group and wait until nothing in it answers.
  * The server is spawned `detached`, so it leads its own group; `kill(-pid)`
  * reaches whatever it started too. services/studio/src/proc.ts explains why
@@ -204,7 +238,8 @@ async function stopGroup(child) {
     while (alive() && Date.now() < until) await sleep(50);
     if (!alive()) return;
   }
-  console.error(`e2e: the server group ${child.pid} survived SIGKILL`);
+  teardownProblem = `the server's process group ${child.pid} survived SIGKILL`;
+  console.error(`e2e: ${teardownProblem}`);
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -213,10 +248,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // The database copy.
 
 async function createCopy() {
-  // A copy from an earlier run that was killed outright would carry this pid's
-  // name only if the pid came round again; clear it rather than fail on it.
-  await pg('dropdb', ['--if-exists', '--force', COPY_DB]);
-
   // No `catalog migrate` afterwards: a template copy carries the schema and the
   // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
   let made = await pg('createdb', ['-T', TEMPLATE_DB, COPY_DB]);
@@ -227,12 +258,8 @@ async function createCopy() {
     console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`);
     made = await pg('createdb', [COPY_DB]);
     if (made.status === 0) {
-      const dump = await exec('sh', [
-        '-c',
-        '"$1/pg_dump" --no-owner "$2" | "$1/psql" -q -v ON_ERROR_STOP=1 -d "$3"',
-        'sh', PG_BIN, TEMPLATE_DB, COPY_DB,
-      ]);
-      if (dump.status !== 0) throw new Error(`copying ${TEMPLATE_DB} failed: ${dump.stderr.trim()}`);
+      const dump = await dumpInto(TEMPLATE_DB, COPY_DB);
+      if (!dump.ok) throw new Error(`copying ${TEMPLATE_DB} with pg_dump failed: ${dump.stderr.trim()}`);
     }
   }
   if (made.status !== 0) {
@@ -478,8 +505,12 @@ async function run() {
 
     const good = page.getByRole('group', { name: 'Rate your recall' }).getByRole('button', { name: /^Good,/ });
     await clickHydrated(page, good);
+    // Moved on: the bar advanced to the next card, or the close screen opened.
+    // Both, because with one card due the bar is at 100 before and after.
     await page.waitForFunction(
-      (value) => document.querySelector('[role=progressbar][aria-label="Review progress"]')?.getAttribute('aria-valuenow') !== value,
+      (value) =>
+        document.querySelector('[role=progressbar][aria-label="Review progress"]')?.getAttribute('aria-valuenow') !== value ||
+        [...document.querySelectorAll('h1')].some((h) => h.textContent?.trim() === 'Review done'),
       before,
     );
     const done = page.getByRole('heading', { name: 'Review done' });
@@ -622,9 +653,10 @@ const clean = problems.length === 0;
 console.log(`${clean ? 'PASS' : 'FAIL'}  ${'no console errors, page errors or failed responses'.padEnd(width)}`);
 for (const p of problems) console.log(`      [${p.step}] ${p.what}`);
 if (fatal) console.log(`\nFAIL  setup: ${fatal.message}`);
+if (teardownProblem) console.log(`\nFAIL  teardown: ${teardownProblem}`);
 
 const failed = results.filter((r) => !r.ok).length;
-const ok = !fatal && failed === 0 && clean;
+const ok = !fatal && !teardownProblem && failed === 0 && clean;
 console.log(`\n${ok ? 'PASS' : 'FAIL'}: ${results.length - failed} of ${results.length} steps passed, ${problems.length} problem(s) logged.`);
 if (!ok) console.log(`Screenshots and the server log: ${OUT}`);
 process.exit(ok ? 0 : 1);

@@ -165,7 +165,7 @@ Prerequisites:
 
 **It never touches `self_learn`.** A review rating, a session answer and Mark
 watched all write real evidence, and the event log is append-only, so the run
-copies the database to `self_learn_e2e_<pid>` (`createdb -T`, or `pg_dump` when
+copies the database to `self_learn_e2e_<pid>_<time>` (`createdb -T`, or `pg_dump` when
 another connection holds the template open) and drops the copy afterwards,
 on a failure and on Ctrl-C too. `--keep-db` leaves it behind to inspect, and
 prints the `dropdb` line; `--headed` shows the browser.
