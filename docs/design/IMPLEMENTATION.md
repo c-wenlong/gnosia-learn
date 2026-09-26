@@ -65,7 +65,7 @@ colour: it reads tokens, and the class decides what they resolve to. `.gnosia` r
 | Correct | `--ok` (fill), `--ok-lip`, `--ok-text`, `--ok-tint` |
 | Not quite | `--warn` (fill), `--warn-lip`, `--warn-text`, `--warn-tint` |
 | Error | `--danger` (a text colour) |
-| Habit | `--streak` |
+| Habit | `--streak` (the fill: discs, rings, the dot, the big number), `--streak-text` (the streak as small text, at 4.5:1 on the card) |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
 | Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in both themes) |

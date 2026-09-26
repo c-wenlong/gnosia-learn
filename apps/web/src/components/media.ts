@@ -90,6 +90,26 @@ export function activeCueIndex(cues: readonly TranscriptCue[], time: number): nu
   return currentIndex(cues, time);
 }
 
+/**
+ * The label beside the transcript's heading: "3 / 25" once a line is being spoken, and
+ * "25 lines" before any has been.
+ *
+ * `active` is `-1` until the first cue starts, which on a video at rest is
+ * every page load. There is no position to report then, and each number that
+ * could stand in for one says something false: "0 / 25" names a line that does
+ * not exist, "1 / 25" says the reader is on a line nobody has heard yet, and a
+ * dash in the slot reads as a value that failed to load. So before playback
+ * the label describes the transcript instead of a place in it, and turns into
+ * a position the moment there is one. Hiding it would work too, but the length
+ * is worth knowing before pressing play.
+ *
+ * `TranscriptPanel` renders it; `TranscriptPanel.test.ts` pins both shapes.
+ */
+export function transcriptCounter(active: number, total: number): string {
+  if (active < 0) return `${total} ${total === 1 ? "line" : "lines"}`;
+  return `${active + 1} / ${total}`;
+}
+
 /** The chapter playing at `time`, or `-1` before the first one starts. */
 export function activeChapterIndex(
   chapters: readonly VideoChapter[],

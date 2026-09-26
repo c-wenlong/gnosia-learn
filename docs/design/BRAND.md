@@ -33,6 +33,13 @@ stop), no exclamation marks, no "AI-powered". The product is single-owner
 for now, so there is no sign-up, pricing or email capture: the one call to
 action is "Open your book", which goes to `/sign-in`.
 
+**No all-caps labels.** Small tracked uppercase labels ("PROBE", "WHAT YOU
+KNOW") read as generated. Of the four references, Brilliant and Khan Academy
+use none; Duolingo uppercases only its buttons, and Masterclass only its one
+hero headline. Labels, kickers and card headings on the public pages are
+sentence case. The one exception is the wordmark, whose spaced capitals are
+the logo's own lettering.
+
 ## Palette
 
 Seven tokens, declared at the end of
@@ -48,7 +55,7 @@ cream in light and navy in dark.
 
 | Token | Light | Dark | Role | Why this value |
 | --- | --- | --- | --- | --- |
-| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, eyebrows, icon chips | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
+| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, chapter kickers, the check chips in the landing glimpses, and inline links and link hovers | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
 | `--brand-navy` | `#0d1c2b` | `#0a1621` | The dark ground, the brand button's lip, the label on a dark-mode teal button | A blue-black with enough blue to sit beside teal without looking like plain black; the dark value is a shade deeper so glass cards can lighten from it |
 | `--brand-cream` | `#faf6ec` | `#f4ecdc` | The light ground, the mark's pages, the label on a light-mode teal button | Warm but close to white, so it reads as paper without becoming parchment. The dark value is the pages' colour on navy, a touch warmer so it does not glare |
 | `--brand-gold` | `#b3842c` | `#e2b95e` | The star in the mark and wherever it appears alone | Graphics only, never body text. Light was darkened from a brighter gold until the star clears the 3:1 non-text minimum on cream (3.11:1); dark is the brighter gold at 9.9:1 |
@@ -71,7 +78,7 @@ white at 62% over cream in light, teal at 7% over navy in dark, `#fdfcf8` and
 | `mist` on ground | 5.91 | 8.42 | 4.5 |
 | `mist` on glass | 6.22 | 7.59 | 4.5 |
 | `mist` on the teal glow | 4.99 | 6.38 | 4.5 |
-| `teal` on ground (eyebrows, mark) | 6.88 | 7.94 | 4.5 |
+| `teal` on ground (kickers, mark) | 6.88 | 7.94 | 4.5 |
 | `teal` on glass | 7.23 | 7.16 | 4.5 |
 | Brand button label on its face (cream on teal, navy on teal) | 6.88 | 7.94 | 4.5 |
 | `gold` star on ground | 3.11 | 9.86 | 3 (non-text) |
@@ -229,6 +236,7 @@ insight. Not as a bullet or an ornament.
 | `.gnosia-glass` | The sign-in card |
 | Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
 | The world art (`public/banner.png`) | The landing page's closing band |
+| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click writes the app's theme cookie, so it is this browser's theme in the app too (the cookie wins over the saved row there); the saved row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
 | Icons, social card, banner | See [The source art](#the-source-art) |
 
 ## The Gnosia theme inside the app
@@ -267,6 +275,7 @@ matches.
 | `--m-lo` | `#ddd5c4` | `#e5e5e5` | Untouched: warm grey |
 | `--lip-shade` | `#cbc1ad` | `#d4d4d4` | Under an untouched path node |
 | `--streak` | `#b3842c` | `#ff9600` | `--brand-gold` |
+| `--streak-text` | `#916a23` | `#b35a00` | The streak as small text: each palette's streak hue darkened until 11px text clears 4.5:1 on the card. `.dark` keeps its `--streak`, `#ffab33`, which is already 8.83:1 |
 | `--ok-text` | `#008024` | `#009b2b` | Darkened to pass on cream and on its tint |
 | `--ok-on` | `#0b2e14` | `#ffffff` | The dark label `.dark` already uses |
 | `--warn-text` | `#8c6800` | `#b78900` | Darkened to pass on cream and on its tint |
@@ -320,21 +329,25 @@ column is the same pair in `:root`, for comparison.
 | `--m-mid` against `--m-lo` | 2.31 | (gap) | 1.51 |
 | `--streak` on `--page` (the dot, the day rings) | 3.11 | 3 | 2.06 |
 | `--streak` on `--surface` | 3.30 | 3 | 2.18 |
+| `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 4.5 | 4.80 |
+| `--streak-text` on `--page` | 4.54 | 4.5 | 4.52 |
 | White check on a `--streak` disc | 3.36 | 3 | 2.18 |
 | White mark on a mastered path node | 7.42 | 3 | 4.30 |
 | White mark on a learning path node | 3.37 | 3 | 1.90 |
 
-Two pairs still fall short, and both need a component change rather than a
-token:
+Two pairs used to fall short. Each was fixed without moving a token another
+component depends on:
 
-1. **The stat tile's "right" strip.** `StatTile` frames the `ok` tile in
-   `--ok-text` and writes the black `--on-tone` label on it. Darkening
-   `--ok-text` so the answer text passes brings black on it to 4.11:1. No
-   green can do both jobs over a visible tint, so the reading text won. The
-   fix is for `StatTile` to frame that tile in `--ok` (black on it is 9.9:1).
-2. **Today's day letter in the streak strip** is 11px `--streak` text, 3.30:1
-   on the card. That is better than orange (2.18:1) but under 4.5:1; it sits
-   next to the ring that carries the same meaning.
+1. **The stat tile's "right" strip.** Darkening `--ok-text` so the answer
+   text passes brings the black `--on-tone` label on it to 4.11:1, and no
+   green can do both jobs over a visible tint. `StatTile` frames the `ok`
+   tile in `--ok`, the green face, instead (black on it is 9.9:1).
+2. **Today's day letter in the streak strip.** It is 11px text, and in
+   `--streak` it was 3.30:1 on the card here and 2.18:1 in orange under
+   `:root`. It reads `--streak-text` now, a darker step of the same hue in
+   every palette, so the gold and the orange stay the fill (discs, rings,
+   and the large streak number, which is large text at 3:1) and only the
+   small letter darkens.
 
 ### The primary button
 
