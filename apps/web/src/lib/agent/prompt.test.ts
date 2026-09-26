@@ -6,8 +6,12 @@ import {
   CONCEPT_BODY_LIMIT,
   conceptCitationSources,
   DEFAULT_AGENT_MODEL,
+  TUTOR_STYLE_INSTRUCTIONS,
+  tutorStyleLabel,
   type ConceptPromptInput,
 } from "@/lib/agent/prompt";
+import { buildSessionQuestionPrompt, SESSION_EXPLANATION_RULES } from "@/lib/agent/session";
+import { TUTOR_STYLES } from "@/lib/preferences";
 import { buildLearningObjectives } from "@/lib/agent/objectives";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 
@@ -114,6 +118,40 @@ describe("concept tutor prompt", () => {
     expect(suggestions).toContain("Give me a check");
     expect(suggestions[1]).toContain("vector as a list of numbers");
     expect(conceptCitationSources({ slug: "x", title: "X", sources: [] })).toHaveLength(1);
+  });
+
+  it("tells the tutor the learner's style, the concise guide by default", () => {
+    const plain = buildConceptSessionContext(input).systemPrompt;
+    expect(plain).toContain("## Tutor style");
+    expect(plain).toContain(TUTOR_STYLE_INSTRUCTIONS["guide-concise"]);
+
+    const socratic = buildConceptSessionContext(input, { style: "socratic" }).systemPrompt;
+    expect(socratic).toContain("Ask before telling");
+    expect(socratic).toContain("one question at a time");
+    expect(socratic).not.toContain(TUTOR_STYLE_INSTRUCTIONS["guide-concise"]);
+
+    const direct = buildConceptSessionContext(input, { style: "direct" }).systemPrompt;
+    expect(direct).toContain("Answer in the first sentence");
+  });
+
+  it("has one distinct instruction per Settings style, in the chat and the session", () => {
+    const ids = TUTOR_STYLES.map((s) => s.id);
+    expect(Object.keys(TUTOR_STYLE_INSTRUCTIONS).sort()).toEqual([...ids].sort());
+    expect(Object.keys(SESSION_EXPLANATION_RULES).sort()).toEqual([...ids].sort());
+    expect(new Set(Object.values(TUTOR_STYLE_INSTRUCTIONS)).size).toBe(ids.length);
+    expect(new Set(Object.values(SESSION_EXPLANATION_RULES)).size).toBe(ids.length);
+    expect(tutorStyleLabel("guide-concise")).toBe("Learning guide · concise");
+  });
+
+  it("shapes the session question's explanation by style", () => {
+    const fallback = buildSessionQuestionPrompt(input, "check");
+    expect(fallback).toContain(SESSION_EXPLANATION_RULES["guide-concise"]);
+    for (const { id } of TUTOR_STYLES) {
+      const prompt = buildSessionQuestionPrompt(input, "probe", [], id);
+      expect(prompt).toContain(SESSION_EXPLANATION_RULES[id]);
+      // The JSON contract does not move with the style.
+      expect(prompt).toContain('"correct" is the zero-based index');
+    }
   });
 
   it("leaves the topic path unchanged", () => {

@@ -442,7 +442,9 @@ The chat route has two tutors. The topic tutor (the course session) builds its
 prompt from course data plus whatever recap the browser sent along. The
 concept tutor (the workspace, `conceptSlug` in the body) builds it from the
 concept note, its neighbours and the learner's mastery and recent answers,
-all read on the server through `lib/concept-workspace.ts`, and asks the model
+all read on the server through `lib/concept-workspace.ts`, plus the
+`tutorStyle` preference from Settings (`readTutorStyle` in `lib/settings.ts`,
+which also shapes the explanation of a session question), and asks the model
 to cite a numbered source list as `[n]`; the request and response shapes are
 in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md#the-concept-tutor-api).
 

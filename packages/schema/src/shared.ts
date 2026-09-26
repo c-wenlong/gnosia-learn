@@ -95,7 +95,8 @@ export const PREFERENCE_KEYS = {
   dailyLeeway: "dailyLeeway",
   /**
    * How the tutor talks: one of `TUTOR_STYLES` in `apps/web/src/lib/preferences.ts`,
-   * default `"guide-concise"`. Written from Settings; nothing reads it yet.
+   * default `"guide-concise"`. Written from Settings; read by the concept
+   * tutor and the session question writer (`apps/web/src/lib/settings.ts`).
    */
   tutorStyle: "tutorStyle",
   /**

@@ -10,8 +10,10 @@ import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
  */
 const readConceptWorkspace = vi.hoisted(() => vi.fn());
 const completeWithFallback = vi.hoisted(() => vi.fn());
+const readTutorStyle = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
+vi.mock("@/lib/settings", () => ({ readTutorStyle }));
 vi.mock("@/lib/agent/providers", () => ({
   completeWithFallback,
   availableProviderSummary: () => "none",
@@ -79,6 +81,8 @@ describe("POST /api/agent/session", () => {
     readConceptWorkspace.mockReset();
     completeWithFallback.mockReset();
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    readTutorStyle.mockReset();
+    readTutorStyle.mockResolvedValue("guide-concise");
   });
 
   it("refuses another origin before reading anything", async () => {
@@ -115,6 +119,16 @@ describe("POST /api/agent/session", () => {
     expect(messages[0]?.content).toContain("Dot product");
     expect(messages[0]?.content).toContain("- Earlier?");
     expect(messages[1]?.role).toBe("user");
+  });
+
+  it("writes the explanation in the learner's tutor style", async () => {
+    readTutorStyle.mockResolvedValue("guide-detailed");
+    completeWithFallback.mockResolvedValue(
+      reply(JSON.stringify({ question: "Q?", options: ["Right", "W1", "W2", "W3"], correct: 0, explanation: "Because." })),
+    );
+    await call({ conceptSlug: "dot-product", step: "probe" });
+    const [messages] = completeWithFallback.mock.calls[0] as [{ role: string; content: string }[]];
+    expect(messages[0]?.content).toContain("three or four sentences");
   });
 
   it("answers UNSTRUCTURED_REPLY when the model writes prose, so the page falls back", async () => {

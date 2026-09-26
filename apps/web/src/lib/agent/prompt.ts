@@ -1,3 +1,4 @@
+import { DEFAULT_TUTOR_STYLE, TUTOR_STYLES, type TutorStyle } from "@/lib/preferences";
 import type { Course, Module, Topic, TopicKnowledge } from "@/lib/types";
 import { buildLearningObjectives, buildSessionAngle } from "./objectives";
 import { formatPriorKnowledgeBlock } from "./summary";
@@ -240,6 +241,27 @@ export function conceptSuggestedQuestions(
   ];
 }
 
+/**
+ * What each Settings tutor style asks of a chat turn: one short instruction,
+ * placed after the teaching rules and allowed to override their length and
+ * order, since the rules describe the default (a concise guide).
+ */
+export const TUTOR_STYLE_INSTRUCTIONS: Record<TutorStyle, string> = {
+  "guide-concise":
+    "Concise learning guide. Short answers with no preamble and no restating of the question: two to four sentences, then one question.",
+  "guide-detailed":
+    "Detailed learning guide. Explain fully: the idea, why it holds, and a small worked example when it helps, in up to ten sentences, then one question.",
+  socratic:
+    "Socratic. Ask before telling: lead with one question that moves the learner toward the answer, one question at a time. Give the answer only after they have tried, or when they ask for it outright.",
+  direct:
+    "Direct. Answer in the first sentence, then give the reasoning, then at most one follow-up question.",
+};
+
+/** The label Settings shows for a style, e.g. "Learning guide · concise". */
+export function tutorStyleLabel(style: TutorStyle): string {
+  return TUTOR_STYLES.find((s) => s.id === style)?.label ?? style;
+}
+
 function neighbourLines(list: ConceptPromptNeighbour[]): string {
   return list.length === 0 ? "- (none)" : list.map((n) => `- ${n.title} (${n.label})`).join("\n");
 }
@@ -253,14 +275,21 @@ function neighbourLines(list: ConceptPromptNeighbour[]): string {
  * the page can turn a marker into a chip. Citing is best effort: a model that
  * ignores it still gives a usable answer, and a marker outside the list is
  * left as text.
+ *
+ * `style` is the learner's `tutorStyle` preference, read on the server by the
+ * caller; it adds one instruction from `TUTOR_STYLE_INSTRUCTIONS`.
  */
-export function buildConceptSessionContext(input: ConceptPromptInput): {
+export function buildConceptSessionContext(
+  input: ConceptPromptInput,
+  options: { style?: TutorStyle } = {},
+): {
   systemPrompt: string;
   openingUserSeed: string;
   sources: CitationSource[];
   suggestions: string[];
 } {
   const sources = conceptCitationSources(input);
+  const style = options.style ?? DEFAULT_TUTOR_STYLE;
   const body = input.body?.trim() ?? "";
   const clipped =
     body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
@@ -317,6 +346,9 @@ ${sources.map((s) => `[${s.n}] ${s.label}`).join("\n")}
 4. When the learner is stuck, give a scaffolded hint, not the full answer.
 5. When asked for a check, ask one question the note could settle and wait for the answer. Do not grade until they reply.
 6. Stay on this concept. Adjacent material only when it is needed to understand this one.
+
+## Tutor style (the learner chose this in Settings)
+${TUTOR_STYLE_INSTRUCTIONS[style]} Where this differs from the length or order in the rules above, follow this.
 
 ## Citing (important)
 When a sentence rests on one of the sources above, end it with its number in square brackets, like [1]. Use only the numbers listed above. Never invent a source or a number. If the note does not cover something, say it is not in the note rather than citing it.

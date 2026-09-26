@@ -107,7 +107,7 @@ Import from `@/components/ui` or from the file.
 | `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
 | `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "div"`, `className?` | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
-| `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "mid"`, `label?` (accessible name), `className?` | `Bar` |
+| `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "hi" \| "mid"` (`hi` and `mid` are the mastered and learning colours), `label?` (accessible name), `className?`. Full width of its container: size it with a wrapper, not `className` (see Gotchas) | `Bar` |
 | `TargetBar` | `done: number`, `total: number`, `label?`, `className?`: a 20px track with "x / y" beside it | `TargetBar` |
 | `StreakDay` | `letter: string`, `state: StreakDayState` (`done`, `forgiven`, `missed`, `today`, `future`), `isToday?`, `description: string` (what a screen reader hears), `className?`. Feed it from `streakStrip` in `@/lib/today-core` | `StreakDay` |
 | `Input` | `pill?: boolean`, `className?`, every `<input>` attribute | `Input` |
@@ -229,8 +229,10 @@ interface Habit {
   `dailyLeeway` (0 to 7, default 1), both in `PREFERENCE_KEYS`. Settings
   writes them through `POST /api/learner/preference`, whose validators
   (`@/lib/preferences`) refuse a value out of those ranges rather than
-  clamping it. Phase 1a added `tutorStyle` and `reducedMotion` beside them;
-  both are stored and nothing reads them yet.
+  clamping it. Phase 1a added `tutorStyle` and `reducedMotion` beside them.
+  `tutorStyle` is read by the concept tutor and the session's question writer
+  (see [Sweep after phase 1](#sweep-after-phase-1)); `reducedMotion` is stored
+  and nothing reads it yet.
 - Days are counted in `HABIT_TIME_ZONE` (an IANA name) when it is set,
   otherwise in the server's zone. On a host that runs in UTC, set it.
 
@@ -326,8 +328,10 @@ The system prompt is built on the server by `buildConceptSessionContext` in
 summary, where it sits, requires, assumes and dependants with their mastery
 labels, the learner's p(L), counts, last seen and next review, the five most
 recent answers, the note body (frontmatter stripped, clipped at 8000
-characters), and the numbered sources with an instruction to cite as `[n]`.
-Nothing about the concept is taken from the browser. `conceptCitationSources`
+characters), the numbered sources with an instruction to cite as `[n]`, and
+one line for the learner's `tutorStyle` (`TUTOR_STYLE_INSTRUCTIONS`, read on
+the server by `readTutorStyle`). Nothing about the concept is taken from the
+browser. `conceptCitationSources`
 and `conceptSuggestedQuestions` are exported so a page renders the same
 numbering and chips before the first turn. Citing is best effort: the page
 turns a `[n]` that is in `sources` into a `Cite` chip (`citedNumbers` in
@@ -462,7 +466,7 @@ in that session.
 | Course graph | not drawn | the transitive reduction of the edges | the algorithms folder drawn with every edge was a hairball |
 | Workspace left panel | summary, links, sources, backlinks only | the same, plus the whole note behind "Read the whole note" | the panel is "Note & sources"; the note is closed by default to keep the drawn layout |
 | Workspace sources | three coloured sources | "Your note" is always source [1], frontmatter sources follow | no note in the corpus fills `sources:` yet, so the note is the one source every concept has |
-| Workspace tutor | "Learning guide · concise" | "Grounded in your note" | there is no tutor style setting yet |
+| Workspace tutor | "Learning guide · concise" | the stored tutor style's label ("Learning guide · concise" by default), as a link to Settings | the label is the style the prompt is given; the link says where it changes |
 | Tutor turns | Save to note and Why? | Why? sends "Why?"; Save to note is disabled with a title | extending `POST /api/learner/note` is not in 1c |
 | Studio cards | "Generate flashcards", "Add source" | disabled, with a title | no feature behind them yet |
 | Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
@@ -478,7 +482,7 @@ in that session.
 | Settings, Theme | System | Light or Dark | the theme is a two-value cookie the root layout reads; a system mode belongs to the shell |
 | Settings, Reminders | "Facts only · 9:00" | a disabled select reading "Off", with a note that nothing is stored | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
-| Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what is not wired up yet, so a stored choice does not pretend to do something |
+| Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what the choice does today (Reminders and Motion that they are not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
 
 ### Session focus mode (phase 1d)
 
@@ -527,8 +531,51 @@ reads about fifty-five small files per search, with no index and no cache,
 which is right for a few hundred rows and the first thing to change if the
 catalog grows by an order of magnitude.
 
+## Sweep after phase 1
+
+Once 1a to 1f had merged, every route was screenshotted from a clean build of
+`main` with `kit/shots.mjs`: Today, Courses, a course path, Learn, a concept
+workspace, a session, Review, Library, an asset page, Settings and Studio, at
+1440x900 and 390x844, light and dark. Each picture was read beside its hi-fi
+frame. One PR fixed what that turned up.
+
+| Found | Fixed |
+| --- | --- |
+| The Learn index's Mastery column showed the p(L) number and no bar | The 160px bar is sized on its wrapper; its `w-full` had won over the width passed in `className`, leaving a flex item of zero width (see Gotchas). Mastered fills with `--m-hi`, learning with `--m-mid`, untouched is an empty track labelled "–", as hi-fi 09 draws it. `ProgressBar` gained the `hi` tone for it |
+| The asset page's links to `/learn/<slug>` carried `prefetch={false}` | Removed. It was the stopgap for a route that did not exist yet. A dynamic route's default prefetch stops at the nearest `loading.js` (Next's `Link` docs), and the app has none, so the prefetch is cheap: in a browser the four prefetch requests from one asset page came back with empty bodies. The external link keeps it |
+| Settings stored `tutorStyle` and nothing read it | The concept tutor's system prompt carries one instruction per style (`TUTOR_STYLE_INSTRUCTIONS` in `lib/agent/prompt.ts`), and the session's question writer writes its explanation to match (`SESSION_EXPLANATION_RULES` in `lib/agent/session.ts`). Both routes read the preference on the server with `readTutorStyle` in `lib/settings.ts`, after the concept read, and fall back to the concise guide if it cannot be read. The workspace's Tutor header shows the style, linking to Settings, and the Settings note says where it applies |
+| The README's picture was the old sidebar catalog | A fresh 1440x900 light capture of Today, with alt text and the surfaces table to match |
+
+Left on purpose:
+
+- **Hard can land past Good on the review rating row.** SM-2's intervals
+  are fuzzed by up to 5% on anything a week or longer, so the two can cross
+  by a day. The fix, if any, belongs in the scheduler (`schedule.mjs`); the
+  buttons print what a grade would really write.
+- **The legacy topic session route still exists.**
+  `/courses/[slug]/[module]/session` is behind the Tutor chat link in a path
+  node's panel, and is where Continue goes for a topic with no concept note.
+  It runs the old topic tutor, which does not read `tutorStyle`. Retiring it
+  needs those topics to have concepts first, so it is its own change.
+- **Reminders are not built.** Settings shows a disabled "Off" and Today's
+  Streak card states the day's fact instead.
+- **`reducedMotion` is stored, not applied.** Only the system's
+  `prefers-reduced-motion` is honoured, where a rule exists; the Settings
+  note says so.
+- **The primary button's hover is ours.** None of the reference apps drew
+  one, so `hover:opacity-90` on the 3D pill is our own choice.
+
 ## Gotchas
 
+- **A width passed to `ProgressBar` loses to its own `w-full`.** The bar's
+  outer element is `w-full` plus your `className`, and in the stylesheet
+  `.w-full` comes after `.w-[160px]`, so the bar stays 100% of its parent.
+  Inside a flex row that parent is sized by its content, a percentage of
+  nothing, so the track rendered 0px wide and the Learn index showed a p(L)
+  with no bar beside it. Put the width (and `shrink-0`) on a wrapping
+  element, as the course path's module bars and the Learn index do. A
+  breakpoint width such as `md:w-[150px]` does win, because media rules come
+  later, which is why the session close screen's bars were never affected.
 - **A primitive sets its own `display`, so hide it with a wrapper.**
   `<Pill className="hidden md:inline-flex">` stays visible on a phone:
   `hidden` and the pill's `inline-flex` are equal-weight utilities and the

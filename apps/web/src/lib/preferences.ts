@@ -24,7 +24,11 @@ export class InvalidPreference extends Error {}
 /* Vocabularies                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** How the tutor talks. Stored as the `id`; the tutor does not read it yet. */
+/**
+ * How the tutor talks. Stored as the `id`; the concept tutor and the session's
+ * question writer read it (`TUTOR_STYLE_INSTRUCTIONS` in `@/lib/agent/prompt`,
+ * `SESSION_EXPLANATION_RULES` in `@/lib/agent/session`).
+ */
 export const TUTOR_STYLES = [
   { id: "guide-concise", label: "Learning guide · concise" },
   { id: "guide-detailed", label: "Learning guide · detailed" },
