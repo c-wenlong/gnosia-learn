@@ -16,7 +16,7 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 
 const FOCUS =
@@ -43,6 +43,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   ok: cx("bg-ok text-[var(--ok-on)] shadow-[0_4px_0_var(--ok-lip)]", LIP),
   warn: cx("bg-warn text-[var(--warn-on)] shadow-[0_4px_0_var(--warn-lip)]", LIP),
   accent: cx("bg-accent text-white shadow-[0_4px_0_var(--accent-lip)]", LIP),
+  // The Gnosia pill for the public pages (docs/design/BRAND.md): a teal face
+  // over a navy lip with cream text in light; in dark the teal lightens, so the
+  // label turns navy and the lip is the teal sunk halfway into navy.
+  brand: cx(
+    "bg-brand-teal text-brand-cream shadow-[0_4px_0_var(--brand-navy)]",
+    "dark:text-brand-navy dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]",
+    LIP,
+  ),
   secondary: "border-2 border-border bg-surface text-text hover:bg-surface2 active:bg-surface2",
   ghost: "text-accent-text underline-offset-4 hover:underline",
 };

@@ -8,10 +8,10 @@ export default function NotFound() {
         That course or module does not exist in the shortlist.
       </p>
       <Link
-        href="/"
+        href="/today"
         className="inline-block text-[var(--accent-strong)] hover:underline"
       >
-        ← Back to all courses
+        Back to Today
       </Link>
     </div>
   );

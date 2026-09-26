@@ -93,11 +93,40 @@ out as `--rate-limit-action log` first, read the real traffic at
 Counters are per region, so N regions can collectively exceed the number by
 roughly N times. `--duration` needs Pro or Enterprise.
 
+## Signing in
+
+Gnosia has one reader, so authentication is a password and a signed cookie
+rather than accounts. `/` is the public landing page and `/sign-in` the door;
+everything else, `/api/*` included, needs the session. The check runs in
+`apps/web/src/proxy.ts` before any page renders, and again in the `(app)`
+layout before any query, so an anonymous request never reaches Postgres.
+
+```bash
+vercel env add OWNER_PASSWORD production      # what you type on /sign-in
+vercel env add AUTH_SECRET production         # openssl rand -base64 32
+```
+
+Set both for Preview too if preview deployments should be usable. With either
+missing the deployment fails closed: every protected page redirects to
+`/sign-in`, which names the missing variable. Rotating `AUTH_SECRET` signs
+every browser out; changing `OWNER_PASSWORD` does not, since the cookie is
+signed with the secret and not the password. Sessions last thirty days.
+
+The only brake on password guessing is a fixed 600ms delay per wrong attempt
+in `apps/web/src/app/api/auth/sign-in/route.ts`. That is proportionate for one
+owner with a long password; add a per-IP rule on `/api/auth/sign-in` with
+`vercel firewall` before opening the deployment to anyone else. When accounts
+arrive, `apps/web/src/lib/auth/` is the module to replace (Auth.js reads the
+same `AUTH_SECRET` name) and `isSignedIn` in `session.ts` is the seam every
+caller already goes through.
+
 ## Secrets and environment variables
 
 | Name | Purpose | Where it is needed |
 | --- | --- | --- |
 | `DATABASE_URL` | Postgres holding the learner state and the catalog | Vercel (once a cloud database exists), CI, locally |
+| `OWNER_PASSWORD` | The one password that opens the app (see [Signing in](#signing-in)) | Vercel, locally |
+| `AUTH_SECRET` | Signs the session cookie; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
 | `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade | Vercel |
 | `GEMINI_API_KEY` | Provider 2 | Vercel |
 | `OPENROUTER_API_KEY` | Provider 3 | Vercel |
@@ -158,9 +187,9 @@ vercel firewall publish --yes
 ```
 
 and a `pg_dump` on a schedule, because the one bound that matters against a
-write nobody authorised is being able to put the rows back. Real
-authentication is the plan's answer (`#27`: "no localStorage except future
-auth") and is not in this bundle.
+write nobody authorised is being able to put the rows back. The owner password
+([Signing in](#signing-in)) now stands in front of every learner route, which
+is what the plan called "future auth" (`#27`); accounts are still to come.
 
 When the cloud database arrives (Neon or Supabase from Vercel, or Postgres on
 the homeserver over Tailscale — the plan has not chosen):

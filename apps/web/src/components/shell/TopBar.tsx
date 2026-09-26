@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { GnosiaWordmark } from "@/components/brand";
 import { Pill } from "@/components/ui/Pill";
 import { cx } from "@/components/ui/classes";
 import { habitLabels, type Habit } from "@/lib/habit-core";
@@ -36,10 +37,11 @@ export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
     <header className="sticky top-0 z-30 border-b border-hair bg-surface pt-[env(safe-area-inset-top)] group-has-[[data-layout=full]]/shell:static md:group-has-[[data-layout=focus]]/shell:hidden">
       <div className="flex h-14 items-center gap-4 px-4 md:h-16 md:gap-8 md:px-7">
         <Link
-          href="/"
-          className="shrink-0 rounded-sm font-display text-[20px] leading-none font-bold text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          href="/today"
+          aria-label="Gnosia, Today"
+          className="shrink-0 rounded-sm text-[14px] text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent md:text-[15px]"
         >
-          self-learn
+          <GnosiaWordmark />
         </Link>
 
         <nav aria-label="Primary" className="hidden h-full md:block">
