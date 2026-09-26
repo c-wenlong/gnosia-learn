@@ -1,6 +1,6 @@
-import { readConceptGraph, recordObservation } from "@self-learn/catalog/state";
+import { closeTutorSession, readConceptGraph, recordObservation } from "@self-learn/catalog/state";
 
-import { BadRequest, handler, requireBoolean } from "@/lib/learner-api";
+import { BadRequest, handler, optionalBoolean, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource } from "@/lib/session-core";
 
@@ -9,7 +9,7 @@ import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource
  * evidence.
  *
  * ```ts
- * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen? }
+ * { conceptSlug, correct, source: "probe" | "teach", requestId, sessionId?, question?, answer?, chosen?, closeSession? }
  * ```
  *
  * It runs `recordObservation`, the function `learn observe` runs, so an answer
@@ -54,6 +54,8 @@ interface ObserveRequest {
   answer: string | null;
   /** What the learner picked; null for "I don't know". */
   chosen: string | null;
+  /** Close the session once this answer is recorded: the page leaving mid-save. */
+  closeSession: boolean;
 }
 
 function optionalText(body: Record<string, unknown>, field: string): string | null {
@@ -92,6 +94,7 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     question: optionalText(body, "question"),
     answer: optionalText(body, "answer"),
     chosen: optionalText(body, "chosen"),
+    closeSession: optionalBoolean(body, "closeSession", false),
   };
 }
 
@@ -115,6 +118,14 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
     requestId: input.requestId,
   });
 
+  // After the answer, in the same request, so the two cannot arrive out of
+  // order: this is how a page that is going away closes a session while an
+  // answer is still saving. The answer is idempotent by its request id, so
+  // whichever of this and the original request lands first records it and
+  // the other replays.
+  const closed =
+    input.closeSession && input.sessionId !== null ? (await closeTutorSession(db, input.sessionId)).closed : false;
+
   return {
     concept: recorded.concept,
     correct: recorded.correct,
@@ -131,5 +142,6 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
         : { due: recorded.card.due, intervalDays: recorded.card.intervalDays, created: recorded.cardCreated },
     session: input.sessionId,
     replayed: recorded.replayed,
+    closed,
   };
 });

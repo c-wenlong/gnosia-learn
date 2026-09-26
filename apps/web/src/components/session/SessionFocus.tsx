@@ -122,8 +122,8 @@ export function SessionFocus({
   const attempts = useRef<Record<number, { requestId: string; picked: number | null }>>({});
   const sessionId = useRef<string | null>(null);
   const closed = useRef(false);
-  /** The answer being saved, if any: a close on the way out waits for it. */
-  const saving = useRef<Promise<unknown> | null>(null);
+  /** The body of the answer being saved, if any: leaving resends it with the close. */
+  const saving = useRef<Record<string, unknown> | null>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
 
   const step = plan[index];
@@ -192,30 +192,30 @@ export function SessionFocus({
       setSent((prev) => (index in prev ? prev : { ...prev, [index]: picked }));
       const correct = picked !== null && picked === question.correct;
       sessionId.current ??= newSessionId(slug, new Date(), randomToken());
+      const payload = {
+        conceptSlug: slug,
+        correct,
+        // Asked after this session taught it is a teaching check; a probe,
+        // and a Quiz me with no teaching, only measure.
+        source: step.kind === "check" && mode === "learn" ? "teach" : "probe",
+        requestId: attempt.requestId,
+        sessionId: sessionId.current,
+        question: question.prompt,
+        // `answer` is the right one, as `learn observe --answer` means it;
+        // `chosen` is the pick, null for "I don't know".
+        answer: question.choices[question.correct] ?? null,
+        chosen: picked === null ? null : (question.choices[picked] ?? null),
+      };
+      saving.current = payload;
       try {
-        const request = fetch("/api/learner/observe", {
+        const res = await fetch("/api/learner/observe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conceptSlug: slug,
-            correct,
-            // Asked after this session taught it is a teaching check; a probe,
-            // and a Quiz me with no teaching, only measure.
-            source: step.kind === "check" && mode === "learn" ? "teach" : "probe",
-            requestId: attempt.requestId,
-            sessionId: sessionId.current,
-            question: question.prompt,
-            // `answer` is the right one, as `learn observe --answer` means it;
-            // `chosen` is the pick, null for "I don't know".
-            answer: question.choices[question.correct] ?? null,
-            chosen: picked === null ? null : (question.choices[picked] ?? null),
-          }),
+          body: JSON.stringify(payload),
           // Survives the page going away, so an answer sent just before the
           // learner leaves still lands.
           keepalive: true,
         });
-        saving.current = request;
-        const res = await request;
         const body = (await res.json().catch(() => null)) as ObserveReply | null;
         if (!res.ok || body?.ok !== true || body.result === undefined) {
           setError(body?.error ?? `Not saved (${res.status}). Press Try again; your pick is kept.`);
@@ -254,12 +254,24 @@ export function SessionFocus({
       });
     if (leaving) {
       closed.current = true;
-      // An answer still saving goes first. Sent now, the close could reach
-      // the server ahead of it: a first answer would then open a session
-      // nothing closes, and a later one would be refused by a closed session
-      // and lost. Waiting keeps both in order.
+      // An answer still saving must land before the close, or a first answer
+      // would open a session nothing closes and a later one would be refused
+      // by a closed session. Waiting for it is no good on a closing tab, where
+      // nothing runs after `pagehide`; so the answer is sent again with
+      // `closeSession`, which the server records (or replays, by its request
+      // id) and then closes, in one request. Whichever copy lands first
+      // records the answer; the other replays it.
       const pending = saving.current;
-      void (pending === null ? send() : pending.catch(() => undefined).then(send)).catch(() => undefined);
+      const request =
+        pending === null
+          ? send()
+          : fetch("/api/learner/observe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...pending, closeSession: true }),
+              keepalive: true,
+            });
+      void request.catch(() => undefined);
       return;
     }
     for (let attempt = 0; attempt < 2 && !closed.current; attempt += 1) {

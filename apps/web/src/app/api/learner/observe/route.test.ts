@@ -100,6 +100,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     ["a request id with a space", { requestId: "a b" }],
     ["a session id with a slash", { sessionId: "a/b" }],
     ["a question past the cap", { question: "x".repeat(2_001) }],
+    ["a non-boolean closeSession", { closeSession: "yes" }],
   ])("refuses %s as a 400", async (_label, change) => {
     const { status, body } = await send({ ...answer, ...change });
     expect(status).toBe(400);
@@ -212,6 +213,21 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     const late = await send({ ...answer, requestId: "req-late" });
     expect(late.status).toBe(400);
     expect((await state.readEvents(scratch.db)).filter((e) => e.type === "observation")).toHaveLength(1);
+  });
+
+  it("records then closes with closeSession, and either copy of a racing answer replays the other", async () => {
+    // A page leaving mid-save resends the pending answer with closeSession.
+    const leaving = await send({ ...answer, closeSession: true });
+    expect(leaving.body.result).toMatchObject({ replayed: false, closed: true });
+    // The original request, arriving late, finds its answer already recorded.
+    const late = await send(answer);
+    expect(late.status).toBe(200);
+    expect(late.body.result).toMatchObject({ replayed: true, closed: false });
+    const again = await send({ ...answer, closeSession: true });
+    expect(again.body.result).toMatchObject({ replayed: true, closed: false });
+    const types = (await state.readEvents(scratch.db)).map((e) => e.type);
+    expect(types).toEqual(["session-start", "observation", "session-close"]);
+    expect((await state.readSession(scratch.db, answer.sessionId))?.state).toBe("closed");
   });
 
   it("refuses a close from another origin, and a malformed session id", async () => {

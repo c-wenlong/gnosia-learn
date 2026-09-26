@@ -370,6 +370,7 @@ write path is the part to read first.
   question?: string;              // the workspace's check status matches on this text
   answer?: string;                // the correct answer, as `learn observe --answer` means it
   chosen?: string | null;         // what the learner picked; null for "I don't know"
+  closeSession?: boolean;         // close the session after recording (a page leaving mid-save)
 }                                 // each text up to 2000 characters
 // 200 { ok: true, result }
 {
@@ -378,6 +379,7 @@ write path is the part to read first.
   card: { due, intervalDays, created } | null,
   session: string | null,
   replayed: boolean,                                                   // the request id was already recorded; nothing was written
+  closed: boolean,                                                     // closeSession closed the session in this request
 }
 ```
 
@@ -398,9 +400,12 @@ closed, answered, correct, concepts }`; `closed: false` means it was already
 closed or never opened, and nothing was written. The page sends it on
 reaching the close screen (with one retry), and with `keepalive` when the
 learner leaves mid-session (Exit, Ask the tutor, a closed tab), so an
-answered session does not stay `running`. A close on the way out waits for an
-answer still saving (itself sent with `keepalive`), so it can never reach the
-server first and have that answer refused by a closed session. A tab that dies before either
+answered session does not stay `running`. When an answer is still saving,
+leaving sends that answer again with `closeSession: true` instead of a bare
+close: the observe route records it (or replays it, by its request id) and
+then closes, in one request, so the close can never land first and have the
+answer refused by a closed session, and nothing has to run after `pagehide`.
+Checked in a browser for Exit and for a tab closed mid-save. A tab that dies before either
 still leaves one running, as a `learn session start` never closed does.
 
 `POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
