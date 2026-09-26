@@ -59,6 +59,8 @@ const REQUIRED = [
   "conceptsForAssets",
   // Topics: titles for the chips a card renders from `AssetWithTopics.topics`.
   "topicTitles",
+  // Concept notes: where the indexer read each one, for a page that counts its checks.
+  "notePaths",
 ] as const;
 
 describe("the state barrel", () => {

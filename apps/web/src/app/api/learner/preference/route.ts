@@ -2,10 +2,17 @@ import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 import { writePreference } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
+import {
+  InvalidPreference,
+  validateDailyTarget,
+  validateLeeway,
+  validateMotionMode,
+  validateTutorStyle,
+} from "@/lib/preferences";
 
 /**
- * The key/value corner of the learner state: theme, where they were last, and
- * their own resource links.
+ * The key/value corner of the learner state: theme, where they were last,
+ * their own resource links, and the Settings page's habit and tutor choices.
  *
  * The allow-list is the point. `preference` is a key/value table so a new UI
  * toggle costs no migration, but an endpoint that wrote any key with any value
@@ -21,7 +28,26 @@ const WRITABLE = {
   [PREFERENCE_KEYS.theme]: theme,
   [PREFERENCE_KEYS.lastVisited]: lastVisited,
   [PREFERENCE_KEYS.userResources]: userResources,
+  // The Settings page's keys. Their validators are pure and live in
+  // `@/lib/preferences`, beside the vocabulary the form offers, so the two
+  // cannot disagree about what a valid value is.
+  [PREFERENCE_KEYS.dailyTarget]: settled(validateDailyTarget),
+  [PREFERENCE_KEYS.dailyLeeway]: settled(validateLeeway),
+  [PREFERENCE_KEYS.tutorStyle]: settled(validateTutorStyle),
+  [PREFERENCE_KEYS.reducedMotion]: settled(validateMotionMode),
 } as const;
+
+/** A pure validator's `InvalidPreference` as the 400 `handler` answers with. */
+function settled<T>(validate: (value: unknown) => T): (value: unknown) => T {
+  return (value) => {
+    try {
+      return validate(value);
+    } catch (error) {
+      if (error instanceof InvalidPreference) throw new BadRequest(error.message);
+      throw error;
+    }
+  };
+}
 
 export const POST = handler(
   "preference",
