@@ -4,7 +4,8 @@
 // usage: node docs/design/kit/shots.mjs <base-url> <out-dir> [route ...]
 //   node docs/design/kit/shots.mjs http://localhost:3121 /tmp/shots / /courses /review
 //
-// Writes <out-dir>/<slug>-<desktop|phone>-<light|dark>.png, where slug is the
+// Writes <out-dir>/<slug>-<desktop|phone>-<theme>.png (a system mode adds the
+// scheme it resolved under: `-system-light`, `-gnosia-system-dark`), where slug is the
 // route with slashes turned into dashes ("courses", "courses-cp4281", "root").
 // Desktop is 1440x900 and phone 390x844, the hi-fi frame sizes. Each shot is
 // the full page, so content below the fold is in the picture too.
@@ -67,6 +68,10 @@ const sizes = pick(process.env.SHOTS_VIEWPORTS, Object.keys(VIEWPORTS));
 const MODES = ['light', 'dark', 'system', 'gnosia', 'gnosia-dark', 'gnosia-system'];
 const themes = process.env.SHOTS_THEMES ? pick(process.env.SHOTS_THEMES, MODES) : ['light', 'dark'];
 const schemeFor = (theme) => process.env.SHOTS_COLOR_SCHEME ?? (theme === 'dark' || theme.endsWith('-dark') ? 'dark' : 'light');
+// A system mode's picture depends on the emulated scheme, so its file name
+// carries it (`gnosia-system-dark`) and a light and a dark run of the same
+// mode can share an output directory.
+const label = (theme) => (theme.endsWith('system') ? `${theme}-${schemeFor(theme)}` : theme);
 const fullPage = !process.env.SHOTS_VIEWPORT_ONLY;
 
 mkdirSync(outDir, { recursive: true });
@@ -88,7 +93,7 @@ try {
       const page = await context.newPage();
       for (const route of routes) {
         const slug = route.replace(/^\/+|\/+$/g, '').replace(/[/?&=#]+/g, '-') || 'root';
-        const file = join(outDir, `${slug}-${size}-${theme}.png`);
+        const file = join(outDir, `${slug}-${size}-${label(theme)}.png`);
         try {
           const response = await page.goto(new URL(route, base).href, { waitUntil: 'networkidle' });
           await page.evaluate(() => document.fonts.ready);

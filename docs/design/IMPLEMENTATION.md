@@ -300,7 +300,9 @@ Output is `<route>-<desktop|phone>-<theme>.png`. `SHOTS_VIEWPORTS`,
 `SHOTS_THEMES` and `SHOTS_VIEWPORT_ONLY=1` narrow a run; `SHOTS_THEMES` takes
 any of the six theme modes (`SHOTS_THEMES=gnosia-dark`), and the browser
 prefers dark for `dark` and `gnosia-dark`. `SHOTS_COLOR_SCHEME=dark` forces
-it, to see a system mode resolve dark. It borrows
+it, to see a system mode resolve dark; a system mode's file name ends in the
+scheme it resolved under (`-gnosia-system-dark`), so the two runs do not
+overwrite each other. It borrows
 playwright-core from the tldrawkc submodule; in a checkout where that is not
 installed (a fresh worktree), point `PLAYWRIGHT_CORE` at another checkout's
 `tools/tldrawkc/node_modules/playwright-core/index.mjs`. It exits 1 if any
