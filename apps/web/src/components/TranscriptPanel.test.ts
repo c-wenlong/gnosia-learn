@@ -98,12 +98,39 @@ describe("TranscriptPanel", () => {
     expect(activeText(host)).toBeNull();
   });
 
-  it("marks the position with a dash before the first line starts, never a false line", () => {
-    // No cue has started yet: there is no line to count as read, so the
-    // counter must not read "0 / 3" (claims a line that does not exist) or
-    // "1 / 3" (claims the reader is already on the first line).
+  it("gives the length before the first line starts, never a false position", () => {
+    // No cue has started yet, so there is no position to report. "0 / 3"
+    // names a line that does not exist, "1 / 3" claims the reader is on a line
+    // nobody has heard, and "- / 3" reads as a value that failed to load.
     const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: -1 }));
-    expect(counterText(host)).toBe("- / 3");
+    expect(counterText(host)).toBe("3 lines");
+  });
+
+  it("gives the length on a video at rest whose first line starts after 0:00", () => {
+    // The asset page's case: the player reports 0 until playback starts, and
+    // manimkc's first segment begins a moment into the video.
+    const late = cues.map((cue) => ({ ...cue, start: cue.start + 0.4 }));
+    const { host, rerender } = mount(
+      createElement(TranscriptPanel, { cues: late, currentTime: 0 }),
+    );
+    expect(counterText(host)).toBe("3 lines");
+
+    rerender(createElement(TranscriptPanel, { cues: late, currentTime: 5 }));
+    expect(counterText(host)).toBe("2 / 3");
+
+    // Seeking back before the first line returns to the length, not a stale position.
+    rerender(createElement(TranscriptPanel, { cues: late, currentTime: 0 }));
+    expect(counterText(host)).toBe("3 lines");
+  });
+
+  it("says line, not lines, for a one-line transcript", () => {
+    const one = [{ start: 2, end: 3, text: "Only line." }];
+    const { host, rerender } = mount(
+      createElement(TranscriptPanel, { cues: one, currentTime: 0 }),
+    );
+    expect(counterText(host)).toBe("1 line");
+    rerender(createElement(TranscriptPanel, { cues: one, currentTime: 2 }));
+    expect(counterText(host)).toBe("1 / 1");
   });
 
   it("counts the line being spoken", () => {
@@ -216,9 +243,13 @@ describe("TranscriptPanel", () => {
     expect(host.textContent).not.toContain("Follow along");
   });
 
-  it("says so when there is no transcript", () => {
+  it("says so when there is no transcript, with no counter at all", () => {
+    // The chapters-only fallback and a silent render both land here: there
+    // are no lines, so neither a length nor a position is shown.
     const { host } = mount(createElement(TranscriptPanel, { cues: [], currentTime: 0 }));
     expect(host.textContent).toContain("No transcript beside this video.");
     expect(host.querySelector("ol")).toBeNull();
+    expect(counterText(host)).toBeNull();
+    expect(host.textContent).not.toMatch(/\d+ lines?|\/ 0/);
   });
 });
