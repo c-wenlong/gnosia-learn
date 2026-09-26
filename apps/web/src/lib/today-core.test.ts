@@ -180,6 +180,20 @@ describe("recent activity", () => {
     expect(rows.map((r) => r.text)).toEqual(["Review · 1 card · 1 again", "Review · 2 cards · 1 again"]);
   });
 
+  it("names a watched or read library asset, and runs several together", () => {
+    const events: HabitEvent[] = [
+      { at: "2026-09-21T08:00:00Z", type: "watched", asset: "manimkc:out/dot.mp4", kind: "video" },
+      { at: "2026-09-25T08:00:00Z", type: "watched", asset: "note:learn/a.md", kind: "note" },
+      { at: "2026-09-25T08:10:00Z", type: "watched", asset: "link:b", kind: "link" },
+    ];
+    const titles: Record<string, string> = { "manimkc:out/dot.mp4": "Dot product explainer" };
+    const rows = activityRows(events, { now: NOW, timeZone: TZ, title, assetTitle: (id) => titles[id] ?? null });
+    expect(rows.map((r) => [r.day, r.text, r.detail])).toEqual([
+      ["Yesterday", "Read · 2 assets", null],
+      ["Mon", "Watched · Dot product explainer", null],
+    ]);
+  });
+
   it("leaves out a voided session and the bookkeeping events", () => {
     const events: HabitEvent[] = [
       { at: "2026-09-25T09:00:00Z", type: "session-start", session: "gone" },

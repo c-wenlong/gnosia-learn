@@ -59,7 +59,7 @@ export interface ReviewRow {
   kindLabel: string;
 }
 
-export type ActivityKind = "Teach" | "Probe" | "Review";
+export type ActivityKind = "Teach" | "Probe" | "Review" | "Watched" | "Read";
 
 export interface ActivityRow {
   key: string;
@@ -231,15 +231,23 @@ export function reviewKindLabel(checks: number): string {
 /* Recent activity                                                            */
 /* -------------------------------------------------------------------------- */
 
+type GroupType = "observation" | "review" | "watched";
+
 interface Group {
   key: string;
   kind: ActivityKind;
-  review: boolean;
+  type: GroupType;
   events: HabitEvent[];
+}
+
+/** What a library asset was: a video is watched, anything else is read. */
+function watchedKind(event: HabitEvent): ActivityKind {
+  return event.kind === "video" ? "Watched" : "Read";
 }
 
 function kindOf(event: HabitEvent): ActivityKind {
   if (event.type === "review") return "Review";
+  if (event.type === "watched") return watchedKind(event);
   const source = event.source ?? "probe";
   if (source === "teach") return "Teach";
   if (source === "review") return "Review";
@@ -249,6 +257,9 @@ function kindOf(event: HabitEvent): ActivityKind {
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
+
+/** The event types that make a row. Bookkeeping (`session-start`, `session-close`, `void`) does not. */
+const ACTIVITY_TYPES = new Set(["observation", "review", "watched"]);
 
 /** Two answers or grades further apart than this, outside a session, are two sittings. */
 export const SITTING_GAP_MS = 60 * 60_000;
@@ -267,7 +278,8 @@ function plural(n: number, one: string, many: string): string {
  * gap of more than `SITTING_GAP_MS`, which keeps a morning review and an
  * evening one apart. `session-start` and `session-close` are bookkeeping and
  * never make a row, and anything inside a session a `void` retracted is left
- * out, as the streak leaves it out.
+ * out, as the streak leaves it out. A library asset marked watched or read
+ * (`watched`) runs the same way as reviews and prints the asset's title.
  *
  * A row about one concept names it and prints its p(L) before and after; a
  * row about several prints how many went up and down.
@@ -280,10 +292,12 @@ export function activityRows(
     title: (conceptId: string) => string;
     /** The concept's next review, if it has a card. */
     nextDue?: (conceptId: string) => string | null;
+    /** A library asset's title, for `watched` rows. The id is printed without one. */
+    assetTitle?: (assetId: string) => string | null;
     limit?: number;
   },
 ): ActivityRow[] {
-  const { now, timeZone, title, nextDue, limit = 4 } = options;
+  const { now, timeZone, title, nextDue, assetTitle, limit = 4 } = options;
   const today = dayKey(now, timeZone);
   const voided = new Set(
     events
@@ -295,16 +309,16 @@ export function activityRows(
   /** The open run for each session-less kind: its key and when it last grew. */
   const runs = new Map<string, { key: string; day: string; lastAt: number }>();
   const ordered = [...events]
-    .filter((e) => (e.type === "observation" || e.type === "review") && !Number.isNaN(new Date(e.at).getTime()))
+    .filter((e) => ACTIVITY_TYPES.has(e.type) && !Number.isNaN(new Date(e.at).getTime()))
     .filter((e) => !(typeof e.session === "string" && voided.has(e.session)))
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
   for (const e of ordered) {
     const kind = kindOf(e);
-    const review = e.type === "review";
-    const lane = `${review ? "review" : "obs"}:${kind}`;
+    const type = e.type as GroupType;
+    const lane = `${type}:${kind}`;
     let key: string;
-    if (!review && typeof e.session === "string" && e.session !== "") {
+    if (type === "observation" && typeof e.session === "string" && e.session !== "") {
       key = `${lane}:s:${e.session}`;
     } else {
       const at = new Date(e.at).getTime();
@@ -319,7 +333,7 @@ export function activityRows(
       }
     }
     const group = groups.get(key);
-    if (group === undefined) groups.set(key, { key, kind, review, events: [e] });
+    if (group === undefined) groups.set(key, { key, kind, type, events: [e] });
     else group.events.push(e);
   }
 
@@ -331,10 +345,22 @@ export function activityRows(
       const at = last(g).at;
       const base = { key: g.key, at, day: pastDayLabel(dayKey(at, timeZone), today), kind: g.kind };
       const concepts = [...new Set(g.events.map((e) => e.concept).filter((c): c is string => typeof c === "string"))];
-      return g.review
+      if (g.type === "watched") return { ...base, ...watchedText(g, assetTitle) };
+      return g.type === "review"
         ? { ...base, ...reviewText(g, concepts, today, timeZone, nextDue) }
         : { ...base, ...observationText(g, concepts, title) };
     });
+}
+
+function watchedText(
+  g: Group,
+  assetTitle: ((id: string) => string | null) | undefined,
+): { text: string; short: string; detail: string | null } {
+  const assets = [...new Set(g.events.map((e) => e.asset).filter((a): a is string => typeof a === "string"))];
+  const subject =
+    assets.length === 1 ? (assetTitle?.(assets[0]) ?? assets[0]) : plural(assets.length, "asset", "assets");
+  const text = `${g.kind} · ${subject}`;
+  return { text, short: text, detail: null };
 }
 
 function observationText(

@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { connection } from "next/server";
 import {
+  assetsByIds,
   dueReviews,
   notePaths,
   readEvents,
@@ -87,7 +88,10 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   );
 
   const shown = due.slice(0, REVIEW_ROWS);
-  const checks = await checkCounts(db, shown.map((card) => card.conceptId));
+  const [checks, assets] = await Promise.all([
+    checkCounts(db, shown.map((card) => card.conceptId)),
+    assetTitles(db, events),
+  ]);
   const reviewRows: ReviewRow[] = shown.map((card) => {
     const concept = byId.get(card.conceptId);
     const when = dueLabel(card.due, now, timeZone);
@@ -116,6 +120,7 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
       timeZone,
       title,
       nextDue: (id) => byId.get(id)?.due ?? null,
+      assetTitle: (id) => assets[id] ?? null,
       limit: ACTIVITY_ROWS,
     }),
     habit: computeHabit({ events, preferences, dueReviews: due.length, now, timeZone }),
@@ -200,4 +205,21 @@ async function checkCounts(db: CatalogDatabase, slugs: string[]): Promise<Record
     }),
   );
   return Object.fromEntries(entries);
+}
+
+/**
+ * Titles for the library assets the log says were watched or read. A failed
+ * lookup costs the titles (the rows print the asset id), not the page.
+ */
+async function assetTitles(db: CatalogDatabase, events: readonly { type: string; asset?: unknown }[]): Promise<Record<string, string>> {
+  const ids = [
+    ...new Set(events.filter((e) => e.type === "watched" && typeof e.asset === "string").map((e) => e.asset as string)),
+  ];
+  if (ids.length === 0) return {};
+  try {
+    const rows = await assetsByIds(db, ids);
+    return Object.fromEntries(rows.filter((r) => r.title !== null).map((r) => [r.id, r.title as string]));
+  } catch {
+    return {};
+  }
 }
