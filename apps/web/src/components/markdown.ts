@@ -229,10 +229,16 @@ function parseBlocks(lines: string[]): Block[] {
  * between. Answers the LaTeX inside and the line after the block, or null.
  *
  * Null covers every way that shape can fail: no closing `$$` before a blank
- * line or the end of the file, nothing between the delimiters, or a second
- * `$$` pair inside (`$$a$$ and $$b$$` is a sentence with two formulas in it,
- * not one formula). The caller then reads the lines as an ordinary paragraph,
- * so an unfinished block shows as the text it is rather than vanishing.
+ * line or the end of the file, nothing between the delimiters, a second `$$`
+ * pair inside (`$$a$$ and $$b$$` is a sentence with two formulas in it, not
+ * one formula), or a heading, a code fence or a thematic break before the
+ * close. The caller then reads the lines as an ordinary paragraph, so an
+ * unfinished block shows as the text it is rather than vanishing.
+ *
+ * Those three stop the scan because no line of LaTeX starts with one, so an
+ * unclosed `$$` cannot swallow the note's structure up to some later `$$`.
+ * A list marker and a `>` do not: `- b` and `> 0` are ordinary continuation
+ * lines of a multi-line formula, and stopping there would break real maths.
  */
 function displayMathAt(lines: string[], from: number): [string, number] | null {
   if (!lines[from].trim().startsWith("$$")) return null;
@@ -240,6 +246,7 @@ function displayMathAt(lines: string[], from: number): [string, number] | null {
   for (let i = from; i < lines.length; i += 1) {
     const line = lines[i].trim();
     if (line === "") return null;
+    if (i > from && (HEADING.test(lines[i]) || FENCE.test(lines[i]) || RULE.test(lines[i]))) return null;
     body.push(line);
     const joined = body.join("\n");
     // The opening line on its own is `$$`, which also ends with `$$`.

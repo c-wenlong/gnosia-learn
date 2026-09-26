@@ -362,6 +362,23 @@ describe("display math blocks", () => {
     ]);
   });
 
+  it("does not let an unclosed $$ swallow a heading, a fence or a rule before a later $$", () => {
+    const note = ["$$", "x^2", "## Next section", "Body.", "", "```", "code", "```", "", "---", "", "Ends $$"].join("\n");
+    expect(blocks(note)).toEqual([
+      { kind: "paragraph", text: "$$ x^2" },
+      { kind: "heading", level: 2, text: "Next section" },
+      { kind: "paragraph", text: "Body." },
+      { kind: "code", info: "", text: "code" },
+      { kind: "rule" },
+      { kind: "paragraph", text: "Ends $$" },
+    ]);
+    expect(blocks(["$$", "a", "```", "b", "```", "$$"].join("\n"))[0]).toEqual({ kind: "paragraph", text: "$$ a" });
+  });
+
+  it("keeps list-like and quote-like continuation lines inside a formula", () => {
+    expect(blocks(["$$", "a", "- b", "> 0", "$$"].join("\n"))).toEqual([{ kind: "math", source: "a\n- b\n> 0" }]);
+  });
+
   it("reads two formulas in one line as a sentence, not one block", () => {
     const [block] = blocks("$$a$$ and $$b$$");
     expect(block).toEqual({ kind: "paragraph", text: "$$a$$ and $$b$$" });
