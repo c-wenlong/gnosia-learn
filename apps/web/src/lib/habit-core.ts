@@ -169,13 +169,18 @@ export function parseLeeway(value: unknown): number {
 
 /**
  * The event types that are study: an answered question (`observation`, from a
- * probe, a teach step or a check) and a graded review card. `session-start`
+ * probe, a teach step or a check), a graded review card, and a library asset
+ * the learner marked watched or read (`watched`, phase 1f). `session-start`
  * and `session-close` are lifecycle, written before and after anything is
  * learnt, so opening a session and walking away does not make a streak day.
- * `void` is a retraction. A new kind of study (a `watched` event, say) joins
- * this list when it is added to `EVENT_TYPES`.
+ * `void` is a retraction. A new kind of study joins this list when it is added
+ * to `EVENT_TYPES`.
+ *
+ * `watched` keeps the streak and does not touch the daily target, which counts
+ * concepts taught or probed (`conceptsStudied`): watching is not evidence of
+ * knowing, so it is a day of study without being a concept done.
  */
-export const STUDY_EVENT_TYPES: readonly string[] = ["observation", "review"];
+export const STUDY_EVENT_TYPES: readonly string[] = ["observation", "review", "watched"];
 
 /** Study events, minus any inside a session a `void` event retracted. */
 function studyEvents(events: readonly HabitEvent[]): HabitEvent[] {

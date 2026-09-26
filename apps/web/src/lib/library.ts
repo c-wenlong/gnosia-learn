@@ -1,4 +1,7 @@
-import { assetKindLabel } from "@/components/asset-meta";
+import type { MasteryLabel } from "@self-learn/catalog/state";
+
+import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
+import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
  * What the library shows first, and why it is not everything.
@@ -163,28 +166,23 @@ export function kindNoun(label: string, count: number): string {
   return `${word}s`;
 }
 
-/** One chip in the topic rail. */
-export interface TopicFacet {
-  slug: string;
-  count: number;
+/** The two orders the grid offers. `newest` is the default and is left out of a URL. */
+export type LibrarySort = "newest" | "title";
+
+/** Anything but `title` is the default, so a hand-typed `?sort=` cannot break the page. */
+export function parseSort(value: string | null | undefined): LibrarySort {
+  return value === "title" ? "title" : "newest";
 }
 
-/**
- * Topics ranked by how much is filed under them, then by slug.
- *
- * Counted over the rows the view is showing rather than over the whole catalog,
- * so the number on a chip is the number of cards clicking it yields. Eighty
- * topics carry assets today, which is why the page discloses them behind a
- * `<details>` instead of printing eighty chips above the grid.
- */
-export function topicFacets(rows: readonly { topics: string[] }[]): TopicFacet[] {
-  const counts = new Map<string, number>();
-  for (const row of rows) {
-    for (const slug of row.topics) counts.set(slug, (counts.get(slug) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([slug, count]) => ({ slug, count }))
-    .sort((a, b) => b.count - a.count || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+/** Every filter the library's URL can carry. */
+export interface LibraryFilters {
+  kind?: string | null;
+  topic?: string | null;
+  /** A course slug: the assets filed under any of its modules' topics. */
+  course?: string | null;
+  /** The search box, as typed. */
+  q?: string | null;
+  sort?: LibrarySort | null;
 }
 
 /**
@@ -193,12 +191,17 @@ export function topicFacets(rows: readonly { topics: string[] }[]): TopicFacet[]
  * Every filter lives in the URL so a view is linkable and the back button
  * works, which means every chip is a plain `<a>` and the whole rail needs no
  * client JavaScript. A cleared filter drops its key rather than writing
- * `?kind=`, so the default view has a bare `/library` URL.
+ * `?kind=`, so the default view has a bare `/library` URL, and the default sort
+ * is never written either.
  */
-export function libraryHref(filters: { kind?: string | null; topic?: string | null }): string {
+export function libraryHref(filters: LibraryFilters): string {
   const params = new URLSearchParams();
   if (filters.kind) params.set("kind", filters.kind);
   if (filters.topic) params.set("topic", filters.topic);
+  if (filters.course) params.set("course", filters.course);
+  const q = filters.q?.trim();
+  if (q) params.set("q", q);
+  if (filters.sort === "title") params.set("sort", "title");
   const query = params.toString();
   return query === "" ? "/library" : `/library?${query}`;
 }
@@ -278,4 +281,236 @@ export function assetStatusHref(id: string, target: "file" | "poster" = "file"):
 export function firstParam(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value.length > 0 ? (value[0] ?? null) : null;
   return value === undefined || value === "" ? null : value;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Courses                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** A course as the library needs it: a code for the chip and its modules' topic slugs. */
+export interface LibraryCourse {
+  slug: string;
+  code: string;
+  title: string;
+  /** `module.topic` for every module, the same slugs `asset_topic` is keyed by. */
+  topics: readonly string[];
+}
+
+export interface CourseFacet {
+  slug: string;
+  code: string;
+  title: string;
+  /** Standalone assets filed under any of the course's topics. */
+  count: number;
+}
+
+/**
+ * The course chips: every course with at least one standalone asset, in the
+ * order the courses are given (the authored shortlist order).
+ *
+ * A course reaches an asset the way `assetsForCollection` does in the catalog:
+ * each module is filed under one topic, and an asset filed under that topic
+ * belongs to the course. Worked out here from the course files rather than
+ * asked of `collection_item`, because the page already holds both halves and
+ * the answer is the same one `courses.ts` wrote into the catalog from those
+ * files. Counted over standalone rows only, so a chip's number is the number
+ * of cards clicking it shows.
+ */
+export function courseFacets(
+  courses: readonly LibraryCourse[],
+  rows: readonly { kind: string; topics: string[] }[],
+): CourseFacet[] {
+  const out: CourseFacet[] = [];
+  for (const course of courses) {
+    const topics = new Set(course.topics);
+    let count = 0;
+    for (const row of rows) {
+      if (isCompanionKind(row.kind)) continue;
+      if (row.topics.some((slug) => topics.has(slug))) count += 1;
+    }
+    if (count > 0) out.push({ slug: course.slug, code: course.code, title: course.title, count });
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Search                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** The longest query the page reads; the rest is ignored rather than refused. */
+export const MAX_QUERY_CHARS = 200;
+
+/** The most words a query is split into. */
+export const MAX_QUERY_TERMS = 8;
+
+/**
+ * A query as the words every match must contain: lowercased, split on
+ * whitespace, deduplicated. Empty for a blank or missing query, which means
+ * "no search" rather than "match nothing".
+ *
+ * All the words, in any order and anywhere in the title or the text, which is
+ * what a person typing "dot product projection" expects. It is substring
+ * matching and nothing cleverer: no stemming, no ranking, no typo tolerance.
+ * The corpus is a few hundred rows, so the ordering the grid already applies
+ * is a better ranking than a score this function would have to invent.
+ */
+export function searchTerms(q: string | null | undefined): string[] {
+  if (!q) return [];
+  const words = q.slice(0, MAX_QUERY_CHARS).toLowerCase().split(/\s+/).filter(Boolean);
+  return [...new Set(words)].slice(0, MAX_QUERY_TERMS);
+}
+
+/** True when every term appears somewhere in the text. No terms matches everything. */
+export function matchesAll(haystack: string, terms: readonly string[]): boolean {
+  const text = haystack.toLowerCase();
+  return terms.every((term) => text.includes(term));
+}
+
+/**
+ * What a row is called, for search: its title, its filename and its URL. The
+ * filename matters for the rows with no title, which the card names by it.
+ */
+export function searchableName(row: {
+  title: string | null;
+  path: string | null;
+  url: string | null;
+}): string {
+  const base = row.path?.split("/").filter(Boolean).pop() ?? "";
+  return [row.title ?? "", base, row.url ?? ""].join("\n");
+}
+
+/**
+ * The ids a search matches: rows whose name or text holds every term, plus the
+ * asset each matching companion file was derived from.
+ *
+ * `texts` is the body of the rows whose words were read (notes and
+ * transcripts, when the deployment serves files); a row absent from it is
+ * searched by name alone. `sourcesOf` is `asset_derivation` read upward for
+ * those rows, and is what turns a line inside a transcript into its video:
+ * the transcript is a companion file the default view hides, so without the
+ * lift a search for a phrase somebody said would find nothing a reader could
+ * see. The companion still matches in its own right, so `?kind=transcript`
+ * shows it.
+ */
+export function searchHits(
+  rows: readonly { id: string; title: string | null; path: string | null; url: string | null }[],
+  terms: readonly string[],
+  texts: ReadonlyMap<string, string>,
+  sourcesOf: Readonly<Record<string, readonly string[]>>,
+): Set<string> {
+  const hits = new Set<string>();
+  for (const row of rows) {
+    const text = texts.get(row.id);
+    const haystack = text === undefined ? searchableName(row) : `${searchableName(row)}\n${text}`;
+    if (!matchesAll(haystack, terms)) continue;
+    hits.add(row.id);
+    for (const source of sourcesOf[row.id] ?? []) hits.add(source);
+  }
+  return hits;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The view                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The rows one filter state shows, before sorting.
+ *
+ * - No kind is the default view: every standalone row, companions left out.
+ * - `courseTopics` is the chosen course's module topics, or null for none.
+ * - `hits` is the search's answer, or null when nothing was searched. A hit
+ *   still has to pass the other filters, so a video lifted in by its
+ *   transcript does not appear under `?kind=note`.
+ */
+export function filterRows<T extends { id: string; kind: string; topics: string[] }>(
+  rows: readonly T[],
+  filters: {
+    kind: string | null;
+    topic: string | null;
+    courseTopics: ReadonlySet<string> | null;
+    hits: ReadonlySet<string> | null;
+  },
+): T[] {
+  const { kind, topic, courseTopics, hits } = filters;
+  return rows.filter(
+    (row) =>
+      (kind === null ? !isCompanionKind(row.kind) : row.kind === kind) &&
+      (topic === null || row.topics.includes(topic)) &&
+      (courseTopics === null || row.topics.some((slug) => courseTopics.has(slug))) &&
+      (hits === null || hits.has(row.id)),
+  );
+}
+
+/**
+ * The grid's order. Newest is when the row entered the catalog, latest first;
+ * title is the name on the card, A to Z. Both fall back to kind-then-id, so two
+ * rows indexed in the same run (most of them) keep a stable order and the
+ * grid does not reshuffle between renders.
+ */
+export function sortRows<T extends AssetCardRef & { createdAt: string }>(
+  rows: readonly T[],
+  sort: LibrarySort,
+): T[] {
+  const collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+  const time = (row: T) => {
+    const t = Date.parse(row.createdAt);
+    return Number.isNaN(t) ? 0 : t;
+  };
+  return [...rows].sort((a, b) => {
+    const primary =
+      sort === "title"
+        ? collator.compare(assetDisplayTitle(a).text, assetDisplayTitle(b).text)
+        : time(b) - time(a);
+    return primary !== 0 ? primary : compareByKindThenId(a, b);
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Concepts                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** One concept an asset explains, with what the knowledge base knows about it. */
+export interface ExplainedConcept {
+  slug: string;
+  title: string;
+  bucket: MasteryBucket;
+  pL: number | null;
+  observations: number;
+}
+
+/**
+ * The concept slugs from `asset_concept`, joined to the knowledge base for a
+ * title and a mastery bucket.
+ *
+ * A slug the knowledge base does not have (it could not be read, or the note
+ * was pruned between the two reads) keeps its slug as the title and reads as
+ * untouched, which is what a concept with no evidence is. It is not dropped:
+ * the link is a fact about the asset whatever the knowledge base can say
+ * about the concept.
+ */
+export function explainedConcepts(
+  slugs: readonly string[],
+  kb: ReadonlyMap<
+    string,
+    { title: string; mastery: MasteryLabel; pL: number; observations: number }
+  >,
+): ExplainedConcept[] {
+  return slugs.map((slug) => {
+    const known = kb.get(slug);
+    if (known === undefined) {
+      return { slug, title: slug, bucket: "untouched", pL: null, observations: 0 };
+    }
+    return {
+      slug,
+      title: known.title,
+      bucket: bucketOf(known),
+      pL: known.pL,
+      observations: known.observations,
+    };
+  });
+}
+
+/** Where a concept's workspace lives (phase 1c's `/learn/[concept]`). */
+export function conceptHref(slug: string): string {
+  return `/learn/${encodeURIComponent(slug)}`;
 }

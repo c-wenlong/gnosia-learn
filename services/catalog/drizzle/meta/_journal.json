@@ -57,6 +57,13 @@
       "when": 1790078060248,
       "tag": "0007_job_cost_source",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790409156500,
+      "tag": "0008_watched_event",
+      "breakpoints": true
     }
   ]
 }
