@@ -59,10 +59,11 @@ export const metadata: Metadata = {
  * the class to match on hydration, so a new browser gets the right theme one
  * frame late rather than a query on every public page.
  *
- * `system` is the mode the server cannot resolve. It is rendered as light
- * with `data-theme="system"`, and the first thing in `<body>` is a two-line
- * script that adds `dark` when the device prefers it, before anything paints
- * (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).
+ * A system appearance (`system`, `gnosia-system`) is what the server cannot
+ * resolve. It is rendered light, with `gnosia` already on for the brand
+ * palette and `data-theme` naming the mode, and the first thing in `<body>`
+ * is a two-line script that adds `dark` when the device prefers it, before
+ * anything paints (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).
  */
 export default async function RootLayout({
   children,
@@ -71,14 +72,14 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value) ?? "light";
-  const cls = themeClass(theme, false);
+  const classes = themeClass(theme, false);
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
       data-theme={theme}
-      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${cls ? ` ${cls}` : ""}`}
+      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${classes.map((c) => ` ${c}`).join("")}`}
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />

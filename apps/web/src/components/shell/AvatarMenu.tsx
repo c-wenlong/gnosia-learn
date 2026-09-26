@@ -21,6 +21,7 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
+  const themeLabel = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -67,8 +68,10 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
         >
           <ul className="flex flex-col gap-0.5">
             <li className="px-1.5 pt-1 pb-2">
-              <p className="mb-1.5 px-1.5 text-[11px] font-semibold tracking-wide text-text3 uppercase">Theme</p>
-              <ThemeSwitch size="sm" />
+              <p id={themeLabel} className="mb-1.5 px-1.5 text-[11px] font-semibold tracking-wide text-text3 uppercase">
+                Theme
+              </p>
+              <ThemeSwitch size="sm" labelledBy={themeLabel} />
             </li>
             <li>
               <Link href="/settings" className={item} onClick={() => setOpen(false)}>
