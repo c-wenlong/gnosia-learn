@@ -13,7 +13,7 @@ the shell), and how to check a page against its hi-fi frame.
 | 1a | Today and Settings | `/`, `/settings`, `GET /api/learner/today`, `GET /api/learner/export` | Done |
 | 1b | Course path, absorbing the module page | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit) | Done |
 | 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]`, `GET /api/concepts/[slug]`, `conceptSlug` on `POST /api/agent/chat` | Done |
-| 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session` | Not started, needs 1c |
+| 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session`, `POST /api/learner/observe`, `POST /api/learner/session/close`, `POST /api/agent/session` | Done |
 | 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Done |
 | 1f | Library and the asset page: concept links, Mark watched, text search | `/library`, `/library/[id]`, `POST /api/learner/watched` | Done |
 
@@ -341,6 +341,93 @@ per tab, mirrored in memory when storage is refused, and cleared by "Start a
 new thread". The browser sends at most the last 30 turns and 20000
 characters (`trimForRequest`). Moving it to the database is future work.
 
+## Phase 1d: the session and the observe path
+
+What 1d shipped. A graded answer is evidence in an append-only log, so the
+write path is the part to read first.
+
+### Modules
+
+| Module | What it is |
+| --- | --- |
+| [`state/observe.ts`](../../services/catalog/src/state/observe.ts) | `recordObservation(db, input)`: `learn observe` moved out of the CLI. The `observation` event (`correct`, `pLBefore`, `pLAfter`, `grade`, `scheduled`, `source`, `opportunity`, `question`, `answer`, `session`, and `chosen` and `requestId` when given), then the mastery row (a correct answer spread to the prerequisites with `propagateCorrect`), then the review card, all under the learner lock in one transaction. The CLI's `observe` now calls it; its `--json` shape is unchanged and still pinned. `openTutorSession` (the row and one `session-start`, idempotent) and `closeTutorSession` (one `session-close` and the row to `closed`, idempotent) are the database half of `learn session start` and `close` |
+| `readConceptGraph` in [`state/knowledge-base.ts`](../../services/catalog/src/state/knowledge-base.ts) | The graph `propagateCorrect` walks, built from the catalog's `concept_prerequisite` rows, the same edges every page's frontier uses. The CLI still builds its graph from the notes on disk; the two agree except between editing a note's `requires:` and the next `learn index` |
+| [`@/lib/session-core`](../../apps/web/src/lib/session-core.ts) | Pure. The step plan (`buildSessionPlan`), a check block as a question (`noteQuestion`), the wrong options (`distractorPool`, `wrongOptionsFor`), the teaching prose (`teachProse`), Keep going (`nextConcept`), and the feedback and close arithmetic |
+| [`@/lib/agent/session`](../../apps/web/src/lib/agent/session.ts) | Pure. The question writer's system prompt and `parseSessionQuestion`, which accepts a JSON object (fenced or with a sentence around it) and refuses anything else rather than guess an answer key. It reshuffles the options, seeded by the question text, because models put the answer in slot one |
+| [`@/lib/session-page`](../../apps/web/src/lib/session-page.ts) | Server. The plan, the teach step's asset, whether a model is configured, and the next concept |
+| [`SessionFocus`](../../apps/web/src/components/session/SessionFocus.tsx), [`SessionClose`](../../apps/web/src/components/session/SessionClose.tsx) | The client session and its close screen |
+
+### `POST /api/learner/observe`
+
+```ts
+// request
+{
+  conceptSlug: string;            // a concept id
+  correct: boolean;
+  source: "probe" | "teach";      // probe: asked before teaching, no BKT learning step. A review grade is /api/review/grade
+  requestId: string;              // one per answer, resent on a retry: [A-Za-z0-9_-]{1,128}
+  sessionId?: string;             // the first answer opens the session; a closed one is refused
+  question?: string;              // the workspace's check status matches on this text
+  answer?: string;                // the correct answer, as `learn observe --answer` means it
+  chosen?: string | null;         // what the learner picked; null for "I don't know"
+  closeSession?: boolean;         // close the session after recording (a page leaving mid-save)
+}                                 // each text up to 2000 characters
+// 200 { ok: true, result }
+{
+  concept, correct, pLBefore, pLAfter, delta, mastery, mastered, due,  // as `learn observe --json`
+  propagated: { concept, title, hops, pLBefore?, pLAfter? }[],        // the numbers are absent on a replay
+  card: { due, intervalDays, created } | null,
+  session: string | null,
+  replayed: boolean,                                                   // the request id was already recorded; nothing was written
+  closed: boolean,                                                     // closeSession closed the session in this request
+}
+```
+
+400 `BAD_REQUEST` (a malformed body, or a concept or session the catalog
+cannot take), 403 `ORIGIN_MISMATCH`, 429, 503 `STORE_UNAVAILABLE`. The first
+answer opens the session inside its own locked transaction
+(`recordObservation`'s `openSession`), so a refused answer leaves no
+`session-start`, and a close racing it either counts it or refuses it. The
+page shows the verdict only once this answers, so the screen and the log
+cannot disagree. Once Check is pressed the pick is fixed until the server
+answers: a failed write keeps its request id and its pick, and Try again
+resends both, so a response lost after the save is replayed with the verdict
+of the answer actually sent. `learn observe --json`'s `logged` is not in the answer: the markdown
+session log is the CLI's.
+
+`POST /api/learner/session/close` with `{ sessionId }` answers `{ session,
+closed, answered, correct, concepts }`; `closed: false` means it was already
+closed or never opened, and nothing was written. The page sends it on
+reaching the close screen (with one retry), and with `keepalive` when the
+learner leaves mid-session (Exit, Ask the tutor, a closed tab), so an
+answered session does not stay `running`. When an answer is still saving,
+leaving sends that answer again with `closeSession: true` instead of a bare
+close: `recordObservation` records it (or replays it, by its request id) and
+closes the session in the same locked transaction, so the close can never
+land first and have the answer refused, the two commit together or not at
+all, and nothing has to run after `pagehide`.
+Checked in a browser for Exit and for a tab closed mid-save. A tab that dies before either
+still leaves one running, as a `learn session start` never closed does.
+
+`POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
+avoid?: string[] }` answers `{ question, model, provider, providerLabel }`,
+where `question` is the `SessionQuestion` the page renders. Guarded like the
+chat (same origin, 20 a minute in its own bucket). 502 `UNSTRUCTURED_REPLY`
+when the model answered in prose; the page then uses the plan's fallback (the
+note's first check, reshuffled) or says there is no question.
+
+### Which question a step asks
+
+| Note has | Probe | Check (after Teach) |
+| --- | --- | --- |
+| two or more checks | the first | the second |
+| one check | the check | the tutor's question; with no model or a prose reply, the same check, reshuffled |
+| no checks | the tutor's question, or "no question" | the tutor's question, or "no question" |
+
+A probe is recorded as `source: probe` (no learning step), a check after
+teaching as `teach`, and a Quiz me check as `probe`, since nothing was taught
+in that session.
+
 ## Deviations from the hi-fi
 
 | Where | Hi-fi | Built | Why |
@@ -378,7 +465,7 @@ characters (`trimForRequest`). Moving it to the database is future work.
 | Workspace tutor | "Learning guide · concise" | "Grounded in your note" | there is no tutor style setting yet |
 | Tutor turns | Save to note and Why? | Why? sends "Why?"; Save to note is disabled with a title | extending `POST /api/learner/note` is not in 1c |
 | Studio cards | "Generate flashcards", "Add source" | disabled, with a title | no feature behind them yet |
-| Workspace header | Teach me links to focus mode | the link is not prefetched | until 1d ships the route, the 404 prefetch never settles and the page never goes network-idle |
+| Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
 | Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
 | Today, Streak card | "Calendar" link in the title row | not drawn | there is no calendar page to open |
 | Today, Streak card | "Reminders state facts, never guilt" under the strip | "Studied today." or "Nothing recorded yet today." | reminders are not built; the line states today's fact instead |
@@ -392,6 +479,25 @@ characters (`trimForRequest`). Moving it to the database is future work.
 | Settings, Reminders | "Facts only · 9:00" | a disabled select reading "Off", with a note that nothing is stored | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
 | Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what is not wired up yet, so a stored choice does not pretend to do something |
+
+### Session focus mode (phase 1d)
+
+| Where | Hi-fi | Built | Why |
+| --- | --- | --- | --- |
+| Steps | "Step 3 of 7", teaching and its question on one screen | four steps: Probe, Teach, Check, Close ("Step 2 of 4"); the check step shows the diagram again, smaller, above its question, which is the 05 and 06 layout | the brief's plan. Quiz me (`?mode=check`) is each of the note's checks (up to five) then Close |
+| Teach prose | two sentences | the note's body without its frontmatter, title, check blocks, Checks, Sessions and Prerequisites sections, and empty template headings, through `NoteProse` | the answers to the next question live in the check blocks; most notes are still thin, so a teach step is often one paragraph |
+| Widget slot | "interactive diagram" | the concept's first `diagram_svg` (on the light mat, via `EmbedImage`), else its first video (`VideoPlayer`), else the placeholder; the server's `WidgetFailure` when the file route is off or the file is gone | no interactive widget exists; the assets from `assetsForConcept` are what there is |
+| Option rows on a phone | radio circles | the number badge, as on a desktop | `ChoiceRow` is 1e's primitive; restyling it for one page is not this phase's to do |
+| Wrong options | authored | the note's other checks' answers and its neighbours' and folder's summaries; the far summaries closest in length only fill up to three | a check block has no distractors (the review page's rule, with neighbours first) |
+| Why? | a disclosure | a note check opens the note's summary ("From your note: ..."); a tutor question opens its explanation. The reason line under the verdict is the check's `why:` or the explanation's first sentence | a check's answer is already the green row, so repeating it explains nothing |
+| Feedback note | "this becomes a review card" | that for a concept's first card, else "next review tomorrow" (or the date) | every answer schedules the card; the note says what it did |
+| Close, Scheduled | named checks, "review in 10 min, then 1 day" | one row per concept card the session wrote, "new card, review tomorrow" | cards are per concept and SM-2 has no learning steps (as on the review page) |
+| Close, Review cards | cards created | concepts whose card the session created or moved | every answer reschedules; a count of created cards would read 0 on the second session |
+| Close, Keep going | the next concept | the first frontier concept this one leads to, else one in its folder, else the frontier's first; "Back to the workspace" when the frontier holds nothing else | the frontier's own order put an algorithms concept after the dot product |
+| Close, target | "1 / 2" | `habit.target` from the server's refresh after the last answer; a dash when the database is down | the same number the top bar shows |
+| Phone header | "Session" | the wordmark | the shell's rule, as on every phone page |
+| No model, no checks | not drawn | the step says there is no question and why (no model configured, or the tutor answered in prose), records nothing, and Continue goes on | the brief: the session works with no provider key |
+| Session log | a markdown log per session | none from the web: the `session` row, `session-start`, the observations and `session-close` are the record | a page never writes under `learn/` (layering rule 3); the CLI still writes its log |
 
 ### Library and the asset page (phase 1f)
 
@@ -440,9 +546,19 @@ catalog grows by an order of magnitude.
   open in Playwright's eyes, so the course path (whose Continue and Guidebook
   point at `/learn/<concept>` before 1c and 1d land) timed out at 30s. A copy
   of the tool waiting for `load` plus a second works; the real fix is the
-  routes existing. Until then, `prefetch={false}` on the link avoids it: the
-  workspace passes it on Teach me and Quiz me, which point at
-  `/learn/<slug>/session` before 1d lands. Drop it once the route exists.
+  routes existing. The session route exists since 1d, so Teach me, Quiz me
+  and Today's Continue are prefetched again; `prefetch={false}` is the stopgap for the next route
+  that is linked before it lands.
+- **A session's next concept keeps the old one's state without a key.**
+  Keep going moves from `/learn/a/session` to `/learn/b/session`, the same
+  page with a new param, and React keeps a client component's state across
+  that. The page keys `SessionFocus` on the slug and mode, so the answers of
+  one session never show on the next.
+- **Test a model-written question without a key by pointing a provider at a
+  stub.** `NVIDIA_API_KEY=stub NVIDIA_BASE_URL=http://localhost:<port>/v1`
+  with a server that answers `{ choices: [{ message: { content } }] }` drives
+  `POST /api/agent/session` end to end; a prose `content` exercises
+  `UNSTRUCTURED_REPLY` and the fallback.
 - **The habit numbers are read on every request,** `readEvents` in full. The
   log is small for one learner; if it grows into the tens of thousands, add a
   date-bounded read to the catalog rather than caching in the layout.

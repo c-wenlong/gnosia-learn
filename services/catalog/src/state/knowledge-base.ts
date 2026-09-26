@@ -86,6 +86,55 @@ export function domainOf(path: string | null): string | null {
   return parts.length >= 4 ? (parts[2] ?? null) : null;
 }
 
+/**
+ * The concept graph `graph.mjs` works on, built from the catalog's `concept`
+ * and `concept_prerequisite` rows rather than from the notes on disk.
+ *
+ * The CLI builds its graph from the files (`loadGraph` in `learn/cli.ts`);
+ * the web app has no business reading `learn/concepts/`, and the catalog holds
+ * the same edges, indexed from those same files. So a correct answer recorded
+ * from a page propagates along the edges the frontier on every page is
+ * computed from. The two can differ only between editing a note's `requires:`
+ * and the next `learn index`, and a rebuild replays either way.
+ */
+export async function readConceptGraph(db: CatalogDatabase): Promise<{ nodes: Map<string, unknown> }> {
+  const [concepts, prerequisites] = await Promise.all([
+    db.select({ slug: concept.slug, title: concept.title, summary: concept.summary }).from(concept),
+    db.select().from(conceptPrerequisite),
+  ]);
+  return graphOf(concepts, prerequisites);
+}
+
+/** Rows to `buildGraph`'s input, which is the shape `listConcepts()` returns. */
+function graphOf(
+  concepts: readonly { slug: string; title: string; summary: string | null }[],
+  prerequisites: readonly { conceptSlug: string; prerequisiteSlug: string; kind: string }[],
+) {
+  const { requires, assumes } = edgeLists(prerequisites);
+  return buildGraph(
+    concepts.map((row) => ({
+      id: row.slug,
+      title: row.title,
+      summary: row.summary ?? "",
+      requires: requires.get(row.slug) ?? [],
+      assumes: assumes.get(row.slug) ?? [],
+    })),
+  ) as { nodes: Map<string, unknown> };
+}
+
+function edgeLists(prerequisites: readonly { conceptSlug: string; prerequisiteSlug: string; kind: string }[]) {
+  const requires = new Map<string, string[]>();
+  const assumes = new Map<string, string[]>();
+  for (const edge of prerequisites) {
+    const into = edge.kind === "assumes" ? assumes : requires;
+    const list = into.get(edge.conceptSlug);
+    if (list === undefined) into.set(edge.conceptSlug, [edge.prerequisiteSlug]);
+    else list.push(edge.prerequisiteSlug);
+  }
+  for (const list of [...requires.values(), ...assumes.values()]) list.sort();
+  return { requires, assumes };
+}
+
 export async function readKnowledgeBase(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
@@ -99,15 +148,7 @@ export async function readKnowledgeBase(
     db.select().from(indexRun).where(eq(indexRun.source, "concepts")).limit(1),
   ]);
 
-  const requires = new Map<string, string[]>();
-  const assumes = new Map<string, string[]>();
-  for (const edge of prerequisites) {
-    const into = edge.kind === "assumes" ? assumes : requires;
-    const list = into.get(edge.conceptSlug);
-    if (list === undefined) into.set(edge.conceptSlug, [edge.prerequisiteSlug]);
-    else list.push(edge.prerequisiteSlug);
-  }
-  for (const list of [...requires.values(), ...assumes.values()]) list.sort();
+  const { requires, assumes } = edgeLists(prerequisites);
 
   const topics = new Map<string, string[]>();
   for (const link of curriculumLinks) {
@@ -118,15 +159,7 @@ export async function readKnowledgeBase(
 
   // `buildGraph` takes the same shape `listConcepts()` returns, so it can be
   // handed rows instead of parsed notes with no change to graph.mjs.
-  const graph = buildGraph(
-    concepts.map((row) => ({
-      id: row.slug,
-      title: row.title,
-      summary: row.summary ?? "",
-      requires: requires.get(row.slug) ?? [],
-      assumes: assumes.get(row.slug) ?? [],
-    })),
-  );
+  const graph = graphOf(concepts, prerequisites);
 
   const front = frontier(graph, model) as { id: string }[];
   const kbConcepts: KbConcept[] = concepts.map((row) => {

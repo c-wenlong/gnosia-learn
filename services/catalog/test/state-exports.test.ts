@@ -42,6 +42,11 @@ const REQUIRED = [
   "conceptSummaries",
   "gradeReview",
   "gradeForRating",
+  // A session: a graded answer recorded as evidence, and the session around it.
+  "recordObservation",
+  "readConceptGraph",
+  "openTutorSession",
+  "closeTutorSession",
   // Assets: which video, diagram, note or link is about this subject.
   "assetsForTopic",
   "assetsForConcept",

@@ -106,7 +106,7 @@ export function StudioCards({
         )}
         <span className="mt-1">
           {checks.length > 0 ? (
-            <Button variant="secondary" size="sm" href={`/learn/${w.slug}/session?mode=check`} prefetch={false}>
+            <Button variant="secondary" size="sm" href={`/learn/${w.slug}/session?mode=check`}>
               Quiz me
             </Button>
           ) : (
