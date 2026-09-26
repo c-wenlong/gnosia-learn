@@ -55,7 +55,7 @@ cream in light and navy in dark.
 
 | Token | Light | Dark | Role | Why this value |
 | --- | --- | --- | --- | --- |
-| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, chapter kickers, links | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
+| `--brand-teal` | `#0f5f61` | `#5cbab3` | The mark, the brand button's face, chapter kickers, the check chips in the landing glimpses, and inline links and link hovers | Light: deep enough to carry cream text at 6.9:1 and to read as "deep teal" rather than green. Dark: lifted until it clears 7.9:1 on navy, since in dark it is a text colour too |
 | `--brand-navy` | `#0d1c2b` | `#0a1621` | The dark ground, the brand button's lip, the label on a dark-mode teal button | A blue-black with enough blue to sit beside teal without looking like plain black; the dark value is a shade deeper so glass cards can lighten from it |
 | `--brand-cream` | `#faf6ec` | `#f4ecdc` | The light ground, the mark's pages, the label on a light-mode teal button | Warm but close to white, so it reads as paper without becoming parchment. The dark value is the pages' colour on navy, a touch warmer so it does not glare |
 | `--brand-gold` | `#b3842c` | `#e2b95e` | The star in the mark and wherever it appears alone | Graphics only, never body text. Light was darkened from a brighter gold until the star clears the 3:1 non-text minimum on cream (3.11:1); dark is the brighter gold at 9.9:1 |
