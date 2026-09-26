@@ -113,7 +113,9 @@ in [content/README.md](content/README.md).
 git clone --recursive https://github.com/c-wenlong/self-learn   # two submodules under tools/
 cd self-learn
 npm ci
-cp .env.example apps/web/.env.local    # Next reads it from apps/web/, not the root; ASSET_FILES_ENABLED=1 serves videos
+cp .env.example apps/web/.env.local              # Next reads it from apps/web/, never the root
+echo ASSET_FILES_ENABLED=1 >> apps/web/.env.local   # serve videos and diagrams from disk
+npm run catalog -- index --only manimkc             # once, so the catalog knows where the renders are
 npm run dev
 ```
 
