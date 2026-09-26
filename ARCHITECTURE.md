@@ -145,17 +145,19 @@ says which pages are on the new design and which phase replaces the rest.
 | --- | --- | --- |
 | `/` | `page.tsx` | Today: the next concept on the frontier, the first reviews due, recent activity by sitting, the target, the streak week, the courses in progress |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
+| `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
 | `/settings` | `settings/page.tsx` | The daily target, streak leeway, theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
-| `/review` | `review/page.tsx` | A placeholder, so the top bar has no dead link (phase 1e) |
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
 | `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
-| `/courses/[slug]` | `courses/[slug]/page.tsx` | One course: its modules, progress, related courses |
-| `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | One module: topic checklist, notes, resources, recaps |
+| `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
+| `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
 | not found | `not-found.tsx` | The 404 |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
+| `GET /api/review/due` | `api/review/due/route.ts` | The due cards as the review page renders them (`?concept=` first), with the next due instant |
+| `POST /api/review/grade` | `api/review/grade/route.ts` | One rating (0 Again to 3 Easy) recorded as `learn review grade` records it |
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
@@ -306,12 +308,23 @@ what the UI shows and what the server is told cannot disagree. `loadState`,
 | `POST /api/learner/recap` | Writes, replaces or clears one recap |
 | `POST /api/learner/preference` | Theme, last visited, the learner's own links, and Settings' `dailyTarget`, `dailyLeeway`, `tutorStyle` and `reducedMotion` |
 | `POST /api/learner/import` | The one-time carry-over of a browser's old document |
+| `POST /api/review/grade` | One review grade: a `review` event, the card, the mastery entry |
 
 Every one of them is `handler()` from `apps/web/src/lib/learner-api.ts`: same-origin
 through the existing `agent/guard.ts` helpers, a rate limit, a bounded body,
 and validation. `/api/learner/preference` writes an allow-list of keys rather
 than any key, because an unauthenticated open jsonb store is not something
 "the learner owns their own row" excuses.
+
+`/api/review/grade` is the one route here that writes evidence, and it writes
+it by calling `gradeReview` in `services/catalog/src/state/review.ts`, the
+function `learn review grade` itself calls since phase 1e: the event first, then
+the card and the mastery entry, under the learner lock. The page sends the
+button (0 Again, 1 Hard, 2 Good, 3 Easy); `REVIEW_RATINGS` beside it maps that
+onto SM-2's 1, 3, 4 and 5, so the log holds the same scale whichever door the
+grade came through, and `review rebuild` replays both. The page reads its queue
+through `reviewQueue` in the same module, which also returns the interval each
+button would give, computed by the scheduler a grade runs.
 
 Recaps are clamped by `KNOWLEDGE_LIMITS`, twice and from one definition in
 `@self-learn/schema/shared`: as CHECK constraints, so nothing can put an
@@ -361,8 +374,9 @@ over `content/tags.yaml`.
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
 reaches either of them fail the build with the import chain printed, rather
 than shipping a YAML parser and every course file to the browser. So client
-components take what they need as props: the module page resolves the course,
-module and topic and hands them to `TopicChecklist` and `AgentSession`; the
+components take what they need as props: the course page resolves the course,
+each topic's mastery and each module's assets and hands them to `CoursePath`;
+the session page resolves the course, module and topic for `AgentSession`; the
 Courses page projects each course into a `CourseSummary` for its card grid. The
 arithmetic those components still do lives in `apps/web/src/lib/curriculum.ts` and
 `apps/web/src/lib/progress.ts`, which are pure functions over a course the caller
@@ -372,8 +386,18 @@ Each course carries an `inferred` flag. `true` means the syllabus was
 reconstructed from the course announcement and the standard treatment of the
 subject rather than read off an official document. Three of the ten are
 inferred, and `packages/content/test/courses.test.ts` pins exactly which. A
-page with `inferred` renders `InferredBanner`, and the agent prompt is told to
-flag uncertainty for those courses.
+course path with `inferred` says so under its header, and the agent prompt is
+told to flag uncertainty for those courses.
+
+**A course topic's concepts come from the concept notes, not from
+`content/topics.yaml`.** That file's `maps.courses` names modules, so it can
+say which concepts a module is about but not which of the module's topics each
+belongs to. The per-topic link is a note's `topics:` frontmatter, which
+`catalog index` writes to `concept_curriculum_item` and `readKnowledgeBase`
+returns as `KbConcept.topics`. The course path reads that link, orders a
+topic's concepts by the module topic's `maps.concepts`, and falls back to that
+list for a unit's Guidebook. The arithmetic (the bucket, the active node, the
+lock rule) is `apps/web/src/lib/course-path.ts`.
 
 Courses also carry an `order:`, which is the order the Courses page renders
 them in. It is authored because the shortlist is curated: sorting ten
@@ -576,9 +600,13 @@ workspace, so `npm test` from the repo root is the whole suite.
 | --- | --- |
 | `apps/web/src/lib/storage.test.ts` | Clamping and every pure state reducer |
 | `apps/web/src/lib/progress.test.ts` | Counting completed topics per module and course |
+| `apps/web/src/lib/course-path.test.ts` | The course path: a topic's concepts and its bucket, the active node, the lock rule, the labels and links |
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
 | `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
+| `apps/web/src/app/api/review/routes.test.ts` | The review routes: the origin guard, the rating range, a rating landing in the log on SM-2's scale, the due list with its focus and intervals |
+| `apps/web/src/lib/review-core.test.ts`, `review-queue.test.ts` | A review card's options (deterministic, the answer among them), check versus recall, and the interval and date wording |
+| `services/catalog/test/review-grade.test.ts` | `gradeReview`, `reviewQueue` and the rating mapping: the grade moved out of the CLI unchanged, and a web grade replays exactly |
 | `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
 | `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
 | `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
@@ -768,8 +796,11 @@ Postgres would put a staler one in front of the agent.
     hash.
 11. **The web app never writes the *content* half.** It reads the course files
     through `packages/content`, reads `concept`, `mastery` and `review` through
-    the store, and writes only `progress`, `recap` and `preference`. `event`,
-    `mastery` and `review` are written by the CLI, never by a page. The only
+    the store, and writes `progress`, `recap` and `preference`. `event`,
+    `mastery` and `review` are written only through the store's own evidence
+    functions, never assembled by a caller: the CLI's commands, and the one
+    page-facing write, `POST /api/review/grade`, which calls the same
+    `gradeReview` that `learn review grade` does. The only
     writer of the content tables is `npm run catalog -- index`, and the only
     thing it writes from is files in git. A page that could write a derived
     table would make it a source of truth no index run could reproduce.

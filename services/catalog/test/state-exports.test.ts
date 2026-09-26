@@ -37,6 +37,11 @@ const REQUIRED = [
   "readKnowledgeBase",
   "dueConcepts",
   "EMPTY_KNOWLEDGE_BASE",
+  // Review: the queue a session works through, and the grade it records.
+  "reviewQueue",
+  "conceptSummaries",
+  "gradeReview",
+  "gradeForRating",
   // Assets: which video, diagram, note or link is about this subject.
   "assetsForTopic",
   "assetsForConcept",
