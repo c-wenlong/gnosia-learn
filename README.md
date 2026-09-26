@@ -117,7 +117,7 @@ cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the 
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. That is enough for the courses and the tutor. Without Postgres the app shows a banner saying nothing you change is saved, and the Library has no files to serve.
+Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required. That is enough for the courses and the topic tutor. Without Postgres the app shows a banner saying nothing you change is saved, the Library has no files to serve, and the concept workspace under `/learn` is unavailable, since mastery lives in the database.
 
 Learner state and the videos need Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). With it up:
 
