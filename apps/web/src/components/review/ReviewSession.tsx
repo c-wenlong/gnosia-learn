@@ -88,6 +88,9 @@ export function ReviewSession({
   // The card the queue is really on. A key handler still holding the previous
   // render's card between a recorded grade and the re-render finds it stale.
   const current = useRef(0);
+  // One name per card, reused by a retry, so a grade the server saved but
+  // whose answer was lost is not recorded twice (`requestId` on the route).
+  const attempt = useRef(newRequestId());
 
   const now = useMemo(() => new Date(asOf), [asOf]);
   const item: ReviewItem | undefined = items[index];
@@ -115,7 +118,7 @@ export function ReviewSession({
         const res = await fetch("/api/review/grade", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conceptId: item.conceptId, grade: rating }),
+          body: JSON.stringify({ conceptId: item.conceptId, grade: rating, requestId: attempt.current }),
         });
         const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
         if (!res.ok || body?.ok !== true) {
@@ -123,6 +126,7 @@ export function ReviewSession({
           return;
         }
         current.current = index + 1;
+        attempt.current = newRequestId();
         setOutcomes((list) => [...list, { conceptId: item.conceptId, rating }]);
         setIndex((i) => i + 1);
         setPhase("ask");
@@ -176,10 +180,13 @@ export function ReviewSession({
       if (event.metaKey || event.ctrlKey || event.altKey || pending) return;
       const target = event.target as HTMLElement | null;
       if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      // Space and Enter on a focused link or button belong to that control:
+      // Enter on Exit leaves, it does not record the suggested grade.
+      const onControl = target !== null && target.closest("a[href], button:not(:disabled)") !== null;
 
       const n = Number(event.key);
       const number = Number.isInteger(n) && n >= 1 && n <= 4 ? n - 1 : null;
-      const confirm = event.key === " " || event.key === "Enter";
+      const confirm = (event.key === " " || event.key === "Enter") && !onControl;
 
       if (item.kind === "recall" && phase === "ask" && confirm) {
         event.preventDefault();
@@ -338,6 +345,12 @@ export function ReviewSession({
       </div>
     </Frame>
   );
+}
+
+function newRequestId(): string {
+  // `randomUUID` needs a secure context; a LAN address over http is not one.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function keysHint(item: ReviewItem, phase: Phase): string {

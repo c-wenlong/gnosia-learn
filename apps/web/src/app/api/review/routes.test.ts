@@ -101,6 +101,15 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     expect((await state.readReviews(scratch.db)).cards.alpha?.due).toBe(result.due);
   });
 
+  it("records a retried request once and says it was a replay", async () => {
+    const first = await send({ conceptId: "alpha", grade: 2, requestId: "card-1" });
+    const retry = await send({ conceptId: "alpha", grade: 2, requestId: "card-1" });
+    expect(first.body.result).toMatchObject({ replayed: false });
+    expect(retry.body.result).toMatchObject({ replayed: true, due: (first.body.result as { due: string }).due });
+    expect(await state.readEvents(scratch.db)).toHaveLength(1);
+    expect((await send({ conceptId: "alpha", grade: 2, requestId: "no spaces" })).status).toBe(400);
+  });
+
   it("records Again as a failed grade 1", async () => {
     await send({ conceptId: "alpha", grade: 2 });
     const { body } = await send({ conceptId: "alpha", grade: 0 });

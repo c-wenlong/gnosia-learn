@@ -1,4 +1,4 @@
-import { concept, LOCAL_LEARNER_ID, review, SCHEDULE_LIMITS } from "@self-learn/schema";
+import { concept, event, LOCAL_LEARNER_ID, review, SCHEDULE_LIMITS } from "@self-learn/schema";
 import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -276,12 +276,21 @@ export interface GradeReviewInput {
   /** One clock for the card, the model and the event (see `learn/replay.ts`). */
   now?: Date;
   learnerId?: string;
+  /**
+   * The caller's name for this one answer, kept on the event. A second call
+   * with the same id records nothing and answers with what the first one
+   * wrote. The web app sends one per card, so a retry after a response that
+   * was lost in transit cannot count one answer twice. The CLI sends none.
+   */
+  requestId?: string;
 }
 
 export interface GradeReviewResult {
   card: ReviewCard;
   pLBefore: number;
   pL: number;
+  /** True when `requestId` had already been recorded and nothing was written. */
+  replayed: boolean;
 }
 
 /**
@@ -302,7 +311,7 @@ export async function gradeReview(
   db: CatalogDatabase,
   input: GradeReviewInput,
 ): Promise<GradeReviewResult> {
-  const { conceptId, grade, now = new Date(), learnerId = LOCAL_LEARNER_ID } = input;
+  const { conceptId, grade, now = new Date(), learnerId = LOCAL_LEARNER_ID, requestId } = input;
   if (!Number.isFinite(grade) || grade < 0 || grade > 5) {
     throw new StateError(`grade must be between 0 and 5; got ${grade}.`);
   }
@@ -312,6 +321,34 @@ export async function gradeReview(
 
   return withLearnerLock(db, learnerId, async (tx) => {
     const current = await readCards(tx, [conceptId], learnerId);
+
+    // Inside the lock, so two copies of one request cannot both miss the
+    // other: the second waits for the first to commit and then finds it.
+    if (requestId !== undefined) {
+      const [seen] = await tx
+        .select({ payload: event.payload })
+        .from(event)
+        .where(
+          and(
+            eq(event.learnerId, learnerId),
+            eq(event.type, "review"),
+            eq(event.conceptSlug, conceptId),
+            sql`${event.payload}->>'requestId' = ${requestId}`,
+          ),
+        )
+        .limit(1);
+      const stored = current[0];
+      if (seen !== undefined && stored !== undefined) {
+        const payload = seen.payload as { pLBefore?: number; pLAfter?: number };
+        return {
+          card: stored,
+          pLBefore: Number(payload.pLBefore),
+          pL: Number(payload.pLAfter),
+          replayed: true,
+        };
+      }
+    }
+
     const card = scheduleCard(current[0], conceptId, grade, now);
 
     const model = await readModel(tx, learnerId);
@@ -326,13 +363,13 @@ export async function gradeReview(
 
     await appendEvent(
       tx,
-      { at, type: "review", concept: conceptId, grade, pLBefore, pLAfter: entry.pL },
+      { at, type: "review", concept: conceptId, grade, pLBefore, pLAfter: entry.pL, requestId },
       learnerId,
     );
     await upsertReview(tx, card, learnerId);
     await writeModel(tx, model, learnerId);
 
-    return { card, pLBefore, pL: entry.pL };
+    return { card, pLBefore, pL: entry.pL, replayed: false };
   });
 }
 

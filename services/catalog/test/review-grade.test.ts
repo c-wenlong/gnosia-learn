@@ -181,6 +181,28 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
     });
   });
 
+  it("records a request id once: a retry answers with the first write", async () => {
+    const first = await gradeReview(scratch.db, { conceptId: "alpha", grade: 4, now: NOW, requestId: "r-1" });
+    expect(first.replayed).toBe(false);
+    // The retry even names a different grade: what was saved stands.
+    const again = await gradeReview(scratch.db, {
+      conceptId: "alpha",
+      grade: 5,
+      now: new Date(NOW.getTime() + 5_000),
+      requestId: "r-1",
+    });
+    expect(again).toEqual({ ...first, card: { ...first.card, history: [] }, replayed: true });
+
+    const events = await readEvents(scratch.db);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ grade: 4, requestId: "r-1" });
+    expect((await readModel(scratch.db)).concepts.alpha?.observations).toBe(1);
+
+    // A new id is a new answer.
+    expect((await gradeReview(scratch.db, { conceptId: "alpha", grade: 4, requestId: "r-2" })).replayed).toBe(false);
+    expect(await readEvents(scratch.db)).toHaveLength(2);
+  });
+
   it("refuses an unknown concept and an out-of-range grade before writing anything", async () => {
     await expect(gradeReview(scratch.db, { conceptId: "nope", grade: 4 })).rejects.toThrow(StateError);
     await expect(gradeReview(scratch.db, { conceptId: "alpha", grade: 6 })).rejects.toThrow(StateError);
