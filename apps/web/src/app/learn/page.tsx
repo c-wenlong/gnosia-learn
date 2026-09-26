@@ -1,270 +1,109 @@
-import Link from "next/link";
-import { ConceptGraph } from "@/components/ConceptGraph";
-import { dueConcepts, loadKnowledgeBase } from "@/lib/kb/load";
-import type { KbConcept, MasteryLabel } from "@/lib/kb/types";
-import { findTopicAcrossCourses } from "@/lib/agent/lookup";
+import type { Metadata } from "next";
 
-export const metadata = { title: "Knowledge base" };
+import { LearnIndex } from "@/components/learn/LearnIndex";
+import { Card } from "@/components/ui/Card";
+import { defaultSelection } from "@/lib/concept-graph";
+import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
+import { habitTimeZone } from "@/lib/habit";
+import { loadKnowledgeBase } from "@/lib/kb/load";
+import type { KbConcept } from "@/lib/kb/types";
+import { dueLabel, lastSeenLabel, parseFilter, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
+import { bucketOf } from "@/lib/mastery-bucket";
 
-const MASTERY_STYLE: Record<MasteryLabel, string> = {
-  mastered:
-    "bg-green-100 text-green-900 dark:bg-green-950/50 dark:text-green-200",
-  solid: "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
-  shaky: "bg-yellow-100 text-yellow-900 dark:bg-yellow-950/50 dark:text-yellow-200",
-  weak: "bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200",
-  gap: "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200",
-};
+export const metadata: Metadata = { title: "Learn" };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const first = (value: string | string[] | undefined): string | null =>
+  (Array.isArray(value) ? value[0] : value) ?? null;
+
+function toRow(concept: KbConcept, now: Date, timeZone: string | undefined): IndexRow {
+  const bucket = bucketOf(concept);
+  const due = dueLabel(concept.due, now, timeZone);
+  const place = placeOf(concept.topics);
+  return {
+    id: concept.id,
+    title: concept.title,
+    summary: concept.summary,
+    bucket,
+    pL: concept.pL,
+    due: concept.due,
+    isDue: concept.due !== null && new Date(concept.due).getTime() <= now.getTime(),
+    dueLabel: due.label,
+    overdue: due.overdue,
+    lastSeenLabel: lastSeenLabel(concept.lastSeen, now, timeZone),
+    leech: concept.leech,
+    courseLabel: place ? `${place.courseCode} M${place.moduleOrder}` : null,
+    courses: courseSlugsOf(concept.topics),
+    domain: concept.domain,
+  };
 }
 
-function StatCard({ label, value }: { label: string; value: number | string }) {
+/**
+ * The Learn index (hi-fi 09). Reads the knowledge base on the server, turns
+ * each concept into a row with its labels worked out in the learner's time
+ * zone, and hands the rows and the edges to `LearnIndex`, which filters and
+ * draws in the browser.
+ *
+ * Dynamic, because it reads the database, and it still says which kind of
+ * empty it is: "you have no concepts" and "I could not ask" look identical and
+ * are not.
+ */
+export default async function LearnPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const { kb, reachable } = await loadKnowledgeBase();
+
+  if (kb.concepts.length === 0) {
+    return <div data-layout="app">{reachable ? <EmptyState /> : <Unreachable />}</div>;
+  }
+
+  const now = new Date();
+  const timeZone = habitTimeZone();
+  // Studied first, then the untouched ones, alphabetical within each: the
+  // untouched tail is long and says the least.
+  const rows = kb.concepts
+    .map((c) => toRow(c, now, timeZone))
+    .sort((a, b) => Number(a.bucket === "untouched") - Number(b.bucket === "untouched") || a.title.localeCompare(b.title));
+
+  const asked = first(params.concept);
+  const selected = asked !== null && rows.some((r) => r.id === asked) ? asked : defaultSelection(kb.concepts, kb.frontier, now);
+  const view = parseView(first(params.view));
+
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-      <p className="text-xs text-[var(--muted)]">{label}</p>
+    <div data-layout="app">
+      <LearnIndex
+        rows={rows}
+        edges={kb.edges}
+        initial={{ selected, view, scope: parseScope(first(params.scope), view), filter: parseFilter(first(params.filter)) }}
+      />
     </div>
-  );
-}
-
-function ConceptRow({
-  concept,
-  onFrontier,
-}: {
-  concept: KbConcept;
-  onFrontier: boolean;
-}) {
-  return (
-    <li className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">{concept.title}</span>
-        <span className="flex items-center gap-2 text-xs">
-          {onFrontier && (
-            <span className="rounded px-1.5 py-0.5 font-medium text-[var(--accent-strong)] ring-1 ring-[var(--accent-strong)]">
-              frontier
-            </span>
-          )}
-          {concept.leech && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200">
-              leech
-            </span>
-          )}
-          <span
-            className={`rounded px-1.5 py-0.5 font-medium tabular-nums ${MASTERY_STYLE[concept.mastery]}`}
-          >
-            {Math.round(concept.pL * 100)}% {concept.mastery}
-          </span>
-        </span>
-      </div>
-
-      {concept.summary && (
-        <p className="mt-1 text-sm text-[var(--muted-strong)]">{concept.summary}</p>
-      )}
-
-      <p className="mt-1.5 font-mono text-[11px] text-[var(--muted)]">
-        {concept.id}
-        {concept.requires.length > 0 && ` ← ${concept.requires.join(", ")}`}
-        {concept.assumes.length > 0 && ` · assumes ${concept.assumes.join(", ")}`}
-        {concept.observations > 0 &&
-          ` · ${concept.correct}/${concept.observations} correct`}
-        {concept.due && ` · review ${formatDate(concept.due)}`}
-      </p>
-
-      <TopicLinks topicIds={concept.topics} />
-    </li>
-  );
-}
-
-/** Concepts can name the course topics they support, linking the two halves. */
-function TopicLinks({ topicIds }: { topicIds: string[] }) {
-  const resolved = topicIds
-    .map((id) => ({ id, found: findTopicAcrossCourses(id) }))
-    .filter(
-      (r): r is { id: string; found: NonNullable<typeof r.found> } =>
-        r.found !== undefined,
-    );
-
-  if (resolved.length === 0) return null;
-
-  return (
-    <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-      {resolved.map(({ id, found }) => (
-        <Link
-          key={id}
-          href={`/courses/${found.course.slug}/${found.module.slug}`}
-          className="text-[var(--accent-strong)] hover:underline"
-        >
-          {found.course.code} · {found.topic.title}
-        </Link>
-      ))}
-    </p>
   );
 }
 
 function Unreachable() {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-      <h2 className="text-lg font-semibold">Knowledge base unavailable</h2>
-      <p className="mt-2 text-sm text-[var(--muted-strong)]">
-        The database could not be reached, so this page has nothing to show.
-        Nothing has been lost — this is a view, and the concepts, the mastery
-        model and the schedule are all still where they were.
+    <Card title="Knowledge base unavailable" className="max-w-2xl">
+      <p className="text-[14px] text-text2">
+        The database could not be reached, so this page has nothing to show. Nothing has been lost: this is a view, and
+        the concepts, the mastery model and the schedule are all still where they were.
       </p>
-      <pre className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3 text-xs leading-relaxed">
-        {`npm run catalog -- status`}
-      </pre>
-    </div>
+      <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
+    </Card>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-      <h2 className="text-lg font-semibold">No concepts yet</h2>
-      <p className="mt-2 text-sm text-[var(--muted-strong)]">
-        The knowledge base is empty. This page is a view over the{" "}
-        <code>concept</code>, <code>mastery</code> and <code>review</code>{" "}
-        tables — the pipeline writes them, the site reads them.
+    <Card title="No concepts yet" className="max-w-2xl">
+      <p className="text-[14px] text-text2">
+        The knowledge base is empty. This page is a view over the concept, mastery and review tables: the pipeline writes
+        them, the site reads them. Start a session in Claude Code with /learn &lt;topic&gt;, or seed it by hand:
       </p>
-      <p className="mt-3 text-sm text-[var(--muted-strong)]">
-        Start a session in Claude Code with{" "}
-        <code className="rounded bg-[var(--chip-bg)] px-1 py-0.5">
-          /learn &lt;topic&gt;
-        </code>
-        , or seed it by hand:
-      </p>
-      <pre className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)] p-3 text-xs leading-relaxed">
+      <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px] leading-relaxed">
         {`npm run learn -- concept add --title "Softmax" \\
   --summary "Normalises scores into a distribution."
 npm run learn -- index`}
       </pre>
-    </div>
-  );
-}
-
-/**
- * Dynamic, because it reads the database. It used to be prerendered over a
- * snapshot file, which meant a study session did not reach this page until the
- * next deploy.
- */
-export default async function LearnPage() {
-  const { kb, reachable } = await loadKnowledgeBase();
-  const frontier = new Set(kb.frontier);
-  const due = dueConcepts(kb);
-
-  // Grouped by the folder the note lives in, biggest domain first, with the
-  // weakest concepts surfaced inside each group.
-  const groups = new Map<string, KbConcept[]>();
-  for (const concept of kb.concepts) {
-    const key = concept.domain ?? "unfiled";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(concept);
-  }
-  const byDomain = [...groups.entries()]
-    .map(([domain, items]) => {
-      items.sort((a, b) => a.pL - b.pL || a.title.localeCompare(b.title));
-      return [domain, items] as const;
-    })
-    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-
-  return (
-    <article className="prose-docs space-y-8">
-      <header className="space-y-2">
-        <p className="font-mono text-sm text-[var(--muted)]">Knowledge base</p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          What I actually know
-        </h1>
-        <p className="text-sm text-[var(--muted-strong)]">
-          Mastery is p(L) from Bayesian Knowledge Tracing — the probability you
-          hold a concept given every answer you have given. Driven by the{" "}
-          <code>learn</code> pipeline; regenerate with{" "}
-          <code>npm run learn -- index</code>.
-        </p>
-      </header>
-
-      {kb.concepts.length === 0 ? (
-        reachable ? (
-          <EmptyState />
-        ) : (
-          <Unreachable />
-        )
-      ) : (
-        <>
-          <section className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <StatCard label="concepts" value={kb.stats.total} />
-            <StatCard label="mastered" value={kb.stats.mastered} />
-            <StatCard label="learning" value={kb.stats.learning} />
-            <StatCard label="untouched" value={kb.stats.untouched} />
-            <StatCard label="due now" value={due.length} />
-          </section>
-
-          {kb.frontier.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-xl font-semibold tracking-tight">The frontier</h2>
-              <p className="text-sm text-[var(--muted)]">
-                Every prerequisite met, the concept itself not yet held. The only
-                place teaching is efficient.
-              </p>
-              <ul className="space-y-2">
-                {kb.frontier.map((id) => {
-                  const concept = kb.concepts.find((c) => c.id === id);
-                  return concept ? (
-                    <ConceptRow key={id} concept={concept} onFrontier />
-                  ) : null;
-                })}
-              </ul>
-            </section>
-          )}
-
-          <section className="space-y-3">
-            <h2 className="text-xl font-semibold tracking-tight">Dependency graph</h2>
-            <p className="text-sm text-[var(--muted)]">
-              Solid arrows are hard prerequisites: they gate teaching and carry
-              evidence. Dotted arrows are background, which only affects
-              ordering. Dashed borders mark the frontier.
-            </p>
-            <ConceptGraph
-              concepts={kb.concepts}
-              edges={kb.edges}
-              frontier={kb.frontier}
-            />
-          </section>
-
-          <section className="space-y-5">
-            <h2 className="text-xl font-semibold tracking-tight">
-              All concepts ({kb.concepts.length})
-            </h2>
-            {byDomain.map(([domain, items]) => (
-              <div key={domain} className="space-y-2">
-                <h3 className="font-mono text-sm text-[var(--muted)]">
-                  {domain}/ <span className="text-[var(--muted)]">({items.length})</span>
-                </h3>
-                <ul className="space-y-2">
-                  {items.map((concept) => (
-                    <ConceptRow
-                      key={concept.id}
-                      concept={concept}
-                      onFrontier={frontier.has(concept.id)}
-                    />
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </section>
-
-          <footer className="border-t border-[var(--border)] pt-4 text-xs text-[var(--muted)]">
-            Notes last indexed {formatDate(kb.indexedAt)}. They live in{" "}
-            <code>learn/concepts/</code>; the map in <code>learn/map.md</code>.{" "}
-            <Link href="/" className="text-[var(--accent-strong)] hover:underline">
-              Back to courses
-            </Link>
-          </footer>
-        </>
-      )}
-    </article>
+    </Card>
   );
 }

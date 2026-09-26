@@ -136,7 +136,7 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Ten pages, a 404, and the API handlers below. Pages are server components;
+Eleven pages, a 404, and the API handlers below. Pages are server components;
 the interactive parts opt into the client one component at a time. The app
 is mid-redesign: [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)
 says which pages are on the new design and which phase replaces the rest.
@@ -147,14 +147,16 @@ says which pages are on the new design and which phase replaces the rest.
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
 | `/settings` | `settings/page.tsx` | A placeholder, so the avatar menu has no dead link (phase 1a) |
-| `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
+| `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
+| `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph |
 | `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset (a player with chapters and transcript, a diagram, a file's words, or a link) with Mark watched, the concepts it explains, related assets and its derivations |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
 | not found | `not-found.tsx` | The 404 |
-| `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
+| `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn, for a course topic or, with `conceptSlug`, for one concept note |
+| `GET /api/concepts/[slug]` | `api/concepts/[slug]/route.ts` | Everything the concept workspace shows about one concept, as JSON |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
 | `GET /api/review/due` | `api/review/due/route.ts` | The due cards as the review page renders them (`?concept=` first), with the next due instant |
 | `POST /api/review/grade` | `api/review/grade/route.ts` | One rating (0 Again to 3 Easy) recorded as `learn review grade` records it |
@@ -420,8 +422,15 @@ or an empty reply, collecting each failure so the caller can report what was
 tried. No key at all returns `MISSING_API_KEY`, which the chat route turns
 into a 503; every provider failing returns `ALL_PROVIDERS_FAILED` and a 502.
 
-The prompt is assembled server-side from course data plus whatever recap the
-browser sent along. `objectives.ts` derives the session's success criteria
+The chat route has two tutors. The topic tutor (the course session) builds its
+prompt from course data plus whatever recap the browser sent along. The
+concept tutor (the workspace, `conceptSlug` in the body) builds it from the
+concept note, its neighbours and the learner's mastery and recent answers,
+all read on the server through `lib/concept-workspace.ts`, and asks the model
+to cite a numbered source list as `[n]`; the request and response shapes are
+in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md#the-concept-tutor-api).
+
+For the topic tutor, `objectives.ts` derives the session's success criteria
 deterministically, `prompt.ts` builds the system prompt around them, and
 `summary.ts` parses the model's recap back into the same `KnowledgeInput`
 shape that `storage.ts` persists. The chat route re-clamps the incoming recap

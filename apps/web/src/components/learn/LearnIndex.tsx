@@ -1,0 +1,303 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { ConceptGraph, ConceptGraphKey } from "@/components/ConceptGraph";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
+import { cx } from "@/components/ui/classes";
+import { MasteryDot } from "@/components/ui/MasteryDot";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SearchField } from "@/components/ui/SearchField";
+import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import {
+  bucketCounts,
+  INDEX_FILTERS,
+  matchesFilter,
+  matchesQuery,
+  type GraphScope,
+  type IndexFilter,
+  type IndexRow,
+  type IndexView,
+} from "@/lib/learn-index";
+
+/**
+ * The Learn index (hi-fi 09): every concept in a table with search and
+ * mastery filters, and the graph of the selected one docked beside it.
+ *
+ * The rows arrive with every label worked out on the server; filtering,
+ * searching and picking a row happen here, with no round trip. The selection,
+ * the view and the scope are mirrored into the query string with
+ * `history.replaceState`, so "Open full course graph" in the workspace can
+ * link straight to a concept's course graph and a reload keeps the place.
+ */
+
+export function LearnIndex({
+  rows,
+  edges,
+  initial,
+}: {
+  rows: IndexRow[];
+  edges: GraphEdge[];
+  initial: { selected: string | null; view: IndexView; scope: GraphScope; filter: IndexFilter };
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState(initial.filter);
+  const [view, setView] = useState(initial.view);
+  const [scope, setScope] = useState(initial.scope);
+  const [selected, setSelected] = useState(initial.selected);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const set = (key: string, value: string | null) => (value === null ? params.delete(key) : params.set(key, value));
+    set("concept", selected);
+    set("view", view === "table" ? null : view);
+    set("scope", scope === (view === "graph" ? "course" : "neighbourhood") ? null : scope);
+    set("filter", filter === "all" ? null : filter);
+    const search = params.toString();
+    const next = `${window.location.pathname}${search ? `?${search}` : ""}`;
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next);
+  }, [selected, view, scope, filter]);
+
+  const visible = useMemo(
+    () => rows.filter((r) => matchesFilter(r, filter) && matchesQuery(r, query)),
+    [rows, filter, query],
+  );
+  const counts = bucketCounts(rows);
+  const nodes: GraphNode[] = useMemo(
+    () => rows.map((r) => ({ id: r.id, title: r.title, bucket: r.bucket, pL: r.pL, courses: r.courses, domain: r.domain })),
+    [rows],
+  );
+  const focus = rows.find((r) => r.id === selected) ?? null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="flex min-w-0 flex-1 basis-[20rem] flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="font-display text-[28px] leading-tight font-bold text-text">Learn</h1>
+          <p className="text-[12px] text-text2">
+            {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
+            {counts.untouched} untouched
+          </p>
+        </div>
+        <SearchField
+          label="Search concepts"
+          placeholder="Search concepts"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full sm:w-[280px]"
+        />
+        <span className="hidden sm:inline-flex">
+          <Button
+            variant="secondary"
+            disabled
+            title="Concepts are added with the learn CLI: npm run learn -- concept add"
+          >
+            Add concept
+          </Button>
+        </span>
+      </header>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 basis-full flex-wrap gap-2 sm:basis-auto" role="group" aria-label="Filter by mastery">
+          {INDEX_FILTERS.map((f) => (
+            <Chip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
+              {f.label}
+            </Chip>
+          ))}
+        </div>
+        <div className="ml-auto flex gap-2" role="group" aria-label="View">
+          <Chip active={view === "table"} onClick={() => { setView("table"); setScope("neighbourhood"); }}>
+            Table
+          </Chip>
+          <Chip active={view === "graph"} onClick={() => { setView("graph"); setScope("course"); }}>
+            Graph
+          </Chip>
+        </div>
+      </div>
+
+      {view === "table" ? (
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+          <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
+          <GraphCard
+            nodes={nodes}
+            edges={edges}
+            focus={focus}
+            scope={scope}
+            onScope={setScope}
+            onSelect={setSelected}
+          />
+        </div>
+      ) : (
+        <GraphCard
+          nodes={nodes}
+          edges={edges}
+          focus={focus}
+          scope={scope}
+          onScope={setScope}
+          onSelect={setSelected}
+          wide
+        />
+      )}
+    </div>
+  );
+}
+
+function ConceptTable({
+  rows,
+  selected,
+  onSelect,
+  total,
+}: {
+  rows: IndexRow[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  total: number;
+}) {
+  const th = "px-3 py-2.5 sm:px-4 text-left text-[11px] font-bold tracking-[0.05em] text-text3 uppercase";
+  return (
+    <div className="min-w-0 overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse">
+          <caption className="sr-only">Concepts, {rows.length} of {total} shown. Choose a row to show its graph.</caption>
+          <thead>
+            <tr className="border-b border-hair">
+              <th scope="col" className={th}>Concept</th>
+              <th scope="col" className={cx(th, "w-[64px] sm:w-[236px]")}>Mastery</th>
+              <th scope="col" className={cx(th, "w-[92px]")}>Due</th>
+              <th scope="col" className={cx(th, "hidden w-[112px] md:table-cell")}>Last seen</th>
+              <th scope="col" className={cx(th, "hidden w-[124px] md:table-cell")}>Course</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-[14px] text-text2">
+                  No concept matches. Try another filter or a shorter search.
+                </td>
+              </tr>
+            )}
+            {rows.map((r) => (
+              <tr
+                key={r.id}
+                onClick={() => onSelect(r.id)}
+                aria-selected={r.id === selected}
+                className={cx(
+                  "cursor-pointer border-b border-hair last:border-b-0",
+                  r.id === selected ? "bg-surface2" : "hover:bg-surface2/60",
+                )}
+              >
+                <td className="px-3 py-2.5 sm:px-4">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <MasteryDot bucket={r.bucket} className="shrink-0" />
+                    <Link
+                      href={`/learn/${r.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      // Tabbing through the titles moves the graph along with the focus.
+                      onFocus={() => onSelect(r.id)}
+                      className="min-w-0 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      {r.title}
+                    </Link>
+                    {r.leech && <span className="shrink-0 text-[11px] font-bold text-danger uppercase">leech</span>}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 sm:px-4">
+                  <span className="flex items-center gap-2">
+                    <span className="hidden sm:block">
+                      <ProgressBar
+                        percent={r.bucket === "untouched" ? 0 : r.pL * 100}
+                        size="sm"
+                        tone={r.bucket === "mastered" ? "accent" : "mid"}
+                        label={`${r.title} mastery`}
+                        className="w-[160px]"
+                      />
+                    </span>
+                    <span className="w-8 text-[12px] text-text2 tabular-nums">{r.bucket === "untouched" ? "–" : r.pL.toFixed(2)}</span>
+                  </span>
+                </td>
+                <td className={cx("px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap", r.overdue ? "text-danger" : "text-text2")}>
+                  {r.dueLabel}
+                </td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.lastSeenLabel}</td>
+                <td className="hidden px-3 py-2.5 sm:px-4 text-[12px] whitespace-nowrap text-text2 md:table-cell">{r.courseLabel ?? "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function GraphCard({
+  nodes,
+  edges,
+  focus,
+  scope,
+  onScope,
+  onSelect,
+  wide = false,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  focus: IndexRow | null;
+  scope: GraphScope;
+  onScope: (scope: GraphScope) => void;
+  onSelect: (id: string) => void;
+  wide?: boolean;
+}) {
+  const course = focus ? courseScope(nodes, edges, focus.id) : null;
+  const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
+  const wider = course?.basis === "domain" ? "Folder" : "Course";
+
+  return (
+    <Card
+      title="Graph"
+      action={
+        <span className="flex gap-1.5" role="group" aria-label="Graph scope">
+          <Chip size="sm" active={scope === "neighbourhood"} onClick={() => onScope("neighbourhood")}>
+            Neighbourhood
+          </Chip>
+          <Chip size="sm" active={scope === "course"} onClick={() => onScope("course")}>
+            {wider}
+          </Chip>
+        </span>
+      }
+    >
+      {focus === null || shown === null ? (
+        <p className="text-[14px] text-text2">Choose a concept to see what it needs and what needs it.</p>
+      ) : (
+        <>
+          <p className="flex min-w-0 items-center gap-2 text-[13px] text-text2">
+            <MasteryDot bucket={focus.bucket} size={12} />
+            <span className="min-w-0 truncate">
+              <span className="font-semibold text-text">{focus.title}</span>
+              {scope === "course" && course?.basis === "course" && focus.courseLabel && ` · ${focus.courseLabel.split(" ")[0]}`}
+              {scope === "course" && course?.basis === "domain" && ` · no course, showing the ${focus.domain} folder`}
+            </span>
+          </p>
+          <div className={cx("rounded-xl bg-surface2 p-2", wide ? "min-h-[440px]" : "min-h-[300px]")}>
+            <ConceptGraph
+              nodes={shown.nodes}
+              edges={shown.edges}
+              focus={focus.id}
+              onSelect={onSelect}
+              fit={scope === "neighbourhood"}
+              compact={!wide}
+              label={`${scope === "course" ? "Course" : "Neighbourhood"} graph of ${focus.title}`}
+            />
+          </div>
+          <ConceptGraphKey />
+          <span>
+            <Button variant="secondary" size="sm" href={`/learn/${focus.id}`}>
+              Open in workspace
+            </Button>
+          </span>
+        </>
+      )}
+    </Card>
+  );
+}
