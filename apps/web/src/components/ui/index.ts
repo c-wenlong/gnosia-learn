@@ -5,8 +5,10 @@
 export { Button, type ButtonProps } from "./Button";
 export { Card, CardAction } from "./Card";
 export { Chip } from "./Chip";
+export { ChoiceRow, type ChoiceState } from "./ChoiceRow";
 export { Divider } from "./Divider";
 export { Eyebrow } from "./Eyebrow";
+export { FeedbackBar } from "./FeedbackBar";
 export { Input } from "./Input";
 export { MasteryDot } from "./MasteryDot";
 export { Panel } from "./Panel";
@@ -14,6 +16,7 @@ export { PathNode } from "./PathNode";
 export { Pill } from "./Pill";
 export { Placeholder } from "./Placeholder";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
+export { RatingButton } from "./RatingButton";
 export { SearchField } from "./SearchField";
 export { StatTile, type StatTone } from "./StatTile";
 export { TargetBar } from "./TargetBar";

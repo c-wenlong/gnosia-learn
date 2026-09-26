@@ -145,7 +145,8 @@ says which pages are on the new design and which phase replaces the rest.
 | --- | --- | --- |
 | `/` | `page.tsx` | A 307 to `/courses` until Today lands (phase 1a) |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
-| `/review`, `/settings` | `review/page.tsx`, `settings/page.tsx` | Placeholders, so the top bar has no dead links (phases 1e and 1a) |
+| `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
+| `/settings` | `settings/page.tsx` | A placeholder, so the avatar menu has no dead link (phase 1a) |
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
 | `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
@@ -155,6 +156,8 @@ says which pages are on the new design and which phase replaces the rest.
 | not found | `not-found.tsx` | The 404 |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
 | `POST /api/agent/summarize` | `api/agent/summarize/route.ts` | A transcript condensed into a recap |
+| `GET /api/review/due` | `api/review/due/route.ts` | The due cards as the review page renders them (`?concept=` first), with the next due instant |
+| `POST /api/review/grade` | `api/review/grade/route.ts` | One rating (0 Again to 3 Easy) recorded as `learn review grade` records it |
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
@@ -293,12 +296,23 @@ what the UI shows and what the server is told cannot disagree. `loadState`,
 | `POST /api/learner/recap` | Writes, replaces or clears one recap |
 | `POST /api/learner/preference` | Theme, last visited, the learner's own links |
 | `POST /api/learner/import` | The one-time carry-over of a browser's old document |
+| `POST /api/review/grade` | One review grade: a `review` event, the card, the mastery entry |
 
 Every one of them is `handler()` from `apps/web/src/lib/learner-api.ts`: same-origin
 through the existing `agent/guard.ts` helpers, a rate limit, a bounded body,
 and validation. `/api/learner/preference` writes an allow-list of keys rather
 than any key, because an unauthenticated open jsonb store is not something
 "the learner owns their own row" excuses.
+
+`/api/review/grade` is the one route here that writes evidence, and it writes
+it by calling `gradeReview` in `services/catalog/src/state/review.ts`, the
+function `learn review grade` itself calls since phase 1e: the event first, then
+the card and the mastery entry, under the learner lock. The page sends the
+button (0 Again, 1 Hard, 2 Good, 3 Easy); `REVIEW_RATINGS` beside it maps that
+onto SM-2's 1, 3, 4 and 5, so the log holds the same scale whichever door the
+grade came through, and `review rebuild` replays both. The page reads its queue
+through `reviewQueue` in the same module, which also returns the interval each
+button would give, computed by the scheduler a grade runs.
 
 Recaps are clamped by `KNOWLEDGE_LIMITS`, twice and from one definition in
 `@self-learn/schema/shared`: as CHECK constraints, so nothing can put an
@@ -578,6 +592,9 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
 | `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
+| `apps/web/src/app/api/review/routes.test.ts` | The review routes: the origin guard, the rating range, a rating landing in the log on SM-2's scale, the due list with its focus and intervals |
+| `apps/web/src/lib/review-core.test.ts`, `review-queue.test.ts` | A review card's options (deterministic, the answer among them), check versus recall, and the interval and date wording |
+| `services/catalog/test/review-grade.test.ts` | `gradeReview`, `reviewQueue` and the rating mapping: the grade moved out of the CLI unchanged, and a web grade replays exactly |
 | `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
 | `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
 | `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
@@ -767,8 +784,11 @@ Postgres would put a staler one in front of the agent.
     hash.
 11. **The web app never writes the *content* half.** It reads the course files
     through `packages/content`, reads `concept`, `mastery` and `review` through
-    the store, and writes only `progress`, `recap` and `preference`. `event`,
-    `mastery` and `review` are written by the CLI, never by a page. The only
+    the store, and writes `progress`, `recap` and `preference`. `event`,
+    `mastery` and `review` are written only through the store's own evidence
+    functions, never assembled by a caller: the CLI's commands, and the one
+    page-facing write, `POST /api/review/grade`, which calls the same
+    `gradeReview` that `learn review grade` does. The only
     writer of the content tables is `npm run catalog -- index`, and the only
     thing it writes from is files in git. A page that could write a derived
     table would make it a source of truth no index run could reproduce.
