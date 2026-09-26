@@ -43,9 +43,9 @@ export function ProbeDemo() {
 
   return (
     <div className="gnosia-paper relative rounded-[28px] p-6 text-left md:p-7">
-      <p className="flex items-center justify-between gap-3 text-[12px] font-semibold tracking-[0.16em] text-brand-mist uppercase">
-        <span>Probe · Softmax</span>
-        <span className="font-book text-[13px] font-normal tracking-normal normal-case italic">try it</span>
+      <p className="flex items-center justify-between gap-3 text-[13px] font-medium text-brand-mist">
+        <span>A probe on softmax</span>
+        <span className="font-book text-[14px] font-normal italic">try it</span>
       </p>
       <p className="mt-3 font-book text-[22px] leading-snug font-medium text-brand-ink md:text-[24px]">{QUESTION}</p>
 
