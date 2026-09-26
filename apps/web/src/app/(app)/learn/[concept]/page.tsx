@@ -20,8 +20,8 @@ import { habitTimeZone } from "@/lib/habit";
 import { dueLabel } from "@/lib/learn-index";
 import { assetFileHref, assetStatusHref, isCompanionKind } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
-import { NOTHING_TO_ASK, sessionCanAsk } from "@/lib/session-core";
-import { tutorModelConfigured } from "@/lib/session-page";
+import { NOTHING_TO_ASK } from "@/lib/session-core";
+import { sessionWillAsk } from "@/lib/session-page";
 import { readTutorStyle } from "@/lib/settings";
 
 /**
@@ -99,7 +99,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const known = new Set([w.slug, ...[...w.requires, ...w.assumes, ...w.dependants, ...w.backlinks].map((r) => r.slug)]);
 
   // Decided here, on the server: the provider keys never reach the client.
-  const canAsk = sessionCanAsk(w.checks, tutorModelConfigured());
+  const canAsk = await sessionWillAsk(w);
 
   const eyebrow = placeLabel(w.place) ?? (w.domain ? `${w.domain} · not in a course yet` : "Not in a course yet");
 

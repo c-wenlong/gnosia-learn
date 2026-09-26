@@ -470,7 +470,8 @@ A step nothing can fill is dropped on the server (`withoutEmptySteps` in
 `session-core`), so the learner is never walked through empty cards: Teach me
 becomes Teach then Close, and Quiz me opens on the close screen. Both say why
 (`NOTHING_TO_ASK`), and nothing is recorded. The workspace says the same under
-Teach me before a session starts (`sessionCanAsk`); the button stays live,
+Teach me before a session starts (`sessionWillAsk`, which builds the same plan
+through `sessionCanAsk`, so the two cannot disagree); the button stays live,
 since the session still teaches, and a disabled kit button takes no pointer
 events, so a `title` on it would never show. "No question" is left for a model
 that fails at run time, which only a request finds out.

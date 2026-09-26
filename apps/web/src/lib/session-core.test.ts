@@ -208,13 +208,21 @@ describe("buildSessionPlan", () => {
     expect(withoutEmptySteps(starved, false).map((s) => s.kind)).toEqual(["teach", "close"]);
   });
 
-  it("tells the workspace before a session whether it can ask anything", () => {
-    expect(sessionCanAsk([], false)).toBe(false);
-    expect(sessionCanAsk([], true)).toBe(true);
-    expect(sessionCanAsk([check("c1", "A?", "a.")], false)).toBe(true);
+  it("tells the workspace before a session whether it can ask anything, as the session would", () => {
+    const input = (checks: ConceptCheck[], pool = POOL) => ({ slug: "x", checks, pool });
+    expect(sessionCanAsk(input([]), false)).toBe(false);
+    expect(sessionCanAsk(input([]), true)).toBe(true);
+    expect(sessionCanAsk(input([check("c1", "A?", "a.")]), false)).toBe(true);
     // A check block with no answer cannot be graded, so it is no question.
-    expect(sessionCanAsk([check("c1", "A?", "  ")], false)).toBe(false);
-    expect(sessionCanAsk([check("c1", "A?", "  ")], true)).toBe(true);
+    expect(sessionCanAsk(input([check("c1", "A?", "  ")]), false)).toBe(false);
+    expect(sessionCanAsk(input([check("c1", "A?", "  ")]), true)).toBe(true);
+    // A check with no two wrong options to offer is dropped by the session, so the workspace warns too.
+    expect(sessionCanAsk(input([check("c1", "A?", "a.")], { near: [], far: [] }), false)).toBe(false);
+    expect(sessionCanAsk(input([check("c1", "A?", "a.")], { near: [], far: [] }), true)).toBe(true);
+    // Two checks lend each other one wrong option each; one summary makes the second.
+    expect(sessionCanAsk(input([check("c1", "A?", "a."), check("c2", "B?", "b.")], { near: ["S."], far: [] }), false)).toBe(
+      true,
+    );
   });
 
   it("reads ?mode= as check only when it says so", () => {

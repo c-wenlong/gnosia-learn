@@ -236,7 +236,7 @@ export function buildSessionPlan(input: {
  * and the workspace all print, so the three cannot drift apart.
  */
 export const NOTHING_TO_ASK =
-  "This note has no check to ask, and no tutor model is configured on this server to write one.";
+  "This note has no check the session can ask, and no tutor model is configured on this server to write one.";
 
 /**
  * A probe or check step that nothing can fill: no question from the note, no
@@ -270,19 +270,18 @@ export function asksNothing(plan: readonly SessionStep[]): boolean {
 
 /**
  * Whether a session on this concept can ask anything, for the workspace
- * before one starts: a note check with a question and an answer, or a tutor
- * model to write one.
- *
- * The session page decides from the built plan instead (`withoutEmptySteps`),
- * which also drops a check `buildChoices` cannot find two wrong options for.
- * That takes a catalog with fewer than two other summaries, so the workspace
- * does not read every summary just to catch it.
+ * before one starts. Decided from the same plan the session page walks, so
+ * the two cannot disagree: a model can always be asked, and without one the
+ * question is whether any check survives as a question, which also needs two
+ * wrong options from `pool`. Teach me and Quiz me agree here, since the
+ * variant a check is asked under changes only the order of its options.
  */
 export function sessionCanAsk(
-  checks: readonly Pick<ConceptCheck, "question" | "answer">[],
+  input: { slug: string; checks: readonly ConceptCheck[]; pool: DistractorPool; summary?: string },
   modelAvailable: boolean,
 ): boolean {
-  return modelAvailable || checks.some((c) => c.question.trim() !== "" && c.answer.trim() !== "");
+  if (modelAvailable) return true;
+  return !asksNothing(withoutEmptySteps(buildSessionPlan({ ...input, mode: "learn" }), false));
 }
 
 export const STEP_NAME: Record<StepKind, string> = {

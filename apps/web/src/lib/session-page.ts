@@ -13,6 +13,7 @@ import {
   buildSessionPlan,
   distractorPool,
   nextConcept,
+  sessionCanAsk,
   withoutEmptySteps,
   type SessionMode,
   type SessionStep,
@@ -92,13 +93,38 @@ export function tutorModelConfigured(): boolean {
   return resolveProviders().length > 0;
 }
 
-export async function loadSessionPage(workspace: ConceptWorkspace, mode: SessionMode): Promise<SessionPageData> {
-  let summaries: ConceptSummary[] = [];
+/** Every concept's summary, for wrong options; none when the catalog cannot be read. */
+async function readSummaries(): Promise<ConceptSummary[]> {
   try {
-    summaries = await conceptSummaries(await catalogDatabase());
+    return await conceptSummaries(await catalogDatabase());
   } catch (error) {
     console.warn(`session: concept summaries unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    return [];
   }
+}
+
+/**
+ * Whether a session on this concept will ask anything, for the workspace
+ * before one starts, decided from the plan the session page would build.
+ * With a model configured, or a note with no check, the answer needs no
+ * summaries, so none are read.
+ */
+export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boolean> {
+  const modelAvailable = tutorModelConfigured();
+  const summaries = modelAvailable || workspace.checks.length === 0 ? [] : await readSummaries();
+  return sessionCanAsk(
+    {
+      slug: workspace.slug,
+      checks: workspace.checks,
+      pool: distractorPool(workspace, summaries),
+      summary: workspace.summary,
+    },
+    modelAvailable,
+  );
+}
+
+export async function loadSessionPage(workspace: ConceptWorkspace, mode: SessionMode): Promise<SessionPageData> {
+  const summaries = await readSummaries();
 
   const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb()]);
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
