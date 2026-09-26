@@ -140,6 +140,16 @@ The pure helpers beside them:
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
 | [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `streakStrip`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
 
+Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
+is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
+`$...$` and `$$...$$` with the same rules the note parser uses (`mathSpanAt` in
+`components/markdown.ts`). [`@/components/Math`](../../apps/web/src/components/Math.tsx)
+has `MathText({ text, className? })` for any plain string that may hold maths
+(a question, a choice, a summary, a chat bubble), and `InlineMath` and
+`DisplayMath` for one expression. No hooks, so they work in server and client
+components. Maths takes `currentColor`, so it follows the text in every palette;
+its size is the `.katex` rule in `globals.css`.
+
 `bucketOf` is the only way a page turns a concept into a colour: mastered
 stays mastered, no observations is untouched, everything else is learning.
 Pass `observations`; a missing count reads as zero.

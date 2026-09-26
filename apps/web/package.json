@@ -16,6 +16,7 @@
     "@self-learn/content": "*",
     "@self-learn/schema": "*",
     "@tailwindcss/typography": "^0.5.20",
+    "katex": "0.18.9",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
@@ -285,7 +286,9 @@ export function ReviewSession({
           {item.kind === "check" ? "Check" : "Recall"} · {item.title}
           {item.leech && " · leech"}
         </Eyebrow>
-        <h1 className="font-display text-[20px] leading-[1.3] font-bold text-text md:text-[24px]">{item.prompt}</h1>
+        <h1 className="font-display text-[20px] leading-[1.3] font-bold text-text md:text-[24px]">
+          <MathText text={item.prompt} />
+        </h1>
       </section>
 
       {item.kind === "check" ? (
@@ -423,10 +426,18 @@ function AnswerPanel({ item, whyOpen, onWhy }: { item: ReviewItem; whyOpen: bool
     <section className="flex flex-col gap-1 rounded-2xl bg-tint p-4 md:gap-2.5 md:rounded-[20px] md:p-6">
       <Eyebrow>Answer</Eyebrow>
       <p className="text-[15px] leading-[1.45] text-text md:text-[17px] md:leading-[26px]">
-        {item.answer.trim() !== "" ? item.answer : "This note has no summary yet. Open the concept and check yourself against the note."}
+        {item.answer.trim() !== "" ? (
+          <MathText text={item.answer} />
+        ) : (
+          "This note has no summary yet. Open the concept and check yourself against the note."
+        )}
       </p>
       <Links item={item} whyOpen={whyOpen} onWhy={onWhy} />
-      {whyOpen && item.why !== null && <p className="text-[14px] leading-[1.5] text-text2">{item.why}</p>}
+      {whyOpen && item.why !== null && (
+        <p className="text-[14px] leading-[1.5] text-text2">
+          <MathText text={item.why} />
+        </p>
+      )}
     </section>
   );
 }
@@ -486,7 +497,7 @@ function CheckBody({
             disabled={answered || pending}
             onClick={() => onPick(i)}
           >
-            {choice}
+            <MathText text={choice} />
           </ChoiceRow>
         ))}
       </div>
@@ -494,7 +505,7 @@ function CheckBody({
         <FeedbackBar
           ok={right}
           title={right ? "Correct" : picked === null ? "Here is the answer" : "Not quite"}
-          detail={item.why ?? undefined}
+          detail={item.why === null ? undefined : <MathText text={item.why} />}
           note={`Counts as ${RATING_LABEL[suggested]}, next in ${formatInterval(item.intervals[suggested] ?? 1)}.`}
           actions={
             <>

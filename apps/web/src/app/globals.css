@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/*
+ * KaTeX's stylesheet and, through its url()s, its fonts. Imported here rather
+ * than from a component so it is one global sheet loaded once, and so the
+ * `.katex` rule below comes after it and wins on source order.
+ */
+@import "katex/dist/katex.min.css";
 @plugin "@tailwindcss/typography";
 
 /*
@@ -259,6 +265,17 @@ body {
   font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.5;
+}
+
+/*
+ * Typeset maths (lib/math.ts, components/Math.tsx). KaTeX sets itself at
+ * 1.21em, sized for a serif body; next to 15px Figtree that reads a size too
+ * big and pushes the line apart. 1.06em matches the x-height closely enough
+ * that an inline formula sits on the line without a jump. No colour here:
+ * KaTeX's glyphs use currentColor, so maths follows the text in every theme.
+ */
+.katex {
+  font-size: 1.06em;
 }
 
 /* Docs-style prose tweaks */

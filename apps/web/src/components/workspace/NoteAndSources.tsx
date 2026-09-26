@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
@@ -70,7 +71,9 @@ export function NoteAndSources({
   return (
     <>
       <Section title="Summary">
-        <p className="text-[13px] leading-[1.4] text-text2">{w.summary || "No summary written yet."}</p>
+        <p className="text-[13px] leading-[1.4] text-text2">
+          {w.summary ? <MathText text={w.summary} /> : "No summary written yet."}
+        </p>
       </Section>
 
       <Section title="Prerequisites">

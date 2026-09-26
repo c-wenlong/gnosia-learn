@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
+import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { cx } from "@/components/ui/classes";
@@ -427,7 +428,7 @@ export function SessionFocus({
                 <FeedbackBar
                   ok={answered.correct}
                   title={answered.correct ? "Correct" : answered.picked === null ? "Here is the answer" : "Not quite"}
-                  detail={question.reason ?? undefined}
+                  detail={question.reason === null ? undefined : <MathText text={question.reason} />}
                   note={feedbackNote(answered.recorded, new Date())}
                   actions={
                     <>
@@ -447,7 +448,9 @@ export function SessionFocus({
                 />
                 {whyOpen && question.explanation !== null && (
                   <div className="rounded-2xl bg-surface2 p-4 text-[14px] leading-[1.55] text-text">
-                    <p>{question.explanation}</p>
+                    <p>
+                      <MathText text={question.explanation} />
+                    </p>
                     {question.source !== null && <p className="mt-1.5 text-[12px] text-text2">Source: {question.source}</p>}
                   </div>
                 )}
@@ -514,7 +517,7 @@ function Question({
   return (
     <div className="flex flex-col gap-2">
       <p id="session-question" className="text-[15px] font-semibold leading-snug text-text md:text-[16px]">
-        {question.prompt}
+        <MathText text={question.prompt} />
       </p>
       <div className="flex flex-col gap-1.5 md:gap-2" role="group" aria-labelledby="session-question">
         {question.choices.map((choice, i) => (
@@ -525,7 +528,7 @@ function Question({
             disabled={answered !== undefined || locked}
             onClick={() => onSelect(i)}
           >
-            {choice}
+            <MathText text={choice} />
           </ChoiceRow>
         ))}
       </div>

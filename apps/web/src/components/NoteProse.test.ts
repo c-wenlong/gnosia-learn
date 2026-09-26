@@ -311,11 +311,42 @@ describe("heading anchors", () => {
 });
 
 describe("maths", () => {
-  it("sets a TeX span with real sub and superscripts", () => {
+  it("typesets a TeX span with KaTeX, a MathML copy for screen readers beside it", () => {
     const host = render("Compare $f(n)$ against $n^{\\log_b a}$.");
-    expect(host.querySelector("sup")).not.toBeNull();
-    expect(host.querySelector("sup sub")?.textContent).toBe("b");
-    expect(host.textContent).not.toContain("$");
-    expect(host.textContent).not.toContain("\\log");
+    const formulas = host.querySelectorAll("p .katex");
+    expect(formulas).toHaveLength(2);
+    // The visual HTML is hidden from assistive tech; the MathML is what it reads.
+    expect(formulas[1].querySelector(".katex-html")?.getAttribute("aria-hidden")).toBe("true");
+    expect(formulas[1].querySelector("math msup")).not.toBeNull();
+    expect(formulas[1].querySelector("annotation")?.textContent).toBe("n^{\\log_b a}");
+    expect(host.querySelector("[role=math]")).toBeNull();
+    expect(host.querySelector("p")?.firstChild?.textContent).toBe("Compare ");
+  });
+
+  it("sets what the old symbol table could not: fractions, sums, blackboard bold", () => {
+    const host = render("$\\frac{a}{b} + \\sum_{i=1}^{n} x_i \\in \\mathbb{R}$");
+    expect(host.querySelector(".katex-error")).toBeNull();
+    expect(host.querySelector(".katex .mfrac")).not.toBeNull();
+    expect(host.querySelector(".katex .mathbb")).not.toBeNull();
+  });
+
+  it("renders a $$ block as centred display maths in its own scroll box", () => {
+    const host = render(["Before.", "", "$$", "\\hat{y} = \\begin{cases} 1 & x > 0 \\\\ 0 & \\text{otherwise} \\end{cases}", "$$"].join("\n"));
+    const display = host.querySelector("article > span .katex-display");
+    expect(display).not.toBeNull();
+    expect(display?.parentElement?.className).toContain("overflow-x-auto");
+    expect(host.querySelector("math[display=block]")).not.toBeNull();
+    expect(host.querySelector(".katex-error")).toBeNull();
+  });
+
+  it("shows a formula KaTeX cannot parse as its source, not as nothing", () => {
+    const host = render("Broken: $\\frac{a}{$ here.");
+    expect(host.querySelector(".katex-error")?.textContent).toBe("\\frac{a}{");
+  });
+
+  it("never turns markup inside a formula into elements", () => {
+    const host = render("$<img src=x onerror=alert(1)>$ and $\\href{javascript:alert(1)}{x}$");
+    expect(host.querySelector("img")).toBeNull();
+    expect(host.querySelector("a")).toBeNull();
   });
 });

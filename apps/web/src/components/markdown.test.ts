@@ -277,43 +277,111 @@ describe("inline", () => {
 });
 
 describe("math", () => {
-  it("turns a TeX span into greek, functions and real sub and superscripts", () => {
+  it("keeps a TeX span as its raw source, for KaTeX to set", () => {
     const nodes = parseInline("compare against $n^{\\log_b a}$");
-    expect(nodes[0]).toEqual({ kind: "text", text: "compare against " });
-    expect(nodes[1]).toEqual({
-      kind: "math",
-      nodes: [
-        { kind: "text", text: "n" },
-        {
-          kind: "sup",
-          nodes: [
-            { kind: "text", text: "log", roman: true },
-            { kind: "sub", nodes: [{ kind: "text", text: "b" }] },
-            { kind: "text", text: " a" },
-          ],
-        },
-      ],
-    });
+    expect(nodes).toEqual([
+      { kind: "text", text: "compare against " },
+      { kind: "math", source: "n^{\\log_b a}", display: false },
+    ]);
   });
 
-  it("maps the symbols the algorithms notes use, and thins the spacing macros", () => {
-    const [node] = parseInline("$f(n) \\le c\\,g(n)$");
-    if (node.kind !== "math") throw new Error("expected math");
-    expect(node.nodes.map((n) => (n.kind === "text" ? n.text : n.kind)).join("")).toBe(
-      "f(n) \u2264 c\u2009g(n)",
-    );
-  });
-
-  it("shows an unknown macro unrendered rather than half-rendered", () => {
-    const [node] = parseInline("$\\frac{a}{b}$");
-    if (node.kind !== "math") throw new Error("expected math");
-    expect(node.nodes).toEqual([{ kind: "text", text: "\\fracab" }]);
+  it("passes macros through untouched, including ones the old symbol table lacked", () => {
+    expect(parseInline("$f(n) \\le c\\,g(n)$")).toEqual([
+      { kind: "math", source: "f(n) \\le c\\,g(n)", display: false },
+    ]);
+    expect(parseInline("$\\frac{a}{b}$")).toEqual([{ kind: "math", source: "\\frac{a}{b}", display: false }]);
   });
 
   it("does not read currency as a formula", () => {
     expect(parseInline("it costs $5 and saves $3 a month")).toEqual([
       { kind: "text", text: "it costs $5 and saves $3 a month" },
     ]);
+    expect(parseInline("$3 and $5")).toEqual([{ kind: "text", text: "$3 and $5" }]);
+  });
+
+  it("does not read a price range as a formula, though both dollars hug a digit", () => {
+    expect(parseInline("between $5-$10 a month")).toEqual([{ kind: "text", text: "between $5-$10 a month" }]);
+  });
+
+  it("reads \\$ as a literal dollar, outside a formula and inside one", () => {
+    expect(parseInline("costs \\$5, and $x = \\$3$")).toEqual([
+      { kind: "text", text: "costs $5, and " },
+      { kind: "math", source: "x = \\$3", display: false },
+    ]);
+  });
+
+  it("reads $$...$$ mid-line as display maths", () => {
+    expect(parseInline("so $$\\sum_{i=1}^{n} i$$ holds")).toEqual([
+      { kind: "text", text: "so " },
+      { kind: "math", source: "\\sum_{i=1}^{n} i", display: true },
+      { kind: "text", text: " holds" },
+    ]);
+  });
+
+  it("leaves an unclosed $$ as text rather than opening $...$ at its second dollar", () => {
+    expect(parseInline("a $$x and $y$")).toEqual([
+      { kind: "text", text: "a $$x and " },
+      { kind: "math", source: "y", display: false },
+    ]);
+  });
+});
+
+describe("display math blocks", () => {
+  it("takes a $$ paragraph over several lines as one block, newlines kept", () => {
+    expect(blocks(["Before.", "", "$$", "\\sum_{i=1}^{n} i", "= \\frac{n(n+1)}{2}", "$$", "", "After."].join("\n"))).toEqual([
+      { kind: "paragraph", text: "Before." },
+      { kind: "math", source: "\\sum_{i=1}^{n} i\n= \\frac{n(n+1)}{2}" },
+      { kind: "paragraph", text: "After." },
+    ]);
+  });
+
+  it("takes $$...$$ on one line as a block", () => {
+    expect(blocks("$$ \\hat{y} = Wx $$")).toEqual([{ kind: "math", source: "\\hat{y} = Wx" }]);
+  });
+
+  it("ends the paragraph above it when written without a blank line", () => {
+    expect(blocks(["The sum is", "$$", "a + b", "$$"].join("\n"))).toEqual([
+      { kind: "paragraph", text: "The sum is" },
+      { kind: "math", source: "a + b" },
+    ]);
+  });
+
+  it("works inside a list item and a callout", () => {
+    expect(blocks("- $$x^2$$")).toEqual([
+      { kind: "list", ordered: false, start: 1, items: [[{ kind: "math", source: "x^2" }]] },
+    ]);
+    expect(blocks(["> [!note] Rule", "> $$a \\le b$$"].join("\n"))).toEqual([
+      { kind: "quote", callout: "note", title: "Rule", blocks: [{ kind: "math", source: "a \\le b" }] },
+    ]);
+  });
+
+  it("reads an unclosed block as a paragraph, so the text still shows", () => {
+    expect(blocks(["$$", "x^2", "", "Next."].join("\n"))).toEqual([
+      { kind: "paragraph", text: "$$ x^2" },
+      { kind: "paragraph", text: "Next." },
+    ]);
+  });
+
+  it("does not let an unclosed $$ swallow a heading, a fence or a rule before a later $$", () => {
+    const note = ["$$", "x^2", "## Next section", "Body.", "", "```", "code", "```", "", "---", "", "Ends $$"].join("\n");
+    expect(blocks(note)).toEqual([
+      { kind: "paragraph", text: "$$ x^2" },
+      { kind: "heading", level: 2, text: "Next section" },
+      { kind: "paragraph", text: "Body." },
+      { kind: "code", info: "", text: "code" },
+      { kind: "rule" },
+      { kind: "paragraph", text: "Ends $$" },
+    ]);
+    expect(blocks(["$$", "a", "```", "b", "```", "$$"].join("\n"))[0]).toEqual({ kind: "paragraph", text: "$$ a" });
+  });
+
+  it("keeps list-like and quote-like continuation lines inside a formula", () => {
+    expect(blocks(["$$", "a", "- b", "> 0", "$$"].join("\n"))).toEqual([{ kind: "math", source: "a\n- b\n> 0" }]);
+  });
+
+  it("reads two formulas in one line as a sentence, not one block", () => {
+    const [block] = blocks("$$a$$ and $$b$$");
+    expect(block).toEqual({ kind: "paragraph", text: "$$a$$ and $$b$$" });
   });
 });
 
@@ -393,8 +461,9 @@ describe("inlineText", () => {
     expect(inlineText(parseInline("![](x.png)"))).toBe("x.png");
   });
 
-  it("reads math as the symbols parseMath already substituted", () => {
-    expect(inlineText(parseInline("$\\alpha \\le \\beta$"))).toBe("α ≤ β");
+  it("reads math as its LaTeX source, which slugify reduces to letters", () => {
+    expect(inlineText(parseInline("$\\alpha \\le \\beta$"))).toBe("\\alpha \\le \\beta");
+    expect(slugify(inlineText(parseInline("Why $\\Theta(n)$ holds")))).toBe("why-theta-n-holds");
   });
 });
 

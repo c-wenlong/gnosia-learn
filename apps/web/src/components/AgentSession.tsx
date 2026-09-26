@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { MathText } from "@/components/Math";
 import type {
   Course,
   KnowledgeInput,
@@ -365,7 +366,9 @@ export function AgentSession({
                 {m.role === "assistant" ? "Agent" : "You"}
                 {m.meta ? ` · ${m.meta}` : ""}
               </p>
-              <div className="whitespace-pre-wrap">{m.content}</div>
+              <div className="whitespace-pre-wrap">
+                <MathText text={m.content} />
+              </div>
             </div>
           ))}
           {busy && (

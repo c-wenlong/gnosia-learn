@@ -6,6 +6,7 @@ import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Cite } from "@/components/ui/Cite";
+import { MathText } from "@/components/Math";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
 import { citedNumbers, parseThread, threadKey, trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
@@ -186,7 +187,9 @@ export function TutorChat({
 
         {turns.map((turn, i) =>
           turn.role === "user" ? (
-            <UserMessage key={i}>{turn.content}</UserMessage>
+            <UserMessage key={i}>
+              <MathText text={turn.content} />
+            </UserMessage>
           ) : (
             <TutorMessage
               key={i}
