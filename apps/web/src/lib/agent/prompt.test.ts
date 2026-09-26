@@ -143,6 +143,13 @@ describe("concept tutor prompt", () => {
     expect(tutorStyleLabel("guide-concise")).toBe("Learning guide · concise");
   });
 
+  it("keeps the rationale in every style's explanation", () => {
+    for (const rule of Object.values(SESSION_EXPLANATION_RULES)) {
+      expect(rule).toMatch(/why the correct option is right/);
+      expect(rule).toMatch(/most tempting wrong/);
+    }
+  });
+
   it("shapes the session question's explanation by style", () => {
     const fallback = buildSessionQuestionPrompt(input, "check");
     expect(fallback).toContain(SESSION_EXPLANATION_RULES["guide-concise"]);

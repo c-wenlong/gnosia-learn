@@ -21,9 +21,10 @@ export const QUESTION_LIMITS = { prompt: 400, option: 240, explanation: 800 } as
 /**
  * How the explanation is written, per Settings tutor style. The explanation is
  * the only prose a session question carries (the feedback bar prints its first
- * sentence, Why? opens the rest), so it is where the style shows. Every line
- * keeps the answer inside the explanation, since the verdict has already been
- * given when it is read.
+ * sentence, Why? opens the rest), so it is where the style shows. Every rule
+ * keeps the rationale (why the right option is right, what the tempting wrong
+ * one gets wrong), since the verdict has already been given when it is read;
+ * the style only changes how much is said and in what order.
  */
 export const SESSION_EXPLANATION_RULES: Record<TutorStyle, string> = {
   "guide-concise":
@@ -31,9 +32,9 @@ export const SESSION_EXPLANATION_RULES: Record<TutorStyle, string> = {
   "guide-detailed":
     "The explanation is three or four sentences: why the correct option is right, what the most tempting wrong one gets wrong, and one small example or consequence.",
   socratic:
-    "The explanation walks the reasoning a learner could follow to reach the answer themselves, in two or three sentences, and ends with one short question that pushes one step further.",
+    "The explanation's first sentence says why the correct option is right. Then, in one or two sentences, it walks the reasoning a learner could follow to reach it themselves and names what the most tempting wrong option gets wrong, ending with one short question that pushes one step further.",
   direct:
-    "The explanation opens with the reason the correct option is right, in its first sentence, then says what the most tempting wrong one gets wrong.",
+    "The explanation opens with why the correct option is right, in its first sentence, then says what the most tempting wrong one gets wrong.",
 };
 
 /**
