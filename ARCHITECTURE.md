@@ -67,7 +67,7 @@ another repo.
 | Directory | Owns |
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
-| `apps/web/src/components/` | Every React component: shell, sidebar, progress, checklists, recaps, the concept graph |
+| `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), checklists, recaps, the concept graph |
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-posters.ts` (a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
@@ -136,12 +136,16 @@ entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
 
-Seven pages, a 404, and four API handlers. Pages are server components; the
-interactive parts opt into the client one component at a time.
+Ten pages, a 404, and the API handlers below. Pages are server components;
+the interactive parts opt into the client one component at a time. The app
+is mid-redesign: [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)
+says which pages are on the new design and which phase replaces the rest.
 
 | Route | File | What it renders |
 | --- | --- | --- |
-| `/` | `page.tsx` | The course shortlist, grouped by theme tag |
+| `/` | `page.tsx` | A 307 to `/courses` until Today lands (phase 1a) |
+| `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
+| `/review`, `/settings` | `review/page.tsx`, `settings/page.tsx` | Placeholders, so the top bar has no dead links (phases 1e and 1a) |
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
 | `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
@@ -188,6 +192,20 @@ concurrency reasoning.
 
 The session route declares `generateStaticParams()` over every course and
 module pair, so the shell is prerendered and only the chat is live.
+
+**The shell.** `AppShell` is a server component: a 64px top bar (the
+wordmark, the five destinations Today, Courses, Learn, Library and Review,
+the streak and target pills, and an avatar menu holding the theme toggle,
+Settings and, behind `STUDIO_ENABLED`, Studio), the store banner, the page,
+and below 768px a bottom tab bar in place of the destinations. The streak
+and target come from `@/lib/habit`, which the root layout reads on every
+request next to the learner snapshot and passes down as a prop, degrading
+to zeros when the database is down. A page picks its width with
+`data-layout` on its root element (`app` for the redesigned pages, `focus`
+for focus mode, `full` for the studio canvas, none for the old reading
+measure), which the shell reads with `has-*` so nothing crosses the client
+boundary to say it. The table of values is in `AppShell.tsx` and in
+IMPLEMENTATION.md.
 
 The two library routes are that route's reader, and reach the catalog through
 `apps/web/src/lib/asset-library.ts`, which is `learner-store.ts`'s shape for the
@@ -332,7 +350,7 @@ reaches either of them fail the build with the import chain printed, rather
 than shipping a YAML parser and every course file to the browser. So client
 components take what they need as props: the module page resolves the course,
 module and topic and hands them to `TopicChecklist` and `AgentSession`; the
-root layout projects the shortlist into `CourseNavEntry[]` for the sidebar. The
+Courses page projects each course into a `CourseSummary` for its card grid. The
 arithmetic those components still do lives in `apps/web/src/lib/curriculum.ts` and
 `apps/web/src/lib/progress.ts`, which are pure functions over a course the caller
 already holds.
@@ -344,8 +362,8 @@ inferred, and `packages/content/test/courses.test.ts` pins exactly which. A
 page with `inferred` renders `InferredBanner`, and the agent prompt is told to
 flag uncertainty for those courses.
 
-Courses also carry an `order:`, which is the order the home page and the
-sidebar render in. It is authored because the shortlist is curated: sorting ten
+Courses also carry an `order:`, which is the order the Courses page renders
+them in. It is authored because the shortlist is curated: sorting ten
 files by name gives a different sequence and nothing would say so.
 
 ## The agent chat API

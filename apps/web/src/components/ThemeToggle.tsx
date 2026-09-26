@@ -2,7 +2,12 @@
 
 import { useLearner } from "@/lib/learner-context";
 
-export function ThemeToggle() {
+/**
+ * Flip between light and dark. Lives in the avatar menu, so it is styled by
+ * the caller as one of that menu's rows; the cookie and the preference row
+ * are written by `setThemeMode`.
+ */
+export function ThemeToggle({ className }: { className?: string }) {
   const { state, ready, setThemeMode } = useLearner();
   const isDark = state.theme === "dark";
 
@@ -10,14 +15,14 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={() => setThemeMode(isDark ? "light" : "dark")}
-      className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className={className}
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       disabled={!ready}
     >
-      <span aria-hidden className="text-base leading-none">
+      <span aria-hidden className="w-4 text-center text-base leading-none text-text2">
         {isDark ? "☀" : "☾"}
       </span>
-      <span className="hidden sm:inline">{isDark ? "Light" : "Dark"}</span>
+      {isDark ? "Light theme" : "Dark theme"}
     </button>
   );
 }

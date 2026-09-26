@@ -2,6 +2,8 @@
 
 Status: lo-fi agreed in an interview on 2026-09-23; hi-fi v1 drawn on
 2026-09-26 from the three captured design systems under [reference/](reference/).
+Implementation is phased; the plan, the shipped token and component contract
+and the status of each phase are in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 This document is the written half of the design. The drawn half is
 [self-learn-lofi.fig](self-learn-lofi.fig), an OpenPencil document with a
 lo-fi page and a hi-fi page, and the SVG exports of every screen under
@@ -193,7 +195,7 @@ do not change. Everything below is on the web side, in
 | A due list, not a count | Today, Review | `GET /api/review/due` returning the `review due` shape, and `POST /api/review/grade` wrapping `review grade` |
 | Chat probes move mastery (decision 12) | Session, Workspace | the agent chat route returns graded probes as structured results, and the session calls `POST /api/learner/observe` (wrapping `learn observe`) per graded answer; the recap stays a note |
 | Next step, target, streak | Today, top bar | `GET /api/learner/today` aggregating frontier, target progress, streak (derived from the event log, with leeway from preferences), recent events |
-| Target and leeway are the learner's | Settings | new preference keys: `dailyTarget`, `streakLeewayPerWeek`, `reminders` |
+| Target and leeway are the learner's | Settings | new preference keys: `dailyTarget` and `dailyLeeway` (in `PREFERENCE_KEYS` since phase 0), `reminders` |
 | Concept page data | Workspace | `GET /api/concepts/[slug]` returning note body, requires and assumes, dependants, backlinks, sources, checks, mastery with the event trajectory, `asset_concept` rows |
 | Assets explain concepts | Library asset, Workspace, Path | query `asset_concept` wherever an asset is shown; it is in the schema and unread today |
 | Save to note, Mark watched | Workspace, Library asset | extend `POST /api/learner/note`; a `watched` event kind on the asset |

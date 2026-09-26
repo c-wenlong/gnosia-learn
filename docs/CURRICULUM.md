@@ -23,8 +23,8 @@ server-only module over the reader, holding the lookups pages call (`getCourse`,
 
 1. Write or edit `content/courses/<code>.yaml`, named after the course code in
    lowercase. The reader refuses a file whose name and `code:` disagree.
-2. Give it an `order:`. That is the order the home page and the sidebar render
-   in, and it has to be unique across the shortlist. Sorting by filename is not
+2. Give it an `order:`. That is the order the Courses page renders them in,
+   and it has to be unique across the shortlist. Sorting by filename is not
    the reading order, which is why the key is authored rather than derived.
 3. Point each module's `topic:` at a slug from `content/topics.yaml`. It is a
    lookup key, not free text: add or rename a topic there, never here. If the
@@ -52,7 +52,7 @@ rendering something wrong:
 | A module whose `topic:` is missing or not in `content/topics.yaml` | A course row nothing else can join to |
 | A missing `id`, `slug`, `code`, `title`, `credits`, `order`, `capstone` | A route that 404s, or a page with a hole in it |
 | `inferred` absent, or written as a string | A reconstructed syllabus presented as an official one |
-| Two courses claiming one `order` | An ambiguous sidebar |
+| Two courses claiming one `order` | An ambiguous order on the Courses page |
 | A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
 | A tag that is not in `content/tags.yaml` | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
 | A module with no `topics:` | A page with an empty section and nothing to tick |

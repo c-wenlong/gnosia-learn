@@ -1,7 +1,7 @@
 "use client";
 
 import type { Module } from "@/lib/types";
-import { ProgressBar } from "@/components/ProgressBar";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { moduleProgress } from "@/lib/progress";
 import { useLearner } from "@/lib/learner-context";
 

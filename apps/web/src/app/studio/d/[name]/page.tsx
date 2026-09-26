@@ -294,8 +294,8 @@ function Strip({ diagram, path }: { diagram: Diagram; path: string }) {
           title={`${pill.title} Click to export it again.`}
           className={`inline-flex h-7 items-center rounded-md border px-2 text-xs transition-colors ${
             pill.tone === "ok"
-              ? "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok)]"
-              : "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn)]"
+              ? "border-[var(--ok)]/40 bg-[var(--chip-bg)] text-[var(--ok-text)]"
+              : "border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]"
           }`}
         >
           {pill.label}

@@ -71,7 +71,7 @@ export function DiagramTile({
             </div>
           )}
           {untopiced && (
-            <p className="text-xs text-[var(--warn)]">
+            <p className="text-xs text-[var(--warn-text)]">
               The indexer refuses a diagram with no topic by name, so this one is in no catalog.
               Set one from the panel.
             </p>

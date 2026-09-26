@@ -1,117 +1,77 @@
-"use client";
+import type { ReactNode } from "react";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { Sidebar } from "@/components/Sidebar";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { ProgressBar } from "@/components/ProgressBar";
-import { useLearner } from "@/lib/learner-context";
-import { countsFromIds } from "@/lib/progress";
-import { navTopicIds, type CourseNavEntry } from "@/lib/curriculum";
+import { StoreBanner } from "@/components/shell/StoreBanner";
+import { TabBar } from "@/components/shell/TabBar";
+import { TopBar } from "@/components/shell/TopBar";
+import type { Habit } from "@/lib/habit-core";
 
 /**
- * The one place a failed write is visible.
+ * The frame every page renders inside: the top bar, the store banner, the
+ * page, and on a phone the tab bar.
  *
- * Progress used to be saved in the browser, where the only failure was a full
- * quota. It is a database now, and a database can be down — so the shell
- * carries two states the app never had before: the snapshot the server
- * rendered was empty because it could not ask, and the last change the learner
- * made did not land. Both are said in words rather than left to be inferred
- * from a progress bar that quietly reads zero.
- */
-function StoreBanner() {
-  const { reachable, saveError, dismissSaveError } = useLearner();
-  if (saveError === null && reachable) return null;
-
-  const message = saveError ?? "Not connected to the database — nothing you change here will be saved.";
-  return (
-    <div
-      role="status"
-      className="flex items-start gap-3 border-b border-[var(--warn-border)] bg-[var(--warn-bg)] px-4 py-2 text-sm text-[var(--warn)]"
-    >
-      <span className="min-w-0 flex-1">{message}</span>
-      {saveError !== null && (
-        <button
-          type="button"
-          onClick={dismissSaveError}
-          className="shrink-0 font-medium underline underline-offset-2"
-        >
-          Dismiss
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
- * `nav` comes from the root layout, which is a server component and the only
- * thing allowed to read `content/`. It carries the whole-shortlist topic ids
- * the header's progress bar counts, as well as the sidebar's list.
+ * A server component; the parts that need the browser (the active tab, the
+ * avatar menu, the banner) are client components one level down. `habit`
+ * comes from the root layout, which is the only thing that can read it.
+ *
+ * **The page chooses its width with `data-layout` on its root element**, which
+ * `has-*` reads here without a prop, a context or a client boundary between
+ * the layout and the route:
+ *
+ * | value     | width                                   | used by                  |
+ * | --------- | --------------------------------------- | ------------------------ |
+ * | none      | the old 48rem reading measure           | pages not yet redesigned |
+ * | `wide`    | 72rem, old gutters                      | the old library pages    |
+ * | `app`     | up to 1392px inside 24px gutters (16 on a phone) | every redesigned page |
+ * | `focus`   | the whole width, no padding, and no top bar from 768px up | Session and Review (focus mode) |
+ * | `full`    | the whole region, no padding, the shell fixed to the viewport | the studio canvas |
+ *
+ * `focus` is the hi-fi's focus mode (frames 05 to 08): on a desktop the page
+ * owns the whole screen, drawing its own step bar and exit link, so the top
+ * bar goes. On a phone (frames 14 and 15) the header and the tab bar stay,
+ * and the page still starts flush under the header.
+ *
+ * `full` is not a wider `wide`. The studio's canvas is an iframe that has to
+ * fill the region exactly, so it drops the measure *and* the padding, fixes
+ * the shell to the viewport height, hides the phone tab bar, and hands the
+ * route a flex child as tall as the space under the header.
+ *
+ * A redesigned page puts `data-layout="app"` on its root. Once every page has
+ * moved, `app` becomes the default and the other two old values go.
  */
 export function AppShell({
-  nav,
+  habit,
   studio = false,
   children,
 }: {
-  nav: CourseNavEntry[];
-  /** Passed through to the sidebar. The server is the only thing that can know. */
+  habit: Habit;
+  /** Whether this deployment has a studio. Only the server can know (D11). */
   studio?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const { state, ready } = useLearner();
-  const allTopicIds = useMemo(() => navTopicIds(nav), [nav]);
-  const progress = countsFromIds(allTopicIds, state.completed);
-
   return (
-    <div className="flex min-h-full bg-[var(--background)] text-[var(--foreground)] has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden">
-      <Sidebar nav={nav} open={open} onClose={() => setOpen(false)} studio={studio} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--header-bg)] px-4 py-2.5 backdrop-blur">
-          <button
-            type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] text-sm lg:hidden"
-            onClick={() => setOpen(true)}
-            aria-label="Open navigation"
-          >
-            ☰
-          </button>
-          <div className="hidden min-w-0 flex-1 sm:block sm:max-w-xs">
-            {ready ? (
-              <ProgressBar progress={progress} size="sm" />
-            ) : (
-              <div className="h-2 rounded-full bg-[var(--border)]" />
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="hidden text-xs text-[var(--muted)] md:inline">
-              Progress is saved to your catalog
-            </span>
-            <ThemeToggle />
-          </div>
-        </header>
-        <StoreBanner />
-        {/* 48rem is the reading measure every page wants and one does not: a
-            gallery at that width is two cards across, and the media player's
-            own container queries only reach their side-by-side layout at 64rem.
-            A page opts out by putting `data-layout="wide"` on its root element,
-            which `has-*` reads without a prop, a context or a client boundary
-            between the layout and the route.
-
-            `full` is the third value and not a wider `wide`. The studio's
-            canvas is an iframe that has to fill the region exactly: a measure
-            of any width is still a measure, and the page gutters that make
-            prose readable put a border of background around a drawing surface.
-            So `full` drops the measure *and* the padding, fixes the shell to
-            the viewport height, and hands the route a flex child it can make
-            as tall as the space left under the header. Only the content
-            scrolls, which is what the design asks for and what `wide` cannot
-            give without breaking every page that uses it. */}
-        <main className="flex-1 px-4 py-8 has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:p-0 sm:px-8 lg:px-12">
-          <div className="mx-auto w-full max-w-3xl has-[[data-layout=wide]]:max-w-6xl has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:flex-1 has-[[data-layout=full]]:max-w-none">
-            {children}
-          </div>
-        </main>
-      </div>
+    <div className="group/shell flex min-h-full flex-col bg-page text-text has-[[data-layout=full]]:h-dvh has-[[data-layout=full]]:overflow-hidden">
+      <TopBar habit={habit} studio={studio} />
+      <StoreBanner />
+      <main
+        className={[
+          // The old pages' gutters, and room under a phone page for the tab bar.
+          "flex-1 px-4 pt-8 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-8 md:pb-8 lg:px-12",
+          "has-[[data-layout=app]]:px-4 has-[[data-layout=app]]:pt-6 md:has-[[data-layout=app]]:px-6 md:has-[[data-layout=app]]:pb-10",
+          "has-[[data-layout=focus]]:px-0 has-[[data-layout=focus]]:pt-0 md:has-[[data-layout=focus]]:pb-0",
+          "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:p-0",
+        ].join(" ")}
+      >
+        <div
+          className={[
+            "mx-auto w-full max-w-3xl",
+            "has-[[data-layout=wide]]:max-w-6xl has-[[data-layout=app]]:max-w-[1392px] has-[[data-layout=focus]]:max-w-none",
+            "has-[[data-layout=full]]:flex has-[[data-layout=full]]:min-h-0 has-[[data-layout=full]]:max-w-none has-[[data-layout=full]]:flex-1",
+          ].join(" ")}
+        >
+          {children}
+        </div>
+      </main>
+      <TabBar />
     </div>
   );
 }

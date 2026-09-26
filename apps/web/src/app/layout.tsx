@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Figtree, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
-import { courses } from "@/data/courses";
-import { toCourseNav } from "@/lib/curriculum";
+import { loadHabit } from "@/lib/habit";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -11,10 +10,14 @@ import { studioEnabled } from "@/lib/studio";
 import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// The interface face. Brilliant's own is CoFo Brilliant, and Figtree is the
+// fallback its CSS names; titles use Georgia from the system (see globals.css).
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
 });
+
+// Kept for code in notes: Figtree has no monospace.
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -59,18 +62,19 @@ export const metadata: Metadata = {
  * bit is not a trade worth making. The `preference` row is the durable copy
  * and the fallback when the cookie is missing.
  *
- * It is also the one place that can read both `content/` and the database, so
- * it resolves the sidebar's nav here and hands it down: the sidebar and the
- * header progress bar are client components, and the course files are on disk.
+ * It also reads the habit numbers the top bar shows on every page (the streak
+ * and the daily target, `@/lib/habit`) and hands them to the shell as props:
+ * the bar is a client component and cannot query anything itself.
  */
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [cookieStore, { state, reachable }] = await Promise.all([
+  const [cookieStore, { state, reachable }, habit] = await Promise.all([
     cookies(),
     loadLearnerSnapshot(),
+    loadHabit(),
   ]);
 
   // The cookie wins when both are present: it is what the browser last chose,
@@ -82,13 +86,13 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased${
+      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${
         theme === "dark" ? " dark" : ""
       }`}
     >
       <body className="min-h-full">
         <LearnerProvider initialState={initialState} reachable={reachable}>
-          <AppShell nav={toCourseNav(courses)} studio={studioEnabled()}>
+          <AppShell habit={habit} studio={studioEnabled()}>
             {children}
           </AppShell>
         </LearnerProvider>
