@@ -14,7 +14,7 @@ the shell), and how to check a page against its hi-fi frame.
 | 1b | Course path, absorbing the module page | `/courses/[slug]`, `/courses/[slug]/[module]` (a redirect to the unit) | Done |
 | 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]` | Not started |
 | 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session` | Not started, needs 1c |
-| 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Not started |
+| 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Done |
 | 1f | Library and the asset page: concept links, Mark watched, text search | `/library`, `/library/[id]` | Not started |
 
 Update the row when a phase merges.
@@ -114,6 +114,9 @@ Import from `@/components/ui` or from the file.
 | `StatTile` | `value: ReactNode`, `label: string`, `tone: "ok" \| "accent" \| "violet" \| "streak"`, `className?` | `StatTile` |
 | `Placeholder` | `label?: string` (lines split on `\|`), `height?: number \| string` (default 120), `className?`, `children?` | `Placeholder` |
 | `Divider` | `vertical?: boolean`, `className?` | `HR` |
+| `RatingButton` | `label`, `interval` (desktop), `short?` (phone, "4d"), `shortcut?` (the key, for `aria-keyshortcuts`), `suggested?` (tint and accent border: what Continue will record), `disabled?`, `onClick?`, `className?`. Four in a `flex` row make the rating row | `Rating` |
+| `ChoiceRow` | `state?: "idle" \| "selected" \| "correct" \| "wrong"`, `shortcut?` (the number badge), `disabled?`, `onClick?`, `children` (the option text). Graded rows carry the "correct answer" and "your answer" tags | `Option` |
+| `FeedbackBar` | `ok: boolean` (green, else yellow "not quite"), `title`, `detail?`, `note?`, `actions?` (the caller's ghost Why and coloured Continue). A `role="status"` live region; the actions drop under the text on a phone | `Feedback` |
 
 The pure helpers beside them:
 
@@ -132,10 +135,12 @@ Pass `observations`; a missing count reads as zero.
 `PathNode` (`bucket`, `active?`, `glyph?: "dot" | "check"`: the 72 by 78 node with its 6px lip and the accent ring) and `UnitHeader` (`eyebrow`, `title`, `subtitle?`, `actions?`, `muted?` for a locked unit, `headingLevel?`) shipped with 1b.
 
 Not built yet, because one phase each needs them and none of the others do:
-`StreakDay` (1a), the tutor message and
-the citation pill (1c), the choice row and the feedback footer (1d), the
-rating row (1e). Build them in `components/ui/` from the kit function of the
-same name, with the same rules.
+`StreakDay` (1a), the tutor message and the citation pill (1c). Build them in
+`components/ui/` from the kit function of the same name, with the same rules.
+The choice row and the feedback footer are built (1e needed them for check
+cards, as `ChoiceRow` and `FeedbackBar`), so 1d uses those rather than drawing
+its own. The review page carries a small local `CitePill` in
+`components/review/` until 1c's citation pill exists.
 
 ## The shell
 
@@ -265,6 +270,14 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Guidebook with no concept | a link | toggles the module's outline (topics and subtopics) inline under the unit header | the brief: no concept note to open |
 | Rail | three cards | a fourth, "About this course" (credits, prerequisites, notes, capstone, related courses), and an inferred-roadmap note in the header card | what the old course page showed, kept |
 | Path node dot | `#FFFFFF` | `bg-white` / `text-white` | the kit's literal in both themes; the accent button already uses `text-white` |
+| Review, Again interval | "10 min" | "1 day" | the scheduler is SM-2 with no learning steps: a failed card comes back in a day. The buttons print what a grade will write |
+| Review, the four intervals | Hard 1 day, Good 4, Easy 9 | often equal, and Hard can pass Good by a day | SM-2 only lets the grade change the interval from the third repetition on, and `schedule.mjs` fuzzes intervals of a week or more by up to 5% keyed on the interval itself. Honest, and a scheduler question, not a page one |
+| Review, answer panel | a citation, Why?, Open concept on every card | the citation and Why? only when the check block has `source:` and `why:` | most notes have neither; nothing is invented to fill the slot |
+| Review, before the answer | the answer already revealed | Show answer (space) in the rating row's place | the hi-fi draws the revealed state; recall needs the hidden one first |
+| Review, check cards | options and a verdict, as in a session | wrong options drawn from other notes' check answers, then summaries | a check block has `q`, `a`, `why` and `source`, no distractors; a note too short of neighbours is asked as recall instead |
+| Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
+| Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
+| Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
 
 ## Gotchas
 
@@ -289,3 +302,11 @@ calling a page done; a build that passes proves nothing about how it looks.
 - **The habit numbers are read on every request,** `readEvents` in full. The
   log is small for one learner; if it grows into the tens of thousands, add a
   date-bounded read to the catalog rather than caching in the layout.
+- **Driving `/review` or a session in a browser writes real evidence.** A
+  rating is a `review` event in the learner's own log, which is append-only.
+  Screenshot a page that grades against a copy of the database
+  (`createdb -T self_learn self_learn_<phase>`, then start the server with
+  `DATABASE_URL` pointing at it), never against `self_learn`.
+- **On a check card the number keys mean two things.** Before the verdict 1
+  to 4 pick an option; after it they rate. The review page keeps one phase
+  per card so the second press of "2" is a rating, never a second pick.

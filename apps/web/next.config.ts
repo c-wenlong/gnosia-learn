@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
    * deployed bundle ships without the course files and every page that reads a
    * course fails in production while the build looks fine.
    *
+   * The concept notes are the same case. `/review` reads each due note's check
+   * blocks at request time (through the catalog's note asset and
+   * `resolveAssetFile`), and a deployment without the files would quietly ask
+   * every check card as summary recall instead.
+   *
    * The pattern is resolved from this directory, not from the tracing root
    * above, which is why it starts with `../../`.
    *
@@ -39,7 +44,7 @@ const nextConfig: NextConfig = {
    * by removing the entry and building.
    */
   outputFileTracingIncludes: {
-    "/*": ["../../content/**/*.yaml"],
+    "/*": ["../../content/**/*.yaml", "../../learn/concepts/**/*.md"],
   },
 
   /**

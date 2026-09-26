@@ -170,6 +170,24 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
         },
       ]);
     });
+
+    it("review grade", async () => {
+      // Pinned because the grade moved into `state/review.ts` so the web app's
+      // `POST /api/review/grade` runs the same code: the shape must not move
+      // with it. A first review at grade 4 is SM-2's one-day step, the ease
+      // untouched, and a correct answer at the 0.25 prior. `pL` is printed
+      // unrounded, float noise and all, which is part of the shape too.
+      expect(stamp(await json("review", "grade", "--concept", "alpha", "--grade", "4"))).toEqual({
+        concept: "alpha",
+        grade: 4,
+        due: "<instant>",
+        intervalDays: 1,
+        ease: 2.5,
+        lapses: 0,
+        leech: false,
+        pL: 0.6599999999999999,
+      });
+    });
   });
 
   describe("the loop", () => {
