@@ -42,8 +42,8 @@ A third part, the `tools/manimkc/` submodule, renders narrated animations for co
 ```
 
 <p align="center">
-  <img src="apps/web/public/screenshot.png" alt="The Self-Learn course catalog: a sidebar of ten NUS courses beside progress bars and per-course cards" width="900"><br>
-  <em>The course catalog, live at <a href="https://self-learn-one.vercel.app">self-learn-one.vercel.app</a>.</em>
+  <img src="apps/web/public/screenshot.png" alt="The Self-Learn Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
+  <em>Today, the home page, live at <a href="https://self-learn-one.vercel.app">self-learn-one.vercel.app</a>.</em>
 </p>
 
 ## Why this exists
@@ -64,11 +64,16 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 
 | Surface | Purpose |
 | --- | --- |
-| `/` | Course catalog and overall progress |
+| `/` | Today: what to study next, reviews due, recent activity, the daily target and streak |
+| `/courses` | The course catalog and overall progress |
+| `/courses/[slug]` | The course path: units of topic nodes coloured by mastery, with each topic's checklist, notes, recaps and resources in its panel |
 | `/learn` | Knowledge base: mastery per concept, the frontier, the dependency graph |
-| `/courses/[slug]` | Course overview, modules, capstone, related courses |
-| `/courses/[slug]/[module]` | Topic checklist, notes, recaps, curated and user resources |
-| `/courses/[slug]/[module]/session?topic=…` | Socratic micro-session for one topic |
+| `/learn/[concept]` | One concept's workspace: its note and sources, a tutor grounded in the note, checks, assets |
+| `/learn/[concept]/session` | Focus-mode session: probe, teach, check, close, each graded answer recorded as evidence |
+| `/review` | Spaced-repetition review of what is due |
+| `/library`, `/library/[id]` | Every indexed asset (videos, diagrams, notes), searchable, with the concepts each explains |
+| `/settings` | Daily target, streak leeway, theme, tutor style; export and reset |
+| `/courses/[slug]/[module]/session?topic=…` | The older Socratic micro-session for one topic |
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 
 ```

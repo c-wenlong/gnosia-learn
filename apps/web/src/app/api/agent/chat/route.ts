@@ -9,6 +9,7 @@ import { findTopicBySlugs } from "@/lib/agent/lookup";
 import { buildAgentSessionContext, buildConceptSessionContext, type CitationSource } from "@/lib/agent/prompt";
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
+import { readTutorStyle } from "@/lib/settings";
 import {
   availableProviderSummary,
   completeWithFallback,
@@ -143,9 +144,9 @@ export async function POST(req: Request) {
 
 /**
  * A turn of the concept tutor. The context is the concept's note, its
- * neighbours and the learner's mastery and recent answers on it, all read on
- * the server from `conceptSlug`; nothing about the concept is taken from the
- * browser. The response adds `concept` and the numbered `sources` the reply
+ * neighbours, the learner's mastery and recent answers on it, and their tutor
+ * style preference, all read on the server from `conceptSlug`; nothing about
+ * the concept is taken from the browser. The response adds `concept` and the numbered `sources` the reply
  * may cite as `[n]`.
  */
 async function conceptTurn(req: Request, body: ChatBody) {
@@ -194,7 +195,10 @@ async function conceptTurn(req: Request, body: ChatBody) {
     return NextResponse.json({ error: "Concept not found", code: "CONCEPT_NOT_FOUND" }, { status: 404 });
   }
 
-  const session = buildConceptSessionContext(toConceptPromptInput(read.workspace));
+  // The learner's Settings choice, read after the concept so a database that
+  // is down has already answered 503 above.
+  const style = await readTutorStyle();
+  const session = buildConceptSessionContext(toConceptPromptInput(read.workspace), { style });
   const note =
     typeof learnerNote === "string" && learnerNote.trim()
       ? `\n## Learner notes (from their study hub)\n${learnerNote.trim()}\n`

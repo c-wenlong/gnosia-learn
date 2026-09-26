@@ -57,3 +57,22 @@ export async function loadSettings(): Promise<SettingsSnapshot> {
   await connection();
   return readSettings();
 }
+
+/**
+ * The learner's `tutorStyle`, for the tutor routes (`POST /api/agent/chat`
+ * with a concept, `POST /api/agent/session`) and the workspace page. Never
+ * throws: a failed read is the default style, since a style is not worth
+ * refusing a tutor turn over. The routes read the concept first, so a database
+ * that is down has already answered 503 before this runs in practice.
+ */
+export async function readTutorStyle(): Promise<TutorStyle> {
+  try {
+    const db = await catalogDatabase();
+    const preferences = await readPreferences(db);
+    return parseTutorStyle(preferences[PREFERENCE_KEYS.tutorStyle]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`settings: tutor style unavailable, ${message}`);
+    return parseTutorStyle(undefined);
+  }
+}

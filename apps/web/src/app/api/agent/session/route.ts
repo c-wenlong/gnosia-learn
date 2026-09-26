@@ -11,6 +11,7 @@ import {
 } from "@/lib/agent/session";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
+import { readTutorStyle } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -71,8 +72,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Concept not found", code: "CONCEPT_NOT_FOUND" }, { status: 404 });
   }
 
+  // The learner's tutor style shapes the explanation; read after the concept,
+  // as the chat does.
+  const style = await readTutorStyle();
   const outcome = await completeWithFallback([
-    { role: "system", content: buildSessionQuestionPrompt(toConceptPromptInput(read.workspace), step as QuestionStep, asked) },
+    {
+      role: "system",
+      content: buildSessionQuestionPrompt(toConceptPromptInput(read.workspace), step as QuestionStep, asked, style),
+    },
     { role: "user", content: sessionQuestionRequest(step as QuestionStep) },
   ]);
 

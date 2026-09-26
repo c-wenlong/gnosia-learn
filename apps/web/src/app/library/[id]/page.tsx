@@ -258,7 +258,6 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
             <Button
               variant="secondary"
               href={conceptHref(firstConcept.slug)}
-              prefetch={false}
               title={`Open the workspace for ${firstConcept.title}, where the note is`}
             >
               Add to note
@@ -413,10 +412,6 @@ function Aside({ children }: { children: ReactNode }) {
  * with its dot and p(L), and the way into the first one's workspace. A concept
  * with no evidence yet says "not started" rather than printing a prior as if it
  * were a measurement.
- *
- * The workspace links are not prefetched. A workspace is a full dynamic page
- * per concept, and a page listing several concepts would render each of them
- * on arrival to save a click the reader may never make.
  */
 function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
   const first = concepts[0];
@@ -431,7 +426,6 @@ function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
               <MasteryDot bucket={c.bucket} />
               <Link
                 href={conceptHref(c.slug)}
-                prefetch={false}
                 className="min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {c.title}
@@ -448,7 +442,6 @@ function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
           variant="secondary"
           size="sm"
           href={conceptHref(first.slug)}
-          prefetch={false}
           className="self-start"
         >
           Open workspace
