@@ -436,6 +436,12 @@ not have to be worked out again.
   specifier itself; vitest does not, and the npm package's default entry throws
   on import by design, so every test touching course data would die. The alias
   points at the package's own `empty.js`, which is the module Next substitutes.
+- **`.env.local` belongs in `apps/web/`, not the repository root.** Next loads
+  `.env*` files from the directory it starts in, and since the move that is
+  `apps/web/`. A root copy is silently ignored: the symptom is every video
+  page saying to set `ASSET_FILES_ENABLED=1` while the variable sits in a file
+  nothing reads. `.env.example` stays at the root because it documents the
+  whole repo; copy it to `apps/web/.env.local`.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
   output: `npm run build` then, from `apps/web/`,
