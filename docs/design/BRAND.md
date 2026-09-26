@@ -214,6 +214,149 @@ insight. Not as a bullet or an ornament.
 | `.gnosia-ground`, `.gnosia-glass` | The `(site)` layout, the landing page and the sign-in card |
 | Icons, social card, banner | See [The source art](#the-source-art) |
 
+## The Gnosia theme inside the app
+
+The app has three palettes in
+[globals.css](../../apps/web/src/app/globals.css): light on `:root`
+(Brilliant-derived: grey page, blue accent, black pill), dark on `.dark`, and
+**Gnosia** on `.gnosia`. Gnosia is the brand palette above applied to every
+app page: cream paper, teal accent, navy ink, gold kept for the streak. It is
+a light theme, so Tailwind's `dark:` variant stays off under it. The block
+redefines only the tokens below; every other token falls through from `:root`.
+The values are literal hex, with a comment naming the brand token where one
+matches.
+
+| Token | Gnosia | Replaces (`:root`) | Note |
+| --- | --- | --- | --- |
+| `--page` | `#faf6ec` | `#f8f8f8` | `--brand-cream` |
+| `--surface` | `#fffdf8` | `#ffffff` | A whiter card, still warm |
+| `--surface2` | `#f3eee1` | `#f3f3f3` | A deeper cream |
+| `--tint` | `#e2efec` | `#eef1ff` | A pale teal wash |
+| `--border` | `#e6dfd0` | `#e5e5e5` | Warm grey, 1.30:1 on the card (`:root` is 1.26) |
+| `--hair` | `#ede7da` | `#ebebeb` | Warm grey |
+| `--text` | `#15283a` | `#000000` | `--brand-ink` |
+| `--text2` | `#605b54` | `#666666` | A warm muted ink |
+| `--text3` | `#878276` | `#999999` | A lighter warm ink, for hints |
+| `--accent` | `#148285` | `#456dff` | A mid teal for fills, focus rings and the selected border |
+| `--accent-text` | `#0f5f61` | `#294bc6` | `--brand-teal`, for links and ghost buttons |
+| `--accent-lip` | `#0f5f61` | `#2e4fd1` | `--brand-teal`, under the accent button |
+| `--btn-face` | `#0f5f61` | `#111111` | `--brand-teal` |
+| `--btn-lip` | `#0d1c2b` | `#000000` | `--brand-navy` |
+| `--btn-text` | `#faf6ec` | `#ffffff` | `--brand-cream` |
+| `--m-hi` | `#0f5f61` | `#456dff` | Mastered: `--brand-teal` |
+| `--m-hi-lip` | `#0a4244` | `#2e4fd1` | A darker teal |
+| `--m-mid` | `#529798` | `#a9b9ff` | Learning: a soft teal |
+| `--m-mid-lip` | `#3b7475` | `#7e93e6` | A darker soft teal |
+| `--m-lo` | `#ddd5c4` | `#e5e5e5` | Untouched: warm grey |
+| `--lip-shade` | `#cbc1ad` | `#d4d4d4` | Under an untouched path node |
+| `--streak` | `#b3842c` | `#ff9600` | `--brand-gold` |
+| `--ok-text` | `#008024` | `#009b2b` | Darkened to pass on cream and on its tint |
+| `--ok-on` | `#0b2e14` | `#ffffff` | The dark label `.dark` already uses |
+| `--warn-text` | `#8c6800` | `#b78900` | Darkened to pass on cream and on its tint |
+
+**Why the accent is not the brand teal.** Two components put opposite labels
+on `--accent`: chips and the accent button write white on it, and the close
+screen's stat tile writes the black `--on-tone` strip on it. The deep brand
+teal carries white at 7.4:1 but black at only 2.8:1. `#148285` is the brand
+teal's hue lifted to the one lightness where both clear 4.5:1 (4.60 and 4.56),
+the same trick `:root` plays with its blue. The deep teal still leads: it is
+the link colour, the primary button and the mastered node.
+
+### Contrast, checked
+
+WCAG 2 relative luminance, computed with a script rather than read off a
+picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. The last
+column is the same pair in `:root`, for comparison.
+
+| Pair | Gnosia | Needs | `:root` |
+| --- | --- | --- | --- |
+| `--text` on `--page` | 13.93 | 4.5 | 19.77 |
+| `--text` on `--surface` | 14.79 | 4.5 | 21.00 |
+| `--text` on `--tint` | 12.74 | 4.5 | 18.66 |
+| `--text2` on `--page` | 6.23 | 4.5 | 5.41 |
+| `--text2` on `--surface` | 6.62 | 4.5 | 5.74 |
+| `--text2` on `--surface2` | 5.81 | 4.5 | 5.17 |
+| `--text2` on `--tint` | 5.70 | 4.5 | 5.10 |
+| `--text3` on `--surface` (hints, so 3:1) | 3.77 | 3 | 2.85 |
+| `--text3` on `--page` | 3.55 | 3 | 2.68 |
+| `--text3` on `--surface2` | 3.31 | 3 | 2.57 |
+| `--accent-text` on `--page` | 6.88 | 4.5 | 6.78 |
+| `--accent-text` on `--surface` | 7.30 | 4.5 | 7.20 |
+| `--accent-text` on `--tint` | 6.29 | 4.5 | 6.40 |
+| `--btn-text` on `--btn-face` | 6.88 | 4.5 | 18.88 |
+| White on `--accent` (chips, accent button) | 4.60 | 4.5 | 4.30 |
+| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.5 | 4.88 |
+| `--ok-text` on `--ok-tint` | 4.62 | 4.5 | 3.32 |
+| `--ok-text` on `--page` | 4.73 | 4.5 | 3.45 |
+| `--warn-text` on `--warn-tint` | 4.71 | 4.5 | 2.93 |
+| `--warn-text` on `--page` | 4.75 | 4.5 | 3.00 |
+| `--warn-on` on `--warn` | 5.60 | 4.5 | 5.60 |
+| `--ok-on` on `--ok` | 6.97 | 4.5 | 2.13 |
+| `--danger` on `--surface` | 5.18 | 4.5 | 5.26 |
+| `--danger` on `--page` | 4.87 | 4.5 | 4.95 |
+| `--accent` on `--surface` (focus ring) | 4.53 | 3 | 4.30 |
+| `--accent` on `--tint` (selected row border) | 3.90 | 3 | 3.82 |
+| `--m-hi` on `--surface` | 7.30 | 3 | 4.30 |
+| `--m-mid` on `--surface` | 3.31 | 3 | 1.90 |
+| `--m-mid` on `--page` | 3.12 | 3 | 1.79 |
+| `--m-hi` against `--m-mid` | 2.20 | (gap) | 2.27 |
+| `--m-mid` against `--m-lo` | 2.31 | (gap) | 1.51 |
+| `--streak` on `--page` (the dot, the day rings) | 3.11 | 3 | 2.06 |
+| `--streak` on `--surface` | 3.30 | 3 | 2.18 |
+| White check on a `--streak` disc | 3.36 | 3 | 2.18 |
+| White mark on a mastered path node | 7.42 | 3 | 4.30 |
+| White mark on a learning path node | 3.37 | 3 | 1.90 |
+
+Two pairs still fall short, and both need a component change rather than a
+token:
+
+1. **The stat tile's "right" strip.** `StatTile` frames the `ok` tile in
+   `--ok-text` and writes the black `--on-tone` label on it. Darkening
+   `--ok-text` so the answer text passes brings black on it to 4.11:1. No
+   green can do both jobs over a visible tint, so the reading text won. The
+   fix is for `StatTile` to frame that tile in `--ok` (black on it is 9.9:1).
+2. **Today's day letter in the streak strip** is 11px `--streak` text, 3.30:1
+   on the card. That is better than orange (2.18:1) but under 4.5:1; it sits
+   next to the ring that carries the same meaning.
+
+### The primary button
+
+The pill is the landing page's brand button: teal face, navy lip, cream
+label (6.88:1). The sign-in page already presses it, so the app pressing the
+same button makes the two feel like one product, and a black pill on cream
+reads as Brilliant rather than Gnosia. The accent button stays distinct from
+it: mid teal over a deep teal lip, white label.
+
+### The mastery ramp
+
+Mastered is the deep brand teal, learning a soft teal, untouched a warm
+grey. The three are stepped by lightness so a reader who cannot tell hues
+apart still can: L* 36.3, 58.2 and 85.5, gaps of 22.0 and 27.3, luminance
+ratios of 2.20 and 2.31. `:root` has 2.27 and 1.51, so the bottom step is
+wider than before. Learning cannot be paler than it is and still clear 3:1 on
+the card, which is why it reads as soft rather than pale.
+
+Against the green verdict colour the ramp is apart in both lightness and
+hue. Simulated for deuteranopia (Machado 2009, full severity), `--m-hi` and
+`--m-mid` become slate blue-greys (`#4c5261`, `#838899`) while `--ok` becomes
+an olive (`#bdad60`): ΔE 62 and 53, L* gaps of 36 and 14. The one close pair
+is the gold streak against the green `--ok` under deuteranopia (ΔE 15, where
+orange was 35); they never share a component, and the streak always carries
+a label or a check.
+
+### What did not change
+
+The signal colours keep their `:root` hues: `--ok`, `--ok-lip` and
+`--ok-tint` green, `--warn`, `--warn-lip` and `--warn-tint` yellow, `--danger`
+red, `--violet`, and the black `--on-tone`. Right, not quite and wrong have to
+mean the same thing in every theme, and they have to stay unmistakable beside
+teal and gold, so they are kept as saturated as the kit drew them. Only three
+labels moved, each because it was under 4.5:1: `--ok-text` and `--warn-text`
+darkened just far enough within their own hue, and `--ok-on`, the label on a
+green face, became the dark green `.dark` already uses. The `--brand-*` tokens
+are not redefined by `.gnosia`; their `:root` values are the light ones, which
+is what this theme wants.
+
 ## What the landing page may claim
 
 Every line on `/` maps to something the product does today. Keep it that way

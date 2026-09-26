@@ -1,4 +1,4 @@
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
 import { writePreference } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
@@ -69,11 +69,12 @@ export const POST = handler(
   },
 );
 
-function theme(value: unknown): "light" | "dark" {
-  if (value !== "light" && value !== "dark") {
-    throw new BadRequest(`"value" must be "light" or "dark".`);
+function theme(value: unknown): ThemeMode {
+  const mode = asThemeMode(value);
+  if (mode === null) {
+    throw new BadRequest(`"value" must be one of ${THEME_MODES.map((m) => `"${m}"`).join(", ")}.`);
   }
-  return value;
+  return mode;
 }
 
 function lastVisited(value: unknown): {

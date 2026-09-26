@@ -49,6 +49,13 @@ light on `:root` and dark on `.dark` (the cookie-driven class on `<html>`).
 The values and where each came from are the token table in DESIGN.md and
 `TOKENS` in [kit/hifi.py](kit/hifi.py).
 
+**Three palettes.** `:root` is light, `.dark` is dark and `.gnosia` is the
+brand's light theme, each selected by the theme class on `<html>`. A
+component never branches on the class or writes a `.gnosia` selector for a
+colour: it reads tokens, and the class decides what they resolve to. `.gnosia` redefines only the tokens that differ from
+`:root`; its values, the reason for each and the contrast table are in
+[BRAND.md](BRAND.md#the-gnosia-theme-inside-the-app).
+
 | Group | Names |
 | --- | --- |
 | Grounds | `--page`, `--surface`, `--surface2`, `--tint` |
@@ -169,6 +176,19 @@ layout holds only the document, the fonts and the theme class. Its client parts 
   to the bottom.
 - **Store banner** under the bar when the database is unreachable or a
   write failed, as before.
+
+**Four appearance modes, two classes.** The theme cookie and the `theme`
+preference hold one of `light`, `gnosia`, `dark`, `system`
+(`THEME_MODES` in `packages/schema/src/shared.ts`). `<html>` carries `dark`
+for the dark palette and `gnosia` for the brand palette; the original light
+palette is the absence of both. `system` is rendered light by the server with
+`data-theme="system"`, and an inline script at the top of `<body>` adds
+`dark` before paint when the device prefers it; `LearnerProvider` then
+follows `prefers-color-scheme` changes while the page is open. The control is
+`ThemeSwitch` (`apps/web/src/components/ThemeSwitch.tsx`), a four-segment
+radio group used small in the avatar menu and full size on Settings. A
+component never branches on the class: it reads tokens, and the palettes are
+in `globals.css` (`:root`, `.dark`, `.gnosia`).
 
 **A page picks its layout with `data-layout` on its root element.** The
 shell reads it with `has-*`, so no prop or context crosses the server and

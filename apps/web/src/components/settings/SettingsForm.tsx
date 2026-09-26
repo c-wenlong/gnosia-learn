@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
@@ -19,7 +20,6 @@ import {
   type TutorStyle,
 } from "@/lib/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
-import type { ThemeMode } from "@/lib/types";
 
 /**
  * The Settings page's three cards (hi-fi 12). Each select saves on change
@@ -27,8 +27,9 @@ import type { ThemeMode } from "@/lib/types";
  *
  * Saving the target or the leeway calls `router.refresh()`: the top bar's
  * pills are computed by the root layout, which Next keeps mounted, so without
- * it the pill would still show the old target. The theme goes through the
- * provider's `setThemeMode`, which also writes the cookie the layout reads.
+ * it the pill would still show the old target. The theme is `ThemeSwitch`,
+ * which goes through the provider's `setThemeMode` and so also writes the
+ * cookie the layout reads.
  */
 
 type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
@@ -93,7 +94,6 @@ export function SettingsForm({
   topicIds: string[];
 }) {
   const router = useRouter();
-  const { state, setThemeMode } = useLearner();
   const refresh = () => router.refresh();
 
   const target = usePreference<DailyTarget>(PREFERENCE_KEYS.dailyTarget, settings.target, refresh);
@@ -146,13 +146,8 @@ export function SettingsForm({
       </Card>
 
       <Card title="Appearance and tutor">
-        <Field label="Theme">
-          {(id) => (
-            <Select id={id} value={state.theme} onChange={(v) => setThemeMode(v as ThemeMode)}>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </Select>
-          )}
+        <Field label="Theme" note="Gnosia is the brand palette as a light theme. System follows your device between Light and Dark.">
+          {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
         </Field>
         <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
           {(id) => (
@@ -221,7 +216,7 @@ function Field({
   return (
     <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
       <div className="flex flex-col gap-0.5 md:w-[320px] md:shrink-0">
-        <label htmlFor={id} className="text-[14px] font-medium text-text">
+        <label id={`${id}-label`} htmlFor={id} className="text-[14px] font-medium text-text">
           {label}
         </label>
         {note !== undefined && <p className="text-[12px] text-text2">{note}</p>}
