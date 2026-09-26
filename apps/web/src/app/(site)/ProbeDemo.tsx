@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 
@@ -26,6 +26,21 @@ export function ProbeDemo() {
   const right = picked === CORRECT;
   const p = !answered ? BEFORE : right ? AFTER_RIGHT : AFTER_WRONG;
 
+  // Answering disables the choices, so focus would fall to the page: move it
+  // to "Try again", and back to the first choice on a retry. `moved` keeps the
+  // first render from taking focus away from wherever the visitor is.
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const firstRef = useRef<HTMLButtonElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (!moved.current) return;
+    (answered ? retryRef : firstRef).current?.focus();
+  }, [answered]);
+  const choose = (i: number | null) => {
+    moved.current = true;
+    setPicked(i);
+  };
+
   return (
     <div className="gnosia-paper relative rounded-[28px] p-6 text-left md:p-7">
       <p className="flex items-center justify-between gap-3 text-[12px] font-semibold tracking-[0.16em] text-brand-mist uppercase">
@@ -43,11 +58,12 @@ export function ProbeDemo() {
             <li key={c}>
               <button
                 type="button"
+                ref={i === 0 ? firstRef : undefined}
                 aria-pressed={isPicked}
-                aria-disabled={answered}
-                onClick={() => !answered && setPicked(i)}
+                disabled={answered}
+                onClick={() => choose(i)}
                 className={cx(
-                  "flex w-full items-center aria-disabled:cursor-default justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-[15px] font-medium transition-colors duration-150",
+                  "flex w-full items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-[15px] font-medium transition-colors duration-150",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-teal",
                   !answered && "border-brand-ink/12 text-brand-ink hover:border-brand-teal/60 hover:bg-brand-teal/5",
                   answered && !showRight && !showWrong && "border-brand-ink/8 text-brand-mist",
@@ -80,13 +96,18 @@ export function ProbeDemo() {
         </span>
         <p aria-live="polite" className="mt-3 min-h-[2.75rem] text-[14px] leading-snug text-brand-mist">
           {!answered && "Pick an answer. Every answer is evidence."}
-          {answered && right && "Right. The estimate rises, and the next lesson can build on it."}
-          {answered && !right && "Not quite: it gives probabilities that sum to one. The estimate drops, so softmax stays on your list."}
+          {answered &&
+            right &&
+            `Right. The estimate rises to ${AFTER_RIGHT.toFixed(2)}, and the next lesson can build on it.`}
+          {answered &&
+            !right &&
+            `Not quite: it gives probabilities that sum to one. The estimate drops to ${AFTER_WRONG.toFixed(2)}, so softmax stays on your list.`}
         </p>
         {answered && (
           <button
+            ref={retryRef}
             type="button"
-            onClick={() => setPicked(null)}
+            onClick={() => choose(null)}
             className={siteLink("mt-1 rounded-md text-[14px] font-semibold text-brand-teal underline-offset-4 hover:underline")}
           >
             Try again
