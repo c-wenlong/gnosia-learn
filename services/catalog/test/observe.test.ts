@@ -326,6 +326,72 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
       await expect(openTutorSession(scratch.db, { id: "done-1", now: NOW })).rejects.toThrow(/closed/);
     });
 
+    it("opens the session with the first answer, in one transaction with it", async () => {
+      const graph = fixtureGraph();
+      const open = { title: "Alpha", goal: "alpha" };
+      await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, session: "s-1", openSession: open, now: NOW });
+      await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, session: "s-1", openSession: open, now: later(1) });
+      expect((await readEvents(scratch.db)).map((e) => e.type)).toEqual(["session-start", "observation", "observation"]);
+      expect(await readSession(scratch.db, "s-1")).toMatchObject({ kind: "tutor", state: "running", title: "Alpha" });
+    });
+
+    it("leaves no session-start behind when the answer is refused", async () => {
+      await expect(
+        recordObservation(scratch.db, {
+          conceptId: "nope",
+          correct: true,
+          graph: fixtureGraph(),
+          session: "s-2",
+          openSession: {},
+          now: NOW,
+        }),
+      ).rejects.toThrow(StateError);
+      expect(await readEvents(scratch.db)).toEqual([]);
+      expect(await readSession(scratch.db, "s-2")).toBeUndefined();
+    });
+
+    it("refuses an answer into a closed session, but still answers its replay", async () => {
+      const graph = fixtureGraph();
+      const first = await recordObservation(scratch.db, {
+        conceptId: "alpha",
+        correct: true,
+        graph,
+        session: "s-3",
+        openSession: {},
+        now: NOW,
+        requestId: "q-1",
+      });
+      await closeTutorSession(scratch.db, "s-3");
+      await expect(
+        recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, session: "s-3", openSession: {}, requestId: "q-2" }),
+      ).rejects.toThrow(/closed/);
+      const replay = await recordObservation(scratch.db, {
+        conceptId: "alpha",
+        correct: true,
+        graph,
+        session: "s-3",
+        openSession: {},
+        requestId: "q-1",
+      });
+      expect(replay).toMatchObject({ replayed: true, pLAfter: first.pLAfter });
+      expect((await readEvents(scratch.db)).filter((e) => e.type === "observation")).toHaveLength(1);
+    });
+
+    it("orders a close and a first answer: the close counts the answer or the answer is refused", async () => {
+      const graph = fixtureGraph();
+      await openTutorSession(scratch.db, { id: "s-4", now: NOW });
+      const [answer, closed] = await Promise.allSettled([
+        recordObservation(scratch.db, { conceptId: "beta", correct: true, graph, session: "s-4", openSession: {}, now: later(1) }),
+        closeTutorSession(scratch.db, "s-4"),
+      ]);
+      expect(closed.status).toBe("fulfilled");
+      const counted = closed.status === "fulfilled" ? closed.value.answered : -1;
+      expect(counted).toBe(answer.status === "fulfilled" ? 1 : 0);
+      const types = (await readEvents(scratch.db)).map((e) => e.type);
+      expect(types.at(-1) === "session-close" || answer.status === "rejected").toBe(true);
+      expect(types.indexOf("session-close")).toBeGreaterThan(types.lastIndexOf("observation"));
+    });
+
     it("leaves chosen out of the event when the caller does not know it, as the CLI does", async () => {
       await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph: fixtureGraph(), now: NOW });
       expect(Object.keys((await readEvents(scratch.db))[0] ?? {})).not.toContain("chosen");

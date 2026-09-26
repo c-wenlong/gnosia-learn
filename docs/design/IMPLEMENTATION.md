@@ -382,15 +382,24 @@ write path is the part to read first.
 ```
 
 400 `BAD_REQUEST` (a malformed body, or a concept or session the catalog
-cannot take), 403 `ORIGIN_MISMATCH`, 429, 503 `STORE_UNAVAILABLE`. The page
-shows the verdict only once this answers, so the screen and the log cannot
-disagree; a failed write keeps its request id, so Check retries the same
-answer. `learn observe --json`'s `logged` is not in the answer: the markdown
+cannot take), 403 `ORIGIN_MISMATCH`, 429, 503 `STORE_UNAVAILABLE`. The first
+answer opens the session inside its own locked transaction
+(`recordObservation`'s `openSession`), so a refused answer leaves no
+`session-start`, and a close racing it either counts it or refuses it. The
+page shows the verdict only once this answers, so the screen and the log
+cannot disagree. Once Check is pressed the pick is fixed until the server
+answers: a failed write keeps its request id and its pick, and Try again
+resends both, so a response lost after the save is replayed with the verdict
+of the answer actually sent. `learn observe --json`'s `logged` is not in the answer: the markdown
 session log is the CLI's.
 
 `POST /api/learner/session/close` with `{ sessionId }` answers `{ session,
 closed, answered, correct, concepts }`; `closed: false` means it was already
-closed or never opened, and nothing was written.
+closed or never opened, and nothing was written. The page sends it on
+reaching the close screen (with one retry), and with `keepalive` when the
+learner leaves mid-session (Exit, Ask the tutor, a closed tab), so an
+answered session does not stay `running`. A tab that dies before either
+still leaves one running, as a `learn session start` never closed does.
 
 `POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
 avoid?: string[] }` answers `{ question, model, provider, providerLabel }`,

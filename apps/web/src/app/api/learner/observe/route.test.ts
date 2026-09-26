@@ -113,6 +113,12 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     expect(await state.readEvents(scratch.db)).toEqual([]);
   });
 
+  it("leaves no session behind when the first answer is refused", async () => {
+    expect((await send({ ...answer, conceptSlug: "delta" })).status).toBe(400);
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+    expect(await state.readSession(scratch.db, answer.sessionId)).toBeUndefined();
+  });
+
   it("records the answer as learn observe does, opening the session with it", async () => {
     const { status, body } = await send(answer);
     expect(status).toBe(200);

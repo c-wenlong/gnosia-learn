@@ -11,7 +11,7 @@ import {
 import { gradeFromOutcome, newCard, review as sm2 } from "../../../../scripts/learn/lib/schedule.mjs";
 import { StateError } from "./errors";
 import { appendEvent, toRecord } from "./events";
-import { ensureLearner, withLearnerLock } from "./learner";
+import { withLearnerLock } from "./learner";
 import { assertKnownConcepts, ensureEntry, propagateCorrect, readModel, writeModel } from "./mastery";
 import { readCards, readReviews, upsertReview, type ReviewCard } from "./review";
 import { endSession } from "./sessions";
@@ -63,6 +63,15 @@ export interface ObserveInput {
   chosen?: string | null;
   /** The session this answer belongs to; the row is created if nobody opened it. */
   session?: string | null;
+  /**
+   * Open `session` as a tutor session in the same transaction as the answer,
+   * or refuse the answer if it cannot be (a closed session, a studio one).
+   * The page sends this; the CLI does not, and keeps `appendEvent`'s
+   * create-on-first-reference. Doing both in one locked transaction is what
+   * keeps a refused answer from leaving a `session-start` behind, and a close
+   * racing the first answer from landing between the two.
+   */
+  openSession?: { title?: string | null; goal?: string | null };
   /** One clock for the event, the model's `lastSeen` and the card. */
   now?: Date;
   learnerId?: string;
@@ -157,9 +166,18 @@ export async function recordObservation(
   return withLearnerLock(db, learnerId, async (tx) => {
     // Inside the lock, so two copies of one request cannot both miss the
     // other: the second waits for the first to commit and then finds it.
+    // Before the session check, so a replay writes nothing and never fails.
     if (requestId !== undefined) {
       const seen = await replayOf(tx, learnerId, id, requestId);
       if (seen !== null) return seen;
+    }
+
+    // `closeTutorSession` takes the same lock, so a close is either wholly
+    // before this (and the session is refused as closed) or wholly after (and
+    // its `session-close` counts this answer).
+    const sessionId = input.session ?? null;
+    if (sessionId !== null && input.openSession !== undefined) {
+      await openInTransaction(tx, { id: sessionId, ...input.openSession, now, learnerId });
     }
 
     const model = await readModel(tx, learnerId);
@@ -313,50 +331,56 @@ export async function openTutorSession(
   db: CatalogDatabase,
   input: OpenSessionInput,
 ): Promise<{ id: string; created: boolean }> {
+  // Under the learner lock, like the answers and the close it orders against.
+  return withLearnerLock(db, input.learnerId ?? LOCAL_LEARNER_ID, (tx) => openInTransaction(tx, input));
+}
+
+/**
+ * The row and its `session-start`, or a refusal, inside the caller's
+ * transaction. Shared by `openTutorSession` and by `recordObservation` when
+ * the page asks it to open the session with the first answer.
+ */
+async function openInTransaction(
+  tx: CatalogDatabase,
+  input: OpenSessionInput,
+): Promise<{ id: string; created: boolean }> {
   const id = input.id.trim();
   if (id === "") throw new StateError("a session needs an id");
   const { now = new Date(), learnerId = LOCAL_LEARNER_ID } = input;
-  await ensureLearner(db, learnerId);
-  return db.transaction(async (tx) => {
-    const inserted = await tx
-      .insert(sessionTable)
-      .values({
-        id,
-        kind: "tutor",
-        learnerId,
-        state: "running",
-        title: input.title ?? null,
-        goal: input.goal ?? null,
-        startedAt: now,
-        metadata: {},
-      })
-      .onConflictDoNothing()
-      .returning({ id: sessionTable.id, learnerId: sessionTable.learnerId });
-    if (inserted.length === 0) {
-      const [existing] = await tx
-        .select({ kind: sessionTable.kind, learnerId: sessionTable.learnerId, state: sessionTable.state })
-        .from(sessionTable)
-        .where(eq(sessionTable.id, id))
-        .limit(1);
-      // An id is one session. A studio job's id, or another learner's, is not
-      // this learner's tutor session to write evidence into; and a closed one
-      // has already said which concepts it touched, so an answer arriving
-      // after it would contradict its own `session-close`.
-      if (existing !== undefined && (existing.kind !== "tutor" || existing.learnerId !== learnerId)) {
-        throw new StateError(`session "${id}" is not a tutor session of this learner.`);
-      }
-      if (existing !== undefined && existing.state !== "running") {
-        throw new StateError(`session "${id}" is ${existing.state}; start a new one.`);
-      }
-      return { id, created: false };
-    }
-    await appendEvent(
-      tx as CatalogDatabase,
-      { at: now.toISOString(), type: "session-start", session: id, goal: input.goal ?? null },
+  const inserted = await tx
+    .insert(sessionTable)
+    .values({
+      id,
+      kind: "tutor",
       learnerId,
-    );
-    return { id, created: true };
-  });
+      state: "running",
+      title: input.title ?? null,
+      goal: input.goal ?? null,
+      startedAt: now,
+      metadata: {},
+    })
+    .onConflictDoNothing()
+    .returning({ id: sessionTable.id });
+  if (inserted.length === 0) {
+    const [existing] = await tx
+      .select({ kind: sessionTable.kind, learnerId: sessionTable.learnerId, state: sessionTable.state })
+      .from(sessionTable)
+      .where(eq(sessionTable.id, id))
+      .limit(1);
+    // An id is one session. A studio job's id, or another learner's, is not
+    // this learner's tutor session to write evidence into; and a closed one
+    // has already said which concepts it touched, so an answer arriving
+    // after it would contradict its own `session-close`.
+    if (existing !== undefined && (existing.kind !== "tutor" || existing.learnerId !== learnerId)) {
+      throw new StateError(`session "${id}" is not a tutor session of this learner.`);
+    }
+    if (existing !== undefined && existing.state !== "running") {
+      throw new StateError(`session "${id}" is ${existing.state}; start a new one.`);
+    }
+    return { id, created: false };
+  }
+  await appendEvent(tx, { at: now.toISOString(), type: "session-start", session: id, goal: input.goal ?? null }, learnerId);
+  return { id, created: true };
 }
 
 export interface CloseSessionResult {

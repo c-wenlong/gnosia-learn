@@ -1,4 +1,4 @@
-import { openTutorSession, readConceptGraph, recordObservation } from "@self-learn/catalog/state";
+import { readConceptGraph, recordObservation } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
@@ -26,8 +26,9 @@ import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource
  * (`readConceptGraph`), the one every page's frontier is computed from.
  *
  * `sessionId` names the session the answer belongs to. The first answer opens
- * it (`openTutorSession`: the row and one `session-start` event), so a visit
- * that answers nothing leaves no row behind; later answers find it open.
+ * it (the row and one `session-start` event) inside the same locked
+ * transaction as the answer, so a visit that answers nothing leaves no row
+ * behind, a refused answer leaves no start, and a closed session refuses.
  *
  * `requestId` is required and names this one answer. The page makes one per
  * answer and resends it on a retry, so an answer that was saved but whose
@@ -98,16 +99,6 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
   const graph = await readConceptGraph(db);
   const titleOf = (slug: string) => (graph.nodes.get(slug) as { title?: string } | undefined)?.title ?? slug;
 
-  if (input.sessionId !== null) {
-    // Before the answer, so the answer's event names a session that already
-    // has its start. Idempotent, and refuses an id that is not a tutor session.
-    await openTutorSession(db, {
-      id: input.sessionId,
-      title: titleOf(input.conceptSlug),
-      goal: input.conceptSlug,
-    });
-  }
-
   const recorded = await recordObservation(db, {
     conceptId: input.conceptSlug,
     correct: input.correct,
@@ -117,6 +108,10 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
     answer: input.answer,
     chosen: input.chosen,
     session: input.sessionId,
+    // The first answer opens the session, in the answer's own transaction:
+    // a refused answer leaves no `session-start`, and a closed session (or a
+    // studio one) refuses the answer. Idempotent for every later answer.
+    openSession: input.sessionId === null ? undefined : { title: titleOf(input.conceptSlug), goal: input.conceptSlug },
     requestId: input.requestId,
   });
 

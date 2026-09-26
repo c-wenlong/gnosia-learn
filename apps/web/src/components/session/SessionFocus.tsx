@@ -107,12 +107,21 @@ export function SessionFocus({
   const [error, setError] = useState<string | null>(null);
   const [startedAt] = useState(() => Date.now());
   const [closedAt, setClosedAt] = useState<number | null>(null);
+  /**
+   * A pick that was sent but not confirmed, per step. Once Check is pressed
+   * the choice is fixed until the server answers: a retry resends the same
+   * request id, and a request id stands for one answer, so letting the
+   * learner change the pick in between would pair the saved verdict with an
+   * option they never sent.
+   */
+  const [sent, setSent] = useState<Record<number, number | null>>({});
 
   // Refs, not state, for what a handler must see before React re-renders.
   const inFlight = useRef(false);
   const requested = useRef(new Set<number>());
-  const requestIds = useRef<Record<number, string>>({});
+  const attempts = useRef<Record<number, { requestId: string; picked: number | null }>>({});
   const sessionId = useRef<string | null>(null);
+  const closed = useRef(false);
   const feedbackRef = useRef<HTMLDivElement>(null);
 
   const step = plan[index];
@@ -170,14 +179,17 @@ export function SessionFocus({
   const answered = graded[index];
 
   const grade = useCallback(
-    async (picked: number | null) => {
+    async (choice: number | null) => {
       if (question === null || step === undefined || inFlight.current || graded[index] !== undefined) return;
       inFlight.current = true;
       setPending(true);
       setError(null);
+      // The first attempt fixes the pick; a retry sends that pick again.
+      const attempt = (attempts.current[index] ??= { requestId: randomToken(), picked: choice });
+      const picked = attempt.picked;
+      setSent((prev) => (index in prev ? prev : { ...prev, [index]: picked }));
       const correct = picked !== null && picked === question.correct;
       sessionId.current ??= newSessionId(slug, new Date(), randomToken());
-      requestIds.current[index] ??= randomToken();
       try {
         const res = await fetch("/api/learner/observe", {
           method: "POST",
@@ -188,7 +200,7 @@ export function SessionFocus({
             // Asked after this session taught it is a teaching check; a probe,
             // and a Quiz me with no teaching, only measure.
             source: step.kind === "check" && mode === "learn" ? "teach" : "probe",
-            requestId: requestIds.current[index],
+            requestId: attempt.requestId,
             sessionId: sessionId.current,
             question: question.prompt,
             // `answer` is the right one, as `learn observe --answer` means it;
@@ -199,7 +211,7 @@ export function SessionFocus({
         });
         const body = (await res.json().catch(() => null)) as ObserveReply | null;
         if (!res.ok || body?.ok !== true || body.result === undefined) {
-          setError(body?.error ?? `Not saved (${res.status}). Press Check to try again.`);
+          setError(body?.error ?? `Not saved (${res.status}). Press Try again; your pick is kept.`);
           return;
         }
         const recorded = body.result;
@@ -207,7 +219,7 @@ export function SessionFocus({
         setGraded((prev) => ({ ...prev, [index]: { picked, correct: recorded.correct, recorded } }));
         router.refresh();
       } catch {
-        setError("Not saved: the server could not be reached. Press Check to try again.");
+        setError("Not saved: the server could not be reached. Press Try again; your pick is kept.");
       } finally {
         inFlight.current = false;
         setPending(false);
@@ -215,6 +227,49 @@ export function SessionFocus({
     },
     [question, step, graded, index, slug, mode, router],
   );
+
+  /**
+   * Close the session, once. Awaited with one retry when the learner reaches
+   * the close screen; fired with `keepalive` when they leave mid-session
+   * (Exit, Ask the tutor, a closed tab), so answered sessions do not stay
+   * `running`. A session no answer opened has nothing to close.
+   */
+  const closeSession = useCallback(async (leaving: boolean): Promise<void> => {
+    const id = sessionId.current;
+    if (id === null || closed.current) return;
+    const send = () =>
+      fetch("/api/learner/session/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+        keepalive: leaving,
+      });
+    if (leaving) {
+      closed.current = true;
+      void send().catch(() => undefined);
+      return;
+    }
+    for (let attempt = 0; attempt < 2 && !closed.current; attempt += 1) {
+      try {
+        const res = await send();
+        if (res.ok) closed.current = true;
+      } catch {
+        // Retried once below; a close that never lands leaves a running row,
+        // never lost evidence, since every answer is already recorded.
+      }
+      if (!closed.current && attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+  }, []);
+
+  // Leaving before the close screen still closes what was answered.
+  useEffect(() => {
+    const onHide = () => void closeSession(true);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      void closeSession(true);
+    };
+  }, [closeSession]);
 
   const advance = useCallback(() => {
     const to = index + 1;
@@ -225,21 +280,10 @@ export function SessionFocus({
     setError(null);
     if (plan[to]?.kind === "close") {
       setClosedAt(Date.now());
-      const id = sessionId.current;
-      if (id !== null) {
-        // Best effort: the answers are already recorded, and a close that did
-        // not land leaves a running row, not lost evidence.
-        void fetch("/api/learner/session/close", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: id }),
-        })
-          .then(() => router.refresh())
-          .catch(() => undefined);
-      }
+      void closeSession(false).then(() => router.refresh());
     }
     window.scrollTo({ top: 0 });
-  }, [index, plan, router]);
+  }, [index, plan, router, closeSession]);
 
   // On a phone the verdict lands under the options; bring it up.
   useEffect(() => {
@@ -259,10 +303,10 @@ export function SessionFocus({
       const enter = event.key === "Enter" && !onControl;
 
       if (question !== null && answered === undefined) {
-        if (number !== null && number < question.choices.length) {
+        if (number !== null && number < question.choices.length && !(index in sent)) {
           event.preventDefault();
           setSelected(number);
-        } else if (enter && selected !== null) {
+        } else if (enter && (selected !== null || index in sent)) {
           event.preventDefault();
           void grade(selected);
         }
@@ -275,7 +319,7 @@ export function SessionFocus({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, question, answered, selected, pending, current.status, grade, advance]);
+  }, [step, question, answered, selected, pending, current.status, grade, advance, index, sent]);
 
   if (step === undefined) return null;
 
@@ -345,9 +389,9 @@ export function SessionFocus({
           {question !== null && (
             <Question
               question={question}
-              selected={selected}
+              selected={index in sent ? (sent[index] ?? null) : selected}
               answered={answered}
-              pending={pending}
+              locked={pending || index in sent}
               onSelect={setSelected}
             />
           )}
@@ -386,23 +430,23 @@ export function SessionFocus({
             ) : question !== null ? (
               <div className="flex items-center gap-3">
                 <span className="md:hidden">
-                  <Button variant="secondary" size="sm" onClick={() => void grade(null)} disabled={pending}>
+                  <Button variant="secondary" size="sm" onClick={() => void grade(null)} disabled={pending || index in sent}>
                     Don&apos;t know
                   </Button>
                 </span>
                 <span className="hidden md:inline-flex">
-                  <Button variant="secondary" onClick={() => void grade(null)} disabled={pending}>
+                  <Button variant="secondary" onClick={() => void grade(null)} disabled={pending || index in sent}>
                     I don&apos;t know
                   </Button>
                 </span>
                 <span className="flex-1" />
                 <Button
-                  onClick={() => selected !== null && void grade(selected)}
-                  disabled={selected === null || pending}
+                  onClick={() => (index in sent || selected !== null) && void grade(selected)}
+                  disabled={(selected === null && !(index in sent)) || pending}
                   aria-keyshortcuts="Enter"
                   className="min-w-32 md:min-w-40"
                 >
-                  {pending ? "Saving…" : "Check"}
+                  {pending ? "Saving…" : index in sent ? "Try again" : "Check"}
                 </Button>
               </div>
             ) : current.status === "none" ? (
@@ -426,13 +470,14 @@ function Question({
   question,
   selected,
   answered,
-  pending,
+  locked,
   onSelect,
 }: {
   question: SessionQuestion;
   selected: number | null;
   answered: Graded | undefined;
-  pending: boolean;
+  /** Saving, or sent and waiting to be retried: the pick cannot change. */
+  locked: boolean;
   onSelect: (i: number) => void;
 }) {
   const stateOf = (i: number): ChoiceState => {
@@ -452,7 +497,7 @@ function Question({
             key={`${i}-${choice}`}
             shortcut={String(i + 1)}
             state={stateOf(i)}
-            disabled={answered !== undefined || pending}
+            disabled={answered !== undefined || locked}
             onClick={() => onSelect(i)}
           >
             {choice}
