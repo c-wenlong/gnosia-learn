@@ -60,7 +60,7 @@ export default async function ConceptWorkspacePage({ params }: Params) {
   const access = await loadFileAccess();
   const assets: StudioAsset[] = w.assets
     .filter((a) => !isCompanionKind(a.kind))
-    .map((a) => ({ ...a, thumbnail: thumbnailFor({ ...a, topics: [] }, access) }));
+    .map((a) => ({ ...a, thumbnail: thumbnailFor(a, access) }));
 
   const embedId = (name: string) => `diagram:learn/assets/${name}`;
   const selfLearn = accessFor(access, "self-learn");
