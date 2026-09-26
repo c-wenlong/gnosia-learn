@@ -122,6 +122,8 @@ export function SessionFocus({
   const attempts = useRef<Record<number, { requestId: string; picked: number | null }>>({});
   const sessionId = useRef<string | null>(null);
   const closed = useRef(false);
+  /** The answer being saved, if any: a close on the way out waits for it. */
+  const saving = useRef<Promise<unknown> | null>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
 
   const step = plan[index];
@@ -191,7 +193,7 @@ export function SessionFocus({
       const correct = picked !== null && picked === question.correct;
       sessionId.current ??= newSessionId(slug, new Date(), randomToken());
       try {
-        const res = await fetch("/api/learner/observe", {
+        const request = fetch("/api/learner/observe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -208,7 +210,12 @@ export function SessionFocus({
             answer: question.choices[question.correct] ?? null,
             chosen: picked === null ? null : (question.choices[picked] ?? null),
           }),
+          // Survives the page going away, so an answer sent just before the
+          // learner leaves still lands.
+          keepalive: true,
         });
+        saving.current = request;
+        const res = await request;
         const body = (await res.json().catch(() => null)) as ObserveReply | null;
         if (!res.ok || body?.ok !== true || body.result === undefined) {
           setError(body?.error ?? `Not saved (${res.status}). Press Try again; your pick is kept.`);
@@ -221,6 +228,7 @@ export function SessionFocus({
       } catch {
         setError("Not saved: the server could not be reached. Press Try again; your pick is kept.");
       } finally {
+        saving.current = null;
         inFlight.current = false;
         setPending(false);
       }
@@ -246,7 +254,12 @@ export function SessionFocus({
       });
     if (leaving) {
       closed.current = true;
-      void send().catch(() => undefined);
+      // An answer still saving goes first. Sent now, the close could reach
+      // the server ahead of it: a first answer would then open a session
+      // nothing closes, and a later one would be refused by a closed session
+      // and lost. Waiting keeps both in order.
+      const pending = saving.current;
+      void (pending === null ? send() : pending.catch(() => undefined).then(send)).catch(() => undefined);
       return;
     }
     for (let attempt = 0; attempt < 2 && !closed.current; attempt += 1) {

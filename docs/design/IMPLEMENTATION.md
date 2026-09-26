@@ -398,7 +398,9 @@ closed, answered, correct, concepts }`; `closed: false` means it was already
 closed or never opened, and nothing was written. The page sends it on
 reaching the close screen (with one retry), and with `keepalive` when the
 learner leaves mid-session (Exit, Ask the tutor, a closed tab), so an
-answered session does not stay `running`. A tab that dies before either
+answered session does not stay `running`. A close on the way out waits for an
+answer still saving (itself sent with `keepalive`), so it can never reach the
+server first and have that answer refused by a closed session. A tab that dies before either
 still leaves one running, as a `learn session start` never closed does.
 
 `POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
