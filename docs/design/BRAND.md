@@ -229,7 +229,7 @@ insight. Not as a bullet or an ornament.
 | `.gnosia-glass` | The sign-in card |
 | Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
 | The world art (`public/banner.png`) | The landing page's closing band |
-| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click writes the app's theme cookie, which the signed-in app overrides with the owner's saved preference |
+| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click writes the app's theme cookie, so it is this browser's theme in the app too (the cookie wins over the saved row there); the saved row and other devices are untouched |
 | Icons, social card, banner | See [The source art](#the-source-art) |
 
 ## The Gnosia theme inside the app

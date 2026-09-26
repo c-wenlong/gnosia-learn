@@ -12,8 +12,10 @@ import { siteLink } from "./site";
  * Light is the default: a visitor with no theme cookie is served light by the
  * root layout, since light carries the brighter mood the landing page wants.
  * A click writes the same cookie the app uses, so the choice survives a
- * reload. It cannot fight the owner's own setting: once signed in,
- * `LearnerProvider` applies the saved preference and rewrites the cookie.
+ * reload and is this browser's theme everywhere: the signed-in layout lets
+ * the cookie win over the saved `preference` row ("what the browser last
+ * chose"), so switching here also switches the app on this browser. The row,
+ * and so every other device, is left alone; only Settings writes it.
  *
  * Only two states here. `gnosia` looks the same as light on these pages (the
  * brand tokens are not redefined by it) and `system` resolves to one of the
