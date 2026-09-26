@@ -118,7 +118,9 @@ export function WorkspacePanels({
             title="Tutor"
             actions={tutorAside}
             className="h-full max-[899px]:min-h-[70dvh]"
-            bodyClassName="gap-3.5"
+            // A last resort for a window too short for even the shrunk thread,
+            // the chips and the composer: the body scrolls rather than clips.
+            bodyClassName="gap-3.5 min-[900px]:overflow-y-auto"
           >
             {tutor}
           </Panel>
