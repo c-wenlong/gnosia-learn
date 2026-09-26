@@ -529,8 +529,8 @@ catalog grows by an order of magnitude.
   open in Playwright's eyes, so the course path (whose Continue and Guidebook
   point at `/learn/<concept>` before 1c and 1d land) timed out at 30s. A copy
   of the tool waiting for `load` plus a second works; the real fix is the
-  routes existing. The session route exists since 1d, so Teach me and Quiz me
-  are prefetched again; `prefetch={false}` is the stopgap for the next route
+  routes existing. The session route exists since 1d, so Teach me, Quiz me
+  and Today's Continue are prefetched again; `prefetch={false}` is the stopgap for the next route
   that is linked before it lands.
 - **A session's next concept keeps the old one's state without a key.**
   Keep going moves from `/learn/a/session` to `/learn/b/session`, the same
