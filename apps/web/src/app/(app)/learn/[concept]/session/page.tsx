@@ -33,6 +33,11 @@ import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
  *
  * `?mode=check` (Quiz me) skips the probe and the teaching and asks the note's
  * checks.
+ *
+ * A question step nothing can fill (no check in the note, no model configured)
+ * is dropped here, on the server, rather than walked through as an empty card:
+ * Teach me teaches and closes, Quiz me opens on the close screen, and both say
+ * why.
  */
 
 type Props = {
@@ -107,6 +112,7 @@ export default async function SessionPage({ params, searchParams }: Props) {
         mode={mode}
         plan={data.plan}
         modelAvailable={data.modelAvailable}
+        nothingToAsk={data.nothingToAsk}
         teach={teach}
         asset={assetElement(data.asset, false)}
         assetCompact={assetElement(data.asset, true)}
