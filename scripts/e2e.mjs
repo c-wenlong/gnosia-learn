@@ -1,0 +1,664 @@
+// End-to-end smoke test: the built app, a throwaway copy of the database, and
+// headless Chromium walking the flows a person uses every day.
+//
+// usage: npm run e2e [-- --keep-db] [-- --headed]
+//
+// What it does, in order:
+//   1. Copies `self_learn` into `self_learn_e2e_<pid>_<time>` with `createdb -T`.
+//      Every flow below that grades (a review rating, a session answer, Mark
+//      watched, a settings change) writes real rows, and AGENTS.md is plain
+//      that anything which grades runs against a copy, never `self_learn`.
+//      The copy is dropped in `finally`, on a failure and on Ctrl-C too.
+//   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
+//      with a fixed test password and secret and with every provider key blank.
+//      It builds nothing: run `npm run build` first.
+//   3. Drives the app through playwright-core, one named step per flow, and
+//      screenshots a failing step into a directory under the OS temp dir.
+//   4. Fails the run on any step failure, any `console.error`, any uncaught page
+//      error and any response of 400 or more, except the 503 the agent routes
+//      are expected to answer with no provider key.
+//
+// Options:
+//   --keep-db    leave the copy behind and print its name, to look at afterwards
+//   --headed     show the browser instead of running headless
+//
+// Environment:
+//   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
+//   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
+//                           in this checkout is not installed
+//   CHROMIUM=<path>         the browser binary, when not in the Playwright cache
+//
+// Like docs/design/kit/shots.mjs it borrows playwright-core from the tldrawkc
+// submodule and the Chromium Playwright caches, so nothing is installed for it.
+// It writes nothing into the tracked tree: screenshots and the server log go
+// under os.tmpdir().
+//
+// Exit codes: 0 every step passed, 1 something failed, 2 a prerequisite is missing.
+import { spawn } from 'node:child_process';
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const WEB = join(ROOT, 'apps/web');
+
+const flags = new Set(process.argv.slice(2));
+const KEEP_DB = flags.delete('--keep-db');
+const HEADED = flags.delete('--headed');
+if (flags.size > 0) {
+  console.error(`unknown option: ${[...flags].join(' ')}\nusage: npm run e2e [-- --keep-db] [-- --headed]`);
+  process.exit(2);
+}
+
+/** Values the server is started with. Test values only; nothing real is typed anywhere. */
+const PASSWORD = 'e2e-smoke-owner-password';
+const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
+const TEMPLATE_DB = 'self_learn';
+// The pid and the start time, so a later run that happens to get the same pid
+// can never collide with (or drop) a copy an earlier run kept with --keep-db.
+const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
+
+// ---------------------------------------------------------------------------
+// Prerequisites. Each one names what is missing and how to get it, then exits 2.
+
+function missing(message) {
+  console.error(`e2e: ${message}`);
+  process.exit(2);
+}
+
+if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
+  missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
+}
+
+const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
+for (const tool of ['createdb', 'dropdb', 'psql', 'pg_dump']) {
+  if (!existsSync(join(PG_BIN, tool))) {
+    missing(`${tool} not found in ${PG_BIN}. Install Postgres 17 (brew install postgresql@17) or set PG_BIN to its bin directory.`);
+  }
+}
+
+const corePath = process.env.PLAYWRIGHT_CORE ?? join(ROOT, 'tools/tldrawkc/node_modules/playwright-core/index.mjs');
+if (!existsSync(corePath)) {
+  missing(
+    `playwright-core not found at ${corePath}. It comes from the tldrawkc submodule, not from this repo's dependencies: ` +
+      '`git submodule update --init tools/tldrawkc && (cd tools/tldrawkc && npm ci)`, or set PLAYWRIGHT_CORE to its index.mjs.',
+  );
+}
+
+/** Same lookup as docs/design/kit/shots.mjs: the newest Chromium in the Playwright cache. */
+function findChromium() {
+  if (process.env.CHROMIUM) return process.env.CHROMIUM;
+  const cache = join(homedir(), 'Library/Caches/ms-playwright');
+  const dir = existsSync(cache) ? readdirSync(cache).filter((d) => d.startsWith('chromium-')).sort().pop() : undefined;
+  if (!dir) return undefined; // let Playwright look for its own
+  return join(cache, dir, 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+}
+const chromiumPath = findChromium();
+if (chromiumPath !== undefined && !existsSync(chromiumPath)) {
+  missing(`Chromium not found at ${chromiumPath}. Run \`npx playwright install chromium\` inside tools/tldrawkc, or set CHROMIUM.`);
+}
+
+const { chromium } = await import(pathToFileURL(corePath).href);
+
+const OUT = mkdtempSync(join(tmpdir(), 'self-learn-e2e-'));
+const SERVER_LOG = join(OUT, 'server.log');
+console.log(`e2e: screenshots and the server log go to ${OUT}`);
+
+// ---------------------------------------------------------------------------
+// Cleanup. One idempotent teardown, reached from `finally` and from a signal,
+// so an interrupted run still stops the server and drops the copy.
+
+/**
+ * What a teardown has to undo. Each is recorded the moment it starts, not when
+ * it finishes, so a signal that lands mid-launch or mid-copy still finds it:
+ * `browser` is the launch promise, `copying` the copy's.
+ */
+const held = { browser: null, server: null, copying: null };
+let teardown = null;
+let interrupted = false;
+/** Why the teardown did not finish cleanly, if it did not. A leftover copy fails the run. */
+let teardownProblem = null;
+
+function cleanup() {
+  teardown ??= (async () => {
+    const browser = held.browser === null ? null : await held.browser.catch(() => null);
+    if (browser !== null) await browser.close().catch(() => {});
+    if (held.server !== null) await stopGroup(held.server);
+    if (held.copying !== null) {
+      // Let an in-flight createdb or dump finish first; a drop that ran ahead
+      // of it would find nothing and leave the finished copy behind.
+      await held.copying.catch(() => {});
+      if (KEEP_DB) {
+        console.log(`e2e: kept the database ${COPY_DB}. Drop it with: ${join(PG_BIN, 'dropdb')} ${COPY_DB}`);
+      } else {
+        // --force ends any connection still open, so a server that was slow to
+        // die cannot leave the copy behind.
+        const drop = await pg('dropdb', ['--if-exists', '--force', COPY_DB]);
+        if (drop.status === 0) console.log(`e2e: dropped ${COPY_DB}`);
+        else {
+          teardownProblem = `could not drop ${COPY_DB}: ${drop.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${COPY_DB}`;
+          console.error(`e2e: ${teardownProblem}`);
+        }
+      }
+    }
+  })();
+  return teardown;
+}
+
+// `on`, not `once`: Ctrl-C under `npm run` delivers SIGINT twice, once to the
+// whole foreground group and once more forwarded by npm, and with no listener
+// left the second one would kill this process halfway through the teardown.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    if (interrupted) return;
+    interrupted = true;
+    console.error(`\ne2e: ${signal}, cleaning up`);
+    void cleanup().finally(() => process.exit(130));
+  });
+}
+
+/** Called before starting anything new, so nothing is started after a teardown began. */
+function stopIfInterrupted() {
+  if (interrupted) throw new Error('interrupted');
+}
+
+/**
+ * Run a command and collect its output. `detached` puts it in a process group
+ * of its own, so a Ctrl-C meant for this script does not kill createdb halfway
+ * through; the handler above decides what stops, and in what order.
+ */
+function exec(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.stderr.on('data', (chunk) => (stderr += chunk));
+    child.once('error', (error) => resolve({ status: null, stdout, stderr: `${stderr}${error.message}` }));
+    child.once('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+const pg = (tool, args) => exec(join(PG_BIN, tool), args);
+
+/**
+ * `pg_dump from | psql into`, piped here rather than in a shell so both exit
+ * codes are checked: a shell pipeline reports only psql's, and a dump that died
+ * halfway would load as a quietly incomplete copy.
+ */
+function dumpInto(from, into) {
+  return new Promise((resolve) => {
+    const dump = spawn(join(PG_BIN, 'pg_dump'), ['--no-owner', from], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const load = spawn(join(PG_BIN, 'psql'), ['-q', '-v', 'ON_ERROR_STOP=1', '-d', into], {
+      detached: true,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    for (const child of [dump, load]) {
+      child.stderr.on('data', (chunk) => (stderr += chunk));
+      child.once('error', (error) => (stderr += `${error.message}\n`));
+    }
+    // psql exiting early closes the pipe under pg_dump; that exit code says why.
+    load.stdin.on('error', () => {});
+    dump.stdout.pipe(load.stdin);
+    const exited = (child) => new Promise((done) => child.once('close', (code) => done(code)));
+    void Promise.all([exited(dump), exited(load)]).then(([dumped, loaded]) =>
+      resolve({ ok: dumped === 0 && loaded === 0, stderr: `${stderr}pg_dump exited ${dumped}, psql exited ${loaded}` }),
+    );
+  });
+}
+
+/**
+ * Signal the server's whole process group and wait until nothing in it answers.
+ * The server is spawned `detached`, so it leads its own group; `kill(-pid)`
+ * reaches whatever it started too. services/studio/src/proc.ts explains why
+ * "told it to stop" is not the same as "it stopped".
+ */
+async function stopGroup(child) {
+  const alive = () => {
+    try {
+      process.kill(-child.pid, 0);
+      return true;
+    } catch (error) {
+      return error.code === 'EPERM';
+    }
+  };
+  const signal = (sig) => {
+    try {
+      process.kill(-child.pid, sig);
+    } catch {
+      /* already gone */
+    }
+  };
+  for (const sig of ['SIGTERM', 'SIGKILL']) {
+    signal(sig);
+    const until = Date.now() + 5_000;
+    while (alive() && Date.now() < until) await sleep(50);
+    if (!alive()) return;
+  }
+  teardownProblem = `the server's process group ${child.pid} survived SIGKILL`;
+  console.error(`e2e: ${teardownProblem}`);
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// ---------------------------------------------------------------------------
+// The database copy.
+
+async function createCopy() {
+  // No `catalog migrate` afterwards: a template copy carries the schema and the
+  // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
+  let made = await pg('createdb', ['-T', TEMPLATE_DB, COPY_DB]);
+  if (made.status !== 0 && /being accessed by other users/.test(made.stderr)) {
+    // `createdb -T` needs the template to have no other connections, and a dev
+    // server or another session holding `self_learn` open is ordinary. A dump
+    // into an empty database is slower and does not care.
+    console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`);
+    made = await pg('createdb', [COPY_DB]);
+    if (made.status === 0) {
+      const dump = await dumpInto(TEMPLATE_DB, COPY_DB);
+      if (!dump.ok) throw new Error(`copying ${TEMPLATE_DB} with pg_dump failed: ${dump.stderr.trim()}`);
+    }
+  }
+  if (made.status !== 0) {
+    throw new Error(`createdb ${COPY_DB} from ${TEMPLATE_DB} failed: ${made.stderr.trim()} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
+  }
+
+  // Make the review step deterministic: whatever the owner has already cleared,
+  // the earliest card in the copy is due now. `review` is a projection of the
+  // event log, and this is a throwaway copy, so rewriting one row is harmless.
+  const due = await pg('psql', [
+    '-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc',
+    `update review set due = now() - interval '1 minute'
+      where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
+  ]);
+  if (due.status !== 0) throw new Error(`could not mark a review due in the copy: ${due.stderr.trim()}`);
+}
+
+// ---------------------------------------------------------------------------
+// The server.
+
+/** A port nothing holds on either loopback address, since `localhost` may resolve to either. */
+async function freePort() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const port = await listenOnce(0, '127.0.0.1');
+    // In use on ::1 means try another; no IPv6 loopback at all (EADDRNOTAVAIL) is fine.
+    const clash = await listenOnce(port, '::1').then(() => false, (error) => error.code === 'EADDRINUSE');
+    if (!clash) return port;
+  }
+  throw new Error('could not find a free port on 127.0.0.1 and ::1');
+}
+
+function listenOnce(port, host) {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      const bound = server.address().port;
+      server.close(() => resolve(bound));
+    });
+  });
+}
+
+async function startServer(port) {
+  const env = {
+    ...process.env,
+    NODE_ENV: 'production',
+    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
+    OWNER_PASSWORD: PASSWORD,
+    AUTH_SECRET: SECRET,
+    ASSET_FILES_ENABLED: '1',
+    // Blank rather than unset: Next loads apps/web/.env.local and fills in any
+    // variable that is *undefined*, so deleting a key would let a real one back
+    // in. An empty string is defined, and the provider cascade treats it as absent.
+    NVIDIA_API_KEY: '',
+    GEMINI_API_KEY: '',
+    OPENROUTER_API_KEY: '',
+  };
+  delete env.__NEXT_PROCESSED_ENV;
+
+  stopIfInterrupted();
+  const log = openSync(SERVER_LOG, 'a');
+  // `next` directly, not `npm run start`: npm would be the process we hold and
+  // the server a grandchild. `detached` makes it a group leader for stopGroup.
+  const child = spawn(process.execPath, [join(ROOT, 'node_modules/next/dist/bin/next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
+    cwd: WEB,
+    env,
+    detached: true,
+    stdio: ['ignore', log, log],
+  });
+  closeSync(log);
+  held.server = child;
+
+  let exited = null;
+  child.once('exit', (code, signal) => {
+    exited = { code, signal };
+  });
+
+  // `localhost`, not 127.0.0.1, although the server binds the IPv4 loopback
+  // only: a route handler's `request.url` under `next start` always names
+  // `localhost`, so the sign-in and sign-out redirects land there, and a
+  // cookie set for 127.0.0.1 would not be sent to it.
+  const base = `http://localhost:${port}`;
+  const until = Date.now() + 60_000;
+  for (;;) {
+    if (exited) throw new Error(`next start exited (${exited.code ?? exited.signal}) before answering. Server log:\n${tail(SERVER_LOG)}`);
+    try {
+      const res = await fetch(`${base}/`, { redirect: 'manual' });
+      if (res.status === 200) return base;
+    } catch {
+      /* not listening yet */
+    }
+    if (Date.now() > until) throw new Error(`next start did not answer 200 on / within 60s. Server log:\n${tail(SERVER_LOG)}`);
+    await sleep(250);
+  }
+}
+
+function tail(file, lines = 30) {
+  try {
+    return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-lines).join('\n');
+  } catch {
+    return '(no log)';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Steps.
+
+const results = [];
+/** Console errors, page errors and bad responses, each tagged with the step it happened in. */
+const problems = [];
+let current = 'startup';
+
+async function step(name, page, fn) {
+  stopIfInterrupted();
+  current = name;
+  const started = Date.now();
+  try {
+    await fn();
+    results.push({ name, ok: true, ms: Date.now() - started });
+  } catch (error) {
+    const file = join(OUT, `${String(results.length + 1).padStart(2, '0')}-${name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
+    let shot = file;
+    await page.screenshot({ path: file, fullPage: true }).catch(() => {
+      shot = null;
+    });
+    // Playwright's first line says what timed out; its call log says what it was
+    // waiting for, which is the line that makes a failure readable.
+    const lines = String(error?.message ?? error).split('\n');
+    const waiting = lines.find((line) => /waiting for/.test(line))?.trim().replace(/^- /, '');
+    const message = waiting && waiting !== lines[0] ? `${lines[0]} (${waiting})` : lines[0];
+    results.push({ name, ok: false, ms: Date.now() - started, error: message, shot });
+  }
+}
+
+/**
+ * Wait until React has hydrated an element, then click it.
+ *
+ * A server-rendered button is visible and enabled before its `onClick` exists,
+ * and a click in that window does nothing at all, which is the classic flaky
+ * smoke test. React stamps a `__reactProps$…` key on every host node it has
+ * hydrated, so its presence is the moment the handler is attached. A React
+ * internal, but a stable one, and a smoke test that waits on a guess is worse.
+ */
+async function hydrated(page, locator) {
+  await locator.waitFor({ state: 'visible' });
+  const handle = await locator.elementHandle();
+  await page.waitForFunction((el) => Object.keys(el).some((k) => k.startsWith('__reactProps')), handle);
+  await handle.dispose();
+  return locator;
+}
+async function clickHydrated(page, locator) {
+  await (await hydrated(page, locator)).click();
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function progressValue(bar) {
+  return (await bar.getAttribute('aria-valuenow')) ?? '';
+}
+
+async function run() {
+  held.copying = createCopy();
+  await held.copying;
+  console.log(`e2e: copied ${TEMPLATE_DB} to ${COPY_DB}`);
+  const base = await startServer(await freePort());
+  console.log(`e2e: next start is answering on ${base}`);
+
+  stopIfInterrupted();
+  held.browser = chromium.launch({
+    executablePath: chromiumPath,
+    headless: !HEADED,
+    // Signals are handled above, so the browser closes as part of one teardown.
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
+  });
+  const browser = await held.browser;
+  // Wide enough that the concept workspace shows all three panels side by side.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'light' });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(30_000);
+
+  const isExpectedAgent503 = (url, status) => status === 503 && new URL(url).pathname.startsWith('/api/agent/');
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    const where = message.location()?.url ?? '';
+    // Chromium logs every failed resource load as a console error; the agent
+    // routes' 503 is the one failure this run expects.
+    if (/Failed to load resource: the server responded with a status of 503/.test(message.text()) && where && isExpectedAgent503(where, 503)) return;
+    problems.push({ step: current, what: `console.error: ${message.text().slice(0, 200)}` });
+  });
+  page.on('pageerror', (error) => problems.push({ step: current, what: `page error: ${error.message.slice(0, 200)}` }));
+  page.on('response', (response) => {
+    const status = response.status();
+    if (status < 400 || isExpectedAgent503(response.url(), status)) return;
+    problems.push({ step: current, what: `${status} ${response.request().method()} ${response.url().replace(base, '')}` });
+  });
+
+  const go = (path) => page.goto(base + path, { waitUntil: 'load' });
+  const main = page.getByRole('main');
+  const state = { concept: null };
+
+  await step('landing: Open your book goes to /sign-in', page, async () => {
+    await go('/');
+    await page.getByRole('link', { name: 'Open your book' }).first().click();
+    await page.waitForURL(`${base}/sign-in`);
+    await page.getByRole('heading', { name: 'Open your book' }).waitFor();
+  });
+
+  await step('sign-in: a wrong password shows the error', page, async () => {
+    if (!page.url().startsWith(`${base}/sign-in`)) await go('/sign-in');
+    await page.getByLabel('Password').fill('not-the-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(/\/sign-in\?.*error=password/);
+    // Scoped to the form: Next's route announcer is a second role=alert on the page.
+    await page.locator('form').getByRole('alert').getByText('That is not the owner password.').waitFor();
+  });
+
+  await step('sign-in: the right password lands on /today', page, async () => {
+    if (!page.url().startsWith(`${base}/sign-in`)) await go('/sign-in');
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(`${base}/today`);
+  });
+
+  await step('review: Start review, reveal, rate Good, move on', page, async () => {
+    await go('/today');
+    await page.getByRole('link', { name: /^Start review/ }).click();
+    await page.waitForURL(`${base}/review`);
+    const bar = page.getByRole('progressbar', { name: 'Review progress' });
+    await bar.waitFor();
+    const before = await progressValue(bar);
+
+    // A recall card reveals with Show answer; a check card reveals by answering.
+    const show = page.getByRole('button', { name: 'Show answer' });
+    const options = page.getByRole('group', { name: 'Options' });
+    await show.or(options).first().waitFor();
+    if (await show.isVisible()) await clickHydrated(page, show);
+    else await clickHydrated(page, options.getByRole('button').first());
+
+    const good = page.getByRole('group', { name: 'Rate your recall' }).getByRole('button', { name: /^Good,/ });
+    await clickHydrated(page, good);
+    // Moved on: the bar advanced to the next card, or the close screen opened.
+    // Both, because with one card due the bar is at 100 before and after.
+    await page.waitForFunction(
+      (value) =>
+        document.querySelector('[role=progressbar][aria-label="Review progress"]')?.getAttribute('aria-valuenow') !== value ||
+        [...document.querySelectorAll('h1')].some((h) => h.textContent?.trim() === 'Review done'),
+      before,
+    );
+    const done = page.getByRole('heading', { name: 'Review done' });
+    await done.or(show).or(options).first().waitFor();
+  });
+
+  await step('learn: /learn renders the concept table', page, async () => {
+    await go('/learn');
+    const table = main.getByRole('table');
+    await table.getByRole('columnheader', { name: 'Concept' }).waitFor();
+    const first = table.getByRole('link').first();
+    await first.waitFor();
+    const href = await first.getAttribute('href');
+    assert(href !== null && /^\/learn\/[a-z0-9-]+$/.test(href), `the first concept row links to ${href}`);
+    state.concept = href.slice('/learn/'.length);
+  });
+
+  await step('workspace: a concept renders three panels', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await go(`/learn/${state.concept}`);
+    for (const title of ['Note & sources', 'Tutor', 'Studio']) {
+      await main.getByRole('heading', { level: 2, name: title, exact: true }).waitFor();
+    }
+  });
+
+  await step('tutor: no provider key shows the notice and Try again', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    if (!page.url().endsWith(`/learn/${state.concept}`)) await go(`/learn/${state.concept}`);
+    const tutor = main.locator('section').filter({ has: page.getByRole('heading', { level: 2, name: 'Tutor', exact: true }) });
+    const input = tutor.getByPlaceholder('Ask about this concept');
+    await hydrated(page, input);
+    await input.fill('What is this concept about?');
+    const answered = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/agent/chat');
+    await tutor.getByRole('button', { name: 'Send', exact: true }).click();
+    const response = await answered;
+    assert(response.status() === 503, `/api/agent/chat answered ${response.status()}, expected 503 with no provider key`);
+    await tutor.getByRole('alert').getByText(/No tutor model is configured/).waitFor();
+    await tutor.getByRole('button', { name: 'Try again' }).waitFor();
+  });
+
+  await step('session: walk the concept to the close screen', page, async () => {
+    assert(state.concept !== null, 'no concept: the /learn step found none');
+    await go(`/learn/${state.concept}`);
+    await page.getByRole('link', { name: /^Teach me/ }).click();
+    await page.waitForURL(`${base}/learn/${state.concept}/session`);
+
+    const bar = page.getByRole('progressbar', { name: 'Session progress' });
+    const closed = page.getByRole('heading', { name: 'Session closed' });
+    const check = page.getByRole('button', { name: 'Check', exact: true });
+    const cont = page.getByRole('button', { name: 'Continue', exact: true });
+    const choices = page.locator('[role=group][aria-labelledby="session-question"]').getByRole('button');
+
+    for (let moves = 0; ; moves += 1) {
+      assert(moves < 25, 'still not closed after 25 moves');
+      // A question may still be on its way from the tutor; wait for the step to settle.
+      await closed.or(check).or(cont).first().waitFor({ timeout: 30_000 });
+      if (await closed.isVisible()) break;
+      const before = await progressValue(bar);
+      if (await check.isVisible()) {
+        // A question: answer it (the first choice, right or wrong) and read the verdict.
+        await clickHydrated(page, choices.first());
+        await check.click();
+        await cont.waitFor();
+      }
+      await clickHydrated(page, cont);
+      await page.waitForFunction(
+        (value) => {
+          const now = document.querySelector('[role=progressbar][aria-label="Session progress"]')?.getAttribute('aria-valuenow');
+          return now !== value;
+        },
+        before,
+      );
+    }
+  });
+
+  await step('library: first video, Mark watched', page, async () => {
+    await go('/library');
+    await page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('link', { name: /^Video\b/ }).click();
+    await page.waitForURL(/\/library\?(.*&)?kind=video/);
+    await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
+    await page.waitForURL(/\/library\/[^/?]+$/);
+    await clickHydrated(page, main.getByRole('button', { name: 'Mark watched' }));
+    await main.getByRole('button', { name: 'Marked watched' }).waitFor();
+  });
+
+  await step('settings: change the daily target, see Saved', page, async () => {
+    await go('/settings');
+    const select = main.getByLabel('Daily target');
+    await hydrated(page, select);
+    const currentValue = await select.inputValue();
+    const values = await select.locator('option').evaluateAll((options) => options.map((o) => o.value));
+    const next = values.find((v) => v !== currentValue);
+    assert(next !== undefined, `the daily target has no option besides ${currentValue}`);
+    await select.selectOption(next);
+    await main.getByText('Saved', { exact: true }).waitFor();
+  });
+
+  await step('theme: Dark adds `dark` to <html>', page, async () => {
+    if (!page.url().endsWith('/settings')) await go('/settings');
+    // The theme is two radio groups since #101, Palette and Appearance; dark is an appearance.
+    const appearance = main.getByRole('group', { name: 'Theme' }).getByRole('radiogroup', { name: 'Appearance' });
+    const dark = appearance.getByRole('radio', { name: 'Dark' });
+    await clickHydrated(page, dark);
+    await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
+  });
+
+  await step('sign out: /today answers 307 afterwards', page, async () => {
+    await go('/today');
+    await clickHydrated(page, page.getByRole('button', { name: 'Account and settings' }));
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.waitForURL(`${base}/`);
+    const after = await page.request.get(`${base}/today`, { maxRedirects: 0 });
+    assert(after.status() === 307, `/today answered ${after.status()} after signing out, expected 307`);
+  });
+
+  current = 'teardown';
+}
+
+// ---------------------------------------------------------------------------
+
+let fatal = null;
+try {
+  await run();
+} catch (error) {
+  fatal = error;
+} finally {
+  await cleanup();
+}
+// The signal handler owns the exit code and the last word after an interrupt.
+if (interrupted) await new Promise(() => {});
+
+const width = Math.max(...results.map((r) => r.name.length), 40);
+console.log('');
+for (const r of results) {
+  console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(width)}  ${String(r.ms).padStart(6)} ms`);
+  if (!r.ok) {
+    console.log(`      ${r.error}`);
+    console.log(`      screenshot: ${r.shot ?? '(none: the page could not be captured)'}`);
+  }
+}
+const clean = problems.length === 0;
+console.log(`${clean ? 'PASS' : 'FAIL'}  ${'no console errors, page errors or failed responses'.padEnd(width)}`);
+for (const p of problems) console.log(`      [${p.step}] ${p.what}`);
+if (fatal) console.log(`\nFAIL  setup: ${fatal.message}`);
+if (teardownProblem) console.log(`\nFAIL  teardown: ${teardownProblem}`);
+
+const failed = results.filter((r) => !r.ok).length;
+const ok = !fatal && !teardownProblem && failed === 0 && clean;
+console.log(`\n${ok ? 'PASS' : 'FAIL'}: ${results.length - failed} of ${results.length} steps passed, ${problems.length} problem(s) logged.`);
+if (!ok) console.log(`Screenshots and the server log: ${OUT}`);
+process.exit(ok ? 0 : 1);
