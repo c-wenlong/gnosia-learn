@@ -10,7 +10,7 @@ readable: plain files, no hidden state.
 git clone --recursive https://github.com/c-wenlong/self-learn.git
 cd self-learn
 npm ci
-cp .env.example .env.local
+cp .env.example apps/web/.env.local
 npm run dev
 npm test
 ```
@@ -26,7 +26,11 @@ npm run catalog -- status
 Without a reachable Postgres the catalog tests skip themselves with a reason
 and `npm test` still passes.
 
-`.env.local` matters only for the agent chat, which needs at least one
+`apps/web/.env.local` is where Next reads variables from: the app lives in
+`apps/web/`, and Next loads `.env*` files from the directory it starts in, so
+a copy at the repository root is never read. Set `ASSET_FILES_ENABLED=1`
+there to serve videos and diagrams locally, and `DATABASE_URL` if yours is
+not the default. The file matters for the agent chat too, which needs at least one
 provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
