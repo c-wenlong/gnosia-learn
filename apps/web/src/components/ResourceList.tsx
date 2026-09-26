@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import type { Resource } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
+import { inputClasses } from "@/components/ui/classes";
 import { useLearner } from "@/lib/learner-context";
 
 const typeLabel: Record<string, string> = {
@@ -24,7 +26,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="font-medium text-[var(--accent-strong)] hover:underline"
+      className="font-medium text-accent-text underline-offset-4 hover:underline"
     >
       {children}
     </a>
@@ -69,23 +71,23 @@ export function ResourceList({
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-4 text-[14px]">
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">
           Curated resources
         </h3>
         {curated.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">
+          <p className="mt-1.5 text-text2">
             No curated resources yet.
           </p>
         ) : (
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-1.5 space-y-1.5">
             {curated.map((r) => (
               <li
                 key={r.id}
-                className="flex flex-wrap items-baseline gap-2 text-sm"
+                className="flex flex-wrap items-baseline gap-2"
               >
-                <span className="rounded bg-[var(--chip-bg)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-strong)]">
+                <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-text2">
                   {typeLabel[r.type] ?? r.type}
                 </span>
                 <ExternalLink href={r.url}>{r.title}</ExternalLink>
@@ -96,25 +98,25 @@ export function ResourceList({
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">
           Your resources
         </h3>
         {user.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">
+          <p className="mt-1.5 text-text2">
             Add papers, notes, or videos you find useful.
           </p>
         ) : (
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-1.5 space-y-1.5">
             {user.map((r) => (
               <li
                 key={r.id}
-                className="flex flex-wrap items-center gap-2 text-sm"
+                className="flex flex-wrap items-center gap-2"
               >
                 <ExternalLink href={r.url}>{r.title}</ExternalLink>
                 <button
                   type="button"
                   onClick={() => removeResource(moduleId, r.id)}
-                  className="text-xs text-[var(--muted)] hover:text-red-600"
+                  className="text-[12px] text-text3 hover:text-danger"
                 >
                   Remove
                 </button>
@@ -129,25 +131,20 @@ export function ResourceList({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Title"
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm outline-none ring-[var(--accent)] focus:ring-2"
+            className={inputClasses()}
           />
           <input
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://…"
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm outline-none ring-[var(--accent)] focus:ring-2"
+            className={inputClasses()}
           />
           <div className="sm:col-span-2 flex items-center gap-3">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-            >
+            <Button type="submit" variant="secondary" size="sm">
               Add resource
-            </button>
-            {error && (
-              <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-            )}
+            </Button>
+            {error && <p className="text-[12px] text-danger">{error}</p>}
           </div>
         </form>
       </div>

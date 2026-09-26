@@ -1,25 +1,31 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
 import { useLearner } from "@/lib/learner-context";
 
+/**
+ * The course header's Reset: clears the course's ticks and notes after a
+ * confirm. Mastery is the learn pipeline's event log, which is append-only,
+ * so a path node backed by a concept keeps its colour; the confirm says so.
+ */
 export function ResetCourseButton({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      title="Clear this course's ticks and notes"
       onClick={() => {
         if (
           window.confirm(
-            "Reset all progress and notes for this course? Saved topic recaps are kept. This cannot be undone.",
+            "Clear your ticks and notes for this course? Saved recaps are kept, and so is mastery from study sessions, which moves only when you are tested. This cannot be undone.",
           )
         ) {
           resetCourse(topicIds);
         }
       }}
-      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted-strong)] hover:border-red-300 hover:text-red-700 dark:hover:border-red-700 dark:hover:text-red-300"
     >
-      Reset course progress
-    </button>
+      Reset
+    </Button>
   );
 }
