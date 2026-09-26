@@ -91,15 +91,17 @@ reduction of it, and where the two disagree the art wins.
 
 | File | What it is | Used for |
 | --- | --- | --- |
-| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The canonical mark and wordmark; `GnosiaMark` is drawn from it |
-| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of the three icon files below |
+| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. `GnosiaMark`, the flat SVG reduction, is drawn from it and now only feeds the preview kit |
+| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of `apple-icon.png` and `app-icon-256.png` below (the favicon is cut from `logo/mark.png`) |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
 | [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
 | [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
 | [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page |
-| [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `app-icon.png`, transparent corners | Favicon and PWA icon |
+| [docs/design/brand/logo/](brand/logo/) `mark.png`, `wordmark-ink.png`, `wordmark-cream.png` | The owner's logo art, 2026-09-27: the mark alone (1254px), and the GNOSIA letters in deep teal (for light grounds) and in cream (for dark grounds), 2172 by 724, all on transparent grounds | Source of the four files below |
+| [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (256), `wordmark-ink.png`, `wordmark-cream.png` (96px tall) | Cut from `docs/design/brand/logo/`: pixels under 32 alpha cleared (the faint haze round the art), cropped to the art, scaled | `GnosiaWordmark` and `GnosiaLockup` |
+| [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `logo/mark.png`: the same clean-up, squared with a 5% margin | Favicon and PWA icon |
 | [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | Cut from `app-icon.png` | Home-screen icon |
 | [apps/web/public/brand/app-icon-256.png](../../apps/web/public/brand/app-icon-256.png) | Cut from `app-icon.png` | Anywhere a 256px icon is wanted |
 | [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
@@ -125,7 +127,10 @@ it, and the G makes the symbol Gnosia's own.
 
 The art is rendered with gradients (teal into a lighter green along the
 ribbon, a glow on the star). [GnosiaMark.tsx](../../apps/web/src/components/brand/GnosiaMark.tsx)
-is the flat, three-fill reduction for the interface, on a 64 unit grid:
+is a flat, three-fill reduction of it on a 64 unit grid. The interface no
+longer draws it (it shows the owner's `logo/mark.png`); it stays because the
+preview kit renders from it, and its star (`MARK_STAR`) is the landing
+page's star glyph:
 
 | Part | Fill | Construction |
 | --- | --- | --- |
@@ -148,16 +153,17 @@ anything but gold, or let the pages spill outside the ribbon.
 
 ### The wordmark and the lockup
 
-The sheet's `GNOSIA` is a light geometric sans with a wide, open G and an A
-with no crossbar. The interface sets it in Figtree semibold, uppercase,
-tracked at 0.3em: the closest the loaded face allows. The letters are live
-text, not paths, so the A keeps its crossbar; the sheet's letterforms appear
-only where the art itself is used (the social card, the icons).
+`GNOSIA` is a light geometric sans with a wide, open G and an A with no
+crossbar. Until 2026-09-27 the interface faked it in tracked Figtree
+semibold, which kept the crossbar and never looked right; it now uses the
+owner's own letter art from `docs/design/brand/logo/`, in two colourways:
+deep teal on light grounds, cream on dark ones. The swap is CSS (`dark:`),
+so the first paint is right in every theme.
 [GnosiaWordmark](../../apps/web/src/components/brand/GnosiaWordmark.tsx) puts
-the mark at 1.9em beside the letters and is sized by font size (15px in the
-app bar, 13px in the footer). `GnosiaLockup` stacks the mark over the
+the mark at 1.9em beside letters 0.8em tall and is sized by font size (15px
+in the app bar, 13px in the footer). `GnosiaLockup` stacks the mark over the
 letters, for the sign-in card. A screen reader hears "Gnosia" once: the mark
-is hidden and the capitals are CSS.
+is decorative, and only one colourway is ever displayed.
 
 ## The mascot
 
