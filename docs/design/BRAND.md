@@ -431,10 +431,18 @@ products (captured at 1440px on 2026-09-27):
 
 The book is the organising idea, so the page is laid out as one: a title
 page with the probe, three chapters (Probe, Plan, Review), a contents page
-whose "page numbers" are the app's routes, a colophon naming the mechanics
+numbered in roman numerals, a colophon naming the mechanics
 and the typefaces, and the world as the last page. **Literata** was picked
 because it was drawn for reading long-form books on screens; it is loaded by
 `(site)/layout.tsx` only, so no signed-in page downloads it, and the
 `font-book` utility names it. The closing band carries the `dark` class so
 the brand values and the brand button inside it are the dark ones in every
 theme.
+
+**Two faces, no mono.** The public pages use Literata and Figtree only.
+Numbers (the estimates, 0.54 and so on) are Figtree with tabular figures,
+not a monospace: a book prints its numbers in its text face, and a mono face
+on a landing page reads as a developer dashboard. The one monospace left is
+the sign-in page's configuration error, which names environment variables
+(real code, so mono is right there) and which any visitor can see while
+sign-in is not configured.

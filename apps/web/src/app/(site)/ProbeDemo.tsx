@@ -83,7 +83,7 @@ export function ProbeDemo() {
       <div className="mt-6 border-t border-dashed border-brand-ink/15 pt-5">
         <p className="flex items-baseline justify-between gap-3 text-[13px] text-brand-mist">
           <span>How sure your book is that you know softmax</span>
-          <span className="font-mono text-[14px] font-semibold text-brand-ink tabular-nums">{p.toFixed(2)}</span>
+          <span className="text-[15px] font-semibold text-brand-ink tabular-nums">{p.toFixed(2)}</span>
         </p>
         <span className="mt-2 block h-2 overflow-hidden rounded-full bg-brand-ink/10">
           <span
