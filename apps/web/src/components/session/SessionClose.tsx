@@ -121,7 +121,7 @@ export function SessionClose({
       </Card>
 
       <div className="mt-auto flex flex-wrap items-center gap-3 md:mt-0">
-        <Button variant="secondary" href="/">
+        <Button variant="secondary" href="/today">
           Back to Today
         </Button>
         <span className="flex-1" />

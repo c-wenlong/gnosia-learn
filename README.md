@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="apps/web/public/banner.png" alt="Pixel-art staircase built from stacked books, climbing from a forest up into the sky towards a glowing open book" width="800">
+  <img src="apps/web/public/banner.png" alt="A staircase of teal books climbing through clouds towards a glowing four-point star, with the Gnosia mascot, a floating book with bright eyes and a ribbon tail, hovering beside it" width="800">
 </p>
 
 <h1 align="center">
-Self-Learn
+Gnosia
 </h1>
 
 <p align="center">
-  <strong>A study hub for the NUS SoC shortlist, a tutoring loop in Claude Code, and a video renderer.</strong>
+  <strong>A book that grows as you do: a living knowledge model, a tutoring loop in Claude Code, and a video renderer.</strong>
 </p>
 
 <p align="center">
@@ -60,11 +60,13 @@ Knowing what is worth learning and actually learning it are two different proble
 | Diagrams | [`tools/tldrawkc/`](tools/tldrawkc/README.md) (submodule) | Teaching diagrams drawn on a real tldraw canvas, exported as self-contained SVG with the editable `.tldr` committed beside it |
 | Catalog | `packages/schema/`, `services/catalog/` | Postgres index over the three content trees, and the `catalog` CLI agents read |
 
-Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are still no accounts, just one learner row. A browser that used the old `localStorage` document imports it once, automatically, on first load.
+Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are no accounts yet, just one learner row behind one owner password (`/sign-in`). A browser that used the old `localStorage` document imports it once, automatically, on first load.
 
 | Surface | Purpose |
 | --- | --- |
-| `/` | Today: what to study next, reviews due, recent activity, the daily target and streak |
+| `/` | The public landing page; a signed-in owner is sent to `/today` |
+| `/sign-in` | The owner password (docs/DEPLOYMENT.md, "Signing in"); everything below needs the session |
+| `/today` | Today: what to study next, reviews due, recent activity, the daily target and streak |
 | `/courses` | The course catalog and overall progress |
 | `/courses/[slug]` | The course path: units of topic nodes coloured by mastery, with each topic's checklist, notes, recaps and resources in its panel |
 | `/learn` | Knowledge base: mastery per concept, the frontier, the dependency graph |

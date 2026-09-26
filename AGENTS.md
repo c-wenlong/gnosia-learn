@@ -25,6 +25,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
+| [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
 
 ## The learning pipeline
 
@@ -336,6 +337,16 @@ happened yet, not that the PR is clean.
 Traps that cost time once already. Each names the file, so the reasoning does
 not have to be worked out again.
 
+- **`/` is public and everything else is behind `apps/web/src/proxy.ts`.** The
+  pages live in two route groups: `apps/web/src/app/(site)/` (the landing page
+  and `/sign-in`, no shell, no database) and `apps/web/src/app/(app)/` (every
+  other page, whose layout calls `requireSignedIn()` and then draws the
+  shell). The Today dashboard is `/today`, not `/`. A new page goes in
+  `(app)/`; a new public page goes in `(site)/` *and* in `isPublicPath` in
+  `apps/web/src/lib/auth/core.ts`, or the proxy redirects it to sign-in.
+  `OWNER_PASSWORD` and `AUTH_SECRET` must both be set or nobody can sign in,
+  locally included: that is deliberate, see "Signing in" in
+  `docs/DEPLOYMENT.md`.
 - **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
   with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
   sidecar, so the file convention would ship a social card with no alt text.

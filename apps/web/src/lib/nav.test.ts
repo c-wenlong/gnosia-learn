@@ -4,7 +4,9 @@ import { activeDestination } from "./nav";
 
 describe("activeDestination", () => {
   it("matches Today only on the root", () => {
-    expect(activeDestination("/")).toBe("today");
+    expect(activeDestination("/today")).toBe("today");
+    expect(activeDestination("/today?tab=x")).toBe("today");
+    expect(activeDestination("/")).toBeNull();
     expect(activeDestination("/settings")).toBeNull();
   });
 

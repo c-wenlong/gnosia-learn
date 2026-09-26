@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { exportSvg, inspectDiagram, verifySvg } from "@/app/studio/actions";
+import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
