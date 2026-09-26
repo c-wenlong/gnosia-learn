@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 
 /**
  * The avatar at the right of the top bar, and the small menu behind it:
- * the theme toggle, Settings, Studio when this deployment has one, and Sign
+ * the theme switch, Settings, Studio when this deployment has one, and Sign
  * out. Sign out is a form post rather than a link, so nothing that prefetches
  * or embeds a URL can end the session (see `api/auth/sign-out`).
  *
@@ -66,8 +66,9 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
           className="absolute top-full right-0 z-40 mt-2 w-56 rounded-2xl border-2 border-border bg-surface p-1.5"
         >
           <ul className="flex flex-col gap-0.5">
-            <li>
-              <ThemeToggle className={item} />
+            <li className="px-1.5 pt-1 pb-2">
+              <p className="mb-1.5 px-1.5 text-[11px] font-semibold tracking-wide text-text3 uppercase">Theme</p>
+              <ThemeSwitch size="sm" />
             </li>
             <li>
               <Link href="/settings" className={item} onClick={() => setOpen(false)}>

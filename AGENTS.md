@@ -347,6 +347,14 @@ not have to be worked out again.
   `OWNER_PASSWORD` and `AUTH_SECRET` must both be set or nobody can sign in,
   locally included: that is deliberate, see "Signing in" in
   `docs/DEPLOYMENT.md`.
+- **The theme is four modes and two classes, and `dark:` is only one of them.**
+  `light`, `gnosia`, `dark`, `system` live in `THEME_MODES`
+  (`packages/schema/src/shared.ts`); `<html>` gets `dark` or `gnosia` or
+  neither. A component that hard-codes a colour for "light" is wrong under
+  `gnosia`, so it reads tokens only, and a new token gets a value in all three
+  blocks of `apps/web/src/app/globals.css` or it silently falls back to the
+  light one. `system` is resolved by an inline script in the root layout, not
+  by CSS, so `matchMedia` is the only place `prefers-color-scheme` is read.
 - **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
   with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
   sidecar, so the file convention would ship a social card with no alt text.
