@@ -217,6 +217,17 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(snapshot.userResources["fx-m1"]).toHaveLength(1);
     });
 
+    it("reads every theme mode back, and falls back to light for one it does not know", async () => {
+      for (const mode of ["gnosia-dark", "gnosia-system", "gnosia", "system"] as const) {
+        await writePreference(scratch.db, PREFERENCE_KEYS.theme, mode);
+        expect((await readLearnerSnapshot(scratch.db)).theme).toBe(mode);
+      }
+      // A row written by some later build, or by hand, renders light rather
+      // than handing the root layout a class it has no palette for.
+      await writePreference(scratch.db, PREFERENCE_KEYS.theme, "gnosia-sepia");
+      expect((await readLearnerSnapshot(scratch.db)).theme).toBe("light");
+    });
+
     it("drops a malformed resource rather than rendering it", async () => {
       await writePreference(scratch.db, PREFERENCE_KEYS.userResources, {
         "fx-m1": [{ id: "r1", title: "no url" }, "junk"],
@@ -849,6 +860,11 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(snapshot.notes[ITEMS[0]]).toBe("written here");
       expect(snapshot.theme).toBe("light");
       expect(result.skippedExisting).toBeGreaterThan(0);
+    });
+
+    it("carries a theme mode newer than the localStorage document", async () => {
+      await importLegacyState(scratch.db, { theme: "gnosia-dark" });
+      expect((await readLearnerSnapshot(scratch.db)).theme).toBe("gnosia-dark");
     });
 
     it("is safe to run twice", async () => {

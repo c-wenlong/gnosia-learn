@@ -49,11 +49,14 @@ light on `:root` and dark on `.dark` (the cookie-driven class on `<html>`).
 The values and where each came from are the token table in DESIGN.md and
 `TOKENS` in [kit/hifi.py](kit/hifi.py).
 
-**Three palettes.** `:root` is light, `.dark` is dark and `.gnosia` is the
-brand's light theme, each selected by the theme class on `<html>`. A
-component never branches on the class or writes a `.gnosia` selector for a
-colour: it reads tokens, and the class decides what they resolve to. `.gnosia` redefines only the tokens that differ from
-`:root`; its values, the reason for each and the contrast table are in
+**Four palettes.** `:root` is Classic light, `.dark` Classic dark, `.gnosia`
+the brand's light theme and `.gnosia.dark` the brand's dark one, each
+selected by the theme classes on `<html>`. A component never branches on the
+class or writes a `.gnosia` selector for a colour: it reads tokens, and the
+classes decide what they resolve to. `.gnosia` redefines only the tokens that
+differ from `:root`; `.gnosia.dark` declares every token `.dark` or `.gnosia`
+sets, so it never depends on which of the two comes later. Their values, the
+reason for each and the contrast table are in
 [BRAND.md](BRAND.md#the-gnosia-theme-inside-the-app).
 
 | Group | Names |
@@ -68,7 +71,7 @@ colour: it reads tokens, and the class decides what they resolve to. `.gnosia` r
 | Habit | `--streak` (the fill: discs, rings, the dot, the big number), `--streak-text` (the streak as small text, at 4.5:1 on the card) |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
-| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in both themes) |
+| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white, navy under Gnosia dark) |
 
 **Every token is also a Tailwind colour of the same name**, so write
 `bg-surface2 text-text2 border-border`, not `bg-[var(--surface2)]`. The
@@ -187,18 +190,25 @@ layout holds only the document, the fonts and the theme class. Its client parts 
 - **Store banner** under the bar when the database is unreachable or a
   write failed, as before.
 
-**Four appearance modes, two classes.** The theme cookie and the `theme`
-preference hold one of `light`, `gnosia`, `dark`, `system`
-(`THEME_MODES` in `packages/schema/src/shared.ts`). `<html>` carries `dark`
-for the dark palette and `gnosia` for the brand palette; the original light
-palette is the absence of both. `system` is rendered light by the server with
-`data-theme="system"`, and an inline script at the top of `<body>` adds
-`dark` before paint when the device prefers it; `LearnerProvider` then
-follows `prefers-color-scheme` changes while the page is open. The control is
-`ThemeSwitch` (`apps/web/src/components/ThemeSwitch.tsx`), a four-segment
-radio group used small in the avatar menu and full size on Settings. A
+**Six modes, two axes, two classes.** The theme is a palette (Classic or
+Gnosia) and an appearance (Light, Dark or System), stored as one mode so the
+cookie, the `theme` preference and the import each keep a single string:
+`light`, `dark`, `system`, `gnosia`, `gnosia-dark`, `gnosia-system`
+(`THEME_MODES` in `packages/schema/src/shared.ts`). The first four predate the
+palette axis and keep their meaning, so a stored `gnosia` is Gnosia light and
+a stored `system` is Classic. `paletteOf`, `appearanceOf` and `themeModeFor`
+in the same file convert between a mode and its two halves. `<html>` carries
+`gnosia` for the brand palette and `dark` for a dark appearance, both for
+Gnosia dark; Classic light is the absence of both. Both system modes are
+rendered light by the server (with `gnosia` already on for the brand one) and
+`data-theme` naming the mode, and an inline script at the top of `<body>` adds
+`dark` before paint when the device prefers it; `LearnerProvider` then follows
+`prefers-color-scheme` changes while the page is open. The control is
+`ThemeSwitch` (`apps/web/src/components/ThemeSwitch.tsx`): two segmented radio
+groups, Palette and Appearance, stacked under one label, used small in the
+avatar menu and full size on Settings. Changing one axis keeps the other. A
 component never branches on the class: it reads tokens, and the palettes are
-in `globals.css` (`:root`, `.dark`, `.gnosia`).
+in `globals.css` (`:root`, `.dark`, `.gnosia`, `.gnosia.dark`).
 
 **A page picks its layout with `data-layout` on its root element.** The
 shell reads it with `has-*`, so no prop or context crosses the server and
@@ -286,8 +296,11 @@ node docs/design/kit/shots.mjs http://localhost:3121 /tmp/shots /courses /review
 node docs/design/kit/svg2png.mjs /tmp/hifi docs/design/hifi/02-courses-*.svg   # the frames to compare with
 ```
 
-Output is `<route>-<desktop|phone>-<light|dark>.png`. `SHOTS_VIEWPORTS`,
-`SHOTS_THEMES` and `SHOTS_VIEWPORT_ONLY=1` narrow a run. It borrows
+Output is `<route>-<desktop|phone>-<theme>.png`. `SHOTS_VIEWPORTS`,
+`SHOTS_THEMES` and `SHOTS_VIEWPORT_ONLY=1` narrow a run; `SHOTS_THEMES` takes
+any of the six theme modes (`SHOTS_THEMES=gnosia-dark`), and the browser
+prefers dark for `dark` and `gnosia-dark`. `SHOTS_COLOR_SCHEME=dark` forces
+it, to see a system mode resolve dark. It borrows
 playwright-core from the tldrawkc submodule; in a checkout where that is not
 installed (a fresh worktree), point `PLAYWRIGHT_CORE` at another checkout's
 `tools/tldrawkc/node_modules/playwright-core/index.mjs`. It exits 1 if any
