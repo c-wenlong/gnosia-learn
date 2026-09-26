@@ -144,7 +144,7 @@ function Chapters() {
             <p className="flex items-baseline gap-3 text-brand-teal">
               <span className="font-book text-[20px] italic">Chapter {c.n}</span>
               <span aria-hidden className="h-px w-8 translate-y-[-5px] bg-brand-teal/40" />
-              <span className="text-[12px] font-semibold tracking-[0.18em] uppercase">{c.name}</span>
+              <span className="text-[15px] font-semibold">{c.name}</span>
             </p>
             <h2
               id={`chapter-${c.n}`}
@@ -184,7 +184,7 @@ function KnownArt() {
   ];
   return (
     <div aria-hidden className="gnosia-paper w-full max-w-[330px] rounded-[22px] p-5">
-      <p className="text-[11px] font-semibold tracking-[0.16em] text-brand-mist uppercase">What you know</p>
+      <p className="text-[13px] font-medium text-brand-mist">What you know</p>
       <ul className="mt-4 flex flex-col gap-3.5">
         {rows.map((r) => (
           <li key={r.name} className="flex flex-col gap-1.5">
@@ -255,7 +255,7 @@ function ReviewArt() {
   return (
     <div aria-hidden className="w-full max-w-[340px]">
       <div className="gnosia-paper rounded-[22px] p-5">
-        <p className="text-[11px] font-semibold tracking-[0.16em] text-brand-mist uppercase">Review · 3 of 7</p>
+        <p className="text-[13px] font-medium text-brand-mist">Review, 3 of 7</p>
         <p className="mt-3 font-book text-[19px] leading-snug font-medium text-brand-ink">
           Why divide the scores by the square root of the key size?
         </p>
@@ -354,7 +354,7 @@ function Colophon() {
   return (
     <aside aria-labelledby="colophon-title" className="mt-14 border-t border-brand-ink/10 pt-10 text-center md:mt-16">
       <StarGlyph className="mx-auto size-4 text-brand-gold" />
-      <h2 id="colophon-title" className="mt-4 text-[12px] font-semibold tracking-[0.2em] text-brand-mist uppercase">
+      <h2 id="colophon-title" className="mt-4 font-book text-[20px] font-medium text-brand-ink">
         Colophon
       </h2>
       <p className="mx-auto mt-4 max-w-[34rem] font-book text-[16px] leading-relaxed text-pretty text-brand-ink/85 italic">
