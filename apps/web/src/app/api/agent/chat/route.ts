@@ -6,7 +6,9 @@ import {
   enforceSameOrigin,
 } from "@/lib/agent/guard";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
-import { buildAgentSessionContext } from "@/lib/agent/prompt";
+import { buildAgentSessionContext, buildConceptSessionContext, type CitationSource } from "@/lib/agent/prompt";
+import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
+import { readConceptWorkspace } from "@/lib/concept-workspace";
 import {
   availableProviderSummary,
   completeWithFallback,
@@ -17,10 +19,18 @@ import type { TopicKnowledge } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+/**
+ * One of two shapes. The topic tutor (the course session) sends
+ * `courseSlug`, `moduleSlug` and `topicId`. The concept tutor (the workspace)
+ * sends `conceptSlug` instead, and when it is present the three topic fields
+ * are ignored. The request and response shapes are written down in
+ * docs/design/IMPLEMENTATION.md under "The concept tutor API".
+ */
 interface ChatBody {
-  courseSlug: string;
-  moduleSlug: string;
-  topicId: string;
+  courseSlug?: string;
+  moduleSlug?: string;
+  topicId?: string;
+  conceptSlug?: unknown;
   messages: ChatMessage[];
   learnerNote?: string;
   priorKnowledge?: Partial<TopicKnowledge>;
@@ -91,6 +101,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (body === null || typeof body !== "object") {
+    return NextResponse.json({ error: "The body must be a JSON object" }, { status: 400 });
+  }
+  if (body.conceptSlug !== undefined) return conceptTurn(req, body);
+
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } =
     body;
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {
@@ -123,9 +138,70 @@ export async function POST(req: Request) {
     },
   );
 
+  return completeTurn(session.systemPrompt, messages);
+}
+
+/**
+ * A turn of the concept tutor. The context is the concept's note, its
+ * neighbours and the learner's mastery and recent answers on it, all read on
+ * the server from `conceptSlug`; nothing about the concept is taken from the
+ * browser. The response adds `concept` and the numbered `sources` the reply
+ * may cite as `[n]`.
+ */
+async function conceptTurn(req: Request, body: ChatBody) {
+  const { conceptSlug, messages, learnerNote } = body;
+  if (!isConceptSlug(conceptSlug) || !Array.isArray(messages)) {
+    return NextResponse.json(
+      {
+        error: "conceptSlug must be a concept id (lowercase letters, digits and hyphens), and messages an array",
+        code: "BAD_REQUEST",
+      },
+      { status: 400 },
+    );
+  }
+
+  const tooLarge = enforcePayloadBounds(messages, learnerNote);
+  if (tooLarge) return tooLarge;
+
+  // Before the lookup, for the same reason as the topic path: an unknown slug
+  // must not be a free way to spin the limiter.
+  const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
+  if (rateLimited) return rateLimited;
+
+  const read = await readConceptWorkspace(conceptSlug);
+  if (read.state === "unreachable") {
+    return NextResponse.json(
+      {
+        error: "The knowledge base could not be reached, so the tutor has no note to work from.",
+        code: "CONCEPT_UNAVAILABLE",
+      },
+      { status: 503 },
+    );
+  }
+  if (read.state === "not-found") {
+    return NextResponse.json({ error: "Concept not found", code: "CONCEPT_NOT_FOUND" }, { status: 404 });
+  }
+
+  const session = buildConceptSessionContext(toConceptPromptInput(read.workspace));
+  const note =
+    typeof learnerNote === "string" && learnerNote.trim()
+      ? `\n## Learner notes (from their study hub)\n${learnerNote.trim()}\n`
+      : "";
+  return completeTurn(session.systemPrompt + note, messages, {
+    concept: { slug: read.workspace.slug, title: read.workspace.title },
+    sources: session.sources,
+  });
+}
+
+/** Send the turn to the provider cascade and shape the answer both tutors share. */
+async function completeTurn(
+  systemPrompt: string,
+  messages: ChatMessage[],
+  extra: { concept?: { slug: string; title: string }; sources?: CitationSource[] } = {},
+) {
   // Always inject our system prompt as the authoritative first message.
   const payloadMessages: ChatMessage[] = [
-    { role: "system", content: session.systemPrompt },
+    { role: "system", content: systemPrompt },
     ...messages.filter((m) => m.role !== "system"),
   ];
 
@@ -161,5 +237,6 @@ export async function POST(req: Request) {
     provider: outcome.result.provider,
     providerLabel: outcome.result.providerLabel,
     fallbackAttempts: outcome.attempts.length,
+    ...extra,
   });
 }
