@@ -143,6 +143,43 @@ bug fixes or docs. All welcome.
    leaving them open.
 5. Squash merge once CI is green and every review thread is resolved.
 
+## End-to-end smoke
+
+`npm run e2e` starts the built app against a throwaway copy of your database
+and walks it in headless Chromium: the landing page to sign-in, a wrong and a
+right password, one review card rated Good, `/learn`, a concept workspace and
+its tutor with no provider key, a session walked to its close screen, Mark
+watched on a video, a settings change, the dark theme, and sign-out. It is
+not part of `npm test`, because it needs a build and Postgres.
+
+Prerequisites:
+
+- A current production build: `npm run build`. The script never builds, and
+  runs whatever `apps/web/.next` holds, so rebuild after changing the app.
+- Homebrew Postgres 17 running, with a `self_learn` database. Set `PG_BIN` if
+  the binaries are not in `/opt/homebrew/opt/postgresql@17/bin`.
+- playwright-core from the tldrawkc submodule (`npm ci` inside
+  `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
+  Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the
+  same lookup `docs/design/kit/shots.mjs` uses; the repo installs nothing for it.
+
+**It never touches `self_learn`.** A review rating, a session answer and Mark
+watched all write real evidence, and the event log is append-only, so the run
+copies the database to `self_learn_e2e_<pid>` (`createdb -T`, or `pg_dump` when
+another connection holds the template open) and drops the copy afterwards,
+on a failure and on Ctrl-C too. `--keep-db` leaves it behind to inspect, and
+prints the `dropdb` line; `--headed` shows the browser.
+
+Reading a failure: the run prints one line per step and a final `PASS` or
+`FAIL`, and exits 1 on any failure (2 when a prerequisite is missing). A
+failed step names the locator it was waiting for and the path of a full-page
+screenshot. The last row fails on any `console.error`, uncaught page error or
+response of 400 or more, each tagged with the step it happened in; the 503
+the `/api/agent/*` routes answer with no provider key is the one expected
+failure. Screenshots and `server.log` (the output of `next start`) are in the
+directory printed on the first line, under the OS temp directory, never in
+the tree.
+
 ## Reporting bugs
 
 Use the [bug report template](https://github.com/c-wenlong/self-learn/issues/new?template=bug_report.yml)

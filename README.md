@@ -287,6 +287,7 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | `npm run test` | Vitest, single run |
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
+| `npm run e2e` | Headless smoke test of a production build against a throwaway database copy. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
 | `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `index`, `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
