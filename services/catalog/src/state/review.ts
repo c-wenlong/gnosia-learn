@@ -1,9 +1,14 @@
-import { LOCAL_LEARNER_ID, review, SCHEDULE_LIMITS } from "@self-learn/schema";
-import { and, asc, eq, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { concept, LOCAL_LEARNER_ID, review, SCHEDULE_LIMITS } from "@self-learn/schema";
+import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { DEFAULT_PARAMS, update as bktUpdate } from "../../../../scripts/learn/lib/bkt.mjs";
+import { newCard, PASS_GRADE, review as sm2 } from "../../../../scripts/learn/lib/schedule.mjs";
 import { StateError } from "./errors";
-import { ensureLearner } from "./learner";
+import { appendEvent } from "./events";
+import { domainOf } from "./knowledge-base";
+import { ensureLearner, withLearnerLock } from "./learner";
+import { assertKnownConcepts, ensureEntry, readModel, writeModel } from "./mastery";
 
 /**
  * `learn/state/reviews.json` as the `review` table.
@@ -195,4 +200,249 @@ export async function readCards(
     .from(review)
     .where(and(eq(review.learnerId, learnerId), inArray(review.conceptSlug, slugs)));
   return rows.map(toCard);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Grading                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One review, applied: the next card for `grade` on the SM-2 scale (0 to 5).
+ *
+ * Pure. The maths is `schedule.mjs`'s `review`, unchanged; what lives here is
+ * the one decision every caller used to make for itself, which is that a
+ * concept with no card yet is graded as a fresh one created at `now`. The CLI's
+ * `review grade`, the web app's rating buttons and the interval each button
+ * previews all go through this, so the number under "Good" is the interval
+ * pressing it will actually write.
+ */
+export function scheduleCard(
+  card: ReviewCard | null | undefined,
+  conceptId: string,
+  grade: number,
+  now: Date,
+): ReviewCard {
+  const current = card ?? (newCard(conceptId, now) as ReviewCard);
+  return sm2(current, grade, { now }) as ReviewCard;
+}
+
+/**
+ * The four ratings a person can press, as SM-2 grades, in button order.
+ *
+ * Anki's names over the six-point SM-2 scale the `/review` skill asks for:
+ * Easy is 5 (instant), Good 4 (slight hesitation), Hard 3 (correct but hard
+ * work, the lowest passing grade). Again is 1, "wrong, though it felt
+ * familiar": the skill separates 0, 1 and 2 only "when it matters", and to the
+ * scheduler and to BKT they are the same failure, so one button is honest.
+ * `gradeFromOutcome` in `schedule.mjs` picks 1 for a wrong answer at an
+ * ordinary p(L) for the same reason.
+ */
+export const REVIEW_RATINGS = [
+  { rating: 0, name: "again", grade: 1 },
+  { rating: 1, name: "hard", grade: 3 },
+  { rating: 2, name: "good", grade: 4 },
+  { rating: 3, name: "easy", grade: 5 },
+] as const;
+
+export type ReviewRating = (typeof REVIEW_RATINGS)[number]["rating"];
+
+/** A rating (0 to 3) to its SM-2 grade. Throws a `StateError` on anything else. */
+export function gradeForRating(rating: number): number {
+  const found = REVIEW_RATINGS.find((r) => r.rating === rating);
+  if (found === undefined) {
+    throw new StateError(`rating must be 0, 1, 2 or 3 (again, hard, good, easy); got ${rating}.`);
+  }
+  return found.grade;
+}
+
+/**
+ * The interval, in days, each of the four ratings would give this card now.
+ * Index `i` is rating `i`. Exact rather than estimated: it runs the same
+ * `scheduleCard` a grade does, fuzz included, since the fuzz is deterministic.
+ */
+export function previewIntervals(
+  card: ReviewCard | null | undefined,
+  conceptId: string,
+  now: Date,
+): [number, number, number, number] {
+  const days = REVIEW_RATINGS.map((r) => scheduleCard(card, conceptId, r.grade, now).intervalDays);
+  return days as [number, number, number, number];
+}
+
+export interface GradeReviewInput {
+  conceptId: string;
+  /** SM-2 grade, 0 to 5. */
+  grade: number;
+  /** One clock for the card, the model and the event (see `learn/replay.ts`). */
+  now?: Date;
+  learnerId?: string;
+}
+
+export interface GradeReviewResult {
+  card: ReviewCard;
+  pLBefore: number;
+  pL: number;
+}
+
+/**
+ * Record one review grade: a `review` event, the card rescheduled, the mastery
+ * entry updated, all under the learner lock and in one transaction.
+ *
+ * This is `learn review grade`, moved out of the CLI so the web app's
+ * `POST /api/review/grade` records a grade by running the same function rather
+ * than a copy of it. The event comes first and carries everything a replay
+ * needs (`grade`, and the instant as `at`), so `review rebuild` reproduces a
+ * card graded from a page exactly as it does one graded from the terminal.
+ *
+ * The lock matters for the same reason it does in `observe`: this reads the
+ * card and the model, computes from both, and writes them back, and two tabs
+ * grading at once would otherwise both read the same card.
+ */
+export async function gradeReview(
+  db: CatalogDatabase,
+  input: GradeReviewInput,
+): Promise<GradeReviewResult> {
+  const { conceptId, grade, now = new Date(), learnerId = LOCAL_LEARNER_ID } = input;
+  if (!Number.isFinite(grade) || grade < 0 || grade > 5) {
+    throw new StateError(`grade must be between 0 and 5; got ${grade}.`);
+  }
+  await assertKnownConcepts(db, [conceptId]);
+  const at = now.toISOString();
+  const passed = grade >= PASS_GRADE;
+
+  return withLearnerLock(db, learnerId, async (tx) => {
+    const current = await readCards(tx, [conceptId], learnerId);
+    const card = scheduleCard(current[0], conceptId, grade, now);
+
+    const model = await readModel(tx, learnerId);
+    const entry = ensureEntry(model, conceptId);
+    const pLBefore = entry.pL;
+    entry.pL = bktUpdate(pLBefore, passed, {
+      params: model.params as unknown as typeof DEFAULT_PARAMS,
+    }) as number;
+    entry.observations += 1;
+    if (passed) entry.correct += 1;
+    entry.lastSeen = at;
+
+    await appendEvent(
+      tx,
+      { at, type: "review", concept: conceptId, grade, pLBefore, pLAfter: entry.pL },
+      learnerId,
+    );
+    await upsertReview(tx, card, learnerId);
+    await writeModel(tx, model, learnerId);
+
+    return { card, pLBefore, pL: entry.pL };
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* The queue a review session works through                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface ReviewQueueItem {
+  conceptId: string;
+  title: string;
+  summary: string;
+  /** Folder the note lives in, e.g. `algorithms`. Presentation only. */
+  domain: string | null;
+  /** Null when the concept was asked for by name and has never been scheduled. */
+  card: ReviewCard | null;
+  /** The interval each rating would give, in days, index = rating. */
+  intervals: [number, number, number, number];
+}
+
+export interface ReviewQueue {
+  items: ReviewQueueItem[];
+  /** The soonest due instant after `now` across every card, or null. */
+  nextDue: string | null;
+}
+
+/**
+ * The cards due at `now`, most overdue first, each with its concept's title and
+ * summary and the four intervals its buttons would give.
+ *
+ * `focus` names one concept to put first whether or not it is due, which is
+ * what "Review now" on a concept page means: reviewing early is allowed (SM-2
+ * simply schedules from today), and a concept that has never been scheduled
+ * gets the fresh card `review grade` would make for it. A focus the catalog has
+ * no concept for is dropped rather than refused, since it came from a URL.
+ */
+export async function reviewQueue(
+  db: CatalogDatabase,
+  options: { now?: Date; focus?: string | null; limit?: number; learnerId?: string } = {},
+): Promise<ReviewQueue> {
+  const { now = new Date(), focus = null, limit, learnerId = LOCAL_LEARNER_ID } = options;
+  const due = await dueReviews(db, { now, limit, learnerId });
+
+  const cards: (ReviewCard | { conceptId: string; card: null })[] = [...due];
+  if (focus !== null && focus !== "") {
+    const at = due.findIndex((c) => c.conceptId === focus);
+    if (at > 0) cards.unshift(...cards.splice(at, 1));
+    if (at === -1) {
+      const [stored] = await readCards(db, [focus], learnerId);
+      cards.unshift(stored ?? { conceptId: focus, card: null });
+    }
+  }
+
+  const slugs = cards.map((c) => c.conceptId);
+  const rows =
+    slugs.length === 0
+      ? []
+      : await db
+          .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
+          .from(concept)
+          .where(inArray(concept.slug, slugs));
+  const bySlug = new Map(rows.map((row) => [row.slug, row]));
+
+  const items: ReviewQueueItem[] = [];
+  for (const entry of cards) {
+    const row = bySlug.get(entry.conceptId);
+    // A due card whose concept left the catalog cannot be graded either
+    // (`assertKnownConcepts`), so showing it would be a button that 400s.
+    if (row === undefined) continue;
+    const card = "card" in entry ? null : entry;
+    items.push({
+      conceptId: row.slug,
+      title: row.title,
+      summary: row.summary ?? "",
+      domain: domainOf(row.path),
+      card,
+      intervals: previewIntervals(card, row.slug, now),
+    });
+  }
+
+  const [next] = await db
+    .select({ due: review.due })
+    .from(review)
+    .where(and(eq(review.learnerId, learnerId), gt(review.due, now)))
+    .orderBy(asc(review.due))
+    .limit(1);
+
+  return { items, nextDue: next === undefined ? null : next.due.toISOString() };
+}
+
+export interface ConceptSummary {
+  conceptId: string;
+  title: string;
+  summary: string;
+  domain: string | null;
+}
+
+/**
+ * Every concept's one-line summary. A review session draws the wrong options
+ * of a multiple-choice card from these when the queue itself is too short to
+ * supply them, so it is one narrow query rather than the whole knowledge base.
+ */
+export async function conceptSummaries(db: CatalogDatabase): Promise<ConceptSummary[]> {
+  const rows = await db
+    .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
+    .from(concept)
+    .orderBy(asc(concept.slug));
+  return rows.map((row) => ({
+    conceptId: row.slug,
+    title: row.title,
+    summary: row.summary ?? "",
+    domain: domainOf(row.path),
+  }));
 }

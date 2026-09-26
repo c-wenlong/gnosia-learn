@@ -86,6 +86,7 @@ import {
   endSession,
   ensureSession,
   assertKnownConcepts,
+  gradeReview,
   ensureEntry,
   ensureLearner,
   propagateCorrect,
@@ -1019,40 +1020,11 @@ commands.review = async ({ values, positionals }, session) => {
     if (!Number.isFinite(grade) || grade < 0 || grade > 5) {
       fail("--grade must be between 0 and 5");
     }
-    await assertKnownConcepts(db, [id]);
-
-    const now = new Date();
-    const at = now.toISOString();
-
-    // Same lock as `observe`, for the same reason: this reads the card and the
-    // model, computes from both, and writes them back.
-    const { card, pL } = await withLearnerLock(db, LOCAL_LEARNER_ID, async (tx) => {
-      const current = await readReviews(tx);
-      const next = reviewCard(current.cards[id] ?? newCard(id, now), grade, {
-        now,
-      }) as ReviewCard;
-
-      const model = await readModel(tx);
-      const entry = ensureEntry(model, id);
-      const before = entry.pL;
-      entry.pL = bktUpdate(before, grade >= 3, { params: bktParams(model.params) }) as number;
-      entry.observations += 1;
-      if (grade >= 3) entry.correct += 1;
-      entry.lastSeen = at;
-
-      await appendEvent(tx, {
-        at,
-        type: "review",
-        concept: id,
-        grade,
-        pLBefore: before,
-        pLAfter: entry.pL,
-      });
-      await upsertReview(tx, next);
-      await writeModel(tx, model);
-
-      return { card: next, pL: entry.pL };
-    });
+    // The transaction is `gradeReview` in `state/review.ts`, the same function
+    // the web app's rating buttons call, so the terminal and the page cannot
+    // record a grade two different ways. It takes the learner lock for the
+    // reason `observe` does: it reads the card and the model and writes both.
+    const { card, pL } = await gradeReview(db, { conceptId: id, grade, now: new Date() });
 
     const result = {
       concept: id,
