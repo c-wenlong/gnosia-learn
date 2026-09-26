@@ -92,7 +92,7 @@ reduction of it, and where the two disagree the art wins.
 | File | What it is | Used for |
 | --- | --- | --- |
 | [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. `GnosiaMark`, the flat SVG reduction, is drawn from it and now only feeds the preview kit |
-| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of `apple-icon.png` and `app-icon-256.png` below (the favicon is cut from `logo/mark.png`) |
+| [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of `app-icon-256.png` below (the favicon and the home-screen icon are cut from `logo/mark.png`) |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
@@ -102,7 +102,7 @@ reduction of it, and where the two disagree the art wins.
 | [docs/design/brand/logo/](brand/logo/) `mark.png`, `wordmark-ink.png`, `wordmark-cream.png` | The owner's logo art, 2026-09-27: the mark alone (1254px), and the GNOSIA letters in deep teal (for light grounds) and in cream (for dark grounds), 2172 by 724, all on transparent grounds | Source of the four files below |
 | [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (256), `wordmark-ink.png`, `wordmark-cream.png` (96px tall) | Cut from `docs/design/brand/logo/`: pixels under 32 alpha cleared (the faint haze round the art), cropped to the art, scaled | `GnosiaWordmark` and `GnosiaLockup` |
 | [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `logo/mark.png`: the same clean-up, squared with a 5% margin | Favicon and PWA icon |
-| [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | Cut from `app-icon.png` | Home-screen icon |
+| [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | `logo/mark.png` at 70% of the tile on a solid `--brand-navy` (`#0d1c2b`) square; opaque, because iOS fills a transparent home-screen icon with black, and square, because iOS rounds the corners itself | Home-screen icon |
 | [apps/web/public/brand/app-icon-256.png](../../apps/web/public/brand/app-icon-256.png) | Cut from `app-icon.png` | Anywhere a 256px icon is wanted |
 | [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
 | [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Made from `hero-lockup.png` | The social card |
