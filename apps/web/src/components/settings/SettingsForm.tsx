@@ -297,13 +297,24 @@ function ReadOnly({ id, title, children }: { id: string; title?: string; childre
  * Reset asks first, in place, and says what it keeps. It goes through the
  * provider's `resetCourse`, the same call a course page's reset makes, so it
  * waits behind any tick or note still being saved (a write landing after the
- * delete would recreate the row) and, like every other write, shows its
- * result at once and raises the shell's banner if the database refuses it.
+ * delete would recreate the row). It says "reset" only once the write has
+ * been stored; a refusal is said here and in the shell's banner.
  */
 function DataActions({ topicIds }: { topicIds: string[] }) {
   const { resetCourse } = useLearner();
   const [confirming, setConfirming] = useState(false);
-  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
+
+  const reset = async () => {
+    setStatus({ kind: "saving" });
+    const stored = await resetCourse(topicIds);
+    if (stored) {
+      setConfirming(false);
+      setStatus({ kind: "saved" });
+    } else {
+      setStatus({ kind: "error", message: "Not reset: the write was not stored." });
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -316,7 +327,7 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
           aria-expanded={confirming}
           onClick={() => {
             setConfirming((v) => !v);
-            setDone(false);
+            setStatus({ kind: "idle" });
           }}
         >
           Reset progress
@@ -329,15 +340,7 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
             undone.
           </p>
           <div className="flex flex-wrap gap-2.5">
-            <Button
-              variant="warn"
-              size="sm"
-              onClick={() => {
-                resetCourse(topicIds);
-                setConfirming(false);
-                setDone(true);
-              }}
-            >
+            <Button variant="warn" size="sm" disabled={status.kind === "saving"} onClick={() => void reset()}>
               Reset every course
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
@@ -346,8 +349,10 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
           </div>
         </div>
       )}
-      <p aria-live="polite" className={cx("text-[12px] text-ok-text", !done && "sr-only")}>
-        {done ? "Progress reset. Ticks and notes are cleared." : ""}
+      <p aria-live="polite" className={cx("text-[12px]", status.kind === "idle" && "sr-only")}>
+        {status.kind === "saving" && <span className="text-text3">Resetting…</span>}
+        {status.kind === "saved" && <span className="text-ok-text">Progress reset. Ticks and notes are cleared.</span>}
+        {status.kind === "error" && <span className="text-danger">{status.message}</span>}
       </p>
     </div>
   );
