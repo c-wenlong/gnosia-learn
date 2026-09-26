@@ -96,8 +96,9 @@ bug fixes or docs. All welcome.
 ## Guidelines
 
 1. **Justify any new runtime dependency in the PR body.** The `learn` CLI has
-   none, and the web app's four (`next`, `react`, `react-dom`,
-   `@tailwindcss/typography`) are the whole list.
+   none, and the web app's third-party list is `next`, `react`, `react-dom`,
+   `@tailwindcss/typography` and `katex` (maths typesetting, pinned exactly;
+   see `apps/web/src/lib/math.ts` for why it earned its place).
 2. **`npm run build` has to pass, not just `npm run typecheck`.**
    `next-env.d.ts` imports `./.next/types/routes.d.ts`, which only `next dev`
    or `next build` generates, so route types are checked properly only once a
