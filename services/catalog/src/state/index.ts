@@ -74,13 +74,27 @@ export {
   type Model,
 } from "./mastery";
 export {
+  conceptSummaries,
   dueReviews,
   emptyReviews,
+  gradeForRating,
+  gradeReview,
+  previewIntervals,
+  ratingForGrade,
   readCards,
   readReviews,
+  REVIEW_RATINGS,
+  reviewQueue,
+  scheduleCard,
   upsertReview,
   writeReviews,
+  type ConceptSummary,
+  type GradeReviewInput,
+  type GradeReviewResult,
   type ReviewCard,
+  type ReviewQueue,
+  type ReviewQueueItem,
+  type ReviewRating,
   type Reviews,
 } from "./review";
 export {
