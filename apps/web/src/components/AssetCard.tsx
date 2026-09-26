@@ -1,39 +1,43 @@
 "use client";
 
-import type { ReactNode } from "react";
-
 import {
   assetDisplayTitle,
   assetKindLabel,
+  assetMetaLine,
   familyOf,
-  formatBytes,
   type AssetCardRef,
-  type Family,
 } from "@/components/asset-meta";
+import { MasteryDot } from "@/components/ui/MasteryDot";
+import { Chip } from "@/components/ui/Chip";
+import { cardClasses, cx } from "@/components/ui/classes";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
+import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
- * One row of the catalog's asset table, as a card in a grid.
+ * One row of the catalog's asset table, as a card in the library grid
+ * (hi-fi 10: a thumbnail, the kind chip and a meta line, the title, and the
+ * concept it explains with a mastery dot).
  *
  * The asset comes in as a prop, already read by whoever is listing them; the
- * thumbnail and the link come in already resolved. The component's whole job
- * is to say what this thing is and let the reader open it.
+ * thumbnail, the concept and the link come in already resolved. The
+ * component's whole job is to say what this thing is and let the reader open
+ * it.
  *
- * **Two shapes, not one.** A video and a diagram are worth looking at before
- * opening, so they get a preview tile. A transcript, a note or a link is text,
- * and a 16:9 grey rectangle above every one of them would be a grid of empty
- * boxes pretending to be a gallery. Those get a compact row instead: a glyph,
- * the title, the file. Same card vocabulary, sized to what is in it.
+ * **One shape for every kind.** A video shows its poster and a diagram shows
+ * itself; everything else, and a video or diagram with no picture to show,
+ * gets the labelled `Placeholder` box the hi-fi draws, so the grid lines up
+ * whatever it holds.
  *
  * **It has to degrade honestly**, because the catalog holds rows this app has
- * never seen. A kind with no special rendering still reads as itself. A video
- * with no poster shows a labelled placeholder, not a black hole. An asset with
- * no title falls back to its filename, in mono, because that is what it is
- * actually called, and to `Untitled <kind>` only when there is no name at all.
- * A preview that fails to load says so where the picture would have been,
- * and says why: the compact form of the shared Widget placeholder failure,
- * with the reason asked of `thumbnailStatusHref` after the image fails.
+ * never seen. A kind with no special rendering still reads as itself. An
+ * asset with no title falls back to its filename, in mono, because that is
+ * what it is actually called, and to `Untitled <kind>` only when there is no
+ * name at all. A preview that fails to load says so where the picture would
+ * have been, and says why: the compact form of the shared Widget placeholder
+ * failure, with the reason asked of `thumbnailStatusHref` after the image
+ * fails. An asset linked to no concept shows its topic instead of a concept
+ * chip, without a dot, since there is no mastery to colour.
  *
  * **The naming and sizing live in `./asset-meta`**, which is React-free and
  * carries no `"use client"`. They were in this file and had to move: a
@@ -43,69 +47,26 @@ import { WidgetFailure } from "@/components/WidgetFailure";
  * on the first request. The pure half belongs where both sides may call it.
  */
 
-/** One stroke set for every kind, so the grid reads as one family of things. */
-function KindGlyph({ family, className }: { family: Family; className?: string }) {
-  const common = {
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.5,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-    className,
-  };
-  if (family === "video") {
-    return (
-      <svg {...common}>
-        <rect x="3" y="5" width="18" height="14" rx="2.5" />
-        <path d="M10.5 9.5 15 12l-4.5 2.5z" />
-      </svg>
-    );
-  }
-  if (family === "diagram") {
-    return (
-      <svg {...common}>
-        <rect x="3" y="4" width="7" height="5" rx="1.5" />
-        <rect x="14" y="15" width="7" height="5" rx="1.5" />
-        <path d="M6.5 9v4.5a2 2 0 0 0 2 2H14" />
-      </svg>
-    );
-  }
-  if (family === "link") {
-    return (
-      <svg {...common}>
-        <path d="M10 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
-        <path d="M14 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...common}>
-      <path d="M6 3.5h7L18 8v12.5H6z" />
-      <path d="M13 3.5V8h5" />
-      <path d="M9 13h6M9 16.5h4" />
-    </svg>
-  );
-}
-
-function Chip({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--chip-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted-strong)]">
-      {children}
-    </span>
-  );
+/** The concept a card names: the first one the asset explains, and how many more. */
+export interface CardConcept {
+  title: string;
+  bucket: MasteryBucket;
+  /** Further concepts the asset explains beyond this one. */
+  more: number;
 }
 
 export function AssetCard({
   asset,
+  concept,
   topic,
   thumbnailSrc,
   thumbnailStatusHref,
   href,
 }: {
   asset: AssetCardRef;
-  /** The topic this asset is filed under, already resolved to a label. */
+  /** The first concept this asset explains, resolved against the knowledge base. */
+  concept?: CardConcept;
+  /** The topic this asset is filed under, as a label. Shown when there is no concept. */
   topic?: string;
   /** A poster for a video, or the diagram itself. Already resolved. */
   thumbnailSrc?: string | null;
@@ -126,33 +87,26 @@ export function AssetCard({
   const family = familyOf(asset.kind);
   const label = assetKindLabel(asset.kind);
   const name = assetDisplayTitle(asset);
-  const size = formatBytes(asset.bytes);
+  const meta = assetMetaLine(asset);
   const previewable = family === "video" || family === "diagram";
   const showThumb = previewable && Boolean(thumbnailSrc) && !thumbFailed;
 
   const nameClass =
     name.source === "title"
-      ? "font-medium text-[var(--foreground)]"
+      ? "font-semibold text-text"
       : name.source === "none"
-        ? "font-medium text-[var(--muted)]"
-        : "font-mono text-[13px] font-medium text-[var(--muted-strong)]";
+        ? "font-semibold text-text2"
+        : "font-mono text-[13px] font-medium text-text2";
 
-  const meta = (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <Chip>{label}</Chip>
-      {topic && <Chip>{topic}</Chip>}
-      {size && <span className="text-[10px] tabular-nums text-[var(--muted)]">{size}</span>}
-    </div>
-  );
-
-  const body = previewable ? (
+  const body = (
     <>
       <div
-        className={`flex aspect-video items-center justify-center overflow-hidden border-b border-[var(--border)] ${
+        className={cx(
+          "flex h-[110px] shrink-0 items-center justify-center overflow-hidden rounded-xl",
           // The diagram's own ground, held constant in both themes; see
           // DiagramView for why an exported drawing is never recoloured.
-          showThumb && family === "diagram" ? "bg-[#f7f6f3]" : "bg-[var(--chip-bg)]"
-        }`}
+          showThumb && family === "diagram" ? "bg-[#f7f6f3]" : "bg-surface2",
+        )}
       >
         {showThumb ? (
           // eslint-disable-next-line @next/next/no-img-element -- the poster and the diagram are files the app serves as-is, and a vector drawing must not be rasterised.
@@ -163,7 +117,7 @@ export function AssetCard({
             loading="lazy"
             decoding="async"
             onError={fail}
-            className={`h-full w-full ${family === "diagram" ? "object-contain p-2" : "object-cover"}`}
+            className={cx("h-full w-full", family === "diagram" ? "object-contain p-2" : "object-cover")}
           />
         ) : thumbFailed ? (
           <WidgetFailure
@@ -173,38 +127,33 @@ export function AssetCard({
             className="h-full w-full"
           />
         ) : (
-          <span className="flex flex-col items-center gap-1 text-[var(--muted)]">
-            <KindGlyph family={family} className="h-7 w-7" />
-            <span className="text-[10px]">{family === "video" ? "No poster" : "No preview"}</span>
+          <span data-thumbnail="placeholder" className="text-[12px] text-text3">
+            {label.toLowerCase()}
           </span>
         )}
       </div>
-      <div className="p-3">
-        <h3 className={`line-clamp-2 break-words text-sm leading-snug ${nameClass}`}>
-          {name.text}
-        </h3>
-        {meta}
+      <div className="flex min-w-0 items-center gap-2">
+        {/* Lowercase by style only, so the chip reads "video" as the hi-fi
+            draws it while its text stays the kind's name. */}
+        <Chip size="sm" className="lowercase">
+          {label}
+        </Chip>
+        {meta && <span className="min-w-0 truncate text-[12px] text-text2">{meta}</span>}
       </div>
+      <h3 className={cx("line-clamp-2 break-words text-[14px] leading-snug", nameClass)}>{name.text}</h3>
+      {concept !== undefined ? (
+        <p className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
+          <MasteryDot bucket={concept.bucket} size={12} />
+          <span className="min-w-0 truncate">{concept.title}</span>
+          {concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
+        </p>
+      ) : topic !== undefined ? (
+        <p className="min-w-0 truncate text-[12px] text-text2">{topic}</p>
+      ) : null}
     </>
-  ) : (
-    <div className="flex gap-3 p-3">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--chip-bg)] text-[var(--muted)]">
-        <KindGlyph family={family} className="h-4 w-4" />
-      </span>
-      <div className="min-w-0">
-        <h3 className={`line-clamp-2 break-words text-sm leading-snug ${nameClass}`}>
-          {name.text}
-        </h3>
-        {meta}
-      </div>
-    </div>
   );
 
-  // `self-start` so a compact row does not stretch to the height of the
-  // preview card beside it: the two shapes share a grid and the empty space
-  // that stretching leaves is the ugliest thing a mixed grid does.
-  const shell =
-    "block self-start overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-colors duration-150";
+  const shell = cardClasses({ tight: true, className: "h-full w-full gap-2" });
 
   if (!href) {
     return <article className={shell}>{body}</article>;
@@ -213,7 +162,11 @@ export function AssetCard({
   return (
     <a
       href={href}
-      className={`${shell} hover:border-[var(--accent)]/40 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]`}
+      className={cx(
+        shell,
+        "transition-colors duration-100 hover:border-text3",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      )}
     >
       {body}
     </a>

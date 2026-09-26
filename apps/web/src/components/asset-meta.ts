@@ -113,3 +113,45 @@ export function formatBytes(bytes: number | null): string | null {
   }
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
+
+/** The tool that made a row, as the card's meta line names it. */
+const SOURCE_LABEL: Record<string, string> = {
+  manimkc: "manim",
+  tldrawkc: "tldraw",
+};
+
+/**
+ * The short line beside a card's kind chip (hi-fi 10: "4:12 · manim",
+ * "svg · tldraw", "concept note", "external"): what made it and how big it is,
+ * from what the row actually carries. There is no duration column, so a video
+ * says its tool and its size rather than a running time nobody measured.
+ */
+export function assetMetaLine(asset: AssetCardRef): string {
+  const size = formatBytes(asset.bytes);
+  const tool = asset.sourceRepo === undefined ? undefined : SOURCE_LABEL[asset.sourceRepo];
+  const parts: (string | null | undefined)[] = [];
+  switch (asset.kind) {
+    case "video":
+      parts.push(tool, size);
+      break;
+    case "diagram_svg":
+      parts.push("svg", tool, size);
+      break;
+    case "note":
+      parts.push("concept note", size);
+      break;
+    case "link": {
+      let host: string | null = null;
+      try {
+        host = asset.url ? new URL(asset.url).host : null;
+      } catch {
+        host = null;
+      }
+      parts.push(host ?? "external");
+      break;
+    }
+    default:
+      parts.push(tool, size);
+  }
+  return parts.filter(Boolean).join(" · ");
+}

@@ -8,6 +8,7 @@ import {
   type VideoChapter,
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
+import { chipClasses } from "@/components/ui/classes";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
@@ -26,17 +27,11 @@ import { WidgetFailure } from "@/components/WidgetFailure";
  * element does not have is chapters and a transcript, so that is what this
  * component adds and all it adds.
  *
- * The layout is driven by container queries, not by the viewport. The app's
- * content column is capped at 48rem whatever the screen is doing, so a `lg:`
- * breakpoint here would put a 20rem transcript beside a video and leave the
- * video narrower than its own transcript. What the layout actually depends on
- * is how much room this component was given:
- *
- * ```
- * under 42rem   video, then chapters, then transcript, stacked
- * 42rem and up  video, then chapters and transcript side by side beneath it
- * 64rem and up  video with the reading column beside it
- * ```
+ * The layout is the library asset page's main column (hi-fi 11): the
+ * picture, then the chapters as a row of chips, then the transcript in a card
+ * beneath. One column at every width, because the page gives the video the
+ * wide column and keeps its own rail for the asset's metadata; the transcript
+ * beside the picture would take width from both.
  *
  * **A video that fails says why.** Without an `onError` the reader got the
  * browser's own dead player, with no hint whether the file was gone, the index
@@ -134,125 +129,88 @@ export function VideoPlayer({
   }
 
   const activeChapter = chapters ? activeChapterIndex(chapters, time) : -1;
-  const aside = chapters !== undefined || transcript !== undefined;
 
   return (
-    // The container is the wrapper, never the grid itself: an element cannot
-    // answer a query about its own width, only about an ancestor's.
-    <div className="@container">
-      <section
-        className={`grid gap-4 ${
-          aside ? "@5xl:grid-cols-[minmax(0,1fr)_20rem] @5xl:items-start" : ""
-        }`}
-      >
-        {failure !== null ? (
-          <WidgetFailure
-            headline="This video did not load."
-            code={failure.code}
-            onRetry={retry}
-            className="min-h-64 w-full sm:min-h-80"
+    <section className="flex flex-col gap-3.5">
+      {failure !== null ? (
+        <WidgetFailure
+          headline="This video did not load."
+          code={failure.code}
+          onRetry={retry}
+          className="min-h-64 w-full sm:min-h-80"
+        />
+      ) : (
+        <div className="overflow-hidden rounded-xl bg-black has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-accent has-[video:focus-visible]:ring-offset-2 has-[video:focus-visible]:ring-offset-page">
+          {/* The caption track is a separate asset row and a separate prop the
+              catalog has not been asked for yet; what this component is handed
+              is the transcript, and it renders that beneath the picture. */}
+          <video
+            key={attempt}
+            ref={(element) => {
+              videoRef.current = element;
+              observe(element);
+            }}
+            src={src}
+            poster={poster}
+            controls
+            preload="metadata"
+            playsInline
+            aria-label={title}
+            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+            onSeeked={(e) => setTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
+            onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
+            onError={fail}
+            className="aspect-video w-full bg-black outline-none"
           />
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-sm transition-shadow duration-150 has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-[var(--accent)] has-[video:focus-visible]:ring-offset-2 has-[video:focus-visible]:ring-offset-[var(--background)]">
-            {/* The caption track is a separate asset row and a separate prop the
-                catalog has not been asked for yet; what this component is handed
-                is the transcript, and it renders that beside the picture. */}
-            <video
-              key={attempt}
-              ref={(element) => {
-                videoRef.current = element;
-                observe(element);
-              }}
-              src={src}
-              poster={poster}
-              controls
-              preload="metadata"
-              playsInline
-              aria-label={title}
-              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-              onSeeked={(e) => setTime(e.currentTarget.currentTime)}
-              onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
-              onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
-              onError={fail}
-              className="aspect-video w-full bg-black outline-none"
-            />
-          </div>
-        )}
+        </div>
+      )}
 
-        {aside && (
-          <div className="grid content-start gap-4 @2xl:grid-cols-2 @5xl:grid-cols-1">
-            {chapters !== undefined && (
-              <nav
-                aria-label={title ? `Chapters of ${title}` : "Chapters"}
-                className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-              >
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    Chapters
-                  </h3>
-                  {chapters.length > 0 && (
-                    <span className="text-[11px] tabular-nums text-[var(--muted)]">
-                      {chapters.length}
-                    </span>
-                  )}
-                </div>
-                {chapters.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-sm text-[var(--muted)]">
-                    No chapters for this video.
-                  </p>
-                ) : (
-                  <ol className="max-h-[18rem] overflow-y-auto overscroll-contain p-1.5 @5xl:max-h-[13rem]">
-                    {chapters.map((chapter, i) => {
-                      const isActive = i === activeChapter;
-                      return (
-                        <li key={`${chapter.start}-${i}`}>
-                          <button
-                            type="button"
-                            onClick={() => seek(chapter.start)}
-                            aria-current={isActive ? "true" : undefined}
-                            className={`grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
-                              isActive
-                                ? "bg-[var(--nav-active-bg)] font-medium text-[var(--foreground)]"
-                                : "text-[var(--muted-strong)]"
-                            }`}
-                          >
-                            <span
-                              className={`pt-px font-mono text-[11px] tabular-nums ${
-                                isActive
-                                  ? "text-[var(--accent-strong)]"
-                                  : "text-[var(--muted)]"
-                              }`}
-                            >
-                              {formatTimecode(chapter.start)}
-                            </span>
-                            <span>{chapter.title}</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </nav>
-            )}
+      {chapters !== undefined && (
+        <nav
+          aria-label={title ? `Chapters of ${title}` : "Chapters"}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <h3 className="mr-1 text-[12px] font-normal text-text3">Chapters</h3>
+          {chapters.length === 0 ? (
+            <p className="text-[12px] text-text2">No chapters for this video.</p>
+          ) : (
+            chapters.map((chapter, i) => {
+              const isActive = i === activeChapter;
+              return (
+                <button
+                  key={`${chapter.start}-${i}`}
+                  type="button"
+                  onClick={() => seek(chapter.start)}
+                  aria-current={isActive ? "true" : undefined}
+                  className={chipClasses({ active: isActive, size: "sm", className: "max-w-full" })}
+                >
+                  <span className="truncate">{chapter.title}</span>
+                  <span className={`tabular-nums ${isActive ? "" : "text-text2"}`}>
+                    {formatTimecode(chapter.start)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </nav>
+      )}
 
-            {transcript !== undefined && (
-              <TranscriptPanel
-                // The panel's follow-along state is playback state too: a
-                // reader who scrolled away from one video should not land on
-                // the next one with its transcript already given up on. A key
-                // is right *here*, where the one caller owns the child and
-                // always passes it, and wrong at the route, where the next
-                // caller would have to remember it.
-                key={src}
-                cues={transcript}
-                currentTime={time}
-                onSeek={seek}
-                scrollerClassName="max-h-[18rem] @5xl:max-h-[26rem]"
-              />
-            )}
-            </div>
-        )}
-      </section>
-    </div>
+      {transcript !== undefined && (
+        <TranscriptPanel
+          // The panel's follow-along state is playback state too: a
+          // reader who scrolled away from one video should not land on
+          // the next one with its transcript already given up on. A key
+          // is right *here*, where the one caller owns the child and
+          // always passes it, and wrong at the route, where the next
+          // caller would have to remember it.
+          key={src}
+          cues={transcript}
+          currentTime={time}
+          onSeek={seek}
+          scrollerClassName="max-h-[26rem]"
+        />
+      )}
+    </section>
   );
 }
