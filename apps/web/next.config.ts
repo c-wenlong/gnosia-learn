@@ -55,6 +55,16 @@ const nextConfig: NextConfig = {
    * laptop and on Vercel.
    */
   serverExternalPackages: ["pg"],
+
+  /**
+   * Next 16.3 writes an `AGENTS.md` and a `CLAUDE.md` into this directory on
+   * every `next dev`, pointing agents at its bundled docs. The repository
+   * already carries that notice at the top of the root `AGENTS.md`, which is
+   * the single source of truth for agent instructions, and a second pair
+   * under `apps/web/` would be loaded on top of it by any session working in
+   * this directory. Off, so the tree stays as committed after a dev run.
+   */
+  agentRules: false,
 };
 
 export default nextConfig;
