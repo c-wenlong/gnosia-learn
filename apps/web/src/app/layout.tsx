@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { resolveSiteUrl } from "@/lib/site-url";
-import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
+import { asThemeMode, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 
 // The interface face. Brilliant's own is CoFo Brilliant, and Figtree is the
@@ -55,9 +55,14 @@ export const metadata: Metadata = {
  * The theme stays here because it is a cookie and has to be known before the
  * first byte of HTML, or a dark-mode reload flashes white. It used to fall
  * back to the `preference` row when the cookie was missing; the `(app)`
- * layout still seeds the learner state from the row, and the client toggles
+ * layout still seeds the learner state from the row, and the client sets
  * the class to match on hydration, so a new browser gets the right theme one
  * frame late rather than a query on every public page.
+ *
+ * `system` is the mode the server cannot resolve. It is rendered as light
+ * with `data-theme="system"`, and the first thing in `<body>` is a two-line
+ * script that adds `dark` when the device prefers it, before anything paints
+ * (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).
  */
 export default async function RootLayout({
   children,
@@ -66,16 +71,19 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value) ?? "light";
+  const cls = themeClass(theme, false);
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${
-        theme === "dark" ? " dark" : ""
-      }`}
+      data-theme={theme}
+      className={`${figtree.variable} ${geistMono.variable} h-full antialiased${cls ? ` ${cls}` : ""}`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
+        {children}
+      </body>
     </html>
   );
 }

@@ -11,12 +11,14 @@ import { cx } from "./classes";
  * The strip label is `--on-tone`, black in both themes, where the kit drew it
  * white in light: white on the streak orange is about 2:1 and on the others
  * under 4.5:1, too low for 11px text. Black is at least 4.8:1 on all four
- * tones in both themes.
+ * tones in every palette. The `ok` frame is the green face, not the green
+ * text colour: the text green is tuned for 4.5:1 *as* text on cream, which
+ * makes it too dark to carry black at 11px (4.1:1 under `.gnosia`).
  */
 export type StatTone = "ok" | "accent" | "violet" | "streak";
 
 const TONE: Record<StatTone, string> = {
-  ok: "var(--ok-text)",
+  ok: "var(--ok)",
   accent: "var(--accent)",
   violet: "var(--violet)",
   streak: "var(--streak)",

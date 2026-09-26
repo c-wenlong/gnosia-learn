@@ -131,6 +131,63 @@
 }
 
 /*
+ * The third theme, "Gnosia" light: the brand palette (docs/design/BRAND.md)
+ * applied to the whole app. Selected by the class `gnosia` on <html>, in place
+ * of `.dark`, so it is a light theme and Tailwind's `dark:` variant stays off.
+ * Only the tokens that change are here; everything else falls through from
+ * :root. Literal hex on purpose, so the block is self-contained and greppable;
+ * the values that are brand tokens say which. Every pair is contrast-checked
+ * in BRAND.md, "The Gnosia theme inside the app".
+ */
+.gnosia {
+  /* Grounds: cream paper, a whiter card, a deeper cream, a pale teal wash. */
+  --page: #faf6ec; /* --brand-cream */
+  --surface: #fffdf8;
+  --surface2: #f3eee1;
+  --tint: #e2efec;
+  --border: #e6dfd0;
+  --hair: #ede7da;
+
+  /* Ink: the brand's navy-black, then two warm muted inks. */
+  --text: #15283a; /* --brand-ink */
+  --text2: #605b54;
+  --text3: #878276;
+
+  /* Accent: a mid teal for fills, at the one luminance where both a white
+     label (chips, the accent button) and the black stat-tile strip clear
+     4.5:1; the deep brand teal is the text colour and the lip. */
+  --accent: #148285;
+  --accent-text: #0f5f61; /* --brand-teal */
+  --accent-lip: #0f5f61; /* --brand-teal */
+
+  /* The primary pill is the landing page's brand button: teal face, navy lip,
+     cream label, so the app and the sign-in page press the same button. */
+  --btn-face: #0f5f61; /* --brand-teal */
+  --btn-lip: #0d1c2b; /* --brand-navy */
+  --btn-text: #faf6ec; /* --brand-cream */
+
+  /* Mastery: deep teal, soft teal, warm grey, stepped by lightness (L* 36,
+     58, 86) so the three stay apart without hue. */
+  --m-hi: #0f5f61; /* --brand-teal */
+  --m-hi-lip: #0a4244;
+  --m-mid: #529798;
+  --m-mid-lip: #3b7475;
+  --m-lo: #ddd5c4;
+  --lip-shade: #cbc1ad;
+
+  /* The streak is the brand's gold: 3.1:1 on cream, the non-text minimum. */
+  --streak: #b3842c; /* --brand-gold */
+
+  /* Signal colours keep their :root hues. Only three labels move, each
+     because it was under 4.5:1: the green and amber text darkened just far
+     enough to pass on their tints and on cream, and the label on a green
+     face turned dark, as it already is in `.dark`. */
+  --ok-text: #008024;
+  --ok-on: #0b2e14;
+  --warn-text: #8c6800;
+}
+
+/*
  * Every token is also a Tailwind colour of the same name, so a component can
  * write `bg-surface2 text-text2 border-border` instead of
  * `bg-[var(--surface2)]`. `inline` keeps the utility pointing at the variable,

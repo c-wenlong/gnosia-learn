@@ -72,7 +72,7 @@ export type RecapSource = (typeof RECAP_SOURCES)[number];
  * of them is a type error rather than a silently missing value.
  */
 export const PREFERENCE_KEYS = {
-  /** "light" | "dark". Mirrored into a cookie so the root layout can render it. */
+  /** One of `THEME_MODES`. Mirrored into a cookie so the root layout can render it. */
   theme: "theme",
   /** Bumps on a progress reset so client UI state remounts. */
   epoch: "epoch",
@@ -144,7 +144,21 @@ export function clampSummary(value: unknown): string {
  * Postgres.
  */
 
-export type ThemeMode = "light" | "dark";
+/**
+ * The four appearance modes. `light` is the original palette, `gnosia` the
+ * brand palette as a light theme, `dark` the dark one, and `system` follows
+ * the device's `prefers-color-scheme` between `light` and `dark`. The names
+ * are stored in the `preference` row and in the theme cookie, so adding one
+ * here is the whole schema change.
+ */
+export const THEME_MODES = ["light", "gnosia", "dark", "system"] as const;
+
+export type ThemeMode = (typeof THEME_MODES)[number];
+
+/** The mode a stored or posted value names, or null for anything else. */
+export function asThemeMode(value: unknown): ThemeMode | null {
+  return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
+}
 
 /** Where a recap came from. The same vocabulary as `RECAP_SOURCES`. */
 export type KnowledgeSource = RecapSource;

@@ -1,4 +1,5 @@
 import {
+  asThemeMode,
   clampKnowledgeList,
   clampSummary,
   curriculumItem,
@@ -6,6 +7,7 @@ import {
   PREFERENCE_KEYS,
   RECAP_SOURCES,
   type KnowledgeSource,
+  type ThemeMode,
 } from "@self-learn/schema";
 import { inArray } from "drizzle-orm";
 
@@ -188,8 +190,8 @@ export async function importLegacyState(
   return result;
 }
 
-function themeOf(value: unknown): "light" | "dark" | null {
-  return value === "dark" || value === "light" ? value : null;
+function themeOf(value: unknown): ThemeMode | null {
+  return asThemeMode(value);
 }
 
 /** Write a preference only when the payload has one and the database does not. */

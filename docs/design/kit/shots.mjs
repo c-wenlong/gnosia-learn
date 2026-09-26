@@ -15,7 +15,7 @@
 //
 // Options (environment):
 //   SHOTS_VIEWPORTS=desktop,phone   which sizes (default both)
-//   SHOTS_THEMES=light,dark         which themes (default both)
+//   SHOTS_THEMES=light,dark,gnosia  which themes (default light,dark; gnosia only when named)
 //   SHOTS_VIEWPORT_ONLY=1           capture the viewport only, not the full page
 //   PLAYWRIGHT_CORE=<path>          playwright-core's index.mjs, when the tldrawkc
 //                                   submodule in this checkout is not installed
@@ -57,7 +57,7 @@ const VIEWPORTS = {
 };
 const pick = (value, all) => (value ? value.split(',').map((s) => s.trim()).filter((s) => all.includes(s)) : all);
 const sizes = pick(process.env.SHOTS_VIEWPORTS, Object.keys(VIEWPORTS));
-const themes = pick(process.env.SHOTS_THEMES, ['light', 'dark']);
+const themes = pick(process.env.SHOTS_THEMES, ['light', 'dark', 'gnosia']).filter((t) => t !== 'gnosia' || process.env.SHOTS_THEMES);
 const fullPage = !process.env.SHOTS_VIEWPORT_ONLY;
 
 mkdirSync(outDir, { recursive: true });
@@ -73,7 +73,7 @@ try {
         deviceScaleFactor: 1,
         isMobile,
         hasTouch: isMobile,
-        colorScheme: theme,
+        colorScheme: theme === 'dark' ? 'dark' : 'light',
       });
       await context.addCookies([{ name: 'self-learn-theme', value: theme, domain: origin.hostname, path: '/' }]);
       const page = await context.newPage();

@@ -30,7 +30,7 @@ import {
   setTheme,
   toggleTopic,
 } from "@/lib/storage";
-import { writeThemeCookie } from "@/lib/theme-cookie";
+import { applyThemeToDocument, writeThemeCookie } from "@/lib/theme-cookie";
 import { createWriteQueue } from "@/lib/write-queue";
 
 /**
@@ -216,13 +216,19 @@ export function LearnerProvider({
   // on the first render and writes the cookie the next reload will read.
   // One frame late in a new browser, and never a query on a public page.
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", state.theme === "dark");
+    applyThemeToDocument(state.theme);
     writeThemeCookie(state.theme);
+    if (state.theme !== "system" || typeof window.matchMedia !== "function") return;
+    // Under `system` the device can change its mind while the page is open.
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => applyThemeToDocument("system");
+    query.addEventListener("change", follow);
+    return () => query.removeEventListener("change", follow);
   }, [state.theme]);
 
   const setThemeMode = useCallback(
     (theme: ThemeMode) => {
-      document.documentElement.classList.toggle("dark", theme === "dark");
+      applyThemeToDocument(theme);
       // The cookie first, and not conditional on the write succeeding: it is
       // what stops the next reload flashing the wrong theme, and it costs
       // nothing to be right about that even when the database is down.
