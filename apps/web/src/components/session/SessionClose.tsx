@@ -27,6 +27,11 @@ import {
  * in p(L), always signed, and a dash when nothing was answered. Target is the habit's own
  * count, read by the server on the refresh after the last answer, so it is the
  * number the top bar shows too.
+ *
+ * `reason` is set when the session could ask nothing (no check in the note,
+ * no model configured): What moved says why in place of "nothing was
+ * answered", and a Quiz me that opened straight onto this screen, having
+ * walked no step, is titled for what happened rather than as a closed session.
  */
 export function SessionClose({
   slug,
@@ -36,6 +41,7 @@ export function SessionClose({
   minutes,
   target,
   next,
+  reason = null,
 }: {
   slug: string;
   title: string;
@@ -44,20 +50,23 @@ export function SessionClose({
   minutes: number;
   target: { done: number; total: number; reachable: boolean };
   next: { slug: string; title: string } | null;
+  /** Why nothing was asked, when the server knew before the session began. */
+  reason?: string | null;
 }) {
   // One clock for the relative dates on this screen.
   const [now] = useState(() => new Date());
   const totals = sessionTotals(slug, answers);
   const moved = whatMoved(slug, title, answers);
   const scheduled = scheduledCards(slug, title, answers);
+  const walked = stepsWalked(plan);
 
   return (
     <div className="flex flex-col gap-4 md:gap-[22px]">
       <div className="flex flex-col items-center gap-1.5 pt-2 text-center md:pt-0">
-        <h1 className="font-display text-[26px] leading-tight font-bold text-text md:text-[32px]">Session closed</h1>
-        <p className="text-[13px] text-text2">
-          {title} · {minutes} min · {stepsWalked(plan)}
-        </p>
+        <h1 className="font-display text-[26px] leading-tight font-bold text-text md:text-[32px]">
+          {walked === "" ? "Nothing to ask" : "Session closed"}
+        </h1>
+        <p className="text-[13px] text-text2">{walked === "" ? title : `${title} · ${minutes} min · ${walked}`}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 md:flex md:gap-3.5">
@@ -69,7 +78,9 @@ export function SessionClose({
 
       <Card title="What moved">
         {moved.length === 0 ? (
-          <p className="text-[14px] text-text2">Nothing was answered, so no belief moved.</p>
+          <p className="text-[14px] text-text2">
+            {reason === null ? "Nothing was answered, so no belief moved." : `${reason} Nothing was recorded.`}
+          </p>
         ) : (
           <ul className="flex flex-col gap-3 md:gap-2">
             {moved.map((row) => (
