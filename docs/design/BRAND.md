@@ -444,4 +444,5 @@ Numbers (the estimates, 0.54 and so on) are Figtree with tabular figures,
 not a monospace: a book prints its numbers in its text face, and a mono face
 on a landing page reads as a developer dashboard. The one monospace left is
 the sign-in page's configuration error, which names environment variables
-and is only ever seen by the owner.
+(real code, so mono is right there) and which any visitor can see while
+sign-in is not configured.
