@@ -78,7 +78,7 @@ export function WorkspacePanels({
   const shown = (key: PanelKey) => cx("min-h-0 min-w-0", active !== key && "max-[899px]:hidden");
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
+    <div className="flex min-h-0 flex-col gap-4 min-[900px]:flex-1">
       <div role="group" aria-label="Workspace panels" className="flex gap-2 overflow-x-auto min-[900px]:hidden">
         {TABS.map((t) => (
           <Chip key={t.key} active={active === t.key} onClick={() => setActive(t.key)}>
@@ -90,7 +90,9 @@ export function WorkspacePanels({
       <div
         className={cx(
           "grid grid-cols-1 gap-4",
-          "min-[900px]:h-[calc(100dvh-13rem)] min-[900px]:min-h-[560px] min-[900px]:grid-rows-[minmax(0,1fr)]",
+          // From 900px up the page is fixed to the viewport (`data-layout="workspace"`),
+          // so the grid takes whatever height is left and the panels scroll inside.
+          "min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:grid-rows-[minmax(0,1fr)]",
           noteOpen ? "min-[900px]:[--note-w:250px] xl:[--note-w:290px]" : "min-[900px]:[--note-w:48px]",
           studioOpen ? "min-[900px]:[--studio-w:270px] xl:[--studio-w:310px]" : "min-[900px]:[--studio-w:48px]",
           "min-[900px]:grid-cols-[var(--note-w)_minmax(0,1fr)_var(--studio-w)]",

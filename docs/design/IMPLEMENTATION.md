@@ -178,6 +178,7 @@ client boundary.
 | --- | --- | --- | --- |
 | `app` | up to 1392px, 24px gutters (16 on a phone), 24px top | full | every redesigned page |
 | `focus` | the whole width, no padding | no top bar from 768px up; the phone keeps its header and tab bar | Session and Review (hi-fi 05 to 08, 14, 15) |
+| `workspace` | as `app`; from 900px up the shell is fixed to the viewport and the page gets a `flex-1 min-h-0` region | full | the concept workspace, whose three panels scroll inside themselves |
 | none | the old 48rem reading measure | full | pages not yet redesigned |
 | `wide` | 72rem | full | the old library pages |
 | `full` | the whole region, no padding, the shell fixed to the viewport | tab bar hidden | the studio canvas |
