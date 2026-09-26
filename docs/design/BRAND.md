@@ -171,8 +171,10 @@ cream and on navy. The copies the app ships are trimmed to the art plus 8px
 and scaled to 900px on the longest side, which covers the 400px hero at 2x.
 [GnosiaMascot](../../apps/web/src/components/brand/GnosiaMascot.tsx) renders
 a pose from `public/brand/mascot/` with `next/image`, `alt=""`, sized by
-height with a class; `MASCOT_POSES` holds each file's pixel size, so a
-replaced file needs its size updated there too.
+height with a class. The poses are static imports, so each ships under a
+content-hashed URL and `next/image` reads its pixel size from the file: a
+replaced file needs no size edited anywhere and never leaves a browser on
+the old picture.
 
 | Pose | Where it goes |
 | --- | --- |

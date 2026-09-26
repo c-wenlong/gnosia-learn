@@ -2,6 +2,13 @@ import Image from "next/image";
 
 import { cx } from "@/components/ui/classes";
 
+import curious from "../../../public/brand/mascot/curious.png";
+import excited from "../../../public/brand/mascot/excited.png";
+import happy from "../../../public/brand/mascot/happy.png";
+import neutral from "../../../public/brand/mascot/neutral.png";
+import reading from "../../../public/brand/mascot/reading.png";
+import sleepy from "../../../public/brand/mascot/sleepy.png";
+
 /**
  * The mascot: the hooded tome with the glowing crescent eyes. Each pose is
  * one of the owner's renders, drawn on a transparent ground, trimmed to the
@@ -14,15 +21,14 @@ import { cx } from "@/components/ui/classes";
  * `float` adds the slow bob from globals.css, which only runs for a reader
  * who has not asked for reduced motion. Rules for which pose goes where are
  * in docs/design/BRAND.md.
+ *
+ * The poses are static imports, not `/brand/mascot/...` strings, for two
+ * reasons: each gets a content-hashed URL cached as immutable, so replacing a
+ * file can never leave a browser on the old picture for the optimizer's
+ * four-hour TTL, and its pixel size comes from the file itself, so
+ * `MASCOT_POSES` cannot drift from the art.
  */
-export const MASCOT_POSES = {
-  neutral: { width: 666, height: 900 },
-  happy: { width: 847, height: 900 },
-  reading: { width: 619, height: 900 },
-  curious: { width: 664, height: 900 },
-  excited: { width: 881, height: 900 },
-  sleepy: { width: 654, height: 900 },
-} as const;
+export const MASCOT_POSES = { neutral, happy, reading, curious, excited, sleepy } as const;
 
 export type MascotPose = keyof typeof MASCOT_POSES;
 
@@ -39,14 +45,11 @@ export function GnosiaMascot({
   /** For the one mascot above the fold (`preload` replaced `priority` in Next 16). */
   preload?: boolean;
 }) {
-  const { width, height } = MASCOT_POSES[pose];
   return (
     <span aria-hidden className={cx("inline-block", float && "gnosia-float")}>
       <Image
-        src={`/brand/mascot/${pose}.png`}
+        src={MASCOT_POSES[pose]}
         alt=""
-        width={width}
-        height={height}
         preload={preload}
         draggable={false}
         className={cx("block w-auto max-w-none select-none", className)}
