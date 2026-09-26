@@ -9,6 +9,7 @@ import {
   conceptsStudied,
   dayKey,
   emptyHabit,
+  habitIsStale,
   habitLabels,
   parseDailyTarget,
   parseLeeway,
@@ -128,14 +129,17 @@ describe("computeStreak", () => {
 });
 
 describe("activeDays", () => {
-  it("ignores void events and anything in a voided session", () => {
+  it("counts only study: not session bookkeeping, not a void, not a voided session", () => {
     const events: HabitEvent[] = [
+      { at: "2026-09-22T10:00:00Z", type: "session-start", session: "s0" },
+      { at: "2026-09-22T10:30:00Z", type: "session-close", session: "s0" },
+      { at: "2026-09-23T10:00:00Z", type: "review", concept: "b" },
       { at: "2026-09-24T10:00:00Z", type: "observation", concept: "a", session: "s1" },
       { at: "2026-09-25T10:00:00Z", type: "observation", concept: "a", session: "s2" },
       { at: "2026-09-26T10:00:00Z", type: "void", session: "s2" },
       { at: "not a date", type: "observation" },
     ];
-    expect([...activeDays(events, UTC)]).toEqual(["2026-09-24"]);
+    expect([...activeDays(events, UTC)].sort()).toEqual(["2026-09-23", "2026-09-24"]);
   });
 });
 
@@ -185,6 +189,11 @@ describe("the daily target", () => {
     expect(habit.target).toMatchObject({ conceptsDone: 2, done: 2, total: 3, reviewsCleared: false });
   });
 
+  it("stamps when the numbers were computed", () => {
+    const now = new Date("2026-09-26T12:00:00Z");
+    expect(computeHabit({ events: [], preferences: {}, dueReviews: 0, now }).asOf).toBe(now.toISOString());
+  });
+
   it("claims nothing done when the catalog could not be asked", () => {
     const habit = emptyHabit(new Date("2026-09-26T12:00:00Z"), UTC);
     expect(habit.reachable).toBe(false);
@@ -212,5 +221,25 @@ describe("habitLabels", () => {
 
   it("says why when the catalog is down", () => {
     expect(habitLabels(emptyHabit()).targetTitle).toMatch(/Not connected/);
+  });
+});
+
+describe("habitIsStale", () => {
+  const asOf = "2026-09-26T12:00:00Z";
+
+  it("is fresh inside the window on the same day", () => {
+    expect(habitIsStale(asOf, new Date("2026-09-26T12:04:00Z"), 5 * 60_000, UTC)).toBe(false);
+  });
+
+  it("is stale once older than the window", () => {
+    expect(habitIsStale(asOf, new Date("2026-09-26T12:06:00Z"), 5 * 60_000, UTC)).toBe(true);
+  });
+
+  it("is stale across midnight even inside the window", () => {
+    expect(habitIsStale("2026-09-26T23:59:00Z", new Date("2026-09-27T00:01:00Z"), 5 * 60_000, UTC)).toBe(true);
+  });
+
+  it("is stale when the stamp is unreadable", () => {
+    expect(habitIsStale("nonsense", new Date())).toBe(true);
   });
 });

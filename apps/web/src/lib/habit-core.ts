@@ -82,6 +82,8 @@ export interface Habit {
   target: TargetProgress;
   /** False when the catalog could not be read; every number is then zero. */
   reachable: boolean;
+  /** When these numbers were computed, as an ISO instant. The shell refreshes them once they are old. */
+  asOf: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -166,25 +168,33 @@ export function parseLeeway(value: unknown): number {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Events that count as the learner having done something. A `void` event is a
- * retraction, not study, and an event inside a voided session was retracted by
- * one; neither keeps a streak alive.
+ * The event types that are study: an answered question (`observation`, from a
+ * probe, a teach step or a check) and a graded review card. `session-start`
+ * and `session-close` are lifecycle, written before and after anything is
+ * learnt, so opening a session and walking away does not make a streak day.
+ * `void` is a retraction. A new kind of study (a `watched` event, say) joins
+ * this list when it is added to `EVENT_TYPES`.
  */
-function countedEvents(events: readonly HabitEvent[]): HabitEvent[] {
+export const STUDY_EVENT_TYPES: readonly string[] = ["observation", "review"];
+
+/** Study events, minus any inside a session a `void` event retracted. */
+function studyEvents(events: readonly HabitEvent[]): HabitEvent[] {
   const voided = new Set(
     events
       .filter((e) => e.type === "void" && typeof e.session === "string" && e.session !== "")
       .map((e) => e.session as string),
   );
   return events.filter(
-    (e) => e.type !== "void" && !(typeof e.session === "string" && voided.has(e.session)),
+    (e) =>
+      STUDY_EVENT_TYPES.includes(e.type) &&
+      !(typeof e.session === "string" && voided.has(e.session)),
   );
 }
 
-/** The set of day keys with at least one counted event. */
+/** The set of day keys with at least one study event. */
 export function activeDays(events: readonly HabitEvent[], timeZone?: string): Set<string> {
   const days = new Set<string>();
-  for (const e of countedEvents(events)) {
+  for (const e of studyEvents(events)) {
     const at = new Date(e.at);
     if (!Number.isNaN(at.getTime())) days.add(dayKey(at, timeZone));
   }
@@ -194,7 +204,7 @@ export function activeDays(events: readonly HabitEvent[], timeZone?: string): Se
 /**
  * The current streak.
  *
- * Walk back from today one day at a time. A day with an event adds one. A day
+ * Walk back from today one day at a time. A day with a study event adds one. A day
  * without one is forgiven if its week (Monday to Sunday) still has leeway
  * left, and ends the walk if it does not. Today with nothing done yet is not a
  * miss: the day is not over, so the streak carries through yesterday.
@@ -274,7 +284,7 @@ export function conceptsStudied(
   timeZone?: string,
 ): number {
   const concepts = new Set<string>();
-  for (const e of countedEvents(events)) {
+  for (const e of studyEvents(events)) {
     if (e.type !== "observation" || typeof e.concept !== "string") continue;
     const source = e.source ?? "probe";
     if (source !== "probe" && source !== "teach") continue;
@@ -322,7 +332,26 @@ export function computeHabit(input: HabitInput): Habit {
       input.dueReviews,
     ),
     reachable: true,
+    asOf: input.now.toISOString(),
   };
+}
+
+/**
+ * Whether numbers computed at `asOf` are worth fetching again at `now`: once
+ * they are more than `maxAgeMs` old, or once the calendar day has changed in
+ * `timeZone`. The root layout computes them, and Next keeps a layout mounted
+ * across client-side navigation, so without a refresh a tab left open over
+ * midnight would show yesterday's streak.
+ */
+export function habitIsStale(
+  asOf: string,
+  now: Date,
+  maxAgeMs: number = 5 * 60_000,
+  timeZone?: string,
+): boolean {
+  const then = new Date(asOf);
+  if (Number.isNaN(then.getTime())) return true;
+  return now.getTime() - then.getTime() > maxAgeMs || dayKey(then, timeZone) !== dayKey(now, timeZone);
 }
 
 /** What the shell shows when the catalog could not be asked: zeros, and the default target. */

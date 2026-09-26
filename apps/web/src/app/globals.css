@@ -57,6 +57,9 @@
   --m-hi-lip: #2e4fd1;
   /* The close screen's review-cards tile; the kit's one literal colour. */
   --violet: #8b5cf6;
+  /* Small text on a saturated fill (the stat tiles' strips). Black in both
+     themes: at least 4.8:1 on the ok, accent, violet and streak tones. */
+  --on-tone: #000000;
   --m-mid-lip: #7e93e6;
 
   /* Also a Tailwind font (`font-display`, below); declared here as well so
@@ -163,6 +166,7 @@
   --color-m-lo: var(--m-lo);
   --color-lip-shade: var(--lip-shade);
   --color-violet: var(--violet);
+  --color-on-tone: var(--on-tone);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

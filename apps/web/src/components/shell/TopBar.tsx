@@ -9,6 +9,7 @@ import { habitLabels, type Habit } from "@/lib/habit-core";
 import { activeDestination, DESTINATIONS } from "@/lib/nav";
 
 import { AvatarMenu } from "./AvatarMenu";
+import { useHabitRefresh } from "./use-habit-refresh";
 
 /**
  * Kit `TopBar`: 64px on `--surface` with a hairline under it. The wordmark in
@@ -22,12 +23,14 @@ import { AvatarMenu } from "./AvatarMenu";
  * On a `data-layout="focus"` page it is hidden from 768px up: focus mode
  * draws its own step bar and exit instead.
  *
- * A client component only for `usePathname`. The habit numbers arrive as
- * props from the root layout, which is the server component that can read them.
+ * A client component for `usePathname` and for `useHabitRefresh`. The habit
+ * numbers arrive as props from the root layout, which is the server component
+ * that can read them; the hook asks the layout again once they are old.
  */
 export function TopBar({ habit, studio }: { habit: Habit; studio: boolean }) {
   const active = activeDestination(usePathname());
   const labels = habitLabels(habit);
+  useHabitRefresh(habit.asOf);
 
   return (
     <header className="sticky top-0 z-30 border-b border-hair bg-surface pt-[env(safe-area-inset-top)] group-has-[[data-layout=full]]/shell:static md:group-has-[[data-layout=focus]]/shell:hidden">

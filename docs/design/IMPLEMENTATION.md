@@ -61,7 +61,7 @@ The values and where each came from are the token table in DESIGN.md and
 | Habit | `--streak` |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
-| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile) |
+| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in both themes) |
 
 **Every token is also a Tailwind colour of the same name**, so write
 `bg-surface2 text-text2 border-border`, not `bg-[var(--surface2)]`. The
@@ -198,12 +198,22 @@ interface Habit {
     total: number;
   };
   reachable: boolean;      // false: every number is zero and nothing claims to be done
+  asOf: string;            // ISO instant the numbers were computed
 }
 ```
 
-- A day counts when it has any event other than `void`, outside a voided
-  session. Today with nothing done is not a miss; the streak carries through
-  yesterday.
+- A day counts when it has a study event: an `observation` or a `review`
+  (`STUDY_EVENT_TYPES`), outside a voided session. `session-start` and
+  `session-close` are bookkeeping and do not count, so opening a session and
+  leaving does not make a streak day. A new kind of study (1f's `watched`)
+  joins that list. Today with nothing done is not a miss; the streak carries
+  through yesterday.
+- **A page that writes a study event calls `router.refresh()` after the
+  write.** The root layout computes the numbers and Next keeps a layout
+  mounted across client-side navigation, so without it the pills show the
+  old values. `useHabitRefresh` in the top bar is only the backstop: it
+  refreshes when a tab comes back or every few minutes, once the numbers are
+  older than 30 minutes or the day has turned.
 - The preference keys are `dailyTarget` (`{ concepts, reviews }`, default
   `{ concepts: 1, reviews: true }`, concepts clamped to 0 to 20) and
   `dailyLeeway` (0 to 7, default 1), both in `PREFERENCE_KEYS`. Neither is
@@ -245,6 +255,7 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Avatar | a plain disc | a disc with a person glyph | a bare disc does not read as a button |
 | Store banner | not drawn | `--text` on `--warn-tint` with a `--warn` rule | `--warn-text` on `--warn-tint` is under 3:1 in light, too low for a sentence |
 | Preference key | DESIGN.md's API table said `streakLeewayPerWeek` | `dailyLeeway` | the name the phase-0 brief set; DESIGN.md now matches |
+| Stat tile label | white on the coloured strip in light | black (`--on-tone`) in both themes | white on the streak orange is about 2:1, and under 4.5:1 on the other three; black is at least 4.8:1 on all four |
 
 ## Gotchas
 
