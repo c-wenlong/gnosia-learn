@@ -146,6 +146,32 @@ export function safeNextPath(next: string | null | undefined): string {
 }
 
 /**
+ * The origin the browser addressed, from the request headers.
+ *
+ * `request.url` under `next start` always names `localhost`, so anything that
+ * has to name the app's own origin (a redirect, the same-origin check) reads
+ * `Host` instead: it is what the browser typed, and Vercel forwards it
+ * unchanged. `X-Forwarded-Proto` supplies the scheme behind a proxy that
+ * terminated TLS. `X-Forwarded-Host` is deliberately *not* read: a client can
+ * send it to a directly exposed `next start`, and a redirect built from it
+ * would point wherever the client said. Only the first value of a
+ * comma-separated chain counts, and anything that does not form a valid URL
+ * falls back to `fallback` rather than throwing on the request path.
+ */
+export function originFromHeaders(headers: Headers, fallback: string): string {
+  const first = (value: string | null) => value?.split(",")[0]?.trim() ?? "";
+  const host = first(headers.get("host"));
+  if (host.length === 0) return fallback;
+  const forwardedProto = first(headers.get("x-forwarded-proto"));
+  const proto = forwardedProto === "https" || forwardedProto === "http" ? forwardedProto : new URL(fallback).protocol.replace(/:$/, "");
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * The paths a visitor may reach without a session: the landing page, the
  * sign-in page and the two auth routes. Everything else is the owner's.
  */

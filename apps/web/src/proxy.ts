@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { HOME_PATH, isApiPath, isPublicPath, readAuthConfig, SESSION_COOKIE, verifySession } from "@/lib/auth/core";
+import { HOME_PATH, isApiPath, isPublicPath, originFromHeaders, readAuthConfig, SESSION_COOKIE, verifySession } from "@/lib/auth/core";
 
 /**
  * The front door. Runs before every route the matcher lets through and asks
@@ -47,14 +47,12 @@ export async function proxy(request: NextRequest) {
  * browser used, so a redirect built from it sends a LAN or tunnelled visitor
  * to a host they cannot reach. The route handlers answer with a relative
  * `Location` for the same reason; the proxy runtime refuses one (it parses
- * the header as a URL and throws `Invalid URL`), so here the origin is
- * rebuilt from `Host` and, behind a proxy that terminated TLS,
- * `X-Forwarded-Proto` and `X-Forwarded-Host`.
+ * the header as a URL and throws `Invalid URL`), so here the origin comes
+ * from `originFromHeaders`: `Host`, the forwarded scheme, never a forwarded
+ * host, and `request.url` when the headers do not form a valid origin.
  */
 function redirect(request: NextRequest, path: string): NextResponse {
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
-  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(/:$/, "");
-  return NextResponse.redirect(new URL(path, `${proto}://${host}`), 307);
+  return NextResponse.redirect(new URL(path, originFromHeaders(request.headers, request.url)), 307);
 }
 
 export const config = {

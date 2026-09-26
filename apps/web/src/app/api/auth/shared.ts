@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { originFromHeaders } from "@/lib/auth/core";
+
 /**
  * What the two auth routes share: the same-origin check and the cookie
  * attributes, so sign-in and sign-out cannot drift into setting and clearing
@@ -21,14 +23,15 @@ export function sameOrigin(request: Request): boolean {
   if (site !== null) return site === "same-origin" || site === "none";
   const origin = request.headers.get("origin");
   if (origin === null) return true;
-  // Compare against the `Host` the browser addressed, never `request.url`:
-  // under `next start` that URL says `localhost` whatever the page was opened
-  // on, so a sign-in from a phone on the LAN (`192.168.x.x:3000`) would be
-  // refused as cross-site.
-  const host = request.headers.get("host");
-  if (host === null) return false;
+  // Compare against the host the browser addressed (`originFromHeaders`),
+  // never `request.url`: under `next start` that URL says `localhost`
+  // whatever the page was opened on, so a sign-in from a phone on the LAN
+  // (`192.168.x.x:3000`) would be refused as cross-site. The scheme is left
+  // out of the comparison: behind a proxy that terminated TLS the page is
+  // https and the hop to Node is http, and the host is what identifies the
+  // site.
   try {
-    return new URL(origin).host === host;
+    return new URL(origin).host === new URL(originFromHeaders(request.headers, request.url)).host;
   } catch {
     return false;
   }

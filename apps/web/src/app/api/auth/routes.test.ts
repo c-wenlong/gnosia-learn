@@ -97,6 +97,14 @@ describe("POST /api/auth/sign-in", () => {
     expect(cookieOf(response)).toBe("");
   });
 
+  it("accepts a proxied post whose Origin is https while the hop to Node is http", async () => {
+    const request = new Request(`${ORIGIN}/api/auth/sign-out`, {
+      method: "POST",
+      headers: { host: "gnosia.example", "x-forwarded-proto": "https", origin: "https://gnosia.example" },
+    });
+    expect((await signOut(request)).status).toBe(303);
+  });
+
   it("refuses a cross-site post before reading the body", async () => {
     const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "sec-fetch-site": "cross-site" }));
     expect(response.status).toBe(403);
