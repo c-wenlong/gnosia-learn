@@ -48,7 +48,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
 
       <div className="gnosia-glass flex flex-col rounded-[28px] px-6 py-8 md:order-2 md:px-8 md:py-10">
         <GnosiaLockup size={44} className="self-center text-brand-ink" />
-        <h1 className="mt-7 text-center text-[28px] leading-tight font-semibold tracking-[-0.02em] text-brand-ink">
+        <h1 className="mt-7 text-center font-book text-[30px] leading-tight font-medium tracking-[-0.02em] text-brand-ink">
           Open your book
         </h1>
         <p className="mt-2 text-center text-[15px] leading-relaxed text-brand-mist">
