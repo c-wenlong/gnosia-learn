@@ -94,8 +94,8 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const eyebrow = placeLabel(w.place) ?? (w.domain ? `${w.domain} · not in a course yet` : "Not in a course yet");
 
   return (
-    <div data-layout="app" className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-x-3.5 gap-y-3">
+    <div data-layout="workspace" className="flex flex-col gap-4 min-[900px]:min-h-0 min-[900px]:flex-1">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-3">
         <div className="min-w-0 flex-1 basis-[18rem]">
           <Eyebrow>{eyebrow}</Eyebrow>
           <h1 className="mt-1 font-display text-[26px] leading-tight font-bold text-text">{w.title}</h1>
