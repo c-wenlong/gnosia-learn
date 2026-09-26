@@ -45,6 +45,10 @@
   --warn-tint: #fff5d6;
   --danger: #c43939;
   --streak: #ff9600;
+  /* The streak as small text (today's letter in the streak strip, 11px):
+     the orange darkened within its hue until it clears 4.5:1 on the card
+     (4.80; 4.52 on the page). `--streak` stays the fill, at 3:1 for graphics. */
+  --streak-text: #b35a00;
   --btn-face: #111111;
   --btn-lip: #000000;
   --btn-text: #ffffff;
@@ -121,6 +125,8 @@
   --warn-tint: #33300f;
   --danger: #ff8585;
   --streak: #ffab33;
+  /* Already 8.83:1 on the dark card, so the text colour is the fill. */
+  --streak-text: #ffab33;
   --btn-face: #e5e5e5;
   --btn-lip: #b3b3b3;
   --btn-text: #000000;
@@ -183,6 +189,9 @@
 
   /* The streak is the brand's gold: 3.1:1 on cream, the non-text minimum. */
   --streak: #b3842c; /* --brand-gold */
+  /* As small text the gold is too light (3.30:1 on the card): the brand
+     gold's hue darkened until it clears 4.5:1 (4.82 on the card). */
+  --streak-text: #916a23;
 
   /* Signal colours keep their :root hues. Only three labels move, each
      because it was under 4.5:1: the green and amber text darkened just far
@@ -221,6 +230,7 @@
   --color-warn-tint: var(--warn-tint);
   --color-danger: var(--danger);
   --color-streak: var(--streak);
+  --color-streak-text: var(--streak-text);
   --color-btn-face: var(--btn-face);
   --color-btn-lip: var(--btn-lip);
   --color-btn-text: var(--btn-text);

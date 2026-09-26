@@ -259,6 +259,7 @@ matches.
 | `--m-lo` | `#ddd5c4` | `#e5e5e5` | Untouched: warm grey |
 | `--lip-shade` | `#cbc1ad` | `#d4d4d4` | Under an untouched path node |
 | `--streak` | `#b3842c` | `#ff9600` | `--brand-gold` |
+| `--streak-text` | `#916a23` | `#b35a00` | The streak as small text: each palette's streak hue darkened until 11px text clears 4.5:1 on the card. `.dark` keeps its `--streak`, `#ffab33`, which is already 8.83:1 |
 | `--ok-text` | `#008024` | `#009b2b` | Darkened to pass on cream and on its tint |
 | `--ok-on` | `#0b2e14` | `#ffffff` | The dark label `.dark` already uses |
 | `--warn-text` | `#8c6800` | `#b78900` | Darkened to pass on cream and on its tint |
@@ -312,21 +313,25 @@ column is the same pair in `:root`, for comparison.
 | `--m-mid` against `--m-lo` | 2.31 | (gap) | 1.51 |
 | `--streak` on `--page` (the dot, the day rings) | 3.11 | 3 | 2.06 |
 | `--streak` on `--surface` | 3.30 | 3 | 2.18 |
+| `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 4.5 | 4.80 |
+| `--streak-text` on `--page` | 4.54 | 4.5 | 4.52 |
 | White check on a `--streak` disc | 3.36 | 3 | 2.18 |
 | White mark on a mastered path node | 7.42 | 3 | 4.30 |
 | White mark on a learning path node | 3.37 | 3 | 1.90 |
 
-Two pairs still fall short, and both need a component change rather than a
-token:
+Two pairs used to fall short. Each was fixed without moving a token another
+component depends on:
 
-1. **The stat tile's "right" strip.** `StatTile` frames the `ok` tile in
-   `--ok-text` and writes the black `--on-tone` label on it. Darkening
-   `--ok-text` so the answer text passes brings black on it to 4.11:1. No
-   green can do both jobs over a visible tint, so the reading text won. The
-   fix is for `StatTile` to frame that tile in `--ok` (black on it is 9.9:1).
-2. **Today's day letter in the streak strip** is 11px `--streak` text, 3.30:1
-   on the card. That is better than orange (2.18:1) but under 4.5:1; it sits
-   next to the ring that carries the same meaning.
+1. **The stat tile's "right" strip.** Darkening `--ok-text` so the answer
+   text passes brings the black `--on-tone` label on it to 4.11:1, and no
+   green can do both jobs over a visible tint. `StatTile` frames the `ok`
+   tile in `--ok`, the green face, instead (black on it is 9.9:1).
+2. **Today's day letter in the streak strip.** It is 11px text, and in
+   `--streak` it was 3.30:1 on the card here and 2.18:1 in orange under
+   `:root`. It reads `--streak-text` now, a darker step of the same hue in
+   every palette, so the gold and the orange stay the fill (discs, rings,
+   and the large streak number, which is large text at 3:1) and only the
+   small letter darkens.
 
 ### The primary button
 
