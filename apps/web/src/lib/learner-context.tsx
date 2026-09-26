@@ -82,7 +82,8 @@ interface LearnerContextValue {
     options?: { countSession?: boolean },
   ) => void;
   forgetKnowledge: (topicId: string) => void;
-  resetCourse: (topicIds: string[]) => void;
+  /** Resolves true once the reset is stored, false if it was refused. */
+  resetCourse: (topicIds: string[]) => Promise<boolean>;
   markVisited: (courseSlug: string, moduleSlug?: string) => void;
 }
 
@@ -181,23 +182,30 @@ export function LearnerProvider({
    * note share a key and are ordered, while a tick on one item and a note on
    * another do not and are not. Several keys make the write a barrier over all
    * of them, which is how a reset waits for the writes it is about to delete.
+   *
+   * Resolves once the write has settled, true when it was stored. Most
+   * callers ignore it and let the banner speak; one that has to say
+   * "done" in words (Settings' reset) waits for it.
    */
   const commit = useCallback(
     (
       key: string | readonly string[],
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
-    ) => {
+    ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
       setState(next);
-      queue.current.run(
-        key,
-        () => send(next),
-        (response) => {
-          setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
-        },
-      );
+      return new Promise<boolean>((resolve) => {
+        queue.current.run(
+          key,
+          () => send(next),
+          (response) => {
+            setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
+            resolve(response.ok !== false);
+          },
+        );
+      });
     },
     [],
   );
@@ -304,7 +312,7 @@ export function LearnerProvider({
   );
 
   const resetCourse = useCallback(
-    (topicIds: string[]) => {
+    (topicIds: string[]) =>
       commit(
         // A barrier over every row the reset deletes. Without it a note still
         // in flight for one of these topics could land after the delete and
@@ -312,8 +320,7 @@ export function LearnerProvider({
         topicIds.flatMap((id) => [`progress:${id}`, `note:${id}`]),
         (previous) => resetCourseProgress(previous, topicIds),
         () => post("reset", { curriculumItemIds: topicIds }),
-      );
-    },
+      ),
     [commit],
   );
 

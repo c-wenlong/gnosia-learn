@@ -143,10 +143,10 @@ says which pages are on the new design and which phase replaces the rest.
 
 | Route | File | What it renders |
 | --- | --- | --- |
-| `/` | `page.tsx` | A 307 to `/courses` until Today lands (phase 1a) |
+| `/` | `page.tsx` | Today: the next concept on the frontier, the first reviews due, recent activity by sitting, the target, the streak week, the courses in progress |
 | `/courses` | `courses/page.tsx` | Every course as a card: search, filter chips by theme, progress, the next topic |
 | `/review` | `review/page.tsx` | The review session in focus mode: the due cards one at a time, the four ratings with their intervals, a close screen. `?concept=<slug>` puts that concept first |
-| `/settings` | `settings/page.tsx` | A placeholder, so the avatar menu has no dead link (phase 1a) |
+| `/settings` | `settings/page.tsx` | The daily target, streak leeway, theme, tutor style and motion, each saved on change; the BKT priors and provider order read-only; export and reset |
 | `/learn` | `learn/page.tsx` | The Learn index: every concept in a table with search and mastery filters, and the neighbourhood (or course) graph of the selected row |
 | `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph |
 | `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
@@ -163,6 +163,8 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
+| `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
+| `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
 | `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study for the streak, never evidence |
 
 The asset route is the one place the app reads a file the deployment does not
@@ -198,6 +200,16 @@ concurrency reasoning.
 
 The session route declares `generateStaticParams()` over every course and
 module pair, so the shell is prerendered and only the chat is live.
+
+**Today** reads everything in one pass through `apps/web/src/lib/today.ts`: the
+knowledge base, the event log, the preferences, the due queue and the snapshot,
+through `learner-store`'s pool, and hands them to the pure
+`apps/web/src/lib/today-core.ts`. It runs `computeHabit` over the same rows
+rather than calling `loadHabit` again, so the page and the top bar agree. The
+check count beside each due review comes from the concept's note, found by the
+path `catalog index` recorded (`notePaths` in the store) rather than a path the
+app builds under `learn/` (layering rule 6); a note it cannot read counts as a
+plain recall.
 
 **The shell.** `AppShell` is a server component: a 64px top bar (the
 wordmark, the five destinations Today, Courses, Learn, Library and Review,
@@ -308,7 +320,7 @@ what the UI shows and what the server is told cannot disagree. `loadState`,
 | `POST /api/learner/note` | The scratch note on one curriculum item |
 | `POST /api/learner/reset` | Clears a course's ticks and notes, bumps the epoch |
 | `POST /api/learner/recap` | Writes, replaces or clears one recap |
-| `POST /api/learner/preference` | Theme, last visited, the learner's own links |
+| `POST /api/learner/preference` | Theme, last visited, the learner's own links, and Settings' `dailyTarget`, `dailyLeeway`, `tutorStyle` and `reducedMotion` |
 | `POST /api/learner/import` | The one-time carry-over of a browser's old document |
 | `POST /api/review/grade` | One review grade: a `review` event, the card, the mastery entry |
 

@@ -1,0 +1,59 @@
+import "server-only";
+
+import { connection } from "next/server";
+import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { readParams, readPreferences, type BktParams } from "@self-learn/catalog/state";
+
+import { parseDailyTarget, parseLeeway, type DailyTarget } from "@/lib/habit-core";
+import { catalogDatabase } from "@/lib/learner-store";
+import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "@/lib/preferences";
+
+/**
+ * What the Settings page starts from: the learner's stored choices, each read
+ * through the same parser its consumer uses (so a malformed row shows as the
+ * default it behaves as), and the BKT parameters the `learn` CLI owns.
+ *
+ * A read, so it degrades: an unreachable database is the defaults with
+ * `reachable: false` and no parameters, and the shell's banner says so. The
+ * form stays usable; a write then fails the way every write does, visibly.
+ */
+export interface SettingsSnapshot {
+  reachable: boolean;
+  target: DailyTarget;
+  leeway: number;
+  tutorStyle: TutorStyle;
+  motion: MotionMode;
+  /** Null when they could not be read. */
+  bkt: BktParams | null;
+}
+
+export async function readSettings(): Promise<SettingsSnapshot> {
+  try {
+    const db = await catalogDatabase();
+    const [preferences, bkt] = await Promise.all([readPreferences(db), readParams(db)]);
+    return {
+      reachable: true,
+      target: parseDailyTarget(preferences[PREFERENCE_KEYS.dailyTarget]),
+      leeway: parseLeeway(preferences[PREFERENCE_KEYS.dailyLeeway]),
+      tutorStyle: parseTutorStyle(preferences[PREFERENCE_KEYS.tutorStyle]),
+      motion: parseMotionMode(preferences[PREFERENCE_KEYS.reducedMotion]),
+      bkt,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`settings: preferences unavailable, ${message}`);
+    return {
+      reachable: false,
+      target: parseDailyTarget(undefined),
+      leeway: parseLeeway(undefined),
+      tutorStyle: parseTutorStyle(undefined),
+      motion: parseMotionMode(undefined),
+      bkt: null,
+    };
+  }
+}
+
+export async function loadSettings(): Promise<SettingsSnapshot> {
+  await connection();
+  return readSettings();
+}
