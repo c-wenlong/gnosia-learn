@@ -7,7 +7,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
  * The avatar at the right of the top bar, and the small menu behind it:
- * the theme toggle, Settings, and Studio when this deployment has one.
+ * the theme toggle, Settings, Studio when this deployment has one, and Sign
+ * out. Sign out is a form post rather than a link, so nothing that prefetches
+ * or embeds a URL can end the session (see `api/auth/sign-out`).
  *
  * A disclosure (a button that shows a list of links), not an ARIA `menu`:
  * a menu role promises arrow-key navigation, and three items do not need it.
@@ -84,6 +86,14 @@ export function AvatarMenu({ studio }: { studio: boolean }) {
                 </Link>
               </li>
             )}
+            <li>
+              <form method="post" action="/api/auth/sign-out">
+                <button type="submit" className={item}>
+                  <Glyph d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8M13 13.5 16.5 10 13 6.5M16.5 10H7.5" />
+                  Sign out
+                </button>
+              </form>
+            </li>
           </ul>
         </div>
       )}

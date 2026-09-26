@@ -86,7 +86,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (asset === null) return { title: "Asset not found" };
   return {
     title: assetDisplayTitle(asset).text,
-    description: `${assetKindLabel(asset.kind)} in the self-learn catalog.`,
+    description: `${assetKindLabel(asset.kind)} in the Gnosia library.`,
   };
 }
 

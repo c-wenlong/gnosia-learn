@@ -99,7 +99,7 @@ Import from `@/components/ui` or from the file.
 
 | Component | Props | Kit |
 | --- | --- | --- |
-| `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"` | `Btn` |
+| `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent" \| "brand"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"` | `Btn` |
 | `Card` | `title?: ReactNode`, `action?: ReactNode`, `tight?: boolean` (padding 14), `as?: "section" \| "div" \| "article" \| "li"`, `className?`, `id?`, `aria-label?` | `Card` |
 | `CardAction` | `href`, `children`: the "See all" link for a card's `action` slot | `Card` action |
 | `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
@@ -118,6 +118,8 @@ Import from `@/components/ui` or from the file.
 | `RatingButton` | `label`, `interval` (desktop), `short?` (phone, "4d"), `shortcut?` (the key, for `aria-keyshortcuts`), `suggested?` (tint and accent border: what Continue will record), `disabled?`, `onClick?`, `className?`. Four in a `flex` row make the rating row | `Rating` |
 | `ChoiceRow` | `state?: "idle" \| "selected" \| "correct" \| "wrong"`, `shortcut?` (the number badge), `disabled?`, `onClick?`, `children` (the option text). Graded rows carry the "correct answer" and "your answer" tags | `Option` |
 | `FeedbackBar` | `ok: boolean` (green, else yellow "not quite"), `title`, `detail?`, `note?`, `actions?` (the caller's ghost Why and coloured Continue). A `role="status"` live region; the actions drop under the text on a phone | `Feedback` |
+
+`brand` is the Gnosia pill for the public pages (teal face, navy lip, cream label; navy label in dark), documented in [BRAND.md](BRAND.md); the app's own pages keep `primary`.
 
 The pure helpers beside them:
 
@@ -148,12 +150,16 @@ its own. The review page carries a small local `CitePill` in
 ## The shell
 
 [AppShell](../../apps/web/src/components/AppShell.tsx) is a server
-component. Its client parts are in
+component, drawn by the `(app)` route group's layout
+([app/(app)/layout.tsx](../../apps/web/src/app/(app)/layout.tsx)), which
+checks the session and reads the learner snapshot first. The `(site)` group
+(the landing page and `/sign-in`) has no shell and no database read; the root
+layout holds only the document, the fonts and the theme class. Its client parts are in
 [components/shell/](../../apps/web/src/components/shell/): `TopBar`,
 `TabBar`, `AvatarMenu`, `StoreBanner`, `NavIcon`.
 
-- **Top bar**, 64px on `--surface` with a hairline under it: the wordmark
-  linking to `/`, the five destinations (Today `/`, Courses, Learn, Library,
+- **Top bar**, 64px on `--surface` with a hairline under it: the Gnosia
+  wordmark linking to `/today`, the five destinations (Today `/today`, Courses, Learn, Library,
   Review; the selected one in `--text` over a 2px underline), the streak
   pill, the target pill, and the avatar menu (theme, Settings, and Studio
   when `STUDIO_ENABLED` is set). Between 768 and 1024px the streak pill

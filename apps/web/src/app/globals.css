@@ -168,6 +168,16 @@
   --color-violet: var(--violet);
   --color-on-tone: var(--on-tone);
 
+  /* Gnosia brand colours (the block at the end of this file, and
+     docs/design/BRAND.md): `bg-brand-cream`, `text-brand-teal` and so on. */
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-soft: var(--brand-gold-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-mist: var(--brand-mist);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
@@ -245,5 +255,115 @@ body {
     animation: none;
     width: 100%;
     opacity: 0.4;
+  }
+}
+
+/* ==========================================================================
+ * Gnosia brand
+ *
+ * The brand palette and the motion for the public pages (app/(site)/) and the
+ * brand components (components/brand/). Values, contrast ratios and the reason
+ * for each are the token table in docs/design/BRAND.md. Light on :root, dark on
+ * `.dark`, like the kit tokens above; every one is also a Tailwind colour
+ * (`bg-brand-cream`, `text-brand-ink`), declared in the @theme block.
+ *
+ * Roles, not just hues: `ink` and `mist` are the text colours and flip between
+ * themes; `teal` lightens in dark so it still reads as text on navy; `cream`
+ * and `navy` are the two grounds (the site layout picks one per theme).
+ * ========================================================================== */
+:root {
+  --brand-teal: #0f5f61;
+  --brand-navy: #0d1c2b;
+  --brand-cream: #faf6ec;
+  --brand-gold: #b3842c;
+  --brand-gold-soft: #efd9a1;
+  --brand-ink: #15283a;
+  --brand-mist: #4f6173;
+}
+
+.dark {
+  --brand-teal: #5cbab3;
+  --brand-navy: #0a1621;
+  --brand-cream: #f4ecdc;
+  --brand-gold: #e2b95e;
+  --brand-gold-soft: #e8c877;
+  --brand-ink: #eee8dc;
+  --brand-mist: #a3b2bf;
+}
+
+/* The public pages' ground: cream (navy in dark) under two soft glows, a cool
+   one from the top right and a warm one behind the hero. */
+.gnosia-ground {
+  background:
+    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-teal) 11%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-gold-soft) 32%, transparent), transparent 70%),
+    var(--brand-cream);
+  color: var(--brand-ink);
+}
+
+.dark .gnosia-ground {
+  background:
+    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-teal) 16%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-gold-soft) 6%, transparent), transparent 70%),
+    var(--brand-navy);
+}
+
+/* A translucent card: frosted white on cream, a teal-tinted pane on navy.
+   The public pages are the one place with shadows; the app kit has none. */
+.gnosia-glass {
+  background: color-mix(in srgb, white 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-ink) 8%, transparent);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--brand-navy) 4%, transparent),
+    0 18px 40px -20px color-mix(in srgb, var(--brand-navy) 18%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.dark .gnosia-glass {
+  background: color-mix(in srgb, var(--brand-teal) 7%, transparent);
+  border-color: color-mix(in srgb, var(--brand-cream) 10%, transparent);
+  box-shadow: 0 18px 40px -20px color-mix(in srgb, black 60%, transparent);
+}
+
+@keyframes gnosia-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-1deg);
+  }
+}
+
+@keyframes gnosia-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Motion only for a reader who has not asked for less: the mascot's slow bob
+   and the hero's one rise. Nothing here carries meaning, so the reduced
+   version is simply still. */
+@media (prefers-reduced-motion: no-preference) {
+  .gnosia-float {
+    animation: gnosia-float 9s ease-in-out infinite;
+  }
+
+  .gnosia-rise {
+    animation: gnosia-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .gnosia-rise-2 {
+    animation-delay: 0.12s;
+  }
+
+  .gnosia-rise-3 {
+    animation-delay: 0.24s;
   }
 }

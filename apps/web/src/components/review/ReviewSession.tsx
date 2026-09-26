@@ -99,7 +99,7 @@ export function ReviewSession({
 
   const exit = focus
     ? { href: `/learn/${encodeURIComponent(focus)}`, label: "Exit to workspace" }
-    : { href: "/", label: "Exit to Today" };
+    : { href: "/today", label: "Exit to Today" };
 
   const suggested: Rating | null =
     item?.kind === "check" && phase === "answered"
@@ -519,7 +519,7 @@ function Closing({ title, lead, children }: { title: string; lead: string; child
         <p className="max-w-[480px] text-[14px] text-text2">{lead}</p>
       </div>
       {children}
-      <Button href="/">Back to Today</Button>
+      <Button href="/today">Back to Today</Button>
     </div>
   );
 }

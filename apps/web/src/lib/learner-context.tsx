@@ -210,6 +210,16 @@ export function LearnerProvider({
     [],
   );
 
+  // The root layout can only read the theme cookie, so a browser without one
+  // is served light even when the preference row says dark. The provider is
+  // seeded from the row, so it is the thing that knows; it corrects the class
+  // on the first render and writes the cookie the next reload will read.
+  // One frame late in a new browser, and never a query on a public page.
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", state.theme === "dark");
+    writeThemeCookie(state.theme);
+  }, [state.theme]);
+
   const setThemeMode = useCallback(
     (theme: ThemeMode) => {
       document.documentElement.classList.toggle("dark", theme === "dark");

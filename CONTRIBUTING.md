@@ -28,7 +28,10 @@ and `npm test` still passes.
 
 `apps/web/.env.local` is where Next reads variables from: the app lives in
 `apps/web/`, and Next loads `.env*` files from the directory it starts in, so
-a copy at the repository root is never read. Set `ASSET_FILES_ENABLED=1`
+a copy at the repository root is never read. Set `OWNER_PASSWORD` and
+`AUTH_SECRET` first (`openssl rand -base64 32` for the secret), or `/sign-in`
+refuses every password and says why: the landing page at `/` is the only
+page that opens without them. Set `ASSET_FILES_ENABLED=1`
 there to serve videos and diagrams locally, and `DATABASE_URL` if yours is
 not the default. A non-default `DATABASE_URL` also goes in
 `services/catalog/.env` (copy `services/catalog/.env.example`), because the
