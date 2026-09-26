@@ -52,7 +52,7 @@ cream in light and navy in dark.
 | `--brand-navy` | `#0d1c2b` | `#0a1621` | The dark ground, the brand button's lip, the label on a dark-mode teal button | A blue-black with enough blue to sit beside teal without looking like plain black; the dark value is a shade deeper so glass cards can lighten from it |
 | `--brand-cream` | `#faf6ec` | `#f4ecdc` | The light ground, the mark's pages, the label on a light-mode teal button | Warm but close to white, so it reads as paper without becoming parchment. The dark value is the pages' colour on navy, a touch warmer so it does not glare |
 | `--brand-gold` | `#b3842c` | `#e2b95e` | The star in the mark and wherever it appears alone | Graphics only, never body text. Light was darkened from a brighter gold until the star clears the 3:1 non-text minimum on cream (3.11:1); dark is the brighter gold at 9.9:1 |
-| `--brand-gold-soft` | `#efd9a1` | `#e8c877` | Glows: behind the mascot, the warm wash on the page, the closing panel | Only ever used with transparency (radial gradients, `color-mix`), so it tints rather than fills |
+| `--brand-gold-soft` | `#efd9a1` | `#e8c877` | Glows: the warm wash on the page, and the chapter-two panel's wash | Only ever used with transparency (radial gradients, `color-mix`), so it tints rather than fills |
 | `--brand-ink` | `#15283a` | `#eee8dc` | Headings and body text on the brand grounds | A navy-tinted near-black on cream and a cream-tinted near-white on navy: softer than pure black or white, still 13.9:1 and 15.0:1 |
 | `--brand-mist` | `#4f6173` | `#a3b2bf` | Secondary text: the hero sentence, card bodies, the footer | The quietest grey-blue that still clears AA (4.5:1) on every surface it sits on, including the teal glow |
 
@@ -178,21 +178,22 @@ the old picture.
 
 | Pose | Where it goes |
 | --- | --- |
-| `neutral` | The landing hero, the default |
-| `happy` | Sign-in; later, a session closed or a concept mastered |
-| `reading` | Beside the "Built on" strip on the landing page; later, a lesson or a note being read |
-| `curious` | The landing page's closing panel; later, a probe question |
-| `excited` | Reserved for a real milestone (a course finished) |
+| `neutral` | The default |
+| `happy` | Sign-in; the landing page's chapter three (a review answered); later, a session closed or a concept mastered |
+| `reading` | The landing page's chapter one (the probe); later, a lesson or a note being read |
+| `curious` | The landing hero, peeking over the probe question; later, a probe question in the app |
+| `excited` | The landing page's chapter two (the next concept lit); otherwise reserved for a real milestone (a course finished) |
 | `sleepy` | Reserved for an empty state (nothing due today) |
 
 Rules:
 
 1. **Always decorative.** `alt=""` and `aria-hidden`, never the only carrier
    of meaning, never a button.
-2. **One large mascot per screen.** Secondary poses are small (120 to 160px)
-   and never two in the same phone viewport: the landing page hides its
-   `reading` pose below 768px so the closing panel's `curious` is the only
-   one a phone sees there.
+2. **One large mascot per screen.** Secondary poses are small (90 to 170px).
+   On the landing page each chapter's mascot hangs off the outer bottom
+   corner of its panel, half in the gap below, so it never lands on the
+   product glimpse inside; the chapters are far enough apart that a phone
+   never shows two at once.
 3. **Slow.** Only the hero and sign-in mascots float (`float` prop: 9
    seconds, 10px, under `prefers-reduced-motion: no-preference`).
 4. **Never redrawn.** Use the renders. A new pose comes from the owner's
@@ -201,14 +202,17 @@ Rules:
 
 ## Motion and surfaces
 
-The public pages allow what the app kit does not: soft shadows and
-translucent cards (`.gnosia-glass`, frosted white on cream, a teal-tinted pane
-on navy). The app keeps its flat, border-only kit. Motion is limited to the
+The public pages allow what the app kit does not: soft shadows, translucent
+cards (`.gnosia-glass`, frosted white on cream, a teal-tinted pane on navy,
+now only on the sign-in card), sheets of paper (`.gnosia-paper`, the warm
+white card every product glimpse on the landing page sits on) and three flat
+chapter washes (`.gnosia-panel-teal`, `-gold`, `-mist`: 11 to 42% of a brand
+colour mixed into the ground). The app keeps its flat, border-only kit. Motion is limited to the
 mascot's float and a single 0.9 second rise on the hero text, all of it
 behind `prefers-reduced-motion: no-preference`. Nothing moves on scroll.
 
-**The star as a state.** The mark's star, drawn alone, marks the steps of
-"How it works", the next concept on the frontier, and a feature card on hover.
+**The star as a state.** The mark's star, drawn alone, marks the next concept
+on the frontier in chapter two, and heads the colophon.
 Reuse it the same way in the app: the active item, a mastered concept, an
 insight. Not as a bullet or an ornament.
 
@@ -218,9 +222,13 @@ insight. Not as a bullet or an ornament.
 | --- | --- |
 | `GnosiaWordmark` | The app's top bar (links to `/today`), the public header (links to `/`) and footer |
 | `GnosiaLockup` | The sign-in card |
-| `GnosiaMascot` | Landing hero (`neutral`), "Built on" strip (`reading`, 768px and up), closing panel (`curious`), sign-in (`happy`) |
+| `GnosiaMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
 | The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Teal face, navy lip and cream label in light; in dark the lip is teal sunk halfway into navy and the label turns navy |
-| `.gnosia-ground`, `.gnosia-glass` | The `(site)` layout, the landing page and the sign-in card |
+| `.gnosia-ground` | The `(site)` layout |
+| `.gnosia-paper`, `.gnosia-panel-*` | The landing page's probe, chapter glimpses and chapter panels |
+| `.gnosia-glass` | The sign-in card |
+| Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
+| The world art (`public/banner.png`) | The landing page's closing band |
 | Icons, social card, banner | See [The source art](#the-source-art) |
 
 ## The Gnosia theme inside the app
@@ -381,9 +389,39 @@ when editing the copy.
 | Animations, diagrams, notes, links, transcripts, with watched state | The library and the `watched` event |
 | Next up, reviews due, a forgiving streak, a self-set target; no XP, hearts or leagues | The Today dashboard and the habit data |
 | One append-only event log; notes and model derived from it | The `event` table |
+| A few questions before any teaching | The Probe phase of the tutoring loop |
+| Remembered cards wait longer; missed ones come back sooner | SM-2: a pass grows the interval, a lapse resets it |
+| "Good. See it again in 6 days." | SM-2's second interval is six days |
 
-The two small cards beside the hero mascot (three concepts with their
-probabilities, and "Attention weights" as the next concept on the frontier)
-are illustrations built from real concept names in `learn/concepts/`, not a
-live reading. They show from 1280px up only, and sit clear of the mascot's
-face.
+The hero's probe is interactive but local: `ProbeDemo` moves a softmax
+estimate from 0.54 to 0.83 on a right answer or to 0.38 on a wrong one,
+without calling the model. What is true is the direction, and the page says
+the numbers are the book's estimate, nothing more. The chapter glimpses (the
+estimates, the lit frontier, the review card) are illustrations built from
+real concept names in `learn/concepts/`, not a live reading.
+
+## The landing page
+
+The first version was the stock template every generated landing page
+shares: an eyebrow pill, a sans headline, glass stat cards floating round
+the hero, three numbered steps, six icon cards, a closing card. The
+redesign on 2026-09-27 kept the brand, the copy rules and the claims, and
+changed the shape, after reading the landing pages of four learning
+products (captured at 1440px on 2026-09-27):
+
+| Product | What it does | What Gnosia took |
+| --- | --- | --- |
+| Brilliant | A serif display face (CoFo Robert, 76px, weight 500) over a plain sans; a warm off-white ground; large flat pastel panels, each holding a working piece of the product | Literata for titles over Figtree; the three flat chapter washes; a probe question you can answer in the hero instead of a picture of one |
+| Duolingo | One character in every section, doing something different; alternating illustration and text rows; the lipped 3D button | A mascot pose per chapter; the alternating rows; the brand button kept |
+| Masterclass | Cinematic: black, full-bleed imagery, a condensed display face | The world art as a full-bleed closing band, always dark, whatever the theme |
+| Khan Academy | Editorial: Source Serif headings, Lato body, a mission line | The editorial register, carried by the book itself |
+
+The book is the organising idea, so the page is laid out as one: a title
+page with the probe, three chapters (Probe, Plan, Review), a contents page
+whose "page numbers" are the app's routes, a colophon naming the mechanics
+and the typefaces, and the world as the last page. **Literata** was picked
+because it was drawn for reading long-form books on screens; it is loaded by
+`(site)/layout.tsx` only, so no signed-in page downloads it, and the
+`font-book` utility names it. The closing band carries the `dark` class so
+the brand values and the brand button inside it are the dark ones in every
+theme.
