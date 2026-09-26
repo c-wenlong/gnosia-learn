@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmbedImage } from "@/components/EmbedImage";
+import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
 import { SessionFocus } from "@/components/session/SessionFocus";
 import { VideoPlayer } from "@/components/VideoPlayer";
@@ -87,7 +88,11 @@ export default async function SessionPage({ params, searchParams }: Props) {
       />
     ) : (
       <p className="text-[15px] leading-[1.5] text-text md:text-[17px] md:leading-[27px]">
-        {w.summary || "This note has no body yet. Read the summary in the workspace, then check yourself below."}
+        {w.summary ? (
+          <MathText text={w.summary} />
+        ) : (
+          "This note has no body yet. Read the summary in the workspace, then check yourself below."
+        )}
       </p>
     );
 
