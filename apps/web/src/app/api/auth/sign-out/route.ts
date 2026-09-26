@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { SESSION_COOKIE } from "@/lib/auth/core";
-import { sameOrigin, sessionCookie } from "../shared";
+import { redirectTo, sameOrigin, sessionCookie } from "../shared";
 
 /**
  * `POST /api/auth/sign-out`: clears the session cookie and lands on the
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) {
     return NextResponse.json({ error: "CROSS_ORIGIN" }, { status: 403 });
   }
-  const response = NextResponse.redirect(new URL("/", request.url), 303);
+  const response = redirectTo("/");
   response.cookies.set({ ...sessionCookie(request), name: SESSION_COOKIE, value: "", maxAge: 0 });
   return response;
 }

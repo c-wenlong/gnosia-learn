@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { passwordMatches, readAuthConfig, safeNextPath, SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from "@/lib/auth/core";
-import { sameOrigin, sessionCookie, WRONG_PASSWORD_DELAY_MS } from "../shared";
+import { redirectTo, sameOrigin, sessionCookie, WRONG_PASSWORD_DELAY_MS } from "../shared";
 
 /**
  * `POST /api/auth/sign-in`: the sign-in form's target. A plain form post, so
@@ -28,10 +28,9 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const next = safeNextPath(typeof form.get("next") === "string" ? (form.get("next") as string) : null);
   const back = (error: string) => {
-    const url = new URL("/sign-in", request.url);
-    url.searchParams.set("error", error);
-    if (next !== safeNextPath(null)) url.searchParams.set("next", next);
-    return NextResponse.redirect(url, 303);
+    const params = new URLSearchParams({ error });
+    if (next !== safeNextPath(null)) params.set("next", next);
+    return redirectTo(`/sign-in?${params}`);
   };
 
   const config = readAuthConfig(process.env);
@@ -44,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   const token = await signSession(config.config.secret, Math.floor(Date.now() / 1000));
-  const response = NextResponse.redirect(new URL(next, request.url), 303);
+  const response = redirectTo(next);
   response.cookies.set({
     ...sessionCookie(request),
     name: SESSION_COOKIE,

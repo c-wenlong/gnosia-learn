@@ -35,7 +35,7 @@ describe("POST /api/auth/sign-in", () => {
   it("sets a verifiable session cookie and lands on next", async () => {
     const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple", next: "/learn/bkt" }));
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/learn/bkt`);
+    expect(response.headers.get("location")).toBe("/learn/bkt");
     const cookie = cookieOf(response);
     expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
     expect(cookie).toContain("HttpOnly");
@@ -53,26 +53,47 @@ describe("POST /api/auth/sign-in", () => {
     });
     const response = await signIn(request);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://gnosia.example/today");
+    expect(response.headers.get("location")).toBe("/today");
     expect(cookieOf(response)).toContain("Secure");
+  });
+
+  it("marks the cookie Secure behind a proxy that terminated TLS", async () => {
+    const request = new Request("http://localhost:3000/api/auth/sign-in", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin", "x-forwarded-proto": "https" },
+      body: new URLSearchParams({ password: "correct horse battery staple" }),
+    });
+    expect(cookieOf(await signIn(request))).toContain("Secure");
+  });
+
+  it("accepts a form posted from a LAN address, where request.url still says localhost", async () => {
+    const request = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", host: "192.168.1.20:3000", origin: "http://192.168.1.20:3000" },
+      body: new URLSearchParams({ password: "correct horse battery staple", next: "/review" }),
+    });
+    const response = await signIn(request);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/review");
+    expect(cookieOf(response)).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
   });
 
   it("refuses an off-origin next and lands on home instead", async () => {
     const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple", next: "//evil.example" }));
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/today`);
+    expect(response.headers.get("location")).toBe("/today");
   });
 
   it("bounces a wrong password back to the form with no cookie, keeping next", async () => {
     const response = await signIn(post("/api/auth/sign-in", { password: "wrong", next: "/review" }));
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?error=password&next=%2Freview`);
+    expect(response.headers.get("location")).toBe("/sign-in?error=password&next=%2Freview");
     expect(cookieOf(response)).toBe("");
   });
 
   it("says so when the deployment has no password or secret", async () => {
     delete process.env.OWNER_PASSWORD;
     const response = await signIn(post("/api/auth/sign-in", { password: "anything" }));
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?error=unconfigured`);
+    expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
     expect(cookieOf(response)).toBe("");
   });
 
@@ -82,7 +103,7 @@ describe("POST /api/auth/sign-in", () => {
     const byOrigin = await signIn(
       new Request(`${ORIGIN}/api/auth/sign-in`, {
         method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+        headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "https://evil.example" },
         body: new URLSearchParams({ password: "correct horse battery staple" }),
       }),
     );
@@ -94,7 +115,7 @@ describe("POST /api/auth/sign-out", () => {
   it("clears the cookie and lands on the landing page", async () => {
     const response = await signOut(post("/api/auth/sign-out", {}));
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/`);
+    expect(response.headers.get("location")).toBe("/");
     const cookie = cookieOf(response);
     expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=;`));
     expect(cookie).toContain("Max-Age=0");

@@ -38,7 +38,7 @@ describe("proxy", () => {
   it("sends an anonymous visitor to sign-in, remembering where they were going", async () => {
     const response = await proxy(get("/learn/bkt?tab=note"));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Flearn%2Fbkt%3Ftab%3Dnote`);
+    expect(response.headers.get("location")).toBe("/sign-in?next=%2Flearn%2Fbkt%3Ftab%3Dnote");
   });
 
   it("answers an anonymous API call with 401 JSON, not a redirect", async () => {
@@ -55,7 +55,7 @@ describe("proxy", () => {
     for (const path of ["/", "/sign-in"]) {
       const response = await proxy(get(path, token));
       expect(response.status, path).toBe(307);
-      expect(response.headers.get("location"), path).toBe(`${ORIGIN}/today`);
+      expect(response.headers.get("location"), path).toBe("/today");
     }
   });
 
@@ -70,7 +70,7 @@ describe("proxy", () => {
     delete process.env.AUTH_SECRET;
     const response = await proxy(get("/today", token));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Ftoday`);
+    expect(response.headers.get("location")).toBe("/sign-in?next=%2Ftoday");
     expect((await proxy(get("/"))).status).toBe(200);
   });
 
