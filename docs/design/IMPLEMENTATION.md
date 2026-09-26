@@ -463,7 +463,17 @@ note's first check, reshuffled) or says there is no question.
 | --- | --- | --- |
 | two or more checks | the first | the second |
 | one check | the check | the tutor's question; with no model or a prose reply, the same check, reshuffled |
-| no checks | the tutor's question, or "no question" | the tutor's question, or "no question" |
+| no checks | the tutor's question, or "no question" when it fails | the tutor's question, or "no question" when it fails |
+| no checks, and no model configured | dropped | dropped |
+
+A step nothing can fill is dropped on the server (`withoutEmptySteps` in
+`session-core`), so the learner is never walked through empty cards: Teach me
+becomes Teach then Close, and Quiz me opens on the close screen. Both say why
+(`NOTHING_TO_ASK`), and nothing is recorded. The workspace says the same under
+Teach me before a session starts (`sessionCanAsk`); the button stays live,
+since the session still teaches, and a disabled kit button takes no pointer
+events, so a `title` on it would never show. "No question" is left for a model
+that fails at run time, which only a request finds out.
 
 A probe is recorded as `source: probe` (no learning step), a check after
 teaching as `teach`, and a Quiz me check as `probe`, since nothing was taught

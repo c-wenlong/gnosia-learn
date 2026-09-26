@@ -231,6 +231,60 @@ export function buildSessionPlan(input: {
   ];
 }
 
+/**
+ * Why a session asks nothing: the one sentence the session, its close screen
+ * and the workspace all print, so the three cannot drift apart.
+ */
+export const NOTHING_TO_ASK =
+  "This note has no check to ask, and no tutor model is configured on this server to write one.";
+
+/**
+ * A probe or check step that nothing can fill: no question from the note, no
+ * fallback, and no tutor model to ask. With a model configured the step still
+ * asks it, since only a request finds out whether the model answers.
+ */
+export function isEmptyStep(step: SessionStep, modelAvailable: boolean): boolean {
+  return (
+    (step.kind === "probe" || step.kind === "check") &&
+    step.question === null &&
+    step.fallback === null &&
+    !modelAvailable
+  );
+}
+
+/**
+ * The plan the page walks: `plan` without the steps `isEmptyStep` finds, so
+ * the learner is never walked through a card saying there is no question.
+ * Teach me becomes Teach, then Close; Quiz me becomes Close alone. Nothing is
+ * recorded either way, since only a graded answer writes. A plan with a model
+ * or a note question comes back unchanged.
+ */
+export function withoutEmptySteps(plan: readonly SessionStep[], modelAvailable: boolean): SessionStep[] {
+  return plan.filter((step) => !isEmptyStep(step, modelAvailable));
+}
+
+/** True when the plan has no probe or check left, so the session asks nothing. */
+export function asksNothing(plan: readonly SessionStep[]): boolean {
+  return !plan.some((step) => step.kind === "probe" || step.kind === "check");
+}
+
+/**
+ * Whether a session on this concept can ask anything, for the workspace
+ * before one starts: a note check with a question and an answer, or a tutor
+ * model to write one.
+ *
+ * The session page decides from the built plan instead (`withoutEmptySteps`),
+ * which also drops a check `buildChoices` cannot find two wrong options for.
+ * That takes a catalog with fewer than two other summaries, so the workspace
+ * does not read every summary just to catch it.
+ */
+export function sessionCanAsk(
+  checks: readonly Pick<ConceptCheck, "question" | "answer">[],
+  modelAvailable: boolean,
+): boolean {
+  return modelAvailable || checks.some((c) => c.question.trim() !== "" && c.answer.trim() !== "");
+}
+
 export const STEP_NAME: Record<StepKind, string> = {
   probe: "Probe",
   teach: "Teach",

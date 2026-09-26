@@ -8,7 +8,15 @@ import { problemForAccess, type RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
-import { buildSessionPlan, distractorPool, nextConcept, type SessionMode, type SessionStep } from "@/lib/session-core";
+import {
+  asksNothing,
+  buildSessionPlan,
+  distractorPool,
+  nextConcept,
+  withoutEmptySteps,
+  type SessionMode,
+  type SessionStep,
+} from "@/lib/session-core";
 
 /**
  * Everything a session page needs beyond the workspace object, read on the
@@ -30,10 +38,17 @@ export type TeachAsset =
   | { kind: "none" };
 
 export interface SessionPageData {
+  /** The steps to walk, without any question step nothing can fill (`withoutEmptySteps`). */
   plan: SessionStep[];
   asset: TeachAsset;
   /** True when some provider key is set, so a step without a note question may ask the tutor. */
   modelAvailable: boolean;
+  /**
+   * True when the plan has no question left: the note has no check the session
+   * can ask and no model is configured. Teach me then teaches and closes, Quiz
+   * me closes at once, and both say why.
+   */
+  nothingToAsk: boolean;
   /** The frontier concept after this one, for Keep going; null when there is none. */
   next: { slug: string; title: string } | null;
 }
@@ -68,6 +83,15 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
     : { kind: "diagram", id: pick.id, title, src: assetFileHref(pick.id), statusHref: assetStatusHref(pick.id) };
 }
 
+/**
+ * Whether a tutor model can be asked at all: some provider key is set, and
+ * `resolveProviders` keeps only those. Server-only, like the keys; a client
+ * component is handed the answer, never the environment.
+ */
+export function tutorModelConfigured(): boolean {
+  return resolveProviders().length > 0;
+}
+
 export async function loadSessionPage(workspace: ConceptWorkspace, mode: SessionMode): Promise<SessionPageData> {
   let summaries: ConceptSummary[] = [];
   try {
@@ -83,17 +107,23 @@ export async function loadSessionPage(workspace: ConceptWorkspace, mode: Session
     return c === undefined ? [] : [{ id: c.id, title: c.title, domain: c.domain }];
   });
 
-  return {
-    plan: buildSessionPlan({
+  const modelAvailable = tutorModelConfigured();
+  const plan = withoutEmptySteps(
+    buildSessionPlan({
       slug: workspace.slug,
       mode,
       checks: workspace.checks,
       pool: distractorPool(workspace, summaries),
       summary: workspace.summary,
     }),
+    modelAvailable,
+  );
+
+  return {
+    plan,
     asset,
-    // `resolveProviders` keeps only the providers whose key is set.
-    modelAvailable: resolveProviders().length > 0,
+    modelAvailable,
+    nothingToAsk: asksNothing(plan),
     next: nextConcept(frontier, workspace),
   };
 }

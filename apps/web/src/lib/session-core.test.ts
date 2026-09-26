@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { ConceptCheck } from "@/lib/concept-note-core";
 import {
+  asksNothing,
   buildSessionPlan,
+  isEmptyStep,
+  sessionCanAsk,
+  withoutEmptySteps,
   distractorPool,
   nextConcept,
   wrongOptionsFor,
@@ -165,6 +169,52 @@ describe("buildSessionPlan", () => {
       "check",
       "close",
     ]);
+  });
+
+  it("with no check and no model, drops the question steps: Teach me teaches and closes, Quiz me closes", () => {
+    const learn = buildSessionPlan({ slug: "softmax", mode: "learn", checks: [], pool: POOL });
+    const walked = withoutEmptySteps(learn, false);
+    expect(walked.map((s) => s.kind)).toEqual(["teach", "close"]);
+    expect(asksNothing(walked)).toBe(true);
+
+    const quiz = withoutEmptySteps(buildSessionPlan({ slug: "softmax", mode: "check", checks: [], pool: POOL }), false);
+    expect(quiz.map((s) => s.kind)).toEqual(["close"]);
+    expect(asksNothing(quiz)).toBe(true);
+  });
+
+  it("keeps every step when a model is configured, since the tutor is asked", () => {
+    const learn = buildSessionPlan({ slug: "softmax", mode: "learn", checks: [], pool: POOL });
+    expect(withoutEmptySteps(learn, true)).toEqual(learn);
+    expect(asksNothing(withoutEmptySteps(learn, true))).toBe(false);
+    expect(learn.some((s) => isEmptyStep(s, true))).toBe(false);
+  });
+
+  it("keeps every step when the note has a check, with or without a model", () => {
+    const one = buildSessionPlan({ slug: "dot-product", mode: "learn", checks: [check("c1", "Why?", "Because.")], pool: POOL });
+    // The check after teaching has no question of its own, but falls back to the first.
+    expect(withoutEmptySteps(one, false)).toEqual(one);
+    expect(asksNothing(withoutEmptySteps(one, false))).toBe(false);
+    const quiz = buildSessionPlan({ slug: "x", mode: "check", checks: [check("c1", "A?", "a.")], pool: POOL });
+    expect(withoutEmptySteps(quiz, false)).toEqual(quiz);
+  });
+
+  it("drops a check nothing can offer wrong options for, when no model can stand in", () => {
+    const starved = buildSessionPlan({
+      slug: "x",
+      mode: "learn",
+      checks: [check("c1", "A?", "a.")],
+      pool: { near: [], far: [] },
+    });
+    expect(withoutEmptySteps(starved, false).map((s) => s.kind)).toEqual(["teach", "close"]);
+  });
+
+  it("tells the workspace before a session whether it can ask anything", () => {
+    expect(sessionCanAsk([], false)).toBe(false);
+    expect(sessionCanAsk([], true)).toBe(true);
+    expect(sessionCanAsk([check("c1", "A?", "a.")], false)).toBe(true);
+    // A check block with no answer cannot be graded, so it is no question.
+    expect(sessionCanAsk([check("c1", "A?", "  ")], false)).toBe(false);
+    expect(sessionCanAsk([check("c1", "A?", "  ")], true)).toBe(true);
   });
 
   it("reads ?mode= as check only when it says so", () => {
