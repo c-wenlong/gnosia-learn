@@ -22,7 +22,9 @@ type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind:
  *
  * Pressing it again after a save appends again, which is honest (a second
  * viewing is a second event), so the button stays enabled and only its label
- * says the first one landed.
+ * says the first one landed. The "Last watched" line stays visible after a
+ * save: the refresh hands it the new day, so it confirms the write rather than
+ * disappearing.
  */
 export function MarkWatched({
   assetId,
@@ -73,7 +75,7 @@ export function MarkWatched({
         <p role="alert" className="text-[12px] text-danger">
           {state.message}
         </p>
-      ) : lastWatchedDay !== null && state.kind !== "saved" ? (
+      ) : lastWatchedDay !== null ? (
         <p className="text-[12px] text-text3">
           Last {verb} {lastWatchedDay}
         </p>

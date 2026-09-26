@@ -358,10 +358,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         {neighbours.length > 0 && (
           <Card
             title="Related"
+            // The library filters by one topic at a time, so "See all" is only
+            // honest when this asset has exactly one: with two, the neighbours
+            // from the second would be missing from the page it opens. Each
+            // topic's own view is a chip in the catalog row instead.
             action={
-              asset.topics[0] === undefined ? undefined : (
+              asset.topics.length === 1 && asset.topics[0] !== undefined ? (
                 <CardAction href={libraryHref({ topic: asset.topics[0] })}>See all</CardAction>
-              )
+              ) : undefined
             }
           >
             <ul className="flex flex-col gap-3">
