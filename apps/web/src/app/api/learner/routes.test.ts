@@ -172,6 +172,18 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await snapshot()).theme).toBe("dark");
     });
 
+    it("takes all six theme modes, and names them when it refuses one", async () => {
+      for (const mode of ["light", "gnosia", "dark", "system", "gnosia-dark", "gnosia-system"]) {
+        expect((await call("preference", { key: "theme", value: mode })).status).toBe(200);
+        expect((await snapshot()).theme).toBe(mode);
+      }
+      const { status, body } = await call("preference", { key: "theme", value: "classic" });
+      expect(status).toBe(400);
+      expect(String(body.error)).toBe(
+        '"value" must be one of "light", "gnosia", "dark", "system", "gnosia-dark", "gnosia-system".',
+      );
+    });
+
     it("refuses a key that is not", async () => {
       const epoch = await call("preference", { key: "epoch", value: 99 });
       expect(epoch.status).toBe(400);

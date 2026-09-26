@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { applyThemeToDocument, writeThemeCookie } from "@/lib/theme-cookie";
+import { applyThemeToDocument, asThemeMode, paletteOf, themeModeFor, writeThemeCookie } from "@/lib/theme-cookie";
 
 import { siteLink } from "./site";
 
@@ -18,9 +18,12 @@ import { siteLink } from "./site";
  * and so every other device, is left alone: only the app's own theme
  * control (Settings and the avatar menu) saves it.
  *
- * Only two states here. `gnosia` looks the same as light on these pages (the
- * brand tokens are not redefined by it) and `system` resolves to one of the
- * two, so the switch reads what is painted and picks the other.
+ * Only two states here: it flips the appearance and keeps the palette, so a
+ * Gnosia reader goes between Gnosia light and Gnosia dark and a Classic one
+ * between Light and Dark. The palette makes no difference on these pages (the
+ * brand tokens follow `dark` alone) but it does in the app, which reads the
+ * same cookie. A system mode resolves to one of the two, so the switch reads
+ * what is painted and picks the other.
  *
  * The icon follows the `dark` class through CSS, so it is right on the first
  * paint. `aria-pressed` reads the same class as an external store: the server
@@ -39,7 +42,8 @@ export function ThemeToggle() {
   const dark = useSyncExternalStore(subscribe, isDark, () => undefined);
 
   function toggle() {
-    const next = isDark() ? "light" : "dark";
+    const current = asThemeMode(document.documentElement.dataset.theme) ?? "light";
+    const next = themeModeFor(paletteOf(current), isDark() ? "light" : "dark");
     applyThemeToDocument(next);
     writeThemeCookie(next);
   }

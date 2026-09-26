@@ -236,15 +236,17 @@ insight. Not as a bullet or an ornament.
 | `.gnosia-glass` | The sign-in card |
 | Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
 | The world art (`public/banner.png`) | The landing page's closing band |
-| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click writes the app's theme cookie, so it is this browser's theme in the app too (the cookie wins over the saved row there); the saved row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
+| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click flips the appearance and keeps the palette (Gnosia light and Gnosia dark, or Light and Dark), and writes the app's theme cookie, so it is this browser's theme in the app too (the cookie wins over the saved row there); the saved row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
 | Icons, social card, banner | See [The source art](#the-source-art) |
 
 ## The Gnosia theme inside the app
 
-The app has three palettes in
-[globals.css](../../apps/web/src/app/globals.css): light on `:root`
-(Brilliant-derived: grey page, blue accent, black pill), dark on `.dark`, and
-**Gnosia** on `.gnosia`. Gnosia is the brand palette above applied to every
+The theme is two choices: a **palette**, Classic or Gnosia, and an
+**appearance**, Light, Dark or System. That makes four palettes in
+[globals.css](../../apps/web/src/app/globals.css): Classic light on `:root`
+(Brilliant-derived: grey page, blue accent, black pill), Classic dark on
+`.dark`, **Gnosia** on `.gnosia`, and **Gnosia dark** on `.gnosia.dark`
+([below](#gnosia-dark)). Gnosia is the brand palette above applied to every
 app page: cream paper, teal accent, navy ink, gold kept for the streak. It is
 a light theme, so Tailwind's `dark:` variant stays off under it. The block
 redefines only the tokens below; every other token falls through from `:root`.
@@ -291,49 +293,50 @@ the link colour, the primary button and the mastered node.
 ### Contrast, checked
 
 WCAG 2 relative luminance, computed with a script rather than read off a
-picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. The last
-column is the same pair in `:root`, for comparison.
+picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. Both
+Gnosia palettes pass every pair. The last two columns are the same pair in
+the Classic palettes, for comparison.
 
-| Pair | Gnosia | Needs | `:root` |
-| --- | --- | --- | --- |
-| `--text` on `--page` | 13.93 | 4.5 | 19.77 |
-| `--text` on `--surface` | 14.79 | 4.5 | 21.00 |
-| `--text` on `--tint` | 12.74 | 4.5 | 18.66 |
-| `--text2` on `--page` | 6.23 | 4.5 | 5.41 |
-| `--text2` on `--surface` | 6.62 | 4.5 | 5.74 |
-| `--text2` on `--surface2` | 5.81 | 4.5 | 5.17 |
-| `--text2` on `--tint` | 5.70 | 4.5 | 5.10 |
-| `--text3` on `--surface` (hints, so 3:1) | 3.77 | 3 | 2.85 |
-| `--text3` on `--page` | 3.55 | 3 | 2.68 |
-| `--text3` on `--surface2` | 3.31 | 3 | 2.57 |
-| `--accent-text` on `--page` | 6.88 | 4.5 | 6.78 |
-| `--accent-text` on `--surface` | 7.30 | 4.5 | 7.20 |
-| `--accent-text` on `--tint` | 6.29 | 4.5 | 6.40 |
-| `--btn-text` on `--btn-face` | 6.88 | 4.5 | 18.88 |
-| White on `--accent` (chips, accent button) | 4.60 | 4.5 | 4.30 |
-| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.5 | 4.88 |
-| `--ok-text` on `--ok-tint` | 4.62 | 4.5 | 3.32 |
-| `--ok-text` on `--page` | 4.73 | 4.5 | 3.45 |
-| `--warn-text` on `--warn-tint` | 4.71 | 4.5 | 2.93 |
-| `--warn-text` on `--page` | 4.75 | 4.5 | 3.00 |
-| `--warn-on` on `--warn` | 5.60 | 4.5 | 5.60 |
-| `--ok-on` on `--ok` | 6.97 | 4.5 | 2.13 |
-| `--danger` on `--surface` | 5.18 | 4.5 | 5.26 |
-| `--danger` on `--page` | 4.87 | 4.5 | 4.95 |
-| `--accent` on `--surface` (focus ring) | 4.53 | 3 | 4.30 |
-| `--accent` on `--tint` (selected row border) | 3.90 | 3 | 3.82 |
-| `--m-hi` on `--surface` | 7.30 | 3 | 4.30 |
-| `--m-mid` on `--surface` | 3.31 | 3 | 1.90 |
-| `--m-mid` on `--page` | 3.12 | 3 | 1.79 |
-| `--m-hi` against `--m-mid` | 2.20 | (gap) | 2.27 |
-| `--m-mid` against `--m-lo` | 2.31 | (gap) | 1.51 |
-| `--streak` on `--page` (the dot, the day rings) | 3.11 | 3 | 2.06 |
-| `--streak` on `--surface` | 3.30 | 3 | 2.18 |
-| `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 4.5 | 4.80 |
-| `--streak-text` on `--page` | 4.54 | 4.5 | 4.52 |
-| White check on a `--streak` disc | 3.36 | 3 | 2.18 |
-| White mark on a mastered path node | 7.42 | 3 | 4.30 |
-| White mark on a learning path node | 3.37 | 3 | 1.90 |
+| Pair | Gnosia | Gnosia dark | Needs | `:root` | `.dark` |
+| --- | --- | --- | --- | --- | --- |
+| `--text` on `--page` | 13.93 | 14.97 | 4.5 | 19.77 | 18.42 |
+| `--text` on `--surface` | 14.79 | 13.41 | 4.5 | 21.00 | 16.67 |
+| `--text` on `--tint` | 12.74 | 12.03 | 4.5 | 18.66 | 13.99 |
+| `--text2` on `--page` | 6.23 | 8.42 | 4.5 | 5.41 | 7.30 |
+| `--text2` on `--surface` | 6.62 | 7.54 | 4.5 | 5.74 | 6.61 |
+| `--text2` on `--surface2` | 5.81 | 6.57 | 4.5 | 5.17 | 5.77 |
+| `--text2` on `--tint` | 5.70 | 6.77 | 4.5 | 5.10 | 5.54 |
+| `--text3` on `--surface` (hints, so 3:1) | 3.77 | 4.15 | 3 | 2.85 | 3.88 |
+| `--text3` on `--page` | 3.55 | 4.64 | 3 | 2.68 | 4.29 |
+| `--text3` on `--surface2` | 3.31 | 3.62 | 3 | 2.57 | 3.39 |
+| `--accent-text` on `--page` | 6.88 | 7.94 | 4.5 | 6.78 | 6.35 |
+| `--accent-text` on `--surface` | 7.30 | 7.11 | 4.5 | 7.20 | 5.75 |
+| `--accent-text` on `--tint` | 6.29 | 6.38 | 4.5 | 6.40 | 4.82 |
+| `--btn-text` on `--btn-face` | 6.88 | 7.94 | 4.5 | 18.88 | 16.67 |
+| White on `--accent` (chips, accent button) | 4.60 | 4.60 | 4.5 | 4.30 | 4.30 |
+| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.88 | 4.88 |
+| `--ok-text` on `--ok-tint` | 4.62 | 7.66 | 4.5 | 3.32 | 7.66 |
+| `--ok-text` on `--page` | 4.73 | 10.19 | 4.5 | 3.45 | 10.28 |
+| `--warn-text` on `--warn-tint` | 4.71 | 9.17 | 4.5 | 2.93 | 9.17 |
+| `--warn-text` on `--page` | 4.75 | 12.53 | 4.5 | 3.00 | 12.63 |
+| `--warn-on` on `--warn` | 5.60 | 6.31 | 4.5 | 5.60 | 6.31 |
+| `--ok-on` on `--ok` | 6.97 | 6.97 | 4.5 | 2.13 | 6.97 |
+| `--danger` on `--surface` | 5.18 | 6.97 | 4.5 | 5.26 | 7.10 |
+| `--danger` on `--page` | 4.87 | 7.78 | 4.5 | 4.95 | 7.85 |
+| `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.30 | 3.88 |
+| `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 3.82 | 3.25 |
+| `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.30 | 5.75 |
+| `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 2.03 |
+| `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 2.24 |
+| `--m-hi` against `--m-mid` | 2.20 | 2.20 | (gap) | 2.27 | 2.83 |
+| `--m-mid` against `--m-lo` | 2.31 | 1.74 | (gap) | 1.51 | 1.05 |
+| `--streak` on `--page` (the dot, the day rings) | 3.11 | 9.86 | 3 | 2.06 | 9.76 |
+| `--streak` on `--surface` | 3.30 | 8.83 | 3 | 2.18 | 8.83 |
+| `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 8.83 | 4.5 | 4.80 | 8.83 |
+| `--streak-text` on `--page` | 4.54 | 9.86 | 4.5 | 4.52 | 9.76 |
+| Check on a `--streak` disc (`--streak-on`) | 3.36 | 9.86 | 3 | 2.18 | 1.89 |
+| Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.30 | 2.90 |
+| White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 8.22 |
 
 Two pairs used to fall short. Each was fixed without moving a token another
 component depends on:
@@ -386,6 +389,67 @@ darkened just far enough within their own hue, and `--ok-on`, the label on a
 green face, became the dark green `.dark` already uses. The `--brand-*` tokens
 are not redefined by `.gnosia`; their `:root` values are the light ones, which
 is what this theme wants.
+
+### Gnosia dark
+
+The brand's navy as a dark palette, selected by both classes on `<html>`,
+`gnosia` and `dark`. So Tailwind's `dark:` variant is on, `color-scheme` is
+dark, and the `--brand-*` tokens take their `.dark` values: the top bar's mark
+is the lifted teal on navy (7.11:1), as on the public pages. The block sits
+after `.dark` and `.gnosia` and outranks both, since two classes beat one.
+It also declares every token either of them sets. Otherwise a token that only
+`.gnosia` defines (`--accent-lip`, the path-node lips, `--ok-text`) would
+leak its light value into the dark palette, because between two one-class
+rules the later one wins.
+
+| Token | Gnosia dark | Note |
+| --- | --- | --- |
+| `--page` | `#0a1621` | `--brand-navy` in dark: the public pages' dark ground, so the app and the site sit on the same navy |
+| `--surface` | `#102131` | The navy's hue lifted to OKLCH L 0.24, the lightness of `.dark`'s card; a step above `#0d1c2b` |
+| `--surface2` | `#1b2c3c` | L 0.285, as `.dark`'s `--surface2` |
+| `--tint` | `#112c32` | A teal wash sunk into navy, dark enough that the accent border still clears 3:1 on it |
+| `--border` | `#3d4c5b` | Navy-grey, 1.86:1 on the card (`.dark` is 1.94) |
+| `--hair` | `#263645` | Navy-grey |
+| `--text` | `#eee8dc` | `--brand-ink` in dark |
+| `--text2` | `#a3b2bf` | `--brand-mist` in dark |
+| `--text3` | `#74828f` | A quieter grey-blue for hints |
+| `--accent` | `#148285` | Gnosia's mid teal, unchanged: the one teal that carries a white label and the black stat-tile strip |
+| `--accent-text` | `#5cbab3` | `--brand-teal` in dark, for links and ghost buttons |
+| `--accent-lip` | `#0f5f61` | The deep brand teal, under the accent button |
+| `--btn-face` | `#5cbab3` | The brand button in dark: lifted teal face |
+| `--btn-lip` | `#33686a` | The teal sunk halfway into navy, as `variant="brand"` draws it |
+| `--btn-text` | `#0a1621` | Navy label |
+| `--m-hi` | `#5cbab3` | Mastered: the lifted brand teal |
+| `--m-hi-lip` | `#36908a` | A darker teal |
+| `--m-hi-on` | `#0a1621` | The mark on a mastered node turns navy, since white on the bright teal is 2.30:1 |
+| `--m-mid` | `#187b78` | Learning: a deep teal |
+| `--m-mid-lip` | `#025f5d` | A darker deep teal |
+| `--m-lo` | `#3d4c5b` | Untouched: the border's navy-grey |
+| `--lip-shade` | `#05101c` | Under an untouched path node, darker than the page |
+| `--streak` | `#e2b95e` | `--brand-gold` in dark |
+| `--streak-text` | `#e2b95e` | The same gold: 8.83:1 on the card, so the letter needs no darker step |
+| `--streak-on` | `#0a1621` | The check on a done day turns navy, since white on the bright gold is 1.85:1 |
+| Signal colours | as `.dark` | `--ok`, `--ok-lip`, `--ok-text`, `--ok-tint`, `--ok-on`, `--warn`, `--warn-lip`, `--warn-text`, `--warn-tint`, `--warn-on`, `--danger`, `--violet`, `--on-tone`: every pair passes on navy, so none moved |
+
+**The mastery ramp on navy.** Mastered is the brightest step, as in `.dark`,
+so the thing earned is the thing that stands out on the dark card: L* 69.9,
+46.6 and 31.6, luminance ratios of 2.20 (the same gap as Gnosia light) and
+1.74 (`:root` has 1.51, `.dark` 1.05). Learning cannot be much lighter and
+still sit clearly below mastered, or much darker and still clear 3:1 on the
+card, so the bottom gap is the narrower one. Untouched is the border colour,
+as it is in `.dark`, since it is drawn as an empty ring.
+
+**Marks on a bright fill.** A bright mastered teal and a bright gold carry a
+white mark at only 2.30:1 and 1.85:1. `--m-hi-on` and `--streak-on` name
+those two marks: white in every other palette, so they are declared once on
+`:root`, and navy here (7.94:1 and 9.86:1).
+
+**What `.dark` still misses.** The Classic dark palette falls short on four
+pairs in the table: white on `--accent` (4.30), `--m-mid` on the card
+(2.03), the check on a streak disc (1.89) and the mark on a mastered node
+(2.90). None of them is new, and changing `.dark` is outside this palette's
+scope. The last two are now a one-line value for `--streak-on` and
+`--m-hi-on` in `.dark`.
 
 ## What the landing page may claim
 

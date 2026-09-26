@@ -7,7 +7,8 @@ import { cx } from "./classes";
  * disc. Done is a `--streak` disc with a check; today, with nothing done yet,
  * is a `--streak` ring around a dot; a missed or future day is a plain
  * `--border` disc. A miss the weekly leeway covered, which the kit does not
- * draw, is a dashed `--streak` ring: kept, but not earned.
+ * draw, is a dashed `--streak` ring: kept, but not earned. The check is
+ * `--streak-on`: white, except on Gnosia dark's bright gold, where it is navy.
  *
  * The letter is `--streak-text` on today and `--text3` otherwise: the
  * streak's own hue, darkened in each palette until 11px text clears 4.5:1
@@ -37,7 +38,7 @@ export function StreakDay({
         aria-hidden
         className={cx(
           "flex size-[34px] shrink-0 items-center justify-center rounded-full",
-          state === "done" && "bg-streak text-white",
+          state === "done" && "bg-streak text-[var(--streak-on)]",
           state === "today" && "border-2 border-streak",
           state === "forgiven" && "border-2 border-dashed border-streak",
           (state === "missed" || state === "future") && "bg-border",

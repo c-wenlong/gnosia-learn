@@ -38,9 +38,11 @@ export function PathNode({
   glyph?: "dot" | "check";
   className?: string;
 }) {
-  // White on a mastered or learning face in both themes, as in the kit; the
-  // untouched face is grey, so its mark is the tertiary text colour.
-  const mark = bucket === "untouched" ? "text-text3" : "text-white";
+  // White on a learning face, as in the kit. The mastered face's mark is
+  // `--m-hi-on`: white too, except under Gnosia dark, where mastered is the
+  // bright teal and the mark turns navy. The untouched face is grey, so its
+  // mark is the tertiary text colour.
+  const mark = bucket === "untouched" ? "text-text3" : bucket === "mastered" ? "text-[var(--m-hi-on)]" : "text-white";
   return (
     <span
       aria-hidden

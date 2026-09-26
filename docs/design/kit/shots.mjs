@@ -4,18 +4,25 @@
 // usage: node docs/design/kit/shots.mjs <base-url> <out-dir> [route ...]
 //   node docs/design/kit/shots.mjs http://localhost:3121 /tmp/shots / /courses /review
 //
-// Writes <out-dir>/<slug>-<desktop|phone>-<light|dark>.png, where slug is the
+// Writes <out-dir>/<slug>-<desktop|phone>-<theme>.png (a system mode adds the
+// scheme it resolved under: `-system-light`, `-gnosia-system-dark`), where slug is the
 // route with slashes turned into dashes ("courses", "courses-cp4281", "root").
 // Desktop is 1440x900 and phone 390x844, the hi-fi frame sizes. Each shot is
 // the full page, so content below the fold is in the picture too.
 //
-// Dark is the `self-learn-theme=dark` cookie the root layout reads, set before
+// A theme is the `self-learn-theme` cookie the root layout reads, set before
 // the page loads, so there is no light flash in the capture. Light sets the
 // cookie to `light`, so a dark preference row in the database cannot leak in.
+// The browser's colour scheme is dark for `dark` and `gnosia-dark`, so the
+// two system modes resolve light unless SHOTS_COLOR_SCHEME says otherwise.
 //
 // Options (environment):
 //   SHOTS_VIEWPORTS=desktop,phone   which sizes (default both)
-//   SHOTS_THEMES=light,dark,gnosia  which themes (default light,dark; gnosia only when named)
+//   SHOTS_THEMES=light,dark,...     any of the six modes: light, dark, system,
+//                                   gnosia, gnosia-dark, gnosia-system
+//                                   (default light,dark)
+//   SHOTS_COLOR_SCHEME=dark         force the emulated prefers-color-scheme,
+//                                   to see a system mode resolve dark
 //   SHOTS_VIEWPORT_ONLY=1           capture the viewport only, not the full page
 //   PLAYWRIGHT_CORE=<path>          playwright-core's index.mjs, when the tldrawkc
 //                                   submodule in this checkout is not installed
@@ -57,7 +64,14 @@ const VIEWPORTS = {
 };
 const pick = (value, all) => (value ? value.split(',').map((s) => s.trim()).filter((s) => all.includes(s)) : all);
 const sizes = pick(process.env.SHOTS_VIEWPORTS, Object.keys(VIEWPORTS));
-const themes = pick(process.env.SHOTS_THEMES, ['light', 'dark', 'gnosia']).filter((t) => t !== 'gnosia' || process.env.SHOTS_THEMES);
+// The six cookie values, THEME_MODES in packages/schema/src/shared.ts.
+const MODES = ['light', 'dark', 'system', 'gnosia', 'gnosia-dark', 'gnosia-system'];
+const themes = process.env.SHOTS_THEMES ? pick(process.env.SHOTS_THEMES, MODES) : ['light', 'dark'];
+const schemeFor = (theme) => process.env.SHOTS_COLOR_SCHEME ?? (theme === 'dark' || theme.endsWith('-dark') ? 'dark' : 'light');
+// A system mode's picture depends on the emulated scheme, so its file name
+// carries it (`gnosia-system-dark`) and a light and a dark run of the same
+// mode can share an output directory.
+const label = (theme) => (theme.endsWith('system') ? `${theme}-${schemeFor(theme)}` : theme);
 const fullPage = !process.env.SHOTS_VIEWPORT_ONLY;
 
 mkdirSync(outDir, { recursive: true });
@@ -73,13 +87,13 @@ try {
         deviceScaleFactor: 1,
         isMobile,
         hasTouch: isMobile,
-        colorScheme: theme === 'dark' ? 'dark' : 'light',
+        colorScheme: schemeFor(theme),
       });
       await context.addCookies([{ name: 'self-learn-theme', value: theme, domain: origin.hostname, path: '/' }]);
       const page = await context.newPage();
       for (const route of routes) {
         const slug = route.replace(/^\/+|\/+$/g, '').replace(/[/?&=#]+/g, '-') || 'root';
-        const file = join(outDir, `${slug}-${size}-${theme}.png`);
+        const file = join(outDir, `${slug}-${size}-${label(theme)}.png`);
         try {
           const response = await page.goto(new URL(route, base).href, { waitUntil: 'networkidle' });
           await page.evaluate(() => document.fonts.ready);

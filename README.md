@@ -74,7 +74,7 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | `/learn/[concept]/session` | Focus-mode session: probe, teach, check, close, each graded answer recorded as evidence |
 | `/review` | Spaced-repetition review of what is due |
 | `/library`, `/library/[id]` | Every indexed asset (videos, diagrams, notes), searchable, with the concepts each explains |
-| `/settings` | Daily target, streak leeway, theme (Light, Gnosia, Dark, System), tutor style; export and reset |
+| `/settings` | Daily target, streak leeway, theme (palette Classic or Gnosia, appearance Light, Dark or System), tutor style; export and reset |
 | `/courses/[slug]/[module]/session?topic=…` | The older Socratic micro-session for one topic |
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 
