@@ -15,6 +15,7 @@ export { Placeholder } from "./Placeholder";
 export { ProgressBar, type ProgressTone } from "./ProgressBar";
 export { SearchField } from "./SearchField";
 export { StatTile, type StatTone } from "./StatTile";
+export { StreakDay } from "./StreakDay";
 export { TargetBar } from "./TargetBar";
 export { buttonClasses, cardClasses, chipClasses, cx, inputClasses } from "./classes";
 export type { ButtonSize, ButtonVariant, ChipSize } from "./classes";

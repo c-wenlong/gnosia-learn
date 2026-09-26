@@ -82,6 +82,17 @@ export const PREFERENCE_KEYS = {
    * breaks, 0 to 7. Read by `apps/web/src/lib/habit.ts`; default 1.
    */
   dailyLeeway: "dailyLeeway",
+  /**
+   * How the tutor talks: one of `TUTOR_STYLES` in `apps/web/src/lib/preferences.ts`,
+   * default `"guide-concise"`. Written from Settings; nothing reads it yet.
+   */
+  tutorStyle: "tutorStyle",
+  /**
+   * `"system"` (follow the operating system's reduced-motion setting, the
+   * default) or `"always"` (reduce motion whatever the system says). Written
+   * from Settings; nothing reads it yet.
+   */
+  reducedMotion: "reducedMotion",
 } as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[keyof typeof PREFERENCE_KEYS];
