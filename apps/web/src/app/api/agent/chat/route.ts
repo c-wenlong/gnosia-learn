@@ -150,10 +150,22 @@ export async function POST(req: Request) {
  */
 async function conceptTurn(req: Request, body: ChatBody) {
   const { conceptSlug, messages, learnerNote } = body;
-  if (!isConceptSlug(conceptSlug) || !Array.isArray(messages)) {
+  // Every turn checked here, so a malformed one is a 400 before anything is
+  // read rather than a throw inside the provider call.
+  const wellFormed =
+    Array.isArray(messages) &&
+    messages.every(
+      (m: unknown) =>
+        m !== null &&
+        typeof m === "object" &&
+        ["user", "assistant", "system"].includes((m as ChatMessage).role) &&
+        typeof (m as ChatMessage).content === "string",
+    );
+  if (!isConceptSlug(conceptSlug) || !wellFormed) {
     return NextResponse.json(
       {
-        error: "conceptSlug must be a concept id (lowercase letters, digits and hyphens), and messages an array",
+        error:
+          "conceptSlug must be a concept id (lowercase letters, digits and hyphens), and messages an array of { role, content } turns",
         code: "BAD_REQUEST",
       },
       { status: 400 },

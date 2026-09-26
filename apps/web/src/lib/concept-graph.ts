@@ -124,29 +124,34 @@ export function courseScope(
  * from a through other edges. A course graph drawn with every edge is a
  * hairball (one foundational note reaches most of the course directly and
  * again through each step), and the dropped edges say nothing the kept path
- * does not. Kinds are treated alike for reachability, since both mean "comes
- * before".
+ * does not.
+ *
+ * A `requires` edge is only dropped for a path of `requires` edges: a hard
+ * prerequisite reached through a background one would otherwise be drawn as
+ * if it were background. An `assumes` edge goes for any path, since a hard
+ * chain says at least as much as a background line.
  */
 export function reduceEdges(edges: readonly GraphEdge[]): GraphEdge[] {
-  const out = new Map<string, string[]>();
+  const out = new Map<string, GraphEdge[]>();
   for (const e of edges) {
     const list = out.get(e.from);
-    if (list === undefined) out.set(e.from, [e.to]);
-    else list.push(e.to);
+    if (list === undefined) out.set(e.from, [e]);
+    else list.push(e);
   }
-  const reachableWithout = (from: string, to: string): boolean => {
-    const seen = new Set<string>([from]);
-    const stack = (out.get(from) ?? []).filter((n) => n !== to);
+  const implied = (edge: GraphEdge): boolean => {
+    const usable = (e: GraphEdge) => edge.kind === "assumes" || e.kind === "requires";
+    const seen = new Set<string>([edge.from]);
+    const stack = (out.get(edge.from) ?? []).filter((e) => e.to !== edge.to && usable(e)).map((e) => e.to);
     while (stack.length > 0) {
       const next = stack.pop() as string;
-      if (next === to) return true;
+      if (next === edge.to) return true;
       if (seen.has(next)) continue;
       seen.add(next);
-      stack.push(...(out.get(next) ?? []));
+      for (const e of out.get(next) ?? []) if (usable(e)) stack.push(e.to);
     }
     return false;
   };
-  return edges.filter((e) => !reachableWithout(e.from, e.to));
+  return edges.filter((e) => !implied(e));
 }
 
 /**

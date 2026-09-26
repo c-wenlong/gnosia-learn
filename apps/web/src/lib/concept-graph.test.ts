@@ -91,6 +91,25 @@ describe("reduceEdges", () => {
   it("keeps an edge that is the only path", () => {
     expect(reduceEdges(edges)).toEqual(edges);
   });
+
+  it("keeps a hard prerequisite that is only implied through a background edge", () => {
+    // theorem requires recurrence directly, and assumes tree, which requires recurrence.
+    const graph: GraphEdge[] = [
+      { from: "recurrence", to: "theorem", kind: "requires" },
+      { from: "recurrence", to: "tree", kind: "requires" },
+      { from: "tree", to: "theorem", kind: "assumes" },
+    ];
+    expect(reduceEdges(graph)).toEqual(graph);
+  });
+
+  it("drops a background edge a hard chain already implies", () => {
+    const graph: GraphEdge[] = [
+      { from: "a", to: "b", kind: "requires" },
+      { from: "b", to: "c", kind: "requires" },
+      { from: "a", to: "c", kind: "assumes" },
+    ];
+    expect(reduceEdges(graph)).toEqual(graph.slice(0, 2));
+  });
 });
 
 describe("dependants and backlinks", () => {

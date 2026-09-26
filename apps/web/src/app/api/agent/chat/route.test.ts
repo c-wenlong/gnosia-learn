@@ -81,6 +81,15 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(readConceptWorkspace).not.toHaveBeenCalled();
   });
 
+  it("refuses a malformed turn before any read", async () => {
+    for (const messages of [[null], [{ role: "user" }], [{ role: "tool", content: "x" }]]) {
+      const { status, json } = await call({ conceptSlug: "dot-product", messages });
+      expect(status).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+  });
+
   it("refuses a body that is not an object", async () => {
     expect((await call("null")).status).toBe(400);
   });
