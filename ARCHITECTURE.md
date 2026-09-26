@@ -149,8 +149,8 @@ says which pages are on the new design and which phase replaces the rest.
 | `/learn` | `learn/page.tsx` | The knowledge base view: stats, frontier, due reviews, the concept graph |
 | `/library` | `library/page.tsx` | Every indexed asset, filtered by kind and topic through the query string |
 | `/library/[id]` | `library/[id]/page.tsx` | One asset: a player, a diagram, a file's words, or a link |
-| `/courses/[slug]` | `courses/[slug]/page.tsx` | One course: its modules, progress, related courses |
-| `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | One module: topic checklist, notes, resources, recaps |
+| `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
+| `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
 | not found | `not-found.tsx` | The 404 |
 | `POST /api/agent/chat` | `api/agent/chat/route.ts` | One tutoring turn |
@@ -348,8 +348,9 @@ over `content/tags.yaml`.
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
 reaches either of them fail the build with the import chain printed, rather
 than shipping a YAML parser and every course file to the browser. So client
-components take what they need as props: the module page resolves the course,
-module and topic and hands them to `TopicChecklist` and `AgentSession`; the
+components take what they need as props: the course page resolves the course,
+each topic's mastery and each module's assets and hands them to `CoursePath`;
+the session page resolves the course, module and topic for `AgentSession`; the
 Courses page projects each course into a `CourseSummary` for its card grid. The
 arithmetic those components still do lives in `apps/web/src/lib/curriculum.ts` and
 `apps/web/src/lib/progress.ts`, which are pure functions over a course the caller
@@ -359,8 +360,18 @@ Each course carries an `inferred` flag. `true` means the syllabus was
 reconstructed from the course announcement and the standard treatment of the
 subject rather than read off an official document. Three of the ten are
 inferred, and `packages/content/test/courses.test.ts` pins exactly which. A
-page with `inferred` renders `InferredBanner`, and the agent prompt is told to
-flag uncertainty for those courses.
+course path with `inferred` says so under its header, and the agent prompt is
+told to flag uncertainty for those courses.
+
+**A course topic's concepts come from the concept notes, not from
+`content/topics.yaml`.** That file's `maps.courses` names modules, so it can
+say which concepts a module is about but not which of the module's topics each
+belongs to. The per-topic link is a note's `topics:` frontmatter, which
+`catalog index` writes to `concept_curriculum_item` and `readKnowledgeBase`
+returns as `KbConcept.topics`. The course path reads that link, orders a
+topic's concepts by the module topic's `maps.concepts`, and falls back to that
+list for a unit's Guidebook. The arithmetic (the bucket, the active node, the
+lock rule) is `apps/web/src/lib/course-path.ts`.
 
 Courses also carry an `order:`, which is the order the Courses page renders
 them in. It is authored because the shortlist is curated: sorting ten
@@ -563,6 +574,7 @@ workspace, so `npm test` from the repo root is the whole suite.
 | --- | --- |
 | `apps/web/src/lib/storage.test.ts` | Clamping and every pure state reducer |
 | `apps/web/src/lib/progress.test.ts` | Counting completed topics per module and course |
+| `apps/web/src/lib/course-path.test.ts` | The course path: a topic's concepts and its bucket, the active node, the lock rule, the labels and links |
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
 | `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
