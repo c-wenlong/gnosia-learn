@@ -145,19 +145,53 @@ export function clampSummary(value: unknown): string {
  */
 
 /**
- * The four appearance modes. `light` is the original palette, `gnosia` the
- * brand palette as a light theme, `dark` the dark one, and `system` follows
- * the device's `prefers-color-scheme` between `light` and `dark`. The names
- * are stored in the `preference` row and in the theme cookie, so adding one
- * here is the whole schema change.
+ * The theme is two choices stored as one string. The **palette** is `classic`
+ * (the original kit colours) or `gnosia` (the brand's); the **appearance** is
+ * `light`, `dark`, or `system`, which follows the device's
+ * `prefers-color-scheme`. One string, not two keys, so the cookie the root
+ * layout reads, the `preference` row and the import each keep a single value.
+ *
+ * The first four names predate the palette axis and keep their meaning, so
+ * nothing already stored changes: `light`, `dark` and `system` are the classic
+ * palette, and `gnosia` is Gnosia light. The two Gnosia modes that came later
+ * say both halves. Adding a mode here is the whole schema change;
+ * `themeModeFor` must still name every pair.
  */
-export const THEME_MODES = ["light", "gnosia", "dark", "system"] as const;
+export const THEME_MODES = ["light", "gnosia", "dark", "system", "gnosia-dark", "gnosia-system"] as const;
 
 export type ThemeMode = (typeof THEME_MODES)[number];
+
+export const THEME_PALETTES = ["classic", "gnosia"] as const;
+export type ThemePalette = (typeof THEME_PALETTES)[number];
+
+export const THEME_APPEARANCES = ["light", "dark", "system"] as const;
+export type ThemeAppearance = (typeof THEME_APPEARANCES)[number];
 
 /** The mode a stored or posted value names, or null for anything else. */
 export function asThemeMode(value: unknown): ThemeMode | null {
   return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
+}
+
+const MODE_FOR: Record<ThemePalette, Record<ThemeAppearance, ThemeMode>> = {
+  classic: { light: "light", dark: "dark", system: "system" },
+  gnosia: { light: "gnosia", dark: "gnosia-dark", system: "gnosia-system" },
+};
+
+/** The one mode that stores a palette and an appearance together. */
+export function themeModeFor(palette: ThemePalette, appearance: ThemeAppearance): ThemeMode {
+  return MODE_FOR[palette][appearance];
+}
+
+/** Which palette a mode draws with. */
+export function paletteOf(mode: ThemeMode): ThemePalette {
+  return mode === "gnosia" || mode.startsWith("gnosia-") ? "gnosia" : "classic";
+}
+
+/** Whether a mode is light, dark, or follows the device. */
+export function appearanceOf(mode: ThemeMode): ThemeAppearance {
+  if (mode === "dark" || mode === "gnosia-dark") return "dark";
+  if (mode === "system" || mode === "gnosia-system") return "system";
+  return "light";
 }
 
 /** Where a recap came from. The same vocabulary as `RECAP_SOURCES`. */

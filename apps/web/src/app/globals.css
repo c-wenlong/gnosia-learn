@@ -49,6 +49,12 @@
      the orange darkened within its hue until it clears 4.5:1 on the card
      (4.80; 4.52 on the page). `--streak` stays the fill, at 3:1 for graphics. */
   --streak-text: #b35a00;
+  /* The marks drawn on a bright fill: the check on a done streak day and the
+     dot on a mastered path node. White wherever those fills are mid-tone or
+     darker, which is every palette but Gnosia dark, so this is their one
+     declaration; `.gnosia.dark` lightens both fills and turns the marks navy. */
+  --streak-on: #ffffff;
+  --m-hi-on: #ffffff;
   --btn-face: #111111;
   --btn-lip: #000000;
   --btn-text: #ffffff;
@@ -143,9 +149,10 @@
 }
 
 /*
- * The third theme, "Gnosia" light: the brand palette (docs/design/BRAND.md)
- * applied to the whole app. Selected by the class `gnosia` on <html>, in place
- * of `.dark`, so it is a light theme and Tailwind's `dark:` variant stays off.
+ * The Gnosia palette, light: the brand palette (docs/design/BRAND.md) applied
+ * to the whole app. Selected by the class `gnosia` on <html> without `.dark`,
+ * so it is a light theme and Tailwind's `dark:` variant stays off; Gnosia dark
+ * is both classes, the `.gnosia.dark` block below.
  * Only the tokens that change are here; everything else falls through from
  * :root. Literal hex on purpose, so the block is self-contained and greppable;
  * the values that are brand tokens say which. Every pair is contrast-checked
@@ -200,6 +207,75 @@
   --ok-text: #008024;
   --ok-on: #0b2e14;
   --warn-text: #8c6800;
+}
+
+/*
+ * Gnosia dark: both classes on <html>. The brand's deep navy as the ground,
+ * cream ink, the lifted teal the public pages use on navy, and the bright
+ * gold. It sits after `.dark` and `.gnosia` and outranks both (two classes),
+ * and it declares every token either of them sets, so nothing here depends on
+ * which of the two happens to come later in the file. Every pair is measured
+ * in BRAND.md, "Gnosia dark".
+ */
+.gnosia.dark {
+  /* Grounds: the site's dark navy for the page, then two steps lighter at
+     the same hue (OKLCH L 0.24 and 0.285, the lightness of `.dark`'s steps),
+     a teal wash for the tint, and navy-greys for the lines. */
+  --page: #0a1621; /* --brand-navy in dark */
+  --surface: #102131;
+  --surface2: #1b2c3c;
+  --tint: #112c32;
+  --border: #3d4c5b;
+  --hair: #263645;
+  --surface-raised: var(--surface2);
+
+  /* Ink: the brand's cream-white and its grey-blue mist, then a quieter
+     grey-blue for hints. */
+  --text: #eee8dc; /* --brand-ink in dark */
+  --text2: #a3b2bf; /* --brand-mist in dark */
+  --text3: #74828f;
+
+  /* Accent: the Gnosia mid teal stays the fill, because it is the one teal
+     that carries both a white label and the black stat-tile strip; the
+     lifted brand teal is the text colour on navy. */
+  --accent: #148285;
+  --accent-text: #5cbab3; /* --brand-teal in dark */
+  --accent-lip: #0f5f61;
+
+  /* The brand button in dark: lifted teal face, navy label, and the teal
+     sunk halfway into navy for the lip, as the public pages draw it. */
+  --btn-face: #5cbab3;
+  --btn-lip: #33686a;
+  --btn-text: #0a1621;
+
+  /* Mastery, stepped by lightness: bright teal, deep teal, navy-grey. */
+  --m-hi: #5cbab3;
+  --m-hi-lip: #36908a;
+  --m-hi-on: #0a1621;
+  --m-mid: #187b78;
+  --m-mid-lip: #025f5d;
+  --m-lo: #3d4c5b;
+  --lip-shade: #05101c;
+
+  /* The brand's bright gold, which clears 4.5:1 as text on navy too. */
+  --streak: #e2b95e; /* --brand-gold in dark */
+  --streak-text: #e2b95e;
+  --streak-on: #0a1621;
+
+  /* Signal colours as `.dark` has them; every pair passes on navy. */
+  --ok: #29cc57;
+  --ok-lip: #15b441;
+  --ok-text: #5ed981;
+  --ok-tint: #17331f;
+  --ok-on: #0b2e14;
+  --warn: #f9d25c;
+  --warn-lip: #b78900;
+  --warn-text: #f9d25c;
+  --warn-tint: #33300f;
+  --warn-on: #5c4400;
+  --danger: #ff8585;
+  --violet: #8b5cf6;
+  --on-tone: #000000;
 }
 
 /*

@@ -1,6 +1,17 @@
-import { asThemeMode, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
+import {
+  appearanceOf,
+  asThemeMode,
+  paletteOf,
+  THEME_APPEARANCES,
+  THEME_MODES,
+  THEME_PALETTES,
+  themeModeFor,
+  type ThemeAppearance,
+  type ThemeMode,
+  type ThemePalette,
+} from "@self-learn/schema/shared";
 
-export { asThemeMode, THEME_MODES };
+export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, THEME_PALETTES, themeModeFor };
 
 /**
  * The theme is the one piece of learner state that is also a cookie.
@@ -20,13 +31,16 @@ export { asThemeMode, THEME_MODES };
  * than anything that authenticates. `SameSite=Lax` because nothing
  * cross-site should be setting it.
  *
- * **Four modes, two classes.** `<html>` carries `dark` for the dark palette
- * and `gnosia` for the brand palette; the original light palette is the
- * absence of both. `system` is the one mode the server cannot resolve, since
- * only the browser knows `prefers-color-scheme`: the server renders it as
- * light with `data-theme="system"`, and `SYSTEM_THEME_SCRIPT`, inlined at the
- * top of `<body>`, adds `dark` before anything paints when the device is
- * dark. `applyThemeToDocument` is the same decision made again on the client
+ * **Six modes, two axes, two classes.** A mode is a palette (classic or
+ * gnosia) and an appearance (light, dark or system); `paletteOf`,
+ * `appearanceOf` and `themeModeFor` in the schema convert. `<html>` carries
+ * `gnosia` for the brand palette and `dark` for a dark appearance, both
+ * together for Gnosia dark; classic light is the absence of both. A system
+ * appearance is the one the server cannot resolve, since only the browser
+ * knows `prefers-color-scheme`: the server renders it as light with
+ * `data-theme` naming the mode, and `SYSTEM_THEME_SCRIPT`, inlined at the top
+ * of `<body>`, adds `dark` before anything paints when the device is dark.
+ * `applyThemeToDocument` is the same decision made again on the client
  * whenever the mode or the device setting changes.
  */
 
@@ -35,51 +49,56 @@ export const THEME_COOKIE = "self-learn-theme";
 /** A year. Long enough that it outlives the browser sessions that matter. */
 export const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-export const THEME_LABELS: Record<ThemeMode, string> = {
-  light: "Light",
+export const PALETTE_LABELS: Record<ThemePalette, string> = {
+  classic: "Classic",
   gnosia: "Gnosia",
+};
+
+export const APPEARANCE_LABELS: Record<ThemeAppearance, string> = {
+  light: "Light",
   dark: "Dark",
   system: "System",
 };
 
-/** The `<html>` class a mode selects, given what the device prefers. */
-export function themeClass(theme: ThemeMode, prefersDark: boolean): "dark" | "gnosia" | "" {
-  switch (theme) {
-    case "dark":
-      return "dark";
-    case "gnosia":
-      return "gnosia";
-    case "system":
-      return prefersDark ? "dark" : "";
-    default:
-      return "";
-  }
+export type ThemeClass = "gnosia" | "dark";
+
+/**
+ * The classes a mode puts on `<html>`, given what the device prefers:
+ * `gnosia` for the brand palette, `dark` for a dark appearance, in that order.
+ */
+export function themeClass(theme: ThemeMode, prefersDark: boolean): ThemeClass[] {
+  const classes: ThemeClass[] = [];
+  if (paletteOf(theme) === "gnosia") classes.push("gnosia");
+  const appearance = appearanceOf(theme);
+  if (appearance === "dark" || (appearance === "system" && prefersDark)) classes.push("dark");
+  return classes;
 }
 
 /**
  * Runs before the body paints. Reads the mode the server stamped on `<html>`
- * and adds `dark` when the mode is `system` and the device is dark; the other
- * three modes were already resolved on the server. Kept tiny and dependency
- * free because it is a string, not a module.
+ * and adds `dark` when the mode is one of the two system modes and the device
+ * is dark; `gnosia` and every fixed appearance were already resolved on the
+ * server. Kept tiny and dependency free because it is a string, not a module,
+ * so it names the two modes rather than importing `appearanceOf`.
  */
 export const SYSTEM_THEME_SCRIPT =
-  '(function(){try{var d=document.documentElement;if(d.dataset.theme==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches)d.classList.add("dark")}catch(e){}})()';
+  '(function(){try{var d=document.documentElement,t=d.dataset.theme;if((t==="system"||t==="gnosia-system")&&window.matchMedia("(prefers-color-scheme: dark)").matches)d.classList.add("dark")}catch(e){}})()';
 
 /** Set the classes on `<html>` for a mode, from the browser. */
 export function applyThemeToDocument(theme: ThemeMode): void {
   if (typeof document === "undefined") return;
   const prefersDark =
     typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const cls = themeClass(theme, prefersDark);
+  const classes = themeClass(theme, prefersDark);
   const root = document.documentElement;
-  root.classList.toggle("dark", cls === "dark");
-  root.classList.toggle("gnosia", cls === "gnosia");
+  root.classList.toggle("dark", classes.includes("dark"));
+  root.classList.toggle("gnosia", classes.includes("gnosia"));
   root.dataset.theme = theme;
 }
 
 /**
- * Apply a mode and, under `system`, keep following the device until the
- * returned function is called. The other three modes are applied once and
+ * Apply a mode and, under either system mode, keep following the device until
+ * the returned function is called. The other four modes are applied once and
  * the cleanup is a no-op, so an effect can return this directly. Pure over
  * the `window` it is handed, which is what lets a test drive it without a
  * browser.
@@ -100,9 +119,9 @@ export function followTheme(
   win: SchemeWindow | undefined = typeof window === "undefined" ? undefined : window,
 ): () => void {
   applyThemeToDocument(theme);
-  if (theme !== "system" || typeof win?.matchMedia !== "function") return () => undefined;
+  if (appearanceOf(theme) !== "system" || typeof win?.matchMedia !== "function") return () => undefined;
   const query = win.matchMedia("(prefers-color-scheme: dark)");
-  const follow = () => applyThemeToDocument("system");
+  const follow = () => applyThemeToDocument(theme);
   query.addEventListener("change", follow);
   return () => query.removeEventListener("change", follow);
 }
