@@ -86,7 +86,8 @@ reduction of it, and where the two disagree the art wins.
 | --- | --- | --- |
 | [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The canonical mark and wordmark; `GnosiaMark` is drawn from it |
 | [docs/design/brand/app-icon.png](brand/app-icon.png) | The app icon: the mark on a navy-to-teal rounded square, 1254px | Source of the three icon files below |
-| [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Source of the pose cut-outs below |
+| [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
+| [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
 | [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
 | [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
@@ -94,7 +95,7 @@ reduction of it, and where the two disagree the art wins.
 | [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512) | Cut from `app-icon.png`, transparent corners | Favicon and PWA icon |
 | [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | Cut from `app-icon.png` | Home-screen icon |
 | [apps/web/public/brand/app-icon-256.png](../../apps/web/public/brand/app-icon-256.png) | Cut from `app-icon.png` | Anywhere a 256px icon is wanted |
-| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses, background knocked out, 340 to 430px wide, each with its soft shadow baked in | `GnosiaMascot` |
+| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
 | [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Made from `hero-lockup.png` | The social card |
 | [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
 
@@ -158,12 +159,22 @@ fanned behind it, gold line accents along the cover, the **star sigil**
 glowing on the brow, **two glowing crescent eyes** in the hood's shadow, two
 small cloth hands, and a **ribbon tail** in teal and green trailing below.
 Its expression lives in the eyes: closed smiles for neutral and happy,
-round for reading and curious, squeezed shut for excited, half-lidded for
-sleepy.
+round for reading and curious, squeezed shut for excited, downturned
+crescents for sleepy. Happy and excited raise both hands with gold strokes
+either side, and excited adds four-point sparkles; reading holds an open
+book up, sleepy holds one low.
 
+Each pose is its own render from the owner, 1254px square on a transparent
+ground, kept in [docs/design/brand/mascot/](brand/mascot/). The renders have
+no background, no fringe and no baked shadow, so the same file works on
+cream and on navy. The copies the app ships are trimmed to the art plus 8px
+and scaled to 900px on the longest side, which covers the 400px hero at 2x.
 [GnosiaMascot](../../apps/web/src/components/brand/GnosiaMascot.tsx) renders
 a pose from `public/brand/mascot/` with `next/image`, `alt=""`, sized by
-height with a class.
+height with a class. The poses are static imports, so each ships under a
+content-hashed URL and `next/image` reads its pixel size from the file: a
+replaced file needs no size edited anywhere and never leaves a browser on
+the old picture.
 
 | Pose | Where it goes |
 | --- | --- |
@@ -184,11 +195,9 @@ Rules:
    one a phone sees there.
 3. **Slow.** Only the hero and sign-in mascots float (`float` prop: 9
    seconds, 10px, under `prefers-reduced-motion: no-preference`).
-4. **The baked shadow.** Each cut-out has a pale shadow ellipse under it. On
-   cream it reads as a shadow; on navy it reads as a spotlight, so in dark
-   the component clips the bottom 8.5% of the picture, which can shave the very tip of a tail.
-5. **Never redrawn.** Use the cut-outs. A new pose comes from the owner's
-   art, not from an SVG approximation.
+4. **Never redrawn.** Use the renders. A new pose comes from the owner's
+   art, as its own render on a transparent ground, not from an SVG
+   approximation or a crop of the sheet.
 
 ## Motion and surfaces
 
