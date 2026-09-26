@@ -8,8 +8,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatTile } from "@/components/ui/StatTile";
 import { formatDue } from "@/lib/review-core";
 import {
-  formatMove,
   formatPL,
+  formatTotalsMove,
   scheduledCards,
   sessionTotals,
   stepsWalked,
@@ -23,7 +23,8 @@ import {
  * bars, what got scheduled, and the two ways out.
  *
  * Right, mastery moved and review cards come from the answers this session
- * recorded, as the observe route reported them. Target is the habit's own
+ * recorded, as the observe route reported them. Mastery moved is the change
+ * in p(L), always signed, and a dash when nothing was answered. Target is the habit's own
  * count, read by the server on the refresh after the last answer, so it is the
  * number the top bar shows too.
  */
@@ -61,11 +62,7 @@ export function SessionClose({
 
       <div className="grid grid-cols-2 gap-2.5 md:flex md:gap-3.5">
         <StatTile value={`${totals.right} / ${totals.answered}`} label="right" tone="ok" />
-        <StatTile
-          value={totals.before === null || totals.after === null ? "0.00" : formatMove(totals.before, totals.after)}
-          label="mastery"
-          tone="accent"
-        />
+        <StatTile value={formatTotalsMove(totals)} label="mastery moved" tone="accent" />
         <StatTile value={totals.cards} label="review cards" tone="violet" />
         <StatTile value={target.reachable ? `${target.done} / ${target.total}` : "–"} label="target" tone="streak" />
       </div>
