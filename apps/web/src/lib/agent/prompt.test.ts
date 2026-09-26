@@ -10,7 +10,12 @@ import {
   tutorStyleLabel,
   type ConceptPromptInput,
 } from "@/lib/agent/prompt";
-import { buildSessionQuestionPrompt, SESSION_EXPLANATION_RULES } from "@/lib/agent/session";
+import {
+  buildSessionQuestionPrompt,
+  EXPLANATION_TARGET,
+  QUESTION_LIMITS,
+  SESSION_EXPLANATION_RULES,
+} from "@/lib/agent/session";
 import { TUTOR_STYLES } from "@/lib/preferences";
 import { buildLearningObjectives } from "@/lib/agent/objectives";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
@@ -143,6 +148,10 @@ describe("concept tutor prompt", () => {
     expect(tutorStyleLabel("guide-concise")).toBe("Learning guide · concise");
   });
 
+  it("asks for an explanation well inside what the parser keeps", () => {
+    expect(EXPLANATION_TARGET).toBeLessThan(QUESTION_LIMITS.explanation);
+  });
+
   it("keeps the rationale in every style's explanation", () => {
     for (const rule of Object.values(SESSION_EXPLANATION_RULES)) {
       expect(rule).toMatch(/why the correct option is right/);
@@ -156,6 +165,8 @@ describe("concept tutor prompt", () => {
     for (const { id } of TUTOR_STYLES) {
       const prompt = buildSessionQuestionPrompt(input, "probe", [], id);
       expect(prompt).toContain(SESSION_EXPLANATION_RULES[id]);
+      // A bound under the parser's limit, so a long style is not thrown away.
+      expect(prompt).toContain(`under ${EXPLANATION_TARGET} characters`);
       // The JSON contract does not move with the style.
       expect(prompt).toContain('"correct" is the zero-based index');
     }

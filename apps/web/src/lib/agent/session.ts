@@ -19,6 +19,14 @@ export type QuestionStep = "probe" | "check";
 export const QUESTION_LIMITS = { prompt: 400, option: 240, explanation: 800 } as const;
 
 /**
+ * The explanation length the prompt asks for, well under the parser's limit:
+ * an explanation over `QUESTION_LIMITS.explanation` is dropped, and the
+ * learner then gets neither the reason line nor Why?. Models overshoot a
+ * stated length, so the margin is deliberate.
+ */
+export const EXPLANATION_TARGET = 500;
+
+/**
  * How the explanation is written, per Settings tutor style. The explanation is
  * the only prose a session question carries (the feedback bar prints its first
  * sentence, Why? opens the rest), so it is where the style shows. Every rule
@@ -76,7 +84,7 @@ ${avoidLines}
 1. Exactly four options. One is correct. The three wrong ones are plausible mistakes a learner actually makes, not jokes, and not "all of the above".
 2. Options are short: one line each, no numbering, no letters.
 3. The question stands alone; do not refer to "the note" or "the text".
-4. ${SESSION_EXPLANATION_RULES[style]} This follows the tutor style the learner chose in Settings.
+4. ${SESSION_EXPLANATION_RULES[style]} This follows the tutor style the learner chose in Settings. Whatever the style, keep the explanation under ${EXPLANATION_TARGET} characters.
 5. Stay inside what the note says. If it cannot support a question, ask about the summary.
 
 ## Output
