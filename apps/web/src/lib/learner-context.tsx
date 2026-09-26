@@ -30,7 +30,7 @@ import {
   setTheme,
   toggleTopic,
 } from "@/lib/storage";
-import { applyThemeToDocument, writeThemeCookie } from "@/lib/theme-cookie";
+import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
 import { createWriteQueue } from "@/lib/write-queue";
 
 /**
@@ -216,14 +216,10 @@ export function LearnerProvider({
   // on the first render and writes the cookie the next reload will read.
   // One frame late in a new browser, and never a query on a public page.
   useEffect(() => {
-    applyThemeToDocument(state.theme);
     writeThemeCookie(state.theme);
-    if (state.theme !== "system" || typeof window.matchMedia !== "function") return;
-    // Under `system` the device can change its mind while the page is open.
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const follow = () => applyThemeToDocument("system");
-    query.addEventListener("change", follow);
-    return () => query.removeEventListener("change", follow);
+    // Under `system` the device can change its mind while the page is open;
+    // `followTheme` applies the mode and returns the listener's cleanup.
+    return followTheme(state.theme);
   }, [state.theme]);
 
   const setThemeMode = useCallback(

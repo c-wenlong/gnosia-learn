@@ -15,7 +15,18 @@ import { THEME_LABELS, THEME_MODES } from "@/lib/theme-cookie";
  * to, and a select hides the choice behind a click. Arrow keys move between
  * the segments as on any radio group.
  */
-export function ThemeSwitch({ id, size = "md", className }: { id?: string; size?: "sm" | "md"; className?: string }) {
+export function ThemeSwitch({
+  id,
+  labelledBy,
+  size = "md",
+  className,
+}: {
+  id?: string;
+  /** The id of a visible label; without one the group names itself "Theme". */
+  labelledBy?: string;
+  size?: "sm" | "md";
+  className?: string;
+}) {
   const { state, ready, setThemeMode } = useLearner();
   const small = size === "sm";
 
@@ -23,7 +34,8 @@ export function ThemeSwitch({ id, size = "md", className }: { id?: string; size?
     <div
       id={id}
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={labelledBy === undefined ? "Theme" : undefined}
+      aria-labelledby={labelledBy}
       className={cx(
         "grid grid-cols-4 rounded-xl bg-surface2 p-0.5",
         small ? "gap-0.5" : "gap-1",

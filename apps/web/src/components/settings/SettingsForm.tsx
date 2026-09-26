@@ -147,7 +147,7 @@ export function SettingsForm({
 
       <Card title="Appearance and tutor">
         <Field label="Theme" note="Gnosia is the brand palette as a light theme. System follows your device between Light and Dark.">
-          {(id) => <ThemeSwitch id={id} />}
+          {(id) => <ThemeSwitch id={id} labelledBy={`${id}-label`} />}
         </Field>
         <Field label="Tutor style" note="Used by the concept tutor and the questions in a session, from the next message." status={tutor.status}>
           {(id) => (
@@ -216,7 +216,7 @@ function Field({
   return (
     <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
       <div className="flex flex-col gap-0.5 md:w-[320px] md:shrink-0">
-        <label htmlFor={id} className="text-[14px] font-medium text-text">
+        <label id={`${id}-label`} htmlFor={id} className="text-[14px] font-medium text-text">
           {label}
         </label>
         {note !== undefined && <p className="text-[12px] text-text2">{note}</p>}

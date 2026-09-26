@@ -68,12 +68,43 @@ export const SYSTEM_THEME_SCRIPT =
 /** Set the classes on `<html>` for a mode, from the browser. */
 export function applyThemeToDocument(theme: ThemeMode): void {
   if (typeof document === "undefined") return;
-  const prefersDark = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const prefersDark =
+    typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
   const cls = themeClass(theme, prefersDark);
   const root = document.documentElement;
   root.classList.toggle("dark", cls === "dark");
   root.classList.toggle("gnosia", cls === "gnosia");
   root.dataset.theme = theme;
+}
+
+/**
+ * Apply a mode and, under `system`, keep following the device until the
+ * returned function is called. The other three modes are applied once and
+ * the cleanup is a no-op, so an effect can return this directly. Pure over
+ * the `window` it is handed, which is what lets a test drive it without a
+ * browser.
+ */
+interface SchemeQuery {
+  readonly matches: boolean;
+  addEventListener(type: "change", listener: () => void): void;
+  removeEventListener(type: "change", listener: () => void): void;
+}
+
+/** The one corner of `window` this module reads, so a test can hand in a fake. */
+export interface SchemeWindow {
+  matchMedia(query: string): SchemeQuery;
+}
+
+export function followTheme(
+  theme: ThemeMode,
+  win: SchemeWindow | undefined = typeof window === "undefined" ? undefined : window,
+): () => void {
+  applyThemeToDocument(theme);
+  if (theme !== "system" || typeof win?.matchMedia !== "function") return () => undefined;
+  const query = win.matchMedia("(prefers-color-scheme: dark)");
+  const follow = () => applyThemeToDocument("system");
+  query.addEventListener("change", follow);
+  return () => query.removeEventListener("change", follow);
 }
 
 /** Write the cookie from the browser. Called by the theme control. */
