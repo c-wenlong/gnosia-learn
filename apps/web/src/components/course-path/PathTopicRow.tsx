@@ -44,6 +44,9 @@ export function PathTopicRow({
 }) {
   const { state } = useLearner();
   const [open, setOpen] = useState(false);
+  // Mounted on first open and then only hidden, so closing the panel inside
+  // the note's 400ms debounce still saves the last keystrokes.
+  const [opened, setOpened] = useState(false);
   const panelId = useId();
   const ticked = Boolean(state.completed[topic.id]);
 
@@ -72,7 +75,10 @@ export function PathTopicRow({
           </div>
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setOpened(true);
+              setOpen((v) => !v);
+            }}
             aria-expanded={open}
             aria-controls={panelId}
             aria-label={`${open ? "Hide" : "Show"} notes and links for ${topic.title}`}
@@ -92,8 +98,9 @@ export function PathTopicRow({
             </svg>
           </button>
         </div>
-        {open && (
+        {opened && (
           <TopicPanel
+            hidden={!open}
             // A reset clears the notes on the server; a new epoch remounts the
             // panel so the draft does not write the old note straight back.
             key={state.epoch}
@@ -111,12 +118,14 @@ export function PathTopicRow({
 
 function TopicPanel({
   id,
+  hidden,
   course,
   module,
   topic,
   mastery,
 }: {
   id: string;
+  hidden: boolean;
   course: Course;
   module: Module;
   topic: Topic;
@@ -138,7 +147,7 @@ function TopicPanel({
   const hasRecap = Boolean(state.knowledge[topic.id]);
 
   return (
-    <div id={id} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
+    <div id={id} hidden={hidden} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
       {mastery && (
         <section>
           <h4 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Concepts</h4>

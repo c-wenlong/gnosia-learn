@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { ResetCourseButton } from "@/components/ResetCourseButton";
 import { ResourceList } from "@/components/ResourceList";
@@ -73,6 +73,7 @@ export function CoursePath({
   related: RelatedCourse[];
 }) {
   const { state } = useLearner();
+  const visited = useHashModule(course.modules);
 
   const status = useMemo(
     () =>
@@ -93,7 +94,7 @@ export function CoursePath({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-      <VisitTracker courseSlug={course.slug} moduleSlug={activeModule?.slug} />
+      <VisitTracker courseSlug={course.slug} moduleSlug={visited} />
 
       <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-none lg:flex-1">
         {course.modules.map((m, i) => (
@@ -123,6 +124,26 @@ export function CoursePath({
       </aside>
     </div>
   );
+}
+
+/**
+ * The module the URL points at, if any: `#<module-slug>`, which is where an old
+ * module link lands and what the Modules card's rows link to. That, and not the
+ * active node, is the module a visit records, since it is the one the learner
+ * asked to see.
+ */
+function useHashModule(modules: readonly Module[]): string | undefined {
+  const [slug, setSlug] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const read = () => {
+      const hash = decodeURIComponent(window.location.hash.slice(1));
+      setSlug(modules.some((m) => m.slug === hash) ? hash : undefined);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, [modules]);
+  return slug;
 }
 
 function UnitCard({
