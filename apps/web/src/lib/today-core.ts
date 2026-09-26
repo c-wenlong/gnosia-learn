@@ -105,7 +105,8 @@ export interface TodayModel {
   reviews: { total: number; estimateMinutes: number; rows: ReviewRow[] };
   activity: ActivityRow[];
   habit: Habit;
-  courses: CourseInProgress[];
+  /** The first few courses in progress, and how many there are in all. */
+  courses: { rows: CourseInProgress[]; total: number };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -249,6 +250,9 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** Two answers or grades further apart than this, outside a session, are two sittings. */
+export const SITTING_GAP_MS = 60 * 60_000;
+
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -257,11 +261,13 @@ function plural(n: number, one: string, many: string): string {
  * The last few things the learner did, one row per sitting.
  *
  * Answered questions (`observation`) group by session and kind, so a probe
- * across seven concepts is one row rather than seven; answers with no
- * session group by day and kind. Graded review cards (`review`) carry no
- * session and group by day. `session-start` and `session-close` are
- * bookkeeping and never make a row, and anything inside a session a `void`
- * retracted is left out, as the streak leaves it out.
+ * across seven concepts is one row rather than seven. Graded review cards
+ * (`review`) carry no session, and neither does an answer recorded outside
+ * one, so those group by kind into runs: a run ends at a day boundary or a
+ * gap of more than `SITTING_GAP_MS`, which keeps a morning review and an
+ * evening one apart. `session-start` and `session-close` are bookkeeping and
+ * never make a row, and anything inside a session a `void` retracted is left
+ * out, as the streak leaves it out.
  *
  * A row about one concept names it and prints its p(L) before and after; a
  * row about several prints how many went up and down.
@@ -286,6 +292,8 @@ export function activityRows(
   );
 
   const groups = new Map<string, Group>();
+  /** The open run for each session-less kind: its key and when it last grew. */
+  const runs = new Map<string, { key: string; day: string; lastAt: number }>();
   const ordered = [...events]
     .filter((e) => (e.type === "observation" || e.type === "review") && !Number.isNaN(new Date(e.at).getTime()))
     .filter((e) => !(typeof e.session === "string" && voided.has(e.session)))
@@ -294,9 +302,22 @@ export function activityRows(
   for (const e of ordered) {
     const kind = kindOf(e);
     const review = e.type === "review";
-    const day = dayKey(e.at, timeZone);
-    const sitting = !review && typeof e.session === "string" && e.session !== "" ? `s:${e.session}` : `d:${day}`;
-    const key = `${review ? "review" : "obs"}:${sitting}:${kind}`;
+    const lane = `${review ? "review" : "obs"}:${kind}`;
+    let key: string;
+    if (!review && typeof e.session === "string" && e.session !== "") {
+      key = `${lane}:s:${e.session}`;
+    } else {
+      const at = new Date(e.at).getTime();
+      const day = dayKey(e.at, timeZone);
+      const run = runs.get(lane);
+      if (run !== undefined && run.day === day && at - run.lastAt <= SITTING_GAP_MS) {
+        run.lastAt = at;
+        key = run.key;
+      } else {
+        key = `${lane}:t:${e.at}`;
+        runs.set(lane, { key, day, lastAt: at });
+      }
+    }
     const group = groups.get(key);
     if (group === undefined) groups.set(key, { key, kind, review, events: [e] });
     else group.events.push(e);
@@ -358,7 +379,11 @@ function reviewText(
 ): { text: string; short: string; detail: string | null } {
   const cards = concepts.length;
   // Grades are SM-2's 0 to 5; below 3 is a lapse, which Anki calls "again".
-  const again = g.events.filter((e) => typeof e.grade === "number" && e.grade < 3).length;
+  // Counted per card like `cards`, so a card failed and then passed in one
+  // sitting is one card and one again, never more agains than cards.
+  const again = new Set(
+    g.events.filter((e) => typeof e.grade === "number" && e.grade < 3).map((e) => e.concept),
+  ).size;
   let detail: string | null = null;
   if (nextDue !== undefined) {
     const upcoming = concepts
@@ -496,11 +521,10 @@ export function leewayLine(habit: Habit): string {
   return `${leewayLeft} free ${leewayLeft === 1 ? "miss" : "misses"} left this week`;
 }
 
-/** The courses with at least one topic ticked, furthest along first. */
+/** Every course with at least one topic ticked, furthest along first. */
 export function coursesInProgress(
   courses: readonly { slug: string; code: string; title: string; order: number; topicIds: readonly string[] }[],
   completed: Readonly<Record<string, true>>,
-  limit = 4,
 ): CourseInProgress[] {
   return courses
     .map((c) => {
@@ -518,6 +542,5 @@ export function coursesInProgress(
     })
     .filter(({ row }) => row.completed > 0)
     .sort((a, b) => b.row.percent - a.row.percent || a.order - b.order)
-    .slice(0, limit)
     .map(({ row }) => row);
 }

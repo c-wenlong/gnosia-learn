@@ -6,10 +6,12 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { CourseInProgress } from "@/lib/today-core";
 
 /**
- * Courses in progress (hi-fi 01, bottom right): every course with at least
- * one topic ticked, furthest along first, then All courses.
+ * Courses in progress (hi-fi 01, bottom right): the courses with at least one
+ * topic ticked, furthest along first, then All courses. The card lists the
+ * first few and says how many more there are, rather than dropping them
+ * without a word.
  */
-export function CoursesCard({ courses }: { courses: CourseInProgress[] }) {
+export function CoursesCard({ courses: { rows: courses, total } }: { courses: { rows: CourseInProgress[]; total: number } }) {
   return (
     <Card title="Courses in progress" className="items-stretch">
       {courses.length === 0 ? (
@@ -34,10 +36,15 @@ export function CoursesCard({ courses }: { courses: CourseInProgress[] }) {
           ))}
         </ul>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-3">
         <Button href="/courses" variant="secondary" size="sm">
           All courses
         </Button>
+        {total > courses.length && (
+          <span className="text-[12px] text-text2">
+            {total - courses.length} more in progress
+          </span>
+        )}
       </div>
     </Card>
   );

@@ -168,6 +168,18 @@ describe("recent activity", () => {
     expect(row.detail).toBe("next due Fri");
   });
 
+  it("counts a card failed then passed once, and splits a morning and an evening review", () => {
+    const events: HabitEvent[] = [
+      { at: "2026-09-25T08:00:00Z", type: "review", concept: "softmax", grade: 1 },
+      { at: "2026-09-25T08:05:00Z", type: "review", concept: "softmax", grade: 4 },
+      { at: "2026-09-25T08:06:00Z", type: "review", concept: "dot-product", grade: 5 },
+      // Five hours later: a second sitting, not more of the first.
+      { at: "2026-09-25T13:06:00Z", type: "review", concept: "cross-product", grade: 2 },
+    ];
+    const rows = activityRows(events, { now: NOW, timeZone: TZ, title });
+    expect(rows.map((r) => r.text)).toEqual(["Review · 1 card · 1 again", "Review · 2 cards · 1 again"]);
+  });
+
   it("leaves out a voided session and the bookkeeping events", () => {
     const events: HabitEvent[] = [
       { at: "2026-09-25T09:00:00Z", type: "session-start", session: "gone" },

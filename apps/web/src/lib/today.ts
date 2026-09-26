@@ -52,6 +52,8 @@ import {
 /** Rows the reviews card lists; the count beside Start review is the whole queue. */
 const REVIEW_ROWS = 5;
 const ACTIVITY_ROWS = 4;
+/** Courses the card lists; it says how many more there are. */
+const COURSE_ROWS = 4;
 
 export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   const timeZone = habitTimeZone();
@@ -72,6 +74,17 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
 
   const first = kb.frontier.map((id) => byId.get(id)).find((c): c is KbConcept => c !== undefined);
   const nextUp: NextUp | null = first === undefined ? null : toNextUp(first, placeOf(first), now, timeZone);
+
+  const started = coursesInProgress(
+    courses.map((c) => ({
+      slug: c.slug,
+      code: c.code,
+      title: c.title,
+      order: c.order,
+      topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
+    })),
+    snapshot.completed,
+  );
 
   const shown = due.slice(0, REVIEW_ROWS);
   const checks = await checkCounts(db, shown.map((card) => card.conceptId));
@@ -106,16 +119,7 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
       limit: ACTIVITY_ROWS,
     }),
     habit: computeHabit({ events, preferences, dueReviews: due.length, now, timeZone }),
-    courses: coursesInProgress(
-      courses.map((c) => ({
-        slug: c.slug,
-        code: c.code,
-        title: c.title,
-        order: c.order,
-        topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
-      })),
-      snapshot.completed,
-    ),
+    courses: { rows: started.slice(0, COURSE_ROWS), total: started.length },
   };
 }
 
@@ -146,7 +150,7 @@ export function emptyToday(now: Date, timeZone?: string): TodayModel {
     reviews: { total: 0, estimateMinutes: 0, rows: [] },
     activity: [],
     habit: emptyHabit(now, timeZone),
-    courses: [],
+    courses: { rows: [], total: 0 },
   };
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readEvents, readLearnerSnapshot } from "@self-learn/catalog/state";
+import { readEvents, readLearnerSnapshot, readPreferences } from "@self-learn/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT } from "@/lib/learner-api";
@@ -7,9 +7,12 @@ import { withLearnerStore } from "@/lib/learner-store";
 
 /**
  * `GET /api/learner/export`: everything the learner has recorded, as one JSON
- * file to keep. The snapshot (ticks, notes, recaps, preferences as the app
- * reads them) plus the whole event log, which is the evidence mastery and the
- * review schedule are replayed from. Settings links here.
+ * file to keep. The snapshot (ticks, notes, recaps, and the preferences it
+ * folds in), every preference row as stored (the snapshot only carries the
+ * handful the old document had, so the daily target, the leeway and the
+ * tutor style would otherwise be missing), and the whole event log, which is
+ * the evidence mastery and the review schedule are replayed from. Settings
+ * links here.
  *
  * Unlike the page reads this does not degrade: an export that quietly came
  * back empty because the database was down would be a backup of nothing, so
@@ -25,11 +28,15 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (limited !== null) return limited;
 
   const exportedAt = new Date();
-  let body: { learner: unknown; events: unknown[] };
+  let body: { learner: unknown; preferences: Record<string, unknown>; events: unknown[] };
   try {
     body = await withLearnerStore(async (db) => {
-      const [learner, events] = await Promise.all([readLearnerSnapshot(db), readEvents(db)]);
-      return { learner, events };
+      const [learner, preferences, events] = await Promise.all([
+        readLearnerSnapshot(db),
+        readPreferences(db),
+        readEvents(db),
+      ]);
+      return { learner, preferences, events };
     });
   } catch (error) {
     // The driver's message is logged, not returned: it is the failed SQL.

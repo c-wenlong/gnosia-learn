@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
 
 import { Button } from "@/components/ui/Button";
@@ -48,20 +48,35 @@ async function savePreference(key: string, value: unknown): Promise<string | nul
   }
 }
 
-/** One select's value, its save, and what to say about it. */
+/**
+ * One select's value, its save, and what to say about it.
+ *
+ * Saves to one key run one after another: two quick changes are two requests,
+ * and if they ran side by side the first could land last and leave the row
+ * (and the refreshed top bar) on the older choice while the select shows the
+ * newer one. Only the newest save reports, so an earlier one finishing late
+ * cannot print "Saved" over a later one still in flight.
+ */
 function usePreference<T>(key: string, initial: T, afterSave?: () => void) {
   const [value, setValue] = useState<T>(initial);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const save = async (next: T) => {
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const latest = useRef(0);
+  const save = (next: T) => {
     setValue(next);
     setStatus({ kind: "saving" });
-    const error = await savePreference(key, next);
-    if (error === null) {
-      setStatus({ kind: "saved" });
-      afterSave?.();
-    } else {
-      setStatus({ kind: "error", message: error });
-    }
+    const mine = ++latest.current;
+    const run = chain.current.then(() => savePreference(key, next));
+    chain.current = run;
+    void run.then((error) => {
+      if (mine !== latest.current) return;
+      if (error === null) {
+        setStatus({ kind: "saved" });
+        afterSave?.();
+      } else {
+        setStatus({ kind: "error", message: error });
+      }
+    });
   };
   return { value, status, save };
 }
@@ -99,7 +114,7 @@ export function SettingsForm({
               value={targetKey(target.value)}
               onChange={(key) => {
                 const choice = choices.find((c) => c.value === key);
-                if (choice !== undefined) void target.save(choice.target);
+                if (choice !== undefined) target.save(choice.target);
               }}
             >
               {choices.map((c) => (
@@ -112,7 +127,7 @@ export function SettingsForm({
         </Field>
         <Field label="Streak leeway" status={leeway.status}>
           {(id) => (
-            <Select id={id} value={String(leeway.value)} onChange={(v) => void leeway.save(Number(v))}>
+            <Select id={id} value={String(leeway.value)} onChange={(v) => leeway.save(Number(v))}>
               {leewayChoices().map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
@@ -141,7 +156,7 @@ export function SettingsForm({
         </Field>
         <Field label="Tutor style" note="Saved now; the tutor does not read it yet." status={tutor.status}>
           {(id) => (
-            <Select id={id} value={tutor.value} onChange={(v) => void tutor.save(v as TutorStyle)}>
+            <Select id={id} value={tutor.value} onChange={(v) => tutor.save(v as TutorStyle)}>
               {TUTOR_STYLES.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
@@ -152,7 +167,7 @@ export function SettingsForm({
         </Field>
         <Field label="Motion" note="Saved now; the system setting is what applies today." status={motion.status}>
           {(id) => (
-            <Select id={id} value={motion.value} onChange={(v) => void motion.save(v as MotionMode)}>
+            <Select id={id} value={motion.value} onChange={(v) => motion.save(v as MotionMode)}>
               {MOTION_MODES.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -180,7 +195,7 @@ export function SettingsForm({
             </ReadOnly>
           )}
         </Field>
-        <DataActions topicIds={topicIds} onReset={refresh} />
+        <DataActions topicIds={topicIds} />
       </Card>
     </>
   );
@@ -278,32 +293,17 @@ function ReadOnly({ id, title, children }: { id: string; title?: string; childre
 /**
  * Export and Reset. Export is a plain link, not `next/link`: it answers with
  * a file, and a client-side navigation would try to render it as a page.
- * Reset asks first, in place, and says what it keeps.
+ *
+ * Reset asks first, in place, and says what it keeps. It goes through the
+ * provider's `resetCourse`, the same call a course page's reset makes, so it
+ * waits behind any tick or note still being saved (a write landing after the
+ * delete would recreate the row) and, like every other write, shows its
+ * result at once and raises the shell's banner if the database refuses it.
  */
-function DataActions({ topicIds, onReset }: { topicIds: string[]; onReset: () => void }) {
+function DataActions({ topicIds }: { topicIds: string[] }) {
+  const { resetCourse } = useLearner();
   const [confirming, setConfirming] = useState(false);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-
-  const reset = async () => {
-    setStatus({ kind: "saving" });
-    try {
-      const response = await fetch("/api/learner/reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ curriculumItemIds: topicIds }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!response.ok || payload.ok === false) {
-        setStatus({ kind: "error", message: payload.error ?? `Not reset (HTTP ${response.status}).` });
-        return;
-      }
-      setConfirming(false);
-      setStatus({ kind: "saved" });
-      onReset();
-    } catch {
-      setStatus({ kind: "error", message: "Not reset: the server did not answer." });
-    }
-  };
+  const [done, setDone] = useState(false);
 
   return (
     <div className="flex flex-col gap-3">
@@ -316,7 +316,7 @@ function DataActions({ topicIds, onReset }: { topicIds: string[]; onReset: () =>
           aria-expanded={confirming}
           onClick={() => {
             setConfirming((v) => !v);
-            setStatus({ kind: "idle" });
+            setDone(false);
           }}
         >
           Reset progress
@@ -329,7 +329,15 @@ function DataActions({ topicIds, onReset }: { topicIds: string[]; onReset: () =>
             undone.
           </p>
           <div className="flex flex-wrap gap-2.5">
-            <Button variant="warn" size="sm" disabled={status.kind === "saving"} onClick={() => void reset()}>
+            <Button
+              variant="warn"
+              size="sm"
+              onClick={() => {
+                resetCourse(topicIds);
+                setConfirming(false);
+                setDone(true);
+              }}
+            >
               Reset every course
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
@@ -338,10 +346,8 @@ function DataActions({ topicIds, onReset }: { topicIds: string[]; onReset: () =>
           </div>
         </div>
       )}
-      <p aria-live="polite" className={cx("text-[12px]", status.kind === "idle" && "sr-only")}>
-        {status.kind === "saving" && <span className="text-text3">Resetting…</span>}
-        {status.kind === "saved" && <span className="text-ok-text">Progress reset. Ticks and notes are cleared.</span>}
-        {status.kind === "error" && <span className="text-danger">{status.message}</span>}
+      <p aria-live="polite" className={cx("text-[12px] text-ok-text", !done && "sr-only")}>
+        {done ? "Progress reset. Ticks and notes are cleared." : ""}
       </p>
     </div>
   );

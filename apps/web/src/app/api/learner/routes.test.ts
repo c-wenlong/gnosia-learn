@@ -231,12 +231,20 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   describe("export", () => {
     it("hands back the snapshot and the event log as a download", async () => {
       await call("progress", { curriculumItemId: ITEMS[0], completed: true });
+      await call("preference", { key: "dailyLeeway", value: 2 });
       const { GET } = await import("./export/route");
       const response = await GET(new Request(`${ORIGIN}/api/learner/export`, { headers: { host: "localhost:3000" } }));
       expect(response.status).toBe(200);
       expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename="self-learn-\d{4}-\d{2}-\d{2}\.json"$/);
-      const body = (await response.json()) as { format: string; learner: { completed: Record<string, true> }; events: unknown[] };
+      const body = (await response.json()) as {
+        format: string;
+        learner: { completed: Record<string, true> };
+        preferences: Record<string, unknown>;
+        events: unknown[];
+      };
       expect(body.format).toBe("self-learn-export");
+      // Every preference row, not only the ones the snapshot folds in.
+      expect(body.preferences).toMatchObject({ dailyLeeway: 2 });
       expect(body.learner.completed).toEqual({ [ITEMS[0]]: true });
       expect(Array.isArray(body.events)).toBe(true);
     });

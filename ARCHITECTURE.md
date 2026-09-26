@@ -160,7 +160,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
 | `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
-| `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot and the whole event log as a JSON download; a 503 when the database is down |
+| `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
 
 The asset route is the one place the app reads a file the deployment does not
 contain. A video sits under manimkc's data root and a diagram under
