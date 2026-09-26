@@ -136,10 +136,17 @@ function useHashModule(modules: readonly Module[]): string | undefined {
   const [slug, setSlug] = useState<string | undefined>(undefined);
   useEffect(() => {
     const read = () => {
-      // Compared as written, not decoded: a module slug is plain ASCII, and
-      // `decodeURIComponent` throws on a hand-typed `#m1%zz`.
-      const hash = window.location.hash.slice(1);
-      setSlug(modules.some((m) => m.slug === hash) ? hash : undefined);
+      // Decoded when it can be, so a slug with non-ASCII characters still
+      // matches; `decodeURIComponent` throws on a hand-typed `#m1%zz`, which
+      // then simply names no module.
+      const raw = window.location.hash.slice(1);
+      let hash = raw;
+      try {
+        hash = decodeURIComponent(raw);
+      } catch {
+        // Keep the raw text.
+      }
+      setSlug(modules.find((m) => m.slug === hash || m.slug === raw)?.slug);
     };
     read();
     window.addEventListener("hashchange", read);
