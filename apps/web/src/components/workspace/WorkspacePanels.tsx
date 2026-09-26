@@ -59,14 +59,17 @@ export function WorkspacePanels({
   tutor,
   tutorAside,
   studio,
+  initialPanel = "note",
 }: {
   note: ReactNode;
   tutor: ReactNode;
   /** The quiet line at the right of the Tutor header. */
   tutorAside?: ReactNode;
   studio: ReactNode;
+  /** The tab a phone opens on; the tutor when a session sent a question here. */
+  initialPanel?: PanelKey;
 }) {
-  const [active, setActive] = useState<PanelKey>("note");
+  const [active, setActive] = useState<PanelKey>(initialPanel);
   const [noteOpen, setNoteOpen] = useState(true);
   const [studioOpen, setStudioOpen] = useState(true);
 

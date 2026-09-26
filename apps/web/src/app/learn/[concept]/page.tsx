@@ -30,7 +30,13 @@ import { embedTargets } from "@/lib/note-embeds";
  * reads the database.
  */
 
-type Params = { params: Promise<{ concept: string }> };
+type Params = {
+  params: Promise<{ concept: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+/** The longest `?ask=` prefill taken, the tutor input's own limit. */
+const ASK_LIMIT = 4_000;
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { concept } = await params;
@@ -38,7 +44,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return { title: read?.state === "ok" ? read.workspace.title : "Concept" };
 }
 
-export default async function ConceptWorkspacePage({ params }: Params) {
+export default async function ConceptWorkspacePage({ params, searchParams }: Params) {
   // A page's segment is not URL-decoded (AGENTS.md), but a concept id is
   // lowercase letters, digits and hyphens, so anything with an escape in it
   // was never a concept and the check below turns it away.
@@ -50,6 +56,11 @@ export default async function ConceptWorkspacePage({ params }: Params) {
   if (read.state === "unreachable") return <Unreachable />;
 
   const w = read.workspace;
+  // `?ask=` is a session's "Ask the tutor": the question it asked, prefilled in
+  // the tutor's input (never sent), with the Tutor tab open on a phone.
+  const query = await searchParams;
+  const rawAsk = Array.isArray(query.ask) ? query.ask[0] : query.ask;
+  const ask = typeof rawAsk === "string" && rawAsk.trim() !== "" ? rawAsk.slice(0, ASK_LIMIT) : undefined;
   const session = buildConceptSessionContext(toConceptPromptInput(w));
   const timeZone = habitTimeZone();
   const nextReview = w.review ? dueLabel(w.review.due, new Date(), timeZone).label : null;
@@ -88,10 +99,7 @@ export default async function ConceptWorkspacePage({ params }: Params) {
         </div>
         <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
         <div className="flex flex-wrap items-center gap-3.5">
-          {/* Not prefetched: until the session route exists (phase 1d) a prefetch of
-              it is a 404 whose segment request Chromium leaves pending, which
-              keeps the page from ever going network-idle. */}
-          <Button href={`/learn/${w.slug}/session`} prefetch={false}>
+          <Button href={`/learn/${w.slug}/session`}>
             Teach me · focus mode
           </Button>
           <Button variant="secondary" href={`/review?concept=${w.slug}`}>
@@ -110,7 +118,16 @@ export default async function ConceptWorkspacePage({ params }: Params) {
           />
         }
         tutorAside={<span className="text-[12px] text-text3">Grounded in your note</span>}
-        tutor={<TutorChat slug={w.slug} title={w.title} sources={session.sources} suggestions={session.suggestions} />}
+        tutor={
+          <TutorChat
+            slug={w.slug}
+            title={w.title}
+            sources={session.sources}
+            suggestions={session.suggestions}
+            initialDraft={ask}
+          />
+        }
+        initialPanel={ask === undefined ? undefined : "tutor"}
         studio={<StudioCards workspace={w} assets={assets} nextReview={nextReview} />}
       />
     </div>
