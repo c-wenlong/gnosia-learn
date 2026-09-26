@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { GnosiaWordmark } from "@/components/brand";
 
 import { GITHUB_URL, siteLink } from "./site";
+import { ThemeToggle } from "./ThemeToggle";
 
 // The public pages' title face. Literata was drawn for reading books on
 // screens, which is the product's one idea; loading it here rather than in the
@@ -46,21 +47,25 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
           <Link href="/" aria-label="Gnosia home" className={siteLink("rounded-md text-[14px] text-brand-ink md:text-[15px]")}>
             <GnosiaWordmark />
           </Link>
-          {/* The sign-in page marks its root `data-page="sign-in"`, and this
-              link hides itself there: a layout cannot read the path, but the
-              wrapper can see what is inside it (the `data-layout` trick
-              AppShell uses). `hidden` is display none, so it leaves the
-              accessibility tree too. */}
-          <nav aria-label="Site" className="group-has-[[data-page=sign-in]]/site:hidden">
-            <Link
-              href="/sign-in"
-              className={siteLink(
-                "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-teal hover:underline",
-              )}
-            >
-              Sign in
-            </Link>
-          </nav>
+          <div className="flex items-center gap-3 md:gap-5">
+            {/* The sign-in page marks its root `data-page="sign-in"`, and
+                this link hides itself there: a layout cannot read the path,
+                but the wrapper can see what is inside it (the `data-layout`
+                trick AppShell uses). `hidden` is display none, so it leaves
+                the accessibility tree too. */}
+            <nav aria-label="Site" className="group-has-[[data-page=sign-in]]/site:hidden">
+              <Link
+                href="/sign-in"
+                className={siteLink(
+                  "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-teal hover:underline",
+                )}
+              >
+                Sign in
+              </Link>
+            </nav>
+            {/* Outside the nav, so it stays on the sign-in page too. */}
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
