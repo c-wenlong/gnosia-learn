@@ -80,6 +80,7 @@ export {
   gradeForRating,
   gradeReview,
   previewIntervals,
+  ratingForGrade,
   readCards,
   readReviews,
   REVIEW_RATINGS,

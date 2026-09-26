@@ -120,14 +120,21 @@ export function ReviewSession({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ conceptId: item.conceptId, grade: rating, requestId: attempt.current }),
         });
-        const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+        const body = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          result?: { rating?: unknown };
+        } | null;
         if (!res.ok || body?.ok !== true) {
           setError(body?.error ?? `Not saved (${res.status}).`);
           return;
         }
         current.current = index + 1;
         attempt.current = newRequestId();
-        setOutcomes((list) => [...list, { conceptId: item.conceptId, rating }]);
+        // What the server recorded, which on a replayed retry is the first
+        // rating rather than the one just pressed.
+        const recorded = isRating(body.result?.rating) ? body.result.rating : rating;
+        setOutcomes((list) => [...list, { conceptId: item.conceptId, rating: recorded }]);
         setIndex((i) => i + 1);
         setPhase("ask");
         setPicked(null);

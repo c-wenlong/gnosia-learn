@@ -256,6 +256,17 @@ export function gradeForRating(rating: number): number {
 }
 
 /**
+ * The rating a recorded SM-2 grade reads as: the button with that grade, or
+ * for a grade no button sends (the CLI's 0, 2), the failed or passed button
+ * nearest it. Used to report a replayed grade in the page's own terms.
+ */
+export function ratingForGrade(grade: number): ReviewRating {
+  const exact = REVIEW_RATINGS.find((r) => r.grade === grade);
+  if (exact !== undefined) return exact.rating;
+  return grade < PASS_GRADE ? 0 : grade >= 5 ? 3 : grade >= 4 ? 2 : 1;
+}
+
+/**
  * The interval, in days, each of the four ratings would give this card now.
  * Index `i` is rating `i`. Exact rather than estimated: it runs the same
  * `scheduleCard` a grade does, fuzz included, since the fuzz is deterministic.
@@ -286,7 +297,14 @@ export interface GradeReviewInput {
 }
 
 export interface GradeReviewResult {
+  /**
+   * The card as it stands after this call. On a replay that is the stored
+   * card now, which is the schedule the caller should believe; it is the one
+   * the first write produced unless another grade has moved it since.
+   */
   card: ReviewCard;
+  /** The grade on record: the one asked for, or on a replay the first one. */
+  grade: number;
   pLBefore: number;
   pL: number;
   /** True when `requestId` had already been recorded and nothing was written. */
@@ -339,9 +357,10 @@ export async function gradeReview(
         .limit(1);
       const stored = current[0];
       if (seen !== undefined && stored !== undefined) {
-        const payload = seen.payload as { pLBefore?: number; pLAfter?: number };
+        const payload = seen.payload as { grade?: number; pLBefore?: number; pLAfter?: number };
         return {
           card: stored,
+          grade: Number(payload.grade),
           pLBefore: Number(payload.pLBefore),
           pL: Number(payload.pLAfter),
           replayed: true,
@@ -369,7 +388,7 @@ export async function gradeReview(
     await upsertReview(tx, card, learnerId);
     await writeModel(tx, model, learnerId);
 
-    return { card, pLBefore, pL: entry.pL, replayed: false };
+    return { card, grade, pLBefore, pL: entry.pL, replayed: false };
   });
 }
 

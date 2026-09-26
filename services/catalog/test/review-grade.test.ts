@@ -6,6 +6,7 @@ import {
   gradeForRating,
   gradeReview,
   previewIntervals,
+  ratingForGrade,
   readEvents,
   readModel,
   readReviews,
@@ -58,6 +59,10 @@ describe("the rating mapping", () => {
   it("fails Again and passes the other three, which is what BKT and SM-2 key on", () => {
     // PASS_GRADE is 3: Hard is the lowest passing grade, not a failure.
     expect(REVIEW_RATINGS.map((r) => r.grade >= 3)).toEqual([false, true, true, true]);
+  });
+
+  it("reads any recorded grade back as a rating, the CLI's 0 and 2 included", () => {
+    expect([0, 1, 2, 3, 4, 5].map(ratingForGrade)).toEqual([0, 0, 0, 1, 2, 3]);
   });
 
   it.each([-1, 4, 1.5, Number.NaN])("refuses rating %s as a StateError", (rating) => {

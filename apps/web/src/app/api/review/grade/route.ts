@@ -1,4 +1,4 @@
-import { gradeForRating, gradeReview } from "@self-learn/catalog/state";
+import { gradeForRating, gradeReview, ratingForGrade } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS, requireId } from "@/lib/learner-api";
 import { isRating, type Rating } from "@/lib/review-core";
@@ -21,8 +21,10 @@ import { isRating, type Rating } from "@/lib/review-core";
  * would be permanent.
  *
  * The answer mirrors `learn review grade --json` (concept, grade on the SM-2
- * scale, due, intervalDays, ease, lapses, leech, pL) plus the `rating` that
- * was pressed and `replayed`. Guarded like every `/api/learner/*` route: same origin, 60 a
+ * scale, due, intervalDays, ease, lapses, leech, pL) plus the `rating`
+ * on record and `replayed`. On a replay `rating` and `grade` are the first
+ * write's, whatever the retry asked for, and the card is the schedule as it
+ * stands now. Guarded like every `/api/learner/*` route: same origin, 60 a
  * minute, and a concept the catalog does not know is a 400, not a 503.
  */
 export const POST = handler(
@@ -43,11 +45,18 @@ export const POST = handler(
     return { conceptId, rating, requestId };
   },
   async (db, { conceptId, rating, requestId }: { conceptId: string; rating: Rating; requestId?: string }) => {
-    const grade = gradeForRating(rating);
-    const { card, pL, replayed } = await gradeReview(db, { conceptId, grade, now: new Date(), requestId });
+    const recorded = await gradeReview(db, {
+      conceptId,
+      grade: gradeForRating(rating),
+      now: new Date(),
+      requestId,
+    });
+    const { card, pL, replayed, grade } = recorded;
     return {
       concept: conceptId,
-      rating,
+      // On a replay, the rating that was recorded, not the one this retry
+      // asked for: the first write stands, and the page counts what stood.
+      rating: ratingForGrade(grade),
       grade,
       due: card.due,
       intervalDays: card.intervalDays,

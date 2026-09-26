@@ -103,9 +103,15 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
 
   it("records a retried request once and says it was a replay", async () => {
     const first = await send({ conceptId: "alpha", grade: 2, requestId: "card-1" });
-    const retry = await send({ conceptId: "alpha", grade: 2, requestId: "card-1" });
-    expect(first.body.result).toMatchObject({ replayed: false });
-    expect(retry.body.result).toMatchObject({ replayed: true, due: (first.body.result as { due: string }).due });
+    // The retry asks for Easy; Good was recorded first, and Good is reported.
+    const retry = await send({ conceptId: "alpha", grade: 3, requestId: "card-1" });
+    expect(first.body.result).toMatchObject({ replayed: false, rating: 2, grade: 4 });
+    expect(retry.body.result).toMatchObject({
+      replayed: true,
+      rating: 2,
+      grade: 4,
+      due: (first.body.result as { due: string }).due,
+    });
     expect(await state.readEvents(scratch.db)).toHaveLength(1);
     expect((await send({ conceptId: "alpha", grade: 2, requestId: "no spaces" })).status).toBe(400);
   });
