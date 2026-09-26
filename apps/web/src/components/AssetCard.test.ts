@@ -6,6 +6,7 @@ import { AssetCard } from "./AssetCard";
 import {
   assetDisplayTitle,
   assetKindLabel,
+  assetMetaLine,
   formatBytes,
   type AssetCardRef,
 } from "./asset-meta";
@@ -114,6 +115,29 @@ describe("formatBytes", () => {
   });
 });
 
+describe("assetMetaLine", () => {
+  it("names the tool and the size, from what the row carries", () => {
+    expect(assetMetaLine(asset())).toBe("manim · 25 MB");
+    expect(
+      assetMetaLine(asset({ kind: "diagram_svg", sourceRepo: "tldrawkc", bytes: 12_000 })),
+    ).toBe("svg · tldraw · 12 kB");
+    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "self-learn", bytes: 3_100 }))).toBe(
+      "concept note · 3.1 kB",
+    );
+  });
+
+  it("gives a link its host, or says external when the URL does not parse", () => {
+    expect(
+      assetMetaLine(asset({ kind: "link", path: null, url: "https://www.scratchapixel.com/x" })),
+    ).toBe("www.scratchapixel.com");
+    expect(assetMetaLine(asset({ kind: "link", path: null, url: "not a url" }))).toBe("external");
+  });
+
+  it("says nothing it does not know", () => {
+    expect(assetMetaLine(asset({ kind: "session", sourceRepo: "self-learn", bytes: null }))).toBe("");
+  });
+});
+
 describe("AssetCard", () => {
   it("shows the kind, the title and the topic", () => {
     const host = mount(
@@ -131,14 +155,13 @@ describe("AssetCard", () => {
       createElement(AssetCard, { asset: asset(), thumbnailSrc: "/posters/ik.jpg" }),
     );
     expect(host.querySelector("img")?.getAttribute("src")).toBe("/posters/ik.jpg");
-    expect(host.textContent).not.toContain("No poster");
+    expect(host.querySelector('[data-thumbnail="placeholder"]')).toBeNull();
   });
 
-  it("says a video has no poster rather than leaving a black hole", () => {
+  it("labels the placeholder when a video has no poster, rather than leaving a black hole", () => {
     const host = mount(createElement(AssetCard, { asset: asset() }));
     expect(host.querySelector("img")).toBeNull();
-    expect(host.textContent).toContain("No poster");
-    expect(host.querySelector("svg")).not.toBeNull();
+    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("video");
   });
 
   it("says so when a preview fails to load", () => {
@@ -180,16 +203,45 @@ describe("AssetCard", () => {
     expect(host.textContent).not.toContain("Preview unavailable");
   });
 
-  it("gives a text asset a compact row instead of an empty preview", () => {
+  it("gives a text asset the same labelled box, named for its kind", () => {
     const host = mount(
       createElement(AssetCard, {
         asset: asset({ kind: "transcript", title: null, bytes: 8_400 }),
+        thumbnailSrc: "/never-used.jpg",
       }),
     );
     expect(host.textContent).toContain("Transcript");
     expect(host.textContent).toContain("ik-explainer.mp4");
     expect(host.textContent).toContain("8.4 kB");
-    expect(host.textContent).not.toContain("No preview");
+    // A transcript has no picture, so a thumbnail handed to it is ignored.
+    expect(host.querySelector("img")).toBeNull();
+    expect(host.querySelector('[data-thumbnail="placeholder"]')?.textContent).toBe("transcript");
+  });
+
+  it("names the concept it explains with a mastery dot, and counts the rest", () => {
+    const host = mount(
+      createElement(AssetCard, {
+        asset: asset({ kind: "session", title: "Transformer block", path: "learn/sessions/t.md" }),
+        concept: { title: "Dot product", bucket: "mastered", more: 2 },
+        topic: "transformers",
+      }),
+    );
+    expect(host.textContent).toContain("Dot product");
+    expect(host.textContent).toContain("+2");
+    expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Mastered");
+    // The concept wins over the topic; the topic is the fallback, not a second line.
+    expect(host.textContent).not.toContain("transformers");
+  });
+
+  it("falls back to the topic, with no dot, when no concept is linked", () => {
+    const host = mount(createElement(AssetCard, { asset: asset(), topic: "Kinematics" }));
+    expect(host.textContent).toContain("Kinematics");
+    expect(host.querySelector('[role="img"]')).toBeNull();
+  });
+
+  it("says what made a video and how big it is", () => {
+    const host = mount(createElement(AssetCard, { asset: asset() }));
+    expect(host.textContent).toContain("manim · 25 MB");
   });
 
   it("renders a kind it has no special treatment for", () => {

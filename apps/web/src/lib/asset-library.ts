@@ -5,8 +5,11 @@ import { connection } from "next/server";
 import {
   assetCounts,
   assetDerivations,
+  conceptsForAssets,
+  derivationSources,
   indexedRoot,
   listAssets,
+  readEvents,
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
@@ -23,7 +26,9 @@ import {
   assetPosterHref,
   assetStatusHref,
   compareByKindThenId,
+  isCompanionKind,
 } from "@/lib/library";
+import { parseTranscript } from "@/lib/transcript";
 
 /**
  * The library's door to the catalog, shaped exactly like
@@ -88,6 +93,13 @@ export interface LibrarySnapshot {
    * page is correct with only the slug.
    */
   titles: TopicTitles;
+  /**
+   * The concepts each row explains, from `asset_concept`, keyed by asset id.
+   * A row with none is absent. Optional in the same way as `titles`: a card
+   * with no concept chip is a correct card, so this failing costs the chips
+   * and never the rows.
+   */
+  concepts: Record<string, string[]>;
 }
 
 const EMPTY_LIBRARY: LibrarySnapshot = {
@@ -96,6 +108,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
   reachable: false,
   truncated: false,
   titles: {},
+  concepts: {},
 };
 
 /**
@@ -128,13 +141,20 @@ export async function readLibrary(): Promise<LibrarySnapshot> {
     // outer `catch` a failing title query would have discarded rows that were
     // already in hand and rendered the library unreachable, which is the exact
     // opposite of the fallback the chips are written for.
-    const titles = await optionalTitles(db, rows);
+    const [titles, concepts] = await Promise.all([
+      optionalTitles(db, rows),
+      optionalConcepts(
+        db,
+        rows.map((row) => row.id),
+      ),
+    ]);
     return {
       rows: [...rows].sort(compareByKindThenId),
       counts,
       reachable: true,
       truncated: rows.length >= LIBRARY_ROW_CAP,
       titles,
+      concepts,
     };
   } catch (error) {
     warn("asset library", error);
@@ -181,6 +201,8 @@ export interface AssetDetail {
    * asking per link would.
    */
   notes: Record<string, string>;
+  /** Concept slugs this asset explains, from `asset_concept`, sorted. Empty when it explains none. */
+  concepts: string[];
 }
 
 const EMPTY_DETAIL: AssetDetail = {
@@ -190,6 +212,7 @@ const EMPTY_DETAIL: AssetDetail = {
   reachable: false,
   titles: {},
   notes: {},
+  concepts: [],
 };
 
 /** How many siblings the detail page offers before it stops listing them. */
@@ -249,6 +272,7 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
         reachable: true,
         titles: {},
         notes: {},
+        concepts: [],
       };
     }
 
@@ -286,9 +310,20 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     // Every slug this page will draw a chip for: the asset's own, plus those
     // of the related cards beside it. Asked once for all of them rather than
     // once per section, so the two cannot disagree about one topic's name.
-    const titles = await optionalTitles(db, [asset, ...related]);
+    const [titles, concepts] = await Promise.all([
+      optionalTitles(db, [asset, ...related]),
+      optionalConcepts(db, [id]),
+    ]);
 
-    return { asset, derivations, related, reachable: true, titles, notes };
+    return {
+      asset,
+      derivations,
+      related,
+      reachable: true,
+      titles,
+      notes,
+      concepts: concepts[id] ?? [],
+    };
   } catch (error) {
     warn(`asset ${id}`, error);
     return EMPTY_DETAIL;
@@ -443,6 +478,19 @@ async function optionalTitles(
   }
 }
 
+/** Concept links for these assets, or none. See `optionalTitles` for why this cannot throw. */
+async function optionalConcepts(
+  db: CatalogDatabase,
+  ids: readonly string[],
+): Promise<Record<string, string[]>> {
+  try {
+    return await conceptsForAssets(db, ids);
+  } catch (error) {
+    warn("concept links", error);
+    return {};
+  }
+}
+
 /** The note index, or none. See `optionalTitles` for why this cannot throw. */
 async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string>> {
   try {
@@ -488,7 +536,7 @@ function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
  * not reachable the placeholder is the correct output, not a broken image.
  */
 export function thumbnailFor(
-  row: AssetWithTopics,
+  row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
   access: { selfLearn: FileAccess; manimkc: FileAccess },
 ): string | null {
   if (!accessFor(access, row.sourceRepo).ok) return null;
@@ -502,7 +550,7 @@ export function thumbnailFor(
  * a diagram, the poster route (with its own ffmpeg refusals) for a video.
  */
 export function thumbnailStatusFor(
-  row: AssetWithTopics,
+  row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
   access: { selfLearn: FileAccess; manimkc: FileAccess },
 ): string | undefined {
   if (thumbnailFor(row, access) === null) return undefined;
@@ -586,6 +634,126 @@ export async function readAssetText(
     warn(`asset text ${id}`, error);
     return null;
   }
+}
+
+/**
+ * The kinds whose words the library search reads, beside every row's name.
+ * Notes and transcripts: the two kinds whose text is what somebody would
+ * search for and is small enough to read per request. A session log is
+ * markdown too and is left out, because its text is mostly the tutor's own
+ * turns, which would match nearly any query.
+ */
+export const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcript"]);
+
+/** What `readSearchText` read, for `searchHits` in `@/lib/library`. */
+export interface SearchText {
+  /** Lowercased body per asset id, for the rows whose words could be read. */
+  texts: Map<string, string>;
+  /** `asset_derivation` upward for the companion rows among them. */
+  sources: Record<string, string[]>;
+  /**
+   * False when no text was read at all: the files are off, or the catalog
+   * could not be asked. The page says the search covered titles only.
+   */
+  searchedText: boolean;
+}
+
+const NO_TEXT: SearchText = { texts: new Map(), sources: {}, searchedText: false };
+
+/**
+ * The words of every note and transcript, for one search.
+ *
+ * Read per request, through `readAssetText`, so it inherits every rule that
+ * function has: the same switch as the file route (off means titles only), the
+ * same containment checks, and the same `TEXT_PREVIEW_BYTES` cap, over which a
+ * file is searched by name alone. A transcript is parsed and searched by what
+ * was said and its chapter titles, not by its JSON keys; one that does not
+ * parse is searched as raw text rather than skipped.
+ *
+ * About fifty-five small files today, each one primary-key lookup and one read,
+ * queued on the shared pool. There is no index and no cache, which is right
+ * at this size and is the first thing to change if the catalog grows by an
+ * order of magnitude: reading every file on every search is fine for a few
+ * hundred rows and not for tens of thousands.
+ */
+export async function readSearchText(
+  rows: readonly AssetWithTopics[],
+  terms: readonly string[],
+): Promise<SearchText> {
+  if (terms.length === 0 || !assetFilesEnabled()) return NO_TEXT;
+  const candidates = rows.filter((row) => SEARCH_TEXT_KINDS.has(row.kind) && row.path !== null);
+  if (candidates.length === 0) return { ...NO_TEXT, searchedText: true };
+  try {
+    const db = await catalogDatabase();
+    const [bodies, sources] = await Promise.all([
+      Promise.all(
+        candidates.map(async (row) => {
+          const raw = await readAssetText(db, row.id);
+          return [row.id, raw === null ? null : searchableText(row.kind, raw)] as const;
+        }),
+      ),
+      derivationSources(
+        db,
+        candidates.filter((row) => isCompanionKind(row.kind)).map((row) => row.id),
+      ),
+    ]);
+    const texts = new Map<string, string>();
+    for (const [id, text] of bodies) if (text !== null) texts.set(id, text);
+    return { texts, sources, searchedText: true };
+  } catch (error) {
+    warn("search text", error);
+    return NO_TEXT;
+  }
+}
+
+/** As `readSearchText`, with the marker that keeps it out of the build. */
+export async function loadSearchText(
+  rows: readonly AssetWithTopics[],
+  terms: readonly string[],
+): Promise<SearchText> {
+  await connection();
+  return readSearchText(rows, terms);
+}
+
+/** A file's words as search sees them: a transcript's lines, anything else as written. */
+export function searchableText(kind: string, raw: string): string {
+  if (kind === "transcript") {
+    const parsed = parseTranscript(raw);
+    if (parsed !== null) {
+      return [...parsed.chapters.map((c) => c.title), ...parsed.cues.map((c) => c.text)]
+        .join("\n")
+        .toLowerCase();
+    }
+  }
+  return raw.toLowerCase();
+}
+
+/**
+ * When the learner last marked this asset watched, or null for never (or for a
+ * log that could not be read, which a caption is no worse for omitting).
+ *
+ * Reads the log in full, as `@/lib/habit` does on every request; the event log
+ * is one learner's and small. The payload's `asset` is the join, since a
+ * `watched` event names no concept.
+ */
+export async function readLastWatched(id: string): Promise<string | null> {
+  try {
+    const events = await readEvents(await catalogDatabase());
+    let last: string | null = null;
+    for (const event of events) {
+      if (event.type === "watched" && event.asset === id) last = event.at;
+    }
+    return last;
+  } catch (error) {
+    warn("watched events", error);
+    return null;
+  }
+}
+
+/** As `readLastWatched`, with the marker that keeps it out of the build. */
+export async function loadLastWatched(id: string): Promise<string | null> {
+  await connection();
+  return readLastWatched(id);
 }
 
 /** The pool, for a caller that already has a request scope and needs one more read. */

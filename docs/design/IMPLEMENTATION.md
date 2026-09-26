@@ -15,7 +15,7 @@ the shell), and how to check a page against its hi-fi frame.
 | 1c | Learn index and Concept workspace, with a concept-aware tutor chat | `/learn`, `/learn/[concept]` | Not started |
 | 1d | Session focus mode with graded probes writing BKT events, and the close screen | `/learn/[concept]/session` | Not started, needs 1c |
 | 1e | Review | `/review`, `GET /api/review/due`, `POST /api/review/grade` | Done |
-| 1f | Library and the asset page: concept links, Mark watched, text search | `/library`, `/library/[id]` | Not started |
+| 1f | Library and the asset page: concept links, Mark watched, text search | `/library`, `/library/[id]`, `POST /api/learner/watched` | Done |
 
 Update the row when a phase merges.
 
@@ -278,6 +278,34 @@ calling a page done; a build that passes proves nothing about how it looks.
 | Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
 | Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
 | Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
+
+### Library and the asset page (phase 1f)
+
+| Where | Hi-fi | Built | Why |
+| --- | --- | --- | --- |
+| Library filter row | six kind chips and three course chips on one line | the kind chips, then a chip for every course that has an asset (ten today), wrapping; the companion kinds (captions, chapters, diagram source, transcript) on a quiet line of small chips under it | ten courses do not fit one line; the companion files keep the chips, counts and `?kind=` views the old page gave them |
+| Library course chips | "CP4281" | the course code, with the course's title and asset count as the tooltip; the active chip clears itself | there is no "All courses" chip in the frame |
+| Library count | "208 assets" | the standalone count (135), or "12 of 135 assets" once anything is filtered | the other 71 rows are companion files the default view leaves out |
+| Library card meta | "4:12 · manim" | the tool and the size ("manim · 9.6 MB") | the catalog records no duration |
+| Library card concept | a concept with a mastery dot on every card | the first concept from `asset_concept` with its dot and "+n" for more; with none, the asset's topic in plain text and no dot | only notes, sessions and the two diagrams have `asset_concept` rows; no video does yet |
+| Library grid | fixed 300px cards | an auto-fill grid, 280px minimum | four across at 1392px and one on a phone |
+| Library search | DESIGN.md's API table proposed a search endpoint | the page's own `?q=`, searched on the server during render; no JSON endpoint | the library is the only caller today; phase 1c's Learn search can lift `searchHits` and `readSearchText` behind a route when it needs one |
+| Asset page eyebrow | "RENDERED 2026-09-12" | "INDEXED" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
+| Asset page Mark watched | on a video | on every asset, reading "Mark read" for anything that is not a video | one `watched` event kind either way; watching a video and reading a note are both study |
+| Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
+| Asset page Explains | always two rows | "No concept is linked to this asset yet." when there are none; "not started" in place of p(L) for a concept with no evidence | a prior is not a measurement |
+| Asset page Derived from | one line of filenames | "Derived from" for the sources and "Companion files" for what was made from it, each a list of links | the rows the old page showed, restyled |
+| Asset page catalog row | not drawn | a closed "Catalog row" disclosure under the asset: id, path, source, bytes, topic chips | the old page's facts; a reader checking what to type still finds them |
+
+**Library search** runs on the server over `?q=`: every row's title,
+filename and URL, plus the text of each note and transcript, read per
+request through `readAssetText` (so it is off with `ASSET_FILES_ENABLED`,
+and a file over `TEXT_PREVIEW_BYTES` is searched by name only). Every word
+must appear, as a case-insensitive substring: no stemming, no ranking, no
+typo tolerance. A line inside a transcript finds the transcript's video. It
+reads about fifty-five small files per search, with no index and no cache,
+which is right for a few hundred rows and the first thing to change if the
+catalog grows by an order of magnitude.
 
 ## Gotchas
 

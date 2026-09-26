@@ -110,6 +110,42 @@ export async function assetsForConcept(db: CatalogDatabase, slug: string): Promi
 }
 
 /**
+ * The concepts each of these assets explains, the reverse of
+ * `assetsForConcept`, for a page that already holds the assets.
+ *
+ * Batched rather than asked per card: the library grid shows a concept chip on
+ * every card, so one query over `asset_concept` for all of them is the shape
+ * that stays one round trip at any grid size. An asset with no concept link is
+ * absent from the result, never an empty-array key, the same contract `byKind`
+ * keeps, and the caller reads `out[id] ?? []`.
+ *
+ * Slugs within one asset come back sorted, so "the first concept this asset
+ * explains" is stable across renders. `asset_concept` carries no position, so
+ * sorted is the only order there is to be stable in. Ids are deduped before
+ * they reach the `IN` list, and an empty list asks nothing.
+ */
+export async function conceptsForAssets(
+  db: CatalogDatabase,
+  ids: readonly string[],
+): Promise<Record<string, string[]>> {
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return {};
+  const rows = await db
+    .select({ assetId: assetConcept.assetId, conceptSlug: assetConcept.conceptSlug })
+    .from(assetConcept)
+    .where(inArray(assetConcept.assetId, wanted))
+    .orderBy(asc(assetConcept.assetId), asc(assetConcept.conceptSlug));
+  const out: Record<string, string[]> = {};
+  for (const row of rows) (out[row.assetId] ??= []).push(row.conceptSlug);
+  return out;
+}
+
+/** The concepts one asset explains, sorted by slug. Empty when it is linked to none. */
+export async function conceptsForAsset(db: CatalogDatabase, id: string): Promise<string[]> {
+  return (await conceptsForAssets(db, [id]))[id] ?? [];
+}
+
+/**
  * Assets a course or module reaches through what it contains.
  *
  * `collection_item` is polymorphic: a member row names exactly one of a topic,
@@ -260,6 +296,33 @@ export async function assetDerivations(
   return { sources, derived };
 }
 
+/**
+ * What each of these assets was derived from, batched: `asset_derivation` read
+ * upward for many ids at once, where `assetDerivations` reads both directions
+ * for one.
+ *
+ * The library search needs this to turn a hit inside a transcript into its
+ * video, since the transcript itself is a companion file the default view does
+ * not show. One query for every hit rather than `assetDerivations` per hit,
+ * which would be three round trips each. Absent keys mean "derived from
+ * nothing", as in `conceptsForAssets`.
+ */
+export async function derivationSources(
+  db: CatalogDatabase,
+  ids: readonly string[],
+): Promise<Record<string, string[]>> {
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return {};
+  const rows = await db
+    .select({ assetId: assetDerivation.assetId, sourceId: assetDerivation.sourceAssetId })
+    .from(assetDerivation)
+    .where(inArray(assetDerivation.assetId, wanted))
+    .orderBy(asc(assetDerivation.assetId), asc(assetDerivation.sourceAssetId));
+  const out: Record<string, string[]> = {};
+  for (const row of rows) (out[row.assetId] ??= []).push(row.sourceId);
+  return out;
+}
+
 /** What one source's last index run said about where it read from. */
 export interface IndexedRoot {
   /** The directory the run read. Absolute for manimkc, repo-relative otherwise. */
@@ -316,6 +379,14 @@ export async function indexedRoot(
 export interface AssetWithTopics extends AssetRef {
   /** Slugs, sorted. Empty when the asset is in no `asset_topic` row, which is legal. */
   topics: string[];
+  /**
+   * When the row first entered the catalog, as an ISO instant: the library's
+   * "newest" sort. `asset.created_at`, which an index run's upsert leaves alone,
+   * so a re-index does not make every asset new again. Here and not on
+   * `AssetRef` because `catalog show --json` prints `AssetRef`s and has no use
+   * for it.
+   */
+  createdAt: string;
 }
 
 /**
@@ -407,6 +478,7 @@ export async function listAssets(
   const base = db
     .select({
       ...ASSET_COLUMNS,
+      createdAt: asset.createdAt,
       topics: sql<string[]>`(
         select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug}), '{}')
         from ${assetTopic}
@@ -428,7 +500,11 @@ export async function listAssets(
   // still normalises rather than trusting that forever: the guarantee lives in
   // the SQL text above, and a future edit to it should not also have to
   // remember that every caller assumed the shape it produced today.
-  return rows.map((row) => ({ ...row, topics: row.topics ?? [] }));
+  return rows.map((row) => ({
+    ...row,
+    topics: row.topics ?? [],
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 /** How many assets of one kind exist, for a filter chip that shows the count. */

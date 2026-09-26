@@ -53,6 +53,10 @@ const REQUIRED = [
   "assetCounts",
   // Assets: what this one came from, and what came out of it.
   "assetDerivations",
+  "derivationSources",
+  // Assets: which concepts this one explains, the library's concept chip.
+  "conceptsForAsset",
+  "conceptsForAssets",
   // Topics: titles for the chips a card renders from `AssetWithTopics.topics`.
   "topicTitles",
 ] as const;
