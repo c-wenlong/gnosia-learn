@@ -7,6 +7,9 @@ import { sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { type ExportFile, type ExportType, sha256 } from "./layout";
+import { readNoteRows } from "./note-rows";
+import { renderNote } from "./notes";
+import { logPath, readLogs } from "./session-logs";
 import { blockScalar, flowList, flowMapping, pad } from "./yaml-out";
 
 /**
@@ -20,8 +23,8 @@ import { blockScalar, flowList, flowMapping, pad } from "./yaml-out";
  * database holds.
  *
  * **Where a row does not hold the data yet, the file it points at is copied.**
- * A concept's body arrives with Track C, a session log's entries with Track C,
- * a diagram's document with Track D. Until then the rows hold a path and the
+ * Concept notes and session logs are rendered from their rows (Track C); a
+ * diagram's document arrives with Track D. Until then the rows hold a path and the
  * sha256 of the bytes that were imported, so the export copies the file from
  * the root the import read (`index_run.metadata.root`) and refuses when its
  * bytes no longer hash to what the row recorded. A copy the database cannot
@@ -87,7 +90,9 @@ export async function renderType(db: CatalogDatabase, type: ExportType): Promise
     case "courses":
       return renderCourses(db);
     case "concepts":
+      return renderConcepts(db);
     case "sessions":
+      return renderSessions(db);
     case "diagrams":
       return copyImported(db, type);
   }
@@ -336,14 +341,32 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
   return files;
 }
 
+/**
+ * `learn/concepts/<domain>/<slug>.md` for every live concept, rendered from
+ * its row (`renderNote`): the columns as frontmatter, `concept.body` after
+ * it, `requires:` and `assumes:` from `concept_prerequisite` in their stored
+ * order. A row with no body was imported before Track C filled the column,
+ * and is refused rather than written as an empty note.
+ */
+async function renderConcepts(db: CatalogDatabase): Promise<ExportFile[]> {
+  const notes = await readNoteRows(db);
+  const empty = notes.filter((note) => note.body === null).map((note) => note.path);
+  if (empty.length > 0) {
+    throw new ExportError(
+      `concepts: ${empty.length} note(s) have no body in the database, because they were imported ` +
+        `before the body was stored. Re-run \`catalog index\` (or \`catalog import <dir>\`).\n  - ${empty.join("\n  - ")}`,
+    );
+  }
+  return notes.map((note) => ({ path: note.path, bytes: Buffer.from(renderNote({ ...note, body: note.body ?? "" }), "utf8") }));
+}
+
+/** `learn/sessions/<id>.md` for every session with a log: its entries, concatenated. */
+async function renderSessions(db: CatalogDatabase): Promise<ExportFile[]> {
+  return (await readLogs(db)).map((log) => ({ path: logPath(log.id), bytes: Buffer.from(log.markdown, "utf8") }));
+}
+
 /** The asset rows whose files a copy-through type exports. The index source of the same name read them. */
 const COPIED = {
-  // One per live concept: its note asset carries the hash of what was read.
-  concepts: sql`select a.path, a.content_hash from concept c
-                join asset a on a.id = ${ASSET_PREFIX.concepts} || c.path
-                where c.archived_at is null order by a.path`,
-  sessions: sql`select path, content_hash from asset
-                where kind = 'session' and starts_with(id, ${ASSET_PREFIX.sessions}) order by path`,
   diagrams: sql`select path, content_hash from asset
                 where kind in ('diagram_source', 'diagram_svg') and starts_with(id, ${ASSET_PREFIX.diagrams})
                 order by path`,
@@ -354,7 +377,7 @@ const COPIED = {
  * Every file whose bytes no longer hash to the row's `content_hash` is listed,
  * and nothing is written: the database can only vouch for what it read.
  */
-async function copyImported(db: CatalogDatabase, type: "concepts" | "sessions" | "diagrams"): Promise<ExportFile[]> {
+async function copyImported(db: CatalogDatabase, type: "diagrams"): Promise<ExportFile[]> {
   const assets = await rows<{ path: string | null; content_hash: string | null }>(db, COPIED[type]);
   if (assets.length === 0) return [];
   const [run] = await rows<{ root: string | null; finished_at: Date }>(

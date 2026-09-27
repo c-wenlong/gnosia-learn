@@ -694,16 +694,16 @@ of the type's pages identical under `CONTENT_SOURCE=files` and `db`, plus
 **Owns:** `services/catalog/src/content/topics.ts` and `tags.ts`, their
 commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
 
-- [ ] `catalog topic add --slug --title --domain --summary [--alias]...
+- [x] `catalog topic add --slug --title --domain --summary [--alias]...
       [--relate kind:slug]... --reason --json`: validates what
       `packages/content/src/topics.ts:60-66` validates (kebab-case, unique),
       then a `pg_trgm` similarity check against titles and aliases that warns
       above a threshold (*guessed* 0.45) and names the near match.
-- [ ] `catalog topic edit` (title, summary, aliases, domain; never the slug),
+- [x] `catalog topic edit` (title, summary, aliases, domain; never the slug),
       `catalog topic rename --from --to` (edge case 2), `catalog topic relate`,
       `catalog topic archive`.
-- [ ] `catalog tag add|edit`.
-- [ ] `learn concept add --topic` calls `catalog topic` internals to set
+- [x] `catalog tag add|edit`.
+- [x] `learn concept add --topic` calls `catalog topic` internals to set
       `concept.topic_slug`, replacing the text splice, lock and verify in
       `vocabulary-edit.ts:244-397`. The invariant that code enforces (a concept
       in exactly one topic, checked after the write) is now a column and a
@@ -717,8 +717,109 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
       author and the draft id in the reason, then enqueues the job. This
       supersedes D39 there (D16 here).
 - [ ] The planner's VOCABULARY block includes relations, so it can say "this
-      sits under `computer-networks`".
-- [ ] The web app's topic and tag readers switch to `dbSource`.
+      sits under `computer-networks`". The planner is not built (phase 1 of
+      STUDIO-CHAT-FIRST.md); what it will read is: `catalog topic ls --json`
+      returns every live topic with its relations, `incoming` edges and maps.
+- [x] The web app's topic and tag readers switch to `dbSource`.
+
+**Built** (the verbs) in `services/catalog/src/content/topics.ts`, `tags.ts`,
+`write-through.ts` and `commands/topic.ts`, tested in
+`services/catalog/test/topic-verbs.test.ts`. Where it goes past or around the
+list above, and why:
+
+- **Every write rewrites its export in the same transaction**
+  (`writeThrough`), from the type's flip back to now: D17 said "from a type's
+  flip", but a topic written before the flip would otherwise be deleted by the
+  next `catalog index`, which reads the file. The writer takes an advisory
+  lock per type, refuses unless the files under the root the type was last
+  imported from are byte for byte what the rows would export (anything else is
+  an edit the database has not seen, and writing from rows would lose it),
+  writes, renders again inside the transaction, replaces the changed files, and
+  records the export hash on `content_source`. A failure after the first file
+  write, commit included, puts the files back. So after any verb the next
+  import of the tree writes zero revisions and parity is clean, which the
+  tests assert after every write.
+- **`add` places the topic after the last topic of its domain** (the file is
+  written in domain groups), as a sparse position between its neighbours
+  (D22); no gap left is refused with `catalog renumber topics`. It also
+  refuses a title another live topic has (case and spacing ignored), and a
+  `--relate` that would close a loop of `broader` or `precedes`. A `related`
+  edge to a smaller slug is stored under that topic, so the add is a
+  composite write and that topic gets a revision too.
+- **The near-match check** (edge case 17) compares the proposed title, each
+  alias and the slug read as words with every live topic's title, aliases and
+  slug read as words, by `similarity`, and lists up to five at or above 0.45.
+  It warns and never refuses. Kept at 0.45 after measuring the real
+  vocabulary: each of the 86 titles checked against the other topics flags 4
+  topics, three of them genuine neighbours (the ManimGL pipeline and graphics
+  pipelines, coding agents and AI code review, 3DGS and its variants) and one
+  not (the two "evaluation methods"); 0.35 flags 16.
+- **`archive` needs the database to own topics**: `topics.yaml` cannot say
+  archived, so before the flip the export would drop the topic and the next
+  import would delete it. It is refused while anything points at the topic
+  (live concepts and modules, manimkc paths, relations, assets, diagrams, open
+  jobs), listed by kind. `restore` is its inverse.
+- **`rename`** locks the six entity types an import would, takes the
+  `related` edges out and puts them back under whichever end is now smaller
+  (the order check would refuse the cascade), rewrites each diagram row's
+  `meta.tldrawkc.topic` and `document_hash`, rewrites open jobs' `brief.topic`,
+  appends the old slug to the aliases, and writes one `rename` revision per
+  entity whose snapshot changed. The topic's is under its new slug, `seq` 1,
+  with `previous_id` at the last revision under the old one. It rewrites the
+  course files too when a module sits under the topic. While diagrams are read
+  from files it refuses a topic a `.tldr` stamps, naming the files, since only
+  tldrawkc rewrites a stamp; `--restamp-diagrams-later` goes ahead and lists
+  them, and the next import refuses them by name until they are restamped.
+- **`topic ls --json`** is what the planner will read in place of its
+  VOCABULARY block: every live topic's slug, title, domain, summary, aliases,
+  `relations`, `maps` and the `incoming` edges other topics hold.
+- **`learn concept add --topic`** calls `fileConceptUnderTopic` in
+  `content/topics.ts`: before the note is written, `checkConceptTopic` refuses
+  a topic that is not a live row, a concept already under another topic, a
+  knowledge base other than the tree topics were imported from, and a
+  `topics.yaml` out of step; after it, `concept.topic_slug` goes through the
+  seam (the row created from the note's title and summary when the catalog
+  has none, at the end of the topic's `maps.concepts`), `topics.yaml` is
+  rewritten from the rows, and the concepts indexer runs as before. The
+  `--json` shape is unchanged; `--reason` is optional there, with a default,
+  since the plugin's calls cannot be made to pass one (D15).
+  `vocabulary-edit.ts` is deleted before the flip rather than at it, since
+  nothing calls it; its lock and atomic replace moved to
+  `services/catalog/src/learn/file-lock.ts` for `course-edit.ts`, the one text
+  edit left until Track B.
+- **The readers** are `services/catalog/src/content/readers/topics.ts` and
+  `tags.ts`, both `ready`: `readTopicEntries` and `readTags` run the export's
+  own queries, so they return what `fileSource` returns for the database's own
+  export. `test/topic-readers.test.ts` holds them equal to the file reader on
+  the real tree, value for value, then flips both and reads them back through
+  `selectSource`. On a `createdb -T self_learn` copy migrated, imported and
+  flipped (parity clean: 86 topics, 23 domains, 294 aliases, 35 manimkc paths,
+  61 module and 32 concept mappings, 8 tags), two `next start` servers on
+  identical copies, one with the rows in charge and one with
+  `CONTENT_SOURCE=topics=files,tags=files`, served byte-identical server HTML
+  for all 47 routes tried (`/today`, `/courses`, the ten course pages,
+  `/learn`, every concept page, `/library`, `/review`), once the request's
+  own `asOf` timestamp is set aside. A single fetch can differ in the order
+  React streams its rows, between two fetches from the same server too, so
+  each route was fetched until a pair matched. The rendered DOM and full-page
+  screenshots at 1440 wide, light and dark, matched for 21 of those routes,
+  and `scripts/e2e.mjs` passed 12 of 12 against a copy of that database. The studio's planner path (the confirm card's
+  **Create topic and draw**) is not built, per phase 1's rule: the verbs it
+  will call are, and `topic add --dry-run --json` is the validation step D16
+  names.
+- **Flip day for topics and tags** is, on the migrated primary: `catalog index`
+  (so both were last imported from the repository), `catalog parity . --only
+  topics,tags`, `catalog flip topics`, `catalog flip tags`, then
+  `catalog export --only topics,tags --out .`. The last step matters: `flip`
+  checks parity but records no export hash, and until one is recorded every
+  import that reaches a flipped type refuses with "No export of tags is
+  recorded", `learn concept add --topic` included (its index run pulls in
+  courses, and courses pull in tags). The export into the working tree is a
+  no-op on the files; any `catalog topic` or `catalog tag` write records the
+  hash too.
+- **`--author`** names the person a write is for (the studio's Draw press);
+  the default is the local learner. Every write needs `--reason`; a dry run
+  does not.
 
 **Parity:** 86 topics, 23 domains, 294 aliases, 8 tags, 35 manimkc paths, 32
 concept mappings, 61 module mappings (*measured* today). **Tests:** the verbs'
@@ -736,14 +837,14 @@ PRs (*guessed*).
 **Owns:** `services/catalog/src/content/courses.ts`, the `course` and `item`
 commands, the courses indexer's import mode.
 
-- [ ] `catalog course import <file.yaml> --reason`: parses with
+- [x] `catalog course import <file.yaml> --reason`: parses with
       `packages/content`'s course parser (every rule in its section 7 of the
       inventory, `packages/content/src/courses.ts:136-357`), validates
       references against rows instead of other files, and writes the diff
       through the seam. An item the file no longer lists is archived and
       reported by id, never deleted.
-- [ ] `catalog course export <id>` writes the one YAML file to edit.
-- [ ] `catalog item archive|restore|purge`. `purge` refuses while `progress`
+- [x] `catalog course export <id>` writes the one YAML file to edit.
+- [x] `catalog item archive|restore|purge`. `purge` refuses while `progress`
       or `recap` rows name the item unless `--with-learner-data` is passed, and
       then snapshots those rows into the revision before deleting.
 - [x] Readers filter `archived_at is null`; an archived item with a learner's
@@ -758,6 +859,45 @@ commands, the courses indexer's import mode.
       `catalog status` showing the distance to zero. When it reaches zero,
       `catalog flip courses --strict` arms the rule (D21), so phase 3 does not
       have to waive it.
+
+**Built** (the writers) in `services/catalog/src/content/courses.ts` and
+`items.ts`, with `parseCourse`, the one-file half of the course parser, in
+`packages/content`. Where it goes past or around the list above, and why:
+
+- **The writers write through (D17) from day one, not from the flip**, with
+  Track A's shared `write-through.ts`: a course write refuses unless the
+  course files (and `topics.yaml`, which lists each module under its topic)
+  are what the database would export, rewrites the ones it changed from the
+  rows in the same transaction, and records the export hash. While courses
+  are on files that is what keeps the next `catalog index` from undoing the
+  write; after the flip it is D17. Track B added one option to it,
+  `exempt`: the file `course import` was handed may differ from the database,
+  because it is the edit being imported, so editing
+  `content/courses/cs2111.yaml` in place and importing it works.
+- **The rows are the indexer's rows**, column for column and placed with the
+  same sparse positions, so importing an unchanged file writes no revision and
+  a `catalog index` after an import writes none either.
+- **An archived row keeps its links.** The indexer drops them (it replaces its
+  link tables whole); the seam does not, and `item restore` of an item the
+  indexer archived takes its concept links from its last live revision.
+- **A curated link no module lists any more is deleted**, with a `delete`
+  revision, as the indexer prunes it. It carries no learner data.
+- **`purge` refuses a live item**: archive first, so deleting is always the
+  second of two steps. The learner rows go into the `delete` revision's
+  snapshot as `links.progress` and `links.recap`, and `item restore` of a
+  purged item rebuilds the row, its links and those rows from it.
+- **Course order is unique by the seam's check, not a constraint.** A unique
+  index on live courses' `position` would be a migration, and D10 keeps
+  phase 1 free of them; every course write goes through `course import`,
+  which refuses a taken order by name. Slug uniqueness is the existing partial
+  index, and the import names a clash before the index would. Course imports
+  take one advisory lock before their checks, which run inside the write's
+  transaction, so two imports of different courses cannot both pass the
+  order and code checks against the old rows.
+- **`item archive` locks the item's module before the item**, in the global
+  lock order, so two archives cannot each leave the other item live and
+  together empty the module.
+- **`--dry-run`** runs the whole write and rolls it back, for the planner.
 
 **Built** (the reader) in `services/catalog/src/content/readers/courses.ts`,
 `ready: true`: six queries, each ordered the way the export orders its list,
@@ -820,6 +960,12 @@ the archive rules, Sonnet for the reader. **Size:** 2 to 3 PRs (*guessed*).
       without the database (`cli.ts:156-160` chose otherwise). `status`, which
       both skills already run first and stop on, has needed the database since
       bundle 5, so a session could not start offline anyway.
+- [x] The rows hold the notes and the logs before anything is flipped:
+      `catalog import` fills `concept.body` and the frontmatter columns and
+      appends `session_log_entry` rows, and `catalog export` and `catalog
+      parity` render both types from those rows instead of copying the files
+      through. Added to this list when it was built, since parity, and so the
+      flip, needs it before any writer does.
 
 **Parity:** 32 notes, byte-exact bodies; 3 logs byte-exact after
 concatenation; 70 prerequisite rows. **Tests:** the five golden `--json`
@@ -829,6 +975,41 @@ commit with a moved base refused; `observe --session` appends one entry.
 **Done when:** a full `/learn` session run against the migrated database closes
 with filled-in notes and a log, and no file under `learn/` changed. **Tier:**
 Opus. **Size:** 4 PRs (*guessed*): writers, readers, plugin, flip.
+
+**Built, rows (PR 1 of the track).** In `services/catalog/src/content/`
+(`notes.ts`, `note-rows.ts`, `session-logs.ts`) and the two indexers. On a
+`createdb -T self_learn` copy: 32 notes, 70 prerequisite rows, 3 logs; parity
+zero mismatches; all 3 logs and 27 of the 32 notes render byte for byte. Where
+it goes past or around the list above, and why:
+
+- **A row keeps a note's frontmatter values, not their layout.** The rendered
+  note writes the eight keys in `learn concept add`'s order and leaves out an
+  empty `assumes:`. Five notes lay theirs out otherwise (four write
+  `assumes: []`, `tool-calling.md` writes `assumes` last), so an export
+  changes one frontmatter line in each and no body byte in any. Parity
+  therefore compares a note as the fields its row holds plus its body byte for
+  byte (`noteParityForm`), not its frontmatter as parsed. Keeping the layout
+  would have needed a column, and D10 put the schema in phase 0. After the
+  flip, an import of `concepts` accepts only files that are the database's
+  last recorded export (edge case 12), so the flip day ends with
+  `catalog export --only concepts --out .`, which rewrites that one line in
+  those five notes and nothing else.
+- **A frontmatter key outside the eight is refused at import**, by file and
+  key, since a row has nowhere to keep it and the flip would drop it. So is a
+  `created:` that is not a date, and a title, summary or list item the
+  dialect cannot write back as it was read (it has no escapes). None of the
+  32 notes trips any of them.
+- **A note asset's hash is of the note as its row renders it**, not of the
+  bytes on disk, so it is the same whether imported from the tree, from an
+  export, or written by the database writer.
+- **A log's first entry is the header `session start` wrote**, frontmatter
+  included, not a frontmatter rebuilt from the `session` row: the three logs'
+  `date:` is a millisecond off `session.started_at`, and one opens with a note
+  of its own. Each entry is the exact text appended, so the log is the
+  concatenation. An import appends what a file grew by as one entry, takes a
+  new log whole as its first, and starts a `session` row (`interrupted`, as
+  0006's backfill does) for a log nothing started. It refuses a log edited
+  above its end and a log whose file is gone, since the table is append-only.
 
 ### Track D: diagrams
 
@@ -876,23 +1057,66 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
 `apps/web/src/app/api/assets/[id]/file/route.ts` and `poster/route.ts`,
 `apps/web/src/lib/asset-files.ts`, `apps/web/src/lib/asset-posters.ts`.
 
-- [ ] `catalog asset upload --source manimkc [--dry-run]` reads the report the
+- [x] `catalog asset upload --source manimkc [--dry-run]` reads the report the
       manimkc indexer already reads (`manimkc topics --json`, with its
       `outRoot`), hashes each deliverable and sidecar, skips keys already
       `present`, uploads the rest, makes a poster with ffmpeg on the laptop and
       uploads it, and sets `asset.blob_key`. Resumable by construction, since a
       content-addressed key that is `present` is done.
-- [ ] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
+- [x] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
       `signedUrl` with a TTL of an hour, or stream when the adapter returns
       null), then the legacy file. `ASSET_FILES_ENABLED` keeps gating the
       legacy branch only. `/api/assets/{id}/poster` does the same with the
       poster asset.
-- [ ] The mirror ledger stays as it is (open question 8): it audits manimkc's
+- [x] The mirror ledger stays as it is (open question 8): it audits manimkc's
       own Drive and Seafile copies, and its join key, the logical
       `out/...` path, survives (D11).
 
+- [x] `catalog blob audit [--fix]` (edge case 9), added when it was built: an
+      object with no row, a `present` row whose object is gone or no longer
+      hashes to its key, a stale `pending` row, an object nothing points at, a
+      poster whose video is gone.
+
+**Built** (branch `p1/e-videos`). The upload is `services/catalog/src/content/asset-upload.ts`
+behind `commands/asset-upload.ts`, on Track D's `uploadBlob`. Three things the
+plan did not say, found while building it:
+
+- **A re-index would have unhooked every blob.** The writer's upsert sets every
+  column from the row an indexer gives it, and an indexer never names a blob,
+  so `catalog index --only manimkc` after an upload set every `blob_key` back
+  to null. `services/catalog/src/index/blob-keys.ts` carries a stored key
+  forward while the stored blob's sha256 is the `content_hash` just read, so a
+  re-render drops it and nothing else does.
+- **A poster's id is `poster:<video id>`, outside `manimkc:`**, because the
+  manimkc prune deletes every row in its namespace it did not produce. It has
+  no `path` and `source_repo = 'self-learn'`, and it is a companion kind in the
+  library. The recipe moved to `services/catalog/src/poster/recipe.ts`, shared
+  with the route's ffmpeg fallback, so the two cannot cut different pictures.
+  A poster cut from a video's old bytes is unhooked from the video when the
+  upload links new bytes and cannot cut a new poster, since nothing later
+  would notice it showed the old render.
+- **The upload refuses a file whose bytes are not its row's `content_hash`**
+  (a re-render since the last index), rather than hooking new bytes to an old
+  row, since that is the one parity rule this track has.
+
+The routes resolve through `resolveAsset` in `apps/web/src/lib/asset-files.ts`,
+which the status route and the pages' pre-render check (`readFileProblems`,
+`readAssetText`) share, so a blob that serves is `ok` everywhere. With the
+switch off and no catalog the routes still answer `files-off`, exactly as
+before. Not built: edge case 15's one retry in the player for an expired URL,
+since the `fs` store signs nothing and it belongs with the cloud adapter; and
+per-row servability on the pages, which still read the switch deployment-wide
+(`readFileAccess`), so with it off a page shows the "files off" state even for
+an asset the route would serve from the store. Both are go-live work.
+
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
-`content_hash` equals its blob's `sha256`. **Tests:** the redirect carries no
+`content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
+`createdb -T self_learn` copy migrated to 0011 with a temporary
+`SELF_LEARN_HOME`: 36 videos, 87 sidecars and 36 posters uploaded, 433.6 MB,
+159 of 159 rows with `blob_object.sha256 = asset.content_hash` and equal
+bytes; a second run uploaded nothing and wrote no revision; `catalog index
+--only manimkc` afterwards kept all 159 keys; `catalog blob audit` found
+nothing. **Tests:** the redirect carries no
 path; a Range request on the fs adapter still returns 206; an asset with a
 `pending` blob answers 404 `not-uploaded` rather than 500. **Docs:**
 [DEPLOYMENT.md](DEPLOYMENT.md) gains the blob store; AGENTS.md's poster gotcha

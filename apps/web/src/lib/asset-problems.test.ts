@@ -55,7 +55,14 @@ describe("the problem table", () => {
   it("offers Try again only where asking again could change the answer", () => {
     const retryable = ALL.filter((code) => ASSET_PROBLEMS[code].retry).sort();
     expect(retryable).toEqual(
-      ["catalog-unreachable", "poster-not-made", "server-unreachable", "undecodable", "unknown"].sort(),
+      [
+        "blob-store-unavailable",
+        "catalog-unreachable",
+        "poster-not-made",
+        "server-unreachable",
+        "undecodable",
+        "unknown",
+      ].sort(),
     );
   });
 

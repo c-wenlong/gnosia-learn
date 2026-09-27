@@ -3,7 +3,20 @@ import { parseArgs } from "node:util";
 import path from "node:path";
 
 import { formatAssertOutput, runAssertOutput } from "./commands/assert-output";
+import { formatAssetUpload, runAssetUpload } from "./commands/asset-upload";
+import { formatBlobAudit, runBlobAudit } from "./commands/blob-audit";
+import { UPLOAD_SOURCES, type UploadSource } from "./content/asset-upload";
 import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
+import {
+  formatCourseExport,
+  formatCourseImport,
+  formatItem,
+  ITEM_VERBS,
+  type ItemVerb,
+  runCourseExport,
+  runCourseImport,
+  runItem,
+} from "./commands/course";
 import { formatExport, runExport } from "./commands/export";
 import { formatFlip, runFlip } from "./commands/flip";
 import { formatIndex, runImportCommand, runIndexCommand } from "./commands/index-command";
@@ -46,6 +59,7 @@ import {
   type SessionStartResult,
 } from "./commands/session";
 import { formatShow, runShow } from "./commands/show";
+import { formatTag, formatTopic, runTag, runTopic, TopicUsage } from "./commands/topic";
 import { formatStatus, runStatus } from "./commands/status";
 import {
   classifyConnectionFailure,
@@ -136,6 +150,56 @@ Commands:
                            which are armed, and every row that breaks one.
                            Also the write guards and whether this database is
                            the primary.
+  asset upload             Copy rendered files into the blob store and point
+                           their asset rows at them: --source manimkc reads
+                           manimkc topics --json, uploads every indexed video
+                           and sidecar whose bytes match its row, cuts a
+                           poster per video with ffmpeg, and sets blob_key.
+                           Resumable: a present blob is skipped.
+  blob audit               Compare the blob store with blob_object: objects
+                           with no row, present rows whose bytes are gone or
+                           wrong, stale pending rows, unreferenced objects,
+                           posters whose video is gone. Exits 1 while any
+                           disagreement stands or an asset points at a
+                           pending blob. --fix deletes day-old
+                           orphans, marks broken rows pending, and deletes
+                           day-old pending rows nothing points at.
+  topic <verb>             The topic vocabulary, written through the catalog
+                           with a --reason, and content/topics.yaml rewritten
+                           from the rows after each write:
+                             add --slug S --title T --domain D [--summary X]
+                               [--alias A]... [--relate kind:slug]...
+                               [--dry-run]: --dry-run validates and lists
+                               near matches (pg_trgm) without writing
+                             edit <slug> [--title] [--summary] [--domain]
+                               [--alias A]... [--add-alias A]...
+                               [--drop-alias A]...
+                             rename --from OLD --to NEW
+                               [--restamp-diagrams-later]
+                             relate <slug> <kind> <other> [--remove], kind
+                               one of broader, related, precedes
+                             archive <slug>, restore <slug>
+                             ls [--domain D]
+  tag <verb>               The cross-course themes, the same way:
+                             add --id ID --label L --description D
+                             edit <id> [--label] [--description]
+  course import <file>     Write one course file into the database through the
+                           write seam, one revision per entity it changes.
+                           Needs --reason. Modules and items the file stops
+                           listing are archived, never deleted, so learner
+                           rows on them stay. Rewrites the course file (and
+                           topics.yaml when a module's topic moved) in the
+                           tree courses were imported from. --dry-run says
+                           what would change and commits nothing.
+  course export <id>       One course as the database would export it: the
+                           file to edit and import back. Prints it, or
+                           writes it to --out FILE.
+  item <verb> <id>         One curriculum item, with --reason: archive (off
+                           the course path, learner rows kept), restore (back
+                           on it, or back from a purge), purge (delete an
+                           archived item; refused while progress or recap
+                           rows name it, unless --with-learner-data, which
+                           copies them into the revision first).
   renumber <list>          Spread a list's positions back out to 1000, 2000,
                            ... in its current order, one revision per row
                            moved. Needs --reason. Lists: topics, tags,
@@ -153,17 +217,34 @@ Options:
                            reads. export, parity: only these types, of
                            topics, tags, courses, concepts, sessions, diagrams.
   --out DIR                export: where to write. Created if missing.
+                           course export: the file to write.
+  --source NAME            asset upload: what to upload. Only manimkc.
+  --dry-run                asset upload: hash and report, write nothing.
+                           topic add: validate, place and list near
+                           matches, write nothing. course import: plan the
+                           write, commit nothing.
+  --blob-root DIR          asset upload, blob audit: the fs store's root.
+                           Default: $SELF_LEARN_HOME/blobs, else
+                           ~/.self-learn/blobs.
+  --fix                    blob audit: act on what it finds (see above).
   --strict                 flip: also arm the type's completeness rules.
   --waive RULE             flip: leave this rule disarmed. Repeatable, each
                            with its own --reason, in the same order.
   --reason TEXT            flip: why a --waive is acceptable. renumber: why
-                           the list is being renumbered.
+                           the list is being renumbered. asset upload: the
+                           reason on each asset revision it writes. topic,
+                           tag: the revision's reason, required on every write.
+                           course import, item: why, kept on every revision.
+  --author ID              topic, tag: who the revision names. Default:
+                           the local learner.
+  --with-learner-data      item purge: delete the item's progress and recap
+                           rows too, after copying them into the revision.
   --topic SLUG             renumber concepts, modules: which topic's list.
   --module ID              renumber items: which module.
-  --manimkc-root PATH      index: the manimkc checkout to read, for both the
-                           manimkc source and the mirror ledger beside it.
-                           Relative to the working directory. Default:
-                           $MANIMKC_ROOT, else <repo>/tools/manimkc.
+  --manimkc-root PATH      index, asset upload: the manimkc checkout to read,
+                           for both the manimkc source and the mirror ledger
+                           beside it. Relative to the working directory.
+                           Default: $MANIMKC_ROOT, else <repo>/tools/manimkc.
   --from PATH              backfill: the directory holding events.jsonl,
                            model.json and reviews.json.
                            Default: <repo>/${DEFAULT_STATE_DIR}.
@@ -206,9 +287,9 @@ Exit codes:
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
   4  The database is behind this code: index, import, export, parity,
-     flip, ls, show, history, diff and renumber read tables or columns a
-     migration it has not had adds. stderr says how many are outstanding and to run
-     migrate.
+     flip, ls, show, history, diff, renumber, asset upload and blob
+     audit read tables or columns a migration it has not had adds. stderr
+     says how many are outstanding and to run migrate.
 
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
@@ -246,7 +327,13 @@ type Command =
   | "export"
   | "parity"
   | "flip"
-  | "renumber";
+  | "renumber"
+  | "asset"
+  | "blob"
+  | "topic"
+  | "tag"
+  | "course"
+  | "item";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -268,6 +355,12 @@ const COMMANDS: readonly Command[] = [
   "parity",
   "flip",
   "renumber",
+  "asset",
+  "blob",
+  "topic",
+  "tag",
+  "course",
+  "item",
 ];
 
 /**
@@ -339,6 +432,24 @@ export async function main(argv: string[]): Promise<number> {
         reason: { type: "string", multiple: true },
         topic: { type: "string" },
         module: { type: "string" },
+        source: { type: "string" },
+        "dry-run": { type: "boolean", default: false },
+        "blob-root": { type: "string" },
+        fix: { type: "boolean", default: false },
+        slug: { type: "string" },
+        domain: { type: "string" },
+        summary: { type: "string" },
+        alias: { type: "string", multiple: true },
+        "add-alias": { type: "string", multiple: true },
+        "drop-alias": { type: "string", multiple: true },
+        relate: { type: "string", multiple: true },
+        to: { type: "string" },
+        remove: { type: "boolean", default: false },
+        "restamp-diagrams-later": { type: "boolean", default: false },
+        label: { type: "string" },
+        description: { type: "string" },
+        author: { type: "string" },
+        "with-learner-data": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -437,6 +548,35 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatFlip(result));
         break;
       }
+      case "asset": {
+        if (positionals[1] !== "upload") throw new Usage("asset takes one verb: upload");
+        const source = values.source;
+        if (source === undefined || !(UPLOAD_SOURCES as readonly string[]).includes(source)) {
+          throw new Usage(`asset upload needs --source: ${UPLOAD_SOURCES.join(", ")}`);
+        }
+        const reasons = values.reason ?? [];
+        if (reasons.length > 1) throw new Usage("asset upload takes at most one --reason");
+        const root = values["manimkc-root"];
+        await schemaCurrent();
+        const result = await runAssetUpload({
+          source: source as UploadSource,
+          dryRun: values["dry-run"],
+          blobRoot: values["blob-root"],
+          manimkcRoot: root === undefined ? undefined : path.resolve(root),
+          reason: reasons[0],
+        });
+        emit(result, formatAssetUpload(result));
+        if (result.refused > 0) return 1;
+        break;
+      }
+      case "blob": {
+        if (positionals[1] !== "audit") throw new Usage("blob takes one verb: audit");
+        await schemaCurrent();
+        const result = await runBlobAudit({ fix: values.fix, blobRoot: values["blob-root"] });
+        emit(result, formatBlobAudit(result));
+        if (result.outstanding > 0) return 1;
+        break;
+      }
       case "renumber": {
         const list = positionals[1];
         if (list === undefined || !(RENUMBER_LISTS as readonly string[]).includes(list)) {
@@ -456,6 +596,47 @@ export async function main(argv: string[]): Promise<number> {
           reason: reasons[0] as string,
         });
         emit(result, formatRenumber(result));
+        break;
+      }
+      case "course": {
+        const verb = positionals[1];
+        const target = positionals[2];
+        if (verb === "import") {
+          if (target === undefined) throw new Usage("course import needs a course file");
+          const reasons = values.reason ?? [];
+          if (reasons.length !== 1) throw new Usage("course import takes exactly one --reason");
+          await schemaCurrent();
+          const result = await runCourseImport({ file: target, reason: reasons[0] as string, dryRun: values["dry-run"] });
+          emit(result, formatCourseImport(result));
+        } else if (verb === "export") {
+          if (target === undefined) throw new Usage("course export needs a course id");
+          await schemaCurrent();
+          const result = await runCourseExport({ id: target, out: values.out });
+          emit(result, formatCourseExport(result));
+        } else {
+          throw new Usage("usage: course import <file> --reason <why> | course export <id> [--out FILE]");
+        }
+        break;
+      }
+      case "item": {
+        const verb = positionals[1];
+        const id = positionals[2];
+        if (verb === undefined || !(ITEM_VERBS as readonly string[]).includes(verb) || id === undefined) {
+          throw new Usage(`usage: item ${ITEM_VERBS.join("|")} <id> --reason <why>`);
+        }
+        const reasons = values.reason ?? [];
+        if (reasons.length !== 1) throw new Usage(`item ${verb} takes exactly one --reason`);
+        if (values["with-learner-data"] && verb !== "purge") {
+          throw new Usage("--with-learner-data is for item purge only");
+        }
+        await schemaCurrent();
+        const result = await runItem({
+          verb: verb as ItemVerb,
+          id,
+          reason: reasons[0] as string,
+          withLearnerData: values["with-learner-data"],
+        });
+        emit(result, formatItem(result));
         break;
       }
       case "backfill": {
@@ -541,6 +722,16 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatDiff(result));
         break;
       }
+      case "topic": {
+        const result = await runTopic(positionals, values, schemaCurrent);
+        emit(result, formatTopic(result));
+        break;
+      }
+      case "tag": {
+        const result = await runTag(positionals, values, schemaCurrent);
+        emit(result, formatTag(result));
+        break;
+      }
       case "doctor": {
         const result = await runDoctor();
         emit(result, formatDoctor(result));
@@ -554,7 +745,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     return 0;
   } catch (error) {
-    if (error instanceof Usage || error instanceof RevisionUsage) {
+    if (error instanceof Usage || error instanceof RevisionUsage || error instanceof TopicUsage) {
       process.stderr.write(`${error.message}\n\n${USAGE}`);
       return 2;
     }

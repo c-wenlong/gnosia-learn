@@ -6,6 +6,7 @@ import type { CatalogDatabase } from "../db";
 import { parseFrontmatter } from "../index/frontmatter";
 import { ExportError, renderType } from "./export";
 import { type ExportFile, type ExportType, readTypeFiles, sha256 } from "./layout";
+import { noteParityForm } from "./notes";
 import { canonicalJson } from "./snapshot";
 
 /**
@@ -22,8 +23,11 @@ import { canonicalJson } from "./snapshot";
  *   topics and tags files are cut one entry per entity, which would lose the
  *   order between entries, so each also yields `<file> (order)`, the list
  *   of keys as written;
- * - markdown has its frontmatter parsed (the knowledge base's own dialect, the
- *   one `catalog index` reads) and its body compared byte for byte;
+ * - a session log has its frontmatter parsed (the knowledge base's own
+ *   dialect, the one `catalog index` reads) and its body compared byte for
+ *   byte; a concept note is compared as the fields its row holds and its body
+ *   byte for byte (`noteParityForm`), since a row keeps a note's frontmatter
+ *   values but not their layout;
  * - a `.tldr` is parsed as JSON;
  * - anything else is its bytes.
  *
@@ -209,11 +213,19 @@ function cut(type: ExportType, files: readonly ExportFile[]): Cut {
           countCourse(doc, count);
           break;
         }
-        case "concepts":
+        case "concepts": {
+          // The fields a row holds and the body byte for byte, not the
+          // frontmatter's layout, which a row does not keep (see notes.ts).
+          const form = noteParityForm(body, file.path) as { requires: unknown[]; assumes: unknown[] };
+          add(file.path, form);
+          count("notes");
+          count("prerequisites", form.requires.length + form.assumes.length);
+          break;
+        }
         case "sessions": {
           const { data, body: markdown } = parseFrontmatter(body);
           add(file.path, { frontmatter: data, body: markdown });
-          count(type === "concepts" ? "notes" : "logs");
+          count("logs");
           break;
         }
         case "diagrams": {

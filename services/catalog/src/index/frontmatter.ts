@@ -90,6 +90,40 @@ export function parseFrontmatter(text: string): ParsedDocument {
   return { data, body: text.slice(match[0].length) };
 }
 
+/** One `key:` line of a frontmatter block as written, before any value is parsed. */
+export interface RawEntry {
+  key: string;
+  /** The value after the colon, trimmed; `""` for a key whose list follows as `- item` lines. */
+  raw: string;
+  /** The `- item` lines under it, trimmed, when it has any. */
+  items: string[];
+}
+
+/**
+ * The frontmatter's keys and values as text, in order, by the same line rules
+ * `parseFrontmatter` reads by. For a caller that must know what was written
+ * rather than what it parses to: `007` and `7` parse the same, and a key
+ * written twice parses as its last line.
+ */
+export function frontmatterEntries(text: string): RawEntry[] {
+  const match = FRONTMATTER_RE.exec(text);
+  if (!match?.[1]) return [];
+  const entries: RawEntry[] = [];
+  for (const line of match[1].split(/\r?\n/)) {
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const blockItem = BLOCK_ITEM_RE.exec(line);
+    const current = entries[entries.length - 1];
+    if (blockItem?.[1] !== undefined && current !== undefined) {
+      current.items.push(blockItem[1].trim());
+      continue;
+    }
+    const pair = PAIR_RE.exec(line);
+    if (!pair?.[1]) continue;
+    entries.push({ key: pair[1], raw: (pair[2] ?? "").trim(), items: [] });
+  }
+  return entries;
+}
+
 /** A frontmatter value read as text. Absent, empty and null all give `null`. */
 export function readText(data: Frontmatter, key: string): string | null {
   const value = data[key];
