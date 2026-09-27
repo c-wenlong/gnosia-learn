@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { CourseGrid } from "@/components/courses/CourseGrid";
-import { getTags, tags } from "@/data/content";
-import { courses } from "@/data/courses";
+import { getTags, tagsFor } from "@/data/content";
+import { getCourses } from "@/data/courses";
 import { itemStanding } from "@/lib/course-path";
 import { toCourseSummary, usedTags } from "@/lib/course-summary";
 import { loadKnowledgeBase } from "@/lib/kb/load";
@@ -21,8 +21,8 @@ export const metadata: Metadata = { title: "Courses" };
  * the same fallback the course path makes.
  */
 export default async function CoursesPage() {
-  const summaries = courses.map((c) => toCourseSummary(c, getTags(c.tags)));
-  const { kb } = await loadKnowledgeBase();
+  const [courses, tags, { kb }] = await Promise.all([getCourses(), getTags(), loadKnowledgeBase()]);
+  const summaries = courses.map((c) => toCourseSummary(c, tagsFor(tags, c.tags)));
   const standing = itemStanding(
     kb.concepts,
     summaries.flatMap((s) => s.topics.map((t) => t.id)),

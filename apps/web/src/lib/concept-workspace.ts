@@ -3,10 +3,12 @@ import "server-only";
 import { connection } from "next/server";
 import { assetsForConcept, readEvents, readReviews } from "@self-learn/catalog/state";
 
+import { getCourses } from "@/data/courses";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import { readConceptNote } from "@/lib/concept-note";
 import { buildConceptWorkspace, type ConceptPlace, type ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
+import type { Course } from "@/lib/types";
 
 /**
  * The concept workspace's reads: the knowledge base, the note, the event log,
@@ -25,9 +27,9 @@ export type ConceptWorkspaceRead =
   | { state: "unreachable"; message: string };
 
 /** Where a concept sits in a course: the first of its curriculum items that resolves. */
-export function placeOf(topicIds: readonly string[]): ConceptPlace | null {
+export function placeOf(courses: readonly Course[], topicIds: readonly string[]): ConceptPlace | null {
   for (const id of topicIds) {
-    const found = findTopicAcrossCourses(id);
+    const found = findTopicAcrossCourses(courses, id);
     if (found === undefined) continue;
     return {
       courseSlug: found.course.slug,
@@ -44,10 +46,10 @@ export function placeOf(topicIds: readonly string[]): ConceptPlace | null {
 }
 
 /** Every course slug a concept's curriculum items belong to, deduplicated. */
-export function courseSlugsOf(topicIds: readonly string[]): string[] {
+export function courseSlugsOf(courses: readonly Course[], topicIds: readonly string[]): string[] {
   const out = new Set<string>();
   for (const id of topicIds) {
-    const found = findTopicAcrossCourses(id);
+    const found = findTopicAcrossCourses(courses, id);
     if (found !== undefined) out.add(found.course.slug);
   }
   return [...out].sort();
@@ -62,11 +64,12 @@ export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspa
 
   try {
     const db = await catalogDatabase();
-    const [note, events, reviews, assets] = await Promise.all([
+    const [note, events, reviews, assets, courses] = await Promise.all([
       readConceptNote(slug),
       readEvents(db),
       readReviews(db),
       assetsForConcept(db, slug),
+      getCourses(),
     ]);
     const workspace = buildConceptWorkspace({
       kb,
@@ -79,7 +82,7 @@ export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspa
       events,
       card: reviews.cards[slug] ?? null,
       assets,
-      place: placeOf(concept.topics),
+      place: placeOf(courses, concept.topics),
     });
     return workspace === null ? { state: "not-found" } : { state: "ok", workspace };
   } catch (error) {

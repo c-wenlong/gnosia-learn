@@ -12,7 +12,7 @@ import { getCourse, getModule } from "@/data/courses";
  */
 export default async function ModulePage({ params }: { params: Promise<{ slug: string; module: string }> }) {
   const { slug, module: moduleSlug } = await params;
-  const course = getCourse(slug);
+  const course = await getCourse(slug);
   if (!course) notFound();
   const mod = getModule(course, moduleSlug);
   if (!mod) notFound();

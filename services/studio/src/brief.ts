@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
-
-import { parse } from "yaml";
+import { fileSource, selectSource, type ContentSource, type TopicEntry } from "@self-learn/content";
 
 import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, type Model } from "./config";
-import { absolute } from "./paths";
+import { readThrough } from "./content-cache";
+import { REPO_ROOT } from "./paths";
 
 /**
  * The brief, and the refusals that happen before anything is spent.
@@ -130,44 +129,86 @@ function oneOf<T extends string>(value: unknown, field: string, allowed: readonl
   return raw as T;
 }
 
-/** The topic vocabulary, read from the file rather than from Postgres. */
+/** The topic vocabulary, as a brief is checked against it. */
 export interface Vocabulary {
   topics: Map<string, { title: string; concepts: string[] }>;
-}
-
-interface TopicsFile {
-  topics?: {
-    slug?: unknown;
-    title?: unknown;
-    maps?: { concepts?: unknown };
-  }[];
+  /** When the vocabulary was read from its source, as an ISO instant. */
+  readAt: string;
+  /**
+   * True when the source could not be read and this is the copy cached at
+   * `readAt` (D13): the screen says "stale since" rather than showing it as
+   * current.
+   */
+  stale: boolean;
+  /** Why the source could not be read, when `stale`. */
+  staleReason?: string;
 }
 
 /**
- * `content/topics.yaml`, parsed.
+ * The studio's content source, one per process so the file source's parse is
+ * kept between briefs.
  *
- * Read from the file and not from the catalog on purpose: with Postgres down
- * the studio still browses and still draws (U3), and the topic list is one of
- * the three things that makes that true. The foreign key at enqueue is the
- * second check on the same fact, and the gate is the third — D7 explains why
- * all three are worth having.
+ * Through the same seam the web app reads (`packages/content`), so the day the
+ * vocabulary moves into Postgres this is where it changes. The studio holds no
+ * database connection of its own (it reaches Postgres through the catalog
+ * CLI), so it passes no `db`: a `CONTENT_SOURCE` that sends topics to the
+ * database makes the read throw, and the cache answers until track A gives the
+ * studio a way to read rows.
+ */
+let studioSource: ContentSource | null = null;
+function source(): ContentSource {
+  studioSource ??= selectSource({ files: fileSource(REPO_ROOT) });
+  return studioSource;
+}
+
+/**
+ * The vocabulary, through the reader seam and the studio's cache.
+ *
+ * Not from the catalog on purpose: with Postgres down the studio still browses
+ * and still draws (U3), and the topic list is one of the three things that
+ * makes that true. Today the seam reads `content/topics.yaml`; when topics move
+ * into the database, a failed read falls back to the copy in
+ * `$STUDIO_HOME/cache/topics.json` and says how old it is. The foreign key at
+ * enqueue is the second check on the same fact, and the gate is the third: D7
+ * explains why all three are worth having.
+ *
+ * The vocabulary is validated by the same parser the catalog indexes with, so a
+ * malformed file is refused here as it is by `catalog index`, and the cached
+ * copy is used until it is fixed. The studio's own lenient parser, which
+ * skipped a bad entry without a word, is gone.
+ *
+ * `repoRoot` reads the files under another root, for a test.
  */
 export async function loadVocabulary(repoRoot?: string): Promise<Vocabulary> {
-  const file = repoRoot === undefined ? absolute("content/topics.yaml") : `${repoRoot}/content/topics.yaml`;
-  const raw = await readFile(file, "utf8");
-  const parsed = parse(raw) as TopicsFile | null;
+  const from = repoRoot === undefined ? source() : fileSource(repoRoot);
+  const read = await readThrough("topics", () => from.topics(), { isValue: isTopicList });
   const topics = new Map<string, { title: string; concepts: string[] }>();
-  for (const entry of parsed?.topics ?? []) {
-    if (typeof entry?.slug !== "string") continue;
-    const concepts = Array.isArray(entry.maps?.concepts)
-      ? entry.maps.concepts.filter((c): c is string => typeof c === "string")
-      : [];
-    topics.set(entry.slug, {
-      title: typeof entry.title === "string" ? entry.title : entry.slug,
-      concepts,
-    });
+  for (const entry of read.value) {
+    topics.set(entry.slug, { title: entry.title, concepts: [...entry.maps.concepts] });
   }
-  return { topics };
+  return {
+    topics,
+    readAt: read.readAt,
+    stale: read.stale,
+    ...(read.error === undefined ? {} : { staleReason: read.error }),
+  };
+}
+
+/** The fields `loadVocabulary` reads, checked on a cached copy before it is trusted. */
+function isTopicList(value: unknown): value is TopicEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry: unknown) => {
+      if (typeof entry !== "object" || entry === null) return false;
+      const topic = entry as { slug?: unknown; title?: unknown; maps?: { concepts?: unknown } };
+      return (
+        typeof topic.slug === "string" &&
+        typeof topic.title === "string" &&
+        Array.isArray(topic.maps?.concepts) &&
+        topic.maps.concepts.every((concept: unknown) => typeof concept === "string")
+      );
+    })
+  );
 }
 
 /**

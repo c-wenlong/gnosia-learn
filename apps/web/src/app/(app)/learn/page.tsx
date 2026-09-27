@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { LearnIndex } from "@/components/learn/LearnIndex";
 import { Card } from "@/components/ui/Card";
+import { getCourses } from "@/data/courses";
 import { defaultSelection } from "@/lib/concept-graph";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
 import { habitTimeZone } from "@/lib/habit";
@@ -9,6 +10,7 @@ import { loadKnowledgeBase } from "@/lib/kb/load";
 import type { KbConcept } from "@/lib/kb/types";
 import { dueLabel, lastSeenLabel, parseFilter, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
 import { bucketOf } from "@/lib/mastery-bucket";
+import type { Course } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Learn" };
 
@@ -17,10 +19,15 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const first = (value: string | string[] | undefined): string | null =>
   (Array.isArray(value) ? value[0] : value) ?? null;
 
-function toRow(concept: KbConcept, now: Date, timeZone: string | undefined): IndexRow {
+function toRow(
+  concept: KbConcept,
+  courses: readonly Course[],
+  now: Date,
+  timeZone: string | undefined,
+): IndexRow {
   const bucket = bucketOf(concept);
   const due = dueLabel(concept.due, now, timeZone);
-  const place = placeOf(concept.topics);
+  const place = placeOf(courses, concept.topics);
   return {
     id: concept.id,
     title: concept.title,
@@ -34,7 +41,7 @@ function toRow(concept: KbConcept, now: Date, timeZone: string | undefined): Ind
     lastSeenLabel: lastSeenLabel(concept.lastSeen, now, timeZone),
     leech: concept.leech,
     courseLabel: place ? `${place.courseCode} M${place.moduleOrder}` : null,
-    courses: courseSlugsOf(concept.topics),
+    courses: courseSlugsOf(courses, concept.topics),
     domain: concept.domain,
   };
 }
@@ -51,7 +58,7 @@ function toRow(concept: KbConcept, now: Date, timeZone: string | undefined): Ind
  */
 export default async function LearnPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const { kb, reachable } = await loadKnowledgeBase();
+  const [{ kb, reachable }, courses] = await Promise.all([loadKnowledgeBase(), getCourses()]);
 
   if (kb.concepts.length === 0) {
     return <div data-layout="app">{reachable ? <EmptyState /> : <Unreachable />}</div>;
@@ -62,7 +69,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   // Studied first, then the untouched ones, alphabetical within each: the
   // untouched tail is long and says the least.
   const rows = kb.concepts
-    .map((c) => toRow(c, now, timeZone))
+    .map((c) => toRow(c, courses, now, timeZone))
     .sort((a, b) => Number(a.bucket === "untouched") - Number(b.bucket === "untouched") || a.title.localeCompare(b.title));
 
   const asked = first(params.concept);

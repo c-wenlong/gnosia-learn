@@ -66,6 +66,8 @@ const REQUIRED = [
   "topicTitles",
   // Concept notes: where the indexer read each one, for a page that counts its checks.
   "notePaths",
+  // The content reader seam's database half, which the app's composition root builds.
+  "dbSource",
 ] as const;
 
 describe("the state barrel", () => {

@@ -5,6 +5,7 @@ import {
   enforceSameOrigin,
   SUMMARIZE_RATE_LIMIT,
 } from "@/lib/agent/guard";
+import { getCourses } from "@/data/courses";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 import {
   buildSummarySystemPrompt,
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const found = findTopicBySlugs(courseSlug, moduleSlug, topicId);
+  const found = findTopicBySlugs(await getCourses(), courseSlug, moduleSlug, topicId);
   if (!found) {
     return NextResponse.json({ error: "Topic not found" }, { status: 404 });
   }

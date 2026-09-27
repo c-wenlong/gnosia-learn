@@ -76,9 +76,9 @@ there.
 | `apps/web/src/app/` | App Router routes: `/courses`, `/learn`, `/library`, the course and module pages, the `/api/*` handlers |
 | `apps/web/src/components/` | The shell, the redesign's primitives in `ui/` ([IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)), checklists, recaps, the concept graph |
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `asset-files.ts` (an asset row to a file on disk, with the containment checks), `asset-posters.ts` (a frame out of a video with ffmpeg, cached outside the repo), `asset-library.ts`, `library.ts` and `transcript.ts` (the `/library` pages' reads, taxonomy and sidecar parsing), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `site-url.ts` (where this deployment lives, for social cards and the OpenRouter referer), `kb/` (the concept graph, from the catalog) |
-| `apps/web/src/data/` | The app's server-only view of `content/`: course lookups in `courses/index.ts`, themes in `content.ts`, the repo root in `repo-root.ts` |
+| `apps/web/src/data/` | The app's server-only view of `content/`, through the reader seam: `getCourses()` and the course lookups in `courses/index.ts`, `getTags()` in `content.ts`, `getTopics()` in `topics.ts`, the seam's composition root in `source.ts`, the repo root in `repo-root.ts` |
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
-| `packages/content/` | The reader both the app and the catalog parse `content/` with |
+| `packages/content/` | The parsers both the app and the catalog read `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) that lets a type move into Postgres |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.self-learn/blobs` ([README](packages/blob/README.md)) |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
