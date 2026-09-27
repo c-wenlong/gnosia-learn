@@ -5,10 +5,19 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-import { assetsByIds, indexedRoot, type AssetRef, type CatalogDatabase } from "@self-learn/catalog/state";
+import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@self-learn/blob";
+import {
+  assetBlobs,
+  assetsByIds,
+  indexedRoot,
+  type AssetBlob,
+  type AssetRef,
+  type CatalogDatabase,
+} from "@self-learn/catalog/state";
 
 import { REPO_ROOT } from "@/data/repo-root";
 import type { RouteProblemCode } from "@/lib/asset-problems";
+import { assetBlobStore } from "@/lib/blob-store";
 
 /**
  * Turning an `asset` row into bytes a browser can play.
@@ -112,6 +121,9 @@ export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".json": "application/json",
   ".md": "text/markdown; charset=utf-8",
   ".png": "image/png",
+  // A poster, cut from a video by `catalog asset upload` and served from the
+  // blob store (docs/CONTENT-MIGRATION.md, Track E).
+  ".jpg": "image/jpeg",
 };
 
 /** The declared type for a file, or null when the extension is not on the list. */
@@ -137,6 +149,7 @@ export interface AssetFileProblem {
 /** A resolution that found a real, readable, recognised file. */
 export interface AssetFile {
   ok: true;
+  source: "file";
   /** Absolute path, symlinks resolved, proven to be inside its root. */
   file: string;
   /** Size from `stat`, not from the row: the row's `bytes` can be stale. */
@@ -239,6 +252,11 @@ export async function resolveAssetFile(
 ): Promise<AssetFileResult> {
   const [row] = await assetsByIds(db, [id]);
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
+  return resolveRowFile(db, row);
+}
+
+/** `resolveAssetFile` for a row already in hand. */
+async function resolveRowFile(db: CatalogDatabase, row: AssetRef): Promise<AssetFileResult> {
   if (row.path === null) {
     // A `link` asset is a URL and nothing else. It is a row about something on
     // the web, so there is no file to serve and never will be.
@@ -297,7 +315,150 @@ export async function resolveAssetFile(
   const stats = await stat(file);
   if (!stats.isFile()) return missing("refused", `Asset ${row.id} is not a regular file.`);
 
-  return { ok: true, file, bytes: stats.size, contentType, filename: safeFilename(file) };
+  return { ok: true, source: "file", file, bytes: stats.size, contentType, filename: safeFilename(file) };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The blob store                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Bytes the blob store holds for an asset (docs/CONTENT-MIGRATION.md, Track E).
+ *
+ * **Why the store is asked first.** An asset whose row names a `blob_key` was
+ * uploaded on purpose, by `catalog asset upload` or a diagram's Accept, and the
+ * key is the sha256 of the bytes its `content_hash` records, so the store
+ * cannot hand back anything but what was indexed. The legacy file under a data
+ * root is only what the render left on this laptop, and it goes away at
+ * cut-over. So a row with a key is served from the store or not at all: a
+ * `pending` blob, or an object the store no longer has, answers `not-uploaded`
+ * rather than quietly falling back to a file that may have been re-rendered
+ * since (edge cases 5 and 9).
+ *
+ * **Nothing about the path here.** The key comes from the row, the store
+ * refuses any key not shaped `<owner>/<sha256>.<ext>`, and the content type
+ * comes off the key's extension through the same closed list the legacy branch
+ * uses, so an unknown extension is refused the same way.
+ */
+export interface AssetStored {
+  ok: true;
+  source: "blob";
+  key: string;
+  /** From the store's `stat`, not the row: the object is what gets sent. */
+  bytes: number;
+  sha256: string;
+  contentType: string;
+  filename: string;
+}
+
+/** Wherever an asset's bytes are served from. */
+export type AssetSource = AssetFile | AssetStored;
+export type AssetSourceResult = AssetSource | AssetFileProblem;
+
+/**
+ * The switch's answer, as a problem. `ASSET_FILES_ENABLED` gates the legacy
+ * file branch only: a blob is served whatever it says, because the store is
+ * what a deployment without the files will have.
+ */
+export const FILES_OFF: AssetFileProblem = {
+  ok: false,
+  status: 404,
+  code: "files-off",
+  error: "Not found.",
+  detail: "Asset files are not served by this deployment.",
+};
+
+const notUploaded = (detail: string): AssetFileProblem => ({
+  ok: false,
+  status: 404,
+  code: "not-uploaded",
+  error: "No such asset file.",
+  detail,
+});
+
+/** A blob store that would not open or answer: the root is misconfigured, or a cloud store is down. */
+export function blobStoreProblem(error: unknown): AssetFileProblem {
+  if (error instanceof BlobNotFoundError) {
+    return notUploaded("The blob store no longer holds this object. Run `npm run catalog -- blob audit`.");
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`asset file: blob store unavailable: ${message}`);
+  return {
+    ok: false,
+    status: 503,
+    code: "blob-store-unavailable",
+    error: "The blob store is unavailable.",
+    detail: error instanceof BlobError ? `${error.code}: could not read from the blob store.` : "Could not read from the blob store.",
+  };
+}
+
+/**
+ * One stored object, checked: `present`, of a served type, and still in the
+ * store. `name` is what the saved file is called: the asset's logical path,
+ * whose extension is replaced by the object's (a poster is `<video>.jpg`).
+ */
+export async function resolveBlob(blob: AssetBlob, name: string): Promise<AssetStored | AssetFileProblem> {
+  if (blob.state !== "present") {
+    return notUploaded(
+      `Asset ${blob.assetId} is kept in the blob store and its upload has not been confirmed. Rerun the upload.`,
+    );
+  }
+  const ext = path.extname(blob.key).toLowerCase();
+  const contentType = CONTENT_TYPES[ext] ?? null;
+  if (contentType === null) {
+    console.warn(`asset file: refusing ${blob.assetId}, unrecognised blob extension`);
+    return missing("unsupported-type", `Asset ${blob.assetId} is stored with an extension this route will not serve.`);
+  }
+  let size: number;
+  try {
+    const stat = await assetBlobStore().stat(blob.key);
+    if (stat === null) {
+      console.warn(`asset file: ${blob.assetId} names ${blob.key}, which the store does not hold; run catalog blob audit`);
+      return notUploaded(`Asset ${blob.assetId} is kept in the blob store, which no longer has it.`);
+    }
+    size = stat.bytes;
+  } catch (error) {
+    return blobStoreProblem(error);
+  }
+  const stem = path.basename(name).replace(/\.[^.]*$/, "");
+  return {
+    ok: true,
+    source: "blob",
+    key: blob.key,
+    bytes: size,
+    sha256: blob.sha256,
+    contentType,
+    filename: safeFilename(`${stem === "" ? "asset" : stem}${ext}`),
+  };
+}
+
+/**
+ * An asset id to where its bytes are served from, or the reason there is
+ * nowhere: the blob store when the row names a key, else the legacy file,
+ * which the switch gates. Every route and every page check goes through this,
+ * so the page and the route cannot give one asset two answers.
+ */
+export async function resolveAsset(
+  db: CatalogDatabase,
+  id: string,
+  env: Record<string, string | undefined> = process.env,
+): Promise<AssetSourceResult> {
+  const [row] = await assetsByIds(db, [id]);
+  if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
+  const blob = (await assetBlobs(db, [row.id])).get(row.id);
+  if (blob !== undefined) return resolveBlob(blob, row.path ?? row.id);
+  if (!assetFilesEnabled(env)) return FILES_OFF;
+  return resolveRowFile(db, row);
+}
+
+/** The object, or a range of it, from the store. Rejects as `BlobStore.get` does. */
+export async function openBlob(key: string, range?: { start: number; end: number }): Promise<BlobRead> {
+  return assetBlobStore().get(key, range);
+}
+
+/** A range the store refused as past the end: the route's 416. */
+export function isRangeRefusal(error: unknown): boolean {
+  return error instanceof BlobRangeError;
 }
 
 /** What a `Range` header asked for, once measured against the real file size. */
