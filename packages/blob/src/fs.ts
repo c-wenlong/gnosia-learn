@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream, existsSync, realpathSync } from "node:fs";
-import { mkdir, open, readdir, rename, rm, stat, type FileHandle } from "node:fs/promises";
+import { constants, createWriteStream, existsSync, realpathSync } from "node:fs";
+import { lstat, mkdir, open, readdir, rename, rm, stat, type FileHandle } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Transform, type Readable } from "node:stream";
@@ -26,6 +26,13 @@ import {
  * running.
  */
 const TEMP_DIR = ".tmp";
+
+/**
+ * Opens without following a symlink at the last component; the directory
+ * above it is checked by `realDirectory`. See `fsStore` for why links are
+ * refused rather than followed.
+ */
+const READ_NO_FOLLOW = constants.O_RDONLY | constants.O_NOFOLLOW;
 
 /**
  * Where the laptop's blobs live: `$SELF_LEARN_HOME/blobs`, or
@@ -72,6 +79,13 @@ export function defaultBlobRoot(env: NodeJS.ProcessEnv = process.env): string {
  * sequential read, which for the largest video today (37 MB) is tens of
  * milliseconds. A hot path that only needs the size, such as a Range request,
  * takes it from the `blob_object` row and never calls `head`.
+ *
+ * **No symlink under the root is followed.** The root is checked once, links
+ * resolved, but an owner directory, `.tmp` or an object that is itself a link
+ * would carry a write, a read or a delete somewhere that check never saw,
+ * checkout included, and `list` (which sees a link as neither a directory nor
+ * a file) would not show it. Every such link is refused with `BLOB_LINK`, so
+ * what the store operates on and what it lists are the same set.
  */
 export function fsStore(root: string = defaultBlobRoot()): BlobStore {
   const base = path.resolve(root);
@@ -97,6 +111,7 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
 
         const tempDir = path.join(base, TEMP_DIR);
         await mkdir(tempDir, { recursive: true });
+        await realDirectory(tempDir);
         temp = path.join(tempDir, `${randomUUID()}.part`);
 
         const hash = createHash("sha256");
@@ -131,6 +146,7 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
         // Created only now, so a refused put leaves no empty owner directory.
         const target = objectPath(parsed);
         await mkdir(path.dirname(target), { recursive: true });
+        await realDirectory(path.dirname(target));
         // Replaces an existing object atomically. The key is the hash, so the
         // old bytes and the new are the same bytes, and a reader holding the
         // old file open keeps reading it.
@@ -188,7 +204,11 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
     },
 
     async delete(key: string): Promise<void> {
-      await rm(objectPath(parseKey(key)), { force: true });
+      const target = objectPath(parseKey(key));
+      // `rm` removes a link at the last component rather than its target, but
+      // it would follow a linked owner directory, so that is checked first.
+      if (!(await realDirectory(path.dirname(target)))) return;
+      await rm(target, { force: true });
     },
 
     async *list(prefix: string): AsyncIterable<BlobListing> {
@@ -258,12 +278,34 @@ function resolveExisting(dir: string): string {
 }
 
 async function openObject(file: string): Promise<FileHandle | null> {
+  if (!(await realDirectory(path.dirname(file)))) return null;
   try {
-    return await open(file, "r");
+    return await open(file, READ_NO_FOLLOW);
   } catch (error) {
     if (isNotFound(error)) return null;
+    if (codeOf(error) === "ELOOP") throw linkRefused(file);
     throw error;
   }
+}
+
+/**
+ * True when `dir` is a real directory, false when it is absent, and a
+ * `BLOB_LINK` refusal when it is a symlink or some other kind of file.
+ */
+async function realDirectory(dir: string): Promise<boolean> {
+  try {
+    const entry = await lstat(dir);
+    if (entry.isDirectory()) return true;
+    if (entry.isSymbolicLink()) throw linkRefused(dir);
+    throw new BlobError("BLOB_LINK", `${dir} is not a directory`);
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+}
+
+function linkRefused(file: string): BlobError {
+  return new BlobError("BLOB_LINK", `${file} is a symlink; the blob store follows no links under its root`);
 }
 
 async function readdirOrEmpty(dir: string) {
@@ -293,6 +335,10 @@ async function syncDirectory(dir: string): Promise<void> {
 }
 
 function isNotFound(error: unknown): boolean {
-  const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  const code = codeOf(error);
   return code === "ENOENT" || code === "ENOTDIR";
+}
+
+function codeOf(error: unknown): unknown {
+  return typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
 }

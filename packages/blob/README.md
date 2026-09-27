@@ -61,7 +61,8 @@ Two additions to the interface drawn in 0.4: `list`, which tenancy needs, and
 store it was handed rather than from a second setting that could disagree.
 
 Every refusal is a `BlobError` with a stable `code` (`BLOB_KEY`,
-`BLOB_INTEGRITY`, `BLOB_NOT_FOUND`, `BLOB_RANGE`, `BLOB_ROOT`).
+`BLOB_INTEGRITY`, `BLOB_NOT_FOUND`, `BLOB_RANGE`, `BLOB_ROOT`, and the `fs`
+adapter's `BLOB_LINK`).
 
 ## The `fs` adapter
 
@@ -73,6 +74,10 @@ unset. A leading `~` is expanded and a relative value is refused.
   deleted 25 rendered videos, because git does not carry gitignored files
   across a move. `fsStore` refuses a root inside any self-learn checkout,
   symlinks resolved, and says which.
+- **No link under the root is followed.** An owner directory, `.tmp/` or an
+  object that is a symlink would carry a write, read or delete somewhere the
+  root check never saw, and `list` would not show it. Each is refused with
+  `BLOB_LINK`, so what the store touches and what it lists are the same set.
 - **Atomic writes.** A put streams into `<root>/.tmp/<uuid>.part`, flushed to
   disk, and is renamed into place only after the hash and length check. A
   refused put removes its temp file and never creates the owner directory.

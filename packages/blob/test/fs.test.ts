@@ -131,6 +131,58 @@ describe("fsStore on disk", () => {
     expect(listed).toEqual([k]);
   });
 
+  it("refuses an owner directory that is a symlink, and writes, reads and deletes nothing through it", async () => {
+    const root = tempDir();
+    const elsewhere = tempDir();
+    const store = fsStore(root);
+    const data = bytes(1_000, 9);
+    const k = key("local", sha256(data), "bin");
+    symlinkSync(elsewhere, path.join(root, "local"));
+    writeFileSync(path.join(elsewhere, `${sha256(data)}.bin`), data);
+
+    await expect(store.put(k, chunked(data), meta(data))).rejects.toMatchObject({ code: "BLOB_LINK" });
+    await expect(store.head(k)).rejects.toMatchObject({ code: "BLOB_LINK" });
+    await expect(store.get(k)).rejects.toMatchObject({ code: "BLOB_LINK" });
+    await expect(store.delete(k)).rejects.toMatchObject({ code: "BLOB_LINK" });
+
+    expect(readdirSync(elsewhere)).toEqual([`${sha256(data)}.bin`]);
+    expect(readdirSync(path.join(root, ".tmp"))).toEqual([]);
+  });
+
+  it("refuses a temp directory that is a symlink before writing into it", async () => {
+    const root = tempDir();
+    const elsewhere = tempDir();
+    const store = fsStore(root);
+    const data = bytes(1_000, 10);
+    symlinkSync(elsewhere, path.join(root, ".tmp"));
+
+    await expect(
+      store.put(key("local", sha256(data), "bin"), chunked(data), meta(data)),
+    ).rejects.toMatchObject({ code: "BLOB_LINK" });
+    expect(readdirSync(elsewhere)).toEqual([]);
+  });
+
+  it("refuses an object that is a symlink, which list does not show either", async () => {
+    const root = tempDir();
+    const store = fsStore(root);
+    const data = bytes(1_000, 11);
+    const k = key("local", sha256(data), "bin");
+    const target = path.join(tempDir(), "outside.bin");
+    writeFileSync(target, data);
+    mkdirSync(path.join(root, "local"));
+    symlinkSync(target, path.join(root, k));
+
+    await expect(store.head(k)).rejects.toMatchObject({ code: "BLOB_LINK" });
+    await expect(store.get(k)).rejects.toMatchObject({ code: "BLOB_LINK" });
+    const listed: string[] = [];
+    for await (const entry of store.list("")) listed.push(entry.key);
+    expect(listed).toEqual([]);
+
+    // A delete removes the link itself, never the file it points at.
+    await store.delete(k);
+    expect(existsSync(target)).toBe(true);
+  });
+
   it("answers an empty listing, null heads and not-found gets before anything was ever put", async () => {
     const store = fsStore(path.join(tempDir(), "never-created"));
     const k = key("local", sha256(bytes(1, 8)), "bin");
