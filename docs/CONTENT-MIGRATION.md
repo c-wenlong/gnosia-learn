@@ -782,10 +782,10 @@ the archive rules, Sonnet for the reader. **Size:** 2 to 3 PRs (*guessed*).
       --reason` reads it back, refuses when the row has moved past `revision`,
       and writes through the seam. `learn concept edit --body-file` is the
       one-shot form.
-- [ ] `readConceptNote` (`apps/web/src/lib/concept-note.ts:60-78`) reads
+- [x] `readConceptNote` (`apps/web/src/lib/concept-note.ts:60-78`) reads
       `concept.body`; `review-queue.ts` gets checks from the same body; the
       256 KB cap stays.
-- [ ] `![[x.svg]]` embeds keep resolving through
+- [x] `![[x.svg]]` embeds keep resolving through
       `diagram:learn/assets/<name>` ids (`apps/web/src/app/(app)/learn/[concept]/page.tsx:85`),
       which D11 keeps valid.
 - [ ] The plugin: Phase 4 Close in `skills/learn/SKILL.md` says "check out,
@@ -889,6 +889,29 @@ Where it goes past or around the list above:
   output), and writes only to `--out`. `learn/map.md` stays in git, no longer
   rewritten, until phase 3 removes `learn/`. `learn index` on flipped notes
   reads nothing and reports the snapshot.
+
+**Built, readers (PR 3 of the track).** `readers/concepts.ts` and
+`readers/sessions.ts` answer from rows and say `ready`, so `catalog flip
+concepts|sessions` accepts both. In the web app, `readConceptNote` reads
+through the seam once `concepts` resolves to `db` (and through the note's
+asset row as before until then), so the workspace, the tutor, the review
+queue and `/api/concepts/<slug>` follow; Today counts check blocks through the
+seam for both sides and no longer opens files itself; the library's text
+reader takes a `note:` or `session:` asset's text from the seam when its type
+resolves to `db`, since the file is then the export as of the flip. On a
+flipped `createdb -T self_learn` copy, served by `next start` twice (the rows,
+then `CONTENT_SOURCE=concepts=files,sessions=files`), the server HTML of
+`/learn/<slug>` for `master-theorem`, `tool-calling` and `accounting-method`,
+two tutor session pages, `/review`, `/today`, `/learn`, `/learn/dot-product`
+(its `![[dot-product.svg]]` embed resolving through the `diagram:` id), and the
+library pages of a note and a log differs only in the `asOf` timestamp;
+`/api/concepts/tool-calling` differs in the raw note's frontmatter order, as
+the rows render it. A scratch session run then (start, observe with
+`--session`, checkout and commit, check add, close, map) left rows and
+revisions and no file under `learn/` changed, and the committed line showed
+on the page from rows and not from files. Not moved here: the raw file route
+`/api/assets/{id}/file` still serves a note's or a log's file; it is Track E's
+route, and phase 2 removes the files it would serve.
 
 ### Track D: diagrams
 

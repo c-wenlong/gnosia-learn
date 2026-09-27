@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import {
   assetCounts,
   assetDerivations,
+  conceptsForAsset,
   conceptsForAssets,
   derivationSources,
   indexedRoot,
@@ -18,6 +19,7 @@ import {
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
+import { contentSource } from "@/data/source";
 import { assetFilesEnabled, resolveAssetFile } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -625,6 +627,13 @@ export async function readAssetText(
   id: string,
   limit = TEXT_PREVIEW_BYTES,
 ): Promise<string | null> {
+  try {
+    const stored = await storedText(db, id);
+    if (stored !== undefined) return stored !== null && Buffer.byteLength(stored, "utf8") <= limit ? stored : null;
+  } catch (error) {
+    warn(`asset text ${id}`, error);
+    return null;
+  }
   if (!assetFilesEnabled()) return null;
   try {
     const resolved = await resolveAssetFile(db, id);
@@ -635,6 +644,32 @@ export async function readAssetText(
     return null;
   }
 }
+
+/**
+ * A note's or a session log's text from the database, once it owns that type
+ * (Track C of docs/CONTENT-MIGRATION.md): the file under `learn/` is then an
+ * export no write touches, and reading it would show the note as it was at
+ * the flip. `undefined` means this asset is not such a text, and the caller
+ * reads its file as before; `null` means the database has no text for it.
+ *
+ * A note asset's concept is the one it is linked to (the concepts indexer
+ * and the row writer both link exactly one); a log's id is its file stem.
+ */
+async function storedText(db: CatalogDatabase, id: string): Promise<string | null | undefined> {
+  const note = id.startsWith(ASSET_ID_PREFIX.note);
+  const log = id.startsWith(ASSET_ID_PREFIX.session);
+  if (!note && !log) return undefined;
+  const seam = contentSource();
+  if ((await seam.resolution())[note ? "concepts" : "sessions"].kind !== "db") return undefined;
+  if (log) {
+    const stem = id.slice(ASSET_ID_PREFIX.session.length).replace(/^.*\//, "").replace(/\.md$/, "");
+    return (await seam.sessionLog(stem))?.markdown ?? null;
+  }
+  const [slug] = await conceptsForAsset(db, id);
+  return slug === undefined ? null : ((await seam.concept(slug))?.markdown ?? null);
+}
+
+const ASSET_ID_PREFIX = { note: "note:", session: "session:" } as const;
 
 /**
  * The kinds whose words the library search reads, beside every row's name.
