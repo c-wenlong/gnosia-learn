@@ -224,7 +224,10 @@ export const progress = pgTable(
       .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
     curriculumItemId: text("curriculum_item_id")
       .notNull()
-      .references(() => curriculumItem.id, { onDelete: "cascade", onUpdate: "cascade" }),
+      // Restrict, not cascade (D12): a course edit archives the item, and a
+      // delete that took the learner's tick and note with it would be the loss SCHEMA.md
+      // "Still open" recorded. Purging an item with learner rows is explicit.
+      .references(() => curriculumItem.id, { onDelete: "restrict", onUpdate: "cascade" }),
     completedAt: instant("completed_at"),
     note: text("note"),
     createdAt: createdAt(),
@@ -249,7 +252,10 @@ export const recap = pgTable(
       .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
     curriculumItemId: text("curriculum_item_id")
       .notNull()
-      .references(() => curriculumItem.id, { onDelete: "cascade", onUpdate: "cascade" }),
+      // Restrict, not cascade (D12): a course edit archives the item, and a
+      // delete that took the learner's recap with it would be the loss SCHEMA.md
+      // "Still open" recorded. Purging an item with learner rows is explicit.
+      .references(() => curriculumItem.id, { onDelete: "restrict", onUpdate: "cascade" }),
     summary: text("summary").notNull().default(""),
     keyPoints: jsonb("key_points").notNull().default(sql`'[]'::jsonb`),
     misconceptions: jsonb("misconceptions").notNull().default(sql`'[]'::jsonb`),

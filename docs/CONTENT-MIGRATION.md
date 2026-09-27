@@ -322,12 +322,12 @@ roles and the move of the primary.
 
 ### 0.2 The expand migration
 
-- [ ] Before any `owner_id` column: `insert into learner (id) values ('local')
+- [x] Before any `owner_id` column: `insert into learner (id) values ('local')
       on conflict do nothing`. The row is created only on the first state
       write today (`services/catalog/src/state/learner.ts`), so a database
       that has been indexed but never studied has no `local` row, and the
       foreign key default would fail on the first existing content row.
-- [ ] Every table in [The new tables](#the-new-tables), every new column
+- [x] Every table in [The new tables](#the-new-tables), every new column
       (`owner_id` everywhere, `archived_at` on `collection`, `curriculum_item`,
       `concept`, `topic`, `diagram`; the concept body columns; `asset.blob_key`;
       `asset.resource_type`, checked against `paper`, `docs`, `video`, `book`,
@@ -336,44 +336,92 @@ roles and the move of the primary.
       (`services/catalog/src/index/courses.ts:181-191`), so an export could not
       be re-imported; `poster` in `ASSET_KINDS`), and the widened `asset`
       location check.
-- [ ] The cascade fix (D12): `progress` and `recap` switch from `ON DELETE
+- [x] The cascade fix (D12): `progress` and `recap` switch from `ON DELETE
       CASCADE` to `RESTRICT` on `curriculum_item`
       (`packages/schema/src/state.ts:227`, `:252`), and `curriculum_item` to
       `RESTRICT` on `collection`. `writer.ts`'s prune archives these two tables
       instead of deleting (`pruneEntity`,
       `services/catalog/src/index/writer.ts:396`).
-- [ ] The append-only triggers on `content_revision` and
+- [x] The append-only triggers on `content_revision` and
       `session_log_entry`. The guard trigger that refuses a content write
       unless the transaction has set `self_learn.revision_id` (D4) is
       defined here but enabled per table by `catalog flip <type>`, not in
       phase 0: until track D flips, the studio's Accept still writes `asset`
       rows through `assert-output` outside the seam, and a guard armed early
       would fail every acceptance in between.
-- [ ] Every constraint trigger in [Integrity the database
+- [x] Every constraint trigger in [Integrity the database
       enforces](#integrity-the-database-enforces), created disarmed where the
       data does not yet satisfy it, and `catalog doctor` extended with the same
       predicates as queries (D21).
-- [ ] `CREATE EXTENSION pg_trgm` and a trigram index on `topic.title` and the
+- [x] `CREATE EXTENSION pg_trgm` and a trigram index on `topic.title` and the
       aliases (D14).
-- [ ] Generated with `npm run generate -w @self-learn/catalog`, never written
+- [x] Generated with `npm run generate -w @self-learn/catalog`, never written
       by hand, and never an edit to an applied file.
 
 Its number is the next free one on `origin/main` at merge: `0010`, or `0011`
 if the studio's `draft` table lands first. Contract migrations follow serially.
 
+**Built** as `0010_content_expand`. Where it goes past or around the list
+above, and why:
+
+- **`position` on `topic`, `tag`, `collection_tag`, `manimkc_topic` and
+  `concept_prerequisite`.** Each stores a list a person authored in an order
+  (the vocabulary's domain groups, the tag chips the home page renders in file
+  order, a course's `tags:`, a topic's `maps.manimkc`, a note's `requires:`).
+  Without it 0.5's export would have to sort them, parity would fail on the
+  order, and D10 forbids a track adding the column later.
+- **`collection_item` is part of the collection's snapshot**, beside
+  `collection_tag`. A module's topic is its `collection_item` row, and a
+  changed mapping has to be a revision of something.
+- **The live-slug index.** `collection_parent_slug_key` became a partial
+  unique index over `coalesce(parent_id, '')` and `slug` where `archived_at is
+  null`, so an archived module does not hold its slug against the one that
+  replaced it. The importer archives before it upserts for the same reason.
+- **Slug `CHECK`s** on `topic`, `concept`, `collection`, `curriculum_item`,
+  `tag` and `diagram`, the kebab-case rule of the integrity table. Every
+  existing id already satisfied it.
+- **The copy guard is a trigger**, not a check in each writer: a statement
+  trigger on every table but `catalog_instance` refuses a write on a copy and
+  names `primary_host`. It binds the web app and psql as well as the CLI. The
+  flag is `CATALOG_COPY_OK=1`, which makes the connection set
+  `self_learn.copy_ok = on`; `catalog migrate` sets it itself.
+- **`content_source` carries `export_hash`, `exported_at` and `waivers`** for
+  edge case 12 and phase 3's `--waive`, and a type with no row reads from
+  files. **`catalog_instance.primary_host`** is required on a copy, so the
+  refusal can name where writes go.
+- **`catalog doctor` is new.** There was no `catalog doctor` to extend; it runs
+  the three completeness predicates, lists the concept-less courses, the
+  concepts with no topic, the armed state of every rule and guard, and this
+  database's role.
+
+The trigger inventory, with every name, is in
+[SCHEMA.md "Triggers"](../services/catalog/SCHEMA.md#triggers).
+
 ### 0.3 The one write seam and the revision writer
 
-- [ ] `services/catalog/src/content/write.ts`: `writeContent(tx, { type, id,
+- [x] `services/catalog/src/content/write.ts`: `writeContent(tx, { type, id,
       next, base, author, reason })` opens the transaction, sets
       `self_learn.revision_id`, writes the entity, and appends the revision.
       Every writer in phase 1 calls it and nothing else writes content tables.
-- [ ] `writeSource` (`writer.ts:218`) calls the same revision writer for each
+- [x] `writeSource` (`writer.ts:218`) calls the same revision writer for each
       upserted entity whose `snapshot_hash` changed, with
       `author_kind = import` and the tree's git sha as `author`. An idempotent
       re-index therefore writes zero revisions.
-- [ ] `catalog history <type> <id>` and `catalog diff` read it.
-- [ ] A grep test: no `insert(` or `update(` on a content table outside
+- [x] `catalog history <type> <id>` and `catalog diff` read it.
+- [x] A grep test: no `insert(` or `update(` on a content table outside
       `services/catalog/src/content/` and `services/catalog/src/index/`.
+
+**Built** in `services/catalog/src/content/` (`write.ts`, `snapshot.ts`,
+`revisions.ts`, `entities.ts`, `history.ts`, `rules.ts`). The signature grew
+`authorKind`, and optional `op`, `jobId` and `sessionId`. A write whose
+snapshot equals the latest revision's appends nothing, like an unchanged
+import. The seam takes the revision id from the identity's sequence before the
+entity write, so `self_learn.revision_id` names the revision the guard lets
+through; an import sets it to `import:<source>`. The grep test
+(`test/content-writes.test.ts`) also catches `delete`, and allows one writer
+outside the seam by name: `assert-output`, the studio's Accept, until Track D
+replaces it. `blob_object` and `session_log_entry` carry no revisions and are
+left to Tracks E and C.
 
 ### 0.4 The blob store
 

@@ -18,8 +18,18 @@ import {
   type JobResult,
 } from "./commands/job";
 import { formatLs, parseKinds, runLs } from "./commands/ls";
+import { formatDoctor, runDoctor } from "./commands/doctor";
 import { formatMigrate, runMigrate } from "./commands/migrate";
 import { formatPath, runPath } from "./commands/path";
+import {
+  formatDiff,
+  formatHistory,
+  parseEntityType,
+  parseRevisionId,
+  RevisionUsage,
+  runDiff,
+  runHistory,
+} from "./commands/revisions";
 import { formatSearch, runSearch } from "./commands/search";
 import {
   formatSession,
@@ -82,6 +92,17 @@ Commands:
   session <verb>           The session row a job hangs off: start --id ID
                            [--kind studio] [--title T] [--goal G]
                            [--agent-session UUID], and end --id ID --state S.
+  history <type> <id>      Every revision of one content entity, oldest first:
+                           who wrote it, why, and with what op. Types: topic,
+                           tag, collection, curriculum_item, concept, diagram,
+                           asset.
+  diff <rev> [<rev>]       What one revision changed from the one before it, or
+                           the difference between two revisions: fields, link
+                           rows, and a line diff for markdown.
+  doctor                   The completeness rules the database can enforce:
+                           which are armed, and every row that breaks one.
+                           Also the write guards and whether this database is
+                           the primary.
 
 Options:
   --json                   Machine-readable output. Supported by every command.
@@ -144,8 +165,11 @@ Environment:
                  files. Defaults to <repo>/tools/tldrawkc.
   LEARN_ROOT     The knowledge base's repo root, for tests. Defaults to
                  this repo.
+  CATALOG_COPY_OK
+                 1 lets this process write to a database marked copy. For
+                 tests and scripts/e2e.mjs only; migrate sets it itself.
 
-  All four are documented in services/catalog/.env.example, all four take a
+  All five are documented in services/catalog/.env.example, all five take a
   default that needs no configuration, and the shell always wins over
   services/catalog/.env.
 `;
@@ -161,7 +185,10 @@ type Command =
   | "search"
   | "job"
   | "session"
-  | "assert-output";
+  | "assert-output"
+  | "history"
+  | "diff"
+  | "doctor";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -175,6 +202,9 @@ const COMMANDS: readonly Command[] = [
   "job",
   "session",
   "assert-output",
+  "history",
+  "diff",
+  "doctor",
 ];
 
 function isCommand(value: string | undefined): value is Command {
@@ -335,10 +365,36 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatJob(result));
         break;
       }
+      case "history": {
+        const type = parseEntityType(positionals[1]);
+        const id = positionals[2];
+        if (id === undefined) throw new Usage(`history ${type} needs an id`);
+        const result = await runHistory(type, id);
+        emit(result, formatHistory(result));
+        break;
+      }
+      case "diff": {
+        const first = parseRevisionId(positionals[1], "a first revision");
+        const second =
+          positionals[2] === undefined ? undefined : parseRevisionId(positionals[2], "the second revision");
+        const result = await runDiff(first, second);
+        emit(result, formatDiff(result));
+        break;
+      }
+      case "doctor": {
+        const result = await runDoctor();
+        emit(result, formatDoctor(result));
+        // Exit 1 when the checks could not run (migrations outstanding) or the
+        // database contradicts itself: an armed rule with a violator, or a
+        // trigger the migration should have made. A disarmed rule with
+        // violators is expected until its type flips, and exits 0.
+        if (!result.ok) return 1;
+        break;
+      }
     }
     return 0;
   } catch (error) {
-    if (error instanceof Usage) {
+    if (error instanceof Usage || error instanceof RevisionUsage) {
       process.stderr.write(`${error.message}\n\n${USAGE}`);
       return 2;
     }

@@ -1,0 +1,732 @@
+import {
+  catalogInstance,
+  collection,
+  concept,
+  conceptCurriculumItem,
+  contentRevision,
+  curriculumItem,
+  learner,
+  LOCAL_LEARNER_ID,
+  preference,
+  progress,
+  recap,
+  topic,
+} from "@self-learn/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { doctor } from "../src/commands/doctor";
+import { diffRevisions, diffSnapshots, history, lineDiff } from "../src/content/history";
+import {
+  COMPLETENESS_RULES,
+  setTriggers,
+  triggerStates,
+  WRITE_GUARDED_TABLES,
+  writeGuardName,
+} from "../src/content/rules";
+import { ContentWriteError, writeContent, type WriteContentInput } from "../src/content/write";
+import { connect, connectionOptions } from "../src/db";
+import type { Indexer, SourceRows } from "../src/index/source";
+import { writeSource } from "../src/index/writer";
+import { applyMigrations, migrationStatus } from "../src/migrations";
+import { partialMigrations } from "./partial-migrations";
+import {
+  createScratchDatabase,
+  probe,
+  type Scratch,
+  sqlMessage,
+  sqlstate,
+} from "./scratch-database";
+
+/**
+ * Phase 0 of docs/CONTENT-MIGRATION.md: the expand migration (0.2) and the
+ * write seam (0.3).
+ *
+ * Every trigger here is exercised on a scratch database rather than reasoned
+ * about: the append-only pair, the write guard armed on one table, the three
+ * completeness rules armed together, and the copy guard. They are created
+ * disabled (all but append-only and the copy guard), so each test that arms
+ * one disarms it again or owns its database.
+ */
+
+const reachable = await probe();
+
+const SQLSTATE = {
+  checkViolation: "23514",
+  restrictViolation: "23001",
+  foreignKeyViolation: "23503",
+  insufficientPrivilege: "42501",
+  readOnly: "25006",
+} as const;
+
+/** The first migration tag after 0009, whatever number it took at merge. */
+const THROUGH_0009 = 10;
+
+function topicWrite(
+  slug: string,
+  title: string,
+  base: number | null,
+  extra: Partial<WriteContentInput> = {},
+): WriteContentInput {
+  return {
+    type: "topic",
+    id: slug,
+    next: { row: { slug, title, domain: "testing" } },
+    base,
+    author: "local",
+    authorKind: "person",
+    reason: `set ${slug} to ${title}`,
+    ...extra,
+  };
+}
+
+/** A stand-in for the courses indexer, owning what it owns. */
+const coursesIndexer: Indexer = {
+  source: "courses",
+  owns: ["collection", "curriculumItem", "collectionItem", "curriculumItemTopic", "conceptCurriculumItem"],
+  assetPrefix: "link:",
+  root: () => "content/courses",
+  read: async () => ({ rows: {} }),
+};
+
+/** One course, one module, the given items, each with the given concepts. */
+function courseRows(items: Record<string, string[]>): SourceRows {
+  return {
+    collection: [
+      { id: "zz1000", kind: "course", slug: "zz1000", title: "ZZ", parentId: null, position: 1, metadata: {} },
+      { id: "zz1000-m1", kind: "module", slug: "m1", title: "M1", parentId: "zz1000", position: 1, metadata: {} },
+    ],
+    collectionItem: [{ collectionId: "zz1000-m1", position: 0, topicSlug: "alpha", conceptSlug: null, assetId: null }],
+    curriculumItem: Object.keys(items).map((id, index) => ({
+      id,
+      collectionId: "zz1000-m1",
+      position: index + 1,
+      title: id,
+      subtopics: [],
+    })),
+    curriculumItemTopic: Object.keys(items).map((id) => ({ curriculumItemId: id, topicSlug: "alpha" })),
+    conceptCurriculumItem: Object.entries(items).flatMap(([id, concepts]) =>
+      concepts.map((slug, index) => ({ conceptSlug: slug, curriculumItemId: id, position: index + 1 })),
+    ),
+  };
+}
+
+describe.skipIf(!reachable.ok)("the expand migration", () => {
+  it("applies to an empty database: the seed rows, the extension, every trigger in its state", async () => {
+    const scratch = await createScratchDatabase();
+    try {
+      await applyMigrations(scratch.db);
+
+      expect(await scratch.db.select({ id: learner.id }).from(learner)).toEqual([{ id: LOCAL_LEARNER_ID }]);
+      const [instance] = await scratch.db.select().from(catalogInstance);
+      expect(instance?.role).toBe("primary");
+      const ext = await scratch.db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_extension where extname = 'pg_trgm'`,
+      );
+      expect(ext.rows[0]?.n).toBe(1);
+
+      // Every trigger the registry names exists, and is disabled.
+      const named = [
+        ...COMPLETENESS_RULES.flatMap((rule) => rule.triggers.map(([, trigger]) => trigger)),
+        ...WRITE_GUARDED_TABLES.map(writeGuardName),
+      ];
+      const states = await triggerStates(scratch.db, named);
+      expect([...states.keys()].sort()).toEqual([...new Set(named)].sort());
+      expect([...states.values()].every((enabled) => !enabled)).toBe(true);
+
+      // The two new append-only tables are guarded from the start, and every
+      // table but `catalog_instance` carries the copy guard, enabled.
+      const { rows } = await scratch.db.execute<{ table: string; trigger: string; enabled: string }>(sql`
+        select c.relname as table, t.tgname as trigger, t.tgenabled as enabled
+        from pg_trigger t join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and not t.tgisinternal
+      `);
+      const enabled = new Set(rows.filter((r) => r.enabled !== "D").map((r) => r.trigger));
+      for (const name of [
+        "content_revision_no_update",
+        "content_revision_no_delete",
+        "session_log_entry_no_update",
+        "session_log_entry_no_delete",
+      ]) {
+        expect(enabled.has(name), name).toBe(true);
+      }
+      const tables = await scratch.db.execute<{ name: string }>(
+        sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
+      );
+      for (const { name } of tables.rows) {
+        if (name === "catalog_instance") continue;
+        expect(enabled.has(`${name}_copy_guard`), `${name}_copy_guard`).toBe(true);
+      }
+    } finally {
+      await scratch.drop();
+    }
+  }, 60_000);
+
+  it("seeds the learner before owner_id, so a database indexed but never studied migrates", async () => {
+    const scratch = await createScratchDatabase();
+    try {
+      await applyMigrations(scratch.db, { folder: await partialMigrations(THROUGH_0009) });
+      // Indexed but never studied: content rows and no learner. Every state
+      // write creates the row on first use, so a catalog that was only ever
+      // indexed has none.
+      await scratch.db.execute(
+        sql`insert into topic (slug, title, domain) values ('alpha', 'Alpha', 'one'), ('beta', 'Beta', 'one')`,
+      );
+      await scratch.db.execute(sql`delete from learner`);
+      expect((await scratch.db.execute(sql`select 1 from learner`)).rows).toHaveLength(0);
+
+      await applyMigrations(scratch.db);
+
+      const status = await migrationStatus(scratch.db);
+      expect(status.pending).toEqual([]);
+      expect(await scratch.db.select({ id: learner.id }).from(learner)).toEqual([{ id: LOCAL_LEARNER_ID }]);
+      const owners = await scratch.db.select({ slug: topic.slug, owner: topic.ownerId }).from(topic).orderBy(asc(topic.slug));
+      expect(owners).toEqual([
+        { slug: "alpha", owner: LOCAL_LEARNER_ID },
+        { slug: "beta", owner: LOCAL_LEARNER_ID },
+      ]);
+    } finally {
+      await scratch.drop();
+    }
+  }, 60_000);
+
+  it("applies to a copy of the local self_learn database", async (ctx) => {
+    // The owner's real data, read only as a template. Absent on CI, and busy
+    // whenever a dev server holds it open; both skip with the reason.
+    const admin = new pg.Client({ connectionString: maintenanceUrl() });
+    await admin.connect();
+    const name = `self_learn_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      const exists = await admin.query("select 1 from pg_database where datname = 'self_learn'");
+      if (exists.rowCount === 0) ctx.skip("no self_learn database to copy");
+      try {
+        await admin.query(`create database "${name}" template self_learn`);
+      } catch (error) {
+        ctx.skip(`could not copy self_learn: ${(error as Error).message}`);
+      }
+      const url = new URL(maintenanceUrl());
+      url.pathname = `/${name}`;
+      // The copy may itself be marked `copy` once the primary has moved; this
+      // is the flag that says writing to a throwaway copy is intended.
+      const copy = connect({ url: url.toString(), copyOk: true });
+      try {
+        const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+        await applyMigrations(copy.db);
+        const status = await migrationStatus(copy.db);
+        expect(status.pending).toEqual([]);
+        const after = await copy.db.execute<{ n: number; owned: number }>(
+          sql`select count(*)::int as n, count(*) filter (where owner_id = 'local')::int as owned from topic`,
+        );
+        expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+        expect(after.rows[0]?.owned).toBe(after.rows[0]?.n);
+        const learners = await copy.db.execute(sql`select 1 from learner where id = 'local'`);
+        expect(learners.rows).toHaveLength(1);
+        const report = await doctor(copy.db, "copy");
+        expect(report.ok).toBe(true);
+      } finally {
+        await copy.close();
+      }
+    } finally {
+      await admin.query(`drop database if exists "${name}" with (force)`);
+      await admin.end();
+    }
+  }, 120_000);
+});
+
+function maintenanceUrl(): string {
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  url.pathname = "/postgres";
+  return url.toString();
+}
+
+describe.skipIf(!reachable.ok)("the write seam", () => {
+  let scratch: Scratch;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    await scratch.db.insert(topic).values({ slug: "alpha", title: "Alpha", domain: "one" });
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  it("creates, then updates, chaining each revision to the one before", async () => {
+    const created = await writeContent(scratch.db, topicWrite("seam-one", "First", null));
+    expect(created.changed).toBe(true);
+    expect(created.op).toBe("create");
+    expect(created.seq).toBe(1);
+    expect(created.hash).toMatch(/^[0-9a-f]{64}$/);
+
+    const updated = await writeContent(scratch.db, topicWrite("seam-one", "Second", created.revisionId));
+    expect(updated.op).toBe("update");
+    expect(updated.seq).toBe(2);
+
+    const revisions = await history(scratch.db, "topic", "seam-one");
+    expect(revisions.map((r) => [r.seq, r.op, r.previousId])).toEqual([
+      [1, "create", null],
+      [2, "update", created.revisionId],
+    ]);
+    expect(revisions[1]?.reason).toBe("set seam-one to Second");
+    expect(revisions[1]?.author).toBe("local");
+
+    const diff = await diffRevisions(scratch.db, updated.revisionId);
+    expect(diff.from?.id).toBe(created.revisionId);
+    expect(diff.changes).toEqual([
+      { path: "entity.title", kind: "changed", before: "First", after: "Second" },
+    ]);
+  });
+
+  it("refuses a write whose base is not the latest revision, and changes nothing (edge case 16)", async () => {
+    const first = await writeContent(scratch.db, topicWrite("seam-race", "A", null));
+    const second = await writeContent(scratch.db, topicWrite("seam-race", "B", first.revisionId));
+
+    // A second writer that started from the first revision.
+    const late = writeContent(scratch.db, topicWrite("seam-race", "C", first.revisionId));
+    await expect(late).rejects.toBeInstanceOf(ContentWriteError);
+    await expect(late).rejects.toThrow(`revision ${second.revisionId}`);
+
+    // And one that thinks the topic does not exist yet.
+    await expect(writeContent(scratch.db, topicWrite("seam-race", "D", null))).rejects.toThrow(
+      /has moved on/,
+    );
+
+    const [row] = await scratch.db.select().from(topic).where(eq(topic.slug, "seam-race"));
+    expect(row?.title).toBe("B");
+    expect(await history(scratch.db, "topic", "seam-race")).toHaveLength(2);
+  });
+
+  it("refuses an empty reason, whitespace included, and writes nothing", async () => {
+    for (const reason of ["", "   "]) {
+      await expect(
+        writeContent(scratch.db, topicWrite("seam-noreason", "X", null, { reason })),
+      ).rejects.toMatchObject({ code: "empty-reason" });
+    }
+    expect(await scratch.db.select().from(topic).where(eq(topic.slug, "seam-noreason"))).toEqual([]);
+  });
+
+  it("appends nothing for a write that leaves the entity as it was", async () => {
+    const first = await writeContent(scratch.db, topicWrite("seam-same", "Same", null));
+    const again = await writeContent(scratch.db, topicWrite("seam-same", "Same", first.revisionId));
+    expect(again.changed).toBe(false);
+    expect(again.op).toBeNull();
+    expect(again.revisionId).toBe(first.revisionId);
+    expect(await history(scratch.db, "topic", "seam-same")).toHaveLength(1);
+  });
+
+  it("puts owned links in the snapshot, so a link-only change is a revision of the parent", async () => {
+    const note = (slug: string, body: string) => ({
+      slug,
+      title: slug,
+      topicSlug: "alpha",
+      path: `learn/concepts/one/${slug}.md`,
+      body,
+    });
+    const base = await writeContent(scratch.db, {
+      type: "concept",
+      id: "seam-base",
+      next: { row: note("seam-base", "base") },
+      base: null,
+      author: "local",
+      authorKind: "person",
+      reason: "a prerequisite to point at",
+    });
+    expect(base.changed).toBe(true);
+
+    const first = await writeContent(scratch.db, {
+      type: "concept",
+      id: "seam-note",
+      next: {
+        row: note("seam-note", "# Title\n\nOne line.\nTwo line.\n"),
+        links: { concept_prerequisite: [{ prerequisiteSlug: "seam-base", kind: "requires", position: 1 }] },
+      },
+      base: null,
+      author: "diagram-maker",
+      authorKind: "agent",
+      reason: "draft the note",
+    });
+    expect(first.snapshot.links["concept_prerequisite"]).toEqual([
+      { kind: "requires", position: 1, prerequisite_slug: "seam-base" },
+    ]);
+
+    // Only the link changes: requires becomes assumes.
+    const second = await writeContent(scratch.db, {
+      type: "concept",
+      id: "seam-note",
+      next: {
+        row: note("seam-note", "# Title\n\nOne line.\nTwo line.\n"),
+        links: { concept_prerequisite: [{ prerequisiteSlug: "seam-base", kind: "assumes", position: 1 }] },
+      },
+      base: first.revisionId,
+      author: "local",
+      authorKind: "person",
+      reason: "it is only assumed",
+    });
+    expect(second.changed).toBe(true);
+    const linkDiff = await diffRevisions(scratch.db, second.revisionId);
+    expect(linkDiff.changes.map((c) => [c.path, c.kind])).toEqual([
+      ["links.concept_prerequisite", "removed"],
+      ["links.concept_prerequisite", "added"],
+    ]);
+
+    // A body edit gets a line diff.
+    const third = await writeContent(scratch.db, {
+      type: "concept",
+      id: "seam-note",
+      next: { row: note("seam-note", "# Title\n\nOne line.\nTwo lines.\n") },
+      base: second.revisionId,
+      author: "local",
+      authorKind: "person",
+      reason: "fix a typo",
+    });
+    const bodyDiff = await diffRevisions(scratch.db, third.revisionId);
+    expect(bodyDiff.changes).toHaveLength(1);
+    expect(bodyDiff.changes[0]?.path).toBe("entity.body");
+    expect(bodyDiff.changes[0]?.lines?.filter((l) => l.op !== " ")).toEqual([
+      { op: "-", text: "Two line." },
+      { op: "+", text: "Two lines." },
+    ]);
+    // Links left out of `next` are kept, not cleared.
+    expect(third.snapshot.links["concept_prerequisite"]).toHaveLength(1);
+  });
+
+  it("keeps revisions append-only", async () => {
+    await writeContent(scratch.db, topicWrite("seam-history", "H", null));
+    const update = scratch.db
+      .update(contentRevision)
+      .set({ reason: "rewritten" })
+      .where(eq(contentRevision.entityId, "seam-history"));
+    await expect(update).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.restrictViolation);
+    const remove = scratch.db.delete(contentRevision).where(eq(contentRevision.entityId, "seam-history"));
+    await expect(remove).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.restrictViolation);
+  });
+
+  it("with the write guard armed, refuses a raw write and lets the seam through", async () => {
+    await setTriggers(scratch.db, [["topic", writeGuardName("topic")]], true);
+    try {
+      const raw = scratch.db.insert(topic).values({ slug: "seam-raw", title: "Raw", domain: "one" });
+      await expect(raw).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.insufficientPrivilege);
+      await expect(
+        scratch.db.update(topic).set({ title: "Changed" }).where(eq(topic.slug, "alpha")),
+      ).rejects.toSatisfy((e) => /content write seam/.test(sqlMessage(e)));
+
+      const through = await writeContent(scratch.db, topicWrite("seam-guarded", "Guarded", null));
+      expect(through.changed).toBe(true);
+      // The setting is transaction-local: the next raw write on the same pooled
+      // connection is refused again.
+      await expect(
+        scratch.db.insert(topic).values({ slug: "seam-raw-2", title: "Raw", domain: "one" }),
+      ).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.insufficientPrivilege);
+    } finally {
+      await setTriggers(scratch.db, [["topic", writeGuardName("topic")]], false);
+    }
+  });
+});
+
+describe.skipIf(!reachable.ok)("import revisions and the archive rule", () => {
+  let scratch: Scratch;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    await scratch.db.insert(topic).values({ slug: "alpha", title: "Alpha", domain: "one" });
+    await scratch.db.insert(concept).values([
+      { slug: "c-one", title: "One", topicSlug: "alpha", path: "learn/concepts/one/c-one.md" },
+      { slug: "c-two", title: "Two", topicSlug: "alpha", path: "learn/concepts/one/c-two.md" },
+    ]);
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  const index = (rows: SourceRows) =>
+    writeSource(scratch.db, coursesIndexer, rows, [], "content/courses", { author: "import:test" });
+
+  const revisionsOf = (type: string, id: string) =>
+    scratch.db
+      .select()
+      .from(contentRevision)
+      .where(and(eq(contentRevision.entityType, type), eq(contentRevision.entityId, id)))
+      .orderBy(asc(contentRevision.seq));
+
+  it("writes one import revision per entity, then none on an unchanged re-index", async () => {
+    const first = await index(courseRows({ "zz1000-m1-t1": ["c-one"], "zz1000-m1-t2": ["c-two"] }));
+    expect(first.revisions).toEqual({ collection: 2, curriculum_item: 2 });
+    const [rev] = await revisionsOf("curriculum_item", "zz1000-m1-t1");
+    expect(rev?.op).toBe("import");
+    expect(rev?.authorKind).toBe("import");
+    expect(rev?.author).toBe("import:test");
+
+    const second = await index(courseRows({ "zz1000-m1-t1": ["c-one"], "zz1000-m1-t2": ["c-two"] }));
+    expect(second.revisions).toEqual({});
+    expect(second.archivedKeys).toEqual([]);
+  });
+
+  it("writes a parent revision for a link-only change, and only for that parent", async () => {
+    const result = await index(
+      courseRows({ "zz1000-m1-t1": ["c-one", "c-two"], "zz1000-m1-t2": ["c-two"] }),
+    );
+    expect(result.revisions).toEqual({ curriculum_item: 1 });
+    const revisions = await revisionsOf("curriculum_item", "zz1000-m1-t1");
+    expect(revisions).toHaveLength(2);
+    const diff = diffSnapshots(
+      revisions[0]!.snapshot as never,
+      revisions[1]!.snapshot as never,
+    );
+    expect(diff).toEqual([
+      {
+        path: "links.concept_curriculum_item",
+        kind: "added",
+        after: { concept_slug: "c-two", position: 2 },
+      },
+    ]);
+  });
+
+  it("archives a dropped item that a learner ticked, and keeps the row, the tick and the recap", async () => {
+    await scratch.db.insert(progress).values({
+      learnerId: LOCAL_LEARNER_ID,
+      curriculumItemId: "zz1000-m1-t2",
+      completedAt: new Date(),
+      note: "done",
+    });
+    await scratch.db.insert(recap).values({
+      learnerId: LOCAL_LEARNER_ID,
+      curriculumItemId: "zz1000-m1-t2",
+      summary: "what I learnt",
+      source: "manual",
+    });
+
+    // The course file drops t2.
+    const dropped = await index(courseRows({ "zz1000-m1-t1": ["c-one", "c-two"] }));
+    expect(dropped.archivedKeys).toEqual(["curriculum_item zz1000-m1-t2"]);
+    expect(dropped.deleted["curriculum_item"]).toBeUndefined();
+    expect(dropped.revisions).toEqual({ curriculum_item: 1 });
+
+    const [row] = await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "zz1000-m1-t2"));
+    expect(row?.archivedAt).toBeInstanceOf(Date);
+    expect(await scratch.db.select().from(progress)).toHaveLength(1);
+    expect(await scratch.db.select().from(recap)).toHaveLength(1);
+    const [archive] = (await revisionsOf("curriculum_item", "zz1000-m1-t2")).slice(-1);
+    expect(archive?.op).toBe("archive");
+
+    // A raw delete is refused by the foreign key, not left to a cascade.
+    await expect(
+      scratch.db.delete(curriculumItem).where(eq(curriculumItem.id, "zz1000-m1-t2")),
+    ).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.foreignKeyViolation);
+
+    // The file lists it again: it comes back, with a restore revision.
+    const restored = await index(courseRows({ "zz1000-m1-t1": ["c-one", "c-two"], "zz1000-m1-t2": ["c-two"] }));
+    expect(restored.archivedKeys).toEqual([]);
+    const [back] = await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "zz1000-m1-t2"));
+    expect(back?.archivedAt).toBeNull();
+    const [restore] = (await revisionsOf("curriculum_item", "zz1000-m1-t2")).slice(-1);
+    expect(restore?.op).toBe("restore");
+  });
+
+  it("archives a dropped module rather than deleting it, and frees its slug for a successor", async () => {
+    const rows = courseRows({ "zz1000-m1-t1": ["c-one"] });
+    rows.collection = [
+      rows.collection![0]!,
+      { id: "zz1000-m2", kind: "module", slug: "m1", title: "M1 again", parentId: "zz1000", position: 1, metadata: {} },
+    ];
+    rows.collectionItem = [{ collectionId: "zz1000-m2", position: 0, topicSlug: "alpha", conceptSlug: null, assetId: null }];
+    rows.curriculumItem = [
+      { id: "zz1000-m2-t1", collectionId: "zz1000-m2", position: 1, title: "t", subtopics: [] },
+    ];
+    rows.curriculumItemTopic = [{ curriculumItemId: "zz1000-m2-t1", topicSlug: "alpha" }];
+    rows.conceptCurriculumItem = [{ conceptSlug: "c-one", curriculumItemId: "zz1000-m2-t1", position: 1 }];
+
+    const result = await index(rows);
+    expect(result.archivedKeys).toEqual(
+      expect.arrayContaining(["collection zz1000-m1", "curriculum_item zz1000-m1-t1"]),
+    );
+    const modules = await scratch.db
+      .select({ id: collection.id, archived: collection.archivedAt })
+      .from(collection)
+      .where(eq(collection.parentId, "zz1000"))
+      .orderBy(asc(collection.id));
+    expect(modules.map((m) => [m.id, m.archived !== null])).toEqual([
+      ["zz1000-m1", true],
+      ["zz1000-m2", false],
+    ]);
+  });
+});
+
+describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
+  let scratch: Scratch;
+  const allTriggers = COMPLETENESS_RULES.flatMap((rule) => rule.triggers);
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    await scratch.db.insert(topic).values([
+      { slug: "alpha", title: "Alpha", domain: "one" },
+      { slug: "beta", title: "Beta", domain: "one" },
+    ]);
+    await scratch.db.insert(concept).values([
+      { slug: "c-one", title: "One", topicSlug: "alpha", path: "learn/concepts/one/c-one.md" },
+      { slug: "c-other", title: "Other", topicSlug: "beta", path: "learn/concepts/one/c-other.md" },
+    ]);
+    // A complete course, written while the rules are off.
+    await writeSource(scratch.db, coursesIndexer, courseRows({ "zz1000-m1-t1": ["c-one"] }), [], "content/courses");
+    await setTriggers(scratch.db, allTriggers, true);
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  it("names every trigger as armed in the doctor, with no violators", async () => {
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.rules.map((r) => [r.name, r.state, r.violators])).toEqual([
+      ["module-has-item", "armed", 0],
+      ["item-has-concept", "armed", 0],
+      ["item-concept-in-module-topic", "armed", 0],
+    ]);
+    expect(report.ok).toBe(true);
+  });
+
+  it("refuses a module with no items, at commit rather than at the insert", async () => {
+    const tx = scratch.db.transaction(async (t) => {
+      await t.insert(collection).values({
+        id: "zz1000-m9",
+        kind: "module",
+        slug: "m9",
+        title: "Empty",
+        parentId: "zz1000",
+      });
+      // Deferred: the insert itself succeeded, and a module whose items arrive
+      // later in the same transaction would pass.
+      return "inserted";
+    });
+    await expect(tx).rejects.toSatisfy(
+      (e) => sqlstate(e) === SQLSTATE.checkViolation && /module "zz1000-m9" has no curriculum items/.test(sqlMessage(e)),
+    );
+    expect(await scratch.db.select().from(collection).where(eq(collection.id, "zz1000-m9"))).toEqual([]);
+  });
+
+  it("accepts a module whose item and concept arrive in the same transaction", async () => {
+    await scratch.db.transaction(async (t) => {
+      await t.insert(collection).values({ id: "zz1000-m8", kind: "module", slug: "m8", title: "Ok", parentId: "zz1000" });
+      await t.execute(sql`insert into collection_item (collection_id, topic_slug) values ('zz1000-m8', 'alpha')`);
+      await t.insert(curriculumItem).values({ id: "zz1000-m8-t1", collectionId: "zz1000-m8", title: "t" });
+      await t.insert(conceptCurriculumItem).values({ conceptSlug: "c-one", curriculumItemId: "zz1000-m8-t1" });
+    });
+    expect(await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "zz1000-m8-t1"))).toHaveLength(1);
+  });
+
+  it("refuses deleting an item's last concept link", async () => {
+    const remove = scratch.db
+      .delete(conceptCurriculumItem)
+      .where(eq(conceptCurriculumItem.curriculumItemId, "zz1000-m1-t1"));
+    await expect(remove).rejects.toSatisfy(
+      (e) => sqlstate(e) === SQLSTATE.checkViolation && /"zz1000-m1-t1" names no concept/.test(sqlMessage(e)),
+    );
+    expect(
+      await scratch.db.select().from(conceptCurriculumItem).where(eq(conceptCurriculumItem.curriculumItemId, "zz1000-m1-t1")),
+    ).toHaveLength(1);
+  });
+
+  it("refuses a concept filed under a different topic from the item's module", async () => {
+    const link = scratch.db.insert(conceptCurriculumItem).values({ conceptSlug: "c-other", curriculumItemId: "zz1000-m1-t1" });
+    await expect(link).rejects.toSatisfy(
+      (e) => sqlstate(e) === SQLSTATE.checkViolation && /not filed under its module's topic/.test(sqlMessage(e)),
+    );
+    // And moving a linked concept to another topic, from the concept's side.
+    const move = scratch.db.update(concept).set({ topicSlug: "beta" }).where(eq(concept.slug, "c-one"));
+    await expect(move).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.checkViolation);
+  });
+
+  it("lets the indexer rewrite a whole course in one transaction, archiving what it dropped", async () => {
+    // The writer clears every link and writes them back, and archives the
+    // module the file no longer lists together with its item: never a
+    // violation at commit, which is the only moment a deferred rule looks.
+    const again = await writeSource(
+      scratch.db,
+      coursesIndexer,
+      courseRows({ "zz1000-m1-t1": ["c-one"] }),
+      [],
+      "content/courses",
+    );
+    expect(again.archivedKeys).toEqual(["collection zz1000-m8", "curriculum_item zz1000-m8-t1"]);
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.rules.every((r) => r.violators === 0)).toBe(true);
+  });
+});
+
+describe.skipIf(!reachable.ok)("the copy guard", () => {
+  let scratch: Scratch;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  it("refuses every write on a copy, names the primary, and lets a copy-ok connection through", async () => {
+    await scratch.db.update(catalogInstance).set({ role: "copy", primaryHost: "primary.example.test" });
+    try {
+      const write = scratch.db.insert(preference).values({ learnerId: LOCAL_LEARNER_ID, key: "k", value: 1 });
+      await expect(write).rejects.toSatisfy(
+        (e) => sqlstate(e) === SQLSTATE.readOnly && /primary\.example\.test/.test(sqlMessage(e)),
+      );
+      await expect(writeContent(scratch.db, topicWrite("copy-topic", "T", null))).rejects.toSatisfy(
+        (e) => sqlstate(e) === SQLSTATE.readOnly,
+      );
+      // Reads are fine.
+      expect(await scratch.db.select().from(topic)).toEqual([]);
+
+      const allowed = connect({ url: scratch.url, copyOk: true });
+      try {
+        await allowed.db.insert(preference).values({ learnerId: LOCAL_LEARNER_ID, key: "k", value: 1 });
+        expect(await allowed.db.select().from(preference)).toHaveLength(1);
+      } finally {
+        await allowed.close();
+      }
+    } finally {
+      // `catalog_instance` itself is never guarded, so a copy can be promoted.
+      await scratch.db.update(catalogInstance).set({ role: "primary", primaryHost: null });
+    }
+    await scratch.db.insert(preference).values({ learnerId: LOCAL_LEARNER_ID, key: "k2", value: 2 });
+  });
+
+  it("builds the connection options without losing the URL's own", () => {
+    expect(connectionOptions("postgres://h/db", { copyOk: false })).toBeUndefined();
+    expect(connectionOptions("postgres://h/db", { copyOk: true })).toBe("-c self_learn.copy_ok=on");
+    expect(
+      connectionOptions("postgres://h/db?options=-c%20search_path%3Dx", { copyOk: true }),
+    ).toBe("-c search_path=x -c self_learn.copy_ok=on");
+    expect(connectionOptions("postgres://h/db", { options: "-c a=b", copyOk: false })).toBe("-c a=b");
+  });
+});
+
+describe("diffs, without a database", () => {
+  it("diffs a line at a time", () => {
+    expect(lineDiff("a\nb\nc", "a\nx\nc")).toEqual([
+      { op: " ", text: "a" },
+      { op: "-", text: "b" },
+      { op: "+", text: "x" },
+      { op: " ", text: "c" },
+    ]);
+  });
+
+  it("recurses into nested objects and treats a new entity as all additions", () => {
+    const after = { entity: { slug: "x", metadata: { tags: ["a"], code: "X" } }, links: { l: [{ a: 1 }] } };
+    expect(diffSnapshots(null, after).map((c) => [c.path, c.kind])).toEqual([
+      ["entity.metadata", "added"],
+      ["entity.slug", "added"],
+      ["links.l", "added"],
+    ]);
+    const changed = { entity: { slug: "x", metadata: { tags: ["a", "b"], code: "X" } }, links: { l: [{ a: 1 }] } };
+    expect(diffSnapshots(after, changed)).toEqual([
+      { path: "entity.metadata.tags", kind: "changed", before: ["a"], after: ["a", "b"] },
+    ]);
+  });
+});

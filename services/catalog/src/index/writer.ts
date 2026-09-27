@@ -13,11 +13,22 @@ import {
   curriculumItemTopic,
   indexRun,
   mirror,
+  type RevisionEntityType,
   topic,
 } from "@self-learn/schema";
-import { and, getTableColumns, getTableName, inArray, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
+import {
+  appendRevisions,
+  deriveOp,
+  latestRevisions,
+  markSeam,
+  reserveRevisionIds,
+  type PendingRevision,
+} from "../content/revisions";
+import { readSnapshots } from "../content/snapshot";
+import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 import { IndexError } from "./errors";
@@ -39,12 +50,20 @@ const FOREIGN_KEY_VIOLATION = "23503";
  *
  * **Entities are upserted, links are replaced.** A `concept` or
  * `curriculum_item` row is the target of foreign keys from the state tables —
- * `mastery`, `review`, `progress`, `recap`, all `ON DELETE CASCADE` — so
- * deleting and reinserting one destroys the learner's record of it and puts an
- * identical-looking row back in its place. Link rows are the target of nothing,
- * so for them delete-then-insert is both simpler and exactly right: it is the
- * only way a link the source *stopped* producing goes away, which an upsert
- * would silently keep forever.
+ * `mastery` and `review` cascade, `progress` and `recap` restrict, so
+ * deleting and reinserting one destroys or blocks on the learner's record of
+ * it. Link rows are the target of nothing, so for them delete-then-insert is
+ * both simpler and exactly right: it is the only way a link the source
+ * *stopped* producing goes away, which an upsert would silently keep forever.
+ *
+ * **Courses and their items are archived, never pruned** (D12 of
+ * docs/CONTENT-MIGRATION.md). A module or checklist row the course files stop
+ * listing gets `archived_at`, and a source that lists it again clears it, so
+ * a learner's tick and recap on a dropped row survive the edit.
+ *
+ * **Every entity the run touched gets an `import` revision when its snapshot
+ * changed**, through the same revision writer the seam in `../content/` uses.
+ * A re-index of an unchanged tree therefore appends nothing.
  *
  * One transaction per source, not one for the whole run. A source either lands
  * whole or not at all, and a manimkc checkout that cannot be read must not roll
@@ -72,9 +91,30 @@ export interface SourceWrite {
   notes: string[];
   totalWritten: number;
   totalDeleted: number;
+  /**
+   * Rows the source stopped producing that were archived rather than deleted,
+   * per SQL table name. Only `collection` and `curriculum_item` are archived.
+   */
+  archived: Record<string, number>;
+  /** Which, capped like `deletedKeys`: an archive hides a row a learner may have ticked. */
+  archivedKeys: string[];
+  /** `import` revisions appended, per entity type. An unchanged tree appends none. */
+  revisions: Record<string, number>;
 }
 
 const DELETED_KEYS_SHOWN = 25;
+
+/** Entity tables whose rows are archived instead of deleted when a source stops producing them. */
+const ARCHIVED_NOT_PRUNED = new Set<EntityName>(["collection", "curriculumItem"]);
+
+/** The revision entity type of each entity table. */
+const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
+  topic: "topic",
+  concept: "concept",
+  collection: "collection",
+  curriculumItem: "curriculum_item",
+  asset: "asset",
+};
 
 /** The entity tables an indexer may own, and the column identifying a row. */
 const ENTITY_KEY = {
@@ -134,12 +174,6 @@ const CONFLICT_TARGET = {
   asset: asset.id,
 } as const;
 
-/**
- * `created_at` is when the catalog first saw a row, and re-indexing is not a
- * new sighting. `updated_at` is handled separately. Everything else on the row
- * belongs to the source.
- */
-const NEVER_UPDATED = new Set(["created_at", "updated_at"]);
 
 type AnyRow = Record<string, unknown>;
 
@@ -167,37 +201,8 @@ function columnOf(table: PgTable, name: string): PgColumn {
   return column;
 }
 
-/**
- * The SET clause for an upsert: every column the table has, taken from the row
- * being inserted.
- *
- * Deliberately not "every column this batch happened to supply". The source is
- * authoritative for the whole row, so a field that disappears from a file has
- * to disappear from the database, and a key-union SET cannot express that — an
- * omitted key is simply absent from the clause and the old value survives
- * forever. Reading the columns off the table instead makes `excluded.<column>`
- * the insert's own value, which for an omitted column is its default. A summary
- * deleted from a note's frontmatter therefore becomes null, rather than living
- * on as the last value anyone ever wrote.
- *
- * `created_at` is the one exception: it is when the catalog first saw the row,
- * and re-indexing is not a new sighting. `updated_at` is set to now() rather
- * than to the insert's default for the same reason in reverse — it is a fact
- * about this write.
- */
-export function updateSet(table: PgTable): Record<string, SQL> {
-  const set: Record<string, SQL> = {};
-  for (const [key, column] of Object.entries(getTableColumns(table))) {
-    if (NEVER_UPDATED.has(column.name)) continue;
-    set[key] = sql.raw(`excluded.${quote(column.name)}`);
-  }
-  set["updatedAt"] = sql`now()`;
-  return set;
-}
-
-function quote(identifier: string): string {
-  return `"${identifier.replaceAll('"', '""')}"`;
-}
+/** Re-exported: `assert-output` upserts an asset with the same rule. */
+export { updateSet };
 
 /** The scope of everything one source owns in a table keyed by asset id. */
 function inNamespace(column: unknown, prefix: string): SQL {
@@ -221,7 +226,12 @@ export async function writeSource(
   rows: SourceRows,
   notes: string[],
   root: string,
-  options: { scope?: ReplaceScope; metadata?: Record<string, unknown> } = {},
+  options: {
+    scope?: ReplaceScope;
+    metadata?: Record<string, unknown>;
+    /** The revision author, `import:<git sha>` of the tree read. */
+    author?: string;
+  } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
   assertInScope(rows, options.scope);
@@ -230,12 +240,19 @@ export async function writeSource(
   const written: Record<string, number> = {};
   const deleted: Record<string, number> = {};
   const deletedKeys: string[] = [];
+  const archived: Record<string, number> = {};
+  const archivedKeys: string[] = [];
+  const revisions: Record<string, number> = {};
 
   const record = (table: PgTable, into: Record<string, number>, count: number) => {
     if (count > 0) into[getTableName(table)] = (into[getTableName(table)] ?? 0) + count;
   };
 
   await db.transaction(async (tx) => {
+    // 0. Say these writes come through the seam, so a table whose type has
+    //    flipped and whose guard is armed (D4) still takes an import.
+    await markSeam(tx, `import:${indexer.source}`);
+
     // 1. Clear the link rows this source owns, and remember how many there
     //    were so step 4 can report the net change rather than the churn.
     const clearedLinks: Partial<Record<LinkName, number>> = {};
@@ -246,7 +263,24 @@ export async function writeSource(
       clearedLinks[name] = result.rowCount ?? 0;
     }
 
-    // 2. Upsert the entities, parents before children.
+    // 2. Archive the courses and items this source owns and stopped
+    //    producing, before the upsert: a module that replaced an archived one
+    //    may reuse its slug, and the live-slug index must not see both.
+    const archivedIds = new Map<EntityName, string[]>();
+    for (const name of ARCHIVED_NOT_PRUNED) {
+      const table = TABLES[name];
+      const keys = await archiveEntity(tx, indexer, name, rows);
+      if (keys.length === 0) continue;
+      archivedIds.set(name, keys);
+      record(table, archived, keys.length);
+      for (const key of keys) {
+        if (archivedKeys.length < DELETED_KEYS_SHOWN) {
+          archivedKeys.push(`${getTableName(table)} ${key}`);
+        }
+      }
+    }
+
+    // 3. Upsert the entities, parents before children.
     for (const name of ENTITY_ORDER) {
       const batch = (rows[name] ?? []) as AnyRow[];
       if (batch.length === 0) continue;
@@ -260,12 +294,14 @@ export async function writeSource(
       record(table, written, batch.length);
     }
 
-    // 3. Prune entities the source no longer produces, children before parents
-    //    so a cascade never double-counts.
+    // 4. Prune entities the source no longer produces, children before parents
+    //    so a cascade never double-counts. Courses and items were archived in
+    //    step 2 instead.
     for (const name of [...ENTITY_ORDER].reverse()) {
+      if (ARCHIVED_NOT_PRUNED.has(name)) continue;
+      const table = TABLES[name];
       const pruned = await pruneEntity(tx, indexer, name, rows);
       if (pruned.length === 0) continue;
-      const table = TABLES[name];
       record(table, deleted, pruned.length);
       for (const key of pruned) {
         if (deletedKeys.length < DELETED_KEYS_SHOWN) {
@@ -274,7 +310,7 @@ export async function writeSource(
       }
     }
 
-    // 4. Insert the links, now that everything they point at exists.
+    // 5. Insert the links, now that everything they point at exists.
     for (const name of LINK_ORDER) {
       const batch = (rows[name] ?? []) as AnyRow[];
       const table = TABLES[name];
@@ -282,6 +318,22 @@ export async function writeSource(
       if (batch.length > 0) record(table, written, batch.length);
       const cleared = clearedLinks[name];
       if (cleared !== undefined) record(table, deleted, Math.max(0, cleared - batch.length));
+    }
+
+    // 6. One `import` revision per entity whose snapshot changed: what it
+    //    produced, and what it archived. A deleted entity writes none; its last
+    //    revision stays as its history.
+    for (const name of ENTITY_ORDER) {
+      const key = ENTITY_KEY[name];
+      const ids = [
+        ...((rows[name] ?? []) as AnyRow[]).map((row) => String(row[key])),
+        ...(archivedIds.get(name) ?? []),
+      ];
+      const count = await recordImport(tx, REVISION_TYPE[name], ids, {
+        author: options.author ?? "import:unknown",
+        reason: `catalog index read ${root} (${indexer.source})`,
+      });
+      if (count > 0) revisions[REVISION_TYPE[name]] = count;
     }
 
     const finishedAt = new Date();
@@ -311,7 +363,44 @@ export async function writeSource(
     notes,
     totalWritten: sum(written),
     totalDeleted: sum(deleted),
+    archived,
+    archivedKeys,
+    revisions,
   };
+}
+
+/**
+ * Append an `import` revision for each entity whose snapshot differs from its
+ * latest revision, or that has none yet. Returns how many were appended.
+ */
+async function recordImport(
+  tx: CatalogDatabase,
+  type: RevisionEntityType,
+  ids: readonly string[],
+  by: { author: string; reason: string },
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const reads = await readSnapshots(tx, type, ids);
+  const latest = await latestRevisions(tx, type, [...reads.keys()]);
+  const changed = [...reads].filter(([id, read]) => latest.get(id)?.hash !== read.hash);
+  if (changed.length === 0) return 0;
+  const revisionIds = await reserveRevisionIds(tx, changed.length);
+  const pending: PendingRevision[] = changed.map(([id, read], index) => {
+    const previous = latest.get(id);
+    return {
+      id: revisionIds[index] as number,
+      type,
+      entityId: id,
+      read,
+      latest: previous,
+      op: deriveOp(previous, read, "import", true),
+      authorKind: "import",
+      author: by.author,
+      reason: by.reason,
+    };
+  });
+  await appendRevisions(tx, pending);
+  return pending.length;
 }
 
 function sum(counts: Record<string, number>): number {
@@ -433,6 +522,36 @@ async function pruneEntity(
     throw error;
   }
   return keys;
+}
+
+/**
+ * Archive the rows of `collection` or `curriculum_item` this source owns and
+ * did not produce this run. Returns the keys newly archived; a row already
+ * archived is left with the instant it was first archived at.
+ *
+ * Archived, not deleted (D12): `progress` and `recap` are RESTRICT on
+ * `curriculum_item`, and the learner's tick on a row a course file dropped is
+ * the learner's, not the course file's.
+ */
+async function archiveEntity(
+  tx: CatalogDatabase,
+  indexer: Indexer,
+  name: EntityName,
+  rows: SourceRows,
+): Promise<string[]> {
+  if (!(indexer.owns as readonly string[]).includes(name)) return [];
+  const table = TABLES[name];
+  const key = ENTITY_KEY[name];
+  const keyColumn = columnOf(table, key);
+  const archivedColumn = columnOf(table, "archivedAt");
+  const produced = ((rows[name] ?? []) as AnyRow[]).map((row) => String(row[key]));
+  const notProduced = produced.length === 0 ? sql`true` : notInArray(keyColumn, produced);
+  const updated = (await tx
+    .update(table)
+    .set({ archivedAt: sql`now()` } as never)
+    .where(and(notProduced, isNull(archivedColumn)))
+    .returning({ key: keyColumn })) as { key: string }[];
+  return updated.map((row) => row.key).sort();
 }
 
 /**

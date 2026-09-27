@@ -2,7 +2,7 @@ import { tables } from "@self-learn/schema";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 
-import { databaseUrl } from "./env";
+import { copyOk, databaseUrl } from "./env";
 
 export type CatalogDatabase = NodePgDatabase<typeof tables>;
 
@@ -33,6 +33,42 @@ export interface ConnectOptions {
    * requests and would serialise every page render behind a single socket.
    */
   max?: number;
+  /**
+   * Let this connection write to a database marked `copy`. Defaults to
+   * `CATALOG_COPY_OK=1`; `catalog migrate` passes it explicitly, since a
+   * copy's schema still has to follow the primary's.
+   */
+  copyOk?: boolean;
+}
+
+/** The session setting the copy guard trigger reads (migration 0010). */
+export const COPY_OK_SETTING = "self_learn.copy_ok";
+
+/**
+ * The libpq `options` for a connection: the caller's, plus the copy flag when
+ * it is on.
+ *
+ * Passing `options` to the pool replaces any `options=` in the connection
+ * string rather than adding to it, so the URL's own value is carried over
+ * first. Nothing is passed when there is nothing to add, which leaves the URL
+ * in charge exactly as before.
+ */
+export function connectionOptions(url: string, options: ConnectOptions): string | undefined {
+  const parts: string[] = [];
+  if (options.options !== undefined) {
+    parts.push(options.options);
+  } else {
+    try {
+      const fromUrl = new URL(url).searchParams.get("options");
+      if (fromUrl !== null && fromUrl !== "") parts.push(fromUrl);
+    } catch {
+      // Not a URL (a keyword/value string): pg parses it, and it cannot carry
+      // `options` in a form this would need to preserve.
+    }
+  }
+  if (options.copyOk ?? copyOk()) parts.push(`-c ${COPY_OK_SETTING}=on`);
+  if (parts.length === 0) return options.options;
+  return parts.join(" ");
 }
 
 /**
@@ -41,10 +77,11 @@ export interface ConnectOptions {
  * of silently leaking a handful of sockets. A long-lived caller passes `max`.
  */
 export function connect(options: ConnectOptions = {}): Connection {
+  const url = options.url ?? databaseUrl();
   const pool = new pg.Pool({
-    connectionString: options.url ?? databaseUrl(),
+    connectionString: url,
     max: options.max ?? 1,
-    options: options.options,
+    options: connectionOptions(url, options),
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? 5_000,
   });
   /**
