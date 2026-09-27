@@ -1,5 +1,5 @@
 {
-  "id": "423397d6-be12-459d-b84c-acc8525eadfe",
+  "id": "cdba51bd-af6d-4b83-a1be-183448aae9b4",
   "prevId": "8534ee9d-49c8-4094-b1f6-9d0d473c7f22",
   "version": "7",
   "dialect": "postgresql",
@@ -4709,7 +4709,7 @@
         },
         "content_revision_op_check": {
           "name": "content_revision_op_check",
-          "value": "op in ('create', 'update', 'archive', 'restore', 'rename', 'import')"
+          "value": "op in ('create', 'update', 'archive', 'restore', 'rename', 'import', 'delete')"
         },
         "content_revision_author_kind_check": {
           "name": "content_revision_author_kind_check",

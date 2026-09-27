@@ -23,11 +23,13 @@ import {
   appendRevisions,
   deriveOp,
   latestRevisions,
+  lockTypes,
   markSeam,
+  needsRevision,
   reserveRevisionIds,
   type PendingRevision,
 } from "../content/revisions";
-import { readSnapshots } from "../content/snapshot";
+import { readSnapshots, type SnapshotRead } from "../content/snapshot";
 import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
@@ -62,7 +64,8 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * a learner's tick and recap on a dropped row survive the edit.
  *
  * **Every entity the run touched gets an `import` revision when its snapshot
- * changed**, through the same revision writer the seam in `../content/` uses.
+ * changed**, through the same revision writer the seam in `../content/` uses,
+ * and every entity it deleted gets a `delete` revision holding its last state.
  * A re-index of an unchanged tree therefore appends nothing.
  *
  * One transaction per source, not one for the whole run. A source either lands
@@ -249,8 +252,20 @@ export async function writeSource(
   };
 
   await db.transaction(async (tx) => {
-    // 0. Say these writes come through the seam, so a table whose type has
-    //    flipped and whose guard is armed (D4) still takes an import.
+    // 0. Take the revision locks for every entity type this source may touch,
+    //    before any row lock, so a seam write in flight finishes first and
+    //    none starts until this commits (see `lockTypes`). Then say these
+    //    writes come through the seam, so a table whose type has flipped and
+    //    whose guard is armed (D4) still takes an import.
+    await lockTypes(
+      tx,
+      ENTITY_ORDER.filter(
+        (name) =>
+          ((rows[name] ?? []) as AnyRow[]).length > 0 ||
+          (indexer.owns as readonly string[]).includes(name) ||
+          (name === "asset" && indexer.assetPrefix !== undefined),
+      ).map((name) => REVISION_TYPE[name]),
+    );
     await markSeam(tx, `import:${indexer.source}`);
 
     // 1. Clear the link rows this source owns, and remember how many there
@@ -297,11 +312,13 @@ export async function writeSource(
     // 4. Prune entities the source no longer produces, children before parents
     //    so a cascade never double-counts. Courses and items were archived in
     //    step 2 instead.
+    const prunedReads = new Map<EntityName, Map<string, SnapshotRead>>();
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const pruned = await pruneEntity(tx, indexer, name, rows);
+      const { keys: pruned, reads } = await pruneEntity(tx, indexer, name, rows);
       if (pruned.length === 0) continue;
+      prunedReads.set(name, reads);
       record(table, deleted, pruned.length);
       for (const key of pruned) {
         if (deletedKeys.length < DELETED_KEYS_SHOWN) {
@@ -321,18 +338,22 @@ export async function writeSource(
     }
 
     // 6. One `import` revision per entity whose snapshot changed: what it
-    //    produced, and what it archived. A deleted entity writes none; its last
-    //    revision stays as its history.
+    //    produced, and what it archived. And one `delete` revision per entity
+    //    it deleted, holding the state it was deleted in, so the history ends
+    //    with a word and an entity that comes back later starts a new line.
+    const by = {
+      author: options.author ?? "import:unknown",
+      reason: `catalog index read ${root} (${indexer.source})`,
+    };
     for (const name of ENTITY_ORDER) {
       const key = ENTITY_KEY[name];
       const ids = [
         ...((rows[name] ?? []) as AnyRow[]).map((row) => String(row[key])),
         ...(archivedIds.get(name) ?? []),
       ];
-      const count = await recordImport(tx, REVISION_TYPE[name], ids, {
-        author: options.author ?? "import:unknown",
-        reason: `catalog index read ${root} (${indexer.source})`,
-      });
+      const count =
+        (await recordImport(tx, REVISION_TYPE[name], ids, by)) +
+        (await recordDeletes(tx, REVISION_TYPE[name], prunedReads.get(name), by));
       if (count > 0) revisions[REVISION_TYPE[name]] = count;
     }
 
@@ -382,7 +403,7 @@ async function recordImport(
   if (ids.length === 0) return 0;
   const reads = await readSnapshots(tx, type, ids);
   const latest = await latestRevisions(tx, type, [...reads.keys()]);
-  const changed = [...reads].filter(([id, read]) => latest.get(id)?.hash !== read.hash);
+  const changed = [...reads].filter(([id, read]) => needsRevision(latest.get(id), read));
   if (changed.length === 0) return 0;
   const revisionIds = await reserveRevisionIds(tx, changed.length);
   const pending: PendingRevision[] = changed.map(([id, read], index) => {
@@ -399,6 +420,34 @@ async function recordImport(
       reason: by.reason,
     };
   });
+  await appendRevisions(tx, pending);
+  return pending.length;
+}
+
+/**
+ * Append a `delete` revision for each entity this run deleted, with the
+ * snapshot read just before the delete. Returns how many were appended.
+ */
+async function recordDeletes(
+  tx: CatalogDatabase,
+  type: RevisionEntityType,
+  reads: ReadonlyMap<string, SnapshotRead> | undefined,
+  by: { author: string; reason: string },
+): Promise<number> {
+  if (reads === undefined || reads.size === 0) return 0;
+  const latest = await latestRevisions(tx, type, [...reads.keys()]);
+  const revisionIds = await reserveRevisionIds(tx, reads.size);
+  const pending: PendingRevision[] = [...reads].map(([id, read], index) => ({
+    id: revisionIds[index] as number,
+    type,
+    entityId: id,
+    read,
+    latest: latest.get(id),
+    op: "delete",
+    authorKind: "import",
+    author: by.author,
+    reason: by.reason,
+  }));
   await appendRevisions(tx, pending);
   return pending.length;
 }
@@ -479,22 +528,23 @@ function assertInScope(rows: SourceRows, replace: ReplaceScope | undefined): voi
 
 /**
  * Delete the rows of one entity table that are in this source's scope and were
- * not produced this run. Returns the keys deleted; a table the source does not
- * own is left entirely alone.
+ * not produced this run. Returns the keys deleted and each one's snapshot from
+ * just before; a table the source does not own is left entirely alone.
  */
 async function pruneEntity(
   tx: CatalogDatabase,
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-): Promise<string[]> {
+): Promise<{ keys: string[]; reads: Map<string, SnapshotRead> }> {
+  const none = { keys: [], reads: new Map<string, SnapshotRead>() };
   let scope: SQL | undefined;
   if (name === "asset") {
     const prefix = indexer.assetPrefix;
-    if (prefix === undefined) return [];
+    if (prefix === undefined) return none;
     scope = inNamespace(asset.id, prefix);
   } else if (!(indexer.owns as readonly string[]).includes(name)) {
-    return [];
+    return none;
   }
 
   const table = TABLES[name];
@@ -506,10 +556,12 @@ async function pruneEntity(
   const where = scope === undefined ? notProduced : and(scope, notProduced);
 
   const stale = (await tx.select({ key: column }).from(table).where(where)) as { key: string }[];
-  if (stale.length === 0) return [];
+  if (stale.length === 0) return none;
 
   const keys = stale.map((row) => row.key);
   if (name === "concept") await assertNoEvidence(tx, keys);
+  // The last state of each, for its `delete` revision, read while it exists.
+  const reads = await readSnapshots(tx, REVISION_TYPE[name], keys);
   try {
     await tx.delete(table).where(inArray(column, keys));
   } catch (error) {
@@ -521,7 +573,7 @@ async function pruneEntity(
     }
     throw error;
   }
-  return keys;
+  return { keys, reads };
 }
 
 /**

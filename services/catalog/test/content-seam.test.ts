@@ -25,6 +25,7 @@ import {
   WRITE_GUARDED_TABLES,
   writeGuardName,
 } from "../src/content/rules";
+import { lockTypes } from "../src/content/revisions";
 import { ContentWriteError, writeContent, type WriteContentInput } from "../src/content/write";
 import { connect, connectionOptions } from "../src/db";
 import type { Indexer, SourceRows } from "../src/index/source";
@@ -308,13 +309,56 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     expect(await scratch.db.select().from(topic).where(eq(topic.slug, "seam-noreason"))).toEqual([]);
   });
 
-  it("appends nothing for a write that leaves the entity as it was", async () => {
+  it("appends nothing, and touches nothing, for a write that leaves the entity as it was", async () => {
     const first = await writeContent(scratch.db, topicWrite("seam-same", "Same", null));
+    const [before] = await scratch.db.select().from(topic).where(eq(topic.slug, "seam-same"));
     const again = await writeContent(scratch.db, topicWrite("seam-same", "Same", first.revisionId));
     expect(again.changed).toBe(false);
     expect(again.op).toBeNull();
     expect(again.revisionId).toBe(first.revisionId);
     expect(await history(scratch.db, "topic", "seam-same")).toHaveLength(1);
+    // The savepoint was rolled back: not even `updated_at` moved.
+    const [after] = await scratch.db.select().from(topic).where(eq(topic.slug, "seam-same"));
+    expect(after?.updatedAt.getTime()).toBe(before?.updatedAt.getTime());
+  });
+
+  it("makes a seam write wait for an import of the same type, so the two cannot pick one seq", async () => {
+    const first = await writeContent(scratch.db, topicWrite("seam-lock", "One", null));
+    const importer = connect({ url: scratch.url });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked!: () => void;
+    const lockTaken = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    try {
+      // An import transaction holding the topic type lock, as writeSource does
+      // before its first write.
+      const importing = importer.db.transaction(async (tx) => {
+        await lockTypes(tx, ["topic"]);
+        locked();
+        await held;
+      });
+      await lockTaken;
+      let done = false;
+      const writing = writeContent(scratch.db, topicWrite("seam-lock", "Two", first.revisionId)).then(
+        (result) => {
+          done = true;
+          return result;
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(done).toBe(false);
+      release();
+      await importing;
+      const result = await writing;
+      expect(result.seq).toBe(2);
+    } finally {
+      release();
+      await importer.close();
+    }
   });
 
   it("puts owned links in the snapshot, so a link-only change is a revision of the parent", async () => {
@@ -525,6 +569,40 @@ describe.skipIf(!reachable.ok)("import revisions and the archive rule", () => {
     expect(back?.archivedAt).toBeNull();
     const [restore] = (await revisionsOf("curriculum_item", "zz1000-m1-t2")).slice(-1);
     expect(restore?.op).toBe("restore");
+  });
+
+  it("records a pruned entity's last state as a delete, and its return as a new revision", async () => {
+    const notes: Indexer = {
+      source: "concepts",
+      owns: ["concept", "conceptPrerequisite"],
+      assetPrefix: "note:",
+      root: () => "learn/concepts",
+      read: async () => ({ rows: {} }),
+    };
+    const note = { slug: "c-gone", title: "Gone", topicSlug: "alpha", path: "learn/concepts/one/c-gone.md" };
+    const keep = [
+      { slug: "c-one", title: "One", topicSlug: "alpha", path: "learn/concepts/one/c-one.md" },
+      { slug: "c-two", title: "Two", topicSlug: "alpha", path: "learn/concepts/one/c-two.md" },
+    ];
+    const write = (concepts: typeof keep) =>
+      writeSource(scratch.db, notes, { concept: concepts }, [], "learn/concepts", { author: "import:test" });
+
+    await write([...keep, note]);
+    const pruned = await write(keep);
+    expect(pruned.deletedKeys).toEqual(["concept c-gone"]);
+    expect(pruned.revisions).toEqual({ concept: 1 });
+    const afterDelete = await revisionsOf("concept", "c-gone");
+    expect(afterDelete.map((r) => r.op)).toEqual(["import", "delete"]);
+    // The delete holds the state it was deleted in.
+    expect(afterDelete[1]?.snapshotHash).toBe(afterDelete[0]?.snapshotHash);
+    const diff = await diffRevisions(scratch.db, afterDelete[1]!.id);
+    expect(diff.changes.every((c) => c.kind === "removed")).toBe(true);
+    expect(diff.changes.map((c) => c.path)).toContain("entity.title");
+
+    // Back, identical to before: still a revision, since the last one says it was gone.
+    const back = await write([...keep, note]);
+    expect(back.revisions).toEqual({ concept: 1 });
+    expect((await revisionsOf("concept", "c-gone")).map((r) => r.op)).toEqual(["import", "delete", "import"]);
   });
 
   it("archives a dropped module rather than deleting it, and frees its slug for a successor", async () => {

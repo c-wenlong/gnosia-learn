@@ -112,7 +112,7 @@ track touches `packages/schema/src/` (D10).
 | `entity_id` | text | The entity's primary key, rendered as text |
 | `seq` | integer | 1, 2, 3 per entity; `UNIQUE (entity_type, entity_id, seq)` |
 | `previous_id` | bigint FK `content_revision(id)`, null | The revision this one replaced; null on create |
-| `op` | text, `CHECK` | `create`, `update`, `archive`, `restore`, `rename`, `import` |
+| `op` | text, `CHECK` | `create`, `update`, `archive`, `restore`, `rename`, `import`, and `delete` for an entity an import pruned (added in review of phase 0) |
 | `snapshot` | jsonb | The whole entity after the write, body included, with its owned links listed under it in a canonical order. For a diagram, the document; the SVG is referenced by blob key. An import that changes only a mapping or a course link therefore changes the parent's `snapshot_hash` and writes a revision |
 | `snapshot_hash` | text | sha256 of the canonical snapshot, so an import that changes nothing writes nothing |
 | `author_kind` | text, `CHECK` | `person`, `agent`, `import` |
@@ -414,8 +414,12 @@ The trigger inventory, with every name, is in
 **Built** in `services/catalog/src/content/` (`write.ts`, `snapshot.ts`,
 `revisions.ts`, `entities.ts`, `history.ts`, `rules.ts`). The signature grew
 `authorKind`, and optional `op`, `jobId` and `sessionId`. A write whose
-snapshot equals the latest revision's appends nothing, like an unchanged
-import. The seam takes the revision id from the identity's sequence before the
+snapshot equals the latest revision's appends nothing and changes nothing (its
+writes run in a savepoint that is rolled back), like an unchanged import. The
+op vocabulary gained `delete`: an import that prunes an entity records its last
+state, so the history ends with a word and a return is always a new revision.
+The seam and the importer take the same advisory locks before reading the
+latest revision, so they cannot pick the same `seq`. The seam takes the revision id from the identity's sequence before the
 entity write, so `self_learn.revision_id` names the revision the guard lets
 through; an import sets it to `import:<source>`. The grep test
 (`test/content-writes.test.ts`) also catches `delete`, and allows one writer

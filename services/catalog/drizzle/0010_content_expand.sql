@@ -141,7 +141,7 @@ CREATE TABLE "content_revision" (
 	"session_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "content_revision_entity_type_check" CHECK (entity_type in ('topic', 'tag', 'collection', 'curriculum_item', 'concept', 'diagram', 'asset')),
-	CONSTRAINT "content_revision_op_check" CHECK (op in ('create', 'update', 'archive', 'restore', 'rename', 'import')),
+	CONSTRAINT "content_revision_op_check" CHECK (op in ('create', 'update', 'archive', 'restore', 'rename', 'import', 'delete')),
 	CONSTRAINT "content_revision_author_kind_check" CHECK (author_kind in ('person', 'agent', 'import')),
 	CONSTRAINT "content_revision_seq_check" CHECK (seq >= 1),
 	CONSTRAINT "content_revision_previous_check" CHECK (seq = 1 or previous_id is not null),

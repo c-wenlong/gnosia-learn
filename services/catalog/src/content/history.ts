@@ -113,12 +113,15 @@ export async function diffRevisions(
     toRow = byId.get(second)!;
   }
 
+  // A `delete` revision holds the entity's last state, so what it changed is
+  // everything going: diff against nothing rather than against its own copy.
+  const target: Snapshot = toRow.op === "delete" ? { entity: {}, links: {} } : (toRow.snapshot as Snapshot);
   return {
     from: fromRow === undefined ? null : summary(fromRow),
     to: summary(toRow),
     changes: diffSnapshots(
-      (fromRow?.snapshot as Snapshot | undefined) ?? null,
-      toRow.snapshot as Snapshot,
+      (fromRow?.snapshot as Snapshot | undefined) ?? (toRow.op === "delete" ? (toRow.snapshot as Snapshot) : null),
+      target,
     ),
   };
 }

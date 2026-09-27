@@ -643,12 +643,27 @@ they cannot snapshot the same entity two ways.
 | `tag`, `diagram` | none |
 
 `writeContent` in `src/content/write.ts` is the one authored write: one
-transaction that takes an advisory lock on the entity, refuses when the
-writer's `base` is not the latest revision, sets `self_learn.revision_id`,
-upserts the row and any links given, reads the snapshot back and appends the
-revision. The id comes from the identity's own sequence before the entity
-write, which is why the identity is `BY DEFAULT`: the setting has to name the
-revision before the write the guard checks.
+transaction that takes the revision locks, refuses when the writer's `base` is
+not the latest revision, sets `self_learn.revision_id`, upserts the row and any
+links given in a savepoint, reads the snapshot back and appends the revision.
+A write whose snapshot equals the latest revision's rolls the savepoint back,
+so it appends nothing and changes nothing, `updated_at` included. The id comes
+from the identity's own sequence before the entity write, which is why the
+identity is `BY DEFAULT`: the setting has to name the revision before the write
+the guard checks.
+
+An import that deletes an entity (a topic, concept or asset its files stopped
+producing) appends a `delete` revision holding the state it was deleted in.
+The history then ends with a word, and an entity that comes back is always a
+new revision even when its snapshot matches the one before it went.
+
+`seq` is the latest plus one, so two writers of one entity must not read the
+latest at once. Both take transaction-scoped advisory locks before reading and
+before any row lock: the seam takes its entity type shared and the entity
+exclusive, and an import takes every entity type it may touch exclusive, in
+sorted order, up front. Seam writes of different entities run side by side, an
+import waits for the ones in flight, and no two writers can each hold what the
+other is waiting for.
 
 ### Positions
 

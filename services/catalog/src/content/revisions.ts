@@ -23,6 +23,50 @@ export interface LatestRevision {
   seq: number;
   hash: string;
   archived: boolean;
+  /** The latest revision records the entity's deletion, so whatever exists now is new. */
+  deleted: boolean;
+}
+
+/*
+ * Locks. A revision's `seq` is the latest one plus one, so two writers of the
+ * same entity that both read the latest before either appends would pick the
+ * same number, and the unique index would abort one of them. Every revision
+ * writer therefore takes a transaction-scoped advisory lock before it reads:
+ *
+ * - the seam takes its entity type *shared* and the one entity exclusive, so
+ *   seam writes of different entities run side by side;
+ * - an import takes each entity type it may touch *exclusive*, all of them,
+ *   in sorted order, before its first write, so it waits for seam writes in
+ *   flight and they wait for it.
+ *
+ * Both take these before any row lock, and an import takes every one it needs
+ * up front in one order, so no two writers can each hold what the other wants.
+ */
+
+function lockKey(key: string) {
+  return sql`hashtextextended(${key}, 0)`;
+}
+
+const typeLock = (type: RevisionEntityType) => `content_revision:${type}`;
+
+/** The seam's locks: its type shared, its entity exclusive. */
+export async function lockEntity(
+  db: CatalogDatabase,
+  type: RevisionEntityType,
+  id: string,
+): Promise<void> {
+  await db.execute(sql`select pg_advisory_xact_lock_shared(${lockKey(typeLock(type))})`);
+  await db.execute(sql`select pg_advisory_xact_lock(${lockKey(`${typeLock(type)}:${id}`)})`);
+}
+
+/** An import's locks: every type it may touch, exclusive, in sorted order. */
+export async function lockTypes(
+  db: CatalogDatabase,
+  types: readonly RevisionEntityType[],
+): Promise<void> {
+  for (const type of [...new Set(types)].sort()) {
+    await db.execute(sql`select pg_advisory_xact_lock(${lockKey(typeLock(type))})`);
+  }
 }
 
 /** The newest revision of each entity named, keyed by entity id. */
@@ -40,10 +84,12 @@ export async function latestRevisions(
     seq: number;
     snapshot_hash: string;
     archived: boolean;
+    deleted: boolean;
   }>(sql`
     select distinct on (entity_id)
       entity_id, id, seq, snapshot_hash,
-      (snapshot -> 'entity' ->> 'archived_at') is not null as archived
+      (snapshot -> 'entity' ->> 'archived_at') is not null as archived,
+      op = 'delete' as deleted
     from ${contentRevision}
     where entity_type = ${type} and entity_id = any(${sql.param(unique)}::text[])
     order by entity_id, seq desc
@@ -54,6 +100,7 @@ export async function latestRevisions(
       seq: row.seq,
       hash: row.snapshot_hash,
       archived: row.archived,
+      deleted: row.deleted,
     });
   }
   return out;
@@ -126,10 +173,18 @@ export async function appendRevisions(
 }
 
 /**
+ * Whether `read` needs a revision on top of `latest`: it has none, its last
+ * one records a deletion, or the snapshot moved.
+ */
+export function needsRevision(latest: LatestRevision | undefined, read: SnapshotRead): boolean {
+  return latest === undefined || latest.deleted || latest.hash !== read.hash;
+}
+
+/**
  * What kind of write turned `latest` into `read`, when the caller did not say.
  * An archive and a restore are named for what they did; anything else is the
  * caller's default (`update` from the seam, `import` from an index run), and a
- * first revision of something that did not exist before is `create`.
+ * seam write of something that had no live history is `create`.
  */
 export function deriveOp(
   latest: LatestRevision | undefined,
@@ -137,9 +192,10 @@ export function deriveOp(
   fallback: RevisionOp,
   existedBefore: boolean,
 ): RevisionOp {
-  const wasArchived = latest?.archived ?? false;
-  if (read.archived && !wasArchived && (latest !== undefined || existedBefore)) return "archive";
+  const gone = latest === undefined || latest.deleted;
+  const wasArchived = !gone && latest.archived;
+  if (read.archived && !wasArchived && (!gone || existedBefore)) return "archive";
   if (!read.archived && wasArchived) return "restore";
-  if (latest === undefined && !existedBefore && fallback !== "import") return "create";
+  if (gone && !existedBefore && fallback !== "import") return "create";
   return fallback;
 }

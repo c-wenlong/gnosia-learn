@@ -5,7 +5,7 @@ import {
   type RevisionEntityType,
   type RevisionOp,
 } from "@self-learn/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { column, ENTITIES, isEntityType } from "./entities";
@@ -13,11 +13,13 @@ import {
   appendRevisions,
   deriveOp,
   latestRevisions,
+  lockEntity,
   markSeam,
+  needsRevision,
   reserveRevisionIds,
   type PendingRevision,
 } from "./revisions";
-import { readSnapshots, type Snapshot } from "./snapshot";
+import { readSnapshots, type Snapshot, type SnapshotRead } from "./snapshot";
 import { updateSet } from "./upsert";
 
 /**
@@ -37,8 +39,12 @@ import { updateSet } from "./upsert";
  *    `seq`, the previous revision's id, the snapshot and its hash.
  *
  * A write that leaves the snapshot exactly as the latest revision has it
- * appends nothing and says so, the same rule that makes a re-import free.
+ * appends nothing, touches nothing, and says so: the writes run in a savepoint
+ * that is rolled back, so not even `updated_at` moves.
  */
+
+/** Thrown inside the savepoint to roll back a write that changed nothing. */
+class Unchanged extends Error {}
 
 export class ContentWriteError extends Error {
   constructor(
@@ -95,15 +101,12 @@ export async function writeContent(
   input: WriteContentInput,
 ): Promise<WriteContentResult> {
   validate(input);
-  const spec = ENTITIES[input.type];
 
   return db.transaction(async (tx) => {
-    // Serialise writers of one entity, including two that both create it:
-    // there is no row yet for FOR UPDATE to lock. Transaction-scoped, so it
-    // cannot outlive a failure.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`${input.type}:${input.id}`}, 0))`,
-    );
+    // Serialise writers of one entity, including two that both create it
+    // (there is no row yet for FOR UPDATE to lock), and wait for an import of
+    // this type. Transaction-scoped, so it cannot outlive a failure.
+    await lockEntity(tx, input.type, input.id);
 
     const latest = (await latestRevisions(tx, input.type, [input.id])).get(input.id);
     const latestId = latest?.id ?? null;
@@ -122,33 +125,26 @@ export async function writeContent(
     if (revisionId === undefined) throw new Error("could not reserve a revision id");
     await markSeam(tx, String(revisionId));
 
-    const key = column(spec.table, spec.key);
-    await tx
-      .insert(spec.table)
-      .values(input.next.row as never)
-      .onConflictDoUpdate({ target: key, set: updateSet(spec.table) });
-
-    for (const [name, rows] of Object.entries(input.next.links ?? {})) {
-      const linkSpec = spec.links.find((l) => l.name === name);
-      if (linkSpec === undefined) {
-        throw new ContentWriteError(
-          "invalid",
-          `${input.type} owns no link table "${name}". It owns: ` +
-            `${spec.links.map((l) => l.name).join(", ") || "none"}.`,
-        );
-      }
-      await tx.delete(linkSpec.table).where(eq(column(linkSpec.table, linkSpec.parent), input.id));
-      if (rows.length > 0) {
-        await tx
-          .insert(linkSpec.table)
-          .values(rows.map((row) => ({ ...row, [linkSpec.parent]: input.id })) as never);
-      }
+    // The writes run in a savepoint, so a write that changes nothing can be
+    // rolled back whole once the snapshot says so.
+    const holder: { after?: SnapshotRead } = {};
+    let unchanged = false;
+    try {
+      await tx.transaction(async (sp) => {
+        await writeRows(sp, input);
+        const read = (await readSnapshots(sp, input.type, [input.id])).get(input.id);
+        if (read === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
+        holder.after = read;
+        if (!needsRevision(latest, read)) throw new Unchanged();
+      });
+    } catch (error) {
+      if (!(error instanceof Unchanged)) throw error;
+      unchanged = true;
     }
-
-    const after = (await readSnapshots(tx, input.type, [input.id])).get(input.id);
+    const after = holder.after;
     if (after === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
 
-    if (latest !== undefined && latest.hash === after.hash) {
+    if (unchanged && latest !== undefined) {
       return {
         type: input.type,
         id: input.id,
@@ -186,6 +182,32 @@ export async function writeContent(
       snapshot: after.snapshot,
     };
   });
+}
+
+/** The entity upsert and the replacement of any owned links the caller gave. */
+async function writeRows(db: CatalogDatabase, input: WriteContentInput): Promise<void> {
+  const spec = ENTITIES[input.type];
+  await db
+    .insert(spec.table)
+    .values(input.next.row as never)
+    .onConflictDoUpdate({ target: column(spec.table, spec.key), set: updateSet(spec.table) });
+
+  for (const [name, rows] of Object.entries(input.next.links ?? {})) {
+    const linkSpec = spec.links.find((l) => l.name === name);
+    if (linkSpec === undefined) {
+      throw new ContentWriteError(
+        "invalid",
+        `${input.type} owns no link table "${name}". It owns: ` +
+          `${spec.links.map((l) => l.name).join(", ") || "none"}.`,
+      );
+    }
+    await db.delete(linkSpec.table).where(eq(column(linkSpec.table, linkSpec.parent), input.id));
+    if (rows.length > 0) {
+      await db
+        .insert(linkSpec.table)
+        .values(rows.map((row) => ({ ...row, [linkSpec.parent]: input.id })) as never);
+    }
+  }
 }
 
 function validate(input: WriteContentInput): void {

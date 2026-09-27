@@ -47,8 +47,21 @@ export const REVISION_ENTITY_TYPES = [
 ] as const;
 export type RevisionEntityType = (typeof REVISION_ENTITY_TYPES)[number];
 
-/** What kind of write produced a revision. */
-export const REVISION_OPS = ["create", "update", "archive", "restore", "rename", "import"] as const;
+/**
+ * What kind of write produced a revision. `delete` is an import pruning an
+ * entity its files no longer produce: the snapshot is the entity as it was, so
+ * the history ends with its last state rather than stopping without a word,
+ * and an entity that comes back after it is always a new revision.
+ */
+export const REVISION_OPS = [
+  "create",
+  "update",
+  "archive",
+  "restore",
+  "rename",
+  "import",
+  "delete",
+] as const;
 export type RevisionOp = (typeof REVISION_OPS)[number];
 
 /** Who made a write: a person, an agent acting for one, or an import of the files. */
