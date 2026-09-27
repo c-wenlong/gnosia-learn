@@ -429,7 +429,7 @@ describe.skipIf(!reachable.ok)("the round trip on a small tree", () => {
   });
 });
 
-/** The types these tests flip. No track has built a database reader yet, so the real set is empty. */
+/** The types these tests flip, whatever readers the tracks have built by now. */
 const READERS = new Set(["tags", "courses"] as const);
 
 describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", () => {
@@ -455,7 +455,7 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
   });
 
   it("refuses a type whose database reader is not built, since every reader would then fail", async () => {
-    await expect(runFlip({ type: "tags" })).rejects.toThrow(/tags has no database reader yet/);
+    await expect(runFlip({ type: "tags", readers: new Set() })).rejects.toThrow(/tags has no database reader yet/);
   });
 
   it("refuses manimkc, which has no export and so no parity", async () => {

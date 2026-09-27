@@ -717,8 +717,10 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
       author and the draft id in the reason, then enqueues the job. This
       supersedes D39 there (D16 here).
 - [ ] The planner's VOCABULARY block includes relations, so it can say "this
-      sits under `computer-networks`".
-- [ ] The web app's topic and tag readers switch to `dbSource`.
+      sits under `computer-networks`". The planner is not built (phase 1 of
+      STUDIO-CHAT-FIRST.md); what it will read is: `catalog topic ls --json`
+      returns every live topic with its relations, `incoming` edges and maps.
+- [x] The web app's topic and tag readers switch to `dbSource`.
 
 **Built** (the verbs) in `services/catalog/src/content/topics.ts`, `tags.ts`,
 `write-through.ts` and `commands/topic.ts`, tested in
@@ -785,6 +787,21 @@ list above, and why:
   nothing calls it; its lock and atomic replace moved to
   `services/catalog/src/learn/file-lock.ts` for `course-edit.ts`, the one text
   edit left until Track B.
+- **The readers** are `services/catalog/src/content/readers/topics.ts` and
+  `tags.ts`, both `ready`: `readTopicEntries` and `readTags` run the export's
+  own queries, so they return what `fileSource` returns for the database's own
+  export. `test/topic-readers.test.ts` holds them equal to the file reader on
+  the real tree, value for value, then flips both and reads them back through
+  `selectSource`. On a `createdb -T self_learn` copy migrated, imported and
+  flipped (parity clean: 86 topics, 23 domains, 294 aliases, 35 manimkc paths,
+  61 module and 32 concept mappings, 8 tags), `next start` served the same
+  server HTML under `CONTENT_SOURCE=topics=files,tags=files` and with the rows
+  in charge, for `/today`, `/courses`, the ten course pages, `/learn`, six
+  concept pages, `/library` and `/review`, once the request's own `asOf`
+  timestamp is set aside. The studio's planner path (the confirm card's
+  **Create topic and draw**) is not built, per phase 1's rule: the verbs it
+  will call are, and `topic add --dry-run --json` is the validation step D16
+  names.
 - **`--author`** names the person a write is for (the studio's Draw press);
   the default is the local learner. Every write needs `--reason`; a dry run
   does not.
