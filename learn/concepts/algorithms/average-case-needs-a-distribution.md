@@ -6,7 +6,6 @@ requires: [case-analysis-worst-best-average]
 assumes: [counting-operations-with-summations]
 tags: [asymptotics, probability]
 sources: []
-topics: []
 created: 2026-08-20T08:05:33.465Z
 ---
 

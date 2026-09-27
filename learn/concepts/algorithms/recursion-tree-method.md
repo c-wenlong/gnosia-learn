@@ -6,7 +6,6 @@ requires: [recurrence-for-recursive-running-time]
 assumes: [counting-operations-with-summations, comparing-growth-rates]
 tags: [asymptotics, recurrences]
 sources: []
-topics: []
 created: 2026-08-20T08:05:34.512Z
 ---
 

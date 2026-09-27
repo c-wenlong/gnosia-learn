@@ -5,7 +5,6 @@ summary: A vector is an element of a vector space; coordinates are a choice, not
 requires: []
 tags: []
 sources: []
-topics: []
 created: 2026-08-18T01:45:40.923Z
 ---
 

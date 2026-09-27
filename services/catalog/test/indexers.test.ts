@@ -95,6 +95,7 @@ modules:
     topics:
       - id: xx1000-m1-t1
         title: An item
+        concepts: [base]
         subtopics: [one, two]
     resources:
       - id: xx1000-m1-r1
@@ -106,11 +107,16 @@ modules:
 describe("courses", () => {
   it("reads collections, curriculum items and link assets", async () => {
     fixture = await makeFixture();
-    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"] }]));
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"], concepts: ["base"] }]),
+    );
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
-    const { rows } = await coursesIndexer.read(await fixture.context());
+    const { rows } = await coursesIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["base"]) }),
+    );
 
     expect(rows.collection).toHaveLength(2);
     expect(rows.collection?.[0]).toMatchObject({ id: "xx1000", kind: "course", parentId: null });
@@ -140,6 +146,10 @@ describe("courses", () => {
     expect(rows.collectionItem).toEqual([
       { collectionId: "xx1000-m1", position: 0, topicSlug: "alpha", conceptSlug: null, assetId: null },
     ]);
+    // The row's `concepts:` list, with its order kept as the position.
+    expect(rows.conceptCurriculumItem).toEqual([
+      { conceptSlug: "base", curriculumItemId: "xx1000-m1-t1", position: 1 },
+    ]);
 
     expect(rows.asset).toEqual([
       {
@@ -158,7 +168,10 @@ describe("courses", () => {
 
   it("refuses a module whose topic is not in the vocabulary", async () => {
     fixture = await makeFixture();
-    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "beta", courses: ["xx1000-m1"] }]));
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "beta", courses: ["xx1000-m1"], concepts: ["base"] }]),
+    );
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
@@ -171,7 +184,7 @@ describe("courses", () => {
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",
-      topicsYaml([{ slug: "alpha" }, { slug: "beta", courses: ["xx1000-m1"] }]),
+      topicsYaml([{ slug: "alpha", concepts: ["base"] }, { slug: "beta", courses: ["xx1000-m1"] }]),
     );
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
@@ -181,16 +194,54 @@ describe("courses", () => {
     );
   });
 
-  it("refuses a vocabulary mapping for a module no course defines", async () => {
+  it("keeps a row's concepts in the list's order, as 1-based positions", async () => {
     fixture = await makeFixture();
     await fixture.write(
       "content/topics.yaml",
-      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1", "xx1000-m9"] }]),
+      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"], concepts: ["base", "derived", "third"] }]),
+    );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      COURSE_YAML.replace("concepts: [base]", "concepts: [third, base, derived]"),
+    );
+
+    const { rows } = await coursesIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["base", "derived", "third"]) }),
+    );
+
+    expect(rows.conceptCurriculumItem).toEqual([
+      { conceptSlug: "third", curriculumItemId: "xx1000-m1-t1", position: 1 },
+      { conceptSlug: "base", curriculumItemId: "xx1000-m1-t1", position: 2 },
+      { conceptSlug: "derived", curriculumItemId: "xx1000-m1-t1", position: 3 },
+    ]);
+  });
+
+  it("refuses a concept the course lists but no note defines", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"], concepts: ["base"] }]),
     );
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
     await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
 
+    // The default context knows no concepts at all.
     await expect(coursesIndexer.read(await fixture.context())).rejects.toThrow(
+      /item "xx1000-m1-t1" lists concept "base", which is not a note in learn\/concepts/,
+    );
+  });
+
+  it("refuses a vocabulary mapping for a module no course defines", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1", "xx1000-m9"], concepts: ["base"] }]),
+    );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write("content/courses/xx1000.yaml", COURSE_YAML);
+
+    await expect(coursesIndexer.read(await fixture.context({ knownConcepts: async () => new Set(["base"]) }))).rejects.toThrow(
       /names 1 module\(s\) that no file in content\/courses defines: xx1000-m9/,
     );
   });
@@ -211,19 +262,15 @@ describe("concepts", () => {
         title: "Derived",
         summary: "Builds on base",
         requires: ["base"],
-        topics: ["xx1000-m1-t1"],
       }),
     );
     return f;
   }
 
-  it("reads concepts, prerequisites, curriculum links and note assets", async () => {
+  it("reads concepts, prerequisites and note assets", async () => {
     fixture = await conceptFixture();
-    const context = await fixture.context({
-      knownCurriculumItems: async () => new Set(["xx1000-m1-t1"]),
-    });
 
-    const { rows } = await conceptsIndexer.read(context);
+    const { rows } = await conceptsIndexer.read(await fixture.context());
 
     expect(rows.concept).toEqual([
       {
@@ -244,9 +291,8 @@ describe("concepts", () => {
     expect(rows.conceptPrerequisite).toEqual([
       { conceptSlug: "derived", prerequisiteSlug: "base", kind: "requires" },
     ]);
-    expect(rows.conceptCurriculumItem).toEqual([
-      { conceptSlug: "derived", curriculumItemId: "xx1000-m1-t1" },
-    ]);
+    // The course link is the courses source's row now, never this one's.
+    expect(rows.conceptCurriculumItem).toBeUndefined();
 
     // Each note is a file: kind, path, and a real hash of real bytes.
     expect(rows.asset).toHaveLength(2);
@@ -284,11 +330,26 @@ describe("concepts", () => {
     );
   });
 
-  it("refuses a `topics:` entry that is not a curriculum item", async () => {
-    fixture = await conceptFixture();
-    // The default context knows no curriculum items at all.
+  it("refuses a note that still carries the retired `topics:` key, and says where it went", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      note({ id: "base", topics: ["xx1000-m1-t1"] }),
+    );
+
     await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(
-      /topics: "xx1000-m1-t1", which is not a curriculum item/,
+      /base\.md: has a `topics:` key.*list the concept under the row's `concepts:` in content\/courses\//s,
+    );
+  });
+
+  it("refuses the retired key even when its list is empty", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write("learn/concepts/testing/base.md", note({ id: "base", topics: [] }));
+
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(
+      /has a `topics:` key/,
     );
   });
 
@@ -881,13 +942,19 @@ describe("source selection", () => {
     ]);
   });
 
-  it("pulls concepts, and what points at concepts, in behind courses", () => {
-    expect([...withDependents(["courses"])].sort()).toEqual([
+  it("pulls courses, and what else points at concepts, in behind concepts", () => {
+    // A course row's `concepts:` list is a row pointing at a concept, so a
+    // concept prune cascades into it and the courses source has to rewrite it.
+    expect([...withDependents(["concepts"])].sort()).toEqual([
       "concepts",
       "courses",
       "diagrams",
       "sessions",
     ]);
+  });
+
+  it("leaves courses alone: nothing another source owns points at a course row", () => {
+    expect([...withDependents(["courses"])]).toEqual(["courses"]);
   });
 
   it("pulls mirrors in behind manimkc, whose assets its rows hang off", () => {
@@ -909,5 +976,12 @@ describe("source selection", () => {
     expect([...withPrerequisites(["mirrors"])].sort()).toEqual(["manimkc", "mirrors"]);
     expect([...withPrerequisites(["manimkc"])]).toEqual(["manimkc"]);
     expect([...withPrerequisites(["topics"])]).toEqual(["topics"]);
+  });
+
+  it("pulls concepts in ahead of courses, because a course row's concepts resolve against them", () => {
+    // `--only courses` after a note was added and listed on a row would
+    // otherwise check the list against concept rows the note is not in yet,
+    // and refuse a course file that is right.
+    expect([...withPrerequisites(["courses"])].sort()).toEqual(["concepts", "courses"]);
   });
 });

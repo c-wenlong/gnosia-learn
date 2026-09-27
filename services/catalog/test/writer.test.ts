@@ -1,8 +1,11 @@
 import {
   asset,
   assetTopic,
+  collection,
   concept,
+  conceptCurriculumItem,
   conceptPrerequisite,
+  curriculumItem,
   indexRun,
   learner,
   LOCAL_LEARNER_ID,
@@ -61,6 +64,9 @@ describe.skipIf(!reachable.ok)("writer", () => {
     await scratch.db.delete(mirror);
     await scratch.db.delete(assetTopic);
     await scratch.db.delete(conceptPrerequisite);
+    await scratch.db.delete(conceptCurriculumItem);
+    await scratch.db.delete(curriculumItem);
+    await scratch.db.delete(collection);
     await scratch.db.delete(asset);
     await scratch.db.delete(concept);
     await scratch.db.delete(topic);
@@ -160,6 +166,56 @@ describe.skipIf(!reachable.ok)("writer", () => {
     const second = await write(rows([]));
     expect(await scratch.db.select().from(conceptPrerequisite)).toHaveLength(0);
     expect(second.deleted["concept_prerequisite"]).toBe(1);
+  });
+
+  it("rewrites a course row's concept links with their positions, and drops one the file lost", async () => {
+    // The courses source owns `concept_curriculum_item`; the concept rows it
+    // points at are another source's, written first the way the runner does.
+    await write({
+      concept: [
+        { slug: "a", title: "A", topicSlug: "alpha", path: "learn/concepts/x/a.md" },
+        { slug: "b", title: "B", topicSlug: "alpha", path: "learn/concepts/x/b.md" },
+      ],
+    });
+    const courses = fakeIndexer({
+      source: "courses",
+      owns: ["collection", "curriculumItem", "conceptCurriculumItem"],
+      assetPrefix: "link:",
+      root: () => "content/courses",
+    });
+    const rows = (concepts: string[]): SourceRows => ({
+      collection: [
+        { id: "xx1000", kind: "course", slug: "xx1000", title: "X", parentId: null, position: 1, metadata: {} },
+        { id: "xx1000-m1", kind: "module", slug: "m1", title: "M1", parentId: "xx1000", position: 1, metadata: {} },
+      ],
+      curriculumItem: [
+        { id: "xx1000-m1-t1", collectionId: "xx1000-m1", position: 1, title: "Row", subtopics: [] },
+      ],
+      conceptCurriculumItem: concepts.map((slug, i) => ({
+        conceptSlug: slug,
+        curriculumItemId: "xx1000-m1-t1",
+        position: i + 1,
+      })),
+    });
+    const links = () =>
+      scratch.db
+        .select({
+          conceptSlug: conceptCurriculumItem.conceptSlug,
+          position: conceptCurriculumItem.position,
+        })
+        .from(conceptCurriculumItem)
+        .orderBy(asc(conceptCurriculumItem.position));
+
+    await write(rows(["b", "a"]), courses);
+    expect(await links()).toEqual([
+      { conceptSlug: "b", position: 1 },
+      { conceptSlug: "a", position: 2 },
+    ]);
+
+    // The row's list loses `b`: its link goes, and `a` moves up to first.
+    const second = await write(rows(["a"]), courses);
+    expect(await links()).toEqual([{ conceptSlug: "a", position: 1 }]);
+    expect(second.deleted["concept_curriculum_item"]).toBe(1);
   });
 
   it("reports no deletion when a run rewrites the same links", async () => {

@@ -6,7 +6,6 @@ requires: [theta-as-both-bounds, machine-model-and-input-size]
 assumes: [comparing-growth-rates]
 tags: [asymptotics, interpretation]
 sources: []
-topics: []
 created: 2026-08-20T08:05:32.734Z
 ---
 
