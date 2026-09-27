@@ -16,9 +16,10 @@ import {
   type KbConcept,
 } from "@self-learn/catalog/state";
 
-import { courses } from "@/data/courses";
+import { getCourses } from "@/data/courses";
 import { REPO_ROOT } from "@/data/repo-root";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
+import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
 import { computeHabit, dayKey, emptyHabit } from "@/lib/habit-core";
 import { habitTimeZone } from "@/lib/habit";
@@ -70,12 +71,13 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
     return emptyToday(now, timeZone);
   }
 
-  const { kb, events, preferences, due, snapshot } = rows;
+  const { kb, events, preferences, due, snapshot, courses } = rows;
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
   const title = (id: string) => byId.get(id)?.title ?? id;
 
   const first = kb.frontier.map((id) => byId.get(id)).find((c): c is KbConcept => c !== undefined);
-  const nextUp: NextUp | null = first === undefined ? null : toNextUp(first, placeOf(first), now, timeZone);
+  const nextUp: NextUp | null =
+    first === undefined ? null : toNextUp(first, placeOf(courses, first), now, timeZone);
 
   const courseRows = courses.map((c) => ({
     slug: c.slug,
@@ -138,14 +140,19 @@ export async function loadToday(): Promise<TodayModel> {
 }
 
 async function readAll(db: CatalogDatabase, now: Date) {
-  const [kb, events, preferences, due, snapshot] = await Promise.all([
+  // The courses are read with the rows rather than after them because they
+  // will be rows too (docs/CONTENT-MIGRATION.md, track B), and a course read
+  // that fails has to degrade like the others: the empty dashboard, not a
+  // thrown render.
+  const [kb, events, preferences, due, snapshot, courses] = await Promise.all([
     readKnowledgeBase(db),
     readEvents(db),
     readPreferences(db),
     dueReviews(db, { now }),
     readLearnerSnapshot(db),
+    getCourses(),
   ]);
-  return { kb, events, preferences, due, snapshot };
+  return { kb, events, preferences, due, snapshot, courses };
 }
 
 export function emptyToday(now: Date, timeZone?: string): TodayModel {
@@ -168,9 +175,12 @@ export function emptyToday(now: Date, timeZone?: string): TodayModel {
  * frontmatter, and most notes link to none, so the domain folder is the
  * fallback the eyebrow prints.
  */
-function placeOf(concept: KbConcept): { courseCode?: string; moduleOrder?: number; domain?: string | null } {
+function placeOf(
+  courses: readonly Course[],
+  concept: KbConcept,
+): { courseCode?: string; moduleOrder?: number; domain?: string | null } {
   for (const item of concept.topics) {
-    const found = findTopicAcrossCourses(item);
+    const found = findTopicAcrossCourses(courses, item);
     if (found !== undefined) return { courseCode: found.course.code, moduleOrder: found.module.order };
   }
   return { domain: concept.domain };

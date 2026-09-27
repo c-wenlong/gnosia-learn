@@ -452,20 +452,22 @@ not have to be worked out again.
   already.
 - **Course content is read at runtime, not imported, so file tracing needs a
   hand.** `packages/content` calls `readFileSync(path.join(root, …))`, which
-  Next cannot trace: it follows `import` statements. Most routes are
-  prerendered and never look again, but the session page and the two agent
-  routes are server-rendered on demand, and without
-  `outputFileTracingIncludes` in `apps/web/next.config.ts` they deploy without
-  the course files and 500 in production while every build and every static
-  preview looks fine. Since the move, that entry needs `outputFileTracingRoot`
+  Next cannot trace: it follows `import` statements. Every route reads the
+  courses per request now (nothing is prerendered from them), and without
+  `outputFileTracingIncludes` in `apps/web/next.config.ts` a deployment ships
+  without the course files and those routes 500 in production while every
+  build and every static preview looks fine. Since the move, that entry needs `outputFileTracingRoot`
   beside it: tracing starts at `apps/web/`, so `content/` is outside the world
   unless the root is widened to the repo.
 - **The app does not run from the repo root, so it cannot default to
   `process.cwd()`.** `@self-learn/content` does, which was right while the app
   *was* the root. `apps/web/src/data/repo-root.ts` walks up to the directory
-  holding `content/courses` and every reader in the app is handed it. A new
-  reader that calls `loadCourses()` with no `root` will work on a laptop
-  running vitest from the repo root and fail in `next build`.
+  holding `content/courses`, and `apps/web/src/data/source.ts` hands it to
+  `fileSource`, the one place the app builds a content reader. A new reader
+  takes `getCourses()`, `getTopics()` or `getTags()` from `@/data/*`, never a
+  parser: one that calls `loadCourses()` directly skips the reader seam the
+  database migration switches on, and with no `root` it also works on a
+  laptop running vitest from the repo root and fails in `next build`.
 - **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).

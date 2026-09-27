@@ -40,6 +40,15 @@
  */
 export { connect, withDatabase, type CatalogDatabase, type Connection } from "../db";
 
+/**
+ * The database half of the content reader seam (docs/CONTENT-MIGRATION.md
+ * 0.6). The plan names it `@self-learn/catalog/content`; it is exported here
+ * instead because this is the web app's one door into the package (layering
+ * rule 1), and a second subpath for one function would be a second door. Every
+ * method refuses until its track fills it in.
+ */
+export { dbSource, NotMigratedError } from "../content/source";
+
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
 export {

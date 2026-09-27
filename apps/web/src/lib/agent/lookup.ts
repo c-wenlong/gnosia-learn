@@ -1,7 +1,18 @@
-import { courses } from "@/data/courses";
 import type { Course, Module, Topic } from "@/lib/types";
 
-export function findTopicAcrossCourses(topicId: string):
+/**
+ * Finding a curriculum item across courses.
+ *
+ * Pure over the list the caller holds (`await getCourses()` in a page or a
+ * route handler), rather than importing it: the list is read per request now,
+ * and a lookup that fetched its own copy would either make every caller async
+ * or read the courses a second time.
+ */
+
+export function findTopicAcrossCourses(
+  courses: readonly Course[],
+  topicId: string,
+):
   | {
       course: Course;
       module: Module;
@@ -18,6 +29,7 @@ export function findTopicAcrossCourses(topicId: string):
 }
 
 export function findTopicBySlugs(
+  courses: readonly Course[],
   courseSlug: string,
   moduleSlug: string,
   topicId: string,

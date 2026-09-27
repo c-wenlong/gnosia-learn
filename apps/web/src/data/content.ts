@@ -1,20 +1,20 @@
 import "server-only";
 
-import { loadTags } from "@self-learn/content";
+import { cache } from "react";
 
-import { REPO_ROOT } from "@/data/repo-root";
+import { contentSource } from "@/data/source";
 import type { TagMeta } from "@/lib/types";
 
 /**
- * The app's view of `content/tags.yaml`: the cross-course themes.
+ * The app's view of the cross-course themes.
  *
- * Server only, for the same reason as `@/data/courses` — it reads the
- * filesystem. `TagChip` is rendered inside client components, so a server page
- * resolves the metadata here and passes the chip what it displays.
+ * Server only, for the same reason as `@/data/courses`: it reads content.
+ * `TagChip` is rendered inside client components, so a server page resolves
+ * the metadata here and passes the chip what it displays.
  *
- * Read once per process.
+ * Once per request, through the content seam, like `getCourses`.
  */
-export const tags: TagMeta[] = loadTags({ root: REPO_ROOT });
+export const getTags = cache(async (): Promise<TagMeta[]> => contentSource().tags());
 
 /**
  * The theme with this id. An unknown id still renders: the chip falls back to
@@ -22,11 +22,11 @@ export const tags: TagMeta[] = loadTags({ root: REPO_ROOT });
  * array and `getTag` returned undefined. A tag typo should cost a label, not
  * a page.
  */
-export function getTag(id: string): TagMeta {
+export function tagFor(tags: readonly TagMeta[], id: string): TagMeta {
   return tags.find((t) => t.id === id) ?? { id, label: id, description: "" };
 }
 
 /** Metadata for a course's `tags:`, in the order the course lists them. */
-export function getTags(ids: readonly string[]): TagMeta[] {
-  return ids.map(getTag);
+export function tagsFor(tags: readonly TagMeta[], ids: readonly string[]): TagMeta[] {
+  return ids.map((id) => tagFor(tags, id));
 }

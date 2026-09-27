@@ -4,7 +4,7 @@ import type { TagMeta } from "@/lib/types";
  * Takes the theme rather than its id: the tag list is read from
  * `content/tags.yaml` on the server, and this chip renders inside `CourseCard`,
  * which is a client component. A server page resolves the metadata with
- * `getTags` from `@/data/content` and passes it down.
+ * `tagsFor(await getTags(), ids)` from `@/data/content` and passes it down.
  */
 export function TagChip({
   tag,

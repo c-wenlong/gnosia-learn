@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { courses } from "@/data/courses";
+import { getCourses } from "@/data/courses";
 import {
   buildAgentSessionContext,
   buildConceptSessionContext,
@@ -19,6 +19,9 @@ import {
 import { TUTOR_STYLES } from "@/lib/preferences";
 import { buildLearningObjectives } from "@/lib/agent/objectives";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
+
+// Read once for the file: the list is per request in the app, and a test file is one request.
+const courses = await getCourses();
 
 describe("agent prompt builder", () => {
   const course = courses[0];
@@ -62,13 +65,13 @@ describe("topic lookup", () => {
     const course = courses[0];
     const mod = course.modules[0];
     const topic = mod.topics[0];
-    const found = findTopicBySlugs(course.slug, mod.slug, topic.id);
+    const found = findTopicBySlugs(courses, course.slug, mod.slug, topic.id);
     expect(found?.topic.id).toBe(topic.id);
     expect(found?.course.code).toBe(course.code);
   });
 
   it("returns undefined for unknown ids", () => {
-    expect(findTopicBySlugs("nope", "nope", "nope")).toBeUndefined();
+    expect(findTopicBySlugs(courses, "nope", "nope", "nope")).toBeUndefined();
   });
 });
 

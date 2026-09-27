@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { courses, getAllTopicIds } from "@/data/courses";
+import { getAllTopicIds, getCourses } from "@/data/courses";
 import {
   countsFromIds,
   courseProgress,
   formatProgress,
   moduleProgress,
 } from "@/lib/progress";
+
+// Read once for the file: the list is per request in the app, and a test file is one request.
+const courses = await getCourses();
 
 describe("countsFromIds", () => {
   it("returns zero percent for empty topic lists", () => {
@@ -56,7 +59,7 @@ describe("curriculum progress helpers", () => {
   });
 
   it("computes global progress across the shortlist", () => {
-    const progress = countsFromIds(getAllTopicIds(), { [topicId]: true });
+    const progress = countsFromIds(getAllTopicIds(courses), { [topicId]: true });
     expect(progress.total).toBeGreaterThan(course.modules.length);
     expect(progress.completed).toBe(1);
   });

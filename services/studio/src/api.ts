@@ -969,10 +969,18 @@ function events(
 
 /** What is and is not working right now. */
 async function health(store: JobStore, runner: Runner): Promise<Record<string, unknown>> {
-  const [checked, claudeVersion, catalog] = await Promise.all([
+  const [checked, claudeVersion, catalog, vocabulary] = await Promise.all([
     doctor().catch(() => null),
     run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
     catalogStatus().catch(() => null),
+    loadVocabulary().then(
+      (read) => ({
+        readAt: read.readAt,
+        stale: read.stale,
+        ...(read.staleReason === undefined ? {} : { error: read.staleReason }),
+      }),
+      (error: unknown) => ({ readAt: null, stale: true, error: (error as Error).message }),
+    ),
   ]);
   const queueDepth = store.list({ state: "queued" }).length;
   // The same window and the same arithmetic the cap refuses on, rather than a
@@ -1004,6 +1012,12 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     // offers "doctor", and this is the line that answers it.
     agentAuth: agentAuthReport(),
     postgres,
+    // Where the topic list a brief is checked against stands (D13): `stale`
+    // with the `readAt` of the cached copy when the source could not be read,
+    // so a screen can say "stale since" instead of passing it off as current.
+    // `readAt: null` means there is no copy either, and a brief cannot be
+    // validated at all.
+    vocabulary,
     queueDepth,
     running: runner.busy,
     costLast24h: cap.totalUsd,

@@ -512,25 +512,38 @@ The web app reads content synchronously at module load
 `data/content.ts:17`), which Postgres cannot serve, so the 16 importers
 (*measured*) change once, here, rather than once per track (D9).
 
-- [ ] `packages/content` exports a `ContentSource` interface (`topics()`,
+- [x] `packages/content` exports a `ContentSource` interface (`topics()`,
       `tags()`, `courses()`, `concept(slug)`, `sessionLog(id)`,
       `diagram(slug)`, all async) and `fileSource(root)` wrapping today's
-      parsers.
-- [ ] `@self-learn/catalog/content` exports `dbSource(db)`, with every method
-      throwing "`<type>` is not migrated yet" until its track fills it in. The
-      database implementation lives in the catalog because the catalog owns
-      the connection; the interface and the switch live in `packages/content`.
-- [ ] `selectSource()` in `packages/content` resolves per type: the
-      `content_source` row when the database answers, overridden by
+      parsers. The single-item methods return the stored text (the note or
+      log whole, the `.tldr` parsed) and `null` for a slug nothing has.
+      `fileSource` keeps each parse until a file it read changes size or
+      modification time, because parsing every course file per request costs
+      about 18 ms (*measured*) where the module constants cost nothing.
+- [x] `dbSource(db)` in `services/catalog/src/content/source.ts`, with every
+      method throwing "`<type>` is not migrated yet" until its track fills it
+      in. The database implementation lives in the catalog because the
+      catalog owns the connection; the interface and the switch live in
+      `packages/content`. It is exported through `@self-learn/catalog/state`
+      rather than a new `./content` subpath: `state` is the web app's one
+      door into the catalog (ARCHITECTURE.md layering rules 1 and 4).
+- [x] `selectSource()` in `packages/content` resolves per type:
       `CONTENT_SOURCE=files|db` or a per-type list such as
-      `CONTENT_SOURCE=topics=db,courses=files`.
-- [ ] The 16 web importers move from module-level constants to
+      `CONTENT_SOURCE=topics=db,courses=files` first, then the
+      `content_source` row through a pluggable `ownership()` callback, then
+      `files`. The row is the authority for importers and writers; the
+      variable overrides readers only (D18). A callback that throws resolves
+      as no rows, so a reader falls back to files.
+- [ ] The `ownership()` callback wired to the `content_source` table in the
+      catalog, and passed by the web app's `contentSource()` (0.5).
+- [x] The 16 web importers move from module-level constants to
       `await getCourses()` and friends, wrapped in React's `cache()` per
       request. `generateStaticParams` on the two course routes goes; every page
       is already dynamic (AGENTS.md "Every page is dynamic").
-- [ ] `services/studio/src/brief.ts:155` (`loadVocabulary`, the studio's own
-      parser) and the studio's repo-root walk (`services/studio/src/paths.ts:24`)
-      move onto the seam, with the studio's local cache (D13).
+- [x] `services/studio/src/brief.ts` (`loadVocabulary`, the studio's own
+      parser) moves onto the seam, with the studio's local cache (D13) in
+      `services/studio/src/content-cache.ts`. The studio's repo-root walk
+      (`services/studio/src/paths.ts:24`) stays until phase 2 removes it.
 
 ### 0.7 Docs
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { courses } from "@/data/courses";
+import { getCourses } from "@/data/courses";
 import {
   buildSummarySystemPrompt,
   formatKnowledgeMarkdown,
@@ -9,6 +9,9 @@ import {
 } from "@/lib/agent/summary";
 import { buildAgentSessionContext } from "@/lib/agent/prompt";
 import type { TopicKnowledge } from "@/lib/types";
+
+// Read once for the file: the list is per request in the app, and a test file is one request.
+const courses = await getCourses();
 
 const course = courses[0];
 const mod = course.modules[0];
