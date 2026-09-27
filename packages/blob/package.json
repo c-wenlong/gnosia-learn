@@ -1,0 +1,18 @@
+{
+  "name": "@self-learn/blob",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "//": "No build step, same as @self-learn/schema and @self-learn/content: the consumers are other workspaces running through tsx or vitest, and the Next app, which transpiles workspace packages itself. No runtime dependencies either: the fs adapter needs only node:crypto, node:fs and node:stream, and a cloud adapter brings its own SDK when it arrives.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
