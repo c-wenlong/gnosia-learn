@@ -71,10 +71,18 @@ export interface PlannedFile {
   /** Absolute: `root` joined with `path`. */
   target: string;
   bytes: Buffer | null;
+  /** What was on disk when the write was checked, or null for no file. */
+  seen: Buffer | null;
 }
 
 export interface WriteThroughPlan {
   files: PlannedFile[];
+  /**
+   * Files that changed on disk between the check and the write, so were not
+   * overwritten: the database's version is beside each, as `<file>.incoming`.
+   * Filled in by `applyWriteThrough`.
+   */
+  conflicts: PlannedFile[];
   /** Types whose rendering changed but that were never imported from a tree, so there is nowhere to write. */
   skipped: { type: ExportType; reason: string }[];
   /** Types whose export hash was recorded on `content_source` in this transaction. */
@@ -172,10 +180,16 @@ export async function planWriteThrough(
     }
     for (const file of changed) {
       const target = path.join(root, file);
+      // Every path comes from a row, so it is held inside the root here, at
+      // the one place that turns it into a file name, as `catalog export` does.
+      const relative = path.relative(root, target);
+      if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+        throw new WriteThroughRefused(`refusing to write outside ${root}: ${file}`);
+      }
       const onDisk = await readOrNull(target);
       const isInput = input !== null && (await resolved(target)) === input;
       if (!isInput && !sameContent(file, onDisk, was.get(file))) edited.push(`${file} (under ${root})`);
-      files.push({ type, path: file, root, target, bytes: now.get(file) ?? null });
+      files.push({ type, path: file, root, target, bytes: now.get(file) ?? null, seen: onDisk });
     }
     if (owners.get(type) === "db" && (await mayRecord(db))) {
       await recordExport(db, type, exportHash([...now].map(([file, bytes]) => ({ path: file, bytes }))));
@@ -191,7 +205,7 @@ export async function planWriteThrough(
         edited.join("\n  - "),
     );
   }
-  return { files, skipped, recorded };
+  return { files, conflicts: [], skipped, recorded };
 }
 
 /**
@@ -199,16 +213,33 @@ export async function planWriteThrough(
  * so a reader never sees half of one. Called after the transaction commits:
  * a crash between the two leaves the files one write behind, which the next
  * import reports by name (edge case 12) rather than losing anything.
+ *
+ * Each file is read once more just before it is replaced. One that changed
+ * since the check (an editor saved it, or another writer got there first) is
+ * left alone, and the database's version goes beside it as
+ * `<file>.incoming`, which no reader picks up; the result lists it. The
+ * window between that read and the rename is the only one left, and it is
+ * the width of one rename.
  */
-export async function applyWriteThrough(plan: WriteThroughPlan): Promise<void> {
+export async function applyWriteThrough(plan: WriteThroughPlan): Promise<WriteThroughPlan> {
+  const written: PlannedFile[] = [];
+  const conflicts: PlannedFile[] = [];
   for (const file of plan.files) {
-    if (file.bytes === null) {
-      await rm(file.target, { force: true });
+    if (!same(await readOrNull(file.target), file.seen)) {
+      if (file.bytes !== null) await replace(`${file.target}.incoming`, file.bytes);
+      conflicts.push(file);
       continue;
     }
-    await mkdir(path.dirname(file.target), { recursive: true });
-    const temporary = `${file.target}.${process.pid}.tmp`;
-    await writeFile(temporary, file.bytes);
-    await rename(temporary, file.target);
+    if (file.bytes === null) await rm(file.target, { force: true });
+    else await replace(file.target, file.bytes);
+    written.push(file);
   }
+  return { ...plan, files: written, conflicts };
+}
+
+async function replace(target: string, bytes: Buffer): Promise<void> {
+  await mkdir(path.dirname(target), { recursive: true });
+  const temporary = `${target}.${process.pid}.tmp`;
+  await writeFile(temporary, bytes);
+  await rename(temporary, target);
 }

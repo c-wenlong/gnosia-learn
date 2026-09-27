@@ -67,6 +67,12 @@ export async function runItem(options: {
 
 function writeThroughLines(summary: WriteThroughSummary): string[] {
   const lines = summary.written.map((file) => `  wrote ${file.path}  (under ${file.root})`);
+  for (const file of summary.conflicts) {
+    lines.push(
+      `  NOT written: ${file.path} (under ${file.root}) changed on disk while this ran. The database's ` +
+        `version is beside it as ${file.path}.incoming; merge the two and import the result.`,
+    );
+  }
   for (const skip of summary.skipped) lines.push(`  not written: ${skip.reason}`);
   for (const type of summary.recorded) lines.push(`  ${type} export hash recorded: the database owns it`);
   return lines;

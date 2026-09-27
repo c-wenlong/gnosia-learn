@@ -101,27 +101,46 @@ async function courseOf(db: CatalogDatabase, moduleId: string): Promise<string> 
 
 /**
  * Run `write` in a transaction with the courses export captured around it,
- * then write the course file through once it commits.
+ * then write the course file through once it commits. `lock` takes the
+ * write's locks first, so the capture reads the state the write starts from
+ * and not one another writer is about to replace.
  */
 async function withWriteThrough<T>(
   db: CatalogDatabase,
+  lock: (tx: CatalogDatabase) => Promise<void>,
   write: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<{ value: T; writeThrough: WriteThroughSummary }> {
   const { value, plan } = await db.transaction(async (tx) => {
+    await lock(tx);
     const before = await captureExports(tx, ["courses"]);
     const value = await write(tx);
     return { value, plan: await planWriteThrough(tx, before) };
   });
-  await applyWriteThrough(plan);
-  return { value, writeThrough: summarise(plan, true) };
+  const applied = await applyWriteThrough(plan);
+  return { value, writeThrough: summarise(applied, true) };
 }
+
+/** One item's lock, alone: for the verbs that touch no other item. */
+const lockItem = (id: string) => (tx: CatalogDatabase) => lockEntity(tx, "curriculum_item", id);
 
 export async function archiveItem(db: CatalogDatabase, options: ItemOptions): Promise<ItemResult> {
   const reason = needReason("archive", options.reason);
-  const { value, writeThrough } = await withWriteThrough(db, async (tx) => {
+  // The module is locked before the item, in the global order (`revisions.ts`),
+  // so two archives in one module run one after the other and the second
+  // sees the first: each alone would leave the other item live, and both
+  // together an empty module.
+  let moduleId: string | null = null;
+  const lock = async (tx: CatalogDatabase) => {
+    moduleId = (await itemRow(tx, options.id))?.collectionId ?? null;
+    if (moduleId !== null) await lockEntity(tx, "collection", moduleId);
     await lockEntity(tx, "curriculum_item", options.id);
+  };
+  const { value, writeThrough } = await withWriteThrough(db, lock, async (tx) => {
     const row = await itemRow(tx, options.id);
     if (row === undefined) throw new CourseWriteError(`no curriculum item "${options.id}" in the catalog`);
+    if (row.collectionId !== moduleId) {
+      throw new CourseWriteError(`item "${options.id}" moved to another module while this ran. Run it again.`);
+    }
     if (row.archivedAt !== null) throw new CourseWriteError(`item "${options.id}" is already archived`);
     const siblings = await tx
       .select({ id: curriculumItem.id })
@@ -200,11 +219,28 @@ async function lastLiveConcepts(db: CatalogDatabase, id: string): Promise<string
     .map((link) => String(link["concept_slug"]));
 }
 
+/** The module a purged item was in, from the revision its purge wrote, or null. */
+async function purgedModule(db: CatalogDatabase, id: string): Promise<string | null> {
+  const { rows } = await db.execute<{ module: string | null }>(sql`
+    select snapshot -> 'entity' ->> 'collection_id' as module from content_revision
+    where entity_type = 'curriculum_item' and entity_id = ${id}
+    order by seq desc limit 1`);
+  return rows[0]?.module ?? null;
+}
+
 export async function restoreItem(db: CatalogDatabase, options: ItemOptions): Promise<ItemResult> {
   const reason = needReason("restore", options.reason);
   const author = options.author ?? LOCAL_LEARNER_ID;
-  const { value, writeThrough } = await withWriteThrough(db, async (tx) => {
+  // The module is locked before the item, as `archiveItem` and a course
+  // import lock it, so a restore cannot land in a module an import is
+  // archiving at the same moment.
+  let moduleId: string | null = null;
+  const lock = async (tx: CatalogDatabase) => {
+    moduleId = (await itemRow(tx, options.id))?.collectionId ?? (await purgedModule(tx, options.id));
+    if (moduleId !== null) await lockEntity(tx, "collection", moduleId);
     await lockEntity(tx, "curriculum_item", options.id);
+  };
+  const { value, writeThrough } = await withWriteThrough(db, lock, async (tx) => {
     const latest = (await latestRevisions(tx, "curriculum_item", [options.id])).get(options.id);
     const row = await itemRow(tx, options.id);
 
@@ -238,12 +274,19 @@ export async function restoreItem(db: CatalogDatabase, options: ItemOptions): Pr
       concepts = [...(purge.snapshot.links["concept_curriculum_item"] ?? [])]
         .sort((a, b) => Number(a["position"] ?? 0) - Number(b["position"] ?? 0))
         .map((link) => String(link["concept_slug"]));
+      // An item the courses indexer archived had its links cleared before
+      // the purge saw it, so the purge recorded none; its last live revision
+      // still has them.
+      if (concepts.length === 0) concepts = await lastLiveConcepts(tx, options.id);
       learnerRows = {
         progress: purge.snapshot.links["progress"] ?? [],
         recap: purge.snapshot.links["recap"] ?? [],
       };
     }
 
+    if (entity["collectionId"] !== moduleId) {
+      throw new CourseWriteError(`item "${options.id}" changed while this ran. Run it again.`);
+    }
     const home = await moduleOf(tx, String(entity["collectionId"]), options.id);
     if (home.topic === null) throw new CourseWriteError(`module "${home.module.id}" has no topic row`);
     // A concept archived or refiled since is not linked again: the rule the
@@ -338,8 +381,7 @@ function learnerSnapshot(table: PgTable, row: Row): Record<string, JsonValue> {
 
 export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Promise<ItemResult> {
   const reason = needReason("purge", options.reason);
-  const { value, writeThrough } = await withWriteThrough(db, async (tx) => {
-    await lockEntity(tx, "curriculum_item", options.id);
+  const { value, writeThrough } = await withWriteThrough(db, lockItem(options.id), async (tx) => {
     const row = await itemRow(tx, options.id);
     if (row === undefined) throw new CourseWriteError(`no curriculum item "${options.id}" in the catalog`);
     if (row.archivedAt === null) {

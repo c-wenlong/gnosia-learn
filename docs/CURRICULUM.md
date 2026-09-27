@@ -54,7 +54,9 @@ After it commits, the course's file, and `content/topics.yaml` when a module
 was added, dropped or moved to another topic, are rewritten in the tree the
 courses were imported from (D17), so the files and the database never
 disagree. A file there that holds edits the database has not imported is never
-overwritten: the import refuses and names it.
+overwritten: the import refuses and names it. A file saved in the moment
+between that check and the rewrite is left alone too, with the database's
+version beside it as `<file>.incoming` to merge by hand.
 
 When writing the file itself:
 

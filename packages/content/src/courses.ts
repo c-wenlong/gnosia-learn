@@ -43,6 +43,9 @@ import type {
 
 export const COURSES_DIR = "content/courses";
 
+/** What a course code may be: it names the file, `<code>.yaml` in lowercase. */
+const COURSE_CODE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
+
 const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other"];
 
 interface RawResource {
@@ -336,6 +339,15 @@ function readCourse(
   }
 
   const code = requireText(parsed.code, where, "code");
+  // The code names the course's file (`courseFileName`), and an import
+  // writes that file back, so it has to be one safe file name: no separator,
+  // no `..`, nothing a path could be built out of.
+  if (!COURSE_CODE.test(code)) {
+    throw new ContentError(
+      `${where}: code "${code}" must be letters and digits, optionally joined by single dots, ` +
+        `dashes or underscores: it is the course's file name`,
+    );
+  }
   const course: Course = {
     id,
     slug,

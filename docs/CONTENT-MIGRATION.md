@@ -773,7 +773,9 @@ list above, and why:
   D17. A changed file that does not say what the database rendered before the
   write (compared parsed, as parity compares it) holds edits nobody imported,
   and the write is refused rather than overwrite them; the file being imported
-  is the one exception.
+  is the one exception. A file that changes between that check and the rename
+  after the commit is left alone, and the database's version goes beside it as
+  `<file>.incoming`.
 - **The rows are the indexer's rows**, column for column and placed with the
   same sparse positions, so importing an unchanged file writes no revision and
   a `catalog index` after an import writes none either.
@@ -790,7 +792,12 @@ list above, and why:
   index on live courses' `position` would be a migration, and D10 keeps
   phase 1 free of them; every course write goes through `course import`,
   which refuses a taken order by name. Slug uniqueness is the existing partial
-  index, and the import names a clash before the index would.
+  index, and the import names a clash before the index would. Course imports
+  take one advisory lock first, so two imports of different courses cannot
+  both pass the order and code checks against the old rows.
+- **`item archive` locks the item's module before the item**, in the global
+  lock order, so two archives cannot each leave the other item live and
+  together empty the module.
 - **`--dry-run`** runs the whole write and rolls it back, for the planner.
 
 **Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.

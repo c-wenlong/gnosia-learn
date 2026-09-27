@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { asset, collection, contentRevision, curriculumItem, learner, progress, recap } from "@self-learn/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runExport } from "../src/commands/export";
@@ -12,6 +12,8 @@ import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
 import { CourseWriteError, exportCourse, importCourse } from "../src/content/courses";
 import { archiveItem, purgeItem, restoreItem } from "../src/content/items";
+import { applyWriteThrough } from "../src/content/write-through";
+import { type CatalogDatabase, connect } from "../src/db";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, sqlstate, type Scratch } from "./scratch-database";
@@ -116,6 +118,11 @@ const COURSE_Y = [
   "        concepts:",
   "          - base",
   "        subtopics: []",
+  "      - id: yy2000-m1-t2",
+  "        title: Its second item",
+  "        concepts:",
+  "          - derived",
+  "        subtopics: []",
   "    resources: []",
   "capstone: Something else.",
   "",
@@ -148,6 +155,38 @@ async function revisionTotal(scratch: Scratch): Promise<number> {
 
 const reason = "a test edit";
 
+describe("the write-through, when a file changes between the check and the write", () => {
+  it("leaves the newer file alone and puts the database's version beside it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-write-through-"));
+    try {
+      const target = path.join(root, "content/courses/xx1000.yaml");
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, "saved by an editor after the check\n");
+      const applied = await applyWriteThrough({
+        files: [
+          {
+            type: "courses",
+            path: "content/courses/xx1000.yaml",
+            root,
+            target,
+            bytes: Buffer.from("the database's version\n"),
+            seen: Buffer.from("what the check read\n"),
+          },
+        ],
+        conflicts: [],
+        skipped: [],
+        recorded: [],
+      });
+      expect(applied.files).toEqual([]);
+      expect(applied.conflicts.map((f) => f.path)).toEqual(["content/courses/xx1000.yaml"]);
+      expect(await readFile(target, "utf8")).toBe("saved by an editor after the check\n");
+      expect(await readFile(`${target}.incoming`, "utf8")).toBe("the database's version\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs", () => {
   let scratch: Scratch;
   let fixture: Fixture;
@@ -155,6 +194,23 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
   let restore: () => void;
 
   const courseFile = () => path.join(fixture.root, "content/courses/xx1000.yaml");
+  /**
+   * Two writes at once on two connections. One pool is one connection (the
+   * CLI's `max: 1`), which would run them one after the other and prove
+   * nothing about a race.
+   */
+  const racing = async <T>(
+    start: (one: CatalogDatabase, two: CatalogDatabase) => Promise<T>[],
+  ): Promise<PromiseSettledResult<T>[]> => {
+    const one = connect({ url: scratch.url });
+    const two = connect({ url: scratch.url });
+    try {
+      return await Promise.allSettled(start(one.db, two.db));
+    } finally {
+      await one.close();
+      await two.close();
+    }
+  };
   /** Write an edited copy of the course outside the tree and return its path. */
   const edited = async (name: string, text: string) => {
     const file = path.join(edits, name);
@@ -351,10 +407,55 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
     expect(reimport.sources.flatMap((s) => Object.keys(s.revisions))).toEqual([]);
   }, 60_000);
 
-  it("refuses to archive a module's last live item", async () => {
-    await expect(archiveItem(scratch.db, { id: "yy2000-m1-t1", reason })).rejects.toThrow(
-      /last live item of module "yy2000-m1"/,
-    );
+  it("refuses to archive a module's last live item, also when two archives race for the last two", async () => {
+    const both = await racing((one, two) => [
+      archiveItem(one, { id: "yy2000-m1-t1", reason: "race one" }),
+      archiveItem(two, { id: "yy2000-m1-t2", reason: "race two" }),
+    ]);
+    expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    const refused = both.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(String(refused?.reason)).toMatch(/last live item of module "yy2000-m1"/);
+    const archived = both.findIndex((r) => r.status === "fulfilled") === 0 ? "yy2000-m1-t1" : "yy2000-m1-t2";
+    await restoreItem(scratch.db, { id: archived, reason: "undo the race" });
+    const live = await scratch.db
+      .select({ id: curriculumItem.id })
+      .from(curriculumItem)
+      .where(and(eq(curriculumItem.collectionId, "yy2000-m1"), isNull(curriculumItem.archivedAt)));
+    expect(live).toHaveLength(2);
+  });
+
+  it("gives a purged item back the concepts the indexer had already cleared, from its last live revision", async () => {
+    const file = path.join(fixture.root, "content/courses/yy2000.yaml");
+    const original = await readFile(file, "utf8");
+    // Archived by `catalog index`, which replaces the item's links whole and so drops them.
+    await writeFile(file, original.replace(/      - id: yy2000-m1-t2\n[\s\S]*?(?=    resources:)/, ""));
+    await runImportCommand({ dir: fixture.root });
+    const [row] = await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "yy2000-m1-t2"));
+    expect(row?.archivedAt).not.toBeNull();
+    await purgeItem(scratch.db, { id: "yy2000-m1-t2", reason: "purge an indexer-archived item" });
+    const back = await restoreItem(scratch.db, { id: "yy2000-m1-t2", reason: "and bring it back" });
+    expect(back.detail).toContain("concept derived");
+    expect(await readFile(file, "utf8")).toBe(original);
+  }, 60_000);
+
+  it("refuses a course code that is not one safe file name", async () => {
+    for (const code of ["../../outside", "XX/1000", "..", ".hidden"]) {
+      const file = await edited("code.yaml", COURSE_X.replace("code: XX1000", `code: "${code}"`));
+      await expect(importCourse(scratch.db, { file, reason })).rejects.toThrow(/it is the course's file name/);
+    }
+  });
+
+  it("lets only one of two racing imports take the same order", async () => {
+    const newCourse = (id: string) => COURSE_Y.replaceAll("yy2000", id).replace("order: 2", "order: 7");
+    const a = await edited("race-a.yaml", newCourse("aa3000").replace("code: YY2000", "code: AA3000"));
+    const b = await edited("race-b.yaml", newCourse("bb4000").replace("code: YY2000", "code: BB4000"));
+    const both = await racing((one, two) => [
+      importCourse(one, { file: a, reason: "race a" }),
+      importCourse(two, { file: b, reason: "race b" }),
+    ]);
+    expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    const refused = both.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(String(refused?.reason)).toMatch(/order 7 is already course/);
   });
 
   it("archives and restores one item by its verbs, each one revision", async () => {

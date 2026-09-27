@@ -75,6 +75,9 @@ export class CourseWriteError extends Error {
   }
 }
 
+/** Serialises course imports, for the checks that read every live course. */
+const COURSE_IDENTITY_LOCK = "catalog:course-identity";
+
 /** A person ran the command, unless a caller says otherwise. */
 const PERSON = LOCAL_LEARNER_ID;
 
@@ -118,6 +121,11 @@ export interface CourseImportResult {
 export interface WriteThroughSummary {
   /** Files rewritten, repo-relative, with the root they were written under. */
   written: { type: string; path: string; root: string }[];
+  /**
+   * Files that changed on disk while the write ran and were left alone; the
+   * database's version of each is beside it as `<path>.incoming`.
+   */
+  conflicts: { type: string; path: string; root: string }[];
   skipped: { type: string; reason: string }[];
   /** Types whose export hash was recorded, because the database owns them. */
   recorded: string[];
@@ -126,6 +134,7 @@ export interface WriteThroughSummary {
 export function summarise(plan: WriteThroughPlan, apply: boolean): WriteThroughSummary {
   return {
     written: apply ? plan.files.map((file) => ({ type: file.type, path: file.path, root: file.root })) : [],
+    conflicts: plan.conflicts.map((file) => ({ type: file.type, path: file.path, root: file.root })),
     skipped: plan.skipped,
     recorded: apply ? plan.recorded : [],
   };
@@ -767,9 +776,15 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
   const by = { author: options.author ?? PERSON, reason: options.reason.trim() };
   const dryRun = options.dryRun === true;
 
-  await checkReferences(db, course, options.file);
-
   const run = async (tx: CatalogDatabase) => {
+    // One course import at a time: the order, code and slug checks below
+    // read the other live courses, and two imports of different courses
+    // lock different rows, so without this both could pass against the old
+    // rows and commit the same order or code. Only this command takes the
+    // lock, and always first, so it cannot take part in a lock cycle.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${COURSE_IDENTITY_LOCK}, 0))`);
+    await checkReferences(tx, course, options.file);
+
     // Two passes: the first finds every entity the write can touch (the
     // course's current rows included, which only the database knows), the
     // locks are taken on all of them in the global order, and the second
@@ -813,8 +828,7 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
 
   try {
     const { result, writeThrough } = await db.transaction(run);
-    await applyWriteThrough(writeThrough);
-    return { ...result, writeThrough: summarise(writeThrough, true) };
+    return { ...result, writeThrough: summarise(await applyWriteThrough(writeThrough), true) };
   } catch (error) {
     if (error instanceof DryRun) return error.result as CourseImportResult;
     throw error;
