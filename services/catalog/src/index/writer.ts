@@ -39,6 +39,7 @@ import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 import { importLogs, type ImportedLog } from "../content/session-logs";
+import { keepBlobKeys } from "./blob-keys";
 import { IndexError, IndexErrors } from "./errors";
 import type { Indexer, ReplaceScope, SourceRows } from "./source";
 
@@ -321,7 +322,9 @@ export async function writeSource(
     // rank, and the stored numbers are placed here, under the locks, against
     // what the rows hold now, so a row whose place did not change keeps its
     // number and its snapshot.
-    const placed = await placeSparsePositions(tx, rows);
+    // A blob an asset already points at stays hooked up while its bytes are
+    // the ones just read (`./blob-keys.ts`).
+    const placed = await keepBlobKeys(tx, await placeSparsePositions(tx, rows));
 
     // The last state of every entity this run will delete, read before step 1
     // clears the link rows it owns, so a `delete` revision records the entity

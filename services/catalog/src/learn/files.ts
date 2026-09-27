@@ -9,6 +9,7 @@ import {
 import { readContentSources } from "../content/ownership";
 import { commitNoteText as commitRows, noteText, readNoteRows, writeNoteRow, type NoteRow } from "../content/note-rows";
 import { ContentWriteError } from "../content/write";
+import { writeThrough } from "../content/write-through";
 import { NOTE_KEYS, type NoteFields } from "../content/notes";
 import { appendLog, listLogIds, logPath } from "../content/session-logs";
 import type { CatalogDatabase } from "../db";
@@ -328,14 +329,22 @@ export async function writeConceptNote(
 ): Promise<Written> {
   const db = await rowsFor("concepts", true);
   if (db !== null) {
-    const written = await writeNoteRow(db, {
+    const input = {
       fields: fieldsOf(note),
       ...(options.domain !== undefined ? { domain: options.domain } : {}),
       ...(options.topic !== undefined ? { topicSlug: options.topic } : {}),
       ...(options.base !== undefined ? { base: options.base } : {}),
       reason: options.reason ?? `learn: write ${note.id}`,
       sessionId: options.session,
-    });
+    };
+    // A new note joins its topic's `maps.concepts`, which is in
+    // content/topics.yaml, so that file is rewritten from the rows in the
+    // same transaction (D17, `writeThrough`). An existing note keeps its
+    // topic, and nothing in topics.yaml moves.
+    const isNew = (await readNoteRows(db, [note.id])).length === 0;
+    const written = isNew
+      ? (await writeThrough(db, ["topics"], (tx) => writeNoteRow(tx, input))).value
+      : await writeNoteRow(db, input);
     return { path: path.join(repoRoot(), written.path), revision: written.revision, changed: written.changed };
   }
   return { path: await writeConceptFile(note, options), revision: null, changed: true };

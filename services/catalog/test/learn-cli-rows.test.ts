@@ -9,6 +9,7 @@ import { concept, contentRevision, sessionLogEntry } from "@self-learn/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { renderType } from "../src/content/export";
 import { flip } from "../src/content/flip";
 import { conceptsIndexer } from "../src/index/concepts";
 import { sessionsIndexer } from "../src/index/sessions";
@@ -90,6 +91,12 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       const { rows, logs } = await indexer.read(context);
       await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root } });
     }
+    // The vocabulary as the database would write it: a new note's topic is
+    // written through to content/topics.yaml (D17), which refuses a file
+    // that is not the rows' own export.
+    for (const file of await renderType(scratch.db, "topics")) {
+      await writeFile(path.join(fixture.root, file.path), file.bytes);
+    }
     const readers = new Set(["concepts", "sessions"] as const);
     await flip(scratch.db, { type: "concepts", readers });
     await flip(scratch.db, { type: "sessions", readers });
@@ -123,6 +130,10 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       .where(and(eq(contentRevision.entityType, "concept"), eq(contentRevision.entityId, "delta")));
     expect(revision).toMatchObject({ op: "create", authorKind: "person", reason: "learn concept add delta --topic alpha" });
     expect((await json<{ id: string }[]>("concept", "list")).map((c) => c.id)).toEqual(["alpha", "beta", "delta", "gamma"]);
+    // Its topic's maps.concepts in content/topics.yaml, rewritten from the rows.
+    expect(await readFile(path.join(fixture.root, "content", "topics.yaml"), "utf8")).toContain(
+      "concepts: [alpha, beta, gamma, delta]",
+    );
   });
 
   it("refuses a new note with no topic, and a move to another folder", async () => {
