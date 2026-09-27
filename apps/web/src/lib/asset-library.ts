@@ -20,7 +20,7 @@ import {
 } from "@self-learn/catalog/state";
 
 import { contentSource } from "@/data/source";
-import { assetFilesEnabled, resolveAssetFile } from "@/lib/asset-files";
+import { assetFilesEnabled, openBlob, resolveAsset } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -528,9 +528,11 @@ function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
  * copies of this rule would drift and the symptom is a card that shows a
  * picture in one place and a grey box in the other.
  *
- * A diagram is already an image, so it is served as itself. A video is not,
- * and an `<img>` pointed at an `.mp4` decodes nothing; `/poster` cuts a frame
- * out of it instead. Everything else has no picture to show and says so.
+ * A diagram is already an image, so it is served as itself, and so is a
+ * stored poster in the companion rail. A video is not, and an `<img>` pointed
+ * at an `.mp4` decodes nothing; `/poster` serves the still the upload stored
+ * for it, or cuts one out of it. Everything else has no picture to show and
+ * says so.
  *
  * Both depend on the file route being reachable for that asset's repo, which
  * is a per-request answer rather than a property of the row: the route is off
@@ -542,7 +544,7 @@ export function thumbnailFor(
   access: { selfLearn: FileAccess; manimkc: FileAccess },
 ): string | null {
   if (!accessFor(access, row.sourceRepo).ok) return null;
-  if (row.kind === "diagram_svg") return assetFileHref(row.id);
+  if (row.kind === "diagram_svg" || row.kind === "poster") return assetFileHref(row.id);
   return row.kind === "video" ? assetPosterHref(row.id) : null;
 }
 
@@ -567,8 +569,9 @@ export function thumbnailStatusFor(
  * note embeds, so a file that is already gone, a name the catalog has no row
  * for, or a stale manimkc index renders the failure panel straight away rather
  * than a player or an `<img>` that fails and then has to ask why. It is the
- * same `resolveAssetFile` the route runs, so the page and the route cannot
- * give one file two different answers. Only what nobody could know before the
+ * same `resolveAsset` the route runs, so the page and the route cannot give
+ * one file two different answers: a blob the store holds is `null` whatever
+ * the switch says, and a legacy file with the switch off is `files-off`. Only what nobody could know before the
  * browser tried is left to the client's probe.
  *
  * A handful of ids per page (one asset, a few embeds), each a primary-key
@@ -581,19 +584,18 @@ export async function readFileProblems(
 ): Promise<Map<string, RouteProblemCode | null>> {
   const out = new Map<string, RouteProblemCode | null>();
   if (ids.length === 0) return out;
-  if (!assetFilesEnabled()) {
-    for (const id of ids) out.set(id, "files-off");
-    return out;
-  }
   try {
     const db = await catalogDatabase();
     for (const id of new Set(ids)) {
-      const resolved = await resolveAssetFile(db, id);
+      const resolved = await resolveAsset(db, id);
       out.set(id, resolved.ok ? null : resolved.code);
     }
   } catch (error) {
-    warn("file problems", error);
-    for (const id of ids) if (!out.has(id)) out.set(id, "catalog-unreachable");
+    // With the switch off and no catalog there is no blob to find and the
+    // file branch is off, so the route says `files-off`, and so does this.
+    const code = assetFilesEnabled() ? "catalog-unreachable" : "files-off";
+    if (code === "catalog-unreachable") warn("file problems", error);
+    for (const id of ids) if (!out.has(id)) out.set(id, code);
   }
   return out;
 }
@@ -607,15 +609,17 @@ export async function readFileProblems(
  * the server can read while it is already rendering; so it is read here and
  * passed down, and the panel arrives populated.
  *
- * `resolveAssetFile` does the resolving, which is not an implementation detail
- * being reused for convenience: it is the module that holds every containment
+ * `resolveAsset` in `@/lib/asset-files` does the resolving, which is not an
+ * implementation detail being reused for convenience: it is the module that
+ * holds every containment
  * check the asset route makes — the id is a primary key and never a path, the
  * stored path is proved to be inside its source root before and after symlinks
  * resolve, and the extension has to be on a closed list. A page that read
  * `path.join(root, row.path)` itself would be a second, weaker copy of that.
  *
- * Gated by the same switch as the route, because a deployment that says it does
- * not serve these files should not read them either.
+ * A blob is read from the store, and a legacy file only with the switch on,
+ * because a deployment that says it does not serve those files should not read
+ * them either.
  *
  * Null means "no text to show", for every reason there is: the switch is off,
  * the row has no file, the file is gone, it is larger than the cap. The callers
@@ -627,6 +631,7 @@ export async function readAssetText(
   id: string,
   limit = TEXT_PREVIEW_BYTES,
 ): Promise<string | null> {
+  // A note or a log the database owns is its row, not its file.
   try {
     const stored = await storedText(db, id);
     if (stored !== undefined) return stored !== null && Buffer.byteLength(stored, "utf8") <= limit ? stored : null;
@@ -634,11 +639,14 @@ export async function readAssetText(
     warn(`asset text ${id}`, error);
     return null;
   }
-  if (!assetFilesEnabled()) return null;
   try {
-    const resolved = await resolveAssetFile(db, id);
+    const resolved = await resolveAsset(db, id);
     if (resolved.ok === false || resolved.bytes > limit) return null;
-    return await readFile(resolved.file, "utf8");
+    if (resolved.source === "file") return await readFile(resolved.file, "utf8");
+    const read = await openBlob(resolved.key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of read.body) chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks).toString("utf8");
   } catch (error) {
     warn(`asset text ${id}`, error);
     return null;

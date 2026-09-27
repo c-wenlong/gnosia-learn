@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 
 import {
   assetFilesEnabled,
+  blobStoreProblem,
+  FILES_OFF,
+  isRangeRefusal,
+  openBlob,
   openRange,
   parseRange,
-  resolveAssetFile,
-  type AssetFile,
+  resolveAsset,
+  webStreamFrom,
+  type AssetFileProblem,
+  type AssetSource,
+  type AssetStored,
 } from "@/lib/asset-files";
+import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -42,10 +50,22 @@ import { withLearnerStore } from "@/lib/learner-store";
  * matters, but it also turns the intended use into a download prompt in some
  * of them. The sandbox closes the same hole and leaves the embed working.
  *
- * **Off unless a machine opts in.** `ASSET_FILES_ENABLED`, the shape
- * `STUDIO_ENABLED` uses in decision D11 of docs/TLDRAWKC-INTEGRATION.md.
- * Production has none of these files, so every request there is a 404 rather
- * than a stat of a path that cannot exist.
+ * **Two places the bytes can be, asked in order** (docs/CONTENT-MIGRATION.md,
+ * Track E). An asset whose row names a `blob_key` is served from the blob
+ * store: redirected to a signed URL when the store can mint one (a cloud store,
+ * so a large video never streams through a function, edge case 10), streamed
+ * through here with the same Range handling when it cannot (the laptop's `fs`
+ * store). The redirect carries the store's URL and nothing of the asset's
+ * path. A `pending` blob, or one the store has lost, is a 404 `not-uploaded`,
+ * never a fall back to the file, which may have been re-rendered since. Only a
+ * row with no key reads the legacy file under its data root.
+ *
+ * **The legacy file is off unless a machine opts in.** `ASSET_FILES_ENABLED`,
+ * the shape `STUDIO_ENABLED` uses in decision D11 of
+ * docs/TLDRAWKC-INTEGRATION.md, gates that branch and nothing else: a blob is
+ * served whatever it says. With the switch off and the catalog unreachable the
+ * answer is still `files-off`, since without the catalog there is no blob to
+ * serve either, so a deployment with neither answers exactly as it did.
  *
  * **Every refusal carries a `code`** from `@/lib/asset-problems` beside its
  * prose `detail`. The detail is for a person reading the raw response and may
@@ -98,7 +118,7 @@ export const ASSET_CSP =
   "font-src data:; img-src data:; sandbox";
 
 /** The headers every successful answer carries, whole file or slice. */
-function baseHeaders(file: AssetFile): Record<string, string> {
+function baseHeaders(file: AssetSource): Record<string, string> {
   return {
     "Content-Type": file.contentType,
     "Content-Disposition": `inline; filename="${file.filename}"`,
@@ -113,22 +133,17 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  if (!assetFilesEnabled()) {
-    // Not "forbidden": on a deployment this route does not exist, and saying
-    // so twice in two different words would only invite someone to look for
-    // the switch.
-    return NextResponse.json(
-      { error: "Not found.", code: "files-off", detail: "Asset files are not served by this deployment." },
-      { status: 404 },
-    );
-  }
-
   const { id } = await params;
 
   let resolved;
   try {
-    resolved = await withLearnerStore((db) => resolveAssetFile(db, id));
+    resolved = await withLearnerStore((db) => resolveAsset(db, id));
   } catch (error) {
+    // Not "forbidden" when the switch is off: without the catalog there is no
+    // blob to serve and the legacy branch is off, so on a deployment with
+    // neither this route does not exist, and saying so in a second set of
+    // words would only invite someone to look for the switch.
+    if (!assetFilesEnabled()) return problem(FILES_OFF);
     // The lookup is a read, and a read that cannot reach the database
     // degrades and says so (ARCHITECTURE.md rule 14). There is no degraded
     // version of a video, so what it degrades to is an honest 503.
@@ -144,12 +159,8 @@ export async function GET(
     );
   }
 
-  if (resolved.ok === false) {
-    return NextResponse.json(
-      { error: resolved.error, code: resolved.code, detail: resolved.detail },
-      { status: resolved.status },
-    );
-  }
+  if (resolved.ok === false) return problem(resolved);
+  if (resolved.source === "blob") return serveBlob(request, resolved);
 
   const headers = baseHeaders(resolved);
   const range = parseRange(request.headers.get("range"), resolved.bytes);
@@ -179,4 +190,69 @@ export async function GET(
     status: 200,
     headers: { ...headers, "Content-Length": String(resolved.bytes) },
   });
+}
+
+function problem(p: AssetFileProblem): Response {
+  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
+}
+
+/**
+ * A stored object: a redirect when the store signs URLs, else the bytes, with
+ * the Range answers the file branch gives.
+ *
+ * The redirect is a 302 with `no-store`, so every play asks this route again
+ * and gets a URL with a fresh hour on it, and the browser sends its Range
+ * requests straight to the store. The stream is the `fs` adapter's path: the
+ * size comes from `stat` in the resolver, the slice from `get`, which reports
+ * the range it actually holds, and that is what `Content-Range` says.
+ */
+async function serveBlob(request: Request, stored: AssetStored): Promise<Response> {
+  let url: string | null;
+  try {
+    url = await assetBlobStore().signedUrl(stored.key, SIGNED_URL_TTL_SECONDS);
+  } catch (error) {
+    return problem(blobStoreProblem(error));
+  }
+  if (url !== null) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+
+  const headers = baseHeaders(stored);
+  const range = parseRange(request.headers.get("range"), stored.bytes);
+  if (range.kind === "unsatisfiable") {
+    return new Response(null, {
+      status: 416,
+      headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
+    });
+  }
+
+  try {
+    if (range.kind === "partial") {
+      const read = await openBlob(stored.key, { start: range.start, end: range.end });
+      return new Response(webStreamFrom(read.body), {
+        status: 206,
+        headers: {
+          ...headers,
+          "Content-Range": `bytes ${read.start}-${read.end}/${read.size}`,
+          "Content-Length": String(read.end - read.start + 1),
+        },
+      });
+    }
+    const read = await openBlob(stored.key);
+    return new Response(webStreamFrom(read.body), {
+      status: 200,
+      headers: { ...headers, "Content-Length": String(read.size) },
+    });
+  } catch (error) {
+    if (isRangeRefusal(error)) {
+      return new Response(null, {
+        status: 416,
+        headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
+      });
+    }
+    return problem(blobStoreProblem(error));
+  }
 }
