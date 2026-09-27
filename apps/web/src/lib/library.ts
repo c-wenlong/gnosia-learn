@@ -63,6 +63,9 @@ export const COMPANION_KINDS: ReadonlySet<string> = new Set([
   "captions",
   "chapters",
   "diagram_source",
+  // A video's stored still, made by `catalog asset upload`: shown on its
+  // video's card, never as a card of its own.
+  "poster",
 ]);
 
 export function isCompanionKind(kind: string): boolean {

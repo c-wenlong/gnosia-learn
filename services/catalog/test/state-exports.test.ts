@@ -70,6 +70,12 @@ const REQUIRED = [
   "dbSource",
   // The blob store's root, so the route serving a blob opens the store the CLI uploaded to.
   "blobRoot",
+  // Which blob serves an asset, and a video's stored poster, for the asset routes.
+  "assetBlobs",
+  "posterBlob",
+  // The poster recipe the upload command and the web app's ffmpeg fallback share.
+  "ffmpegArgs",
+  "POSTER_OFFSETS_SECONDS",
 ] as const;
 
 describe("the state barrel", () => {
