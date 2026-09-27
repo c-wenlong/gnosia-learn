@@ -557,8 +557,10 @@ around the list above, and why:
   until Track E defines a video's parity.
 - **A tag gone from `tags.yaml` while the database owns courses is refused**
   by name, since the courses source will not run to rewrite the course's
-  links; while courses is on files the prune clears them and the courses
-  source writes them back in the same import.
+  links. While courses is on files the prune clears them and the courses
+  source writes them back in the same import, and the course files are read
+  before the tags source writes anything, so a course still naming the tag is
+  refused before its links go (each source commits on its own).
 - **`catalog export` refuses to write outside `--out`**, checking every
   rendered path before writing any.
 - **An import of a `db` type** skips it when its files hash to the last
