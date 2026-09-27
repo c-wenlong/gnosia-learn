@@ -284,6 +284,14 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(listed?.shapes).toBe(3);
   });
 
+  it("keeps an SVG stale through the next import, since the database knows what it was exported from", async () => {
+    // The put above changed the document and kept the SVG, and wrote only the
+    // .tldr through; the SVG on disk is still the old bytes.
+    await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
+    const [listed] = await listDiagrams(scratch.db, "second-diagram");
+    expect(listed?.svgState).toBe("stale");
+  });
+
   it("refuses a document whose topic or stamp does not resolve, by name", async () => {
     await expect(
       put({ slug: "third-diagram", tldr: await file("bad-topic.tldr", documentOf({ topic: "nowhere" })) }),

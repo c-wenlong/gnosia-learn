@@ -70,6 +70,15 @@ export interface IndexContext {
    * runner alongside the other two.
    */
   knownAssets: (sourceRepo: SourceRepo) => Promise<ReadonlyMap<string, string>>;
+  /**
+   * Each stored diagram's SVG key and the document hash that SVG was exported
+   * from, by slug. The diagrams source reads it because a file cannot say
+   * which document an SVG came from and the database can: an SVG on disk whose
+   * bytes are the stored one keeps the export record it has, so an SVG left
+   * stale by a put stays stale through the next import. Empty for a database
+   * that has none.
+   */
+  knownDiagrams: () => Promise<ReadonlyMap<string, { svgBlobKey: string | null; svgDocumentHash: string | null }>>;
 }
 
 /** Rows produced by one source, keyed by the table they belong in. */

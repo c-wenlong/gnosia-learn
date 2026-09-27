@@ -59,6 +59,20 @@ export { contentOwnership } from "../content/ownership";
  * route that serves a blob and the command that uploaded it open one store.
  */
 export { blobRoot } from "../env";
+/**
+ * Which blob serves an asset or a video's poster, for the asset routes, and the
+ * poster recipe, shared with `catalog asset upload` so the web app's ffmpeg
+ * fallback cuts the same picture the upload stored.
+ */
+export { assetBlobs, posterBlob, type AssetBlob } from "./blobs";
+export {
+  ffmpegArgs,
+  POSTER_CONTENT_TYPE,
+  POSTER_EXTENSION,
+  POSTER_OFFSETS_SECONDS,
+  POSTER_QUALITY,
+  POSTER_WIDTH,
+} from "../poster/recipe";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";

@@ -599,6 +599,15 @@ not have to be worked out again.
   catalog and builds clean. `decodeAssetId` in `apps/web/src/lib/library.ts`
   does it, and swallows the `URIError` a malformed escape raises so a hand-typed
   URL is a 404 rather than a 500.
+- **"Dynamic filesystem access causes tracing of the whole project" in
+  `npm run build` is a real bug, not noise.** Turbopack reads a `path.join`,
+  `realpath` or `open` on a computed path in anything a route imports as "this
+  could open any file", and traces the whole repository, `public/` included,
+  into the deployed server bundle. The fix is a `/* turbopackIgnore: true */`
+  comment inside the call it names, as on `objectPath` in
+  `packages/blob/src/fs.ts` and the two `realpath`s in
+  `apps/web/src/lib/asset-files.ts`. A build that prints the warning is not
+  done.
 - **A poster needs `format=yuvj420p` in the filter chain, or ffmpeg writes
   nothing.** `apps/web/src/lib/asset-posters.ts` extracts a still frame as
   JPEG, and mjpeg refuses a limited-range YUV source outright: *Non full-range
@@ -608,6 +617,10 @@ not have to be worked out again.
   anywhere else does not. Its cache lives under the system temp root, never in
   the tree, for the same reason `$MANIMKC_HOME` exists: generated data that a
   `git clean` or a relayout can delete is generated data that will be deleted.
+  The filter chain lives once, in `services/catalog/src/poster/recipe.ts`, and
+  has two callers: `catalog asset upload`, which cuts each video's poster on
+  the laptop and stores it as a blob, and the route's fallback for a video with
+  no stored poster. Change it there and both follow.
 - **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
   `scripts/learn` on purpose.** `apps/web/src/app` and
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
