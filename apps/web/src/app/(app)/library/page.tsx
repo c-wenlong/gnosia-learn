@@ -7,7 +7,7 @@ import { LibraryFilterMenus, type LibraryMenu } from "@/components/library/Libra
 import { Notice } from "@/components/library/Notice";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
-import { courses } from "@/data/courses";
+import { getCourses } from "@/data/courses";
 import {
   loadFileAccess,
   loadLibrary,
@@ -88,10 +88,11 @@ export default async function LibraryPage({
   const sort = parseSort(firstParam(params.sort));
   const filters: LibraryFilters = { kind, topic, course, q, sort };
 
-  const [library, access, { kb }] = await Promise.all([
+  const [library, access, { kb }, courses] = await Promise.all([
     loadLibrary(),
     loadFileAccess(),
     loadKnowledgeBase(),
+    getCourses(),
   ]);
   const { rows, counts, reachable, truncated, titles, concepts } = library;
 
