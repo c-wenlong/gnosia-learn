@@ -21,8 +21,8 @@
  * The hi-fi palette. The starting values and their provenance are `TOKENS`
  * in docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md,
  * which record the hi-fi frames as drawn; where the app has since moved a
- * value for contrast (the `.dark` accent, learning blue and marks, and the
- * tokens the kit never had), docs/design/BRAND.md has the measurement. The
+ * value for contrast (the accent in both Classic palettes, `.dark`'s learning
+ * blue and marks, and the tokens the kit never had), docs/design/BRAND.md has the measurement. The
  * names are the contract every redesigned page is written against, listed in
  * docs/design/IMPLEMENTATION.md. Light is on :root, dark on `.dark`.
  */
@@ -41,7 +41,11 @@
   --text: #000000;
   --text2: #666666;
   --text3: #999999;
-  --accent: #456dff;
+  /* The kit's #456dff a step darker, same hue and chroma: the value `.dark`
+     already uses, where a white label (chips, the accent button) and the
+     black stat-tile strip both clear 4.5:1 (4.58 and 4.59). The kit's blue
+     carried white at 4.30. BRAND.md, "Classic light", has every pair. */
+  --accent: #4168fa;
   --accent-text: #294bc6;
   --ok: #29cc57;
   --ok-lip: #15b441;
@@ -66,7 +70,8 @@
   --btn-face: #111111;
   --btn-lip: #000000;
   --btn-text: #ffffff;
-  --m-hi: #456dff;
+  /* Mastered is the accent blue, and moves with it. */
+  --m-hi: #4168fa;
   --m-mid: #a9b9ff;
   --m-lo: #e5e5e5;
   --lip-shade: #d4d4d4;
@@ -81,8 +86,9 @@
   --m-hi-lip: #2e4fd1;
   /* The close screen's review-cards tile; the kit's one literal colour. */
   --violet: #8b5cf6;
-  /* Small text on a saturated fill (the stat tiles' strips). Black in both
-     themes: at least 4.8:1 on the ok, accent, violet and streak tones. */
+  /* Small text on a saturated fill (the stat tiles' strips). Black in every
+     palette: at least 4.5:1 on the ok, accent, violet and streak tones (the
+     accent is the lowest, 4.59 in Classic and 4.56 in Gnosia). */
   --on-tone: #000000;
   --m-mid-lip: #7e93e6;
 

@@ -270,13 +270,13 @@ matches.
 | `--text` | `#15283a` | `#000000` | `--brand-ink` |
 | `--text2` | `#605b54` | `#666666` | A warm muted ink |
 | `--text3` | `#878276` | `#999999` | A lighter warm ink, for hints |
-| `--accent` | `#148285` | `#456dff` | A mid teal for fills, focus rings and the selected border |
+| `--accent` | `#148285` | `#4168fa` | A mid teal for fills, focus rings and the selected border |
 | `--accent-text` | `#0f5f61` | `#294bc6` | `--brand-teal`, for links and ghost buttons |
 | `--accent-lip` | `#0f5f61` | `#2e4fd1` | `--brand-teal`, under the accent button |
 | `--btn-face` | `#0f5f61` | `#111111` | `--brand-teal` |
 | `--btn-lip` | `#0d1c2b` | `#000000` | `--brand-navy` |
 | `--btn-text` | `#faf6ec` | `#ffffff` | `--brand-cream` |
-| `--m-hi` | `#0f5f61` | `#456dff` | Mastered: `--brand-teal` |
+| `--m-hi` | `#0f5f61` | `#4168fa` | Mastered: `--brand-teal` |
 | `--m-hi-lip` | `#0a4244` | `#2e4fd1` | A darker teal |
 | `--m-mid` | `#529798` | `#a9b9ff` | Learning: a soft teal |
 | `--m-mid-lip` | `#3b7475` | `#7e93e6` | A darker soft teal |
@@ -304,7 +304,8 @@ picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. Both
 Gnosia palettes and Classic dark (`.dark`, [below](#classic-dark)) pass
 every pair but two in Gnosia light: the learning and green fills on the
 light track (see the note after the table). The `:root` column is Classic
-light, for comparison; several of its pairs are still under the minimum.
+light, for comparison; several of its pairs are still under the minimum
+([Classic light](#classic-light) has the ones fixed so far).
 
 | Pair | Gnosia | Gnosia dark | Needs | `:root` | `.dark` |
 | --- | --- | --- | --- | --- | --- |
@@ -322,8 +323,8 @@ light, for comparison; several of its pairs are still under the minimum.
 | `--accent-text` on `--surface` | 7.30 | 7.11 | 4.5 | 7.20 | 5.75 |
 | `--accent-text` on `--tint` | 6.29 | 6.38 | 4.5 | 6.40 | 4.82 |
 | `--btn-text` on `--btn-face` | 6.88 | 7.94 | 4.5 | 18.88 | 16.67 |
-| White on `--accent` (chips, accent button) | 4.60 | 4.60 | 4.5 | 4.30 | 4.58 |
-| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.88 | 4.59 |
+| White on `--accent` (chips, accent button) | 4.60 | 4.60 | 4.5 | 4.58 | 4.58 |
+| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.59 | 4.59 |
 | `--ok-text` on `--ok-tint` | 4.62 | 7.66 | 4.5 | 3.32 | 7.66 |
 | `--ok-text` on `--page` | 4.73 | 10.19 | 4.5 | 3.45 | 10.28 |
 | `--warn-text` on `--warn-tint` | 4.71 | 9.17 | 4.5 | 2.93 | 9.17 |
@@ -332,28 +333,28 @@ light, for comparison; several of its pairs are still under the minimum.
 | `--ok-on` on `--ok` | 6.97 | 6.97 | 4.5 | 2.13 | 6.97 |
 | `--danger` on `--surface` | 5.18 | 6.97 | 4.5 | 5.26 | 7.10 |
 | `--danger` on `--page` | 4.87 | 7.78 | 4.5 | 4.95 | 7.85 |
-| `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.30 | 3.64 |
-| `--accent` on `--page` (focus ring) | 4.27 | 3.97 | 3 | 4.05 | 4.02 |
-| `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 3.82 | 3.05 |
-| `--accent` on `--track` (the target bar, and every bar's default fill) | 3.47 | 4.56 | 3 | 3.41 | 4.59 |
+| `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.58 | 3.64 |
+| `--accent` on `--page` (focus ring) | 4.27 | 3.97 | 3 | 4.31 | 4.02 |
+| `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 4.07 | 3.05 |
+| `--accent` on `--track` (the target bar, and every bar's default fill) | 3.47 | 4.56 | 3 | 3.64 | 4.59 |
 | `--ok` on `--track` (a bar's `ok` tone; no page uses it yet) | 1.60 | 9.87 | 3 | 1.69 | 9.87 |
-| `--m-hi` on `--track` (a mastered bar) | 5.59 | 9.13 | 3 | 3.41 | 7.24 |
+| `--m-hi` on `--track` (a mastered bar) | 5.59 | 9.13 | 3 | 3.64 | 7.24 |
 | `--m-mid` on `--track` (a learning bar) | 2.54 | 4.14 | 3 | 1.51 | 3.86 |
 | `--track` against `--surface` (an empty bar on a card) | 1.30 | 1.28 | (gap) | 1.26 | 1.26 |
 | `--track` against `--page` (the session and review strips) | 1.23 | 1.15 | (gap) | 1.19 | 1.14 |
 | The track's 1px `--border` edge against `--surface` | 1.30 | 1.86 | (gap) | 1.26 | 1.94 |
 | The track's 1px `--border` edge against `--page` | 1.23 | 2.07 | (gap) | 1.19 | 2.15 |
-| `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.30 | 5.75 |
+| `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.58 | 5.75 |
 | `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 3.07 |
 | `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 3.39 |
-| `--m-hi` against `--m-mid` | 2.20 | 2.20 | (gap) | 2.27 | 1.87 |
+| `--m-hi` against `--m-mid` | 2.20 | 2.20 | (gap) | 2.41 | 1.87 |
 | `--m-mid` against `--m-lo` | 2.31 | 1.74 | (gap) | 1.51 | 1.58 |
 | `--streak` on `--page` (the dot, the day rings) | 3.11 | 9.86 | 3 | 2.06 | 9.76 |
 | `--streak` on `--surface` | 3.30 | 8.83 | 3 | 2.18 | 8.83 |
 | `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 8.83 | 4.5 | 4.80 | 8.83 |
 | `--streak-text` on `--page` | 4.54 | 9.86 | 4.5 | 4.52 | 9.76 |
 | Check on a `--streak` disc (`--streak-on`) | 3.36 | 9.86 | 3 | 2.18 | 9.76 |
-| Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.30 | 6.35 |
+| Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.58 | 6.35 |
 | White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 5.44 |
 
 **The track.** Every bar (`TargetBar`, `ProgressBar`, the session and
@@ -415,7 +416,7 @@ it: mid teal over a deep teal lip, white label.
 Mastered is the deep brand teal, learning a soft teal, untouched a warm
 grey. The three are stepped by lightness so a reader who cannot tell hues
 apart still can: L* 36.3, 58.2 and 85.5, gaps of 22.0 and 27.3, luminance
-ratios of 2.20 and 2.31. `:root` has 2.27 and 1.51, so the bottom step is
+ratios of 2.20 and 2.31. `:root` has 2.41 and 1.51, so the bottom step is
 wider than before. Learning cannot be paler than it is and still clear 3:1 on
 the card, which is why it reads as soft rather than pale.
 
@@ -495,6 +496,61 @@ white mark at only 2.30:1 and 1.85:1. `--m-hi-on` and `--streak-on` name
 those two marks: white in both light palettes, so they are declared once on
 `:root`, and navy here (7.94:1 and 9.86:1). Classic dark has the same
 problem and the same fix, in its own page colour.
+
+### Classic light
+
+The Classic light palette on `:root` is the kit's, and its accent carried a
+white label at 4.30:1: the active chips, the accent button, the agent
+session and recap buttons and the studio's buttons all write white on it at
+12 to 15px. One value fixes it, and the mastered blue, which is the same
+colour, moves with it.
+
+| Token | Was | Now | Why |
+| --- | --- | --- | --- |
+| `--accent` | `#456dff` | `#4168fa` | The same hue and chroma a step darker (OKLCH L 0.592 to 0.577, L* 51.2 to 49.4), the value `.dark` already uses: a white label clears 4.5:1 (4.58) and the black stat-tile strip still does (4.59) |
+| `--m-hi` | `#456dff` | `#4168fa` | Mastered is the accent blue in this palette, so it stays equal to it |
+
+**The window.** On the kit blue's hue and chroma, white clears 4.5:1 from
+`#4269fb` (luminance 0.1823, white 4.52, black 4.65) and black clears it down
+to `#4067f8` (0.1757, white 4.65, black 4.51). Any blue in between carries
+both labels; nothing outside it does. The smallest darkening is `#4269fb`,
+0.36 L* lighter than `#4168fa`, which no one can see. `#4168fa` sits in the
+middle of the window, so neither label is left at the edge of 4.5:1, and it
+is the value `.dark` chose for the same reason. So Classic has one accent in
+both appearances, as Gnosia does.
+
+**Every pair that reads the moved blue**, re-measured:
+
+| Pair | Was | Now | Needs |
+| --- | --- | --- | --- |
+| White on `--accent` (chips, the accent button, the agent and studio buttons) | 4.30 | 4.58 | 4.5 |
+| `--on-tone` (black) on `--accent` (the mastery stat tile) | 4.88 | 4.59 | 4.5 |
+| `--accent` on `--surface` (focus ring, an active chip's edge) | 4.30 | 4.58 | 3 |
+| `--accent` on `--page` (focus ring) | 4.05 | 4.31 | 3 |
+| `--accent` on `--surface2` (focus ring on a raised row) | 3.87 | 4.13 | 3 |
+| `--accent` on `--tint` (the selected row's border) | 3.82 | 4.07 | 3 |
+| `--accent` on `--track` (the target bar) | 3.41 | 3.64 | 3 |
+| `--m-hi` on `--surface` (a mastered dot, node or graph node) | 4.30 | 4.58 | 3 |
+| `--m-hi` on `--page` | 4.05 | 4.31 | 3 |
+| `--m-hi` on `--track` (a mastered bar) | 3.41 | 3.64 | 3 |
+| White mark on a mastered node (`--m-hi-on`) | 4.30 | 4.58 | 3 |
+| `--m-hi` against `--m-mid` (the ramp's top step) | 2.27 | 2.41 | (gap) |
+| `--accent-lip` and `--m-hi-lip` (`#2e4fd1`) against the face | 1.55 | 1.45 | (a darker lip) |
+| `--accent-text` (`#294bc6`, links) on `--page`, `--surface`, `--tint` | 6.78, 7.20, 6.40 | unchanged | 4.5 |
+
+Every pair still passes. Two went down: the black strip, still over 4.5,
+and the lip step, since the face moved toward the lip. The lips
+stay `#2e4fd1`: 10 L* below the new face (39.2 against 49.4), still visibly
+the darker shade under the button and the mastered node. `--accent-text` is
+its own darker blue and did not move.
+
+**Why the mastered blue moved with it.** In `:root`, `--m-hi` has always
+been the accent: the mastered dot and node are the same blue as the
+selected chip and the target bar. No pair forces them apart, since every
+`--m-hi` pair improves, and splitting them by 1.8 L* would make two blues
+nobody can tell apart. The link colour here is `--accent-text`, not
+`--m-hi` (that is `.dark`, where mastered and links share `#7491ff`), so
+the links do not change.
 
 ### Classic dark
 
