@@ -239,6 +239,23 @@ export const NOTHING_TO_ASK =
   "This note has no check the session can ask, and no tutor model is configured on this server to write one.";
 
 /**
+ * A reason and what follows from it, as one paragraph: "The tutor could not
+ * be reached. Nothing is recorded; carry on." The reason is often an error
+ * string from a route or a provider ("All free providers failed"), which has
+ * no full stop, so one is added when the reason does not already end a
+ * sentence; a doubled one ("failed..") collapses to one, and an ellipsis is
+ * left alone. An empty reason leaves the consequence standing on its own.
+ */
+export function withConsequence(reason: string, consequence: string): string {
+  const tail = consequence.trim();
+  const trimmed = reason.trim().replace(/(?<!\.)\.\.$/, ".");
+  if (trimmed === "") return tail;
+  // Terminal punctuation, allowing a closing quote or bracket after it: `(HTTP 502).`, `"Done."`
+  const head = /[.?!…]["'”’)\]]*$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  return tail === "" ? head : `${head} ${tail}`;
+}
+
+/**
  * A probe or check step that nothing can fill: no question from the note, no
  * fallback, and no tutor model to ask. With a model configured the step still
  * asks it, since only a request finds out whether the model answers.
