@@ -104,14 +104,15 @@ delete the alias block.
 ## Components
 
 Under [apps/web/src/components/ui/](../../apps/web/src/components/ui/), one
-file each, all safe in a server component (no `"use client"`, no hooks). The
+file each, all safe in a server component (no `"use client"`, no state or
+effects; `Button` calls `useId`, which React allows there). The
 class strings live in the React-free [classes.ts](../../apps/web/src/components/ui/classes.ts),
 so a client component, a server component or a test can compose them.
 Import from `@/components/ui` or from the file.
 
 | Component | Props | Kit |
 | --- | --- | --- |
-| `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent" \| "brand"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"` | `Btn` |
+| `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent" \| "brand"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `disabledReason?: string` (with `disabled`: why, as 12px text beside the button tied by `aria-describedby`, since a disabled button takes no focus and its `title` reaches nobody; omit it when the reason is already on screen), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"`. A link has no disabled state | `Btn` |
 | `Card` | `title?: ReactNode`, `action?: ReactNode`, `tight?: boolean` (padding 14), `as?: "section" \| "div" \| "article" \| "li"`, `className?`, `id?`, `aria-label?` | `Card` |
 | `CardAction` | `href`, `children`: the "See all" link for a card's `action` slot | `Card` action |
 | `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
@@ -525,22 +526,22 @@ in that session.
 | Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
 | Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
 | Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
-| Learn index header | "Add concept" button | rendered disabled, with a title naming the CLI command; hidden on a phone | concepts are added by the `learn` CLI; the web app never writes the content half |
+| Learn index header | "Add concept" button | rendered disabled, with the CLI command beside it as its `disabledReason`; hidden on a phone | concepts are added by the `learn` CLI; the web app never writes the content half |
 | Learn index graph card | a placeholder with "toggle: full course" | a Neighbourhood / Course chip pair in the card header; Course reads "Folder" for a concept in no course | 24 of 32 concepts link to no curriculum item, so "course" falls back to the note's folder |
 | Learn index table | no selected row | the selected row is tinted `--surface2`; clicking a row selects it, the title links to the workspace | the graph follows the selection, so the selection has to show |
 | Course graph | not drawn | the transitive reduction of the edges | the algorithms folder drawn with every edge was a hairball |
 | Workspace left panel | summary, links, sources, backlinks only | the same, plus the whole note behind "Read the whole note" | the panel is "Note & sources"; the note is closed by default to keep the drawn layout |
 | Workspace sources | three coloured sources | "Your note" is always source [1], frontmatter sources follow | no note in the corpus fills `sources:` yet, so the note is the one source every concept has |
 | Workspace tutor | "Learning guide · concise" | the stored tutor style's label ("Learning guide · concise" by default), as a link to Settings | the label is the style the prompt is given; the link says where it changes |
-| Tutor turns | Save to note and Why? | Why? sends "Why?"; Save to note is disabled with a title | extending `POST /api/learner/note` is not in 1c |
-| Studio cards | "Generate flashcards", "Add source" | disabled, with a title | no feature behind them yet |
+| Tutor turns | Save to note and Why? | Why? first, sending "Why?"; Save to note last, disabled, with "Not built yet." beside it | extending `POST /api/learner/note` is not in 1c |
+| Studio cards | "Generate flashcards", "Add source" | disabled, with the reason beside each (`disabledReason`) | no feature behind them yet |
 | Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
 | Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
 | Today, Streak card | "Calendar" link in the title row | not drawn | there is no calendar page to open |
 | Today, Streak card | "Reminders state facts, never guilt" under the strip | "Studied today." or "Nothing recorded yet today." | reminders are not built; the line states today's fact instead |
 | Today, Streak strip | four disc states | a fifth, `forgiven`: a dashed `--streak` ring | the habit data has misses the leeway covered, and they should not read as either a done day or a plain miss |
 | Today, Next up | "Next on your path · CP4281 · Module 2" | the course and module when a curriculum item links the concept, otherwise the note's folder ("Next on your path · algorithms") | most notes link no curriculum item yet |
-| Today, Reviews due | Snooze to tomorrow | drawn, disabled, with a tooltip | snoozing is out of scope for 1a |
+| Today, Reviews due | Snooze to tomorrow | drawn, disabled, with "Not built yet." beside it | snoozing is out of scope for 1a |
 | Today, Recent activity | one row per concept | one row per sitting (session and kind); a row over several concepts prints "p(L) 2 up · 5 down" instead of one before-and-after | a probe across seven concepts would otherwise fill the card with one session |
 | Today, Full history | a history page | links to `/learn` | there is no history page yet |
 | Today, phone | the page title in the header | "Today" printed under the header, visually hidden from 768px up | the shell's header shows the wordmark, as on Courses |

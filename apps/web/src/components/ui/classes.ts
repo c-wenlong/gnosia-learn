@@ -22,10 +22,22 @@ export type ButtonSize = "md" | "sm";
 const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
+/**
+ * A disabled button is dimmed and shows the not-allowed cursor, and it still
+ * takes pointer events: `pointer-events-none` would hide its `title` and any
+ * hover at all, which is how a disabled button's reason went unseen. A
+ * `<button disabled>` ignores clicks on its own; the hover and press styles
+ * below are scoped to `not-disabled:` so a disabled button does not react.
+ * There is no `aria-disabled` styling on purpose: an anchor marked that way
+ * still navigates, so the kit never renders one (`Button` with `href` has no
+ * disabled state).
+ */
+const DISABLED = "disabled:cursor-not-allowed disabled:opacity-50";
+
 const BUTTON_BASE = cx(
   "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold select-none",
   "transition-[translate,box-shadow,background-color,opacity] duration-100",
-  "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
+  DISABLED,
   FOCUS,
 );
 
@@ -36,7 +48,7 @@ const BUTTON_BASE = cx(
  * Pressing moves the face down onto the lip and drops the lip, so the button
  * reads as pushed in.
  */
-const LIP = "mb-1 hover:opacity-90 active:translate-y-1 active:shadow-none";
+const LIP = "mb-1 not-disabled:hover:opacity-90 not-disabled:active:translate-y-1 not-disabled:active:shadow-none";
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: cx("bg-btn-face text-btn-text shadow-[0_4px_0_var(--btn-lip)]", LIP),
@@ -51,8 +63,8 @@ const VARIANT: Record<ButtonVariant, string> = {
     "dark:text-brand-navy dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]",
     LIP,
   ),
-  secondary: "border-2 border-border bg-surface text-text hover:bg-surface2 active:bg-surface2",
-  ghost: "text-accent-text underline-offset-4 hover:underline",
+  secondary: "border-2 border-border bg-surface text-text not-disabled:hover:bg-surface2 not-disabled:active:bg-surface2",
+  ghost: "text-accent-text underline-offset-4 not-disabled:hover:underline",
 };
 
 /** Heights 44 and 36, labels 15 and 13 (kit `Btn`). Ghost keeps the height and drops the padding. */
@@ -106,7 +118,7 @@ export function inputClasses({ pill = false, className }: { pill?: boolean; clas
   return cx(
     "h-11 w-full min-w-0 border-2 border-border bg-surface px-3.5 text-[14px] text-text",
     "placeholder:text-text3 outline-none transition-colors duration-100 focus:border-accent",
-    "disabled:opacity-50",
+    DISABLED,
     pill ? "rounded-full" : "rounded-lg",
     className,
   );
