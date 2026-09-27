@@ -42,6 +42,8 @@ export const ROUTE_PROBLEM_CODES = [
   "no-ffmpeg",
   "poster-failed",
   "poster-not-made",
+  "not-uploaded",
+  "blob-store-unavailable",
 ] as const;
 
 export const CLIENT_PROBLEM_CODES = ["undecodable", "server-unreachable", "unknown"] as const;
@@ -161,6 +163,23 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
     reason:
       "No preview frame has been made for this video yet, or the last attempt was cut short. Asking again will try once more.",
     fix: { kind: "note", text: "Reload the page to try again." },
+    retry: true,
+  },
+  // The row points at the blob store and the store cannot hand the bytes over:
+  // an upload that never confirmed, or an object `catalog blob audit` found
+  // gone. The legacy file is not tried, so the answer names the store.
+  "not-uploaded": {
+    label: "Not in the blob store",
+    reason:
+      "The catalog says this file is kept in the blob store, but its upload never finished or the store no longer has it.",
+    fix: { kind: "command", text: "npm run catalog -- blob audit" },
+    retry: false,
+  },
+  "blob-store-unavailable": {
+    label: "The blob store did not open",
+    reason:
+      "The server could not open the blob store this file is kept in, so it could not be read. The file itself is probably fine.",
+    fix: { kind: "note", text: "Check that SELF_LEARN_HOME is an absolute path outside the repository." },
     retry: true,
   },
   undecodable: {

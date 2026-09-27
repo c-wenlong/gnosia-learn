@@ -68,7 +68,7 @@ another repo.
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-posters.ts` (a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to its bytes, safely: the blob store first, then a file on disk), `blob-store.ts` (the store the routes read), `asset-posters.ts` (a stored poster, or a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, files unless a type resolves to the database |
@@ -181,16 +181,30 @@ contain. A video sits under manimkc's data root and a diagram under
 `learn/assets/`, so neither is servable by Next, and the URL carries an asset
 id rather than a path: the id is a primary key, the row's `path` is joined onto
 a root chosen by the row's own `source_repo`, and the result is proved to be
-inside that root before and after symlinks are resolved. It is off unless
-`ASSET_FILES_ENABLED` is set, the shape decision D11 in
+inside that root before and after symlinks are resolved. That file branch is
+off unless `ASSET_FILES_ENABLED` is set, the shape decision D11 in
 [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) uses for the
 studio, because production has none of these files. The reasoning for each
 header it sets is in `apps/web/src/lib/asset-files.ts`.
 
-The poster route is that resolver's second reader, on the same gate, and it
-resolves nothing itself: it hands the id to `resolveAssetFile` and refuses
-anything that does not come back a video. A poster is not a row in the catalog
-— manimkc writes no thumbnail — so the frame is extracted here, fifteen seconds
+A row that names a `blob_key` never reaches that branch: `resolveAsset` serves
+it from the blob store first ([docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md),
+Track E), whatever the switch says. A store that signs URLs gets a 302 to one,
+good for an hour and never cached, so a cloud store's bytes never stream
+through a function; the laptop's `fs` store signs nothing, so the route streams
+it with the same Range answers. A `pending` blob, or one the store has lost, is
+a 404 `not-uploaded`, never a quiet fall back to a file that may have been
+re-rendered since. `catalog asset upload` is what fills the store and sets the
+keys, and `catalog blob audit` is what checks the two agree.
+
+The poster route asks for the stored poster first: `catalog asset upload` cuts
+one per video on the laptop, with the recipe in
+`services/catalog/src/poster/recipe.ts`, and records it as a `poster` asset
+derived from the video, served like any blob with its sha256 as the tag. For a
+video with none it is the file resolver's second reader, on the same gate, and
+it resolves nothing itself: it hands the id to `resolveAssetFile` and refuses
+anything that does not come back a video. manimkc writes no thumbnail, so
+without a stored one the frame is extracted here, fifteen seconds
 in rather than at the start, because frame 0 of a narrated render is a fade-in
 and three seconds in is a title card the card already prints as text. One
 ffmpeg per video, never per request: the result is cached under the system temp
@@ -660,6 +674,10 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
 | `apps/web/src/lib/asset-problems.test.ts` | The reason table (no paths, no em dashes, a fix per fixable code) and the probe's mapping of every answer |
 | `apps/web/src/components/asset-failure.test.ts`, `NoteProse.island.test.ts` | Each asset surface falling back to the shared panel with its reason, and a note without pictures rendering no client island |
+| `apps/web/src/app/api/assets/asset-blob.test.ts` | The asset routes from the blob store with the file switch off: a 200, a 206, a 416, a `pending` blob and a lost object as `not-uploaded`, the legacy branch still gated, a stored poster with its 304, a stored transcript read for the page |
+| `apps/web/src/app/api/assets/asset-blob-redirect.test.ts` | A store that signs URLs: the 302 carries the store's URL and no path, lives an hour, and a Range request at it returns 206 |
+| `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes fall back to the file instead of answering `catalog-unreachable` |
+| `services/catalog/test/asset-upload.test.ts` | `catalog asset upload` and `catalog blob audit`: every row pointed at bytes equal to its `content_hash`, a rerun that does nothing, a pending upload finished, a re-render refused, a re-index keeping its keys, and each audit finding with what `--fix` does |
 | `apps/web/src/app/api/assets/asset-poster.test.ts` | The poster route, against a fake ffmpeg that counts its own runs: a hit, a second hit from cache, a 304, a non-video, no ffmpeg, the gate, and a burst of ten sharing one process |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |

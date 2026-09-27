@@ -694,16 +694,16 @@ of the type's pages identical under `CONTENT_SOURCE=files` and `db`, plus
 **Owns:** `services/catalog/src/content/topics.ts` and `tags.ts`, their
 commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
 
-- [ ] `catalog topic add --slug --title --domain --summary [--alias]...
+- [x] `catalog topic add --slug --title --domain --summary [--alias]...
       [--relate kind:slug]... --reason --json`: validates what
       `packages/content/src/topics.ts:60-66` validates (kebab-case, unique),
       then a `pg_trgm` similarity check against titles and aliases that warns
       above a threshold (*guessed* 0.45) and names the near match.
-- [ ] `catalog topic edit` (title, summary, aliases, domain; never the slug),
+- [x] `catalog topic edit` (title, summary, aliases, domain; never the slug),
       `catalog topic rename --from --to` (edge case 2), `catalog topic relate`,
       `catalog topic archive`.
-- [ ] `catalog tag add|edit`.
-- [ ] `learn concept add --topic` calls `catalog topic` internals to set
+- [x] `catalog tag add|edit`.
+- [x] `learn concept add --topic` calls `catalog topic` internals to set
       `concept.topic_slug`, replacing the text splice, lock and verify in
       `vocabulary-edit.ts:244-397`. The invariant that code enforces (a concept
       in exactly one topic, checked after the write) is now a column and a
@@ -719,6 +719,75 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
 - [ ] The planner's VOCABULARY block includes relations, so it can say "this
       sits under `computer-networks`".
 - [ ] The web app's topic and tag readers switch to `dbSource`.
+
+**Built** (the verbs) in `services/catalog/src/content/topics.ts`, `tags.ts`,
+`write-through.ts` and `commands/topic.ts`, tested in
+`services/catalog/test/topic-verbs.test.ts`. Where it goes past or around the
+list above, and why:
+
+- **Every write rewrites its export in the same transaction**
+  (`writeThrough`), from the type's flip back to now: D17 said "from a type's
+  flip", but a topic written before the flip would otherwise be deleted by the
+  next `catalog index`, which reads the file. The writer takes an advisory
+  lock per type, refuses unless the files under the root the type was last
+  imported from are byte for byte what the rows would export (anything else is
+  an edit the database has not seen, and writing from rows would lose it),
+  writes, renders again inside the transaction, replaces the changed files, and
+  records the export hash on `content_source`. A failure after the first file
+  write, commit included, puts the files back. So after any verb the next
+  import of the tree writes zero revisions and parity is clean, which the
+  tests assert after every write.
+- **`add` places the topic after the last topic of its domain** (the file is
+  written in domain groups), as a sparse position between its neighbours
+  (D22); no gap left is refused with `catalog renumber topics`. It also
+  refuses a title another live topic has (case and spacing ignored), and a
+  `--relate` that would close a loop of `broader` or `precedes`. A `related`
+  edge to a smaller slug is stored under that topic, so the add is a
+  composite write and that topic gets a revision too.
+- **The near-match check** (edge case 17) compares the proposed title, each
+  alias and the slug read as words with every live topic's title, aliases and
+  slug read as words, by `similarity`, and lists up to five at or above 0.45.
+  It warns and never refuses. Kept at 0.45 after measuring the real
+  vocabulary: each of the 86 titles checked against the other topics flags 4
+  topics, three of them genuine neighbours (the ManimGL pipeline and graphics
+  pipelines, coding agents and AI code review, 3DGS and its variants) and one
+  not (the two "evaluation methods"); 0.35 flags 16.
+- **`archive` needs the database to own topics**: `topics.yaml` cannot say
+  archived, so before the flip the export would drop the topic and the next
+  import would delete it. It is refused while anything points at the topic
+  (live concepts and modules, manimkc paths, relations, assets, diagrams, open
+  jobs), listed by kind. `restore` is its inverse.
+- **`rename`** locks the six entity types an import would, takes the
+  `related` edges out and puts them back under whichever end is now smaller
+  (the order check would refuse the cascade), rewrites each diagram row's
+  `meta.tldrawkc.topic` and `document_hash`, rewrites open jobs' `brief.topic`,
+  appends the old slug to the aliases, and writes one `rename` revision per
+  entity whose snapshot changed. The topic's is under its new slug, `seq` 1,
+  with `previous_id` at the last revision under the old one. It rewrites the
+  course files too when a module sits under the topic. While diagrams are read
+  from files it refuses a topic a `.tldr` stamps, naming the files, since only
+  tldrawkc rewrites a stamp; `--restamp-diagrams-later` goes ahead and lists
+  them, and the next import refuses them by name until they are restamped.
+- **`topic ls --json`** is what the planner will read in place of its
+  VOCABULARY block: every live topic's slug, title, domain, summary, aliases,
+  `relations`, `maps` and the `incoming` edges other topics hold.
+- **`learn concept add --topic`** calls `fileConceptUnderTopic` in
+  `content/topics.ts`: before the note is written, `checkConceptTopic` refuses
+  a topic that is not a live row, a concept already under another topic, a
+  knowledge base other than the tree topics were imported from, and a
+  `topics.yaml` out of step; after it, `concept.topic_slug` goes through the
+  seam (the row created from the note's title and summary when the catalog
+  has none, at the end of the topic's `maps.concepts`), `topics.yaml` is
+  rewritten from the rows, and the concepts indexer runs as before. The
+  `--json` shape is unchanged; `--reason` is optional there, with a default,
+  since the plugin's calls cannot be made to pass one (D15).
+  `vocabulary-edit.ts` is deleted before the flip rather than at it, since
+  nothing calls it; its lock and atomic replace moved to
+  `services/catalog/src/learn/file-lock.ts` for `course-edit.ts`, the one text
+  edit left until Track B.
+- **`--author`** names the person a write is for (the studio's Draw press);
+  the default is the local learner. Every write needs `--reason`; a dry run
+  does not.
 
 **Parity:** 86 topics, 23 domains, 294 aliases, 8 tags, 35 manimkc paths, 32
 concept mappings, 61 module mappings (*measured* today). **Tests:** the verbs'
@@ -867,7 +936,9 @@ Where it goes past or around the list above:
   or no `--domain` (a file with neither was never indexed either), moving a
   note to another folder or topic (the asset's id is its path and the seam
   cannot retire the old one yet), and writing an archived concept. A new
-  note is placed one `POSITION_STEP` past the end of its topic (D22).
+  note is placed one `POSITION_STEP` past the end of its topic (D22), and its
+  write runs inside Track A's `writeThrough(["topics"])`, so
+  `content/topics.yaml`'s `maps.concepts` gains it in the same transaction.
 - **The checkout copy lives outside the repository**: `$LEARN_ROOT/work/`
   when `LEARN_ROOT` is set, a folder per checkout and database under the OS
   temp directory otherwise, or `LEARN_WORK_DIR`, with a sidecar holding the
@@ -940,23 +1011,66 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
 `apps/web/src/app/api/assets/[id]/file/route.ts` and `poster/route.ts`,
 `apps/web/src/lib/asset-files.ts`, `apps/web/src/lib/asset-posters.ts`.
 
-- [ ] `catalog asset upload --source manimkc [--dry-run]` reads the report the
+- [x] `catalog asset upload --source manimkc [--dry-run]` reads the report the
       manimkc indexer already reads (`manimkc topics --json`, with its
       `outRoot`), hashes each deliverable and sidecar, skips keys already
       `present`, uploads the rest, makes a poster with ffmpeg on the laptop and
       uploads it, and sets `asset.blob_key`. Resumable by construction, since a
       content-addressed key that is `present` is done.
-- [ ] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
+- [x] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
       `signedUrl` with a TTL of an hour, or stream when the adapter returns
       null), then the legacy file. `ASSET_FILES_ENABLED` keeps gating the
       legacy branch only. `/api/assets/{id}/poster` does the same with the
       poster asset.
-- [ ] The mirror ledger stays as it is (open question 8): it audits manimkc's
+- [x] The mirror ledger stays as it is (open question 8): it audits manimkc's
       own Drive and Seafile copies, and its join key, the logical
       `out/...` path, survives (D11).
 
+- [x] `catalog blob audit [--fix]` (edge case 9), added when it was built: an
+      object with no row, a `present` row whose object is gone or no longer
+      hashes to its key, a stale `pending` row, an object nothing points at, a
+      poster whose video is gone.
+
+**Built** (branch `p1/e-videos`). The upload is `services/catalog/src/content/asset-upload.ts`
+behind `commands/asset-upload.ts`, on Track D's `uploadBlob`. Three things the
+plan did not say, found while building it:
+
+- **A re-index would have unhooked every blob.** The writer's upsert sets every
+  column from the row an indexer gives it, and an indexer never names a blob,
+  so `catalog index --only manimkc` after an upload set every `blob_key` back
+  to null. `services/catalog/src/index/blob-keys.ts` carries a stored key
+  forward while the stored blob's sha256 is the `content_hash` just read, so a
+  re-render drops it and nothing else does.
+- **A poster's id is `poster:<video id>`, outside `manimkc:`**, because the
+  manimkc prune deletes every row in its namespace it did not produce. It has
+  no `path` and `source_repo = 'self-learn'`, and it is a companion kind in the
+  library. The recipe moved to `services/catalog/src/poster/recipe.ts`, shared
+  with the route's ffmpeg fallback, so the two cannot cut different pictures.
+  A poster cut from a video's old bytes is unhooked from the video when the
+  upload links new bytes and cannot cut a new poster, since nothing later
+  would notice it showed the old render.
+- **The upload refuses a file whose bytes are not its row's `content_hash`**
+  (a re-render since the last index), rather than hooking new bytes to an old
+  row, since that is the one parity rule this track has.
+
+The routes resolve through `resolveAsset` in `apps/web/src/lib/asset-files.ts`,
+which the status route and the pages' pre-render check (`readFileProblems`,
+`readAssetText`) share, so a blob that serves is `ok` everywhere. With the
+switch off and no catalog the routes still answer `files-off`, exactly as
+before. Not built: edge case 15's one retry in the player for an expired URL,
+since the `fs` store signs nothing and it belongs with the cloud adapter; and
+per-row servability on the pages, which still read the switch deployment-wide
+(`readFileAccess`), so with it off a page shows the "files off" state even for
+an asset the route would serve from the store. Both are go-live work.
+
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
-`content_hash` equals its blob's `sha256`. **Tests:** the redirect carries no
+`content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
+`createdb -T self_learn` copy migrated to 0011 with a temporary
+`SELF_LEARN_HOME`: 36 videos, 87 sidecars and 36 posters uploaded, 433.6 MB,
+159 of 159 rows with `blob_object.sha256 = asset.content_hash` and equal
+bytes; a second run uploaded nothing and wrote no revision; `catalog index
+--only manimkc` afterwards kept all 159 keys; `catalog blob audit` found
+nothing. **Tests:** the redirect carries no
 path; a Range request on the fs adapter still returns 206; an asset with a
 `pending` blob answers 404 `not-uploaded` rather than 500. **Docs:**
 [DEPLOYMENT.md](DEPLOYMENT.md) gains the blob store; AGENTS.md's poster gotcha
