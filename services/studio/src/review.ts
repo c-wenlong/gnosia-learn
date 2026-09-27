@@ -228,7 +228,11 @@ async function acceptLocked(
       error: put.offline ? "catalog-offline" : refusal.code === "stale-base" ? "target-moved" : "put-refused",
     };
   }
-  const revision = (put.json as { revision?: unknown } | null)?.revision;
+  const landedJson = (put.json ?? {}) as { revision?: unknown; files?: unknown };
+  const revision = landedJson.revision;
+  // Until `catalog flip diagrams` the files still own diagrams, and the put
+  // wrote them through (D17 of the migration plan); after it, none.
+  const files = Array.isArray(landedJson.files) ? landedJson.files.filter((f): f is string => typeof f === "string") : [];
 
   /* 5. The disk record, before the job row: rule 7. The diagram has landed, so
    *    a crash from here on must leave a record that says so; Reindex then
@@ -237,6 +241,7 @@ async function acceptLocked(
     state: "accepted",
     reviewedAt: new Date().toISOString(),
     written,
+    files,
     indexed: false,
   });
 
@@ -254,7 +259,10 @@ async function acceptLocked(
     `${record.targetPath} landed in the database` +
     (typeof revision === "number" ? ` as revision ${revision}` : "") +
     (hasSvg ? ", with its SVG in the blob store" : "") +
-    `. Nothing under learn/ changed, so there is nothing to commit.` +
+    (files.length === 0
+      ? `. Nothing under learn/ changed, so there is nothing to commit.`
+      : `. The files still own diagrams until the flip, so ${files.join(" and ")} were written ` +
+        `too; commit them yourself: git add ${files.join(" ")}`) +
     (checkout.note.includes("never committed") ? ` ${checkout.note}.` : "");
   if (!indexed.ok) {
     await store.noteCatalogError(record.id, indexed.error ?? "accept could not be recorded");

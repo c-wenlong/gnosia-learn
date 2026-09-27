@@ -172,7 +172,7 @@ function SelectedDiagram({
               <Mono>{diagram.svg.path}</Mono>
               <span className="block text-[var(--muted)]">
                 {formatBytes(diagram.svg.bytes)} · {relativeTime(diagram.svg.modified)}
-                {diagram.svgState === "stale" ? " · older than the document" : ""}
+                {diagram.svgState === "stale" ? " · exported from an earlier version" : ""}
               </span>
             </>
           ) : (
@@ -193,7 +193,8 @@ function SelectedDiagram({
         </div>
         <p className="mt-2 text-xs text-[var(--muted)]">
           Each one runs in the studio runner and launches its own Chromium, so it takes a few
-          seconds. The result is the file on disk: this panel redraws from it.
+          seconds. Each runs on the diagram&apos;s checkout; Export SVG stores the SVG when the canvas
+          holds no uncommitted edits, and Commit stores the canvas.
         </p>
       </div>
 

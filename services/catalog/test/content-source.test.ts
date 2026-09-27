@@ -31,7 +31,11 @@ describe("dbSource", () => {
     diagram: () => source.diagram("dot-product"),
   };
 
-  it.each(Object.keys(calls) as (keyof ContentSource)[])("refuses %s with its type named", async (method) => {
+  // A track that builds its reader sets `ready`, and its method leaves the
+  // refusal cases; the rest must still refuse without touching the database.
+  const waiting = (Object.keys(calls) as (keyof ContentSource)[]).filter((method) => !READERS[method].ready);
+
+  it.each(waiting)("refuses %s with its type named", async (method) => {
     const type = METHOD_TYPES[method];
     const refused = calls[method]().then(
       () => null,
@@ -47,12 +51,13 @@ describe("dbSource", () => {
     expect(new Set(Object.values(METHOD_TYPES))).toEqual(new Set(CONTENT_TYPES));
   });
 
-  it("names no type as readable while every method still refuses", () => {
+  it("names as readable exactly the types whose reader says it is ready", () => {
     // `catalog flip` refuses a type missing from DB_READERS. A track that
     // fills in its reader sets `ready` in its own file, and moves its method
     // out of the refusal cases above.
-    expect([...DB_READERS]).toEqual([]);
-    expect(Object.values(READERS).map((reader) => reader.ready)).toEqual([false, false, false, false, false, false]);
+    const ready = (Object.keys(READERS) as (keyof ContentSource)[]).filter((method) => READERS[method].ready);
+    expect([...DB_READERS].sort()).toEqual(ready.map((method) => METHOD_TYPES[method]).sort());
+    expect(READERS.diagram.ready).toBe(true);
   });
 
   it("derives the readable types from each reader's own flag", () => {

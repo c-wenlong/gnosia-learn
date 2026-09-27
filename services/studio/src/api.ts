@@ -200,6 +200,9 @@ function view(record: JobRecord): Record<string, unknown> {
     // more Chromium launches for an answer already on disk.
     comparison: record.comparison ?? null,
     written: record.written,
+    // The files an accept's put also wrote into the tree, while the files
+    // still owned diagrams: the only ones a person has to commit.
+    files: record.files ?? [],
     indexed: record.indexed,
     error: record.error,
     errorKind: record.errorKind,

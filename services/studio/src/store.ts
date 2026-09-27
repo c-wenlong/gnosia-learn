@@ -109,6 +109,12 @@ export interface JobRecord {
    */
   targetRevisionBefore?: number | null;
   /**
+   * Files the accept's put wrote into the working tree because the files still
+   * owned diagrams (D17 of the migration plan). Empty after the flip, and
+   * absent on a job accepted before diagrams moved into the database.
+   */
+  files?: string[];
+  /**
    * The candidate's sha256 when the reconcile pass marked this job
    * `interrupted`, or null when there was nothing there.
    *

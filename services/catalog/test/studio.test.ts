@@ -690,17 +690,18 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
       expect(await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId))).toHaveLength(0);
     });
 
-    it("never rewrites an accepted job's provenance, even on a repair put", async () => {
+    it("never rewrites an accepted job's provenance: a changed put under its name is refused", async () => {
       const jobId = await readyJob("snapshot");
       await land(jobId, "snapshot", { topic: "alpha" });
       const accepted = await runAccept({ jobId });
       const landed = accepted.outputs[0]!.contentHash;
 
-      await land(jobId, "snapshot", { topic: "alpha", title: "edited afterwards" });
+      await expect(land(jobId, "snapshot", { topic: "alpha", title: "edited afterwards" })).rejects.toThrow(
+        /is accepted/,
+      );
       const [row] = await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId));
       expect(row!.contentHash).toBe(landed);
-      const shown = await runShow(jobId);
-      expect(shown.outputs[0]!.current).toBe(false);
+      expect((await runShow(jobId)).outputs[0]!.current).toBe(true);
     });
 
     it("updates the claim while the job is still awaiting review", async () => {

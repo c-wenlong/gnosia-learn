@@ -267,6 +267,19 @@ describe("a clean accept", () => {
     expect(store.get("job-accept")?.state).toBe("accepted");
   });
 
+  it("names the files the put wrote through while the files still own diagrams", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    catalogMock.diagramPut.mockResolvedValue({
+      ok: true,
+      json: { revision: 6, changed: true, files: [targetPath(SLUG), targetSvgPath(SLUG)] },
+      error: null,
+      offline: false,
+    });
+    const result = await accept(store, await place());
+    expect(result.ok).toBe(true);
+    expect(result.note).toContain(`git add ${targetPath(SLUG)} ${targetSvgPath(SLUG)}`);
+  });
+
   it("is a retry, not a move, when this job's own earlier put is the latest revision", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
     diagram.revision = 6;
