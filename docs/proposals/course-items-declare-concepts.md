@@ -215,18 +215,34 @@ is the one that links it.
 
 ## The web app
 
-The path needs nothing. `conceptsForTopic` sorts by `authored`, today the
-module topic's `maps.concepts`; it should sort by the new `position` instead,
-which the knowledge base can carry on `KbConcept.topics` as `{ item, position }`
-rather than a bare id list
+`KbConcept.topics` stays a list of item ids. Four consumers depend on that
+shape and none of them should have to change: `conceptsForTopic`
+(`topics.includes(topicId)`), Today's "where a concept sits on the courses"
+lookup ([today.ts:163](../../apps/web/src/lib/today.ts)), the concept
+workspace's course link, and the learn index. The knowledge base adds a second
+field beside it, `positions: Record<string, number>` keyed by item id, read
+from the new column
 ([knowledge-base.ts:153](../../services/catalog/src/state/knowledge-base.ts)).
-`resolveTopicMastery`, `topicDone` and `isLocked` are unchanged.
+`conceptsForTopic` sorts by `positions[topicId]` instead of by `authored`, the
+module topic's `maps.concepts`, and keeps `authored` as the tie-break for a
+concept the course file has not placed. `resolveTopicMastery`, `topicDone` and
+`isLocked` are unchanged.
 
-Today and the Courses grid adopt the path's rule. `coursesInProgress` takes a
-`done` set instead of `completed`, built server-side with `topicDone` over the
-knowledge base and the learner's ticks. The grid is a client component reading
-`state.completed`; it needs the same `done` set handed down from the page, or
-it keeps counting ticks and the two screens keep disagreeing.
+Today and the Courses grid adopt the path's rule, and the split between
+server and client is the one the path already has. The server computes
+`mastered`: the set of item ids whose concepts are all mastered, from the
+knowledge base alone. The client keeps owning ticks. An item is done when it
+is in `mastered`, or when it has no concepts and `state.completed` holds it.
+Both screens need to know which items have concepts, which the page passes
+down as a set beside `mastered`.
+
+That keeps the grid live. A tick, an optimistic tick and a course reset all
+change `state.completed` on the client and the grid recomputes as it does
+today. Mastery only moves inside a session or a review, both of which are
+server round-trips followed by navigation, so a `mastered` set built per
+request is never staler than the path's own mastery dots.
+`coursesInProgress` takes `mastered`, `withConcepts` and `completed` and
+applies that rule per item.
 
 ## The CLI
 
@@ -270,8 +286,9 @@ Required is the end state, and `catalog status` is how to see the distance.
   order (concepts before courses), the frontmatter refusal.
 - `apps/web/src/lib/course-path.test.ts`: `conceptsForTopic` sorts by
   position.
-- `apps/web/src/lib/today-core.test.ts`: `coursesInProgress` over a `done`
-  set that mixes mastered items and ticked ones.
+- `apps/web/src/lib/today-core.test.ts`: `coursesInProgress` over an item
+  that is mastered, an item without concepts that is ticked, and an item with
+  concepts that is ticked but not mastered, which must not count.
 
 ## Out of scope
 
