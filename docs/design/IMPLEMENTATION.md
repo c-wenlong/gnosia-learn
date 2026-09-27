@@ -47,7 +47,9 @@ not restyle a primitive for its own page.
 Declared in [apps/web/src/app/globals.css](../../apps/web/src/app/globals.css),
 light on `:root` and dark on `.dark` (the cookie-driven class on `<html>`).
 The values and where each came from are the token table in DESIGN.md and
-`TOKENS` in [kit/hifi.py](kit/hifi.py).
+`TOKENS` in [kit/hifi.py](kit/hifi.py), which record the hi-fi frames as
+drawn. Values the app has since moved for contrast, and the tokens the kit
+never had, are measured in [BRAND.md](BRAND.md#contrast-checked).
 
 **Four palettes.** `:root` is Classic light, `.dark` Classic dark, `.gnosia`
 the brand's light theme and `.gnosia.dark` the brand's dark one, each
@@ -71,7 +73,7 @@ reason for each and the contrast table are in
 | Habit | `--streak` (the fill: discs, rings, the dot, the big number), `--streak-text` (the streak as small text, at 4.5:1 on the card) |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
-| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white, navy under Gnosia dark) |
+| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white in the light palettes, the page colour in the dark ones) |
 
 **Every token is also a Tailwind colour of the same name**, so write
 `bg-surface2 text-text2 border-border`, not `bg-[var(--surface2)]`. The

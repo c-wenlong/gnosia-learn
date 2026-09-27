@@ -18,8 +18,11 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * The hi-fi palette. Values and provenance are `TOKENS` in
- * docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md; the
+ * The hi-fi palette. The starting values and their provenance are `TOKENS`
+ * in docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md,
+ * which record the hi-fi frames as drawn; where the app has since moved a
+ * value for contrast (the `.dark` accent, learning blue and marks, and the
+ * tokens the kit never had), docs/design/BRAND.md has the measurement. The
  * names are the contract every redesigned page is written against, listed in
  * docs/design/IMPLEMENTATION.md. Light is on :root, dark on `.dark`.
  */
@@ -51,8 +54,8 @@
   --streak-text: #b35a00;
   /* The marks drawn on a bright fill: the check on a done streak day and the
      dot on a mastered path node. White wherever those fills are mid-tone or
-     darker, which is every palette but Gnosia dark, so this is their one
-     declaration; `.gnosia.dark` lightens both fills and turns the marks navy. */
+     darker, which is both light palettes. The two dark palettes lighten both
+     fills, so `.dark` and `.gnosia.dark` turn the marks to their page colour. */
   --streak-on: #ffffff;
   --m-hi-on: #ffffff;
   --btn-face: #111111;
@@ -119,7 +122,11 @@
   --text: #ffffff;
   --text2: #a3a3a3;
   --text3: #7a7a7a;
-  --accent: #456dff;
+  /* A step darker than the kit's #456dff, at the one luminance where both a
+     white label (chips, the accent button) and the black stat-tile strip
+     clear 4.5:1 (4.58 and 4.59); same hue and chroma. The kit's value
+     carried white at 4.30. BRAND.md, "Classic dark", has every pair. */
+  --accent: #4168fa;
   --accent-text: #7491ff;
   --ok: #29cc57;
   --ok-lip: #15b441;
@@ -133,11 +140,23 @@
   --streak: #ffab33;
   /* Already 8.83:1 on the dark card, so the text colour is the fill. */
   --streak-text: #ffab33;
+  /* The check on the bright orange is the page colour: white was 1.89:1,
+     this is 9.76:1. */
+  --streak-on: #141414;
   --btn-face: #e5e5e5;
   --btn-lip: #b3b3b3;
   --btn-text: #000000;
   --m-hi: #7491ff;
-  --m-mid: #3a4a8f;
+  /* The mark on a mastered node is the page colour: white on this blue was
+     2.90:1, this is 6.35:1. */
+  --m-hi-on: #141414;
+  /* Learning: the kit's #3a4a8f lifted, same hue and chroma, until it clears
+     3:1 on the card (3.07) and the page (3.39); the kit's value was 2.03.
+     It sits 18.0 L* below mastered (a luminance ratio of 1.87), the widest
+     gap left once learning clears 3:1 and mastered stays #7491ff. The old
+     learning blue is now its lip, the darker shade under the path node. */
+  --m-mid: #5266ad;
+  --m-mid-lip: #3a4a8f;
   --m-lo: #4c4c4c;
   --lip-shade: #0f0f0f;
 
