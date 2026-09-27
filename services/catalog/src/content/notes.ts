@@ -141,6 +141,13 @@ function unheldAsWritten(text: string, where: string): string[] {
   const { data } = parseFrontmatter(text);
   for (const entry of entries) {
     if (twice.has(entry.key)) continue;
+    // A one-value key written as a list (`created: [2026-...]`, or with
+    // `- item` lines under it) is read as a list, which no column of that key
+    // holds, so the value would be dropped.
+    if (!LIST_KEYS.has(entry.key) && (entry.raw.startsWith("[") || entry.items.length > 0)) {
+      problems.push(`${where}: ${entry.key} is written as a list, and a note's ${entry.key} is one value.`);
+      continue;
+    }
     // `tags: one` then `- two` is read as `[two]`: the parser lets the list
     // replace a plain value on the key line. An inline list (`tags: [one]`
     // then `- two`) is extended instead, and is read as written.
