@@ -591,6 +591,15 @@ not have to be worked out again.
   catalog and builds clean. `decodeAssetId` in `apps/web/src/lib/library.ts`
   does it, and swallows the `URIError` a malformed escape raises so a hand-typed
   URL is a 404 rather than a 500.
+- **"Dynamic filesystem access causes tracing of the whole project" in
+  `npm run build` is a real bug, not noise.** Turbopack reads a `path.join`,
+  `realpath` or `open` on a computed path in anything a route imports as "this
+  could open any file", and traces the whole repository, `public/` included,
+  into the deployed server bundle. The fix is a `/* turbopackIgnore: true */`
+  comment inside the call it names, as on `objectPath` in
+  `packages/blob/src/fs.ts` and the two `realpath`s in
+  `apps/web/src/lib/asset-files.ts`. A build that prints the warning is not
+  done.
 - **A poster needs `format=yuvj420p` in the filter chain, or ffmpeg writes
   nothing.** `apps/web/src/lib/asset-posters.ts` extracts a still frame as
   JPEG, and mjpeg refuses a limited-range YUV source outright: *Non full-range

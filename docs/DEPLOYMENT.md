@@ -266,7 +266,9 @@ branch that reads a file from disk. With the `fs` store the route streams the
 object with Range support; a cloud store's signed URL (an hour) would be a
 302 instead, so a video never streams through a Vercel function (edge case 10
 of the plan). An asset whose blob is `pending`, or whose object the store has
-lost, answers 404 with the code `not-uploaded`.
+lost, answers 404 with the code `not-uploaded`. A database not yet migrated
+to 0010 has no blob columns, and the routes then serve the legacy file exactly
+as before, with one warning in the server log saying to migrate.
 
 ### Checking it
 
