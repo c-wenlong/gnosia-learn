@@ -24,6 +24,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
+| [docs/STUDIO-CHAT-FIRST.md](docs/STUDIO-CHAT-FIRST.md) | The studio's proposed chat-first redesign: the planner agent, the `draft` table, the plus card and chat panel, and the tldraw manual in the drawing prompt |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
 | [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
