@@ -49,7 +49,9 @@ const identifiers = guarded.join("|");
 const sqlNames = guarded.map((name) => getTableName(tables[name])).join("|");
 
 const PATTERNS = [
-  new RegExp(`\\.(insert|update|delete)\\(\\s*(${identifiers})\\s*\\)`, "g"),
+  // The table may be reached through a namespace (`schema.topic`,
+  // `tables.curriculumItem`), which is as much a write as the bare name.
+  new RegExp(`\\.(insert|update|delete)\\(\\s*(?:\\w+\\.)?(${identifiers})\\s*\\)`, "g"),
   new RegExp(`\\b(insert\\s+into|delete\\s+from)\\s+"?(${sqlNames})"?\\b`, "gi"),
   new RegExp(`\\bupdate\\s+(only\\s+)?"?(${sqlNames})"?\\s+set\\b`, "gi"),
 ];
@@ -103,7 +105,10 @@ describe("content writes stay inside the seam", () => {
     expect(hits('sql`insert into "concept_curriculum_item" (a) values (1)`')).toBe(true);
     expect(hits("sql`update asset set title = 'x'`")).toBe(true);
     expect(hits("sql`DELETE FROM topic_relation`")).toBe(true);
+    expect(hits("await tx.insert(schema.topic).values(row)")).toBe(true);
+    expect(hits("db.delete(tables.conceptPrerequisite)")).toBe(true);
     expect(hits("await tx.insert(progress).values(row)")).toBe(false);
+    expect(hits("await tx.insert(schema.progress).values(row)")).toBe(false);
     expect(hits("we update topic rows when the file changes")).toBe(false);
   });
 });

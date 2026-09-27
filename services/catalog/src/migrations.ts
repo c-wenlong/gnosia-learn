@@ -111,3 +111,40 @@ export async function applyMigrations(
     migrationsSchema: options.migrationsSchema ?? DEFAULT_MIGRATIONS_SCHEMA,
   });
 }
+
+/**
+ * The catalog CLI's exit code for "the database is behind this code". The
+ * next free number after `EXIT_UNREACHABLE`'s 3, and deliberately not 1:
+ * a caller can tell "run migrate" from "the command failed" without reading
+ * the message, and from 3, which the studio reads as "nothing is there".
+ */
+export const EXIT_MIGRATIONS_OUTSTANDING = 4;
+
+/**
+ * Refused because the database has not had every migration on disk applied.
+ * The message is the whole remedy, and nothing is printed with a stack: the
+ * alternative was drizzle's `Failed query: select ... from content_source`,
+ * which named a table the person had never heard of.
+ */
+export class MigrationsOutstanding extends Error {
+  readonly pending: readonly string[];
+  constructor(pending: readonly string[]) {
+    super(
+      `${pending.length} migration(s) outstanding (${pending.join(", ")}). ` +
+        `Run: npm run catalog -- migrate`,
+    );
+    this.name = "MigrationsOutstanding";
+    this.pending = pending;
+  }
+}
+
+/**
+ * Throws {@link MigrationsOutstanding} when any migration on disk is not
+ * applied, which is how `catalog doctor` and `catalog status` already read it.
+ * For the commands that query tables or columns a later migration added: run
+ * first, so they refuse by name instead of failing on a missing relation.
+ */
+export async function assertMigrated(db: CatalogDatabase): Promise<void> {
+  const status = await migrationStatus(db);
+  if (status.pending.length > 0) throw new MigrationsOutstanding(status.pending);
+}

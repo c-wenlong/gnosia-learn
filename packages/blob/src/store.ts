@@ -14,8 +14,12 @@ export interface BlobMeta {
   mime: string;
 }
 
-export interface BlobHead {
+/** What `stat` reports: the size, without reading the bytes. */
+export interface BlobStat {
   bytes: number;
+}
+
+export interface BlobHead extends BlobStat {
   /**
    * The sha256 of the bytes the store holds now, when the store can say.
    * Optional because a provider that keeps no checksum cannot report one; an
@@ -27,6 +31,22 @@ export interface BlobHead {
 
 /** Both ends inclusive, as in an HTTP `Range` header and `createReadStream`. */
 export interface BlobRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * An open read: the bytes, and what a route needs to answer with them
+ * (`Content-Length`, and for a range `Content-Range: bytes start-end/size`)
+ * without a second request or a hash.
+ *
+ * `size` is the whole object's length. `start` and `end` are the inclusive
+ * range the body holds, after clamping: `0` and `size - 1` for a whole read,
+ * so an empty object reads as `start 0, end -1`, a body of no bytes.
+ */
+export interface BlobRead {
+  body: Readable;
+  size: number;
   start: number;
   end: number;
 }
@@ -71,17 +91,25 @@ export interface BlobStore {
    */
   put(key: string, body: Readable, meta: BlobMeta): Promise<void>;
 
-  /** Size and, where the store can measure it, the hash; null when absent. */
+  /**
+   * Size and, where the store can measure it, the hash; null when absent.
+   * Measuring may read every byte (the `fs` adapter does), so this is the
+   * integrity check, not the way to learn a size.
+   */
   head(key: string): Promise<BlobHead | null>;
 
+  /** The size alone, without reading the bytes; null when absent. */
+  stat(key: string): Promise<BlobStat | null>;
+
   /**
-   * The object, or `range` of it. Rejects with `BlobNotFoundError` when the
-   * key is absent, before any stream is returned. A range whose `end` runs
-   * past the object is clamped to its last byte, as HTTP does; one whose
-   * `start` is at or beyond the end, or that is not a pair of integers with
+   * The object, or `range` of it, with the object's size and the range the
+   * body holds (`BlobRead`). Rejects with `BlobNotFoundError` when the key is
+   * absent, before any stream is returned. A range whose `end` runs past the
+   * object is clamped to its last byte, as HTTP does; one whose `start` is at
+   * or beyond the end, or that is not a pair of integers with
    * `0 <= start <= end`, rejects with `BlobRangeError`.
    */
-  get(key: string, range?: BlobRange): Promise<Readable>;
+  get(key: string, range?: BlobRange): Promise<BlobRead>;
 
   /**
    * A URL a browser can fetch the object from, Range requests included, for

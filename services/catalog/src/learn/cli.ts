@@ -75,7 +75,12 @@ import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { IndexError } from "../index/errors";
 import { runIndex } from "../index/run";
-import { migrationStatus } from "../migrations";
+import {
+  assertMigrated,
+  EXIT_MIGRATIONS_OUTSTANDING,
+  migrationStatus,
+  MigrationsOutstanding,
+} from "../migrations";
 import {
   appendEvent,
   endSession,
@@ -1325,6 +1330,9 @@ commands.map = async ({ values }, session) => {
  */
 commands.index = async ({ values }, session) => {
   const db = await session.db();
+  // The import reads `content_source` and writes revisions, both from 0010 on.
+  // Refused by name on an older database rather than with a stack trace.
+  await assertMigrated(db);
 
   let written = 0;
   let deleted = 0;
@@ -1602,6 +1610,12 @@ export async function main(argv: string[]): Promise<number> {
     await command(parsed as Parsed, session);
     return process.exitCode === 1 ? 1 : 0;
   } catch (error) {
+    // The same code the catalog CLI uses for it, so a script can tell "run
+    // migrate" from a failure without reading the sentence.
+    if (error instanceof MigrationsOutstanding) {
+      process.stderr.write(`learn: ${redactUrl(databaseUrl())} is behind this code. ${error.message}\n`);
+      return EXIT_MIGRATIONS_OUTSTANDING;
+    }
     // A CliError, a StateError or an IndexError is a sentence written for the
     // person reading it. Anything else is a bug, and its stack is the useful
     // part — which is what the old `main().catch` printed for everything.

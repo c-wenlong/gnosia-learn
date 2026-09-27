@@ -130,6 +130,53 @@ describe("who owns each type", () => {
     expect(resolved.tags).toEqual({ kind: "files", from: "default" });
   });
 
+  it("lets Next's own dynamic-usage signal through instead of calling it an outage", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // What `connection()` throws during a prerender: Next recognises it by
+      // its digest, and `unstable_rethrow` hands it back.
+      const bailout = Object.assign(new Error("Dynamic server usage: Route /courses used `connection`"), {
+        digest: "DYNAMIC_SERVER_USAGE",
+      });
+      catalog.ownership = async () => {
+        throw bailout;
+      };
+      await expect(inRequest(() => contentSource().resolution())).rejects.toBe(bailout);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("reports a new cause even while an outage is already reported, and the same cause once", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.ownership = async () => ({});
+      await inRequest(() => contentSource().resolution());
+      const causes = [
+        "connect ECONNREFUSED 127.0.0.1:5432",
+        "connect ECONNREFUSED 127.0.0.1:5432",
+        'relation "content_source" does not exist',
+        'relation "content_source" does not exist',
+        "permission denied for table content_source",
+      ];
+      for (const message of causes) {
+        catalog.ownership = async () => {
+          throw new Error(message);
+        };
+        const resolved = await inRequest(() => contentSource().resolution());
+        expect(resolved.topics).toEqual({ kind: "files", from: "default" });
+      }
+      expect(warn.mock.calls.map((call) => String(call[0]).replace(/^.*reading files\. /, ""))).toEqual([
+        "connect ECONNREFUSED 127.0.0.1:5432",
+        'relation "content_source" does not exist',
+        "permission denied for table content_source",
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("reads files when the rows cannot be read, and says so once per outage", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

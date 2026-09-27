@@ -171,6 +171,22 @@ describe("selectSource", () => {
     expect(String(onOwnershipError.mock.calls[0]?.[0])).toContain("ECONNREFUSED");
   });
 
+  it("fails the read with what the reporter throws, rather than falling back", async () => {
+    const signal = new Error("the framework's own control flow");
+    const source = selectSource({
+      files,
+      db: () => db,
+      ownership: async () => {
+        throw signal;
+      },
+      onOwnershipError: (error) => {
+        throw error;
+      },
+      variable: undefined,
+    });
+    await expect(source.topics()).rejects.toBe(signal);
+  });
+
   it("still obeys the variable when the rows cannot be read", async () => {
     const source = selectSource({
       files,

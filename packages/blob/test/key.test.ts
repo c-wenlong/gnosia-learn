@@ -52,3 +52,33 @@ describe("parseKey", () => {
     }
   });
 });
+
+describe("the database's blob_object_key_check", () => {
+  // Copied from migration 0010 as Postgres runs it (`~` is a POSIX regex, and
+  // this one reads the same in JavaScript). The package is the stricter of
+  // the two; this holds it inside the check, so every key it makes can have
+  // a row.
+  const DATABASE_KEY = /^[^/]+\/[0-9a-f]{64}([.][a-z0-9]+)?$/;
+  const hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
+  it("accepts every key the package builds", () => {
+    for (const [owner, ext] of [
+      ["local", "mp4"],
+      ["0", "SVG"],
+      ["a-b_c", ".json"],
+      ["x".repeat(64), "abcdefghij123456"],
+      ["3f2c9a1e-5b7d-4c8e-9f10-1a2b3c4d5e6f", "vtt"],
+    ] as const) {
+      const built = key(owner, hash, ext);
+      expect(DATABASE_KEY.test(built), built).toBe(true);
+      expect(built.startsWith(`${owner}/${hash}`)).toBe(true);
+    }
+  });
+
+  it("is looser than the package on the shapes a later contract migration should refuse", () => {
+    for (const loose of [`../${hash}.bin`, `Local/${hash}.bin`, `local/${hash}`, `local/${hash}.${"a".repeat(17)}`]) {
+      expect(DATABASE_KEY.test(loose), loose).toBe(true);
+      expect(isKey(loose), loose).toBe(false);
+    }
+  });
+});
