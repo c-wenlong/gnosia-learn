@@ -308,6 +308,12 @@ roles and the move of the primary.
       `npm run catalog -- migrate` against it (a no-op, since migrations are
       keyed by file hash), compare every table's row count with the local
       database, and write the `catalog_instance` row as `primary` there.
+- [ ] Move the bytes: `catalog blob migrate --to <provider>` streams every
+      `present` object from the `fs` store to the cloud adapter, `head`s each
+      one, and only then rewrites `blob_object.provider`; a key that fails
+      stays `fs` and is listed. Rows and bytes move in the same window, before
+      any reader switches adapters, because Vercel cannot reach
+      `~/.self-learn/blobs` and the uploader skips keys already `present`.
 - [ ] Mark the local database `copy`, and point the laptop's `DATABASE_URL` at
       the cloud database as `catalog_writer` (D2).
 - [ ] Set `DATABASE_URL` on Vercel production as `app_web`, and on preview
@@ -460,10 +466,10 @@ The web app reads content synchronously at module load
       `DEPLOYMENT.md` gains the roles, the region and the blob token.
 
 **Done when:** the expand migration is applied to a `createdb -T self_learn`
-copy and to the cloud database; `catalog import` of the current tree into a
+copy and then to the local primary; `catalog import` of the current tree into a
 scratch database followed by `catalog export` yields a tree for which
-`catalog parity` reports zero mismatches against the working tree; both blob
-adapters pass the conformance suite; a second `catalog import` writes zero
+`catalog parity` reports zero mismatches against the working tree; the `fs`
+blob adapter passes the conformance suite; a second `catalog import` writes zero
 revisions; the web app renders every route from `fileSource` through the async
 seam with no visible change (`shots.mjs` before and after); and
 `npm run lint && npm run typecheck && npm test && npm run build` is green with
@@ -663,8 +669,10 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
 path; a Range request on the fs adapter still returns 206; an asset with a
 `pending` blob answers 404 `not-uploaded` rather than 500. **Docs:**
 [DEPLOYMENT.md](DEPLOYMENT.md) gains the blob store; AGENTS.md's poster gotcha
-notes the upload path. **Done when:** a video page on the production URL plays
-and seeks. **Tier:** Sonnet for the upload command, Opus for the route and the
+notes the upload path. **Done when:** a video page served by `next start` against the local primary
+plays and seeks from the `fs` blob store, through the streaming path the route
+keeps for an adapter with no signed URLs; the redirect path is exercised by a
+test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
 ## Phase 2: readers go database-only
@@ -685,6 +693,13 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       write-through export of D17 keeps running until phase 3, so
       `CONTENT_SOURCE=files` never reads an export older than the last
       write.
+- [ ] **Vault:** `learn vault pull [--out <dir>]` (default
+      `~/.self-learn/vault/`) writes every note and session log as markdown
+      with a `.vault.json` recording each file's base revision and hash;
+      `learn vault push` reads changed files back through the write seam, one
+      revision per file with `--reason`, refusing a file whose row moved
+      (edge case 4). Pull never overwrites a locally modified file. Decided by
+      the owner on 2026-09-27.
 - [ ] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
@@ -697,7 +712,10 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 
 **Done when:** deleting `content/` and `learn/` in a scratch worktree leaves
 `npm run lint && npm run typecheck && npm test && npm run build` green and the
-built app serving every route against the cloud database.
+built app serving every route against the local primary; `learn vault pull`
+into an empty folder and `learn vault push` with no edits round-trips with zero
+revisions written, one edited note pushes as one revision, and a note edited on
+both sides is refused with the `.conflict` copy left beside it.
 
 ## Phase 3: cut-over
 
@@ -813,7 +831,7 @@ The shared files, and how tracks stay off them:
 | 1 | Postgres is unreachable while the studio is open | The studio reads topics, relations and the diagram list from its cache, written at the last successful read under `$STUDIO_HOME/cache/`, and the banner says the vocabulary is stale and when it was read. Drawing still runs, as D16 of TLDRAWKC-INTEGRATION.md requires. Accept cannot land a diagram, since the diagram lives in the database: the candidate stays in the job workspace with `awaiting_review`, and Accept is offered again when the database answers |
 | 2 | A topic is renamed | A title change is an ordinary `topic edit`. A slug change is `topic rename --from --to` in one transaction: the row's slug is updated and every foreign key follows (`ON UPDATE CASCADE` on all of them, `packages/schema/src/content.ts` and `studio.ts:168`); the slug inside each diagram's `meta.tldrawkc.topic` and each open job's brief is rewritten by the same command; the old slug is appended to the aliases so search still finds it; one `rename` revision is written per affected row. Revisions keep the old slug in their snapshots, which is correct history |
 | 3 | A concept with evidence is deleted | It cannot be: `event.concept_slug` is `ON DELETE RESTRICT` (migration `0004`). `learn concept archive` sets `archived_at`, readers hide it, `mastery` and `review` stay, and `restore` brings it back |
-| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.self-learn/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
+| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.self-learn/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. `pull` is just as careful in the other direction: it records each written file's hash, and a file whose hash has changed since is never overwritten; the database version is written beside it as `.incoming` and the file is listed, so an unpushed edit survives a pull. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
 | 5 | A video upload is interrupted | The `blob_object` row is `pending` and `asset.blob_key` is unchanged, so the page keeps serving the legacy file or answers `not-uploaded`. Rerunning the command resumes: a key already `present` is skipped, a `pending` one is re-uploaded (the key is the hash, so the bytes are identical). A sweep deletes `pending` rows older than a day with no object behind them |
 | 6 | Two tracks both add a column | They should not: phase 0 lands all expand schema (D10). If one must, it merges in the fixed order, rebases on the other, and regenerates its migration from the schema source; the later track's number moves, and neither applied file is edited |
 | 7 | The plugin runs against a half-migrated checkout | Its verbs and shapes are unchanged, so everything it parses still parses. What can break is a direct file edit: an old plugin version editing `learn/concepts/<id>.md` after track C flipped writes to a file the database no longer reads. `learn doctor` compares the file's hash with the last export and prints the plugin version it expects; the next `catalog import` refuses that file by name (edge case 12) |
