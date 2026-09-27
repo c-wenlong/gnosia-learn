@@ -180,6 +180,12 @@ modules:
       - id: xx1000-m1-t4
         title: Empty key row
         concepts:
+      - id: xx1000-m1-t5
+        title: Spread row
+        concepts: [
+          gamma,
+          delta
+        ]  # over lines
     resources: []
 `;
 
@@ -201,7 +207,13 @@ describe("addConceptToItem", () => {
 
   it("fills an empty key rather than leaving it to be refused", () => {
     const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t4", "cogs");
-    expect(after).toContain("        title: Empty key row\n        concepts: [cogs]\n    resources: []");
+    expect(after).toContain("        title: Empty key row\n        concepts: [cogs]\n      - id: xx1000-m1-t5");
+  });
+
+  it("appends to a flow list spread over lines, on its closing line", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "cogs");
+    expect(after).toContain("          gamma,\n          delta, cogs\n        ]  # over lines");
+    expect(addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "delta")).toBe(COURSE_DOC);
   });
 
   it("is idempotent, and touches no other row", () => {
@@ -393,6 +405,21 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
       "select curriculum_item_id, position from concept_curriculum_item where concept_slug = 'cogs'",
     );
     expect(rows).toEqual([{ curriculum_item_id: "xx1000-m1-t2", position: 1 }]);
+  });
+
+  it("finishes on a --force re-run without repeating any edit", async () => {
+    // The way out of a listing that failed after the mapping landed: every
+    // step is idempotent, so the same command again completes the job.
+    const courseFile = path.join(root, "content", "courses", "xx1000.yaml");
+    const before = await readFile(courseFile, "utf8");
+    const vocabulary = await topics();
+    const { stdout } = await learn(
+      "concept", "add", "--title", "Cogs", "--domain", "fixtures",
+      "--item", "xx1000-m1-t2", "--force", "--json",
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ id: "cogs", item: "xx1000-m1-t2", indexed: true });
+    expect(await readFile(courseFile, "utf8")).toBe(before);
+    expect(await topics()).toBe(vocabulary);
   });
 
   it("refuses --item with a --topic that is not the row's module topic, before writing", async () => {

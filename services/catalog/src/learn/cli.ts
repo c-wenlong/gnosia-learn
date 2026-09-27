@@ -496,7 +496,25 @@ commands.concept = async ({ values, positionals }, session) => {
         // Mapping first: the course reader refuses a listed concept its
         // module's topic does not map, so the listing cannot go in ahead of it.
         await mapConceptToTopic(repoRoot(), topicSlug, id);
-        if (itemId !== undefined) await listConceptOnItem(repoRoot(), itemId, id);
+        if (itemId !== undefined) {
+          // The mapping is in place by now and has no inverse, so a listing
+          // that fails (the course file's lock held past its timeout, say)
+          // leaves the note mapped and unlisted. Every step is idempotent, so
+          // the way out is the same command again with --force, and the
+          // message says so rather than leaving the state to be worked out.
+          try {
+            await listConceptOnItem(repoRoot(), itemId, id);
+          } catch (error) {
+            if (error instanceof CourseEditError || error instanceof ContentError) {
+              fail(
+                `${rel(file)} was written and mapped to "${topicSlug}", but not listed on ` +
+                  `${itemId}: ${error.message}\n  The note and the mapping are in place. Re-run the ` +
+                  `same command with --force to finish; every step it repeats is idempotent.`,
+              );
+            }
+            throw error;
+          }
+        }
         // Concepts, and courses behind it, which is what writes the row's link.
         await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
       } catch (error) {

@@ -80,15 +80,33 @@ function keyLine(lines: string[], start: number, end: number, indent: number, ke
   return -1;
 }
 
-/** The items of a single-line flow list `[a, b]`, or null when it does not close on the line. */
-function flowItems(value: string): string[] | null {
-  const close = value.indexOf("]");
-  if (close === -1) return null;
-  return value
-    .slice(1, close)
-    .split(",")
-    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-    .filter((s) => s !== "");
+/**
+ * A flow list `[a, b]` starting on line `at`, which may close on a later line
+ * within `[at, end)`: the items, the line the `]` is on, and its trailing
+ * comment. Null when it never closes.
+ */
+function flowList(
+  lines: string[],
+  at: number,
+  end: number,
+): { items: string[]; closeLine: number; comment: string } | null {
+  const first = lines[at] as string;
+  let text = first.slice(first.indexOf("[") + 1);
+  for (let i = at; i < end; i += 1) {
+    const line = i === at ? text : (lines[i] as string);
+    const close = line.indexOf("]");
+    if (close === -1) {
+      if (i > at) text += `\n${line}`;
+      continue;
+    }
+    const body = i === at ? line.slice(0, close) : `${text}\n${line.slice(0, close)}`;
+    const items = body
+      .split(/[,\n]/)
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter((s) => s !== "");
+    return { items, closeLine: i, comment: line.slice(close + 1).trim() };
+  }
+  return null;
 }
 
 /**
@@ -118,14 +136,34 @@ export function addConceptToItem(text: string, itemId: string, conceptId: string
   const value = (KEY.exec(line)?.[3] ?? "").trim();
 
   if (value.startsWith("[")) {
-    const items = flowItems(value);
-    if (items === null) {
-      throw new CourseEditError(`item "${itemId}" has a concepts list that does not close on its line`);
+    const flow = flowList(lines, concepts, row.end);
+    if (flow === null) {
+      throw new CourseEditError(`item "${itemId}" has a concepts list that never closes`);
     }
-    if (items.includes(conceptId)) return text;
-    const comment = value.slice(value.indexOf("]") + 1).trim();
-    lines[concepts] =
-      `${pad}concepts: [${[...items, conceptId].join(", ")}]` + (comment === "" ? "" : `  ${comment}`);
+    if (flow.items.includes(conceptId)) return text;
+    const trailer = flow.comment === "" ? "" : `  ${flow.comment}`;
+    if (flow.closeLine === concepts) {
+      lines[concepts] = `${pad}concepts: [${[...flow.items, conceptId].join(", ")}]${trailer}`;
+      return lines.join(newline);
+    }
+    // Spread over several lines. The new id joins the last item's line, or
+    // the closing line when the bracket shares it with an item, so every line
+    // an author wrote stays as they wrote it.
+    const closing = lines[flow.closeLine] as string;
+    const head = closing.slice(0, closing.indexOf("]")).replace(/\s+$/, "");
+    if (head.trim() !== "") {
+      lines[flow.closeLine] = `${head}, ${conceptId}]${trailer}`;
+      return lines.join(newline);
+    }
+    let last = flow.closeLine - 1;
+    while (last > concepts && isBlank(lines[last] as string)) last -= 1;
+    if (last === concepts) {
+      // `[` alone on the key's line and `]` alone on the next: nothing between.
+      lines[concepts] = `${line.replace(/\s+$/, "")}${conceptId}`;
+      return lines.join(newline);
+    }
+    const item = (lines[last] as string).replace(/\s+$/, "");
+    lines[last] = item.endsWith(",") ? `${item} ${conceptId}` : `${item}, ${conceptId}`;
     return lines.join(newline);
   }
 
