@@ -487,6 +487,27 @@ Each with the reason it exists.
   to the candidate path before the agent starts, so extending reads the copy
   rather than the original. manimkc's reason carries: lifting an existing
   document is how every diagram ends up looking like the first one.
+- **The agent's credential is chosen, not inherited.** The agent's environment
+  is the runner's with the Anthropic auth variables taken out
+  (`AGENT_AUTH_ENV` in `services/studio/src/agent.ts` lists them:
+  `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_CUSTOM_HEADERS`, `CLAUDE_CODE_OAUTH_TOKEN`, the provider switches
+  and a parent SDK host's hand-off, each group with its reason), so `claude -p`
+  runs on the account this machine is logged in to, which is what an
+  interactive `claude` uses. `STUDIO_AGENT_AUTH=env` passes them through for a
+  machine that really does run the CLI on a key; anything else, unset
+  included, means `login`. The runner reads it once per job and records it on
+  `job.json` as `agentAuth`, beside the CLI's own `apiKeySource` from its
+  `system/init` event, which the job's events also carry as a step a person
+  can read in the log. `/api/health` reports the mode and whether a key is in
+  the runner's environment, never the key. **Why:** `npm run studio` inherits
+  the shell it was started from, and a login shell that exports an
+  `ANTHROPIC_API_KEY` for some other tool handed that key to every agent. In
+  `-p` mode the CLI uses an environment key without asking, where an
+  interactive session asks and remembers a refusal, so one machine could run
+  `claude` fine by hand and fail every studio job on its first request. It
+  did: an organisation key with no workspace scope, `API Error: 400` three
+  times, and a panel that reported a missing file.
 - **`--session-id` assigned and persisted before the agent launches.** This is
   the fix manimkc already made after losing progress on a restart. A kill at any
   point leaves a resumable session.
@@ -535,9 +556,23 @@ The runner's own checks, in this order, after the agent exits:
    file.
 
 A zero exit from the agent with nothing written is step 1 failing and needs no
-special case. The one agent outcome the gate is *not* asked about is a spawn
+special case. Two agent outcomes are *not* put to the gate. One is a spawn
 that failed — no `claude` on PATH, or a spawn the OS refused — because nothing
-ran, so whatever is at the candidate path was not written by this attempt. A
+ran, so whatever is at the candidate path was not written by this attempt. The
+other is **a first request the API refused**: the session's result has
+`is_error`, it took at most one turn, and the candidate hashes the same as it
+did before the attempt. A key the API will not take, a model the account
+cannot use or an exhausted quota gives the same answer to a retry, so the job
+ends there as `failed` with `error_kind` `agent` and the result event's own
+text as the error, after one attempt rather than three. The stray-write
+backstop still runs before that verdict and outranks it, and whatever is at
+the candidate path (an earlier attempt's partial, the runner's `extend` copy,
+a resumed job's preserved drawing) moves to `jobs/<id>/rejected/` so the next
+job for the slug cannot write over it. The panel reports `agent` ahead of any
+gate code an earlier attempt left on the record. The result's
+`subtype` said `success` on exactly that session, which is why the runner keys
+on `is_error` and not on the subtype. An agent that erred *after* doing
+something (more turns, or a candidate that changed) still goes to the gate. A
 step 2, 3 or 4 failure is fed back as a resume prompt carrying the specific
 finding, up to three attempts total. After that the job is `failed` with the
 gate's findings, and the partial artifacts are moved to `jobs/<id>/rejected/` so
@@ -1043,15 +1078,22 @@ or in the transcript.
 | none | The gate's own finding, for instance `the agent exited 0 and wrote nothing` | Retry, Edit brief |
 
 There is a second key, `job.error_kind`, and it is the one that answers the
-table's `none` row properly: a timeout, an agent that never spawned, a job that
-wrote outside its allowed paths and a gate finding are four different sentences,
-and only the last of them is "the gate's own finding". `wrote-outside` is the
+table's `none` row properly: a timeout, an agent that never spawned, an agent
+whose first request was refused (`agent`: the API's own message, with Run
+doctor and Retry), a job that wrote outside its allowed paths and a gate
+finding are five different sentences, and only the last of them is "the gate's
+own finding". `wrote-outside` is the
 one failure with **no** actions at all — something is dirty in the tree, the
 runner reverted nothing on purpose, and a person has to look before another
 agent runs over the same paths. `interrupted` gets Resume and nothing else.
 
 The committed diagram is unchanged in every one of these cases, by construction:
-the agent's permission file never allowed it.
+the agent's permission file never allowed it. The panel only gives that reason
+where it is the reason, a gate finding or a stray write. Under `agent` it says
+instead that nothing was drawn because the first request failed, names the
+credential the CLI reported, and says the studio runs the agent on the
+machine's login unless `STUDIO_AGENT_AUTH=env`: a person who reads "permission
+file" under a refused key goes looking at the wrong thing.
 
 ### Narrow widths
 

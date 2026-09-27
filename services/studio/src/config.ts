@@ -73,6 +73,61 @@ export const RUNNER_NAME = "studio-diagrams";
 /** The `claude` binary. Overridable the way manimkc's `MANIMKC_CLAUDE_BIN` is. */
 export const CLAUDE_BIN = process.env.STUDIO_CLAUDE_BIN?.trim() || "claude";
 
+/**
+ * Where the spawned agent's credential comes from: `login` or `env`.
+ *
+ * `login`, the default, strips the Anthropic auth variables out of the agent's
+ * environment (`AGENT_AUTH_ENV` in `agent.ts` lists them), so `claude -p` uses
+ * the account this machine is logged in to, which is what an interactive
+ * `claude` uses. `env` passes them through, for a machine that really does run
+ * the CLI on an API key.
+ *
+ * The default is `login` because inheriting was an accident rather than a
+ * choice. `npm run studio` inherits whatever the shell it was started from
+ * exports, and a login shell that exports an `ANTHROPIC_API_KEY` for some other
+ * tool hands that key to the agent. In `-p` mode the CLI uses an environment
+ * key without asking, where an interactive session asks first and remembers a
+ * refusal, so the same machine could run `claude` fine by hand and have every
+ * studio job fail on its first request. It happened: an organisation key with
+ * no workspace scope, three attempts at `API Error: 400`, and a panel that
+ * reported a missing file.
+ *
+ * A function rather than a constant, like `dailyCapUsd`: it is read once per
+ * job, so a restart is enough to change it and a test can set it without
+ * controlling import order. Anything other than `env` means `login`, because
+ * the safe reading of a typo is the one that does not hand a key to a child.
+ */
+export type AgentAuth = "login" | "env";
+
+export function agentAuth(): AgentAuth {
+  return process.env.STUDIO_AGENT_AUTH?.trim().toLowerCase() === "env" ? "env" : "login";
+}
+
+/** What `/api/health` and the startup banner say about the agent's credential. */
+export interface AgentAuthReport {
+  mode: AgentAuth;
+  /** The setting as written, so a typo that fell back to `login` is visible. */
+  setting: string | null;
+  /** Whether the runner's own environment has a non-empty key. Never the key. */
+  apiKeySet: boolean;
+  note: string;
+}
+
+export function agentAuthReport(): AgentAuthReport {
+  const mode = agentAuth();
+  const setting = process.env.STUDIO_AGENT_AUTH?.trim() || null;
+  const apiKeySet = (process.env.ANTHROPIC_API_KEY?.trim() ?? "") !== "";
+  const note =
+    mode === "login"
+      ? apiKeySet
+        ? "the agent runs on this machine's claude login; the ANTHROPIC_API_KEY in the runner's environment is stripped before it starts"
+        : "the agent runs on this machine's claude login"
+      : apiKeySet
+        ? "the agent runs on the ANTHROPIC_API_KEY in the runner's environment"
+        : "STUDIO_AGENT_AUTH=env, and ANTHROPIC_API_KEY is not set, so the agent uses whatever credential the rest of the environment or the login gives it";
+  return { mode, setting, apiKeySet, note };
+}
+
 /** A cap on every free-text brief field, so none can carry a paragraph of prompt. */
 export const TEXT_LIMIT = integer("STUDIO_TEXT_LIMIT", 2_000, 200, 20_000);
 

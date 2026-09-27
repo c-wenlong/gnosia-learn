@@ -9,6 +9,7 @@ import {
   draftToBrief,
   elapsedMs,
   emptyDraft,
+  failureFooter,
   failureReport,
   finishedHeadline,
   formatDuration,
@@ -302,6 +303,52 @@ describe("what a failure says", () => {
     // look at it before another agent runs over the same paths.
     const strayed = job({ state: "failed", errorKind: "wrote-outside", error: "left tools/x dirty" });
     expect(failureReport(strayed).actions).toEqual([]);
+  });
+
+  it("says the agent could not make its first request, with the API's own words", () => {
+    const refused = job({
+      state: "failed",
+      errorKind: "agent",
+      error: "API Error: 400 This API key is not scoped to a workspace",
+      apiKeySource: "ANTHROPIC_API_KEY",
+    });
+    const report = failureReport(refused);
+    expect(report.code).toBeNull();
+    expect(report.headline).toBe("the agent could not make its first request");
+    expect(report.detail).toContain("API Error: 400");
+    expect(report.actions).toEqual(["doctor", "retry"]);
+    expect(announcement(refused)?.body).toBe("the agent could not make its first request");
+  });
+
+  it("reports the refused request even when an earlier attempt left a gate code", () => {
+    const refused = job({
+      state: "failed",
+      errorKind: "agent",
+      error: "API Error: 429 rate limited",
+      gate: gate({ ok: false, steps: [step("inspect", 2, "TypeError: x is not a function (snippet:4)")] }),
+    });
+    const report = failureReport(refused);
+    expect(report.code).toBeNull();
+    expect(report.headline).toBe("the agent could not make its first request");
+    expect(report.detail).toContain("429");
+  });
+
+  it("names the permission file only where it is the reason the target is safe", () => {
+    const refused = job({ state: "failed", errorKind: "agent", apiKeySource: "ANTHROPIC_API_KEY" });
+    const agentFooter = failureFooter(refused);
+    expect(agentFooter).not.toContain("permission file");
+    expect(agentFooter).toContain("first request failed");
+    expect(agentFooter).toContain("ANTHROPIC_API_KEY");
+    expect(agentFooter).toContain("STUDIO_AGENT_AUTH=env");
+    // A record from a runner one version behind has no credential to name.
+    expect(failureFooter(job({ state: "failed", errorKind: "agent" }))).not.toContain("credential:");
+
+    for (const kind of ["gate", "wrote-outside", null]) {
+      expect(failureFooter(job({ state: "failed", errorKind: kind }))).toContain("permission file");
+    }
+    for (const kind of ["timeout", "spawn", "cancelled", "interrupted", "not-claimed"]) {
+      expect(failureFooter(job({ state: "failed", errorKind: kind }))).not.toContain("permission file");
+    }
   });
 
   it("falls back to the gate's own finding when no code was recorded", () => {
