@@ -20,7 +20,7 @@
 export { ContentError } from "./errors";
 export { COURSES_DIR, loadCourses, type LoadCoursesOptions } from "./courses";
 export { TAGS_FILE, loadTags } from "./tags";
-export { TOPICS_FILE, loadTopics } from "./topics";
+export { TOPIC_RELATION_KINDS, TOPICS_FILE, loadTopics } from "./topics";
 export type { LoadOptions } from "./read";
 export { DIAGRAMS_DIR, fileSource, noteId, NOTES_DIR, SESSIONS_DIR } from "./file-source";
 export {
@@ -55,4 +55,6 @@ export type {
   TagMeta,
   Topic,
   TopicEntry,
+  TopicRelation,
+  TopicRelationKind,
 } from "./types";

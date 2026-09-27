@@ -28,6 +28,15 @@ export class NotMigratedError extends Error {
   }
 }
 
+/**
+ * The types whose method below answers from rows. Empty until a track fills
+ * one in, and each track adds its type in the same change: `catalog flip`
+ * refuses a type that is not here, because readers follow the flipped row and
+ * would all fail on the refusal below. `test/content-source.test.ts` holds
+ * this set and the methods to each other.
+ */
+export const DB_READERS: ReadonlySet<ContentType> = new Set<ContentType>();
+
 export function dbSource(db: CatalogDatabase): ContentSource {
   // Held for the tracks that fill these in; no query runs yet.
   void db;

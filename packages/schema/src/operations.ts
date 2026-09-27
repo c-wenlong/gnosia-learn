@@ -40,6 +40,10 @@ import { asset } from "./content";
  */
 export const INDEX_SOURCES = [
   "topics",
+  // `content/tags.yaml`, since 0.5 of docs/CONTENT-MIGRATION.md. Before it a
+  // tag reached Postgres only as a string inside a course's metadata, so a tag
+  // no course used would export and never come back.
+  "tags",
   "courses",
   "concepts",
   "manimkc",

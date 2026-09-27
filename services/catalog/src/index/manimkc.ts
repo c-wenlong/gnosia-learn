@@ -198,8 +198,8 @@ export const manimkcIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.manimkc,
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, manimkcRoot, vocabulary }) => {
-    const report = await readTopicsReport(repoRoot, manimkcRoot);
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary }) => {
+    const report = await readTopicsReport(toolsRoot ?? repoRoot, manimkcRoot);
     return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug);
   },
 };

@@ -182,6 +182,13 @@ export const concept = pgTable(
     tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
     sources: jsonb("sources").notNull().default(sql`'[]'::jsonb`),
     authoredAt: instant("authored_at"),
+    /**
+     * Where the concept sits in its topic's `maps.concepts` list, 1-based.
+     * The list is authored in teaching order and the course path breaks ties
+     * by it (`apps/web/src/lib/course-path.ts`), so an export that sorted it
+     * would change what a page shows. Added in 0011 with 0.5's export.
+     */
+    topicPosition: integer("topic_position").notNull().default(0),
     ownerId: ownerId(() => learner.id),
     archivedAt: archivedAt(),
     createdAt: createdAt(),
@@ -490,6 +497,14 @@ export const collectionItem = pgTable(
       onDelete: "cascade",
       onUpdate: "cascade",
     }),
+    /**
+     * On a module's topic row, where the module sits in that topic's
+     * `maps.courses` list, 1-based; 0 on every other row. `position` is the
+     * row's place inside its own collection, and this is its place in the
+     * topic's list, a different list with a different author. Added in 0011
+     * so 0.5's export writes `maps.courses` back in the order it was written.
+     */
+    topicPosition: integer("topic_position").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [
@@ -648,6 +663,11 @@ export const topicRelation = pgTable(
       .notNull()
       .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
     kind: text("kind").notNull(),
+    /**
+     * Order within the owning topic's `relations:` list, 1-based. Added in
+     * 0011 with the export that writes the list back.
+     */
+    position: integer("position").notNull().default(0),
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
   },

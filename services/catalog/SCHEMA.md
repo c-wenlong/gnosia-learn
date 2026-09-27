@@ -70,13 +70,13 @@ goes is the record of which brief produced them.
 | `asset_topic` | This asset is about this topic. |
 | `asset_concept` | This asset is about this concept. |
 | `concept_prerequisite` | This concept `requires` or `assumes` that one. |
-| `collection_item` | This collection contains exactly one of a topic, a concept or an asset, at a position. |
+| `collection_item` | This collection contains exactly one of a topic, a concept or an asset, at a position. A module holds one topic row (its topic, with `topic_position`, its place in that topic's `maps.courses`) and, since 0.5, one asset row per curated link in `resources:` order. |
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
 | `curriculum_item_topic` | This checklist row covers this topic. How a course reaches the assets. |
 | `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
-| `tag` | A cross-course theme from `content/tags.yaml`, at its position in the file. Since 0010; empty until Track A. |
-| `collection_tag` | This course carries this tag. Makes a stale tag a `23503` instead of a string in jsonb. |
-| `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. |
+| `tag` | A cross-course theme from `content/tags.yaml`, at its position in the file. Since 0010, filled by the `tags` source since 0.5. |
+| `collection_tag` | This course carries this tag, at its place in the course's `tags:`. Makes a stale tag a `23503` instead of a string in jsonb. |
+| `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. Read from a topic's `relations:` list, at its position there. |
 | `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
 | `diagram` | A `.tldr` document in jsonb, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
 | `blob_object` | One object in the blob store: `<owner_id>/<sha256>.<ext>`, its size, type, provider and whether the upload is confirmed. |
@@ -101,7 +101,7 @@ goes is the record of which brief produced them.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
-| `content_source` | Which content types the database owns, written by `catalog flip`. A type with no row is read from files. |
+| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. A type with no row is read from files. See [Who owns a type](#who-owns-a-type). |
 | `catalog_instance` | One row: this database is `primary` or `copy`. A copy refuses every write (the copy guard below). |
 
 ### Studio
@@ -325,6 +325,7 @@ erDiagram
         text title
         text summary
         text topic_slug FK "nullable"
+        int topic_position "place in the topic's maps.concepts"
         text path UK
     }
     collection {
@@ -373,6 +374,7 @@ erDiagram
         text topic_slug FK "exactly one target"
         text concept_slug FK
         text asset_id FK
+        int topic_position "a module's place in its topic's maps.courses"
     }
     asset_derivation {
         text asset_id PK_FK
@@ -468,14 +470,16 @@ computed from `event` and can be thrown away and rebuilt.
 ## Filling it
 
 `npm run catalog -- index` reads the content trees and rewrites the derived
-rows. Seven sources, run in the order the foreign keys require regardless of how
-`--only` names them:
+rows; `catalog import <dir>` does the same from any directory in the same
+layout. Eight sources, run in the order the foreign keys require regardless of
+how `--only` names them:
 
 | Source | Reads | Produces |
 | --- | --- | --- |
-| `topics` | `content/topics.yaml` | `topic` |
+| `topics` | `content/topics.yaml` | `topic`, `topic_relation`, `manimkc_topic` |
+| `tags` | `content/tags.yaml` | `tag` |
 | `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `note` assets |
-| `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets |
+| `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `collection_tag`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets with their `resource_type` |
 | `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
 | `diagrams` | `tldrawkc list learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
 | `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
@@ -502,7 +506,11 @@ that pair runs together and nothing else has to. `--only courses` goes the
 other way and re-reads the notes first: a course row's `concepts:` list
 resolves against concept rows, and checking it against rows from the last run
 would refuse a note added since, so `concepts` is a prerequisite of `courses`
-the way `manimkc` is of `mirrors`.
+the way `manimkc` is of `mirrors`. `tags` is a prerequisite of `courses` too,
+since `collection_tag` points at tag rows, and a dependent of it, since pruning
+a tag clears the links to it that only the courses source writes back. The two
+closures are applied until neither adds anything: `--only concepts` pulls in
+`courses` as a dependent, and `courses` then pulls in `tags`.
 
 `manimkc` and `mirrors` are the optional sources. Both read
 `tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and
@@ -668,9 +676,72 @@ other is waiting for.
 ### Positions
 
 `topic`, `tag`, `collection_tag`, `manimkc_topic` and `concept_prerequisite`
-gained `position`, because each holds a list a person wrote in an order and the
-export has to write it back in that order. The indexers do not fill them yet;
-0.5's import does.
+gained `position` in 0010, because each holds a list a person wrote in an order
+and the export has to write it back in that order. Building the export found
+three more such lists with nowhere to live, and migration
+`0011_content_export_positions` added them: `concept.topic_position` (a
+topic's `maps.concepts`, which the course path breaks ties by),
+`collection_item.topic_position` on a module's topic row (a topic's
+`maps.courses`) and `topic_relation.position` (a topic's `relations:`). The
+indexers fill all eight since 0.5, and a curated link's place in its module's
+`resources:` is its `collection_item.position`.
+
+### Who owns a type
+
+`content_source` has one row per content type once anything has recorded
+something about it, and a type with no row is read from its files. The row is
+the authority (D18): the importers and `catalog flip` read it directly, and a
+reader follows it through `selectSource`'s `ownership()` callback
+(`contentOwnership` in `src/content/ownership.ts`, passed by the web app's
+`apps/web/src/data/source.ts`) unless `CONTENT_SOURCE` overrides it for that
+reader. When the rows cannot be read, a reader falls back to files and says so
+once per outage.
+
+| Column | Written by | Read by |
+| --- | --- | --- |
+| `source` | `catalog flip` sets `db`; a row created by an export says `files` | the importers: a `db` type is not read from files. Readers, through `ownership()` |
+| `flipped_at` | `catalog flip`, the first time; a second flip re-arms and keeps it | `catalog import`'s skip line |
+| `export_hash`, `exported_at` | `catalog export`: sha256 over `path<TAB>sha256(bytes)` lines of every file it wrote for the type | `catalog import`: a `db` type whose files hash to this is its own export and is skipped with a named line; any other hash is refused, naming the files that differ (edge case 12) |
+| `parity_report` | `catalog flip`: the parity it checked before flipping, against the files the type was last imported from (`index_run.metadata.root`) | a person asking what the flip rested on |
+| `waivers` | `catalog flip --waive <rule> --reason` | `catalog doctor`, on every run; `flip --strict` leaves a waived rule disarmed |
+
+`catalog export` is a read of the database, so on a copy it records nothing
+rather than failing on the copy guard at its last step. `catalog parity`
+records nothing anywhere.
+
+`catalog flip <type>` does three things in one transaction: writes the row as
+`db`, arms the type's write guards (`WRITE_GUARDS` in `src/content/rules.ts`),
+and with `--strict` arms the type's completeness rules. Before any of it, it
+refuses a type whose database reader is not built (`DB_READERS` in
+`src/content/source.ts`, empty until a track fills one in), since readers
+follow the row, and it runs parity itself against the files the type was last
+imported from, holding the type's revision locks so no import moves the rows
+under the check. It arms the triggers first and counts the violators after,
+because arming takes each table's lock, so nothing can add a violator between
+the count and the commit; a refusal rolls the arming back with everything
+else. A waived rule is disarmed even if an earlier strict flip armed it.
+`manimkc` cannot be flipped until Track E gives videos a parity.
+
+### Export, import and parity
+
+`catalog index` is `catalog import` of the repository root: one code path,
+reading any directory laid out like the repository, with the pinned tools
+(`tools/manimkc`, `tools/tldrawkc`) always the repository's own.
+
+`catalog export --out <dir>` writes the same layout back. Topics, tags and
+courses are written from rows, in the house style they are authored in, so an
+export of an unchanged database into the working tree changes no byte. Concept
+notes, session logs and diagrams are copied from the directory their import
+read, recorded as `index_run.metadata.root`, and each copy is checked against
+the `content_hash` its asset row recorded; the export refuses what it cannot
+vouch for. That copy step goes when Tracks C and D move the text into rows.
+
+`catalog parity <dir>` renders the export in memory and compares it with
+`<dir>` entity by entity: a topic, a tag, a course file, a note, a log, a
+diagram file. YAML is compared parsed, as sorted-key JSON; markdown as parsed
+frontmatter plus the body byte for byte; a `.tldr` parsed; an SVG by its bytes.
+It prints counts per type on both sides, every mismatch with the first field
+that differs, and exits 1 on any.
 
 ### Triggers
 
@@ -751,6 +822,10 @@ npm run catalog -- show master-theorem         # one entity, and its paths
 npm run catalog -- path big-o-witness-definition master-theorem
 npm run catalog -- search "common data bus"    # titles and aliases, top 20
 npm run catalog -- doctor                      # completeness rules, guards, primary or copy
+npm run catalog -- export --out /tmp/export    # the database as content/ and learn/ files
+npm run catalog -- parity /tmp/export          # entity by entity against a directory; exit 1 on a mismatch
+npm run catalog -- import /tmp/export          # a directory back in; `index` is `import` of the repo
+npm run catalog -- flip tags                   # the database owns tags (needs a clean parity first)
 npm run catalog -- history topic tomasulo-algorithm   # every revision, oldest first
 npm run catalog -- diff 42                     # what revision 42 changed; or diff 41 42
 ```

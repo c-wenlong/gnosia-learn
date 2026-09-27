@@ -1,12 +1,24 @@
 import type { IndexSource } from "@self-learn/schema";
 
+import path from "node:path";
+
 import { withDatabase } from "../db";
-import { databaseUrl, redactUrl } from "../env";
+import { databaseUrl, REPO_ROOT, redactUrl } from "../env";
 import { runIndex, type RunResult } from "../index/run";
 import type { SourceWrite } from "../index/writer";
 
 /**
- * `catalog index` — read the content trees, write the derived rows.
+ * `catalog import <dir>` and `catalog index`: one code path.
+ *
+ * `import` reads any directory laid out like the repository, which is what
+ * `catalog export --out <dir>` writes, so an export can be read back
+ * (docs/CONTENT-MIGRATION.md 0.5). `index` is `import` of the repository
+ * itself and nothing more. Either way every source writes through the
+ * revision writer, a type the database owns is skipped or refused by its
+ * `content_source` row, and the pinned manimkc and tldrawkc checkouts are
+ * the repository's, since an export directory holds no tools.
+ *
+ * `catalog index`: read the content trees, write the derived rows.
  *
  * Reports two things per source, and the second matters more than the first:
  * what it wrote, and what it removed. A removal is the catalog agreeing that
@@ -33,10 +45,21 @@ export interface IndexOptions {
   manimkcRoot?: string;
 }
 
+export interface ImportOptions extends IndexOptions {
+  /** The directory to read, in the repository's layout. */
+  dir: string;
+}
+
 export async function runIndexCommand(options: IndexOptions = {}): Promise<IndexResult> {
+  return runImportCommand({ ...options, dir: REPO_ROOT });
+}
+
+export async function runImportCommand(options: ImportOptions): Promise<IndexResult> {
   const url = databaseUrl();
   return withDatabase(async ({ db }) => {
     const result: RunResult = await runIndex(db, {
+      repoRoot: path.resolve(options.dir),
+      toolsRoot: REPO_ROOT,
       only: options.only,
       manimkcRoot: options.manimkcRoot,
     });
@@ -54,7 +77,12 @@ export async function runIndexCommand(options: IndexOptions = {}): Promise<Index
 }
 
 export function formatIndex(result: IndexResult): string {
-  const lines = [`database     ${result.database}`, `manimkc root ${result.manimkcRoot}`, ""];
+  const lines = [
+    `database     ${result.database}`,
+    `read from    ${result.repoRoot}`,
+    `manimkc root ${result.manimkcRoot}`,
+    "",
+  ];
   for (const skip of result.skipped) {
     lines.push(`skipping ${skip.source}: ${skip.reason}.`, "");
   }
@@ -106,7 +134,7 @@ export function formatIndex(result: IndexResult): string {
 
 /** Deletions that produced a key, so the "and N more" line counts the same thing. */
 function countEntityDeletes(source: SourceWrite): number {
-  const entities = new Set(["topic", "concept", "collection", "curriculum_item", "asset"]);
+  const entities = new Set(["topic", "tag", "concept", "collection", "curriculum_item", "asset"]);
   return Object.entries(source.deleted)
     .filter(([table]) => entities.has(table))
     .reduce((a, [, n]) => a + n, 0);
