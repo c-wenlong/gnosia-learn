@@ -2,7 +2,7 @@
 
 **Status: built through phase 0, 2026-09-28; phase 1 not started.** Phase 0
 merged as PRs #126 to #129, and the fixes a read-only review of it asked for
-as #130 and the one after it; each step below says what was built under
+as #130 and #131; each step below says what was built under
 **Built**, and a box is ticked only for what exists. Approved 2026-09-27, when
 the owner answered the open questions (see
 [Decided by the owner](#decided-by-the-owner)): everything stays local for

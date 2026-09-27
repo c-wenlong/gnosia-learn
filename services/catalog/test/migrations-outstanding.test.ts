@@ -80,6 +80,7 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
     ["show", "alpha"],
     ["history", "topic", "alpha"],
     ["diff", "1"],
+    ["renumber", "tags", "--reason", "spread them out"],
   ])("catalog %s refuses with the count and the command to run", async (...args) => {
     const argv = args.map((arg) => arg.replace("<dir>", dir));
     const ran = await run(CATALOG, { DATABASE_URL: scratch.url, MANIMKC_ROOT: path.join(dir, "none") }, ...argv);

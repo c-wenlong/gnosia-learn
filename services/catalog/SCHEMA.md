@@ -873,8 +873,8 @@ holds the words.
 Every command exits 0 when it worked, 1 when it failed, 2 on a wrong
 invocation, 3 when the database is unreachable: nothing listening, or a host
 name that does not resolve, and 4 when the database is behind this code.
-`index`, `import`, `export`, `parity`, `flip`, `ls`, `show`, `history` and
-`diff` (and `learn index`) check the migration journal first and refuse with how many
+`index`, `import`, `export`, `parity`, `flip`, `ls`, `show`, `history`,
+`diff` and `renumber` (and `learn index`) check the migration journal first and refuse with how many
 migrations are outstanding and `Run: npm run catalog -- migrate`, rather than
 with drizzle's `Failed query: ...` for a table the database does not have yet.
 A server that answered and refused (bad password,

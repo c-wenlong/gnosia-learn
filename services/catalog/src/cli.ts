@@ -206,8 +206,8 @@ Exit codes:
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
   4  The database is behind this code: index, import, export, parity,
-     flip, ls, show, history and diff read tables or columns a migration it
-     has not had adds. stderr says how many are outstanding and to run
+     flip, ls, show, history, diff and renumber read tables or columns a
+     migration it has not had adds. stderr says how many are outstanding and to run
      migrate.
 
 Environment:
@@ -273,7 +273,7 @@ const COMMANDS: readonly Command[] = [
 /**
  * For the commands that read tables or columns added after 0009
  * (`content_source`, `archived_at`, the revision table): `index`, `import`,
- * `export`, `parity`, `flip`, `ls`, `show`, `history` and `diff`. On a database behind the
+ * `export`, `parity`, `flip`, `ls`, `show`, `history`, `diff` and `renumber`. On a database behind the
  * journal they refuse by name, with exit 4, instead of failing on drizzle's
  * `Failed query: ...` for a relation the person never heard of. Each calls it
  * after checking its own arguments, so a wrong invocation is still exit 2
@@ -448,6 +448,7 @@ export async function main(argv: string[]): Promise<number> {
           throw new Usage(`renumber ${list} needs --topic <slug>`);
         }
         if (list === "items" && values.module === undefined) throw new Usage("renumber items needs --module <id>");
+        await schemaCurrent();
         const result = await runRenumber({
           list: list as RenumberList,
           topic: values.topic,
