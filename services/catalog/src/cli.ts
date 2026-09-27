@@ -149,7 +149,8 @@ Commands:
                            with no row, present rows whose bytes are gone or
                            wrong, stale pending rows, unreferenced objects,
                            posters whose video is gone. Exits 1 while any
-                           disagreement stands. --fix deletes day-old
+                           disagreement stands or an asset points at a
+                           pending blob. --fix deletes day-old
                            orphans, marks broken rows pending, and deletes
                            day-old pending rows nothing points at.
   renumber <list>          Spread a list's positions back out to 1000, 2000,

@@ -249,6 +249,38 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect((await assetRow(VIDEO_ID))?.blobKey).not.toBeNull();
   });
 
+  it("unhooks a poster cut from the old render when it cannot cut one from the new", async () => {
+    await uploadAssets(scratch.db, options());
+    const oldPoster = (await assetRow(posterId(VIDEO_ID)))?.blobKey;
+
+    // A re-render, then the re-index: new bytes, new hash, and the stale key dropped.
+    const rerender = Buffer.from("a new render of the demo");
+    await writeFile(path.join(outRoot, VIDEO_PATH), rerender);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(rerender), bytes: rerender.length, blobKey: null })
+      .where(eq(asset.id, VIDEO_ID));
+
+    const noFfmpeg = await uploadAssets(scratch.db, options({ ffmpeg: null }));
+    expect(noFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("detached");
+    expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey("local", sha256(rerender), "mp4"));
+    const derivedFrom = async () =>
+      (
+        await scratch.db
+          .select({ source: assetDerivation.sourceAssetId })
+          .from(assetDerivation)
+          .where(eq(assetDerivation.assetId, posterId(VIDEO_ID)))
+      ).map((row) => row.source);
+    // No stored poster for the video now: the route cuts one from the file.
+    expect(await derivedFrom()).toEqual([]);
+
+    // A later run with ffmpeg sees no poster for the video and makes one.
+    const withFfmpeg = await uploadAssets(scratch.db, options());
+    expect(withFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("made");
+    expect(await derivedFrom()).toEqual([VIDEO_ID]);
+    expect((await assetRow(posterId(VIDEO_ID)))?.blobKey).toBe(oldPoster);
+  });
+
   describe("a re-index", () => {
     it("keeps a blob_key whose bytes are the ones it just hashed, and drops one it re-rendered", async () => {
       await uploadAssets(scratch.db, options());
@@ -298,12 +330,26 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       expect(listed.outstanding).toBe(2);
 
       const fixed = await auditBlobs(scratch.db, store, { fix: true });
-      expect(fixed.outstanding).toBe(0);
+      // Both rows are now pending, and both are pointed at: those two assets
+      // answer not-uploaded until the upload reruns, so the audit keeps failing.
+      expect(fixed.outstanding).toBe(2);
       const states = await scratch.db
         .select({ key: blobObject.key, state: blobObject.state })
         .from(blobObject)
         .where(eq(blobObject.state, "pending"));
       expect(states.map((s) => s.key).sort()).toEqual([transcript, video].sort());
+    });
+
+    it("keeps failing while a referenced blob is pending, and passes once the upload reruns", async () => {
+      await uploadAssets(scratch.db, options());
+      const video = (await assetRow(VIDEO_ID))?.blobKey as string;
+      await scratch.db.update(blobObject).set({ state: "pending" }).where(eq(blobObject.key, video));
+      const audit = await auditBlobs(scratch.db, store);
+      expect(audit.findings).toEqual([expect.objectContaining({ kind: "pending", key: video })]);
+      expect(audit.outstanding).toBe(1);
+
+      await uploadAssets(scratch.db, options());
+      expect((await auditBlobs(scratch.db, store)).outstanding).toBe(0);
     });
 
     it("deletes an orphan object only once it is a day old", async () => {

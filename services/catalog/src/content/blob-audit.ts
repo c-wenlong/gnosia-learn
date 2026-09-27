@@ -17,7 +17,7 @@ import { markBlobPending } from "./blob";
  * | `stale-pending` | A `pending` row a day old with no object behind it and no asset or diagram pointing at it | the row is deleted |
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
  * | `unreferenced` | A `present` row no asset or diagram points at: the old bytes of something re-rendered | none; listed so it can be seen |
- * | `orphan-poster` | A poster asset whose video is gone | none; listed |
+ * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
  *
  * Keys are content addressed, so none of these can point a row at the wrong
  * bytes; they are all a row and an object disagreeing about whether the bytes
@@ -27,6 +27,12 @@ import { markBlobPending } from "./blob";
  * Nothing is changed without `--fix`. What `--fix` deletes is only ever an
  * object nothing in the database knows about, or a `pending` row with no bytes
  * and nothing depending on it.
+ *
+ * **The exit code follows what a reader would see.** A disagreement `--fix`
+ * has not settled counts, and so does any `pending` row an asset or a diagram
+ * points at, whether it was pending before or `--fix` just sent it back: that
+ * asset answers `not-uploaded` until the upload reruns, and an audit that
+ * exited 0 over it would be saying everything serves when it does not.
  */
 
 export const AUDIT_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -54,7 +60,11 @@ export interface BlobAuditResult {
   objects: number;
   fix: boolean;
   findings: AuditFinding[];
-  /** Findings that are a disagreement still standing after this run: the exit code is 1 while any remain. */
+  /**
+   * Findings still standing after this run: a disagreement `--fix` did not
+   * settle, or a referenced blob that is `pending`, whose asset cannot be
+   * served. The exit code is 1 while any remain.
+   */
   outstanding: number;
 }
 
@@ -180,10 +190,14 @@ export async function auditBlobs(
     findings.push({
       kind: "orphan-poster",
       key: poster.key ?? poster.id,
-      detail: `${poster.id}: its video is no longer in the catalog`,
+      detail: `${poster.id}: derived from no video (its video was pruned, or it was unhooked from a re-render)`,
     });
   }
 
-  const outstanding = findings.filter((f) => PROBLEMS.has(f.kind) && f.fixed === undefined).length;
+  const outstanding = findings.filter(
+    (f) =>
+      (PROBLEMS.has(f.kind) && f.fixed === undefined) ||
+      (referenced.has(f.key) && (f.kind === "pending" || f.fixed === "marked-pending")),
+  ).length;
   return { provider: store.provider, rows: rows.length, objects, fix, findings, outstanding };
 }

@@ -887,6 +887,9 @@ plan did not say, found while building it:
   no `path` and `source_repo = 'self-learn'`, and it is a companion kind in the
   library. The recipe moved to `services/catalog/src/poster/recipe.ts`, shared
   with the route's ffmpeg fallback, so the two cannot cut different pictures.
+  A poster cut from a video's old bytes is unhooked from the video when the
+  upload links new bytes and cannot cut a new poster, since nothing later
+  would notice it showed the old render.
 - **The upload refuses a file whose bytes are not its row's `content_hash`**
   (a re-render since the last index), rather than hooking new bytes to an old
   row, since that is the one parity rule this track has.

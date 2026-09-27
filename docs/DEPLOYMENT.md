@@ -247,7 +247,10 @@ catalog already has a row for: hashes the file, refuses it by name if the
 bytes are no longer the ones the last `catalog index --only manimkc` recorded,
 uploads it (`pending` row, put, `head`, `present`), cuts a poster per video
 with ffmpeg and uploads that too, then points each asset row at its blob with
-one revision each. Measured on 2026-09-28 against a copy of the local
+one revision each. When a video's bytes changed and no new poster can be cut
+(no ffmpeg, or ffmpeg found no frame), its old poster is unhooked from it in the
+same write, so the page cuts a frame from the file rather than showing the old
+render, until a later upload makes a new one. Measured on 2026-09-28 against a copy of the local
 database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
 seconds. A rerun skips everything already `present` without reading a file,
 so an interrupted run is finished by running it again. With no ffmpeg on the
@@ -273,7 +276,7 @@ as before, with one warning in the server log saying to migrate.
 ### Checking it
 
 ```bash
-npm run catalog -- blob audit          # list; exits 1 while the two disagree
+npm run catalog -- blob audit          # list; exits 1 while anything cannot be served
 npm run catalog -- blob audit --fix    # act on what it lists
 ```
 
@@ -283,7 +286,10 @@ old bytes of a re-render), and posters whose video is gone. `--fix` deletes an
 orphan object once it is a day old, sends a broken row back to `pending` (its
 asset then answers `not-uploaded` until the upload reruns), and deletes a
 day-old `pending` row with no object and nothing pointing at it. It never
-deletes a row or an object that anything references.
+deletes a row or an object that anything references. It exits 1 while the
+table and the store disagree or while any asset points at a `pending` blob,
+including one `--fix` just sent back, so a clean exit means every stored asset
+serves.
 
 ## Deploying from the command line
 

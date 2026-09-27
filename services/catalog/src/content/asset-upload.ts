@@ -94,7 +94,9 @@ export interface AssetUploadOptions {
  * What happened to one file. `present`: its row already names a blob the store
  * has. `uploaded`: stored now. `linked`: the blob was already stored and only
  * the row changed. `would-upload`, `would-link`, `would-make`: the dry run's
- * answers. `refused`: see `detail`.
+ * answers. `detached`: a poster cut from the video's old bytes, unhooked from
+ * it because no new one could be made (see `settlePoster`). `refused`: see
+ * `detail`.
  */
 export type UploadAction =
   | "present"
@@ -104,6 +106,7 @@ export type UploadAction =
   | "would-upload"
   | "would-link"
   | "would-make"
+  | "detached"
   | "refused";
 
 export interface UploadItem {
@@ -367,16 +370,39 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       items.push({ id, kind: "poster", action: "present", key: current, bytes: existing?.bytes ?? null });
       return null;
     }
-    if (options.ffmpeg === null) return null;
     if (dryRun) {
+      if (options.ffmpeg === null) return null;
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "would-make", key: null, bytes: null });
       return null;
     }
+    /**
+     * No new poster this run. When the video's bytes just changed, the stored
+     * poster shows the old render, and nothing later would notice: the next
+     * run sees the video linked and the poster present. So it is unhooked from
+     * the video in the same transaction that links the new bytes, and the
+     * poster route falls back to cutting a frame from the file until an upload
+     * with a working ffmpeg makes a new one (which hooks it back up). A poster
+     * whose video did not change is left alone: it is the right picture.
+     */
+    const detach = (why: string): WriteContentInput | null => {
+      if (!videoChanged || existing === undefined || !derived) return null;
+      items.push({ id, kind: "poster", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
+      return {
+        type: "asset",
+        id,
+        next: { row: contentRow(existing), links: { asset_derivation: [] } },
+        base: null,
+        author,
+        authorKind: "person",
+        reason,
+      };
+    };
+    if (options.ffmpeg === null) return detach("no ffmpeg to cut a poster from the new render");
     const frame = await extractPoster(options.ffmpeg, video.file);
     if (!frame.ok) {
       refuse(id, "poster", `no poster could be cut from ${video.row.path}: ${frame.reason}`);
-      return null;
+      return detach(`no poster could be cut from the new render: ${frame.reason}`);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
     const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-poster-"));
