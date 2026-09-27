@@ -55,6 +55,7 @@ interface RawResource {
 interface RawTopic {
   id?: unknown;
   title?: unknown;
+  concepts?: unknown;
   subtopics?: unknown;
 }
 
@@ -164,9 +165,28 @@ function readResource(raw: RawResource, where: string): Resource {
 function readTopic(raw: RawTopic, where: string): Topic {
   const id = requireText(raw.id, where, "topics[].id");
   const at = `${where} topic "${id}"`;
+  // `concepts:` with nothing after it parses as null, which `stringList`
+  // reads as an empty list. An author who wrote the key meant to list
+  // something, so the row is refused rather than read as having no concepts.
+  if (raw.concepts === null) {
+    throw new ContentError(
+      `${at}: concepts is present but empty. List the concept ids, or delete the key.`,
+    );
+  }
+  const concepts = stringList(raw.concepts, at, "concepts");
+  // The list is the teaching order and the catalog stores a position per
+  // entry, so a concept named twice would hold two positions on one row.
+  const seen = new Set<string>();
+  for (const concept of concepts) {
+    if (seen.has(concept)) {
+      throw new ContentError(`${at}: concepts lists "${concept}" twice`);
+    }
+    seen.add(concept);
+  }
   return {
     id,
     title: requireText(raw.title, at, "title"),
+    concepts,
     subtopics: stringList(raw.subtopics, at, "subtopics"),
   };
 }
@@ -179,8 +199,8 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
     throw new ContentError(`${COURSES_DIR}: no course YAML files found`);
   }
 
-  const vocabulary = new Set(
-    (options?.topics ?? loadTopics({ root })).map((entry) => entry.slug),
+  const vocabulary = new Map(
+    (options?.topics ?? loadTopics({ root })).map((entry) => [entry.slug, entry]),
   );
   // Tags are checked here rather than by a test over today's files, because a
   // typo is not a cosmetic problem: the chip falls back to the raw id and, more
@@ -253,6 +273,26 @@ export function loadCourses(options?: LoadCoursesOptions): Course[] {
         );
       }
       for (const topic of topics) claim(topicIds, "topic", topic.id, at);
+
+      // A row's concepts must sit under the module's vocabulary topic. Both
+      // files name the same fact, so when they disagree neither is knowably
+      // right and the read stops, the same rule `catalog index` applies to
+      // `maps.courses`. Skipped when the module topic is itself unresolved:
+      // that is already a problem above, and there is nothing to check against.
+      const entry = topicSlug === undefined ? undefined : vocabulary.get(topicSlug);
+      if (entry !== undefined) {
+        const mapped = new Set(entry.maps.concepts);
+        for (const topic of topics) {
+          for (const concept of topic.concepts) {
+            if (!mapped.has(concept)) {
+              problems.add(
+                `${at} topic "${topic.id}" lists concept "${concept}", which is not in ` +
+                  `maps.concepts of topic "${topicSlug}" in content/topics.yaml`,
+              );
+            }
+          }
+        }
+      }
 
       const resources = mappingList(mod.resources, at, "resources").map((raw) =>
         readResource(raw as RawResource, at),
