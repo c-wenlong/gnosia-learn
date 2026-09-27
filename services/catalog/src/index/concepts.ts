@@ -109,7 +109,8 @@ export const conceptsIndexer: Indexer = {
         summary: readText(data, "summary"),
         topicSlug,
         // Where the topic lists it, so the export writes `maps.concepts` back
-        // in the order it was authored.
+        // in the order it was authored. A rank; the writer places the stored
+        // number (D22), so a note added to the list moves no other concept.
         topicPosition: (vocabulary.bySlug.get(topicSlug)?.maps.concepts.indexOf(slug) ?? -1) + 1,
         path: where,
       });

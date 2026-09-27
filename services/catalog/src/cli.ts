@@ -26,6 +26,8 @@ import { formatLs, parseKinds, runLs } from "./commands/ls";
 import { formatDoctor, runDoctor } from "./commands/doctor";
 import { formatMigrate, runMigrate } from "./commands/migrate";
 import { formatPath, runPath } from "./commands/path";
+import { formatRenumber, runRenumber } from "./commands/renumber";
+import { RENUMBER_LISTS, type RenumberList } from "./content/renumber";
 import {
   formatDiff,
   formatHistory,
@@ -132,6 +134,12 @@ Commands:
                            which are armed, and every row that breaks one.
                            Also the write guards and whether this database is
                            the primary.
+  renumber <list>          Spread a list's positions back out to 1000, 2000,
+                           ... in its current order, one revision per row
+                           moved. Needs --reason. Lists: topics, tags,
+                           concepts --topic SLUG, modules --topic SLUG (the
+                           topic's maps.courses), items --module ID. An
+                           import asks for it when a list has no gap left.
 
 Options:
   --json                   Machine-readable output. Supported by every command.
@@ -146,7 +154,10 @@ Options:
   --strict                 flip: also arm the type's completeness rules.
   --waive RULE             flip: leave this rule disarmed. Repeatable, each
                            with its own --reason, in the same order.
-  --reason TEXT            flip: why a --waive is acceptable.
+  --reason TEXT            flip: why a --waive is acceptable. renumber: why
+                           the list is being renumbered.
+  --topic SLUG             renumber concepts, modules: which topic's list.
+  --module ID              renumber items: which module.
   --manimkc-root PATH      index: the manimkc checkout to read, for both the
                            manimkc source and the mirror ledger beside it.
                            Relative to the working directory. Default:
@@ -228,7 +239,8 @@ type Command =
   | "import"
   | "export"
   | "parity"
-  | "flip";
+  | "flip"
+  | "renumber";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -249,6 +261,7 @@ const COMMANDS: readonly Command[] = [
   "export",
   "parity",
   "flip",
+  "renumber",
 ];
 
 function isCommand(value: string | undefined): value is Command {
@@ -304,6 +317,8 @@ export async function main(argv: string[]): Promise<number> {
         strict: { type: "boolean", default: false },
         waive: { type: "string", multiple: true },
         reason: { type: "string", multiple: true },
+        topic: { type: "string" },
+        module: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -391,6 +406,26 @@ export async function main(argv: string[]): Promise<number> {
           waive: waive.map((rule, i) => ({ rule, reason: reasons[i] ?? "" })),
         });
         emit(result, formatFlip(result));
+        break;
+      }
+      case "renumber": {
+        const list = positionals[1];
+        if (list === undefined || !(RENUMBER_LISTS as readonly string[]).includes(list)) {
+          throw new Usage(`renumber needs a list: ${RENUMBER_LISTS.join(", ")}`);
+        }
+        const reasons = values.reason ?? [];
+        if (reasons.length !== 1) throw new Usage("renumber takes exactly one --reason");
+        if ((list === "concepts" || list === "modules") && values.topic === undefined) {
+          throw new Usage(`renumber ${list} needs --topic <slug>`);
+        }
+        if (list === "items" && values.module === undefined) throw new Usage("renumber items needs --module <id>");
+        const result = await runRenumber({
+          list: list as RenumberList,
+          topic: values.topic,
+          module: values.module,
+          reason: reasons[0] as string,
+        });
+        emit(result, formatRenumber(result));
         break;
       }
       case "backfill": {

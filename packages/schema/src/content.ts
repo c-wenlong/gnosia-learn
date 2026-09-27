@@ -130,7 +130,9 @@ export const topic = pgTable(
     /**
      * Where the topic sits in `content/topics.yaml`, which is authored in
      * domain groups and rendered in that order. Kept so an export writes the
-     * file back the way a person wrote it.
+     * file back the way a person wrote it. Sparse (D22 of
+     * docs/CONTENT-MIGRATION.md): steps of 1000, and a topic keeps its number
+     * while its place is unchanged, so adding one topic is one revision.
      */
     position: integer("position").notNull().default(0),
     ownerId: ownerId(() => learner.id),
@@ -183,7 +185,9 @@ export const concept = pgTable(
     sources: jsonb("sources").notNull().default(sql`'[]'::jsonb`),
     authoredAt: instant("authored_at"),
     /**
-     * Where the concept sits in its topic's `maps.concepts` list, 1-based.
+     * Where the concept sits in its topic's `maps.concepts` list, as a
+     * sparse position (D22 of docs/CONTENT-MIGRATION.md): ordered, not
+     * counted, so adding a concept to the list moves no other concept.
      * The list is authored in teaching order and the course path breaks ties
      * by it (`apps/web/src/lib/course-path.ts`), so an export that sorted it
      * would change what a page shows. Added in 0011 with 0.5's export.
@@ -272,6 +276,11 @@ export const curriculumItem = pgTable(
       // archive its items, never take them and the learner rows under them
       // away in one statement nobody saw.
       .references(() => collection.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    /**
+     * Order within the module, as a sparse position (D22 of
+     * docs/CONTENT-MIGRATION.md): an item added at the top is one revision,
+     * not one per item below it.
+     */
     position: integer("position").notNull().default(0),
     title: text("title").notNull(),
     /** The bullet list under the item. Display-only, never joined on. */
@@ -499,7 +508,7 @@ export const collectionItem = pgTable(
     }),
     /**
      * On a module's topic row, where the module sits in that topic's
-     * `maps.courses` list, 1-based; 0 on every other row. `position` is the
+     * `maps.courses` list, as a sparse position (D22); 0 on every other row. `position` is the
      * row's place inside its own collection, and this is its place in the
      * topic's list, a different list with a different author. Added in 0011
      * so 0.5's export writes `maps.courses` back in the order it was written.
@@ -569,7 +578,8 @@ export const curriculumItemTopic = pgTable(
  * This concept note contributes to this checklist item, at this position. The
  * one cross-tree link, authored in the course file as `topics[].concepts` and
  * written by the courses source (docs/proposals/course-items-declare-concepts.md).
- * `position` is the list's order, 1-based like `curriculum_item.position`.
+ * `position` is the list's order, 1-based: it orders links inside one item's
+ * snapshot, so it stays dense (D22).
  */
 export const conceptCurriculumItem = pgTable(
   "concept_curriculum_item",
@@ -607,7 +617,7 @@ export const tag = pgTable(
     id: text("id").primaryKey(),
     label: text("label").notNull(),
     description: text("description"),
-    /** The order the home page renders the chips in, which is the file's order. */
+    /** The order the home page renders the chips in, which is the file's order. Sparse (D22). */
     position: integer("position").notNull().default(0),
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),

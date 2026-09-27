@@ -41,6 +41,14 @@ import { updateSet } from "./upsert";
  * A write that leaves the snapshot exactly as the latest revision has it
  * appends nothing, touches nothing, and says so: the writes run in a savepoint
  * that is rolled back, so not even `updated_at` moves.
+ *
+ * Handed a transaction rather than the database, it runs as a savepoint of
+ * that transaction and commits with it. Two such calls in one outer
+ * transaction take their locks in call order, though, and a caller that
+ * writes a topic and then a tag can deadlock against an import that locks
+ * `tag` before `topic`. A write of several entities therefore goes through
+ * `writeContents`, which takes every lock first, in the one order everything
+ * else uses.
  */
 
 /** Thrown inside the savepoint to roll back a write that changed nothing. */
@@ -107,81 +115,135 @@ export async function writeContent(
     // (there is no row yet for FOR UPDATE to lock), and wait for an import of
     // this type. Transaction-scoped, so it cannot outlive a failure.
     await lockEntity(tx, input.type, input.id);
+    return writeLocked(tx, input);
+  });
+}
 
-    const latest = (await latestRevisions(tx, input.type, [input.id])).get(input.id);
-    const latestId = latest?.id ?? null;
-    if (latestId !== input.base) {
+/**
+ * Several entities in one transaction: all written, or none (tracks B and D
+ * write a course with its items, a diagram with its assets).
+ *
+ * Every lock is taken before the first write, in one global order: by type,
+ * then by id (see "Locks" in `revisions.ts` for why that order cannot
+ * deadlock against another composite writer or an import). The writes then
+ * run in the order given, because that is the order the foreign keys need
+ * (a topic before the concept filed under it), which sorting would break.
+ *
+ * Each input keeps its own `base` check and its own revision, exactly as
+ * `writeContent` would give it, and the results come back in input order. A
+ * refusal of any one rolls back all of them. Naming one entity twice is
+ * refused: the second write's base could only be stale.
+ */
+export async function writeContents(
+  db: CatalogDatabase,
+  inputs: readonly WriteContentInput[],
+): Promise<WriteContentResult[]> {
+  const seen = new Set<string>();
+  for (const input of inputs) {
+    validate(input);
+    const name = `${input.type} ${input.id}`;
+    if (seen.has(name)) {
       throw new ContentWriteError(
-        "stale-base",
-        `${input.type} "${input.id}" has moved on: this write started from ` +
-          `${input.base === null ? "no revision" : `revision ${input.base}`}, and the latest is ` +
-          `${latestId === null ? "no revision" : `revision ${latestId}`}. Read it again and reapply ` +
-          `the change; nothing was merged.`,
+        "invalid",
+        `${input.type} "${input.id}" is named twice in one composite write. Merge the two changes into one input.`,
       );
     }
+    seen.add(name);
+  }
+  if (inputs.length === 0) return [];
 
-    const before = (await readSnapshots(tx, input.type, [input.id])).get(input.id);
-    const [revisionId] = await reserveRevisionIds(tx, 1);
-    if (revisionId === undefined) throw new Error("could not reserve a revision id");
-    await markSeam(tx, String(revisionId));
+  return db.transaction(async (tx) => {
+    for (const input of [...inputs].sort(byLockOrder)) await lockEntity(tx, input.type, input.id);
+    const results: WriteContentResult[] = [];
+    for (const input of inputs) results.push(await writeLocked(tx, input));
+    return results;
+  });
+}
 
-    // The writes run in a savepoint, so a write that changes nothing can be
-    // rolled back whole once the snapshot says so.
-    const holder: { after?: SnapshotRead } = {};
-    let unchanged = false;
-    try {
-      await tx.transaction(async (sp) => {
-        await writeRows(sp, input);
-        const read = (await readSnapshots(sp, input.type, [input.id])).get(input.id);
-        if (read === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
-        holder.after = read;
-        if (!needsRevision(latest, read)) throw new Unchanged();
-      });
-    } catch (error) {
-      if (!(error instanceof Unchanged)) throw error;
-      unchanged = true;
-    }
-    const after = holder.after;
-    if (after === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
+/** The global lock order: type, then id, both by code unit, as `lockTypes` sorts types. */
+function byLockOrder(a: WriteContentInput, b: WriteContentInput): number {
+  if (a.type !== b.type) return a.type < b.type ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
 
-    if (unchanged && latest !== undefined) {
-      return {
-        type: input.type,
-        id: input.id,
-        changed: false,
-        revisionId: latest.id,
-        seq: latest.seq,
-        op: null,
-        hash: latest.hash,
-        snapshot: after.snapshot,
-      };
-    }
+/**
+ * One write, inside a transaction that already holds the entity's locks:
+ * the base check, the savepoint, the revision.
+ */
+async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promise<WriteContentResult> {
+  const latest = (await latestRevisions(tx, input.type, [input.id])).get(input.id);
+  const latestId = latest?.id ?? null;
+  if (latestId !== input.base) {
+    throw new ContentWriteError(
+      "stale-base",
+      `${input.type} "${input.id}" has moved on: this write started from ` +
+        `${input.base === null ? "no revision" : `revision ${input.base}`}, and the latest is ` +
+        `${latestId === null ? "no revision" : `revision ${latestId}`}. Read it again and reapply ` +
+        `the change; nothing was merged.`,
+    );
+  }
 
-    const pending: PendingRevision = {
-      id: revisionId,
-      type: input.type,
-      entityId: input.id,
-      read: after,
-      latest,
-      op: input.op ?? deriveOp(latest, after, "update", before !== undefined),
-      authorKind: input.authorKind,
-      author: input.author,
-      reason: input.reason.trim(),
-      jobId: input.jobId,
-      sessionId: input.sessionId,
-    };
-    await appendRevisions(tx, [pending]);
+  const before = (await readSnapshots(tx, input.type, [input.id])).get(input.id);
+  const [revisionId] = await reserveRevisionIds(tx, 1);
+  if (revisionId === undefined) throw new Error("could not reserve a revision id");
+  await markSeam(tx, String(revisionId));
+
+  // The writes run in a savepoint, so a write that changes nothing can be
+  // rolled back whole once the snapshot says so.
+  const holder: { after?: SnapshotRead } = {};
+  let unchanged = false;
+  try {
+    await tx.transaction(async (sp) => {
+      await writeRows(sp, input);
+      const read = (await readSnapshots(sp, input.type, [input.id])).get(input.id);
+      if (read === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
+      holder.after = read;
+      if (!needsRevision(latest, read)) throw new Unchanged();
+    });
+  } catch (error) {
+    if (!(error instanceof Unchanged)) throw error;
+    unchanged = true;
+  }
+  const after = holder.after;
+  if (after === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
+
+  if (unchanged && latest !== undefined) {
     return {
       type: input.type,
       id: input.id,
-      changed: true,
-      revisionId,
-      seq: (latest?.seq ?? 0) + 1,
-      op: pending.op,
-      hash: after.hash,
+      changed: false,
+      revisionId: latest.id,
+      seq: latest.seq,
+      op: null,
+      hash: latest.hash,
       snapshot: after.snapshot,
     };
-  });
+  }
+
+  const pending: PendingRevision = {
+    id: revisionId,
+    type: input.type,
+    entityId: input.id,
+    read: after,
+    latest,
+    op: input.op ?? deriveOp(latest, after, "update", before !== undefined),
+    authorKind: input.authorKind,
+    author: input.author,
+    reason: input.reason.trim(),
+    jobId: input.jobId,
+    sessionId: input.sessionId,
+  };
+  await appendRevisions(tx, [pending]);
+  return {
+    type: input.type,
+    id: input.id,
+    changed: true,
+    revisionId,
+    seq: (latest?.seq ?? 0) + 1,
+    op: pending.op,
+    hash: after.hash,
+    snapshot: after.snapshot,
+  };
 }
 
 /** The entity upsert and the replacement of any owned links the caller gave. */
