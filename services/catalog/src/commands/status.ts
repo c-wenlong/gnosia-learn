@@ -13,7 +13,7 @@ import {
   type TableName,
   tables,
 } from "@self-learn/schema";
-import { asc, count, eq, getTableName, max, sql } from "drizzle-orm";
+import { and, asc, count, eq, getTableName, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { withDatabase } from "../db";
@@ -200,10 +200,16 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
       withConcepts: sql<number>`count(distinct ${conceptCurriculumItem.curriculumItemId})::int`,
     })
     .from(course)
-    .innerJoin(collection, eq(collection.parentId, course.id))
-    .innerJoin(curriculumItem, eq(curriculumItem.collectionId, collection.id))
+    // Live rows only: an archived module or item is off the course path (D12),
+    // and counting it would put a row nobody can fill in into the distance to
+    // zero that `flip courses --strict` waits on.
+    .innerJoin(collection, and(eq(collection.parentId, course.id), isNull(collection.archivedAt)))
+    .innerJoin(
+      curriculumItem,
+      and(eq(curriculumItem.collectionId, collection.id), isNull(curriculumItem.archivedAt)),
+    )
     .leftJoin(conceptCurriculumItem, eq(conceptCurriculumItem.curriculumItemId, curriculumItem.id))
-    .where(eq(course.kind, "course"))
+    .where(and(eq(course.kind, "course"), isNull(course.archivedAt)))
     .groupBy(course.id, course.position)
     .orderBy(asc(course.position), asc(course.id));
   return rows;

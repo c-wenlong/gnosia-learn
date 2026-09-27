@@ -71,34 +71,48 @@ export function conformance(
       expect(["fs", "vercel-blob", "r2"]).toContain(store.provider);
     });
 
-    it("round-trips bytes streamed in many chunks, and head reports their size", async () => {
+    it("round-trips bytes streamed in many chunks, and head and stat report their size", async () => {
       const data = bytes(300_000, 1);
       const k = await putHonest(ownerA, data);
 
-      expect(await collect(await store.get(k))).toEqual(data);
+      const read = await store.get(k);
+      expect({ size: read.size, start: read.start, end: read.end }).toEqual({
+        size: data.length,
+        start: 0,
+        end: data.length - 1,
+      });
+      expect(await collect(read.body)).toEqual(data);
       const head = await store.head(k);
       expect(head?.bytes).toBe(data.length);
       if (head?.sha256 !== undefined) expect(head.sha256).toBe(sha256(data));
+      expect(await store.stat(k)).toEqual({ bytes: data.length });
     });
 
-    it("round-trips an empty object", async () => {
+    it("round-trips an empty object, read as start 0, end -1", async () => {
       const empty = Buffer.alloc(0);
       const k = await putHonest(ownerA, empty, "txt");
 
-      expect(await collect(await store.get(k))).toEqual(empty);
+      const read = await store.get(k);
+      expect({ size: read.size, start: read.start, end: read.end }).toEqual({ size: 0, start: 0, end: -1 });
+      expect(await collect(read.body)).toEqual(empty);
       expect((await store.head(k))?.bytes).toBe(0);
+      expect(await store.stat(k)).toEqual({ bytes: 0 });
     });
 
-    it("reads a range inclusive at both ends, clamping an end past the object", async () => {
+    it("reads a range inclusive at both ends, clamping an end past the object, and says which", async () => {
       const data = bytes(1_000, 2);
       const k = await putHonest(ownerA, data);
 
-      const read = async (start: number, end: number) => collect(await store.get(k, { start, end }));
-      expect(await read(0, 0)).toEqual(data.subarray(0, 1));
-      expect(await read(10, 19)).toEqual(data.subarray(10, 20));
-      expect(await read(999, 999)).toEqual(data.subarray(999));
-      expect(await read(0, 999)).toEqual(data);
-      expect(await read(990, 5_000)).toEqual(data.subarray(990));
+      const read = async (start: number, end: number) => {
+        const got = await store.get(k, { start, end });
+        return { bytes: await collect(got.body), size: got.size, start: got.start, end: got.end };
+      };
+      expect(await read(0, 0)).toEqual({ bytes: data.subarray(0, 1), size: 1_000, start: 0, end: 0 });
+      expect(await read(10, 19)).toEqual({ bytes: data.subarray(10, 20), size: 1_000, start: 10, end: 19 });
+      expect(await read(999, 999)).toEqual({ bytes: data.subarray(999), size: 1_000, start: 999, end: 999 });
+      expect(await read(0, 999)).toEqual({ bytes: data, size: 1_000, start: 0, end: 999 });
+      // Clamped, and the answer says to where: what Content-Range needs.
+      expect(await read(990, 5_000)).toEqual({ bytes: data.subarray(990), size: 1_000, start: 990, end: 999 });
     });
 
     it("refuses a range it cannot serve", async () => {
@@ -117,9 +131,10 @@ export function conformance(
       await expect(store.get(empty, { start: 0, end: 0 })).rejects.toBeInstanceOf(BlobRangeError);
     });
 
-    it("answers null for head, and BlobNotFoundError for get, on a key never put", async () => {
+    it("answers null for head and stat, and BlobNotFoundError for get, on a key never put", async () => {
       const absent = key(ownerA, sha256(bytes(10, 4)), "bin");
       expect(await store.head(absent)).toBeNull();
+      expect(await store.stat(absent)).toBeNull();
       await expect(store.get(absent)).rejects.toBeInstanceOf(BlobNotFoundError);
       await expect(store.get(absent, { start: 0, end: 0 })).rejects.toBeInstanceOf(BlobNotFoundError);
     });
@@ -217,7 +232,7 @@ export function conformance(
         store.put(k, chunked(data), meta(data)),
       ]);
       await store.put(k, chunked(data), meta(data));
-      expect(await collect(await store.get(k))).toEqual(data);
+      expect(await collect((await store.get(k)).body)).toEqual(data);
     });
 
     it("refuses a malformed key from every method, and destroys a refused body", async () => {
@@ -239,6 +254,7 @@ export function conformance(
         await expect(store.put(bad, body, meta(data))).rejects.toBeInstanceOf(BlobKeyError);
         expect(body.destroyed).toBe(true);
         await expect(store.head(bad)).rejects.toBeInstanceOf(BlobKeyError);
+        await expect(store.stat(bad)).rejects.toBeInstanceOf(BlobKeyError);
         await expect(store.get(bad)).rejects.toBeInstanceOf(BlobKeyError);
         await expect(store.signedUrl(bad, 60)).rejects.toBeInstanceOf(BlobKeyError);
         await expect(store.delete(bad)).rejects.toBeInstanceOf(BlobKeyError);
@@ -266,6 +282,7 @@ export function conformance(
 
       await store.delete(k);
       await expectAbsent(k);
+      expect(await store.stat(k)).toBeNull();
       await expect(store.get(k)).rejects.toBeInstanceOf(BlobNotFoundError);
       await expect(store.delete(k)).resolves.toBeUndefined();
     });

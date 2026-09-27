@@ -18,6 +18,16 @@ import { BlobIntegrityError, BlobKeyError, BlobRangeError, type BlobMeta, type B
  * means no adapter has to.
  */
 
+/*
+ * Stricter than the database's `blob_object_key_check` (migration 0010), which
+ * admits any owner without a slash and an optional extension of any length:
+ * `^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$`. Every key `key()` builds satisfies
+ * that check (`test/key.test.ts` holds the two together), so a row can always
+ * be written for an object this package stored. Relaxing this side to match
+ * would admit `..` as an owner and mixed case, the two things the rules above
+ * exist to refuse, so it is the check that should tighten: a contract
+ * migration in phase 2, listed there.
+ */
 const OWNER = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const EXT = /^[a-z0-9]{1,16}$/;

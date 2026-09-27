@@ -106,9 +106,13 @@ export function parseKinds(raw: string): string[] {
 export async function runLs(target: string | undefined, options: LsOptions = {}): Promise<LsResult> {
   return withDatabase(async ({ db }) => {
     if (target === undefined) {
+      // Live rows only, throughout: an archived topic, course, module or item
+      // is kept for the learner rows under it (D12) and is on no page, so a
+      // count that included it would describe a catalog nobody can browse.
       const domains = await db
         .select({ domain: topic.domain, topics: count() })
         .from(topic)
+        .where(isNull(topic.archivedAt))
         .groupBy(topic.domain)
         .orderBy(asc(topic.domain));
 
@@ -117,7 +121,7 @@ export async function runLs(target: string | undefined, options: LsOptions = {})
       const roots = await db
         .select({ id: collection.id, kind: collection.kind, title: collection.title })
         .from(collection)
-        .where(isNull(collection.parentId))
+        .where(and(isNull(collection.parentId), isNull(collection.archivedAt)))
         .orderBy(asc(collection.id));
 
       // Counted with a second grouped query rather than a correlated subquery
@@ -127,7 +131,7 @@ export async function runLs(target: string | undefined, options: LsOptions = {})
       const childCounts = await db
         .select({ parentId: collection.parentId, n: count() })
         .from(collection)
-        .where(isNotNull(collection.parentId))
+        .where(and(isNotNull(collection.parentId), isNull(collection.archivedAt)))
         .groupBy(collection.parentId);
       const childrenOf = new Map(childCounts.map((r) => [r.parentId, r.n]));
 
@@ -159,7 +163,7 @@ async function topicsInDomain(
   const rows = await db
     .select({ slug: topic.slug, title: topic.title })
     .from(topic)
-    .where(eq(topic.domain, domain))
+    .where(and(eq(topic.domain, domain), isNull(topic.archivedAt)))
     .orderBy(asc(topic.slug));
   if (rows.length === 0) return null;
 
@@ -168,7 +172,7 @@ async function topicsInDomain(
   const conceptCounts = await db
     .select({ slug: concept.topicSlug, n: count() })
     .from(concept)
-    .where(inArray(concept.topicSlug, slugs))
+    .where(and(inArray(concept.topicSlug, slugs), isNull(concept.archivedAt)))
     .groupBy(concept.topicSlug);
 
   const assetWhere =
@@ -187,7 +191,8 @@ async function topicsInDomain(
   const curriculumCounts = await db
     .select({ slug: curriculumItemTopic.topicSlug, n: count() })
     .from(curriculumItemTopic)
-    .where(inArray(curriculumItemTopic.topicSlug, slugs))
+    .innerJoin(curriculumItem, eq(curriculumItem.id, curriculumItemTopic.curriculumItemId))
+    .where(and(inArray(curriculumItemTopic.topicSlug, slugs), isNull(curriculumItem.archivedAt)))
     .groupBy(curriculumItemTopic.topicSlug);
 
   const byConcept = new Map(conceptCounts.map((r) => [r.slug, r.n]));
@@ -216,7 +221,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
   const children = await db
     .select()
     .from(collection)
-    .where(eq(collection.parentId, id))
+    .where(and(eq(collection.parentId, id), isNull(collection.archivedAt)))
     .orderBy(asc(collection.position), asc(collection.id));
 
   const ids = [id, ...children.map((c) => c.id)];
@@ -229,7 +234,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
       position: curriculumItem.position,
     })
     .from(curriculumItem)
-    .where(inArray(curriculumItem.collectionId, ids))
+    .where(and(inArray(curriculumItem.collectionId, ids), isNull(curriculumItem.archivedAt)))
     .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
 
   const topics = await db
@@ -245,7 +250,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
   const grandchildren = await db
     .select({ parentId: collection.parentId, n: count() })
     .from(collection)
-    .where(inArray(collection.parentId, children.map((c) => c.id)))
+    .where(and(inArray(collection.parentId, children.map((c) => c.id)), isNull(collection.archivedAt)))
     .groupBy(collection.parentId);
   const belowChild = new Map(grandchildren.map((r) => [r.parentId, r.n]));
 

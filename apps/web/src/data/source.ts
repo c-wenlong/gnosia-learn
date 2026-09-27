@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fileSource, selectSource, type SelectedSource } from "@self-learn/content";
+import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
@@ -30,19 +31,27 @@ import { catalogDatabase } from "@/lib/learner-store";
  * reader. When the rows cannot be read (the database is down, or not migrated
  * to 0010) every type falls back to files, which is what the pages served
  * before the seam existed, and the reason is logged once per outage rather
- * than once per request.
+ * than once per request. "Once" is per cause: a database that was refusing
+ * connections and now answers without a `content_source` table (or, later,
+ * refuses the role) is a new problem, and a person needs to see it.
  *
  * **The database is reached only at request time**: `connection()` marks the
  * read as request work, the rule every other database read in the app
  * follows, and the catalog is imported lazily so nothing constructs a pool
  * during `next build`. The content itself is read from it only for a type
- * that resolves to `db`.
+ * that resolves to `db`. During a prerender `connection()` throws Next's own
+ * "dynamic server usage" signal, which has to reach Next rather than be taken
+ * for an outage: `selectSource` catches whatever the callback throws and
+ * hands it to `onOwnershipError`, so that is where it is rethrown.
  */
 
 const files = fileSource(REPO_ROOT);
 
-/** Whether the current outage has been reported. A successful read clears it. */
-let ownershipWarned = false;
+/**
+ * The cause last reported, so each outage is logged once and a different
+ * cause is logged again. A successful read clears it.
+ */
+let warnedCause: string | null = null;
 
 export const contentSource = cache(
   (): SelectedSource =>
@@ -52,13 +61,17 @@ export const contentSource = cache(
         await connection();
         const { contentOwnership } = await import("@self-learn/catalog/state");
         const rows = await contentOwnership(await catalogDatabase());
-        ownershipWarned = false;
+        warnedCause = null;
         return rows;
       },
       onOwnershipError: (error) => {
-        if (ownershipWarned) return;
-        ownershipWarned = true;
-        console.warn(`content source: the content_source rows could not be read, reading files. ${cause(error)}`);
+        // Next's control flow, not an outage: a prerender bailing out on
+        // `connection()`, a redirect, a not-found. It propagates to Next.
+        unstable_rethrow(error);
+        const reason = cause(error);
+        if (reason === warnedCause) return;
+        warnedCause = reason;
+        console.warn(`content source: the content_source rows could not be read, reading files. ${reason}`);
       },
       db: async () => {
         await connection();

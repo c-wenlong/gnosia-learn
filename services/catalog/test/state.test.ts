@@ -1,4 +1,5 @@
 import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@self-learn/schema";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { applyMigrations } from "../src/migrations";
@@ -128,6 +129,33 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       await expect(setProgress(scratch.db, "no-such-item", true)).rejects.toThrow(
         /no curriculum item in the catalog for "no-such-item"/,
       );
+    });
+
+    it("refuses a tick, a note or a recap on an archived item, and keeps what was recorded on it", async () => {
+      await setProgress(scratch.db, ITEMS[1], true);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id = ${ITEMS[1]}`);
+      try {
+        for (const write of [
+          () => setProgress(scratch.db, ITEMS[1], true),
+          () => setNote(scratch.db, ITEMS[1], "a note"),
+          () =>
+            upsertRecap(scratch.db, ITEMS[1], {
+              summary: "s",
+              keyPoints: [],
+              misconceptions: [],
+              openQuestions: [],
+              source: "manual",
+            }),
+        ]) {
+          await expect(write()).rejects.toBeInstanceOf(StateError);
+          await expect(write()).rejects.toThrow(new RegExp(`"${ITEMS[1]}" is archived: its course no longer lists it`));
+        }
+        // The tick from before the archive is still the learner's, and still exported.
+        expect((await readProgress(scratch.db)).map((row) => row.curriculumItemId)).toContain(ITEMS[1]);
+      } finally {
+        await scratch.db.execute(sql`update curriculum_item set archived_at = null where id = ${ITEMS[1]}`);
+        await setProgress(scratch.db, ITEMS[1], false);
+      }
     });
 
     it("resets only what it is asked to, and never a recap", async () => {

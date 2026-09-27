@@ -1,10 +1,15 @@
 # Moving authored content into the database
 
-**Status: approved for phase 0, not built. 2026-09-27.** The owner answered
-the open questions the same day (see [Decided by the owner](#decided-by-the-owner)):
-everything stays local for now, so the cloud database and the cloud blob
-adapter are deferred to a go-live step and phase 0 starts at 0.2. Nothing below
-exists yet. Numbers
+**Status: built through phase 0, 2026-09-28; phase 1 not started.** Phase 0
+merged as PRs #126 to #129, and the fixes a read-only review of it asked for
+as #130 and the one after it; each step below says what was built under
+**Built**, and a box is ticked only for what exists. Approved 2026-09-27, when
+the owner answered the open questions (see
+[Decided by the owner](#decided-by-the-owner)): everything stays local for
+now, so the cloud database and the cloud blob adapter are deferred to a
+go-live step and phase 0 started at 0.2. The owner's `self_learn` database is
+still at `0009` and needs `npm run catalog -- migrate` before any phase 1 flip.
+Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
 working tree, `~/.self-learn/manimkc/out` and the local `self_learn` database;
 every other number is marked *guessed* and says what would settle it. File
@@ -437,14 +442,23 @@ interface BlobStore {
   readonly provider: "fs" | "vercel-blob" | "r2";
   put(key: string, body: Readable, meta: { sha256: string; bytes: number; mime: string }): Promise<void>;
   head(key: string): Promise<{ bytes: number; sha256?: string } | null>;
-  get(key: string, range?: { start: number; end: number }): Promise<Readable>;
+  stat(key: string): Promise<{ bytes: number } | null>; // added after the review
+  get(key: string, range?: { start: number; end: number }): Promise<{ body: Readable; size: number; start: number; end: number }>;
   signedUrl(key: string, ttlSeconds: number): Promise<string | null>; // null: the caller streams instead
   delete(key: string): Promise<void>;
   list(prefix: string): AsyncIterable<{ key: string; bytes: number; uploadedAt: Date }>;
 }
 ```
 
-It also exports `key(ownerId, sha256, ext)`. Two members were added when it
+It also exports `key(ownerId, sha256, ext)`. After the phase 0 review `get`
+returns `{ body, size, start, end }` (it returned a bare stream), so Track E's
+route can write `Content-Range` without hashing the file through `head`, and a
+`stat(key)` returns the size alone; the `fs` adapter opens objects
+non-blocking and refuses anything under a key that is not a regular file (a
+FIFO hung `head`), and its checkout guard also recognises a root
+`package.json` named `self-learn`. `blobRoot()` in
+`services/catalog/src/env.ts` resolves the root for the CLI and the web app
+alike. Two members were added when it
 was built: `list`, by plain string prefix, because phase 4 counts, caps and
 deletes by owner prefix (D3, D5) and edge case 9's orphan sweep needs each
 object's upload time; and `provider`, so the upload command fills
@@ -614,10 +628,26 @@ The web app reads content synchronously at module load
       `services/studio/src/content-cache.ts`. The studio's repo-root walk
       (`services/studio/src/paths.ts:24`) stays until phase 2 removes it.
 
+After the phase 0 review: `dbSource` is composed from one reader file per
+type under `services/catalog/src/content/readers/`, with `DB_READERS` derived
+from each file's `ready` flag (the shared-files table under "Dependencies and
+parallel work" has the layout); `noteId` reads the `id:` key line by line, as
+the notes' dialect does, where a pattern let an empty `id:` take the next
+line; `fileSource` keys its parse on ctime and inode as well as size and
+mtime; and the web app's ownership callback hands Next's "dynamic server
+usage" back to Next instead of logging it as an outage, and logs each new
+cause of an outage once rather than only the first. The catalog's commands
+that read what 0010 and 0011 added, and `learn index`, refuse a database
+behind the journal with exit 4 and `Run: npm run catalog -- migrate`.
+
 ### 0.7 Docs
 
-- [ ] `SCHEMA.md` gains the new tables and the reversed "two halves" row;
-      `DEPLOYMENT.md` gains the roles, the region and the blob token.
+- [x] `SCHEMA.md` gains the new tables and the reversed "two halves" row.
+- [ ] `DEPLOYMENT.md` gains the roles, the region and the blob token. Not yet,
+      and on purpose: all three belong to the cloud move of 0.1, which the
+      owner deferred to go-live, and none exists to document. What does exist
+      is written there now: the local blob store and `SELF_LEARN_HOME`
+      ("The blob store"). This box is ticked in 0.1's PR.
 
 **Done when:** the expand migration is applied to a `createdb -T self_learn`
 copy and then to the local primary; `catalog import` of the current tree into a
@@ -701,7 +731,10 @@ commands, the courses indexer's import mode.
       or `recap` rows name the item unless `--with-learner-data` is passed, and
       then snapshots those rows into the revision before deleting.
 - [ ] Readers filter `archived_at is null`; an archived item with a learner's
-      tick leaves the course path and stays in the Settings export.
+      tick leaves the course path and stays in the Settings export. The
+      catalog's own `status`, `ls` and `show` and the progress, note and
+      recap writes do since the phase 0 review; the web app's course readers
+      are this track's `readers/courses.ts`.
 - [ ] The web app's course readers switch to `dbSource`.
 - [ ] The nine courses with no concept on any item get their concepts, as
       content work the owner scheduled into this track on 2026-09-27: one
@@ -841,6 +874,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 - [ ] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
+      The web app's studio screen shows D13's "stale since" banner from the
+      runner's `health.vocabulary` (`stale`, `readAt`), which exists since 0.6
+      and which nothing in `apps/web` reads yet.
 - [ ] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
@@ -866,7 +902,11 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       a local database built by `catalog import seed/`; `vitest.setup.ts`'s
       tracked-tree check watches `seed/`.
 - [ ] **Contract migration:** the `asset` location check narrows so a video,
-      sidecar, poster or SVG must have a `blob_key`.
+      sidecar, poster or SVG must have a `blob_key`; and `blob_object_key_check`
+      tightens to the blob package's own key rule (`packages/blob/src/key.ts`:
+      a lowercase owner of 1 to 64 characters, a required extension of 1 to
+      16), which it is looser than today. Every key the package makes already
+      passes the current check, which `packages/blob/test/key.test.ts` holds.
 
 **Done when:** deleting `content/` and `learn/` in a scratch worktree leaves
 `npm run lint && npm run typecheck && npm test && npm run build` green and the
@@ -979,6 +1019,7 @@ The shared files, and how tracks stay off them:
 | --- | --- | --- |
 | `packages/schema/src/*.ts` and `services/catalog/drizzle/` | Every track adds columns; two branches both generating the next number collide in `_journal.json` and the snapshot files | Phase 0 lands every expand change (D10). A track that finds it needs more schema rebases onto `main`, regenerates, and never hand-merges a snapshot |
 | `packages/content/src/*` | Every track adds its reader | Phase 0 lands the interface complete and `fileSource` complete; tracks fill methods in their own file under `services/catalog/src/content/` |
+| `services/catalog/src/content/source.ts` and `DB_READERS` | Every track fills in one `dbSource` method and adds its type to the set `catalog flip` checks | One file per type under `services/catalog/src/content/readers/` (`topics.ts`, `tags.ts`, `courses.ts`, `concepts.ts`, `sessions.ts`, `diagrams.ts`), each exporting `reader = { ready, read }` and starting as `{ ready: false, read: notMigrated("<type>") }`. `source.ts` composes them and `flip.ts` derives `DB_READERS` from the `ready` flags, so a track edits its own reader file and nothing else |
 | `services/catalog/src/index/writer.ts` | Revisions and the archive-instead-of-prune rule | Both land in phase 0; tracks change only their own indexer file |
 | `services/catalog/src/cli.ts` | Verb registration | One line per track in a registry; a trivial rebase |
 | The `learning` plugin | C and D both edit instructions | C merges first; D rebases and bumps the version again |
@@ -1145,7 +1186,10 @@ the banner says "stale since" and the time. **Why:** U3 of
 TLDRAWKC-INTEGRATION.md promises browsing and drawing with Postgres down, and
 today its own YAML parser (`services/studio/src/brief.ts:155`) is how.
 **Rejected:** keeping the studio on files (two truths); refusing to open
-offline (breaks U3).
+offline (breaks U3). **Built** in phase 0 up to the banner: the cache and
+`health.vocabulary` (`stale`, `readAt`) are in `services/studio/src/` since
+0.6, and nothing in `apps/web` reads them yet, so the "stale since" banner is a
+phase 2 follow-up, beside the studio's other reader changes there.
 
 ### D14. `pg_trgm` now; `pgvector` at about 300 topics, in the same Postgres
 

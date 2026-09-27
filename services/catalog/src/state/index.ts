@@ -54,6 +54,11 @@ export { dbSource, NotMigratedError } from "../content/source";
  * `CONTENT_SOURCE` overrides it for that reader.
  */
 export { contentOwnership } from "../content/ownership";
+/**
+ * The blob store's root, resolved the way the catalog CLI resolves it, so the
+ * route that serves a blob and the command that uploaded it open one store.
+ */
+export { blobRoot } from "../env";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";

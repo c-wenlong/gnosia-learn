@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  blobRoot,
   loadEnv,
   MANIMKC_DIR,
   REPO_ROOT,
@@ -29,7 +30,7 @@ import { repoRoot as learnRepoRoot } from "../src/learn/paths";
  * rests on; what is new here is the resolution of the value once it is read.
  */
 
-const VARIABLES = ["MANIMKC_ROOT", "TLDRAWKC_ROOT", "LEARN_ROOT"] as const;
+const VARIABLES = ["MANIMKC_ROOT", "TLDRAWKC_ROOT", "LEARN_ROOT", "SELF_LEARN_HOME"] as const;
 const original = new Map(VARIABLES.map((name) => [name, process.env[name]]));
 
 beforeAll(() => {
@@ -85,6 +86,21 @@ describe("resolveManimkcRoot and resolveTldrawkcRoot", () => {
     process.env.TLDRAWKC_ROOT = "   ";
     expect(resolveManimkcRoot()).toBe(path.join(REPO_ROOT, MANIMKC_DIR));
     expect(resolveTldrawkcRoot()).toBe(path.join(REPO_ROOT, TLDRAWKC_DIR));
+  });
+});
+
+describe("blobRoot", () => {
+  it("defaults to ~/.self-learn/blobs, and follows SELF_LEARN_HOME with a ~ expanded", () => {
+    expect(blobRoot()).toBe(path.join(homedir(), ".self-learn", "blobs"));
+    process.env["SELF_LEARN_HOME"] = "~/elsewhere";
+    expect(blobRoot()).toBe(path.join(homedir(), "elsewhere", "blobs"));
+    process.env["SELF_LEARN_HOME"] = "/srv/self-learn";
+    expect(blobRoot()).toBe(path.join("/srv/self-learn", "blobs"));
+  });
+
+  it("refuses a relative SELF_LEARN_HOME rather than resolving it against wherever it runs", () => {
+    process.env["SELF_LEARN_HOME"] = "data";
+    expect(() => blobRoot()).toThrow(/absolute/);
   });
 });
 

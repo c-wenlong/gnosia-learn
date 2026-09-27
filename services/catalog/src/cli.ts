@@ -50,7 +50,9 @@ import {
   describeConnectionFailure,
   EXIT_UNREACHABLE,
 } from "./connection-failure";
+import { withDatabase } from "./db";
 import { databaseUrl, redactUrl } from "./env";
+import { assertMigrated, EXIT_MIGRATIONS_OUTSTANDING, MigrationsOutstanding } from "./migrations";
 import { parseSources } from "./index/run";
 
 /**
@@ -192,6 +194,9 @@ Exit codes:
   2  The invocation was wrong.
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
+  4  The database is behind this code: index, import, export, parity,
+     flip, ls and show read tables or columns a migration it has not had
+     adds. stderr says how many are outstanding and to run migrate.
 
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
@@ -251,6 +256,23 @@ const COMMANDS: readonly Command[] = [
   "flip",
 ];
 
+/**
+ * Commands that read tables or columns added after 0009 (`content_source`,
+ * `archived_at`, the revision table). On a database behind the journal they
+ * refuse first, by name, with exit 4, instead of failing on drizzle's
+ * `Failed query: ...` for a relation the person never heard of. `status`,
+ * `doctor` and `migrate` are exempt: saying what is outstanding is their job.
+ */
+const NEEDS_CURRENT_SCHEMA: ReadonlySet<Command> = new Set<Command>([
+  "index",
+  "import",
+  "export",
+  "parity",
+  "flip",
+  "ls",
+  "show",
+]);
+
 function isCommand(value: string | undefined): value is Command {
   return value !== undefined && (COMMANDS as readonly string[]).includes(value);
 }
@@ -260,7 +282,7 @@ class Usage extends Error {}
 
 /**
  * Exit codes: 0 ok, 1 the command failed, 2 the invocation was wrong, 3 the
- * database is unreachable.
+ * database is unreachable, 4 migrations are outstanding.
  *
  * 3 exists for the studio, which has to tell "nothing there to talk to" (run
  * the job without the database, D16) from "a live database said no" (refuse
@@ -329,6 +351,7 @@ export async function main(argv: string[]): Promise<number> {
   };
 
   try {
+    if (NEEDS_CURRENT_SCHEMA.has(command)) await withDatabase(({ db }) => assertMigrated(db));
     switch (command) {
       case "migrate": {
         const result = await runMigrate();
@@ -491,6 +514,15 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof MigrationsOutstanding) {
+      if (values.json) {
+        process.stdout.write(
+          `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, pending: error.pending }, null, 2)}\n`,
+        );
+      }
+      process.stderr.write(`catalog ${command}: ${redactUrl(databaseUrl())} is behind this code. ${message}\n`);
+      return EXIT_MIGRATIONS_OUTSTANDING;
+    }
     const failure = classifyConnectionFailure(error);
     const reason = failure === null ? null : describeConnectionFailure(failure);
     if (values.json) {

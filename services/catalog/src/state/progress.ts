@@ -29,27 +29,50 @@ export interface ProgressRow {
 }
 
 /**
- * Curriculum item ids the catalog does not know. `progress.curriculum_item_id`
- * is a foreign key, so this is checked first to turn a 23503 into a sentence
- * that names the id — which, for a write coming from a browser, is the
- * difference between a 400 the caller can act on and a 500.
+ * Curriculum item ids the catalog does not know, and those it knows only as
+ * archived. `progress.curriculum_item_id` is a foreign key, so this is checked
+ * first to turn a 23503 into a sentence that names the id — which, for a write
+ * coming from a browser, is the difference between a 400 the caller can act
+ * on and a 500.
  */
-async function unknownItems(db: CatalogDatabase, ids: string[]): Promise<string[]> {
-  if (ids.length === 0) return [];
+async function itemStates(
+  db: CatalogDatabase,
+  ids: string[],
+): Promise<{ unknown: string[]; archived: string[] }> {
+  if (ids.length === 0) return { unknown: [], archived: [] };
   const known = await db
-    .select({ id: curriculumItem.id })
+    .select({ id: curriculumItem.id, archivedAt: curriculumItem.archivedAt })
     .from(curriculumItem)
     .where(inArray(curriculumItem.id, ids));
-  const present = new Set(known.map((row) => row.id));
-  return ids.filter((id) => !present.has(id));
+  const present = new Map(known.map((row) => [row.id, row.archivedAt !== null]));
+  return {
+    unknown: ids.filter((id) => !present.has(id)),
+    archived: ids.filter((id) => present.get(id) === true),
+  };
 }
 
+/**
+ * Refuse a write to an item the catalog does not know, or has archived.
+ *
+ * An archived item is one its course file stopped listing (D12 of
+ * docs/CONTENT-MIGRATION.md). The learner's tick, note and recap on it are
+ * kept, and the Settings export still carries them, but it is on no course
+ * path any more, so a new tick there would record progress on something the
+ * course no longer teaches. Only a stale page can send one, and a sentence
+ * that says why beats a tick that silently lands nowhere.
+ */
 export async function assertKnownItems(db: CatalogDatabase, ids: string[]): Promise<void> {
-  const unknown = await unknownItems(db, ids);
+  const { unknown, archived } = await itemStates(db, ids);
   if (unknown.length > 0) {
     throw new StateError(
       `no curriculum item in the catalog for ${unknown.map((id) => `"${id}"`).join(", ")}. ` +
         `Course data is indexed from content/courses/: run \`npm run catalog -- index\`.`,
+    );
+  }
+  if (archived.length > 0) {
+    throw new StateError(
+      `curriculum item ${archived.map((id) => `"${id}"`).join(", ")} is archived: its course no ` +
+        `longer lists it. What was recorded on it is kept, and nothing new is. Reload the course page.`,
     );
   }
 }

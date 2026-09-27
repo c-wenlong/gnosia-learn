@@ -4,7 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/env";
-import { extractWikilinks, parseFrontmatter } from "../src/index/frontmatter";
+import { noteId } from "@self-learn/content";
+
+import { extractWikilinks, parseFrontmatter, readText } from "../src/index/frontmatter";
 
 /**
  * The catalog parses the knowledge base's frontmatter with its own TypeScript
@@ -115,5 +117,53 @@ describe("frontmatter dialect", () => {
     expect(extractWikilinks("see [[target|the alias]] and [[other#heading]] and [[target]]")).toEqual(
       ["target", "other"],
     );
+  });
+});
+
+/**
+ * `noteId` in `packages/content` reads a note's `id:` without this parser
+ * (the package cannot import the catalog), and `fileSource.concept(slug)`
+ * finds notes by it, so it must name the same id the concepts indexer does:
+ * `readText(data, "id") ?? stem`. Held to that here on the shapes where a
+ * pattern and a line parser can part, not on the real notes, whose ids are
+ * all plain and would pass either way.
+ */
+describe("noteId agrees with the catalog's frontmatter parser", () => {
+  const stem = "file-stem";
+  const fixtures: Record<string, string> = {
+    plain: "---\nid: a-b\ntitle: T\n---\nbody\n",
+    "empty id, then another key": "---\nid:\ntitle: not-the-id\n---\nbody\n",
+    "empty id with trailing spaces, then another key": "---\nid:   \ntitle: not-the-id\n---\n",
+    "a multi-line list": "---\nid:\n  - first\n  - second\ntitle: T\n---\n",
+    "a list under a scalar id": "---\nid: scalar\n  - item\n---\n",
+    "a list under the next key": "---\nid: kept\ntags:\n  - a\n---\n",
+    "blank and comment lines in a list": "---\nid:\n\n# note\n  - a\n---\n",
+    "CRLF": "---\r\nid: crlf-id\r\ntitle: T\r\n---\r\n",
+    "CRLF empty id": "---\r\nid:\r\ntitle: not-the-id\r\n---\r\n",
+    "the last id wins": "---\nid: first\nid: second\n---\n",
+    "a later empty id clears it": "---\nid: first\nid:\n---\n",
+    quoted: '---\nid: "  spaced  "\n---\n',
+    "quoted empty": '---\nid: ""\n---\n',
+    "single quotes": "---\nid: 'single'\n---\n",
+    number: "---\nid: 007\n---\n",
+    decimal: "---\nid: 1.50\n---\n",
+    boolean: "---\nid: true\n---\n",
+    null: "---\nid: null\n---\n",
+    tilde: "---\nid: ~\n---\n",
+    "inline list": "---\nid: [a, b]\n---\n",
+    indented: "---\n  id: indented\n---\n",
+    "no space after the colon": "---\nid:tight\n---\n",
+    "no frontmatter": "id: not-frontmatter\n",
+    "empty frontmatter": "---\n\n---\n",
+  };
+
+  it.each(Object.entries(fixtures))("%s", (_, markdown) => {
+    const expected = readText(parseFrontmatter(markdown).data, "id") ?? stem;
+    expect(noteId(markdown, stem)).toBe(expected);
+  });
+
+  it("does not take the next line as the id when id: is empty", () => {
+    expect(noteId(fixtures["empty id, then another key"] as string, stem)).toBe(stem);
+    expect(noteId(fixtures["a multi-line list"] as string, stem)).toBe(stem);
   });
 });

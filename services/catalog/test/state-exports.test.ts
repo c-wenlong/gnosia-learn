@@ -68,6 +68,8 @@ const REQUIRED = [
   "notePaths",
   // The content reader seam's database half, which the app's composition root builds.
   "dbSource",
+  // The blob store's root, so the route serving a blob opens the store the CLI uploaded to.
+  "blobRoot",
 ] as const;
 
 describe("the state barrel", () => {
