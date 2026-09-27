@@ -53,7 +53,7 @@ another repo.
 | Directory | What lives there | npm workspace |
 | --- | --- | --- |
 | `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@self-learn/web` |
-| `packages/content/`, `packages/schema/` | The content reader and the table shapes | yes |
+| `packages/content/`, `packages/schema/`, `packages/blob/` | The content reader, the table shapes and the blob store | yes |
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
 | `scripts/learn/` | The pipeline's pure maths, and the `npm run learn` entry point | no |
 | `content/`, `learn/` | Authored data and the knowledge base. Files, not code. | no |
@@ -83,6 +83,7 @@ tsconfigs.
 | --- | --- |
 | `packages/content/` | The reader for `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
+| `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `content/` | Authored data: the topic vocabulary, the theme tags and the course YAML |
 
@@ -128,11 +129,13 @@ client of the store, never of the database directly.
 | --- | --- |
 | `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types; `ContentSource`, the async interface every reader holds, with `fileSource(root)` over those parsers and `selectSource` choosing files or the database per type. Reads files, connects to nothing: the database implementation, `dbSource`, is the catalog's. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
+| `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$SELF_LEARN_HOME/blobs`, outside the repo. Imports nothing but Node. Nothing uses it yet; the catalog's upload command is next. |
 | `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
 
-`packages/schema` and `packages/content` are the bottom of that stack: one
-imports `drizzle-orm`, the other `yaml`, and neither imports anything else of
-ours. `services/catalog` imports both, owns the only connection string in the
+`packages/schema`, `packages/content` and `packages/blob` are the bottom of
+that stack: the first imports `drizzle-orm`, the second `yaml`, the third only
+Node's own modules, and none imports anything else of ours.
+`services/catalog` imports the first two, owns the only connection string in the
 repo, and is the only thing that talks to Postgres. The design and the
 entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
