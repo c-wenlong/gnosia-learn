@@ -165,6 +165,14 @@ function readResource(raw: RawResource, where: string): Resource {
 function readTopic(raw: RawTopic, where: string): Topic {
   const id = requireText(raw.id, where, "topics[].id");
   const at = `${where} topic "${id}"`;
+  // `concepts:` with nothing after it parses as null, which `stringList`
+  // reads as an empty list. An author who wrote the key meant to list
+  // something, so the row is refused rather than read as having no concepts.
+  if (raw.concepts === null) {
+    throw new ContentError(
+      `${at}: concepts is present but empty. List the concept ids, or delete the key.`,
+    );
+  }
   const concepts = stringList(raw.concepts, at, "concepts");
   // The list is the teaching order and the catalog stores a position per
   // entry, so a concept named twice would hold two positions on one row.

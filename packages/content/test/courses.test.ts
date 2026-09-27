@@ -330,6 +330,13 @@ describe("loadCourses refuses", () => {
     expect(() => loadCourses({ root })).toThrow(/topic "xx1000-m1-t1": concepts must be a list/);
   });
 
+  it("an item's concepts key left empty", () => {
+    const course = JSON.parse(courseYaml()) as { modules: { topics: Record<string, unknown>[] }[] };
+    course.modules[0]!.topics[0]!.concepts = null;
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/concepts is present but empty/);
+  });
+
   it("a concept listed twice on one item", () => {
     const root = mappedTree({ alpha: ["one", "two"] }, ["one", "two", "one"]);
     expect(() => loadCourses({ root })).toThrow(/concepts lists "one" twice/);
