@@ -108,6 +108,7 @@ import {
 } from "./files";
 import { kbDir, mapFile, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
+import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { checkMapping, mapConceptToTopic, VocabularyEditError } from "./vocabulary-edit";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
@@ -295,6 +296,7 @@ interface Values {
   body?: string;
   text?: string;
   topic?: string;
+  item?: string;
   limit?: string;
   days?: string;
   mermaid?: boolean;
@@ -402,10 +404,40 @@ commands.concept = async ({ values, positionals }, session) => {
     // the flag is that a session never leaves a note the vocabulary has never
     // heard of, and writing the note first and then discovering the slug was a
     // typo would produce exactly that.
-    const topicSlug = values.topic?.trim();
+    let topicSlug = values.topic?.trim();
     if (values.topic !== undefined && !topicSlug) {
       fail("concept add --topic needs a topic slug");
     }
+
+    // `--item` is the course-side half: the row the note teaches. Its module
+    // names the topic the note must be mapped to, so the flag implies
+    // `--topic`, and the two are refused together when they disagree, since
+    // the course reader would refuse the file that resulted.
+    const itemId = values.item?.trim();
+    if (values.item !== undefined && !itemId) {
+      fail("concept add --item needs a curriculum item id, e.g. cp4284-m1-t1");
+    }
+    let itemFile: string | undefined;
+    if (itemId !== undefined) {
+      try {
+        const check = checkItem(repoRoot(), itemId, id);
+        itemFile = check.file;
+        if (topicSlug === undefined) topicSlug = check.moduleTopic;
+        else if (topicSlug !== check.moduleTopic) {
+          fail(
+            `--item ${itemId} is in a module whose topic is "${check.moduleTopic}", not ` +
+              `"${topicSlug}". A row's concepts sit under its module's topic; drop --topic, ` +
+              `or pick a row under "${topicSlug}".`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof CourseEditError || error instanceof ContentError) {
+          fail(error.message);
+        }
+        throw error;
+      }
+    }
+
     if (topicSlug !== undefined) {
       try {
         checkMapping(repoRoot(), topicSlug, id);
@@ -461,11 +493,16 @@ commands.concept = async ({ values, positionals }, session) => {
     let indexed = false;
     if (topicSlug !== undefined) {
       try {
+        // Mapping first: the course reader refuses a listed concept its
+        // module's topic does not map, so the listing cannot go in ahead of it.
         await mapConceptToTopic(repoRoot(), topicSlug, id);
+        if (itemId !== undefined) await listConceptOnItem(repoRoot(), itemId, id);
+        // Concepts, and courses behind it, which is what writes the row's link.
         await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
       } catch (error) {
         if (
           error instanceof VocabularyEditError ||
+          error instanceof CourseEditError ||
           error instanceof ContentError ||
           error instanceof IndexError
         ) {
@@ -479,12 +516,16 @@ commands.concept = async ({ values, positionals }, session) => {
     }
 
     if (values.json) {
-      return out({ id, path: rel(file), topic: topicSlug ?? null, indexed }, true);
+      return out(
+        { id, path: rel(file), topic: topicSlug ?? null, item: itemId ?? null, indexed },
+        true,
+      );
     }
 
     out(`Wrote ${rel(file)}`, false);
     if (topicSlug !== undefined) {
       out(`Mapped "${id}" to topic "${topicSlug}" in ${TOPICS_FILE} and indexed it.`, false);
+      if (itemId !== undefined) out(`Listed "${id}" on ${itemId} in ${itemFile ?? ""}.`, false);
     } else if (!indexed) {
       out(
         `Not in the catalog yet, so nothing can record mastery about it.\n` +
@@ -1417,13 +1458,18 @@ commands.help = async () => {
     `learn — local learning pipeline
 
   status                         where you are
-  concept add --title T [--topic S] [--domain D] [--requires a,b] [--assumes c]
-              [--tags x,y]
+  concept add --title T [--topic S] [--item I] [--domain D] [--requires a,b]
+              [--assumes c] [--tags x,y]
                                  --topic is a slug from content/topics.yaml: it
                                    adds the new id to that topic's maps.concepts
                                    and indexes the note, so it can carry mastery
                                    straight away. Without it the note is a file
                                    and nothing else.
+                                 --item is a course row id like cp4284-m1-t1: it
+                                   lists the new id under that row's concepts:
+                                   in content/courses/, so the note is on the
+                                   course path. It implies --topic (the row's
+                                   module names it).
   concept edit <id> [--domain D] [--requires …] [--assumes …] [--title …]
                                  --domain files the note under concepts/<D>/;
                                    the id stays the bare slug either way
@@ -1433,9 +1479,6 @@ commands.help = async () => {
                                  assumes  = useful background: orders the plan,
                                    never blocks, never moves belief
   check add --concept C --question Q --answer A [--why W]
-                                 (a note's place on a course is the course
-                                  file's to say: list the id under the row's
-                                  concepts: in content/courses/<code>.yaml)
   check list [--concept C]       stored verification questions
   probe [--goal G] [--limit N]   what to ask next, by information gain
   observe --concept C --correct true|false [--source probe|teach|review]
@@ -1500,6 +1543,7 @@ const OPTIONS = {
   body: { type: "string" },
   text: { type: "string" },
   topic: { type: "string" },
+  item: { type: "string" },
   limit: { type: "string" },
   days: { type: "string" },
   mermaid: { type: "boolean", default: false },

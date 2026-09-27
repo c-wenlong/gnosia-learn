@@ -258,8 +258,15 @@ const LOCK_POLL_MS = 50;
  * `open(..., "wx")` is the lock: creating a file that must not already exist
  * is atomic on every filesystem this runs on, which a "read then write" check
  * is not. The lock file holds the pid, so a stale one names who to look for.
+ *
+ * Exported because the course file gets the same edit for the same reason
+ * (`course-edit.ts`); `label` is the file as an error names it.
  */
-async function withVocabularyLock<T>(file: string, fn: () => Promise<T>): Promise<T> {
+export async function withFileLock<T>(
+  file: string,
+  label: string,
+  fn: () => Promise<T>,
+): Promise<T> {
   const lockFile = `${file}.lock`;
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
 
@@ -272,7 +279,7 @@ async function withVocabularyLock<T>(file: string, fn: () => Promise<T>): Promis
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         if (Date.now() >= deadline) {
           throw new VocabularyEditError(
-            `another process has been editing ${TOPICS_FILE} for over ` +
+            `another process has been editing ${label} for over ` +
               `${LOCK_TIMEOUT_MS / 1000}s. If nothing else is running, the lock is stale: ` +
               `delete ${path.basename(lockFile)} beside it.`,
           );
@@ -309,7 +316,7 @@ let temporaryCounter = 0;
  * missing lock into a confusing ENOENT on the rename rather than a clean
  * last-write-wins.
  */
-async function writeAtomically(file: string, text: string): Promise<void> {
+export async function writeAtomically(file: string, text: string): Promise<void> {
   temporaryCounter += 1;
   const temporary = `${file}.${process.pid}.${temporaryCounter}.tmp`;
   await writeFile(temporary, text, "utf8");
@@ -368,7 +375,7 @@ export async function mapConceptToTopic(
 ): Promise<MapConceptResult> {
   const file = path.join(repoRoot, TOPICS_FILE);
 
-  return withVocabularyLock(file, async () => {
+  return withFileLock(file, TOPICS_FILE, async () => {
     // Inside the lock, deliberately. Checking outside it would read a file
     // another edit is part-way through changing.
     if (checkMapping(repoRoot, topicSlug, conceptSlug).already) return { changed: false };
