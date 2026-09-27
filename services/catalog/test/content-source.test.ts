@@ -6,11 +6,15 @@ import { dbSource, NotMigratedError, READERS, readyTypes } from "../src/content/
 import type { CatalogDatabase } from "../src/db";
 
 /**
- * The database half of the reader seam, before any track fills it in.
+ * The database half of the reader seam: the methods no track has filled in
+ * yet refuse, and the set `catalog flip` accepts is exactly the readers that
+ * say they are ready.
  *
- * Needs no Postgres: the stub runs no query, and that is part of what is
- * pinned. A method that answered with an empty list instead of refusing would
- * render a site with nothing in it and no error anywhere.
+ * Needs no Postgres: a refusing stub runs no query, and that is part of what
+ * is pinned. A method that answered with an empty list instead of refusing
+ * would render a site with nothing in it and no error anywhere. What a ready
+ * reader returns is its track's test (`topic-readers.test.ts` for topics and
+ * tags).
  */
 
 // Never touched: a method that reached for it would throw on the property read.
@@ -31,11 +35,9 @@ describe("dbSource", () => {
     diagram: () => source.diagram("dot-product"),
   };
 
-  // A track that builds its reader sets `ready`, and its method leaves the
-  // refusal cases; the rest must still refuse without touching the database.
   const waiting = (Object.keys(calls) as (keyof ContentSource)[]).filter((method) => !READERS[method].ready);
 
-  it.each(waiting)("refuses %s with its type named", async (method) => {
+  it.skipIf(waiting.length === 0).each(waiting)("refuses %s with its type named", async (method) => {
     const type = METHOD_TYPES[method];
     const refused = calls[method]().then(
       () => null,
@@ -53,10 +55,15 @@ describe("dbSource", () => {
 
   it("names as readable exactly the types whose reader says it is ready", () => {
     // `catalog flip` refuses a type missing from DB_READERS. A track that
-    // fills in its reader sets `ready` in its own file, and moves its method
-    // out of the refusal cases above.
-    const ready = (Object.keys(READERS) as (keyof ContentSource)[]).filter((method) => READERS[method].ready);
-    expect([...DB_READERS].sort()).toEqual(ready.map((method) => METHOD_TYPES[method]).sort());
+    // fills in its reader sets `ready` in its own file, which takes its method
+    // out of the refusal cases above and puts its type here, with no edit to
+    // this test.
+    const ready = (Object.keys(READERS) as (keyof ContentSource)[])
+      .filter((method) => READERS[method].ready)
+      .map((method) => METHOD_TYPES[method]);
+    expect([...DB_READERS].sort()).toEqual(ready.sort());
+    // Track A's two, since docs/CONTENT-MIGRATION.md Track A, and Track D's.
+    expect(DB_READERS.has("topics") && DB_READERS.has("tags")).toBe(true);
     expect(READERS.diagram.ready).toBe(true);
   });
 

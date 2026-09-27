@@ -3,13 +3,13 @@ import path from "node:path";
 
 import { ContentError, COURSES_DIR, loadCourses } from "@self-learn/content";
 
-import { withFileLock, writeAtomically } from "./vocabulary-edit";
+import { withFileLock, writeAtomically } from "./file-lock";
 
 /**
  * Listing one concept id on one curriculum item's `concepts:` in the course
  * file, without rewriting the file.
  *
- * The same shape as `vocabulary-edit.ts`, for the same reason: a course file
+ * The same shape the vocabulary splice had, for the same reason: a course file
  * is hand-written, with comments and a reading order, and a parse-mutate-
  * stringify round trip would turn "one concept joined one row" into a diff of
  * the whole file. So the edit is textual and the result is checked by the real

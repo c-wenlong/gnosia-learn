@@ -70,6 +70,7 @@ import {
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
 import { ContentError, TOPICS_FILE } from "@self-learn/content";
+import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -114,7 +115,10 @@ import {
 import { kbDir, mapFile, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
 import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
-import { checkMapping, mapConceptToTopic, VocabularyEditError } from "./vocabulary-edit";
+import { FileLockError } from "./file-lock";
+import { checkConceptTopic, fileConceptUnderTopic, TopicError } from "../content/topics";
+import { WriteThroughError } from "../content/write-through";
+import { parseFrontmatter, readList, readText } from "../index/frontmatter";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
 class CliError extends Error {}
@@ -443,11 +447,14 @@ commands.concept = async ({ values, positionals }, session) => {
       }
     }
 
+    // The topic is a row now, and the concept's topic is its `topic_slug`,
+    // written through the catalog. Everything that could refuse that write is
+    // asked here, before the note exists.
     if (topicSlug !== undefined) {
       try {
-        checkMapping(repoRoot(), topicSlug, id);
+        await checkConceptTopic(await session.db(), { concept: id, topic: topicSlug, root: repoRoot() });
       } catch (error) {
-        if (error instanceof VocabularyEditError || error instanceof ContentError) {
+        if (error instanceof TopicError || error instanceof WriteThroughError || error instanceof ContentError) {
           fail(error.message);
         }
         throw error;
@@ -498,16 +505,38 @@ commands.concept = async ({ values, positionals }, session) => {
     await ensureDirs();
 
     // A note is not in the catalog until it is indexed, and it cannot be
-    // indexed until the vocabulary maps it to a topic. `--topic` does both, so
-    // the note a session just wrote can carry evidence at the very next
+    // indexed until it is filed under a topic. `--topic` does both, so the
+    // note a session just wrote can carry evidence at the very next
     // `observe`. Without it the note is a file and nothing else, which is
     // worth saying loudly here rather than at the first refusal.
     let indexed = false;
     if (topicSlug !== undefined) {
       try {
-        // Mapping first: the course reader refuses a listed concept its
-        // module's topic does not map, so the listing cannot go in ahead of it.
-        await mapConceptToTopic(repoRoot(), topicSlug, id);
+        // The topic first: the course reader refuses a listed concept its
+        // module's topic does not map, so the listing cannot go in ahead of
+        // it. `concept.topic_slug` through the seam, and topics.yaml
+        // rewritten from the rows, whose `maps.concepts` is that column.
+        const { data } = parseFrontmatter(await fs.readFile(file, "utf8"));
+        await fileConceptUnderTopic(
+          await session.db(),
+          {
+            concept: id,
+            topic: topicSlug,
+            row: {
+              title: readText(data, "title") ?? id,
+              summary: readText(data, "summary"),
+              path: rel(file),
+              prerequisites: (["requires", "assumes"] as const).flatMap((kind) =>
+                readList(data, kind).map((slug) => ({ slug, kind })),
+              ),
+            },
+          },
+          {
+            author: LOCAL_LEARNER_ID,
+            authorKind: "person",
+            reason: values.reason?.trim() || `learn concept add ${id} --topic ${topicSlug}`,
+          },
+        );
         if (itemId !== undefined) {
           // The mapping is in place by now and has no inverse, so a listing
           // that fails (the course file's lock held past its timeout, say)
@@ -532,7 +561,9 @@ commands.concept = async ({ values, positionals }, session) => {
         await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
       } catch (error) {
         if (
-          error instanceof VocabularyEditError ||
+          error instanceof TopicError ||
+          error instanceof WriteThroughError ||
+          error instanceof FileLockError ||
           error instanceof CourseEditError ||
           error instanceof ContentError ||
           error instanceof IndexError
@@ -555,16 +586,14 @@ commands.concept = async ({ values, positionals }, session) => {
 
     out(`Wrote ${rel(file)}`, false);
     if (topicSlug !== undefined) {
-      out(`Mapped "${id}" to topic "${topicSlug}" in ${TOPICS_FILE} and indexed it.`, false);
+      out(`Filed "${id}" under topic "${topicSlug}" in the catalog, rewrote ${TOPICS_FILE}, and indexed it.`, false);
       if (itemId !== undefined) out(`Listed "${id}" on ${itemId} in ${itemFile ?? ""}.`, false);
     } else if (!indexed) {
       out(
         `Not in the catalog yet, so nothing can record mastery about it.\n` +
-          `  Re-run with --topic <slug> to add "${id}" to that topic's maps.concepts in ` +
-          `${TOPICS_FILE} and index it in one step.\n` +
-          `  Pick the slug with: npm run --silent catalog -- search <term> --json\n` +
-          `  By hand: add "${id}" to one topic's maps.concepts in ${TOPICS_FILE}, ` +
-          `then run: npm run learn -- index`,
+          `  Re-run with --topic <slug> --force to file "${id}" under that topic (its ` +
+          `maps.concepts in ${TOPICS_FILE}) and index it in one step.\n` +
+          `  Pick the slug with: npm run --silent catalog -- search <term> --json`,
         false,
       );
     }
@@ -1494,11 +1523,13 @@ commands.help = async () => {
   status                         where you are
   concept add --title T [--topic S] [--item I] [--domain D] [--requires a,b]
               [--assumes c] [--tags x,y]
-                                 --topic is a slug from content/topics.yaml: it
-                                   adds the new id to that topic's maps.concepts
+                                 --topic is a topic slug: it files the new id
+                                   under that topic in the catalog (rewriting
+                                   its maps.concepts in content/topics.yaml)
                                    and indexes the note, so it can carry mastery
                                    straight away. Without it the note is a file
-                                   and nothing else.
+                                   and nothing else. --reason names why, for
+                                   the revision; it has a default.
                                  --item is a course row id like cp4284-m1-t1: it
                                    lists the new id under that row's concepts:
                                    in content/courses/, so the note is on the
