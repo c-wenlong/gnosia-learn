@@ -148,7 +148,7 @@ describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts 
     await applyMigrations(scratch.db);
     fixture = await makeFixture();
     await vocabulary([
-      { slug: "alpha", concepts: ["base", "spare"] },
+      { slug: "alpha", concepts: ["base", "spare"], manimkc: ["one/first"] },
       { slug: "beta", courses: ["xx1000-m1"] },
     ]);
     await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
@@ -171,9 +171,17 @@ describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts 
     await fixture?.cleanup();
   });
 
-  it("keeps the topic for the concepts source to empty, then prunes it in the same run", async () => {
-    // alpha goes; base moves to beta; spare's note goes with it.
+  it("writes nothing when the notes the held topic waits on would be refused", async () => {
+    // alpha goes and base moves to beta, but spare's note stays with no topic.
     await vocabulary([{ slug: "beta", courses: ["xx1000-m1"], concepts: ["base"] }]);
+    await expect(index()).rejects.toThrow(/concept "spare" is in no topic's maps\.concepts/);
+    expect((await scratch.db.select().from(topic)).map((t) => t.slug).sort()).toEqual(["alpha", "beta"]);
+    const { rows } = await scratch.db.execute<{ path: string }>(sql`select path from manimkc_topic where topic_slug = 'alpha'`);
+    expect(rows).toEqual([{ path: "one/first" }]);
+  }, 60_000);
+
+  it("holds the topic for the concepts source to empty, then prunes it whole in the same run", async () => {
+    // spare's note goes too, so the edit is complete.
     await rm(path.join(fixture.root, "learn/concepts/testing/spare.md"));
     const run = await index();
 
@@ -184,5 +192,14 @@ describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts 
     const topics = run.sources.find((s) => s.source === "topics");
     expect(topics?.deletedKeys).toContain("topic alpha");
     expect(topics?.deferred).toBeUndefined();
+    expect(topics?.revisions["topic"]).toBe(1);
+    // The delete revision records alpha as it was, its manimkc path included.
+    const { rows } = await scratch.db.execute<{ op: string; snapshot: { links: Record<string, unknown[]> } }>(
+      sql`select op, snapshot from content_revision where entity_type = 'topic' and entity_id = 'alpha' order by seq desc limit 1`,
+    );
+    expect(rows[0]?.op).toBe("delete");
+    expect(rows[0]?.snapshot.links["manimkc_topic"]).toHaveLength(1);
+    const [runRow] = (await scratch.db.execute<{ deleted: number }>(sql`select deleted from index_run where source = 'topics'`)).rows;
+    expect(runRow?.deleted).toBe(1);
   }, 60_000);
 });

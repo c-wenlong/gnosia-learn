@@ -28,10 +28,10 @@ import { hasManimkcCli, manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
 import { tagsIndexer } from "./tags";
-import type { IndexContext, Indexer, SourceRows } from "./source";
+import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
 import { loadVocabulary } from "./vocabulary";
-import { writeSource, type SourceWrite } from "./writer";
+import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
 
 /**
  * Running the indexers: dependency order, one transaction each.
@@ -443,11 +443,18 @@ export async function runIndex(
     asIndexError(() => loadCourses({ root: repoRoot, topics: vocabulary.entries }));
   }
 
+  // The notes are read before anything is written when the topics source
+  // runs ahead of them: a topic that source holds for the concepts source to
+  // empty (see `conceptsFollow`) must not be left waiting on notes that were
+  // going to be refused anyway.
+  const preread = new Map<IndexSource, Awaited<ReturnType<Indexer["read"]>>>();
+  if (running.has("topics") && running.has("concepts")) {
+    preread.set("concepts", await conceptsIndexer.read(context));
+  }
+
   const sources: SourceWrite[] = [];
-  /** The topics source's rows, for its second pass (see below). */
-  let topicsPass: { rows: SourceRows; options: Parameters<typeof writeSource>[5] } | null = null;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, logs } = await indexer.read(context);
+    const { rows, notes = [], scope, metadata, logs } = preread.get(indexer.source) ?? (await indexer.read(context));
     const options: Parameters<typeof writeSource>[5] = {
       scope,
       logs,
@@ -465,7 +472,18 @@ export async function runIndex(
     };
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
-    if (indexer.source === "topics" && (write.deferred?.length ?? 0) > 0) topicsPass = { rows, options };
+
+    // The concepts source has now moved or pruned what was filed under the
+    // topics the topics source held, so they go, before any later source
+    // runs: a failure further on cannot leave them standing.
+    const topicsWrite = sources.find((s) => s.source === "topics");
+    if (indexer.source === "concepts" && topicsWrite?.deferred !== undefined) {
+      const pruned = await pruneHeldTopics(db, topicsWrite.deferred, {
+        author,
+        reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(topicsIndexer.root(context))} (topics)`,
+      });
+      foldPrune(topicsWrite, pruned);
+    }
 
     if (indexer.source === "courses") {
       for (const row of rows.curriculumItem ?? []) producedCurriculumItems.add(row.id);
@@ -477,20 +495,6 @@ export async function runIndex(
       ranConcepts = true;
       conceptCache = null;
     }
-  }
-
-  // The topics the first pass kept because concepts were filed under them.
-  // The concepts source has moved or pruned those concepts by now, so the
-  // same rows again prune what is empty; a topic still holding a concept is
-  // refused by name this time, since nothing else will move it.
-  if (topicsPass !== null) {
-    const again = await writeSource(db, topicsIndexer, topicsPass.rows, [], topicsIndexer.root(context), {
-      ...topicsPass.options,
-      conceptsFollow: false,
-      logs: undefined,
-    });
-    const first = sources.find((s) => s.source === "topics");
-    if (first !== undefined) mergeWrite(first, again);
   }
 
   return {
@@ -512,17 +516,14 @@ export async function runIndex(
   };
 }
 
-/** Fold a second pass of a source into its first, so the source reports once. */
-function mergeWrite(into: SourceWrite, from: SourceWrite): void {
-  const add = (a: Record<string, number>, b: Record<string, number>) => {
-    for (const [key, n] of Object.entries(b)) a[key] = (a[key] ?? 0) + n;
-  };
-  add(into.written, from.written);
-  add(into.deleted, from.deleted);
-  add(into.revisions, from.revisions);
-  into.deletedKeys.push(...from.deletedKeys);
-  into.totalWritten += from.totalWritten;
-  into.totalDeleted += from.totalDeleted;
+/** Count the held topics' prune in the topics source's report, which is where it belongs. */
+function foldPrune(into: SourceWrite, pruned: { deleted: string[]; revisions: number }): void {
+  if (pruned.deleted.length > 0) {
+    into.deleted["topic"] = (into.deleted["topic"] ?? 0) + pruned.deleted.length;
+    into.deletedKeys.push(...pruned.deleted.map((slug) => `topic ${slug}`));
+    into.totalDeleted += pruned.deleted.length;
+  }
+  if (pruned.revisions > 0) into.revisions["topic"] = (into.revisions["topic"] ?? 0) + pruned.revisions;
   delete into.deferred;
 }
 

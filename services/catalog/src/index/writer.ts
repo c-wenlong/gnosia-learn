@@ -20,7 +20,7 @@ import {
   topic,
   topicRelation,
 } from "@self-learn/schema";
-import { and, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
 import {
@@ -105,7 +105,7 @@ export interface SourceWrite {
    * per SQL table name. Only `collection` and `curriculum_item` are archived.
    */
   archived: Record<string, number>;
-  /** Topics the vocabulary dropped that were kept this pass because concepts were still filed under them. */
+  /** Topics the vocabulary dropped that were held, untouched, because concepts were still filed under them. */
   deferred?: string[];
   /** Which, capped like `deletedKeys`: an archive hides a row a learner may have ticked. */
   archivedKeys: string[];
@@ -263,9 +263,11 @@ export async function writeSource(
     /**
      * The concepts source runs later in the same import. A topic the
      * vocabulary dropped while concepts are still filed under it is then
-     * kept for now and named in `deferred`, since that source is about to
-     * move or prune them; `runIndex` prunes it in a second topics pass. False
-     * when nothing will move them, and then the drop is refused by name.
+     * held: left exactly as it is, row and links, and named in `deferred`,
+     * since that source is about to move or prune those concepts;
+     * `runIndex` then prunes it with `pruneHeldTopics`. False when nothing
+     * will move them, and then the drop is refused by name before anything
+     * is written.
      */
     conceptsFollow?: boolean;
   } = {},
@@ -280,7 +282,7 @@ export async function writeSource(
   const archived: Record<string, number> = {};
   const archivedKeys: string[] = [];
   const revisions: Record<string, number> = {};
-  const deferred: string[] = [];
+  let deferred: string[] = [];
 
   const record = (table: PgTable, into: Record<string, number>, count: number) => {
     if (count > 0) into[getTableName(table)] = (into[getTableName(table)] ?? 0) + count;
@@ -303,6 +305,18 @@ export async function writeSource(
     );
     await markSeam(tx, `import:${indexer.source}`);
 
+    // A topic the vocabulary dropped while concepts are still filed under it
+    // cannot be deleted (`concept.topic_slug` is NOT NULL and RESTRICT since
+    // 0012). With the concepts source to follow it is held, untouched, for
+    // `pruneHeldTopics`; without, the run is refused before anything moves.
+    if ((indexer.owns as readonly string[]).includes("topic")) {
+      const stale = await staleKeys(tx, indexer, "topic", rows);
+      const filed = stale.length === 0 ? [] : await filedTopics(tx, stale);
+      if (filed.length > 0 && options.conceptsFollow !== true) throw topicsFiledError(filed);
+      deferred = [...new Set(filed.map((f) => f.topic))];
+    }
+    const held = new Set(deferred);
+
     // Sparse positions (D22): the indexers hand over each list's order as a
     // rank, and the stored numbers are placed here, under the locks, against
     // what the rows hold now, so a row whose place did not change keeps its
@@ -315,7 +329,7 @@ export async function writeSource(
     const lastStates = new Map<EntityName, Map<string, SnapshotRead>>();
     for (const name of ENTITY_ORDER) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
-      const keys = await staleKeys(tx, indexer, name, rows);
+      const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !held.has(key));
       if (keys.length > 0) lastStates.set(name, await readSnapshots(tx, REVISION_TYPE[name], keys));
     }
 
@@ -325,7 +339,12 @@ export async function writeSource(
     for (const name of LINK_ORDER) {
       const scope = linkScope(indexer, name, options.scope);
       if (scope === null) continue;
-      const result = await tx.delete(TABLES[name]).where(scope ?? sql`true`);
+      // A held topic keeps its own links, so its eventual delete revision
+      // records it whole, and a failed run leaves it as it was.
+      const heldParent =
+        held.size === 0 ? undefined : name === "topicRelation" ? topicRelation.fromSlug : name === "manimkcTopic" ? manimkcTopic.topicSlug : undefined;
+      const where = heldParent === undefined ? (scope ?? sql`true`) : and(scope ?? sql`true`, notInArray(heldParent, [...held]));
+      const result = await tx.delete(TABLES[name]).where(where);
       clearedLinks[name] = result.rowCount ?? 0;
     }
 
@@ -369,8 +388,7 @@ export async function writeSource(
       const table = TABLES[name];
       const pruned = await pruneEntity(tx, indexer, name, rows, {
         tagLinksRewritten: options.tagLinksRewritten ?? false,
-        conceptsFollow: options.conceptsFollow ?? false,
-        deferred,
+        held,
       });
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
@@ -815,19 +833,10 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-  context: { tagLinksRewritten: boolean; conceptsFollow: boolean; deferred: string[] },
+  context: { tagLinksRewritten: boolean; held: ReadonlySet<string> },
 ): Promise<string[]> {
   const { tagLinksRewritten } = context;
-  let keys = await staleKeys(tx, indexer, name, rows);
-  if (name === "topic" && keys.length > 0) {
-    const filed = await filedTopics(tx, keys);
-    if (filed.length > 0) {
-      if (!context.conceptsFollow) throw topicsFiledError(filed);
-      const held = new Set(filed.map((f) => f.topic));
-      keys = keys.filter((key) => !held.has(key));
-      context.deferred.push(...held);
-    }
-  }
+  const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !context.held.has(key));
   if (keys.length === 0) return [];
 
   const table = TABLES[name];
@@ -939,9 +948,9 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
  * deleting such a topic would fail on the constraint. The topics source runs
  * before the concepts source, so an edit that moves those concepts to another
  * topic, or removes their notes, in the same breath reaches the prune first.
- * When the concepts source follows in the same import, the topic is kept for
- * that source to empty and `runIndex` prunes it in a second pass; otherwise
- * the drop is refused by name, archived concepts included, since the
+ * When the concepts source follows in the same import, the topic is held for
+ * that source to empty and `runIndex` prunes it with `pruneHeldTopics`;
+ * otherwise the drop is refused by name, archived concepts included, since the
  * constraint binds them too.
  */
 async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ topic: string; slug: string }[]> {
@@ -950,6 +959,38 @@ async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ top
     .from(concept)
     .where(inArray(concept.topicSlug, topics))
     .orderBy(concept.topicSlug, concept.slug);
+}
+
+/**
+ * Delete the topics the topics source held, now that the concepts source has
+ * moved or pruned what was filed under them: the step that source's own prune
+ * would have taken. One transaction under the topic lock, a `delete` revision
+ * each from the state the held topic kept, and the topics run's `deleted`
+ * count brought up to date. A topic that still has a concept (the edit moved
+ * it nowhere) is refused by name, and nothing is deleted.
+ */
+export async function pruneHeldTopics(
+  db: CatalogDatabase,
+  topics: readonly string[],
+  by: { author: string; reason: string },
+): Promise<{ deleted: string[]; revisions: number }> {
+  if (topics.length === 0) return { deleted: [], revisions: 0 };
+  return db.transaction(async (tx) => {
+    await lockTypes(tx, ["topic"]);
+    await markSeam(tx, "import:topics");
+    const filed = await filedTopics(tx, [...topics]);
+    if (filed.length > 0) throw topicsFiledError(filed);
+    const reads = await readSnapshots(tx, "topic", topics);
+    const keys = [...reads.keys()].sort();
+    if (keys.length === 0) return { deleted: [], revisions: 0 };
+    await tx.delete(topic).where(inArray(topic.slug, keys));
+    const revisions = await recordDeletes(tx, "topic", reads, by);
+    await tx
+      .update(indexRun)
+      .set({ deleted: sql`${indexRun.deleted} + ${keys.length}`, updatedAt: sql`now()` })
+      .where(eq(indexRun.source, "topics"));
+    return { deleted: keys, revisions };
+  });
 }
 
 function topicsFiledError(filed: readonly { topic: string; slug: string }[]): IndexError {

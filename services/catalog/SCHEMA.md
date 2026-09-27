@@ -906,10 +906,13 @@ an edit makes the migration look unapplied everywhere it has already run.
   on 0012. One consequence for an import while topics are files: the topics
   source runs before the concepts source, so a topic dropped in the same edit
   that moves its concepts elsewhere, or removes their notes, cannot be deleted
-  on the first pass. The writer keeps it (`deferred` on the source's result),
-  the concepts source empties it, and `runIndex` prunes it in a second topics
-  pass of the same run. When the concepts source is not part of the import
-  (the database owns concepts), the drop is refused by name instead.
+  by the topics source. That source holds it (row and links untouched,
+  `deferred` on its result), the concepts source empties it, and `runIndex`
+  deletes it with `pruneHeldTopics` straight after, with a `delete` revision
+  of its whole last state. The notes are read before anything is written, so
+  an edit whose notes would be refused leaves the topic as it was. When the
+  concepts source is not part of the import (the database owns concepts), the
+  drop is refused by name before anything is written.
 - **Settled in migration `0006`: `event.session_id` is a foreign key.** Not to
   `asset(id)`, which is what this section used to propose and what could never
   have worked — `learn session start` writes the event before the markdown log
