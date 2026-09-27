@@ -471,6 +471,25 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       // Nothing is mastered, and only `alpha` has no unmet prerequisite.
       expect(kb.frontier).toEqual(["alpha"]);
     });
+
+    it("carries each concept's course rows and its place on each of them", async () => {
+      // The link rows the courses source writes from a row's `concepts:` list.
+      await scratch.db.execute(
+        "insert into concept_curriculum_item (concept_slug, curriculum_item_id, position) values " +
+          `('beta', '${ITEMS[0]}', 2), ('alpha', '${ITEMS[0]}', 1), ('beta', '${ITEMS[1]}', 1) ` +
+          "on conflict do nothing",
+      );
+      const kb = await readKnowledgeBase(scratch.db);
+
+      const beta = kb.concepts.find((c) => c.id === "beta");
+      expect(beta?.topics).toEqual([ITEMS[0], ITEMS[1]]);
+      expect(beta?.positions).toEqual({ [ITEMS[0]]: 2, [ITEMS[1]]: 1 });
+      expect(kb.concepts.find((c) => c.id === "alpha")?.positions).toEqual({ [ITEMS[0]]: 1 });
+      // A concept on no row has an empty map, not a missing one.
+      expect(kb.concepts.find((c) => c.id === "gamma")?.positions).toEqual({});
+
+      await scratch.db.execute("delete from concept_curriculum_item");
+    });
   });
 
   /**

@@ -15,11 +15,13 @@ import { bucketOf, masteryCaption, type MasteryBucket } from "@/lib/mastery-buck
  * not an entry in `content/topics.yaml`: that file's `maps.courses` names
  * modules, not topics, so it can say which concepts a module is about but not
  * which of the module's topics each one belongs to. The per-topic link is the
- * concept note's own `topics:` frontmatter, which `catalog index` writes into
- * `concept_curriculum_item` and `readKnowledgeBase` returns as
- * `KbConcept.topics`. The module's `maps.concepts` list is still used, as the
- * authored order the concepts are listed and studied in, and as the
- * Guidebook's fallback when no topic of the module has a concept of its own.
+ * course row's own `concepts:` list, which `catalog index` writes into
+ * `concept_curriculum_item` with the list's order as `position`, and
+ * `readKnowledgeBase` returns as `KbConcept.topics` and `KbConcept.positions`.
+ * That list is the order the concepts are drawn and studied in. The module's
+ * `maps.concepts` list is the tie-break for a concept the row has not placed,
+ * and the Guidebook's fallback when no topic of the module has a concept of
+ * its own.
  */
 
 /** A concept as the path draws it: the slice of `KbConcept` it needs, plus its bucket. */
@@ -39,8 +41,10 @@ export interface KbConceptLike {
   pL: number;
   mastery: MasteryLabel;
   observations: number;
-  /** Curriculum item ids (course topic ids) the concept note says it supports. */
+  /** Curriculum item ids (course topic ids) whose `concepts:` list names the concept. */
   topics: readonly string[];
+  /** The concept's 1-based place in each of those lists, keyed by item id. */
+  positions?: Readonly<Record<string, number>>;
 }
 
 /** A topic's standing, from the concepts mapped to it. */
@@ -55,11 +59,13 @@ export interface TopicMastery {
 }
 
 /**
- * The concepts whose notes name this course topic, in authored order.
+ * The concepts this course topic's `concepts:` list names, in that list's
+ * order.
  *
- * `authored` is the module's `maps.concepts` from `content/topics.yaml`: a
- * concept listed there sorts by its position, anything else after them by
- * title, so the list reads in the order the topic file teaches it.
+ * The order is the row's `position`. A concept the row has not placed (a link
+ * indexed before positions existed reads as 0) goes after every placed one,
+ * ranked by `authored`, the module's `maps.concepts` from
+ * `content/topics.yaml`, and then by title, so nothing is ever unordered.
  */
 export function conceptsForTopic(
   concepts: readonly KbConceptLike[],
@@ -70,6 +76,12 @@ export function conceptsForTopic(
     const at = authored.indexOf(slug);
     return at === -1 ? authored.length : at;
   };
+  const placed = new Map<string, number>();
+  for (const c of concepts) {
+    const at = c.positions?.[topicId] ?? 0;
+    placed.set(c.id, at > 0 ? at : Number.POSITIVE_INFINITY);
+  }
+  const position = (slug: string) => placed.get(slug) ?? Number.POSITIVE_INFINITY;
   return concepts
     .filter((c) => c.topics.includes(topicId))
     .map((c) => ({
@@ -80,7 +92,12 @@ export function conceptsForTopic(
       observations: c.observations,
       bucket: bucketOf({ mastery: c.mastery, observations: c.observations }),
     }))
-    .sort((a, b) => rank(a.slug) - rank(b.slug) || a.title.localeCompare(b.title));
+    .sort(
+      (a, b) =>
+        position(a.slug) - position(b.slug) ||
+        rank(a.slug) - rank(b.slug) ||
+        a.title.localeCompare(b.title),
+    );
 }
 
 /**
