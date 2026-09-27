@@ -86,6 +86,16 @@ topics:
       courses: []
       concepts: []
 
+  - slug: cache-basics
+    title: Cache basics
+    domain: computer-architecture
+    summary: A cache splits each address into tag, index and offset to find a block, and its associativity, write policy and replacement rule decide which misses happen and what average memory access time costs.
+    aliases: [cache memory, AMAT, set-associative cache, three Cs, CS4223 quiz 2 map]
+    maps:
+      manimkc: [computer-architecture/cache-basics/quiz2-revision-map]
+      courses: []
+      concepts: []
+
   # ---------------- algorithms ----------------
   - slug: asymptotic-notation-and-growth-rates
     title: Asymptotic notation and growth rates
