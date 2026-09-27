@@ -25,18 +25,41 @@ import { catalogDatabase } from "@/lib/learner-store";
  * **The file source is one per process**, because it keeps its last parse for
  * as long as the files are unchanged (`packages/content/src/file-source.ts`).
  *
- * **The database is reached only for a type that resolves to it**, and not at
- * build time: `connection()` marks the read as request work, the rule every
- * other database read in the app follows, and the catalog is imported lazily
- * so nothing constructs a pool during `next build`.
+ * **Who owns a type is the `content_source` row** (D18), read once per
+ * request through `ownership`; `CONTENT_SOURCE` still overrides it for this
+ * reader. When the rows cannot be read (the database is down, or not migrated
+ * to 0010) every type falls back to files, which is what the pages served
+ * before the seam existed, and the reason is logged once per outage rather
+ * than once per request.
+ *
+ * **The database is reached only at request time**: `connection()` marks the
+ * read as request work, the rule every other database read in the app
+ * follows, and the catalog is imported lazily so nothing constructs a pool
+ * during `next build`. The content itself is read from it only for a type
+ * that resolves to `db`.
  */
 
 const files = fileSource(REPO_ROOT);
+
+/** Whether the current outage has been reported. A successful read clears it. */
+let ownershipWarned = false;
 
 export const contentSource = cache(
   (): SelectedSource =>
     selectSource({
       files,
+      ownership: async () => {
+        await connection();
+        const { contentOwnership } = await import("@self-learn/catalog/state");
+        const rows = await contentOwnership(await catalogDatabase());
+        ownershipWarned = false;
+        return rows;
+      },
+      onOwnershipError: (error) => {
+        if (ownershipWarned) return;
+        ownershipWarned = true;
+        console.warn(`content source: the content_source rows could not be read, reading files. ${cause(error)}`);
+      },
       db: async () => {
         await connection();
         const { dbSource } = await import("@self-learn/catalog/state");
@@ -44,3 +67,18 @@ export const contentSource = cache(
       },
     }),
 );
+
+/**
+ * The innermost message. drizzle wraps a driver error as "Failed query: ..."
+ * and keeps what Postgres said (`relation "content_source" does not exist`)
+ * on `cause`, and that is the half a person can act on.
+ */
+function cause(error: unknown): string {
+  let message = error instanceof Error ? error.message : String(error);
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current instanceof Error && current.cause !== undefined; depth += 1) {
+    current = current.cause;
+    if (current instanceof Error && current.message !== "") message = current.message;
+  }
+  return message;
+}

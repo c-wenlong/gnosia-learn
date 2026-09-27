@@ -48,6 +48,12 @@ export { connect, withDatabase, type CatalogDatabase, type Connection } from "..
  * method refuses until its track fills it in.
  */
 export { dbSource, NotMigratedError } from "../content/source";
+/**
+ * The `content_source` rows as `selectSource`'s `ownership()` callback reads
+ * them (D18): the row decides where a reader reads a type from unless
+ * `CONTENT_SOURCE` overrides it for that reader.
+ */
+export { contentOwnership } from "../content/ownership";
 
 export { StateError, SQLSTATE, constraintName, sqlstate } from "./errors";
 export { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";

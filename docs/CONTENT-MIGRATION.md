@@ -479,11 +479,13 @@ refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
       until its put finishes, malformed keys, delete, and listing by owner
       prefix.
 - [ ] `upload(file)` in the catalog: write the `pending` row, stream to the
-      store, `head` it, then mark it `present`. D5.
+      store, `head` it, then mark it `present`. D5. Left for Track E: 0.5
+      was already at review size without it, and its only caller is Track E's
+      `catalog asset upload`.
 
 ### 0.5 Export, import and parity
 
-- [ ] `catalog import [--only <type>] <dir>`: the seven indexers plus a new
+- [x] `catalog import [--only <type>] <dir>`: the seven indexers plus a new
       `tags` indexer for `tags.yaml` (today tags reach Postgres only as
       strings inside course metadata, so a tag with no course would export
       and never come back), reading a directory argument instead of the repo
@@ -494,16 +496,77 @@ refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
       skips a type whose `content_source` row says `db` with a named line, and
       refuses when that type's file hash differs from the last export (edge
       case 12).
-- [ ] `catalog export [--only <type>] --out <dir>`: new code per type, writing
+- [x] `catalog export [--only <type>] --out <dir>`: new code per type, writing
       `topics.yaml` grouped by domain under the same header and divider
       comments it has today, each topic carrying its `relations:` and its
       `maps.manimkc` paths from `manimkc_topic`, `tags.yaml`, one `courses/<code>.yaml` per course,
       `concepts/<domain>/<slug>.md` with frontmatter, `sessions/<id>.md`,
       `assets/<slug>.{tldr,svg}`.
-- [ ] `catalog parity [--only <type>] <dir>`: counts per type, and sha256 per
+- [x] `catalog parity [--only <type>] <dir>`: counts per type, and sha256 per
       entity over a canonical form (parsed YAML as sorted-key JSON; markdown
       frontmatter parsed and the body byte-exact; `.tldr` parsed; binaries as
       bytes). It prints the mismatches by id and exits 1 on any.
+- [x] `catalog flip <type> [--strict] [--waive <rule> --reason ...]`: writes
+      the `content_source` row, arms the type's write guards, and with
+      `--strict` arms its completeness rules once `catalog doctor` reports no
+      violator. Built and tested on scratch databases; nothing is flipped, and
+      nothing can be until a track builds its type's database reader.
+
+**Built** in `services/catalog/src/content/` (`layout.ts`, `export.ts`,
+`yaml-out.ts`, `parity.ts`, `ownership.ts`, `flip.ts`), the `tags` indexer, and
+four commands. On the real tree, into a scratch database: 86 topics, 8 tags,
+10 courses, 32 notes, 3 session logs and 4 diagram files export byte for byte
+identical to the working tree, parity against both is zero mismatches, a second
+database imported from the export holds the same newest snapshot hash for all
+441 entities, and a second import writes zero revisions. Where it goes past or
+around the list above, and why:
+
+- **The export is the repository's layout**: `<dir>/content/topics.yaml`,
+  `<dir>/learn/concepts/<domain>/<slug>.md` and so on, not a flat tree. So
+  `catalog index` is literally `catalog import` of the repository, parity
+  against the working tree and against an export is one rule, and
+  `catalog export --out .` regenerates the tree in place with an empty
+  `git diff`. The pinned tools resolve from the repository whatever `<dir>` is.
+- **Migration `0011_content_export_positions`.** Three authored orders had
+  nowhere to live and parity would have failed on them: `maps.concepts` (the
+  course path breaks ties by it), `maps.courses` and `relations:`. It adds
+  `concept.topic_position`, `collection_item.topic_position` and
+  `topic_relation.position`, and `tags` to `index_run`'s sources. 0.2's list
+  of positions missed these; D10 is why they land in phase 0 rather than in a
+  track.
+- **A curated link is a `collection_item` of its module**, at its place in
+  `resources:`. Two modules can share a topic, so `asset_topic` cannot say
+  which module a link belongs to.
+- **Two new refusals at import**: a `maps.concepts` entry with no note (it has
+  no row to live in and would vanish from the export), and a `related` edge
+  written under the larger slug (it is stored under the smaller one, and the
+  export would move it).
+- **Concept notes, session logs and diagrams are copied through** from the
+  directory their import read (`index_run.metadata.root`), each checked
+  against its row's `content_hash`, until Tracks C and D move the text into
+  rows. The export refuses a file it cannot vouch for.
+- **`catalog flip` runs parity itself**, against the files the type was last
+  imported from and under the type's revision locks, and records it on
+  `content_source.parity_report`: the plan's "parity clean, then flip" as a
+  check rather than a habit, and one no edit made since the import can slip
+  past. It also refuses a type whose `dbSource` method is not built
+  (`DB_READERS`, empty today), because readers follow the row and would all
+  fail. Flip arms the triggers before counting violators, inside its
+  transaction, so the count cannot go stale before the commit, and a waiver
+  disarms a rule an earlier strict flip armed. `manimkc` cannot be flipped
+  until Track E defines a video's parity.
+- **A tag gone from `tags.yaml` while the database owns courses is refused**
+  by name, since the courses source will not run to rewrite the course's
+  links. While courses is on files the prune clears them and the courses
+  source writes them back in the same import, and the course files are read
+  before the tags source writes anything, so a course still naming the tag is
+  refused before its links go (each source commits on its own).
+- **`catalog export` refuses to write outside `--out`**, checking every
+  rendered path before writing any.
+- **An import of a `db` type** skips it when its files hash to the last
+  export and refuses otherwise, naming the files that differ from what the
+  database would write; with no export recorded it refuses and says to export
+  first. `export` and `parity` record nothing on a copy, since they are reads.
 
 ### 0.6 The reader seam, and readers made async
 
@@ -534,8 +597,14 @@ The web app reads content synchronously at module load
       `files`. The row is the authority for importers and writers; the
       variable overrides readers only (D18). A callback that throws resolves
       as no rows, so a reader falls back to files.
-- [ ] The `ownership()` callback wired to the `content_source` table in the
-      catalog, and passed by the web app's `contentSource()` (0.5).
+- [x] The `ownership()` callback wired to the `content_source` table in the
+      catalog, and passed by the web app's `contentSource()` (0.5). It is
+      `contentOwnership` in `services/catalog/src/content/ownership.ts`,
+      exported through `@self-learn/catalog/state`. When the rows cannot be
+      read (the database is down, or not yet at 0010) every type reads files
+      and the reason is logged once per outage, not once per request. The
+      studio's `selectSource` is not wired: it has no database source to
+      choose, so the row could only ever say what the default already says.
 - [x] The 16 web importers move from module-level constants to
       `await getCourses()` and friends, wrapped in React's `cache()` per
       request. `generateStaticParams` on the two course routes goes; every page

@@ -1,24 +1,31 @@
 import {
   asset,
   concept,
+  type ContentType,
   curriculumItem,
   indexRun,
   INDEX_SOURCES,
   type IndexSource,
   type SourceRepo,
 } from "@self-learn/schema";
+import { loadCourses } from "@self-learn/content";
 import { eq } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 
+import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
+import { readContentSources } from "../content/ownership";
+import { renderType } from "../content/export";
 import type { CatalogDatabase } from "../db";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
+import { asIndexError } from "./content-errors";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
 import { hasManimkcCli, manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
+import { tagsIndexer } from "./tags";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
 import { loadVocabulary } from "./vocabulary";
@@ -51,6 +58,9 @@ import { writeSource, type SourceWrite } from "./writer";
 const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // Every other source resolves a slug from the vocabulary.
   topics: ["courses", "concepts", "manimkc", "diagrams", "sessions"],
+  // A course's `collection_tag` rows point at tags, and pruning a tag clears
+  // them (`pruneEntity`), so the courses source has to write them back.
+  tags: ["courses"],
   // Nothing another source owns points at a collection or a curriculum item:
   // the concept link is the courses source's own row, and progress and recap
   // are learner state, not index output.
@@ -82,16 +92,30 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
  */
 const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
   topics: [],
+  tags: [],
   // A course row's `concepts:` list resolves against concept rows. Run alone,
   // courses would check a note added since the last run against rows that do
   // not have it yet, and refuse a course file that is correct. Re-reading the
-  // notes first costs a pass over a few dozen files.
-  courses: ["concepts"],
+  // notes first costs a pass over a few dozen files. Its `tags:` become
+  // `collection_tag` rows, whose foreign key needs the tag rows written first,
+  // and a database migrated to 0011 has none until the tags source runs.
+  courses: ["concepts", "tags"],
   concepts: [],
   manimkc: [],
   diagrams: [],
   sessions: [],
   mirrors: ["manimkc"],
+};
+
+/** The content type each source reads, for its `content_source` row. `mirrors` reads none. */
+const CONTENT_TYPE: Partial<Record<IndexSource, ContentType>> = {
+  topics: "topics",
+  tags: "tags",
+  courses: "courses",
+  concepts: "concepts",
+  manimkc: "manimkc",
+  diagrams: "diagrams",
+  sessions: "sessions",
 };
 
 /**
@@ -102,6 +126,7 @@ const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
  */
 export const INDEXERS: readonly Indexer[] = [
   topicsIndexer,
+  tagsIndexer,
   conceptsIndexer,
   coursesIndexer,
   manimkcIndexer,
@@ -127,7 +152,13 @@ const NEEDS_MANIMKC_CLI = new Set<IndexSource>(
 );
 
 export interface RunOptions {
+  /** The root the content is read from. Defaults to the repository. */
   repoRoot?: string;
+  /**
+   * Where the pinned tools resolve from, when the content root holds none:
+   * `catalog import <dir>` sets it to the repository. Defaults to `repoRoot`.
+   */
+  toolsRoot?: string;
   manimkcRoot?: string;
   /** Sources to run. Defaults to all of them; always reordered to dependency order. */
   only?: readonly IndexSource[];
@@ -165,7 +196,11 @@ export interface RunResult {
    */
   addedForSafety: IndexSource[];
   addedAsPrerequisite: IndexSource[];
-  /** Sources that could not run in this checkout, and were safe to leave out. */
+  /**
+   * Sources left out, and why: the manimkc CLI is absent and they were safe
+   * to leave out, or the database owns the type and its files match the last
+   * export.
+   */
   skipped: { source: IndexSource; reason: string }[];
   totals: { written: number; deleted: number };
 }
@@ -205,6 +240,21 @@ export function withPrerequisites(requested: readonly IndexSource[]): Set<IndexS
   return selected;
 }
 
+/**
+ * Both closures, repeated until neither adds anything. One pass of each is
+ * not enough once a dependent has a prerequisite of its own: `--only
+ * concepts` pulls in courses as a dependent, and courses needs tags written
+ * first, which neither single pass would have added.
+ */
+export function selection(requested: readonly IndexSource[]): Set<IndexSource> {
+  let current = new Set(requested);
+  for (;;) {
+    const next = withDependents([...withPrerequisites([...current])]);
+    if (next.size === current.size) return next;
+    current = next;
+  }
+}
+
 export function parseSources(raw: string): IndexSource[] {
   const names = raw
     .split(",")
@@ -224,17 +274,24 @@ export async function runIndex(
   options: RunOptions = {},
 ): Promise<RunResult> {
   const repoRoot = options.repoRoot ?? REPO_ROOT;
+  const toolsRoot = options.toolsRoot ?? repoRoot;
   // The flag, else $MANIMKC_ROOT, else the submodule. The middle step is the
   // resolver's, so this line is the whole precedence rule.
-  const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(repoRoot);
+  const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(toolsRoot);
   const requested = options.only ?? INDEX_SOURCES;
-  const required = withPrerequisites(requested);
-  const wanted = withDependents([...required]);
-  const addedAsPrerequisite = [...required].filter((s) => !requested.includes(s));
+  const wanted = selection(requested);
+  const prerequisites = new Set([...wanted].flatMap((source) => REQUIRES[source]));
+  const addedAsPrerequisite = [...wanted].filter((s) => !requested.includes(s) && prerequisites.has(s));
   const addedForSafety = [...wanted].filter(
     (s) => !requested.includes(s) && !addedAsPrerequisite.includes(s),
   );
   const selected = INDEXERS.filter((i) => wanted.has(i.source));
+
+  // The types the database owns are not read from files (D18): skipped when
+  // the files are the database's own last export, refused when they are not
+  // (edge case 12). Checked before anything is written, so a refusal leaves
+  // every source as it was.
+  const owned = await ownedSkips(db, repoRoot, selected);
 
   const vocabulary = await loadVocabulary(repoRoot);
   const author = options.author ?? importAuthor(repoRoot);
@@ -254,6 +311,7 @@ export async function runIndex(
 
   const context: IndexContext = {
     repoRoot,
+    toolsRoot,
     manimkcRoot,
     vocabulary,
     knownConcepts: () => {
@@ -306,10 +364,11 @@ export async function runIndex(
   // and nothing puts them back. So: refuse when it was asked for, refuse when
   // it has rows to lose, and otherwise drop it with a note rather than making a
   // submodule a hard dependency of indexing anything at all.
-  const skipped: { source: IndexSource; reason: string }[] = [];
+  const skipped: { source: IndexSource; reason: string }[] = [...owned.values()];
   const runnable: Indexer[] = [];
-  const haveCli = hasManimkcCli(repoRoot);
+  const haveCli = hasManimkcCli(toolsRoot);
   for (const indexer of selected) {
+    if (owned.has(indexer.source)) continue;
     if (!NEEDS_MANIMKC_CLI.has(indexer.source) || haveCli) {
       runnable.push(indexer);
       continue;
@@ -340,12 +399,28 @@ export async function runIndex(
     });
   }
 
+  // The tags source clears the links to a tag it prunes, trusting the
+  // courses source to write back the ones the course files still name. It
+  // commits first, so a course file still naming a pruned tag would fail the
+  // courses source only after the links were gone. Reading the course files
+  // here, before anything is written, refuses that run while nothing has
+  // moved: the same reader, so the same sentence the courses source would say.
+  const running = new Set(runnable.map((i) => i.source));
+  if (running.has("tags") && running.has("courses")) {
+    asIndexError(() => loadCourses({ root: repoRoot, topics: vocabulary.entries }));
+  }
+
   const sources: SourceWrite[] = [];
   for (const indexer of runnable) {
     const { rows, notes = [], scope, metadata } = await indexer.read(context);
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
-      metadata,
+      tagLinksRewritten: running.has("courses"),
+      // The absolute root the repo-relative paths in these rows resolve
+      // against, which `catalog export` copies concept notes, session logs
+      // and diagrams from until their tracks move the bytes into rows. The
+      // manimkc sources resolve against their report's `outRoot` instead.
+      metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
       author,
     });
     sources.push(write);
@@ -379,4 +454,95 @@ export async function runIndex(
       deleted: sources.reduce((a, s) => a + s.totalDeleted, 0),
     },
   };
+}
+
+/**
+ * The selected sources whose type the database owns, each with the line that
+ * says why it is not read. Throws, naming the files, when a `db` type's files
+ * are not the database's own last export: someone edited an export, and
+ * importing it would bypass the reason every write carries while overwriting
+ * it on the next export would lose the edit (edge case 12).
+ *
+ * `mirrors` follows `manimkc`: its rows hang off manimkc's assets, and a run
+ * that left one out must leave out the other.
+ */
+async function ownedSkips(
+  db: CatalogDatabase,
+  root: string,
+  selected: readonly Indexer[],
+): Promise<Map<IndexSource, { source: IndexSource; reason: string }>> {
+  const out = new Map<IndexSource, { source: IndexSource; reason: string }>();
+  const rows = await readContentSources(db);
+  for (const indexer of selected) {
+    const type = CONTENT_TYPE[indexer.source];
+    const row = type === undefined ? undefined : rows.get(type);
+    if (type === undefined || row?.source !== "db") continue;
+    const since = row.flippedAt?.toISOString() ?? "its flip";
+    if (!isExportType(type)) {
+      out.set(indexer.source, {
+        source: indexer.source,
+        reason: `the database owns ${type} (since ${since}); it is written through the catalog, not read from files`,
+      });
+      continue;
+    }
+    const files = await readTypeFiles(root, type);
+    const hash = exportHash(files);
+    if (row.exportHash !== null && row.exportHash === hash) {
+      out.set(indexer.source, {
+        source: indexer.source,
+        reason:
+          `the database owns ${type} (since ${since}), and ${TYPE_LOCATION[type]} is its own ` +
+          `last export, so there is nothing to read`,
+      });
+      continue;
+    }
+    throw new IndexError(await editedExport(db, type, files, row.exportHash === null));
+  }
+  if (out.has("manimkc") && !out.has("mirrors") && selected.some((i) => i.source === "mirrors")) {
+    out.set("mirrors", {
+      source: "mirrors",
+      reason: "its rows hang off manimkc's assets, and the database owns manimkc",
+    });
+  }
+  return out;
+}
+
+/** The refusal for a hand-edited export, naming the files that differ from the database. */
+async function editedExport(
+  db: CatalogDatabase,
+  type: Parameters<typeof renderType>[1],
+  files: readonly { path: string; bytes: Buffer }[],
+  neverExported: boolean,
+): Promise<string> {
+  const head =
+    `${TYPE_LOCATION[type]}: the database owns ${type}, so these files are an export and ` +
+    `are not read. `;
+  if (neverExported) {
+    return (
+      head +
+      `No export of ${type} is recorded, so nothing says these files are the database's. Run ` +
+      `\`catalog export --only ${type} --out <dir>\` to write them from the database.`
+    );
+  }
+  let differing: string[];
+  try {
+    const expected = new Map((await renderType(db, type)).map((f) => [f.path, f.bytes]));
+    const paths = new Set([...expected.keys(), ...files.map((f) => f.path)]);
+    const actual = new Map(files.map((f) => [f.path, f.bytes]));
+    const same = (p: string) => {
+      const want = expected.get(p);
+      const got = actual.get(p);
+      return want !== undefined && got !== undefined && want.equals(got);
+    };
+    differing = [...paths].filter((p) => !same(p)).sort();
+  } catch {
+    differing = [];
+  }
+  const named = differing.length === 0 ? "" : `Edited since the last export: ${differing.join(", ")}. `;
+  return (
+    head +
+    named +
+    `Apply the change through the catalog's ${type} command, which records who made it and why, ` +
+    `then \`catalog export --only ${type}\` rewrites these files; or discard the edit.`
+  );
 }

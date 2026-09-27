@@ -1,7 +1,7 @@
 import { CONTENT_TYPES, METHOD_TYPES, type ContentSource } from "@self-learn/content";
 import { describe, expect, it } from "vitest";
 
-import { dbSource, NotMigratedError } from "../src/content/source";
+import { DB_READERS, dbSource, NotMigratedError } from "../src/content/source";
 import type { CatalogDatabase } from "../src/db";
 
 /**
@@ -44,5 +44,12 @@ describe("dbSource", () => {
 
   it("covers every content type", () => {
     expect(new Set(Object.values(METHOD_TYPES))).toEqual(new Set(CONTENT_TYPES));
+  });
+
+  it("names no type as readable while every method still refuses", () => {
+    // `catalog flip` refuses a type missing from DB_READERS. A track that
+    // fills in a method adds its type there in the same change, and moves its
+    // method out of the refusal cases above.
+    expect([...DB_READERS]).toEqual([]);
   });
 });

@@ -159,11 +159,13 @@ export async function conceptsForAsset(db: CatalogDatabase, id: string): Promise
  *                   ─ asset_id ─────────────────────┘
  * ```
  *
- * Only the topic branch has rows today: `../index/courses.ts` is the only
- * writer of `collection_item` in the repo and every row it writes is the
- * module's topic. The other two are asked anyway, because the constraint
- * permits them and a query that silently ignores a row shape the schema allows
- * is a bug waiting for the first indexer that writes one. This function
+ * `../index/courses.ts` is the only writer of `collection_item`: each module
+ * gets its topic row and, since 0.5 of docs/CONTENT-MIGRATION.md, one asset
+ * row per curated link, which the topic branch already reaches through
+ * `asset_topic` and the dedupe below folds together. The concept branch has no
+ * rows yet and is asked anyway, because the constraint permits it and a query
+ * that silently ignores a row shape the schema allows is a bug waiting for the
+ * first writer of one. This function
  * resolved *only* the asset branch when it was first lifted out of
  * `catalog show`, which is why `show <module>` reported no assets for any
  * module in the catalog.
