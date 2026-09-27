@@ -162,18 +162,33 @@ export async function writeThrough<T>(
       else await replaceFile(file, before);
     }
   };
-  const restore = async () => {
-    if (touched.length === 0) return;
+  /**
+   * Put the files back after a failed write. Falls back to doing it without
+   * the locks only when the locks themselves cannot be had (the database is
+   * what failed); a put-back that fails while holding them is not retried
+   * unlocked, since that retry could overwrite a newer writer's export.
+   */
+  const restore = async (): Promise<string | null> => {
+    if (touched.length === 0) return null;
+    let locked = false;
     try {
       await db.transaction(async (tx) => {
         for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+        locked = true;
         await putBack();
       });
-    } catch {
-      // The database is what failed, so its locks cannot be had. The check
-      // for bytes still ours is the guard left: a writer that committed in
-      // between rewrote the file, and its bytes are left where they are.
+      return null;
+    } catch (error) {
+      if (locked) return (error as Error).message;
+    }
+    // The locks could not be had. The check for bytes still ours is the guard
+    // left: a writer that committed in between rewrote the file, and its
+    // bytes are left where they are.
+    try {
       await putBack();
+      return null;
+    } catch (error) {
+      return (error as Error).message;
     }
   };
 
@@ -212,7 +227,12 @@ export async function writeThrough<T>(
       return { value, exported };
     });
   } catch (error) {
-    await restore();
-    throw error;
+    const failed = await restore();
+    if (failed === null) throw error;
+    throw new WriteThroughError(
+      `${(error as Error).message}\n  The write was rolled back, but putting the files back failed too ` +
+        `(${failed}), so they may not match the database. Rewrite them from the rows with ` +
+        `\`catalog export --only ${sorted.join(",")} --out <the tree it was imported from>\`.`,
+    );
   }
 }
