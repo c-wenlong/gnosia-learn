@@ -9,9 +9,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { renderType } from "../src/content/export";
 import { fileConceptUnderTopic } from "../src/content/topics";
+import { writeThrough } from "../src/content/write-through";
 import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { addConceptToItem, CourseEditError } from "../src/learn/course-edit";
+import { connect } from "../src/db";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -299,6 +301,26 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(rows).toEqual([{ slug: "widgets", topic_slug: "empty-topic" }]);
   });
 
+  it("writes the note's prerequisites with the concept, so the index after it adds no revision", async () => {
+    const { stdout } = await learn(
+      "concept", "add", "--title", "Gears", "--domain", "fixtures",
+      "--topic", "fixture-topic", "--requires", "alpha,beta", "--assumes", "gamma", "--json",
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ id: "gears", topic: "fixture-topic", indexed: true });
+    const { rows } = await scratch.db.execute<{ op: string; author: string }>(
+      "select op, author from content_revision where entity_type = 'concept' and entity_id = 'gears' order by seq",
+    );
+    expect(rows).toEqual([{ op: "create", author: "local" }]);
+    const links = await scratch.db.execute(
+      "select prerequisite_slug, kind, position from concept_prerequisite where concept_slug = 'gears' order by kind, position",
+    );
+    expect(links.rows).toEqual([
+      { prerequisite_slug: "gamma", kind: "assumes", position: 1 },
+      { prerequisite_slug: "alpha", kind: "requires", position: 1 },
+      { prerequisite_slug: "beta", kind: "requires", position: 2 },
+    ]);
+  });
+
   it("refuses an unknown slug before writing anything", async () => {
     const before = await topics();
     const failure = await learn(
@@ -431,20 +453,42 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     ).rejects.toThrow(/ENOENT/);
   });
 
-  it("keeps both concepts when two writes race", async () => {
-    // Two writers, two topics, one vocabulary file. Each renders the file
-    // from the rows under the export lock, so the one that writes last has
-    // seen the other's row, and neither drops the other's mapping.
+  it("makes a second writer wait for the first, so neither drops the other's mapping", async () => {
+    // Two writers, two topics, one vocabulary file. The first holds the
+    // export lock with its row written and its commit pending; the second,
+    // on its own connection, must wait rather than render the file without
+    // the first's row and write over it.
     const by = { author: "local", authorKind: "person" as const, reason: "race" };
     const file = (slug: string) => ({ title: slug, summary: null, path: `learn/concepts/fixtures/${slug}.md` });
     for (const slug of ["racer-one", "racer-two"]) {
       await writeFile(path.join(root, "learn", "concepts", "fixtures", `${slug}.md`), `---\nid: ${slug}\ntitle: ${slug}\n---\n`, "utf8");
     }
-    const [one, two] = await Promise.all([
-      fileConceptUnderTopic(scratch.db, { concept: "racer-one", topic: "fixture-topic", row: file("racer-one") }, by),
-      fileConceptUnderTopic(scratch.db, { concept: "racer-two", topic: "block-topic", row: file("racer-two") }, by),
-    ]);
-    expect([one.changed, two.changed]).toEqual([true, true]);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered = () => {};
+    const holding = new Promise<void>((resolve) => (entered = resolve));
+
+    const other = connect({ url: scratch.url });
+    try {
+      const first = writeThrough(scratch.db, ["topics"], async (tx) => {
+        await fileConceptUnderTopic(tx, { concept: "racer-one", topic: "fixture-topic", row: file("racer-one") }, by);
+        entered();
+        await gate;
+      });
+      await holding;
+      let settled = false;
+      const second = fileConceptUnderTopic(other.db, { concept: "racer-two", topic: "block-topic", row: file("racer-two") }, by).finally(
+        () => (settled = true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(settled).toBe(false);
+      release();
+      await first;
+      expect((await second).changed).toBe(true);
+    } finally {
+      release();
+      await other.close();
+    }
 
     const after = await topics();
     expect(after).toContain("racer-one");

@@ -13,7 +13,7 @@ import {
   topicRelation,
   type TopicRelationKind,
 } from "@self-learn/schema";
-import { and, asc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { sha256 } from "./layout";
@@ -1213,7 +1213,47 @@ export interface FileConceptInput {
    * catalog has no row for yet. A row that exists keeps its columns and gains
    * the topic.
    */
-  row: { title: string; summary: string | null; path: string };
+  row: {
+    title: string;
+    summary: string | null;
+    path: string;
+    /**
+     * The note's `requires:` and `assumes:`, in order. Written with a new row,
+     * so the concepts index that follows finds the concept as the note says
+     * and adds no second revision; a target with no row yet is left to that
+     * index, which reads every note and can resolve it.
+     */
+    prerequisites?: readonly { slug: string; kind: "requires" | "assumes" }[];
+  };
+}
+
+/**
+ * `concept_prerequisite` rows as the concepts indexer writes them: one per
+ * target and kind, never the concept itself, positions counted per list.
+ * Only targets that already have a row, since the link is a foreign key.
+ */
+async function prerequisiteLinks(
+  db: CatalogDatabase,
+  slug: string,
+  wanted: readonly { slug: string; kind: "requires" | "assumes" }[],
+): Promise<Record<string, unknown>[]> {
+  const targets = [...new Set(wanted.map((w) => w.slug))];
+  if (targets.length === 0) return [];
+  const known = new Set(
+    (await db.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, targets))).map((r) => r.slug),
+  );
+  const seen = new Set<string>();
+  const next = new Map<string, number>();
+  const out: Record<string, unknown>[] = [];
+  for (const { slug: target, kind } of wanted) {
+    const key = `${target} ${kind}`;
+    if (target === slug || seen.has(key) || !known.has(target)) continue;
+    seen.add(key);
+    const position = (next.get(kind) ?? 0) + 1;
+    next.set(kind, position);
+    out.push({ prerequisiteSlug: target, kind, position });
+  }
+  return out;
 }
 
 export interface FileConceptResult {
@@ -1256,7 +1296,10 @@ export async function fileConceptUnderTopic(
     return writeContent(tx, {
       type: "concept",
       id: slug,
-      next: { row },
+      next:
+        existing === undefined
+          ? { row, links: { concept_prerequisite: await prerequisiteLinks(tx, slug, input.row.prerequisites ?? []) } }
+          : { row },
       base: await latestId(tx, "concept", slug),
       ...by,
     });
