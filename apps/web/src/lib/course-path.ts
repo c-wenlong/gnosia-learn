@@ -147,6 +147,49 @@ export function topicDone(mastery: TopicMastery | null | undefined, ticked: bool
 }
 
 /**
+ * The same rule, split so a screen that does not draw the path can apply it.
+ *
+ * The server knows mastery and the client owns the ticks (they change on an
+ * optimistic tick or a course reset without a round trip), so the server sends
+ * the two id sets and the client combines them with `state.completed`. Plain
+ * arrays, because the sets travel in a page payload.
+ */
+export interface ItemStanding {
+  /** Curriculum items whose concepts are all mastered. */
+  mastered: readonly string[];
+  /** Curriculum items with at least one concept, whose tick therefore says nothing. */
+  withConcepts: readonly string[];
+}
+
+export const EMPTY_STANDING: ItemStanding = { mastered: [], withConcepts: [] };
+
+export function itemStanding(
+  concepts: readonly KbConceptLike[],
+  itemIds: readonly string[],
+): ItemStanding {
+  const mastered: string[] = [];
+  const withConcepts: string[] = [];
+  for (const id of itemIds) {
+    const mastery = resolveTopicMastery(conceptsForTopic(concepts, id));
+    if (mastery === null) continue;
+    withConcepts.push(id);
+    if (mastery.bucket === "mastered") mastered.push(id);
+  }
+  return { mastered, withConcepts };
+}
+
+/** `topicDone` over a standing and the learner's ticks, as a predicate. */
+export function itemDoneWith(
+  standing: ItemStanding,
+  completed: Readonly<Record<string, true>>,
+): (itemId: string) => boolean {
+  const mastered = new Set(standing.mastered);
+  const withConcepts = new Set(standing.withConcepts);
+  return (itemId) =>
+    mastered.has(itemId) || (!withConcepts.has(itemId) && completed[itemId] === true);
+}
+
+/**
  * The lock rule: a unit is locked while the unit before it has topics and
  * none of them is done. A soft lock: the unit is drawn, its nodes stay
  * readable and its notes open, and only the header says to start the one

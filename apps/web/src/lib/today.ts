@@ -19,6 +19,7 @@ import {
 import { courses } from "@/data/courses";
 import { REPO_ROOT } from "@/data/repo-root";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
+import { itemStanding } from "@/lib/course-path";
 import { computeHabit, dayKey, emptyHabit } from "@/lib/habit-core";
 import { habitTimeZone } from "@/lib/habit";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -76,15 +77,17 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   const first = kb.frontier.map((id) => byId.get(id)).find((c): c is KbConcept => c !== undefined);
   const nextUp: NextUp | null = first === undefined ? null : toNextUp(first, placeOf(first), now, timeZone);
 
+  const courseRows = courses.map((c) => ({
+    slug: c.slug,
+    code: c.code,
+    title: c.title,
+    order: c.order,
+    topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
+  }));
   const started = coursesInProgress(
-    courses.map((c) => ({
-      slug: c.slug,
-      code: c.code,
-      title: c.title,
-      order: c.order,
-      topicIds: c.modules.flatMap((m) => m.topics.map((t) => t.id)),
-    })),
+    courseRows,
     snapshot.completed,
+    itemStanding(kb.concepts, courseRows.flatMap((c) => c.topicIds)),
   );
 
   const shown = due.slice(0, REVIEW_ROWS);

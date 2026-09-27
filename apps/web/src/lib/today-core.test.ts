@@ -312,4 +312,13 @@ describe("courses in progress", () => {
   it("is empty for a fresh learner", () => {
     expect(coursesInProgress(COURSES, {})).toEqual([]);
   });
+
+  it("counts by mastery where a topic has concepts, and by the tick where it has none", () => {
+    // a1 mastered and unticked, a2 ticked but not mastered, b1 ticked and bare.
+    const standing = { mastered: ["a1"], withConcepts: ["a1", "a2"] };
+    expect(coursesInProgress(COURSES, { a2: true, b1: true }, standing)).toEqual([
+      { slug: "b", code: "B2", title: "Second", completed: 1, total: 2, percent: 50 },
+      { slug: "a", code: "A1", title: "First", completed: 1, total: 4, percent: 25 },
+    ]);
+  });
 });

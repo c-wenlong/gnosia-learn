@@ -4,8 +4,11 @@ import {
   conceptsForTopic,
   continueHref,
   courseSummaryLine,
+  EMPTY_STANDING,
   guidebookConcept,
   isLocked,
+  itemDoneWith,
+  itemStanding,
   nodeCaption,
   pathStatus,
   resolveTopicMastery,
@@ -80,6 +83,34 @@ describe("conceptsForTopic", () => {
     const [react] = conceptsForTopic(concepts, "cp4284-m3-t1");
     expect(react?.bucket).toBe("untouched");
     expect(conceptsForTopic(concepts, "cp4284-m1-t1")[0]?.bucket).toBe("learning");
+  });
+});
+
+describe("itemStanding and itemDoneWith", () => {
+  const concepts = [
+    kb("a", 0.97, "mastered", 4, ["t-mastered", "t-mixed"]),
+    kb("b", 0.96, "mastered", 3, ["t-mastered"]),
+    kb("c", 0.3, "weak", 1, ["t-mixed"]),
+  ];
+  const standing = itemStanding(concepts, ["t-mastered", "t-mixed", "t-bare"]);
+
+  it("says which items have concepts, and which of those are mastered", () => {
+    expect(standing).toEqual({ mastered: ["t-mastered"], withConcepts: ["t-mastered", "t-mixed"] });
+  });
+
+  it("is done by mastery for an item with concepts, and by the tick for one without", () => {
+    const done = itemDoneWith(standing, { "t-mixed": true, "t-bare": true });
+    expect(done("t-mastered")).toBe(true);
+    // Ticked, but its concepts are not mastered: the tick says nothing.
+    expect(done("t-mixed")).toBe(false);
+    expect(done("t-bare")).toBe(true);
+    expect(done("t-unknown")).toBe(false);
+  });
+
+  it("is tick-only with an empty standing, which is the no-catalog fallback", () => {
+    const done = itemDoneWith(EMPTY_STANDING, { "t-mixed": true });
+    expect(done("t-mixed")).toBe(true);
+    expect(done("t-mastered")).toBe(false);
   });
 });
 
