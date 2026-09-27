@@ -129,7 +129,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
 let store: InstanceType<typeof JobStore>;
 
 /** The diagram as the fake catalog holds it: its latest revision, and which job wrote it. */
-const diagram = { revision: 5, revisionJob: null as string | null };
+const diagram = { revision: 5, revisionJob: null as string | null, documentHash: "d".repeat(64) };
 
 const offline = { ok: false, json: null, error: "connect ECONNREFUSED 127.0.0.1:5432", offline: true };
 
@@ -164,10 +164,11 @@ beforeEach(async () => {
   catalogMock.jobDiscard.mockResolvedValue({ ok: true, json: {}, error: null });
   diagram.revision = 5;
   diagram.revisionJob = null;
+  diagram.documentHash = "d".repeat(64);
   catalogMock.diagramShow.mockReset();
   catalogMock.diagramShow.mockImplementation(async () => ({
     ok: true,
-    json: { diagram: { revision: diagram.revision, revisionJob: diagram.revisionJob }, checkout: null },
+    json: { diagram: { ...diagram }, checkout: null },
     error: null,
     offline: false,
   }));
@@ -287,6 +288,25 @@ describe("a clean accept", () => {
     const result = await accept(store, await place());
     expect(result.ok).toBe(true);
     expect(catalogMock.diagramPut).toHaveBeenCalledWith(expect.objectContaining({ base: 6 }));
+  });
+});
+
+describe("a job whose starting revision was never recorded", () => {
+  // Enqueued with the database down and given no checkout record: the
+  // document hash taken at enqueue is the base instead (review on #142).
+  it("lands on the latest revision when the stored document is the one it started from", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place({ targetRevisionBefore: undefined, targetHashBefore: "d".repeat(64) }));
+    expect(result.ok).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledWith(expect.objectContaining({ base: 5 }));
+  });
+
+  it("refuses when the stored document is not the one it started from", async () => {
+    const result = await accept(store, await place({ targetRevisionBefore: undefined, targetHashBefore: "e".repeat(64) }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("target-moved");
+    expect(result.note).toMatch(/starting revision was never recorded/);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
   });
 });
 

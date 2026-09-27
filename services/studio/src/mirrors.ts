@@ -265,6 +265,11 @@ export class Mirrors {
   }
 
   /** Every mirror this process holds, newest first, with `file` touched if named. */
+  /** Whether a canvas is open on `file`, without counting as a look (unlike `list`). */
+  isOpen(file: string): boolean {
+    return this.open.has(file);
+  }
+
   list(file?: string): MirrorView[] {
     if (file !== undefined) {
       const one = this.open.get(file);

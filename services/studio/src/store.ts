@@ -101,11 +101,14 @@ export interface JobRecord {
    */
   targetHashBefore: string | null;
   /**
-   * The diagram's latest revision when the job was enqueued, or null when
-   * there was no diagram: the base `diagram put` checks at Accept, so a
-   * commit that landed while the job ran refuses the Accept (S4, edge case
-   * 18). Absent on a job recorded before diagrams moved into the database,
-   * whose Accept then writes over whatever is latest.
+   * The revision the job started from, or null when there was no diagram: the
+   * base `diagram put` checks at Accept, so a commit that landed while the job
+   * ran refuses the Accept (S4, edge case 18). Recorded at enqueue as the
+   * latest revision, then replaced at run start, for an extend job, by the
+   * revision its copy of the checkout was written from. Absent when neither
+   * could be read (the database down and no checkout record, or a job from
+   * before diagrams moved into the database); Accept then compares
+   * `targetHashBefore` with the stored document instead.
    */
   targetRevisionBefore?: number | null;
   /**

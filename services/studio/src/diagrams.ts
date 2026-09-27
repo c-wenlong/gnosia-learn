@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { diagramCheckout, diagramList, diagramShow } from "./catalog";
 import { readThrough } from "./content-cache";
@@ -137,6 +138,32 @@ function viewOf(summary: Summary): DiagramView {
   };
 }
 
+/**
+ * How long one read of the list answers the thumbnails. A grid asks for every
+ * tile's SVG key at once; without this, each tile would start its own
+ * `catalog diagram list` subprocess and database query for the same rows.
+ * The screen's own list is read fresh every time.
+ */
+const THUMBNAIL_REUSE_MS = 2_000;
+let recent: { at: number; read: ReturnType<typeof summaries> } | null = null;
+
+function sharedSummaries(): ReturnType<typeof summaries> {
+  const now = Date.now();
+  if (recent !== null && now - recent.at < THUMBNAIL_REUSE_MS) return recent.read;
+  const read = summaries();
+  recent = { at: now, read };
+  // A failed read is not kept: the next tile asks again.
+  read.catch(() => {
+    if (recent?.read === read) recent = null;
+  });
+  return read;
+}
+
+/** Forget the list the thumbnails share, after a write that changed an SVG. */
+export function forgetDiagramList(): void {
+  recent = null;
+}
+
 /** Every diagram's row as the catalog lists it, through the cache. */
 async function summaries() {
   return readThrough<Summary[]>(
@@ -155,7 +182,7 @@ async function summaries() {
 
 /** The key of each diagram's SVG in the blob store, from the same (possibly cached) list. */
 export async function svgKeyOf(name: string): Promise<{ key: string | null; stale: boolean }> {
-  const read = await summaries();
+  const read = await sharedSummaries();
   const found = read.value.find((entry) => entry.slug === name);
   return { key: found?.svg?.key ?? null, stale: read.stale };
 }
@@ -211,6 +238,29 @@ export interface Checkout {
   note: string;
   /** The catalog could not be reached, and the file is whatever was checked out last. */
   offline: boolean;
+  /**
+   * The catalog answered and could not write the checkout, for a reason that
+   * is neither an outage nor uncommitted edits. The file on disk, if any, may
+   * be an older revision than the diagram, so nothing should build on it.
+   */
+  failed: boolean;
+}
+
+/**
+ * The revision the checkout on disk was written from, read from the record the
+ * catalog keeps beside it (`<slug>.checkout.json`), with no database needed.
+ * Null when it was checked out before the diagram existed; undefined when
+ * there is no record to read.
+ */
+export async function checkoutRevision(name: string): Promise<number | null | undefined> {
+  const record = await readFile(path.join(workDir(), `${name}.checkout.json`), "utf8").catch(() => null);
+  if (record === null) return undefined;
+  try {
+    const revision = (JSON.parse(record) as { revision?: unknown }).revision;
+    return typeof revision === "number" || revision === null ? revision : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -221,10 +271,25 @@ export interface Checkout {
  * failure, since those edits exist nowhere else. With the database down, the
  * last checkout on disk is what there is, and drawing still runs on it (D16).
  */
-export async function ensureCheckout(name: string): Promise<Checkout> {
+export async function ensureCheckout(name: string, options: { canvasOpen?: boolean } = {}): Promise<Checkout> {
+  const onDisk = async () => (await stat(workPath(name)).catch(() => null)) !== null;
+  // A canvas open on the checkout saves the whole document whenever a person
+  // presses Cmd+S. The catalog checks for edits and then writes, and a save
+  // landing between the two would be overwritten, so a checkout a canvas holds
+  // is never refreshed: the canvas already shows it, and a commit from it is
+  // checked against its base like any other.
+  if (options.canvasOpen === true) {
+    return {
+      path: workPath(name),
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
+      note: `a canvas is open on ${workPath(name)}, so it was used as it is rather than refreshed`,
+      offline: false,
+      failed: false,
+    };
+  }
   const result = await diagramCheckout(name, workDir());
   const json = (result.json ?? {}) as { exists?: unknown; revision?: unknown; note?: unknown; code?: unknown };
-  const onDisk = (await stat(workPath(name)).catch(() => null)) !== null;
   if (result.ok) {
     return {
       path: workPath(name),
@@ -232,22 +297,35 @@ export async function ensureCheckout(name: string): Promise<Checkout> {
       revision: typeof json.revision === "number" ? json.revision : null,
       note: typeof json.note === "string" ? json.note : "checked out",
       offline: false,
+      failed: false,
     };
   }
   if (json.code === "dirty-checkout") {
     return {
       path: workPath(name),
-      exists: onDisk,
-      revision: null,
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
       note: `${workPath(name)} holds edits that were never committed, so it was left as it is`,
       offline: false,
+      failed: false,
+    };
+  }
+  if (result.offline) {
+    return {
+      path: workPath(name),
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
+      note: `the catalog is unreachable, so ${name} is the last checkout on disk`,
+      offline: true,
+      failed: false,
     };
   }
   return {
     path: workPath(name),
-    exists: onDisk,
+    exists: await onDisk(),
     revision: null,
-    note: `the catalog could not check ${name} out (${result.error ?? "no reason given"}); using the last checkout on disk`,
-    offline: result.offline,
+    note: `the catalog could not check ${name} out: ${result.error ?? "no reason given"}`,
+    offline: false,
+    failed: true,
   };
 }

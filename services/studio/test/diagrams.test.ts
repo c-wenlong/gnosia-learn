@@ -23,9 +23,8 @@ vi.mock("../src/catalog", async (importOriginal) => {
   return { ...actual, ...catalogMock };
 });
 
-const { checkoutOf, ensureCheckout, isDiagramName, listDiagrams, readDiagram, svgKeyOf } = await import(
-  "../src/diagrams"
-);
+const { checkoutOf, checkoutRevision, ensureCheckout, forgetDiagramList, isDiagramName, listDiagrams, readDiagram, svgKeyOf } =
+  await import("../src/diagrams");
 const { workPath } = await import("../src/paths");
 
 const summary = {
@@ -57,6 +56,7 @@ beforeEach(async () => {
   catalogMock.diagramList.mockReset().mockResolvedValue(answer({ ok: true, diagrams: [summary] }));
   catalogMock.diagramShow.mockReset();
   catalogMock.diagramCheckout.mockReset();
+  forgetDiagramList();
 });
 
 afterEach(async () => {
@@ -108,6 +108,17 @@ describe("reading the catalog", () => {
     expect(await svgKeyOf("dot-product")).toEqual({ key: summary.svg.key, stale: true });
   });
 
+  it("answers a grid of thumbnails from one read of the list", async () => {
+    // Review on #142: each tile asked for its key, and each ask was a
+    // `catalog diagram list` subprocess and a query for the same rows.
+    await Promise.all(Array.from({ length: 12 }, () => svgKeyOf("dot-product")));
+    await svgKeyOf("dot-product");
+    expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
+    forgetDiagramList();
+    await svgKeyOf("dot-product");
+    expect(catalogMock.diagramList).toHaveBeenCalledTimes(2);
+  });
+
   it("says so rather than inventing an empty list when there is no copy either", async () => {
     catalogMock.diagramList.mockResolvedValue(unreachable);
     await expect(listDiagrams()).rejects.toThrow(/ECONNREFUSED/);
@@ -145,6 +156,33 @@ describe("the checkout", () => {
     const checkout = await ensureCheckout("dot-product");
     expect(checkout).toMatchObject({ exists: true, offline: false });
     expect(checkout.note).toMatch(/never committed/);
+  });
+
+  it("is not built on when the catalog answered and could not write it", async () => {
+    // Review on #142: a file left from an older revision must not be what an
+    // extend job copies when the refresh failed for any reason but an outage.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    catalogMock.diagramCheckout.mockResolvedValue({
+      ok: false,
+      json: { ok: false, code: "unreadable", error: "blob sha mismatch" },
+      error: "blob sha mismatch",
+      offline: false,
+    });
+    expect(await ensureCheckout("dot-product")).toMatchObject({ failed: true, offline: false });
+  });
+
+  it("is used as it is, never refreshed, while a canvas is open on it", async () => {
+    // Review on #142: the catalog checks for edits and then writes, and a
+    // canvas save between the two would be overwritten.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    await writeFile(path.join(home, "work", "dot-product.checkout.json"), JSON.stringify({ revision: 6 }));
+    const checkout = await ensureCheckout("dot-product", { canvasOpen: true });
+    expect(checkout).toMatchObject({ exists: true, revision: 6, failed: false });
+    expect(catalogMock.diagramCheckout).not.toHaveBeenCalled();
+    expect(await checkoutRevision("dot-product")).toBe(6);
+    expect(await checkoutRevision("no-record")).toBeUndefined();
   });
 
   it("falls back to the file on disk with the database down (D16)", async () => {

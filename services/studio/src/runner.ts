@@ -22,7 +22,7 @@ import {
 } from "./config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
 import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
-import { ensureCheckout } from "./diagrams";
+import { checkoutRevision, ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
@@ -136,6 +136,12 @@ export class Runner {
    */
   private readonly settledJobs = new Map<string, Promise<void>>();
   private draining = false;
+  /**
+   * Whether a canvas is open on a diagram, by its logical name. Set by
+   * `index.ts` once the mirrors exist, so a job never refreshes a checkout a
+   * canvas could be saving into (see `ensureCheckout`).
+   */
+  canvasOpen: (target: string) => boolean = () => false;
 
   constructor(store: JobStore) {
     this.store = store;
@@ -265,9 +271,9 @@ export class Runner {
    *
    * Asked of the catalog. When it cannot answer, the checkout on disk says
    * whether there is a diagram and its hash labels it, and the revision is
-   * left unknown, which Accept treats as "whatever is latest" once the
-   * database is back: the one case a base cannot be had, and it is the same
-   * degraded mode D16 already allows.
+   * left unknown. An extend job fills it in from the checkout's record when
+   * it copies the file; failing that, Accept checks this hash against the
+   * stored document instead, so no job lands without a base (D16).
    */
   async startingPoint(
     slug: string,
@@ -645,7 +651,11 @@ export class Runner {
     // The file this job extends and photographs: the checkout, brought up to
     // the latest revision unless it holds edits nobody committed.
     if (record.brief.mode === "extend") {
-      const checkout = await ensureCheckout(record.slug);
+      const checkout = await ensureCheckout(record.slug, { canvasOpen: this.canvasOpen(record.targetPath) });
+      // Anything but an outage or uncommitted edits leaves a file that may be
+      // an older revision than the diagram, and extending it would land that
+      // older drawing over the newer one.
+      if (checkout.failed) throw new Error(checkout.note);
       await this.store.emit(id, { type: "step", state: "running", note: checkout.note });
     }
     const before = await this.readBefore(record);
@@ -674,6 +684,16 @@ export class Runner {
     if (record.brief.mode === "extend") {
       if (!resumedWork) {
         await copyFile(workPath(record.slug), absolute(record.candidatePath));
+        // The base Accept checks is the revision this copy was written from,
+        // which the checkout's record says with no database needed. It can be
+        // older than the latest at enqueue (a checkout kept for its
+        // uncommitted edits), or the only revision there is (a job enqueued
+        // with the database down), and either way it is what the agent is
+        // extending, so a newer revision makes Accept refuse.
+        const copiedFrom = await checkoutRevision(record.slug);
+        if (copiedFrom !== undefined && copiedFrom !== record.targetRevisionBefore) {
+          await this.store.update(id, { targetRevisionBefore: copiedFrom });
+        }
         // Remembered so the gate can tell "extended it" from "left the copy
         // exactly as it found it". Without it, an agent that did nothing at all
         // presents the runner's own copy of the committed diagram for review and

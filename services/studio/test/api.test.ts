@@ -29,10 +29,19 @@ import { fixtureDocument } from "./fixture-document";
  * tells a caller that `reindex` exists at all.
  */
 
-const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
+const canvasMock = vi.hoisted(() => ({
+  doctor: vi.fn(),
+  /** Set by a test that fakes a verb; every other test runs the real tool. */
+  verb: null as null | ((args: string[]) => Promise<unknown>),
+}));
 vi.mock("../src/canvas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/canvas")>();
-  return { ...actual, doctor: canvasMock.doctor };
+  return {
+    ...actual,
+    doctor: canvasMock.doctor,
+    canvas: (args: string[], ...rest: unknown[]) =>
+      canvasMock.verb === null ? (actual.canvas as (...a: unknown[]) => unknown)(args, ...rest) : canvasMock.verb(args),
+  };
 });
 
 const catalogMock = vi.hoisted(() => ({
@@ -121,6 +130,8 @@ beforeEach(async () => {
   enqueued.length = 0;
   canvasMock.doctor.mockResolvedValue({ code: 0, signal: null, stdout: "", stderr: "", json: null, timedOut: false });
   latestRevision = 5;
+  canvasMock.verb = null;
+  catalogMock.diagramCommit.mockReset();
   const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
   catalogMock.diagramShow.mockImplementation(async () =>
     answer({ ok: true, diagram: { revision: latestRevision, revisionJob: null }, checkout: null }),
@@ -550,6 +561,54 @@ describe("naming a diagram", () => {
   it("refuses a verb sent as a GET, because a verb writes a file", async () => {
     const response = await fetch(`${base}/api/diagrams/${SLUG}/export`);
     expect(response.status).toBe(405);
+  });
+});
+
+describe("Export SVG", () => {
+  const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
+  /** The checkout as `diagram show` reports it: clean before the export, edited after it, as the new SVG makes it. */
+  function checkoutReads(...dirty: boolean[]) {
+    for (const d of dirty) {
+      catalogMock.diagramShow.mockResolvedValueOnce(
+        answer({ ok: true, diagram: { revision: 5 }, checkout: { record: { revision: 5 }, dirty: d, behind: false } }),
+      );
+    }
+  }
+
+  beforeEach(() => {
+    catalogMock.diagramCheckout.mockImplementation(async () => answer({ ok: true, exists: true, revision: 5, note: "checked out" }));
+    canvasMock.verb = async () => ({ code: 0, signal: null, stdout: "", stderr: "", json: { ok: true }, timedOut: false });
+    catalogMock.diagramCommit.mockResolvedValue(answer({ ok: true, revision: 6, changed: true }));
+  });
+
+  it("stores the fresh SVG when the document held no edits before it, though the export itself changed the checkout", async () => {
+    checkoutReads(false, true);
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await response.json()) as { note: string };
+    expect(response.status).toBe(200);
+    expect(body.note).toBe("export finished and the SVG is stored");
+    expect(catalogMock.diagramCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the SVG for the next commit when the canvas held edits nobody committed", async () => {
+    checkoutReads(true, true);
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await response.json()) as { note: string };
+    expect(response.status).toBe(200);
+    expect(body.note).toMatch(/waits for the next commit/);
+    expect(catalogMock.diagramCommit).not.toHaveBeenCalled();
+  });
+
+  it("refuses to run a verb on a checkout the catalog could not bring up to date", async () => {
+    catalogMock.diagramCheckout.mockImplementation(async () => ({
+      ok: false,
+      json: { ok: false, code: "unreadable", error: "blob sha mismatch" },
+      error: "blob sha mismatch",
+      offline: false,
+    }));
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect(response.status).toBe(502);
+    expect(catalogMock.diagramCommit).not.toHaveBeenCalled();
   });
 });
 

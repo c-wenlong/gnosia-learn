@@ -850,6 +850,17 @@ describe("extend mode", () => {
     expect(typeof input.unchangedHash).toBe("string");
   });
 
+  it("takes its base from the revision the copied checkout was written from", async () => {
+    // The catalog is down here (the mocks above), so enqueue records no
+    // revision; the checkout's own record says which one the copy is.
+    await writeCheckout(fixtureDocument(), "utf8");
+    await writeFile(path.join(workDir(), `${SLUG}.checkout.json`), JSON.stringify({ slug: SLUG, revision: 4 }), "utf8");
+    const { record } = await runner.enqueue(await brief({ mode: "extend" }));
+    expect(record.targetRevisionBefore).toBeUndefined();
+    await gateInput();
+    expect(store.get(record.id)?.targetRevisionBefore).toBe(4);
+  });
+
   it("passes the brief's elements and relations to the gate", async () => {
     await runner.enqueue(
       await brief({

@@ -285,6 +285,13 @@ this is `catalog diagram put --job <id>`**, one transaction that writes the
 `diagram` row, both asset rows and the `asset_job` rows after the SVG upload is
 confirmed, with the job's starting revision as its base; `catalog job accept
 --job <id>` then moves the job row, refused until those `asset_job` rows exist.
+The starting revision is the latest at enqueue, replaced at run start for an
+extend job by the revision its copy of the checkout was written from (the
+checkout's record says, with no database needed). A job that has neither,
+enqueued with the database down, is checked by the document hash it started
+from instead, so no Accept lands without a base. A checkout a canvas is open
+on is never refreshed, since a save could land between the catalog's edit
+check and its write.
 What follows is the design it replaced, kept for the reasoning.
 
 The studio does not write `asset` rows. On accept it calls one command, and that

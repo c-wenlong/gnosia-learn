@@ -8,7 +8,16 @@ import { status as catalogStatus } from "./catalog";
 import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
 import { diagramCommit } from "./catalog";
-import { checkoutOf, ensureCheckout, isDiagramName, listDiagrams, readDiagram, svgKeyOf, type CheckoutView } from "./diagrams";
+import {
+  checkoutOf,
+  ensureCheckout,
+  forgetDiagramList,
+  isDiagramName,
+  listDiagrams,
+  readDiagram,
+  svgKeyOf,
+  type CheckoutView,
+} from "./diagrams";
 import { studioBlobStore } from "./blobs";
 import { MirrorRefused, type Mirrors } from "./mirrors";
 import { shotPath, targetPath, workDir, workSvgPath } from "./paths";
@@ -259,7 +268,7 @@ async function handle(
 
   /* /api/diagrams — the corpus the browser screen lists. */
   if (segments[1] === "diagrams") {
-    return diagrams(request, response, segments, method);
+    return diagrams(request, response, segments, method, mirrors);
   }
 
   /* /api/mirrors — one `canvas serve` per document, held open while looked at. */
@@ -677,6 +686,7 @@ async function diagrams(
   response: ServerResponse,
   segments: string[],
   method: string,
+  mirrors: Mirrors,
 ): Promise<void> {
   if (segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams does`);
@@ -715,13 +725,18 @@ async function diagrams(
     return fail(response, 405, `${segments[3]} is a POST: it changes the checkout or the database`);
   }
 
-  const checkout = await ensureCheckout(name);
+  const checkout = await ensureCheckout(name, { canvasOpen: mirrors.isOpen(targetPath(name)) });
+  if (checkout.failed) return fail(response, 502, checkout.note);
   if (!checkout.exists) return fail(response, 404, `no diagram ${name} in the catalog`, checkout.note);
   const file = checkout.path;
   const svg = workSvgPath(name);
 
   switch (segments[3]) {
     case "export": {
+      // Asked before the export, since the export itself writes a new SVG
+      // into the checkout, and a checkout whose SVG changed reads as edited.
+      const before = await checkoutOf(name);
+      const edited = before !== null && before.dirty;
       const result = await canvas(["export", file, "--svg", svg], VERB_TIMEOUT_MS);
       if (result.code !== 0) {
         return verbResult(response, "export", result.code, result.json, result.stderr || result.stdout);
@@ -730,8 +745,7 @@ async function diagrams(
       // export, so it goes straight to the database: that is what pressing
       // the pill asks for. Over edits nobody committed it waits in the
       // checkout, and the next commit takes the two together.
-      const state = await checkoutOf(name);
-      if (state !== null && state.dirty) {
+      if (edited) {
         return send(response, 200, {
           verb: "export",
           ok: true,
@@ -742,6 +756,7 @@ async function diagrams(
         });
       }
       const stored = await diagramCommit(name, workDir(), "Export the SVG again from the stored document");
+      forgetDiagramList();
       return send(response, stored.ok ? 200 : 502, {
         verb: "export",
         ok: stored.ok,
@@ -778,6 +793,7 @@ async function diagrams(
         return fail(response, 400, `"reason" is required: it is what the commit message used to say`);
       }
       const result = await diagramCommit(name, workDir(), reason.slice(0, 500));
+      forgetDiagramList();
       const refused = (result.json ?? {}) as { code?: unknown };
       if (!result.ok) {
         return fail(
@@ -983,8 +999,10 @@ async function mirrorRoutes(
   }
 
   // The mirror edits the checkout, so bring it up to date first, unless it
-  // holds edits nobody committed, which are the canvas's own to show.
-  const checkout = await ensureCheckout(name);
+  // holds edits nobody committed, which are the canvas's own to show, or a
+  // canvas is already open on it and could save while the refresh writes.
+  const checkout = await ensureCheckout(name, { canvasOpen: mirrors.isOpen(targetPath(name)) });
+  if (checkout.failed) return fail(response, 502, checkout.note);
   if (!checkout.exists) {
     return fail(response, 404, `no diagram ${name} in the catalog`, checkout.note);
   }
