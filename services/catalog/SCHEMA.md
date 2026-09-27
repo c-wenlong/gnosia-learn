@@ -558,8 +558,10 @@ rewrites each tracked `.tldr`'s key order once.
 `svg_document_hash` is the `document_hash` the SVG was exported from, as the
 writer vouches: `catalog diagram put` with an SVG records the pair as current,
 and a put without one keeps the stored SVG, stale once the document moved. An
-import records each SVG as exported from the document beside it, since
-nothing on disk says otherwise. `catalog diagram put|checkout|commit|list|show`
+import keeps that record for an SVG whose bytes the database already stores,
+so a stale SVG stays stale through the next import, and records any other SVG
+as exported from the document beside it, since nothing on disk says
+otherwise. `catalog diagram put|checkout|commit|list|show`
 (`src/content/diagrams.ts`) is the write path the studio's Accept and the
 plugin use; `commit` carries the revision its checkout started from and is
 refused when the diagram moved past it. Until `catalog flip diagrams`, a put

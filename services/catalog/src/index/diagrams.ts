@@ -112,7 +112,7 @@ export const diagramsIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.diagrams,
   root: () => ASSETS_DIR,
 
-  read: async ({ repoRoot, toolsRoot, knownConcepts, vocabulary }) => {
+  read: async ({ repoRoot, toolsRoot, knownConcepts, knownDiagrams, vocabulary }) => {
     const directory = path.join(repoRoot, ASSETS_DIR);
     // A tree with no `learn/assets/` has no diagrams. `tldrawkc list` calls a
     // missing directory an error, so it is not asked; the parser says empty.
@@ -237,13 +237,21 @@ export const diagramsIndexer: Indexer = {
       }
     }
 
-    // The `diagram` row: the document itself, and its SVG. An import cannot
-    // know which document an SVG on disk was exported from, so it records the
-    // pair as the files present it, exported from the document beside it.
+    // The `diagram` row: the document itself, and its SVG. A file cannot say
+    // which document an SVG was exported from. The database can: an SVG whose
+    // bytes are the ones it already stores keeps the export record it has, so
+    // one a put left stale stays stale; any other SVG on disk is taken as
+    // exported from the document beside it, the only claim the layout makes.
+    const known = await knownDiagrams();
     const diagrams: NewDiagram[] = [];
     for (const [stem, stored] of documents) {
       const subject = subjects.get(stem) as Subject;
       const svgKey = svgKeys.get(stem) ?? null;
+      const before = known.get(stem);
+      const exportedFrom =
+        svgKey !== null && before?.svgBlobKey === svgKey && before.svgDocumentHash !== null
+          ? before.svgDocumentHash
+          : stored.hash;
       diagrams.push({
         slug: stem,
         ownerId: DIAGRAM_OWNER,
@@ -252,7 +260,7 @@ export const diagramsIndexer: Indexer = {
         document: stored.document,
         documentHash: stored.hash,
         svgBlobKey: svgKey,
-        svgDocumentHash: svgKey === null ? null : stored.hash,
+        svgDocumentHash: svgKey === null ? null : exportedFrom,
         archivedAt: null,
       });
       if (svgKey !== null) {

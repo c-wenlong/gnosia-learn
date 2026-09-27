@@ -3,6 +3,7 @@ import {
   concept,
   type ContentType,
   curriculumItem,
+  diagram,
   indexRun,
   INDEX_SOURCES,
   type IndexSource,
@@ -344,6 +345,7 @@ export async function runIndex(
   let conceptCache: Promise<ReadonlySet<string>> | null = null;
   let curriculumCache: Promise<ReadonlySet<string>> | null = null;
   const assetCache = new Map<SourceRepo, Promise<ReadonlyMap<string, string>>>();
+  let diagramCache: ReturnType<IndexContext["knownDiagrams"]> | null = null;
 
   const context: IndexContext = {
     repoRoot,
@@ -372,6 +374,13 @@ export async function runIndex(
     // memory. The only caller runs after `manimkc`, whose transaction has
     // committed by then, so the rows are already there and reading them keeps
     // `--only mirrors` working without re-reading a whole manimkc checkout.
+    knownDiagrams: () => {
+      diagramCache ??= db
+        .select({ slug: diagram.slug, svgBlobKey: diagram.svgBlobKey, svgDocumentHash: diagram.svgDocumentHash })
+        .from(diagram)
+        .then((rows) => new Map(rows.map((r) => [r.slug, { svgBlobKey: r.svgBlobKey, svgDocumentHash: r.svgDocumentHash }])));
+      return diagramCache;
+    },
     knownAssets: (sourceRepo) => {
       let cached = assetCache.get(sourceRepo);
       if (cached === undefined) {
