@@ -1,11 +1,14 @@
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
-import { addTag, editTag, type TagWriteResult } from "../content/tags";
+import { addTag, checkTagInput, editTag, TagError, type TagWriteResult } from "../content/tags";
 import {
   addTopic,
   type AddTopicResult,
   archiveTopic,
   type By,
+  checkAddInput,
+  checkEditInput,
+  checkSlugs,
   editTopic,
   listTopics,
   type NearMatch,
@@ -16,6 +19,7 @@ import {
   renameTopic,
   type RenameResult,
   restoreTopic,
+  TopicError,
   type TopicList,
   type TopicWriteResult,
 } from "../content/topics";
@@ -76,6 +80,22 @@ function by(flags: TopicFlags, dryRun = false): By {
   return { author: flags.author?.trim() || LOCAL_LEARNER_ID, authorKind: "person", reason };
 }
 
+/**
+ * Run a check that needs no database, and turn a malformed value into a usage
+ * error: exit 2, before the connection, so an unreachable database cannot hide
+ * a bad invocation behind exit 3.
+ */
+function shape<T>(check: () => T): T {
+  try {
+    return check();
+  } catch (error) {
+    if ((error instanceof TopicError || error instanceof TagError) && error.code === "invalid") {
+      throw new TopicUsage(error.message);
+    }
+    throw error;
+  }
+}
+
 function positional(positionals: string[], at: number, what: string): string {
   const value = positionals[at];
   if (value === undefined) throw new TopicUsage(what);
@@ -105,15 +125,18 @@ export async function runTopic(
       }
       const dryRun = flags["dry-run"] === true;
       const author = by(flags, dryRun);
-      const relations = (flags.relate ?? []).map(parseRelate);
-      const input = {
-        slug: flags.slug,
-        title: flags.title,
-        domain: flags.domain,
-        summary: flags.summary,
-        aliases: flags.alias ?? [],
-        relations,
-      };
+      const input = shape(() => {
+        const raw = {
+          slug: flags.slug as string,
+          title: flags.title as string,
+          domain: flags.domain as string,
+          summary: flags.summary,
+          aliases: flags.alias ?? [],
+          relations: (flags.relate ?? []).map(parseRelate),
+        };
+        checkAddInput(raw);
+        return raw;
+      });
       return withDatabase(async ({ db }) => ({
         database,
         verb: "add" as const,
@@ -123,34 +146,32 @@ export async function runTopic(
     case "edit": {
       const slug = positional(positionals, 2, "topic edit needs the topic's slug");
       const author = by(flags);
-      return withDatabase(async ({ db }) => ({
-        database,
-        verb: "edit" as const,
-        ...(await editTopic(
-          db,
-          {
-            slug,
-            title: flags.title,
-            summary: flags.summary,
-            domain: flags.domain,
-            aliases: flags.alias,
-            addAliases: flags["add-alias"],
-            dropAliases: flags["drop-alias"],
-          },
-          author,
-        )),
-      }));
+      const input = {
+        slug,
+        title: flags.title,
+        summary: flags.summary,
+        domain: flags.domain,
+        aliases: flags.alias,
+        addAliases: flags["add-alias"],
+        dropAliases: flags["drop-alias"],
+      };
+      shape(() => checkEditInput(input));
+      return withDatabase(async ({ db }) => ({ database, verb: "edit" as const, ...(await editTopic(db, input, author)) }));
     }
     case "rename": {
       if (flags.from === undefined || flags.to === undefined) throw new TopicUsage("topic rename needs --from and --to");
+      shape(() => checkSlugs([flags.from, "--from"], [flags.to, "--to"]));
+      if (flags.from.trim() === flags.to.trim()) throw new TopicUsage("--from and --to are the same slug");
       const author = by(flags);
       const input = { from: flags.from, to: flags.to, restampDiagramsLater: flags["restamp-diagrams-later"] === true };
       return withDatabase(async ({ db }) => ({ database, verb: "rename" as const, ...(await renameTopic(db, input, author)) }));
     }
     case "relate": {
       const from = positional(positionals, 2, "topic relate needs <slug> <kind> <other-slug>");
-      const kind = relationKind(positional(positionals, 3, "topic relate needs <slug> <kind> <other-slug>"));
+      const kind = shape(() => relationKind(positional(positionals, 3, "topic relate needs <slug> <kind> <other-slug>")));
       const to = positional(positionals, 4, "topic relate needs <slug> <kind> <other-slug>");
+      shape(() => checkSlugs([from, "the topic"], [to, "the other topic"]));
+      if (from === to) throw new TopicUsage(`"${from}" cannot relate to itself`);
       const author = by(flags);
       return withDatabase(async ({ db }) => ({
         database,
@@ -161,6 +182,7 @@ export async function runTopic(
     case "archive":
     case "restore": {
       const slug = positional(positionals, 2, `topic ${verb} needs the topic's slug`);
+      shape(() => checkSlugs([slug, "the topic"]));
       const author = by(flags);
       const run = verb === "archive" ? archiveTopic : restoreTopic;
       return withDatabase(async ({ db }) => ({ database, verb, ...(await run(db, slug, author)) }));
@@ -194,10 +216,14 @@ export async function runTag(
       }
       const author = by(flags);
       const input = { id: flags.id, label: flags.label, description: flags.description };
+      shape(() => checkTagInput(input));
       return withDatabase(async ({ db }) => ({ database, verb: "add" as const, ...(await addTag(db, input, author)) }));
     }
     case "edit": {
       const id = positional(positionals, 2, "tag edit needs the tag's id");
+      for (const [value, flag] of [[flags.label, "--label"], [flags.description, "--description"]] as const) {
+        if (value !== undefined && value.trim() === "") throw new TopicUsage(`${flag} cannot be empty`);
+      }
       const author = by(flags);
       const input = { id, label: flags.label, description: flags.description };
       return withDatabase(async ({ db }) => ({ database, verb: "edit" as const, ...(await editTag(db, input, author)) }));
