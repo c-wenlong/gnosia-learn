@@ -112,8 +112,13 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
     );
   }
 
+  // `turbopackIgnore` because the web app serves blobs through this adapter,
+  // and Turbopack reads a join on a computed root as "this route could open
+  // anything", tracing the whole repository, `public/` included, into the
+  // deployed bundle. The root is outside the repository by construction (the
+  // checkout guard above), so nothing it could reach belongs in the bundle.
   const objectPath = (parsed: ParsedKey): string =>
-    path.join(base, parsed.ownerId, `${parsed.sha256}.${parsed.ext}`);
+    path.join(/* turbopackIgnore: true */ base, parsed.ownerId, `${parsed.sha256}.${parsed.ext}`);
 
   return {
     provider: "fs",
