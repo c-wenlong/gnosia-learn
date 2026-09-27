@@ -105,6 +105,8 @@ export interface SourceWrite {
    * per SQL table name. Only `collection` and `curriculum_item` are archived.
    */
   archived: Record<string, number>;
+  /** Topics the vocabulary dropped that were kept this pass because concepts were still filed under them. */
+  deferred?: string[];
   /** Which, capped like `deletedKeys`: an archive hides a row a learner may have ticked. */
   archivedKeys: string[];
   /** `import` revisions appended, per entity type. An unchanged tree appends none. */
@@ -258,6 +260,14 @@ export async function writeSource(
     tagLinksRewritten?: boolean;
     /** Session logs to append, for the sessions source (`importLogs`). */
     logs?: readonly ImportedLog[];
+    /**
+     * The concepts source runs later in the same import. A topic the
+     * vocabulary dropped while concepts are still filed under it is then
+     * kept for now and named in `deferred`, since that source is about to
+     * move or prune them; `runIndex` prunes it in a second topics pass. False
+     * when nothing will move them, and then the drop is refused by name.
+     */
+    conceptsFollow?: boolean;
   } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
@@ -270,6 +280,7 @@ export async function writeSource(
   const archived: Record<string, number> = {};
   const archivedKeys: string[] = [];
   const revisions: Record<string, number> = {};
+  const deferred: string[] = [];
 
   const record = (table: PgTable, into: Record<string, number>, count: number) => {
     if (count > 0) into[getTableName(table)] = (into[getTableName(table)] ?? 0) + count;
@@ -356,7 +367,11 @@ export async function writeSource(
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const pruned = await pruneEntity(tx, indexer, name, rows, options.tagLinksRewritten ?? false);
+      const pruned = await pruneEntity(tx, indexer, name, rows, {
+        tagLinksRewritten: options.tagLinksRewritten ?? false,
+        conceptsFollow: options.conceptsFollow ?? false,
+        deferred,
+      });
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
       prunedReads.set(
@@ -446,6 +461,7 @@ export async function writeSource(
     totalDeleted: sum(deleted),
     archived,
     archivedKeys,
+    ...(deferred.length > 0 ? { deferred } : {}),
     revisions,
   };
 }
@@ -799,15 +815,24 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-  tagLinksRewritten: boolean,
+  context: { tagLinksRewritten: boolean; conceptsFollow: boolean; deferred: string[] },
 ): Promise<string[]> {
-  const keys = await staleKeys(tx, indexer, name, rows);
+  const { tagLinksRewritten } = context;
+  let keys = await staleKeys(tx, indexer, name, rows);
+  if (name === "topic" && keys.length > 0) {
+    const filed = await filedTopics(tx, keys);
+    if (filed.length > 0) {
+      if (!context.conceptsFollow) throw topicsFiledError(filed);
+      const held = new Set(filed.map((f) => f.topic));
+      keys = keys.filter((key) => !held.has(key));
+      context.deferred.push(...held);
+    }
+  }
   if (keys.length === 0) return [];
 
   const table = TABLES[name];
   const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
-  if (name === "topic") await assertTopicsUnfiled(tx, keys);
   // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
   // a course still wears. An import that also runs the courses source is
   // different: that source rewrites every course's tags from the files later
@@ -908,27 +933,31 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
  * silently dropping a tag from one would be an edit nobody made.
  */
 /**
- * A topic the vocabulary dropped while a concept is still filed under it.
+ * The concepts filed under topics the vocabulary dropped.
  *
  * `concept.topic_slug` is `NOT NULL` and `RESTRICT` since migration 0012, so
- * the delete would fail on the constraint. The topics source runs before the
- * concepts source, so even an edit that moves the concepts to another topic in
- * the same breath reaches this point first: the move has to land in one run
- * and the removal in the next. Refused by name, archived concepts included,
- * since the constraint binds them too.
+ * deleting such a topic would fail on the constraint. The topics source runs
+ * before the concepts source, so an edit that moves those concepts to another
+ * topic, or removes their notes, in the same breath reaches the prune first.
+ * When the concepts source follows in the same import, the topic is kept for
+ * that source to empty and `runIndex` prunes it in a second pass; otherwise
+ * the drop is refused by name, archived concepts included, since the
+ * constraint binds them too.
  */
-async function assertTopicsUnfiled(tx: CatalogDatabase, topics: string[]): Promise<void> {
-  const filed = await tx
+async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ topic: string; slug: string }[]> {
+  return tx
     .select({ topic: concept.topicSlug, slug: concept.slug })
     .from(concept)
     .where(inArray(concept.topicSlug, topics))
     .orderBy(concept.topicSlug, concept.slug);
-  if (filed.length === 0) return;
-  throw new IndexError(
+}
+
+function topicsFiledError(filed: readonly { topic: string; slug: string }[]): IndexError {
+  return new IndexError(
     `content/topics.yaml no longer lists topics that concepts are still filed under: ` +
-      `${filed.map((f) => `${f.topic} (${f.slug})`).join(", ")}. Every concept needs a topic. ` +
-      `Move those concepts to their new topic's maps.concepts and run \`catalog index\` with the old ` +
-      `topic still listed, then remove it and index again.`,
+      `${filed.map((f) => `${f.topic} (${f.slug})`).join(", ")}. Every concept needs a topic, and ` +
+      `this import will not move them (the concepts source is not part of it, or has already run). ` +
+      `List each under its new topic's maps.concepts, or remove its note, and index again.`,
   );
 }
 

@@ -8,9 +8,12 @@
 -- the rows. So the migration counts them first and refuses with every slug.
 -- `catalog doctor` reports the same query ("concepts with no topic"), archived
 -- concepts included, and is how the owner sees the distance to zero before
--- migrating. The fix for a listed concept is to file it under a topic
--- (`maps.concepts` in content/topics.yaml, then `catalog index`) or, for one
--- whose note is gone, to archive it.
+-- migrating. The fix for a listed concept is to file it under a topic: for
+-- one with a note, list it in a topic's `maps.concepts` in
+-- content/topics.yaml and run `catalog index`, which sets the column; for one
+-- no note produces (an archived concept), set `concept.topic_slug` to a live
+-- topic directly. Archiving does not help: the check below counts archived
+-- rows, since `NOT NULL` binds them too.
 
 DO $$
 DECLARE

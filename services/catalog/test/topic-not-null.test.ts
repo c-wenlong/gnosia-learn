@@ -1,3 +1,6 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
+
 import { concept, topic } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -6,8 +9,9 @@ import { doctor } from "../src/commands/doctor";
 import { conceptsIndexer } from "../src/index/concepts";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
+import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
-import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
+import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
 
@@ -107,7 +111,7 @@ describe.skipIf(!reachable.ok)("an import that drops a topic its concepts still 
     await fixture?.cleanup();
   });
 
-  it("is refused by name, and moving the concept first lets the topic go", async () => {
+  it("is refused by name when the concepts source does not follow, and moving the concept first lets the topic go", async () => {
     const topics = async () => {
       const context = await fixture.context();
       const { rows } = await topicsIndexer.read(context);
@@ -116,7 +120,7 @@ describe.skipIf(!reachable.ok)("an import that drops a topic its concepts still 
     // The concept moved to beta and alpha removed, in one edit.
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "beta", concepts: ["base"] }]));
     await expect(topics()).rejects.toThrow(
-      /no longer lists topics that concepts are still filed under: alpha \(base\)/,
+      /no longer lists topics that concepts are still filed under: alpha \(base\)\. Every concept needs a topic, and this import will not move them/,
     );
     expect((await scratch.db.select().from(topic)).map((t) => t.slug).sort()).toEqual(["alpha", "beta"]);
 
@@ -131,4 +135,54 @@ describe.skipIf(!reachable.ok)("an import that drops a topic its concepts still 
     expect((await scratch.db.select().from(topic)).map((t) => t.slug)).toEqual(["beta"]);
     expect((await scratch.db.select().from(concept))[0]?.topicSlug).toBe("beta");
   });
+});
+
+describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts and drops the topic", () => {
+  let scratch: Scratch;
+  let fixture: Fixture;
+  const vocabulary = (entries: Parameters<typeof topicsYaml>[0]) => fixture.write("content/topics.yaml", topicsYaml(entries));
+  const index = () => runIndex(scratch.db, { repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    fixture = await makeFixture();
+    await vocabulary([
+      { slug: "alpha", concepts: ["base", "spare"] },
+      { slug: "beta", courses: ["xx1000-m1"] },
+    ]);
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      [
+        "id: xx1000", "slug: xx1000", "code: XX1000", "title: A test course", "credits: 4", "order: 1",
+        "inferred: false", "tags: [testing]", "modules:", "  - id: xx1000-m1", "    slug: m1",
+        "    title: Module one", "    order: 1", "    topic: beta", "    topics:", "      - id: xx1000-m1-t1",
+        "        title: First item", "        subtopics: []", "    resources: []", "capstone: Build something", "",
+      ].join("\n"),
+    );
+    await fixture.write("learn/concepts/testing/base.md", note({ id: "base" }));
+    await fixture.write("learn/concepts/testing/spare.md", note({ id: "spare" }));
+    await index();
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+    await fixture?.cleanup();
+  });
+
+  it("keeps the topic for the concepts source to empty, then prunes it in the same run", async () => {
+    // alpha goes; base moves to beta; spare's note goes with it.
+    await vocabulary([{ slug: "beta", courses: ["xx1000-m1"], concepts: ["base"] }]);
+    await rm(path.join(fixture.root, "learn/concepts/testing/spare.md"));
+    const run = await index();
+
+    expect((await scratch.db.select().from(topic)).map((t) => t.slug)).toEqual(["beta"]);
+    expect((await scratch.db.select({ slug: concept.slug, topic: concept.topicSlug }).from(concept))).toEqual([
+      { slug: "base", topic: "beta" },
+    ]);
+    const topics = run.sources.find((s) => s.source === "topics");
+    expect(topics?.deletedKeys).toContain("topic alpha");
+    expect(topics?.deferred).toBeUndefined();
+  }, 60_000);
 });

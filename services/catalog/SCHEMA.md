@@ -904,10 +904,12 @@ an edit makes the migration look unapplied everywhere it has already run.
   slug rather than failing on the constraint; `catalog doctor` reports the
   same list, and whether the constraint is in force, on a database behind only
   on 0012. One consequence for an import while topics are files: the topics
-  source runs before the concepts source, so dropping a topic from
-  `topics.yaml` in the same edit that moves its concepts elsewhere is refused
-  by name (`assertTopicsUnfiled` in `src/index/writer.ts`). Move the concepts
-  and index with the old topic still listed, then remove it.
+  source runs before the concepts source, so a topic dropped in the same edit
+  that moves its concepts elsewhere, or removes their notes, cannot be deleted
+  on the first pass. The writer keeps it (`deferred` on the source's result),
+  the concepts source empties it, and `runIndex` prunes it in a second topics
+  pass of the same run. When the concepts source is not part of the import
+  (the database owns concepts), the drop is refused by name instead.
 - **Settled in migration `0006`: `event.session_id` is a foreign key.** Not to
   `asset(id)`, which is what this section used to propose and what could never
   have worked — `learn session start` writes the event before the markdown log

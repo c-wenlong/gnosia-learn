@@ -28,7 +28,7 @@ import { hasManimkcCli, manimkcIndexer } from "./manimkc";
 import { mirrorsIndexer } from "./mirrors";
 import { sessionsIndexer } from "./sessions";
 import { tagsIndexer } from "./tags";
-import type { IndexContext, Indexer } from "./source";
+import type { IndexContext, Indexer, SourceRows } from "./source";
 import { topicsIndexer } from "./topics";
 import { loadVocabulary } from "./vocabulary";
 import { writeSource, type SourceWrite } from "./writer";
@@ -444,11 +444,16 @@ export async function runIndex(
   }
 
   const sources: SourceWrite[] = [];
+  /** The topics source's rows, for its second pass (see below). */
+  let topicsPass: { rows: SourceRows; options: Parameters<typeof writeSource>[5] } | null = null;
   for (const indexer of runnable) {
     const { rows, notes = [], scope, metadata, logs } = await indexer.read(context);
-    const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
+    const options: Parameters<typeof writeSource>[5] = {
       scope,
       logs,
+      // A topic dropped while concepts are filed under it is kept for the
+      // concepts source to empty, when that source runs later in this import.
+      conceptsFollow: indexer.source === "topics" && running.has("concepts"),
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs
@@ -457,8 +462,10 @@ export async function runIndex(
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
       author,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
-    });
+    };
+    const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
+    if (indexer.source === "topics" && (write.deferred?.length ?? 0) > 0) topicsPass = { rows, options };
 
     if (indexer.source === "courses") {
       for (const row of rows.curriculumItem ?? []) producedCurriculumItems.add(row.id);
@@ -470,6 +477,20 @@ export async function runIndex(
       ranConcepts = true;
       conceptCache = null;
     }
+  }
+
+  // The topics the first pass kept because concepts were filed under them.
+  // The concepts source has moved or pruned those concepts by now, so the
+  // same rows again prune what is empty; a topic still holding a concept is
+  // refused by name this time, since nothing else will move it.
+  if (topicsPass !== null) {
+    const again = await writeSource(db, topicsIndexer, topicsPass.rows, [], topicsIndexer.root(context), {
+      ...topicsPass.options,
+      conceptsFollow: false,
+      logs: undefined,
+    });
+    const first = sources.find((s) => s.source === "topics");
+    if (first !== undefined) mergeWrite(first, again);
   }
 
   return {
@@ -489,6 +510,20 @@ export async function runIndex(
       deleted: sources.reduce((a, s) => a + s.totalDeleted, 0),
     },
   };
+}
+
+/** Fold a second pass of a source into its first, so the source reports once. */
+function mergeWrite(into: SourceWrite, from: SourceWrite): void {
+  const add = (a: Record<string, number>, b: Record<string, number>) => {
+    for (const [key, n] of Object.entries(b)) a[key] = (a[key] ?? 0) + n;
+  };
+  add(into.written, from.written);
+  add(into.deleted, from.deleted);
+  add(into.revisions, from.revisions);
+  into.deletedKeys.push(...from.deletedKeys);
+  into.totalWritten += from.totalWritten;
+  into.totalDeleted += from.totalDeleted;
+  delete into.deferred;
 }
 
 /**

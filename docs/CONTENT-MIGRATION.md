@@ -924,9 +924,11 @@ drizzle's output counts the concepts with no topic, archived ones included,
 and raises with every slug. `catalog doctor` lists the same rows and says
 whether the constraint is in force, and now reports in full on a database
 behind only on a migration after the expand. The owner's `self_learn` has no
-such row (0 of 32, counted read-only on 2026-09-28), so it will apply. An
-import that drops a topic concepts are still filed under is refused by name,
-since the topics source runs before the concepts source can move them.
+such row (0 of 32, counted read-only on 2026-09-28), so it will apply. A
+topic dropped in the same edit that moves its concepts or removes their notes
+is kept by the topics source, emptied by the concepts source, and pruned by a
+second topics pass of the same `catalog index`; with the concepts source not
+running (the database owns concepts) the drop is refused by name.
 
 ### Track D: diagrams
 
