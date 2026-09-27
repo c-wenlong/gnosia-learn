@@ -1,4 +1,4 @@
-import { cx } from "./classes";
+import { cx, TRACK } from "./classes";
 
 /**
  * Kit `TargetBar`, after Duolingo's goal bar: a 20px track at radius 10 with
@@ -20,7 +20,7 @@ export function TargetBar({
   return (
     <div className={cx("flex w-full items-center gap-3", className)}>
       <div
-        className="h-5 min-w-0 flex-1 overflow-hidden rounded-[10px] bg-border"
+        className={cx("h-5 min-w-0 flex-1 overflow-hidden rounded-[10px]", TRACK)}
         role="progressbar"
         aria-label={label}
         aria-valuenow={done}
