@@ -64,6 +64,13 @@
       "when": 1790409156500,
       "tag": "0008_watched_event",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790507496951,
+      "tag": "0009_concept_curriculum_item_position",
+      "breakpoints": true
     }
   ]
 }

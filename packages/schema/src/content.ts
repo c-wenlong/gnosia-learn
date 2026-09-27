@@ -373,6 +373,10 @@ export const curriculumItemTopic = pgTable(
  * This concept note contributes to this checklist item. The one cross-tree link
  * that already exists in the files: a note's `topics: [cp4284-m1-t1]`
  * frontmatter names curriculum item ids, not shared-vocabulary topic slugs.
+ *
+ * `position` is the teaching order within the item, from the course file's
+ * `topics[].concepts` list (docs/proposals/course-items-declare-concepts.md).
+ * Until the courses indexer owns this table it is 0 on every row.
  */
 export const conceptCurriculumItem = pgTable(
   "concept_curriculum_item",
@@ -383,6 +387,7 @@ export const conceptCurriculumItem = pgTable(
     curriculumItemId: text("curriculum_item_id")
       .notNull()
       .references(() => curriculumItem.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    position: integer("position").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [

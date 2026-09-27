@@ -17,6 +17,13 @@ modules:
     topics:
       - id: cp4284-m1-t1
         title: Transformer architecture and tokenization
+        concepts:
+          - query-key-value-projections
+          - attention-weights
+          - self-attention
+          - multi-head-attention
+          - positional-encoding
+          - transformer-block
         subtopics:
           - Self-attention
           - Tokenization pipelines
@@ -66,10 +73,14 @@ modules:
     topics:
       - id: cp4284-m3-t1
         title: ReAct-style reasoning + acting loops
+        concepts:
+          - react-loop
         subtopics:
           - Interleaved thought and tool calls
       - id: cp4284-m3-t2
         title: Tool use / function calling and multi-step decomposition
+        concepts:
+          - tool-calling
         subtopics:
           - Tool schemas
           - Task graphs
