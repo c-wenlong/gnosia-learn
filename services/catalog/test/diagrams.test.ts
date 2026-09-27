@@ -27,6 +27,7 @@ import {
 } from "../src/content/diagrams";
 import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
+import { lockEntity } from "../src/content/revisions";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
@@ -480,6 +481,16 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     await expect(readdir(path.join(fixture.root, "learn/assets"))).resolves.not.toContain("hand-drawn.svg");
   });
 
+  it("refuses an SVG on its own while a document for its slug waits on disk for an import", async () => {
+    // Review on #143: the next import would file the SVG under that document's stamp.
+    await fixture.write("learn/assets/base.tldr", documentOf({ title: "Not imported yet" }));
+    try {
+      await expect(putSvg("base", "alpha", ["base"], svgOf("x"))).rejects.toThrow(/not imported yet/);
+    } finally {
+      await rm(path.join(fixture.root, "learn/assets/base.tldr"), { force: true });
+    }
+  });
+
   it("writes no file once the database owns diagrams", async () => {
     await flip(scratch.db, { type: "diagrams", readers: new Set(["diagrams"]) });
     const before = await readdir(path.join(fixture.root, "learn/assets"));
@@ -497,6 +508,34 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     const bare = await putSvg("hand-drawn", "beta", [], svgOf("after, by hand"));
     expect(bare).toMatchObject({ changed: true, files: [], concepts: [] });
     expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
+  });
+
+  it("refuses an SVG on its own when a document lands while it waits, rather than replacing that document's SVG", async () => {
+    // Review on #143: the no-document answer has to hold through the write.
+    // A document put holds the SVG asset's lock until it commits; the SVG-only
+    // put waits on that lock and then finds the document.
+    const slug = "raced";
+    let pending: Promise<unknown> = Promise.resolve();
+    await scratch.db.transaction(async (tx) => {
+      await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
+      pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
+      pending.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await putDiagram(tx, store, {
+        slug,
+        tldr: await file("raced.tldr", documentOf({ title: "Raced" })),
+        svg: await file("raced.svg", svgOf("exported")),
+        reason: "a test",
+        author: "local",
+        authorKind: "person",
+      });
+    });
+    await expect(pending).rejects.toMatchObject({ code: "unresolved" });
+    const [row] = await scratch.db.select().from(diagram).where(eq(diagram.slug, slug));
+    const assets = await scratch.db.execute<{ blob_key: string }>(
+      sql`select blob_key from asset where id = ${`diagram:learn/assets/${slug}.svg`}`,
+    );
+    expect(assets.rows[0]?.blob_key).toBe(row?.svgBlobKey);
   });
 
   it.skipIf(!hasCanvasCli(REPO_ROOT))("lists what `tldrawkc list` lists for the same documents", async () => {
