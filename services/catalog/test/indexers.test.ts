@@ -439,6 +439,13 @@ describe("concepts", () => {
     expect(message).toMatch(/bond\.md: tags \["x","1\.50"\] would be read as \["x","1\.5"\]/);
     expect(message).toMatch(/bond\.md: sources has a value on its own line and a list under it/);
 
+    // An inline list with items under it is one list, and is kept whole.
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write("learn/concepts/testing/base.md", "---\nid: base\ntags: [one]\n  - two\n---\n\nbody\n");
+    await rm(path.join(fixture.root, "learn/concepts/testing/bond.md"));
+    const { rows } = await conceptsIndexer.read(await fixture.context());
+    expect(rows.concept?.[0]).toMatchObject({ slug: "base", tags: ["one", "two"] });
+
     // Quoted, they parse as written, but the writer puts them back bare, so
     // the round trip refuses them instead.
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["bond"] }]));
