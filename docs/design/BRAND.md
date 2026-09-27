@@ -107,7 +107,7 @@ reduction of it, and where the two disagree the art wins.
 | [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Made from `hero-lockup.png` | The social card |
 | [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
 
-The three icon files, the social card and the banner are cut by hand from
+The two icon files, the social card and the banner are cut by hand from
 the art; do not regenerate them from code. [kit/render.mjs](kit/render.mjs)
 (SVG or HTML to PNG, fonts loaded, optional transparent ground) and
 [kit/gen-icons.mjs](kit/gen-icons.mjs) (the flat mark on a tile, read from
