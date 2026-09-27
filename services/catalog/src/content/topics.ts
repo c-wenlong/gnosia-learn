@@ -1,6 +1,9 @@
+import { realpath as fsRealpath } from "node:fs/promises";
+
 import type { TopicEntry, TopicRelation } from "@self-learn/content";
 import {
   type AuthorKind,
+  concept,
   contentRevision,
   contentSource,
   JOB_ACTIVE_STATES,
@@ -10,7 +13,7 @@ import {
   topicRelation,
   type TopicRelationKind,
 } from "@self-learn/schema";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { sha256 } from "./layout";
@@ -25,7 +28,7 @@ import {
   revisionRow,
 } from "./revisions";
 import { canonicalJson, readSnapshots, type SnapshotRead } from "./snapshot";
-import { assertInStep, type ExportedType, writeThrough } from "./write-through";
+import { assertInStep, type ExportedType, importRoot, writeThrough } from "./write-through";
 import { writeContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 
 /**
@@ -199,7 +202,9 @@ async function liveRow(db: CatalogDatabase, slug: string, role = "topic"): Promi
   if (row === undefined) {
     throw new TopicError(
       "missing",
-      `no ${role} "${slug}" in the catalog. Find the slug with \`catalog search <term>\` or \`catalog topic ls\`.`,
+      `no ${role} "${slug}" in the catalog. Find the slug with ` +
+        `\`npm run --silent catalog -- search <term> --json\`, or list them with ` +
+        `\`npm run --silent catalog -- topic ls --json\`.`,
     );
   }
   if (row.archivedAt !== null) {
@@ -1148,4 +1153,161 @@ export async function renameTopic(db: CatalogDatabase, input: RenameInput, by: B
     };
   });
   return { from, to, ...done.value, exported: done.exported };
+}
+
+/* ------------------------------------------------------------------ *
+ * A concept's topic (learn concept add --topic)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Can `concept` be filed under `topic`, and is it already? Everything that
+ * could refuse the write, asked before the caller writes anything of its own:
+ * `learn concept add --topic` writes a note file first, and a note left on
+ * disk because the topic was misspelled is a note in no topic, the state the
+ * flag exists to prevent.
+ *
+ * `root`, when given, is the knowledge base the caller writes notes into; the
+ * vocabulary file this rewrites is under the root topics were last imported
+ * from, and the two must be the same tree.
+ */
+export async function checkConceptTopic(
+  db: CatalogDatabase,
+  input: { concept: string; topic: string; root?: string },
+): Promise<{ already: boolean }> {
+  await liveRow(db, input.topic);
+  const [row] = await db.select({ topicSlug: concept.topicSlug }).from(concept).where(eq(concept.slug, input.concept));
+  if (row?.topicSlug !== undefined && row.topicSlug !== null && row.topicSlug !== input.topic) {
+    throw new TopicError(
+      "exists",
+      `concept "${input.concept}" is already mapped to topic "${row.topicSlug}". Each concept belongs to exactly ` +
+        `one topic; move it with \`learn concept add --topic ${input.topic} --force\` only once it has left "${row.topicSlug}".`,
+    );
+  }
+  if (input.root !== undefined) {
+    const imported = await importRoot(db, "topics");
+    if (imported !== null && (await realpath(imported)) !== (await realpath(input.root))) {
+      throw new TopicError(
+        "invalid",
+        `topics were last imported from ${imported}, not from this knowledge base (${input.root}), so the ` +
+          `vocabulary file this would rewrite is not this tree's. Import this tree first (\`catalog index\`).`,
+      );
+    }
+  }
+  await assertInStep(db, ["topics"]);
+  return { already: row?.topicSlug === input.topic };
+}
+
+async function realpath(target: string): Promise<string> {
+  try {
+    return await fsRealpath(target);
+  } catch {
+    return target;
+  }
+}
+
+export interface FileConceptInput {
+  concept: string;
+  topic: string;
+  /**
+   * The concept row's own columns, as the note gives them, for a concept the
+   * catalog has no row for yet. A row that exists keeps its columns and gains
+   * the topic.
+   */
+  row: {
+    title: string;
+    summary: string | null;
+    path: string;
+    /**
+     * The note's `requires:` and `assumes:`, in order. Written with a new row,
+     * so the concepts index that follows finds the concept as the note says
+     * and adds no second revision; a target with no row yet is left to that
+     * index, which reads every note and can resolve it.
+     */
+    prerequisites?: readonly { slug: string; kind: "requires" | "assumes" }[];
+  };
+}
+
+/**
+ * `concept_prerequisite` rows as the concepts indexer writes them: one per
+ * target and kind, never the concept itself, positions counted per list.
+ * Only targets that already have a row, since the link is a foreign key.
+ */
+async function prerequisiteLinks(
+  db: CatalogDatabase,
+  slug: string,
+  wanted: readonly { slug: string; kind: "requires" | "assumes" }[],
+): Promise<Record<string, unknown>[]> {
+  const targets = [...new Set(wanted.map((w) => w.slug))];
+  if (targets.length === 0) return [];
+  const known = new Set(
+    (await db.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, targets))).map((r) => r.slug),
+  );
+  const seen = new Set<string>();
+  const next = new Map<string, number>();
+  const out: Record<string, unknown>[] = [];
+  for (const { slug: target, kind } of wanted) {
+    const key = `${target} ${kind}`;
+    if (target === slug || seen.has(key) || !known.has(target)) continue;
+    seen.add(key);
+    const position = (next.get(kind) ?? 0) + 1;
+    next.set(kind, position);
+    out.push({ prerequisiteSlug: target, kind, position });
+  }
+  return out;
+}
+
+export interface FileConceptResult {
+  /** False when the concept was already under this topic. */
+  changed: boolean;
+  revision: WrittenRevision | null;
+  exported: ExportedType[];
+}
+
+/**
+ * File one concept under one topic: `concept.topic_slug` through the seam,
+ * and `content/topics.yaml` rewritten from the rows (D17), whose
+ * `maps.concepts` is that column read back. It replaces the text splice
+ * `learn concept add --topic` did on the file; the invariant the splice
+ * checked after writing (one concept, one topic) is the column itself.
+ *
+ * The concept goes to the end of the topic's `maps.concepts`, one
+ * `POSITION_STEP` past the last live concept there (D22), and a concept
+ * already under the topic is left where it is.
+ */
+export async function fileConceptUnderTopic(
+  db: CatalogDatabase,
+  input: FileConceptInput,
+  by: By,
+): Promise<FileConceptResult> {
+  const slug = slugOf(input.concept, "the concept");
+  const done = await writeThrough(db, ["topics"], async (tx) => {
+    const { already } = await checkConceptTopic(tx, { concept: slug, topic: input.topic });
+    if (already) return null;
+    const [last] = await tx
+      .select({ at: max(concept.topicPosition) })
+      .from(concept)
+      .where(and(eq(concept.topicSlug, input.topic), isNull(concept.archivedAt)));
+    const topicPosition = (last?.at ?? 0) + POSITION_STEP;
+    const [existing] = await tx.select().from(concept).where(eq(concept.slug, slug));
+    const row =
+      existing === undefined
+        ? { slug, title: input.row.title, summary: input.row.summary, path: input.row.path, topicSlug: input.topic, topicPosition }
+        : { ...existing, topicSlug: input.topic, topicPosition };
+    return writeContent(tx, {
+      type: "concept",
+      id: slug,
+      next:
+        existing === undefined
+          ? { row, links: { concept_prerequisite: await prerequisiteLinks(tx, slug, input.row.prerequisites ?? []) } }
+          : { row },
+      base: await latestId(tx, "concept", slug),
+      ...by,
+    });
+  });
+  const result = done.value;
+  return {
+    changed: result?.changed ?? false,
+    revision: result === null ? null : written([result])[0] ?? null,
+    exported: done.exported,
+  };
 }
