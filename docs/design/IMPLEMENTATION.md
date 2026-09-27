@@ -64,7 +64,7 @@ reason for each and the contrast table are in
 | Group | Names |
 | --- | --- |
 | Grounds | `--page`, `--surface`, `--surface2`, `--tint` |
-| Lines | `--border` (2px card and input borders), `--hair` (1px hairlines) |
+| Lines | `--border` (2px card and input borders), `--hair` (1px hairlines), `--track` (the empty part of a bar or meter: the border's value in the light palettes, black in the dark ones, where every fill needs 3:1 on it) |
 | Text | `--text`, `--text2`, `--text3` |
 | Accent | `--accent` (fills), `--accent-text` (links and ghost buttons) |
 | Correct | `--ok` (fill), `--ok-lip`, `--ok-text`, `--ok-tint` |

@@ -266,6 +266,7 @@ matches.
 | `--tint` | `#e2efec` | `#eef1ff` | A pale teal wash |
 | `--border` | `#e6dfd0` | `#e5e5e5` | Warm grey, 1.30:1 on the card (`:root` is 1.26) |
 | `--hair` | `#ede7da` | `#ebebeb` | Warm grey |
+| `--track` | `#e6dfd0` | `#e5e5e5` | The empty part of a bar or meter. In both light palettes it is the border's value, so nothing changed there; the dark palettes need their own ([the track](#contrast-checked-1)) |
 | `--text` | `#15283a` | `#000000` | `--brand-ink` |
 | `--text2` | `#605b54` | `#666666` | A warm muted ink |
 | `--text3` | `#878276` | `#999999` | A lighter warm ink, for hints |
@@ -301,9 +302,9 @@ mastered node.
 WCAG 2 relative luminance, computed with a script rather than read off a
 picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. Both
 Gnosia palettes and Classic dark (`.dark`, [below](#classic-dark)) pass
-every pair but the target bar's track, which no dark palette passes (see the
-note after the table). The `:root` column is Classic light, for comparison;
-several of its pairs are still under the minimum.
+every pair but two in Gnosia light: the learning and green fills on the
+light track (see the note after the table). The `:root` column is Classic
+light, for comparison; several of its pairs are still under the minimum.
 
 | Pair | Gnosia | Gnosia dark | Needs | `:root` | `.dark` |
 | --- | --- | --- | --- | --- | --- |
@@ -334,7 +335,12 @@ several of its pairs are still under the minimum.
 | `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.30 | 3.64 |
 | `--accent` on `--page` (focus ring) | 4.27 | 3.97 | 3 | 4.05 | 4.02 |
 | `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 3.82 | 3.05 |
-| `--accent` on `--border` (the target bar's fill on its track) | 3.47 | 1.91 | 3 | 3.41 | 1.88 |
+| `--accent` on `--track` (the target bar, and every bar's default fill) | 3.47 | 4.56 | 3 | 3.41 | 4.59 |
+| `--ok` on `--track` (a bar's `ok` tone; no page uses it yet) | 1.60 | 9.87 | 3 | 1.69 | 9.87 |
+| `--m-hi` on `--track` (a mastered bar) | 5.59 | 9.13 | 3 | 3.41 | 7.24 |
+| `--m-mid` on `--track` (a learning bar) | 2.54 | 4.14 | 3 | 1.51 | 3.86 |
+| `--track` against `--surface` (an empty bar on a card) | 1.30 | 1.28 | (gap) | 1.26 | 1.26 |
+| `--track` against `--page` (the session and review strips) | 1.23 | 1.15 | (gap) | 1.19 | 1.14 |
 | `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.30 | 5.75 |
 | `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 3.07 |
 | `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 3.39 |
@@ -348,12 +354,29 @@ several of its pairs are still under the minimum.
 | Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.30 | 6.35 |
 | White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 5.44 |
 
-**The target bar's track.** The fill is `--accent` on a `--border` track,
-and in both dark palettes the two are under 3:1 (1.91 and 1.88). No accent
-can fix it: to clear 3:1 on `.dark`'s track the fill would need a luminance
-where a white label on it is under 3:1. The bar is never the only carrier,
-since the "x / y" count is printed beside it as text; a fix would be a
-darker track, which is a change to `--border` everywhere.
+**The track.** Every bar (`TargetBar`, `ProgressBar`, the session and
+review strips) draws its fill on `--track`. They used to draw it on
+`--border`, where in both dark palettes the accent fill was under 3:1 (1.88
+and 1.91), and no accent could fix that without losing its white label. A
+darker `--border` would have moved every card outline and input with it, so
+the bars got their own token instead.
+
+In the dark palettes the track is darker than the card. A lighter track
+cannot work: the accent is only 3.64:1 on `.dark`'s card and
+3.55:1 on Gnosia dark's, so a track any lighter than the card leaves it
+under 3:1 before the track is even visible. Darker, every fill passes, and
+the lowest, learning, is 3.86 and 4.14. Black is as far from the card as a
+darker track can get, 1.26:1 and 1.28:1: the same step `:root` has between
+its `#e5e5e5` track and the white card, so an empty bar is as visible in
+dark as it always was in light. A navy tint for Gnosia dark would sit under
+L* 1, where no one can see it, and would give up some of that step.
+
+In the light palettes the track is the border's value, unchanged. The
+accent and mastered fills pass on it; the learning and green fills do not
+(`:root` 1.51 and 1.69, Gnosia 2.54 and 1.60), and no light track can fix
+that, since `:root`'s learning blue is only 1.90:1 on the white card itself.
+The fix for those belongs to the light mastery ramp. Every bar that
+shows p(L) prints the number beside it, and no page draws the green tone.
 
 Two pairs used to fall short. Each was fixed without moving a token another
 component depends on:
@@ -427,6 +450,7 @@ rules the later one wins.
 | `--tint` | `#112c32` | A teal wash sunk into navy, dark enough that the accent border still clears 3:1 on it |
 | `--border` | `#3d4c5b` | Navy-grey, 1.86:1 on the card (`.dark` is 1.94) |
 | `--hair` | `#263645` | Navy-grey |
+| `--track` | `#000000` | The empty part of a bar, darker than the card so every fill clears 3:1 on it (the accent 4.56, learning 4.14); 1.28:1 from the card, the most a darker track can be ([the track](#contrast-checked-1)) |
 | `--text` | `#eee8dc` | `--brand-ink` in dark |
 | `--text2` | `#a3b2bf` | `--brand-mist` in dark |
 | `--text3` | `#74828f` | A quieter grey-blue for hints |
@@ -465,10 +489,11 @@ problem and the same fix, in its own page colour.
 ### Classic dark
 
 The Classic dark palette on `.dark` is the kit's (Brilliant's dark values),
-and four of its pairs were under the minimum: white on `--accent` (4.30), the
-learning blue on the card (2.03), the check on a done streak day (1.89) and
-the mark on a mastered path node (2.90). Four values fix them, and a fifth
-keeps the learning node's lip darker than its new face. Every other `.dark`
+and five of its pairs were under the minimum: white on `--accent` (4.30), the
+learning blue on the card (2.03), the check on a done streak day (1.89), the
+mark on a mastered path node (2.90) and the bars' fill on their track (1.88).
+Five values fix them, and a sixth keeps the learning node's lip darker than
+its new face. Every other `.dark`
 pair in the table was re-measured after the change and still passes.
 
 | Token | Was | Now | Why |
@@ -478,6 +503,7 @@ pair in the table was re-measured after the change and still passes.
 | `--m-mid-lip` | `#7e93e6` (from `:root`) | `#3a4a8f` | The lip under a learning node. `.dark` never set it, so it fell through to the light value, a lip lighter than its face; the old learning blue is the darker shade now |
 | `--streak-on` | `#ffffff` (from `:root`) | `#141414` | The check on the orange disc is the page colour, 9.76:1 |
 | `--m-hi-on` | `#ffffff` (from `:root`) | `#141414` | The mark on a mastered node is the page colour, 6.35:1 |
+| `--track` | `#4c4c4c` (the bars read `--border`) | `#000000` | The empty part of a bar. The accent fill was 1.88:1 on the border; on black it is 4.59, and learning, the lowest fill, 3.86. Black is 1.26:1 from the card, as `:root`'s track is from its white card ([the track](#contrast-checked-1)) |
 
 **Why the accent moved rather than the label.** The other way out was to
 keep `#456dff` and write the black `--on-tone` on chips and the accent

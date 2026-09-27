@@ -4,7 +4,7 @@ import { formatProgress } from "@/lib/progress";
 import { cx } from "./classes";
 
 /**
- * Kit `Bar`: an 8px track in `--border` with a fill proportional to a
+ * Kit `Bar`: an 8px track in `--track` with a fill proportional to a
  * fraction. The accent by default; `tone` picks the ok green, or a mastery
  * colour (`hi` mastered, `mid` learning) for a bar that stands for p(L), as on
  * the close screen and the Learn index.
@@ -57,7 +57,7 @@ export function ProgressBar({
         </div>
       )}
       <div
-        className={cx(height, "w-full overflow-hidden rounded-full bg-border")}
+        className={cx(height, "w-full overflow-hidden rounded-full bg-track")}
         role="progressbar"
         aria-label={label}
         aria-valuenow={Math.round(value)}

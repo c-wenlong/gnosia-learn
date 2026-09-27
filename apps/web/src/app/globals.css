@@ -33,6 +33,11 @@
   --tint: #eef1ff;
   --border: #e5e5e5;
   --hair: #ebebeb;
+  /* The empty part of a bar or meter (TargetBar, ProgressBar, the session and
+     review strips). Its own token because in the dark palettes every fill
+     needs 3:1 on it and `--border` there is too light for that. In both
+     light palettes it is the border's value. */
+  --track: #e5e5e5;
   --text: #000000;
   --text2: #666666;
   --text3: #999999;
@@ -119,6 +124,13 @@
   --tint: #232a4a;
   --border: #4c4c4c;
   --hair: #333333;
+  /* A recessed track, darker than the card: every fill clears 3:1 on it
+     (learning's #5266ad is the lowest, 3.86; the accent 4.59). A track lighter
+     than the card cannot work, since the accent is only 3.64:1 on the card
+     itself. Black is as far from the card as a darker track can get, 1.26:1,
+     the same step `:root`'s track has on its white card. The note "The track"
+     in BRAND.md, after the app's contrast table, has every pair. */
+  --track: #000000;
   --text: #ffffff;
   --text2: #a3a3a3;
   --text3: #7a7a7a;
@@ -185,6 +197,7 @@
   --tint: #e2efec;
   --border: #e6dfd0;
   --hair: #ede7da;
+  --track: #e6dfd0; /* the border's value, as in :root */
 
   /* Ink: the brand's navy-black, then two warm muted inks. */
   --text: #15283a; /* --brand-ink */
@@ -246,6 +259,10 @@
   --tint: #112c32;
   --border: #3d4c5b;
   --hair: #263645;
+  /* Recessed, as `.dark` has it: every fill clears 3:1 (learning's #187b78
+     is the lowest, 4.14), and black is 1.28:1 from the card, the most any
+     darker track can be. A navy tint at this lightness is not visible. */
+  --track: #000000;
   --surface-raised: var(--surface2);
 
   /* Ink: the brand's cream-white and its grey-blue mist, then a quieter
@@ -310,6 +327,7 @@
   --color-tint: var(--tint);
   --color-border: var(--border);
   --color-hair: var(--hair);
+  --color-track: var(--track);
   --color-text: var(--text);
   --color-text2: var(--text2);
   --color-text3: var(--text3);

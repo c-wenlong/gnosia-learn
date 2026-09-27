@@ -20,7 +20,7 @@ export function TargetBar({
   return (
     <div className={cx("flex w-full items-center gap-3", className)}>
       <div
-        className="h-5 min-w-0 flex-1 overflow-hidden rounded-[10px] bg-border"
+        className="h-5 min-w-0 flex-1 overflow-hidden rounded-[10px] bg-track"
         role="progressbar"
         aria-label={label}
         aria-valuenow={done}
