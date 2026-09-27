@@ -2,7 +2,7 @@ import { rm, stat } from "node:fs/promises";
 
 import { canvas, EXIT, explainExit, type VerifyReport } from "./canvas";
 import { diagramPut, diagramShow, jobAccept, jobDiscard } from "./catalog";
-import { ensureCheckout } from "./diagrams";
+import { ensureCheckout, forgetDiagramList } from "./diagrams";
 import { absolute, CANDIDATES_DIR, workDir } from "./paths";
 import { run } from "./proc";
 import type { JobRecord, JobStore } from "./store";
@@ -208,7 +208,7 @@ async function acceptLocked(
     tldr: candidate,
     svg: hasSvg ? absolute(record.candidateSvgPath) : null,
     jobId: record.id,
-    base: late.alreadyLanded ? late.latest : record.targetRevisionBefore,
+    base: late.base,
     reason: acceptReason(record),
   });
   if (!put.ok) {
@@ -228,6 +228,7 @@ async function acceptLocked(
       error: put.offline ? "catalog-offline" : refusal.code === "stale-base" ? "target-moved" : "put-refused",
     };
   }
+  forgetDiagramList();
   const landedJson = (put.json ?? {}) as { revision?: unknown; files?: unknown };
   const revision = landedJson.revision;
   // Until `catalog flip diagrams` the files still own diagrams, and the put
@@ -302,13 +303,22 @@ interface Moved {
   /** The diagram's latest revision is this job's own earlier put, which is a retry. */
   alreadyLanded: boolean;
   latest: number | null;
+  /** The revision the put is checked against: where the job started, or its own earlier put. */
+  base: number | null;
 }
 
 /**
  * Has the diagram moved since the job started? Asked of the catalog, since
- * the diagram is its rows: the latest revision against the one recorded at
- * enqueue. A latest revision written by this same job is an earlier accept
- * that landed and was never recorded, not a move.
+ * the diagram is its rows: the latest revision against the one the job
+ * started from. A latest revision written by this same job is an earlier
+ * accept that landed and was never recorded, not a move.
+ *
+ * A job with no starting revision (enqueued with the database down and never
+ * given a checkout record, or recorded before diagrams moved into the
+ * database) is judged by the document it started from instead: the hash
+ * taken at enqueue against the stored document's. Equal, and the latest
+ * revision is its base; different, and it is refused like any other move,
+ * since nothing says the difference was reviewed.
  */
 async function targetMoved(record: JobRecord): Promise<Moved> {
   const shown = await diagramShow(record.slug, workDir());
@@ -326,16 +336,17 @@ async function targetMoved(record: JobRecord): Promise<Moved> {
       },
       alreadyLanded: false,
       latest: null,
+      base: null,
     };
   }
-  const diagram = (shown.json as { diagram?: { revision: number | null; revisionJob: string | null } | null })
-    .diagram;
+  const diagram = (
+    shown.json as { diagram?: { revision: number | null; revisionJob: string | null; documentHash: string } | null }
+  ).diagram;
   const latest = diagram?.revision ?? null;
-  if (diagram?.revisionJob === record.id) return { refusal: null, alreadyLanded: true, latest };
-  // A job recorded before diagrams moved into the database has no base to
-  // compare, and its put writes over whatever is latest.
-  if (record.targetRevisionBefore === undefined || latest === record.targetRevisionBefore) {
-    return { refusal: null, alreadyLanded: false, latest };
+  if (diagram?.revisionJob === record.id) return { refusal: null, alreadyLanded: true, latest, base: latest };
+  const started = record.targetRevisionBefore;
+  if (started !== undefined ? latest === started : (diagram?.documentHash ?? null) === record.targetHashBefore) {
+    return { refusal: null, alreadyLanded: false, latest, base: latest };
   }
   return {
     refusal: {
@@ -343,13 +354,17 @@ async function targetMoved(record: JobRecord): Promise<Moved> {
       written: [],
       indexed: false,
       note:
-        `${record.targetPath} has changed since this job started (revision ` +
-        `${record.targetRevisionBefore ?? "none"} then, ${latest ?? "none"} now), so accepting would ` +
-        `write over a change nobody reviewed. Compare the two and re-run the job against the current diagram.`,
+        `${record.targetPath} has changed since this job started (` +
+        (started !== undefined
+          ? `revision ${started ?? "none"} then, ${latest ?? "none"} now`
+          : `its starting revision was never recorded, and the stored document is not the one it started from`) +
+        `), so accepting would write over a change nobody reviewed. Compare the two and re-run the job ` +
+        `against the current diagram.`,
       error: "target-moved",
     },
     alreadyLanded: false,
     latest,
+    base: null,
   };
 }
 
