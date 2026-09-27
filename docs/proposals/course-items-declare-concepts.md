@@ -300,10 +300,22 @@ Each of these came out of the same audit and is a separate change:
   none of which the app reads.
 - Making `concepts:` required.
 
-## Decisions needed
+## Decisions
 
-1. Does `subtopics` stay once an item has concepts? This proposal keeps it as
-   the reading list and lets the two coexist. The alternative is to refuse an
-   item that has both, which forces every subtopic to become a note.
-2. Does `learn index` running the courses source as well need a flag, or is
-   the extra second acceptable on every `concept add`?
+1. `subtopics` stays once an item has concepts, as the reading list beside
+   them. Refusing an item that has both would force every subtopic to become a
+   note before its course could carry concepts at all, which blocks the nine
+   courses that have none today.
+2. `learn index` runs the courses source too, with no flag. It is one YAML
+   read and a transaction over a few hundred rows, and a note that is indexed
+   but not linked to its course is the state this proposal exists to remove.
+
+## Progress
+
+| Step | Landed in |
+| --- | --- |
+| Reader accepts `topics[].concepts`, with the refusals above; migration 0009 adds `position`; `cp4284.yaml` lists the eight concepts its notes already name | the PR that follows #114 |
+| Courses indexer owns the link, order becomes topics, concepts, courses, frontmatter `topics:` refused and removed | not started |
+| `positions` on the knowledge base, `conceptsForTopic` sorts by it | not started |
+| Today and the Courses grid use `mastered` | not started |
+| `concept add --item`, `catalog status` coverage | not started |

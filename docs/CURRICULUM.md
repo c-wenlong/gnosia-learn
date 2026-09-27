@@ -56,6 +56,9 @@ rendering something wrong:
 | A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
 | A tag that is not in `content/tags.yaml` | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
 | A module with no `topics:` | A page with an empty section and nothing to tick |
+| An item's `concepts:` left empty, or written as anything but a list of strings | The tempting `Array.isArray(x) ? x : []` would index the item as if the author had meant to remove its concepts |
+| A concept id listed twice on one item | The list is the teaching order and each entry gets a position; one concept cannot hold two |
+| A concept listed on an item whose module topic does not name it in `maps.concepts` | Two files disagreeing about which topic a concept belongs to, with neither knowably right |
 | `modules:`, `topics:` or `resources:` written as anything but a list of mappings | The tempting `Array.isArray(x) ? x : []` would render and index the module as if the author had meant to delete its content |
 
 Unresolved topics are collected and reported together, so one run names all of

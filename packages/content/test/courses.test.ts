@@ -36,6 +36,20 @@ function tree(
   return fixture.root;
 }
 
+/**
+ * A tree whose vocabulary maps `mapped` concepts per topic, and whose one
+ * course lists `concepts` on its one checklist row.
+ */
+function mappedTree(mapped: Record<string, string[]>, concepts: string[]): string {
+  const f = (fixture = makeFixture());
+  f.write("content/topics.yaml", topicsYaml(Object.keys(mapped), mapped));
+  f.write("content/tags.yaml", tagsYaml(["testing"]));
+  const course = JSON.parse(courseYaml()) as { modules: { topics: Record<string, unknown>[] }[] };
+  course.modules[0]!.topics[0]!.concepts = concepts;
+  f.write("content/courses/xx1000.yaml", JSON.stringify(course));
+  return f.root;
+}
+
 describe("the real curriculum", () => {
   const courses = loadCourses();
 
@@ -98,6 +112,23 @@ describe("the real curriculum", () => {
     for (const course of courses) {
       for (const mod of course.modules) {
         expect(slugs.has(mod.topic), `${mod.id} names "${mod.topic}"`).toBe(true);
+      }
+    }
+  });
+
+  it("lists an item's concepts under its module topic's maps.concepts", () => {
+    // Enforced by the reader; asserted here so the guarantee is visible.
+    const mapped = new Map(loadTopics().map((t) => [t.slug, new Set(t.maps.concepts)]));
+    for (const course of courses) {
+      for (const mod of course.modules) {
+        for (const topic of mod.topics) {
+          for (const concept of topic.concepts) {
+            expect(
+              mapped.get(mod.topic)?.has(concept),
+              `${topic.id} lists "${concept}" under ${mod.topic}`,
+            ).toBe(true);
+          }
+        }
       }
     }
   });
@@ -290,6 +321,43 @@ describe("loadCourses refuses", () => {
       }),
     });
     expect(loadCourses({ root })).toHaveLength(2);
+  });
+
+  it("an item's concepts written as a mapping", () => {
+    const course = JSON.parse(courseYaml()) as { modules: { topics: Record<string, unknown>[] }[] };
+    course.modules[0]!.topics[0]!.concepts = { first: true };
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/topic "xx1000-m1-t1": concepts must be a list/);
+  });
+
+  it("an item's concepts key left empty", () => {
+    const course = JSON.parse(courseYaml()) as { modules: { topics: Record<string, unknown>[] }[] };
+    course.modules[0]!.topics[0]!.concepts = null;
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/concepts is present but empty/);
+  });
+
+  it("a concept listed twice on one item", () => {
+    const root = mappedTree({ alpha: ["one", "two"] }, ["one", "two", "one"]);
+    expect(() => loadCourses({ root })).toThrow(/concepts lists "one" twice/);
+  });
+
+  it("a concept its module topic does not map, naming every one", () => {
+    const root = mappedTree({ alpha: ["one"] }, ["one", "two", "three"]);
+    expect(() => loadCourses({ root })).toThrow(
+      /2 unresolved references[\s\S]*lists concept "two", which is not in maps\.concepts of topic "alpha"[\s\S]*lists concept "three"/,
+    );
+  });
+
+  it("but keeps a mapped list in its authored order", () => {
+    const root = mappedTree({ alpha: ["one", "two", "three"] }, ["three", "one"]);
+    const [course] = loadCourses({ root });
+    expect(course!.modules[0]!.topics[0]!.concepts).toEqual(["three", "one"]);
+  });
+
+  it("and reads a row with no concepts as an empty list", () => {
+    const root = tree({ "xx1000.yaml": courseYaml() });
+    expect(loadCourses({ root })[0]!.modules[0]!.topics[0]!.concepts).toEqual([]);
   });
 
   it("a directory with no course files", () => {

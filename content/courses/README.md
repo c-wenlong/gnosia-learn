@@ -31,7 +31,8 @@ modules:
     topics:
       - id: cs2111-m1-t1         # permanent: learner progress keys on it
         title: What HCI is
-        subtopics: [...]
+        concepts: [...]          # optional: concept note ids, in teaching order
+        subtopics: [...]         # the reading list, display only
     resources:
       - id: cs2111-m1-r1
         title: ...

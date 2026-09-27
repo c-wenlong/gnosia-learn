@@ -31,6 +31,15 @@ export interface Resource {
 export interface Topic {
   id: string;
   title: string;
+  /**
+   * The concept notes this row teaches, in teaching order. Empty when the
+   * course file lists none, in which case the row is a checklist tick and
+   * nothing else. Each id must be listed under the module topic's
+   * `maps.concepts` in `content/topics.yaml`; that the note itself exists is
+   * the catalog's check, since only the indexer reads `learn/concepts/`.
+   */
+  concepts: string[];
+  /** The reading list under the row. Display only, never joined on. */
   subtopics: string[];
 }
 
