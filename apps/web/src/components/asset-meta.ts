@@ -51,6 +51,8 @@ const KINDS: Record<string, { label: string; family: Family }> = {
   note: { label: "Note", family: "text" },
   session: { label: "Session log", family: "text" },
   link: { label: "Link", family: "link" },
+  // A still cut from a video by `catalog asset upload`, a companion of it.
+  poster: { label: "Poster", family: "diagram" },
 };
 
 /** `diagram_source` reads as "Diagram source"; an unknown kind reads as itself. */

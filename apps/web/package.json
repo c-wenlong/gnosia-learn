@@ -12,6 +12,7 @@
   },
   "//dependencies": "@self-learn/catalog and @self-learn/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {
+    "@self-learn/blob": "*",
     "@self-learn/catalog": "*",
     "@self-learn/content": "*",
     "@self-learn/schema": "*",
