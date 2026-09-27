@@ -532,9 +532,12 @@ not have to be worked out again.
   `mastery.concept_slug` and `event.concept_slug` are foreign keys, so
   `learn observe` on a note that no index run has taken in refuses, `--force`
   included. `learn index` refuses in turn if the note is in no topic's
-  `maps.concepts` in `content/topics.yaml`. The order is: write the note, add
-  the mapping, `npm run learn -- index`, then observe. `concept add` prints the
-  reminder at the point the note is written.
+  `maps.concepts` in `content/topics.yaml`. `learn concept add --topic <slug>`
+  does all of it in one call: it files the concept under the topic through the
+  catalog (a revision, and `topics.yaml` rewritten from the rows), then
+  indexes. Without the flag, `concept add` prints the reminder at the point the
+  note is written. Do not hand-edit `maps.concepts`: the catalog writes that
+  list now, and refuses to write over an edit it has not imported.
 - **The `--json` shapes are a contract with a plugin outside this repo.**
   `status`, `frontier`, `plan`, `observe` and `review due` are parsed by
   `/learn` and `/review`, documented in

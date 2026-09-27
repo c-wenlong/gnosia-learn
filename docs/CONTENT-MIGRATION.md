@@ -703,7 +703,7 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
       `catalog topic rename --from --to` (edge case 2), `catalog topic relate`,
       `catalog topic archive`.
 - [x] `catalog tag add|edit`.
-- [ ] `learn concept add --topic` calls `catalog topic` internals to set
+- [x] `learn concept add --topic` calls `catalog topic` internals to set
       `concept.topic_slug`, replacing the text splice, lock and verify in
       `vocabulary-edit.ts:244-397`. The invariant that code enforces (a concept
       in exactly one topic, checked after the write) is now a column and a
@@ -771,6 +771,20 @@ list above, and why:
 - **`topic ls --json`** is what the planner will read in place of its
   VOCABULARY block: every live topic's slug, title, domain, summary, aliases,
   `relations`, `maps` and the `incoming` edges other topics hold.
+- **`learn concept add --topic`** calls `fileConceptUnderTopic` in
+  `content/topics.ts`: before the note is written, `checkConceptTopic` refuses
+  a topic that is not a live row, a concept already under another topic, a
+  knowledge base other than the tree topics were imported from, and a
+  `topics.yaml` out of step; after it, `concept.topic_slug` goes through the
+  seam (the row created from the note's title and summary when the catalog
+  has none, at the end of the topic's `maps.concepts`), `topics.yaml` is
+  rewritten from the rows, and the concepts indexer runs as before. The
+  `--json` shape is unchanged; `--reason` is optional there, with a default,
+  since the plugin's calls cannot be made to pass one (D15).
+  `vocabulary-edit.ts` is deleted before the flip rather than at it, since
+  nothing calls it; its lock and atomic replace moved to
+  `services/catalog/src/learn/file-lock.ts` for `course-edit.ts`, the one text
+  edit left until Track B.
 - **`--author`** names the person a write is for (the studio's Draw press);
   the default is the local learner. Every write needs `--reason`; a dry run
   does not.
