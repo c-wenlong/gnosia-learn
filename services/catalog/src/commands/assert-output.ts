@@ -28,7 +28,7 @@ import { fileFacts } from "../index/files";
 import { ASSET_PREFIX } from "../index/source";
 import { readDiagram } from "../index/tldr";
 import { loadVocabulary } from "../index/vocabulary";
-import { updateSet } from "../index/writer";
+import { updateSet } from "../content/upsert";
 
 /**
  * `catalog assert-output --job <id> --path <p>`: one file into the catalog,

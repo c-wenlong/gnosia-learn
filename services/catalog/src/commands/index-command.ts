@@ -88,6 +88,15 @@ export function formatIndex(result: IndexResult): string {
     const shown = source.deletedKeys.length;
     const entityDeletes = countEntityDeletes(source);
     if (entityDeletes > shown) lines.push(`           - and ${entityDeletes - shown} more`);
+    for (const key of source.archivedKeys) lines.push(`           - archived ${key}`);
+    const archivedCount = Object.values(source.archived).reduce((a, b) => a + b, 0);
+    if (archivedCount > source.archivedKeys.length) {
+      lines.push(`           - and ${archivedCount - source.archivedKeys.length} more archived`);
+    }
+    const revisions = Object.entries(source.revisions);
+    if (revisions.length > 0) {
+      lines.push(`           revisions: ${revisions.map(([t, n]) => `${t} ${n}`).join(", ")}`);
+    }
   }
 
   lines.push("");

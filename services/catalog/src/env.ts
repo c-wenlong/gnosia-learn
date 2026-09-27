@@ -26,6 +26,19 @@ export const MANIMKC_DIR = path.join("tools", "manimkc");
 export const TLDRAWKC_DIR = path.join("tools", "tldrawkc");
 
 export const MANIMKC_ROOT_ENV = "MANIMKC_ROOT";
+
+/**
+ * Set to `1` to write to a database whose `catalog_instance` row says `copy`
+ * (edge case 14 of docs/CONTENT-MIGRATION.md). For the test suites and
+ * `scripts/e2e.mjs` only, which write to throwaway copies on purpose; a person
+ * who finds themselves reaching for it is pointed at the wrong database.
+ */
+export const COPY_OK_ENV = "CATALOG_COPY_OK";
+
+/** Whether this process may write to a copy. */
+export function copyOk(): boolean {
+  return process.env[COPY_OK_ENV] === "1";
+}
 export const TLDRAWKC_ROOT_ENV = "TLDRAWKC_ROOT";
 
 /** Files already read, so each is read at most once. */

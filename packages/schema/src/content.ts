@@ -9,11 +9,18 @@ import {
   pgTable,
   primaryKey,
   text,
-  unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-import { createdAt, updatedAt } from "./columns";
+import { archivedAt, createdAt, instant, ownerId, updatedAt } from "./columns";
+// `content` and `state` reference each other: every content entity carries
+// `owner_id` pointing at `learner`, and `mastery`, `progress` and the rest
+// point back at `concept` and `curriculum_item`. Both directions are declared
+// inside `() => ...` callbacks, which drizzle only calls once every module has
+// finished evaluating, so neither side reads a binding still in its temporal
+// dead zone. `studio.ts` and `state.ts` already live with the same cycle.
+import { learner } from "./state";
+import { session } from "./studio";
 
 /**
  * The content half of the catalog: what exists, and how the pieces refer to
@@ -40,6 +47,9 @@ export const ASSET_KINDS = [
   "note",
   "session",
   "link",
+  // A still frame made from a video at upload time, stored as a blob and
+  // derived from its video through `asset_derivation` (plan 0.2, Track E).
+  "poster",
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
@@ -55,8 +65,44 @@ export type CollectionKind = (typeof COLLECTION_KINDS)[number];
 export const PREREQUISITE_KINDS = ["requires", "assumes"] as const;
 export type PrerequisiteKind = (typeof PREREQUISITE_KINDS)[number];
 
+/**
+ * What a curated link is, from the course file's `resources[].type`. Carried
+ * on `asset.resource_type` since the phase 0 expand migration, because the
+ * course reader requires it and an export that dropped it could not be read
+ * back (docs/CONTENT-MIGRATION.md 0.2).
+ */
+export const RESOURCE_TYPES = ["paper", "docs", "video", "book", "other"] as const;
+export type AssetResourceType = (typeof RESOURCE_TYPES)[number];
+
+/**
+ * How one topic relates to another. `broader`: `to` is the wider subject.
+ * `related`: symmetric, stored once with the slugs in order. `precedes`: learn
+ * `from` before `to`.
+ */
+export const TOPIC_RELATION_KINDS = ["broader", "related", "precedes"] as const;
+export type TopicRelationKind = (typeof TOPIC_RELATION_KINDS)[number];
+
+/** Where a blob's bytes live. `fs` is the laptop's store under `~/.self-learn/blobs`. */
+export const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
+export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
+
+/** `pending` from the row write until the store confirms the upload, then `present`. */
+export const BLOB_STATES = ["pending", "present"] as const;
+export type BlobState = (typeof BLOB_STATES)[number];
+
+const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+
 const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
+  sql.raw(`${column} in (${quoted(values)})`);
+
+/**
+ * The id rule the content readers enforce at parse time
+ * (`KEBAB_SLUG` in packages/content/src/read.ts), stated once more where it
+ * cannot be skipped. Every existing slug and id already satisfies it.
+ */
+const kebab = (column: string) => sql.raw(`${column} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`);
+
+const jsonArray = (column: string) => sql.raw(`jsonb_typeof(${column}) = 'array'`);
 
 /**
  * The shared vocabulary. One row per subject label, and the required join for
@@ -81,10 +127,30 @@ export const topic = pgTable(
      * `jsonb_array_elements_text(...) ilike ...` either way.
      */
     aliases: jsonb("aliases").notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Where the topic sits in `content/topics.yaml`, which is authored in
+     * domain groups and rendered in that order. Kept so an export writes the
+     * file back the way a person wrote it.
+     */
+    position: integer("position").notNull().default(0),
+    ownerId: ownerId(() => learner.id),
+    archivedAt: archivedAt(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("topic_domain_idx").on(t.domain)],
+  (t) => [
+    check("topic_slug_check", kebab("slug")),
+    check("topic_aliases_array_check", jsonArray("aliases")),
+    index("topic_domain_idx").on(t.domain),
+    index("topic_owner_id_idx").on(t.ownerId),
+    // Near-duplicate detection for `catalog topic add` (D14): trigram
+    // similarity over the title, and over the aliases as one string. The
+    // aliases index is on the jsonb's text form rather than on each element,
+    // because an index expression cannot unnest an array; `word_similarity`
+    // against that string is the query it serves.
+    index("topic_title_trgm_idx").using("gin", sql`"title" gin_trgm_ops`),
+    index("topic_aliases_trgm_idx").using("gin", sql`("aliases"::text) gin_trgm_ops`),
+  ],
 );
 
 /**
@@ -105,12 +171,29 @@ export const concept = pgTable(
     }),
     /** Repo-relative path of the note, e.g. `learn/concepts/algorithms/master-theorem.md`. */
     path: text("path").notNull(),
+    /**
+     * The note itself, from the phase 0 expand migration on: the folder it was
+     * filed under, the markdown after the frontmatter, the frontmatter's
+     * `tags`, `sources` and `created`. Nullable and unfilled until Track C
+     * moves the notes in; the file stays the truth until that type flips.
+     */
+    domain: text("domain"),
+    body: text("body"),
+    tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
+    sources: jsonb("sources").notNull().default(sql`'[]'::jsonb`),
+    authoredAt: instant("authored_at"),
+    ownerId: ownerId(() => learner.id),
+    archivedAt: archivedAt(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check("concept_slug_check", kebab("slug")),
+    check("concept_tags_array_check", jsonArray("tags")),
+    check("concept_sources_array_check", jsonArray("sources")),
     uniqueIndex("concept_path_key").on(t.path),
     index("concept_topic_slug_idx").on(t.topicSlug),
+    index("concept_owner_id_idx").on(t.ownerId),
   ],
 );
 
@@ -133,17 +216,31 @@ export const collection = pgTable(
     }),
     position: integer("position").notNull().default(0),
     metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    ownerId: ownerId(() => learner.id),
+    /**
+     * Set instead of deleting when a course file stops listing the module
+     * (D12): the items under it may carry a learner's tick and recap, and
+     * `curriculum_item.collection_id` is RESTRICT, so a delete would fail.
+     */
+    archivedAt: archivedAt(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check("collection_id_check", kebab("id")),
     check("collection_kind_check", inList("kind", COLLECTION_KINDS)),
     check("collection_not_own_parent_check", sql`parent_id is distinct from id`),
     index("collection_parent_id_idx").on(t.parentId),
-    // NULLS NOT DISTINCT so two top-level courses cannot share a slug. With the
-    // default (nulls distinct) every course has parent_id NULL and the unique
-    // index would never fire for them, which is exactly the case that matters.
-    unique("collection_parent_slug_key").on(t.parentId, t.slug).nullsNotDistinct(),
+    index("collection_owner_id_idx").on(t.ownerId),
+    // Two live collections under one parent cannot share a slug, which is the
+    // URL segment. `coalesce` so two top-level courses (parent_id NULL) collide
+    // too; partial so an archived module does not hold its slug against the
+    // module that replaced it. A unique *constraint* could do neither: it
+    // cannot take a WHERE, and it treats every NULL parent as distinct unless
+    // declared NULLS NOT DISTINCT, which an expression index has no need for.
+    uniqueIndex("collection_parent_slug_key")
+      .on(sql`coalesce("parent_id", '')`, t.slug)
+      .where(sql`archived_at is null`),
   ],
 );
 
@@ -164,21 +261,81 @@ export const curriculumItem = pgTable(
     /** The module (a `collection`) this item is authored inside. */
     collectionId: text("collection_id")
       .notNull()
-      .references(() => collection.id, { onDelete: "cascade", onUpdate: "cascade" }),
+      // Restrict, not cascade (D12): a course edit that drops a module must
+      // archive its items, never take them and the learner rows under them
+      // away in one statement nobody saw.
+      .references(() => collection.id, { onDelete: "restrict", onUpdate: "cascade" }),
     position: integer("position").notNull().default(0),
     title: text("title").notNull(),
     /** The bullet list under the item. Display-only, never joined on. */
     subtopics: jsonb("subtopics").notNull().default(sql`'[]'::jsonb`),
+    ownerId: ownerId(() => learner.id),
+    /**
+     * Set instead of deleting when the course file stops listing the item.
+     * `progress` and `recap` are RESTRICT on this table, so the learner's tick
+     * and recap survive and the Settings export still carries them.
+     */
+    archivedAt: archivedAt(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("curriculum_item_collection_id_idx").on(t.collectionId)],
+  (t) => [
+    check("curriculum_item_id_check", kebab("id")),
+    index("curriculum_item_collection_id_idx").on(t.collectionId),
+    index("curriculum_item_owner_id_idx").on(t.ownerId),
+  ],
+);
+
+/**
+ * One stored object in the blob store (D5): videos, their posters and
+ * sidecars, diagram SVGs. The bytes are never in Postgres (D7); this row says
+ * where they are, how big, and whether the upload has been confirmed.
+ *
+ * The key is `<owner_id>/<sha256>.<ext>`. Content-addressed, so an upload is
+ * idempotent and resumable and an old revision's SVG stays resolvable; prefixed
+ * by owner, so phase 4 can list, count, cap and delete a tenant's objects by
+ * prefix. The CHECK holds the key to that shape, so a row can never name bytes
+ * other than the ones its hash describes.
+ */
+export const blobObject = pgTable(
+  "blob_object",
+  {
+    key: text("key").primaryKey(),
+    ownerId: ownerId(() => learner.id),
+    /** Lowercase hex sha256 of the bytes. Checked against the store after upload. */
+    sha256: text("sha256").notNull(),
+    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    mime: text("mime").notNull(),
+    provider: text("provider").notNull(),
+    state: text("state").notNull().default("pending"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    /** When a `head` against the store last confirmed the object. */
+    confirmedAt: instant("confirmed_at"),
+  },
+  (t) => [
+    check("blob_object_sha256_check", sql`sha256 ~ '^[0-9a-f]{64}$'`),
+    check(
+      "blob_object_key_check",
+      sql`key ~ '^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$' and starts_with(key, owner_id || '/' || sha256)`,
+    ),
+    check("blob_object_bytes_check", sql`bytes >= 0`),
+    check("blob_object_provider_check", inList("provider", BLOB_PROVIDERS)),
+    check("blob_object_state_check", inList("state", BLOB_STATES)),
+    // A present object was confirmed at some moment. The converse is not
+    // asserted: a row found missing on audit goes back to pending and keeps
+    // the instant it was last seen, which is worth knowing.
+    check("blob_object_confirmed_check", sql`state <> 'present' or confirmed_at is not null`),
+    index("blob_object_owner_id_idx").on(t.ownerId),
+  ],
 );
 
 /**
  * A file or a link. One row per artefact, wherever its bytes live.
- * Exactly one of `path` (a file in one of the three repos) or `url` (something
- * on the web) is set, so "where is it" always has one answer.
+ * Exactly one of `url` (something on the web) or a location is set, so "where
+ * is it" always has one answer. A location is `path` (a file in one of the
+ * three repos, and from the content migration on a logical name that survives
+ * the files, D11), `blob_key` (the object store), or both while the two agree.
  */
 export const asset = pgTable(
   "asset",
@@ -193,17 +350,35 @@ export const asset = pgTable(
     bytes: bigint("bytes", { mode: "number" }),
     title: text("title"),
     sourceRepo: text("source_repo").notNull(),
+    /** The stored bytes, once uploaded. Restrict: an object an asset serves is not deletable. */
+    blobKey: text("blob_key").references(() => blobObject.key, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+    /** What a curated `link` is: one of `RESOURCE_TYPES`. Null for every other kind. */
+    resourceType: text("resource_type"),
+    ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     check("asset_kind_check", inList("kind", ASSET_KINDS)),
     check("asset_source_repo_check", inList("source_repo", SOURCE_REPOS)),
-    check("asset_location_check", sql`num_nonnulls(path, url) = 1`),
+    check(
+      "asset_location_check",
+      sql`(url is null) = (path is not null or blob_key is not null)`,
+    ),
     check("asset_bytes_check", sql`bytes is null or bytes >= 0`),
+    check(
+      "asset_resource_type_check",
+      // Only a curated link has a resource type; every other kind is its own answer.
+      sql.raw(`resource_type is null or (kind = 'link' and resource_type in (${quoted(RESOURCE_TYPES)}))`),
+    ),
     uniqueIndex("asset_repo_path_key").on(t.sourceRepo, t.path),
     index("asset_kind_idx").on(t.kind),
     index("asset_content_hash_idx").on(t.contentHash),
+    index("asset_blob_key_idx").on(t.blobKey),
+    index("asset_owner_id_idx").on(t.ownerId),
   ],
 );
 
@@ -267,6 +442,12 @@ export const conceptPrerequisite = pgTable(
       .notNull()
       .references(() => concept.slug, { onDelete: "cascade", onUpdate: "cascade" }),
     kind: text("kind").notNull(),
+    /**
+     * Order within the note's `requires:` or `assumes:` list, 1-based. The
+     * frontmatter is authored in an order, and an export that sorted it would
+     * rewrite every note it touched.
+     */
+    position: integer("position").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [
@@ -390,5 +571,195 @@ export const conceptCurriculumItem = pgTable(
   (t) => [
     primaryKey({ columns: [t.conceptSlug, t.curriculumItemId] }),
     index("concept_curriculum_item_curriculum_item_id_idx").on(t.curriculumItemId),
+  ],
+);
+
+/* ------------------------------------------------------------------ *
+ * Added by the phase 0 expand migration of docs/CONTENT-MIGRATION.md.
+ * Every table a phase 1 track needs lands here at once (D10), so no track
+ * generates a migration of its own and collides in drizzle's journal.
+ * ------------------------------------------------------------------ */
+
+/**
+ * A cross-course theme, from `content/tags.yaml`. Before this table a course's
+ * tags were strings inside `collection.metadata`, checked only at parse time;
+ * `collection_tag` makes a stale tag a `23503`.
+ */
+export const tag = pgTable(
+  "tag",
+  {
+    /** The permanent key a course file's `tags:` names. */
+    id: text("id").primaryKey(),
+    label: text("label").notNull(),
+    description: text("description"),
+    /** The order the home page renders the chips in, which is the file's order. */
+    position: integer("position").notNull().default(0),
+    ownerId: ownerId(() => learner.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check("tag_id_check", kebab("id")), index("tag_owner_id_idx").on(t.ownerId)],
+);
+
+/** This course carries this tag, at this position in its `tags:` list. Part of the collection's snapshot. */
+export const collectionTag = pgTable(
+  "collection_tag",
+  {
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collection.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      // Restrict: a tag a course still uses is not deletable, which is the
+      // whole reason this is a table and not a string in jsonb.
+      .references(() => tag.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.collectionId, t.tagId] }),
+    index("collection_tag_tag_id_idx").on(t.tagId),
+  ],
+);
+
+/**
+ * A typed edge between two topics, the one the owner asked for so a proposed
+ * topic can say where it sits. Foreign keys at both ends, per the standing
+ * rule against a generic edge table.
+ *
+ * `related` is symmetric and stored once, with `from_slug` the smaller slug
+ * under the "C" collation. The collation is spelled out so the rule means the
+ * same byte order on every database this is restored into; a writer compares
+ * with plain JavaScript `<`, which is the same order for kebab-case ASCII.
+ * Because the order is part of the row, renaming a slug with `ON UPDATE
+ * CASCADE` can put a `related` edge the wrong way round and fail the check; a
+ * rename deletes and re-inserts its `related` edges rather than relying on the
+ * cascade.
+ *
+ * Owned by the `from` topic: a change here is a revision of that topic.
+ */
+export const topicRelation = pgTable(
+  "topic_relation",
+  {
+    fromSlug: text("from_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    toSlug: text("to_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    kind: text("kind").notNull(),
+    ownerId: ownerId(() => learner.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.fromSlug, t.toSlug, t.kind] }),
+    check("topic_relation_kind_check", inList("kind", TOPIC_RELATION_KINDS)),
+    check("topic_relation_no_self_check", sql`from_slug <> to_slug`),
+    check(
+      "topic_relation_related_order_check",
+      sql`kind <> 'related' or from_slug collate "C" < to_slug collate "C"`,
+    ),
+    index("topic_relation_to_slug_idx").on(t.toSlug),
+    index("topic_relation_owner_id_idx").on(t.ownerId),
+  ],
+);
+
+/**
+ * One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows.
+ * The primary key is the rule `vocabulary.claim()` enforces in code today, one
+ * path and one topic. A table rather than a column on `asset`, because a path
+ * can be mapped before its first render.
+ *
+ * Owned by its topic, so it cascades with it and a change is a revision of it.
+ */
+export const manimkcTopic = pgTable(
+  "manimkc_topic",
+  {
+    /** `<domain>/<subdomain>/<topic>`, manimkc's own path with `topics/` dropped. */
+    path: text("path").primaryKey(),
+    topicSlug: text("topic_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "cascade", onUpdate: "cascade" }),
+    /** Order within the topic's `maps.manimkc` list. */
+    position: integer("position").notNull().default(0),
+    ownerId: ownerId(() => learner.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("manimkc_topic_topic_slug_idx").on(t.topicSlug),
+    index("manimkc_topic_owner_id_idx").on(t.ownerId),
+  ],
+);
+
+/**
+ * A teaching diagram: the `.tldr` document in jsonb, its SVG in the blob store
+ * (D6). The two hashes replace the modification-time comparison behind the
+ * studio's freshness pill: the SVG is stale exactly when `svg_document_hash`
+ * differs from `document_hash`.
+ *
+ * `topic_slug` is NOT NULL from the start, the same rule `job.topic_slug`
+ * follows and the diagrams indexer already refuses by name.
+ */
+export const diagram = pgTable(
+  "diagram",
+  {
+    slug: text("slug").primaryKey(),
+    ownerId: ownerId(() => learner.id),
+    title: text("title"),
+    topicSlug: text("topic_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    /** The whole `.tldr`, parsed. */
+    document: jsonb("document").notNull(),
+    /** sha256 of the canonical document. */
+    documentHash: text("document_hash").notNull(),
+    svgBlobKey: text("svg_blob_key").references(() => blobObject.key, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+    /** The `document_hash` the SVG was exported from. */
+    svgDocumentHash: text("svg_document_hash"),
+    archivedAt: archivedAt(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("diagram_slug_check", kebab("slug")),
+    check("diagram_document_object_check", sql`jsonb_typeof(document) = 'object'`),
+    // An SVG with no record of what it was exported from cannot be judged
+    // fresh or stale, and a source hash with no SVG describes nothing.
+    check(
+      "diagram_svg_pair_check",
+      sql`(svg_blob_key is null) = (svg_document_hash is null)`,
+    ),
+    index("diagram_owner_id_idx").on(t.ownerId),
+    index("diagram_topic_slug_idx").on(t.topicSlug),
+    index("diagram_svg_blob_key_idx").on(t.svgBlobKey),
+  ],
+);
+
+/**
+ * One appended piece of a session log (D20). Every log write is an append, so
+ * the entries are their own history and carry no revisions; the export
+ * concatenates them under the frontmatter the `session` row already holds.
+ * Append-only by the same per-row trigger as `event`, created in the migration.
+ * The owner is `session.learner_id`, so there is no `owner_id` here.
+ */
+export const sessionLogEntry = pgTable(
+  "session_log_entry",
+  {
+    sessionId: text("session_id")
+      .notNull()
+      // Restrict for the reason `event.session_id` is: `set null` would fire
+      // an UPDATE the append-only trigger refuses.
+      .references(() => session.id, { onDelete: "restrict", onUpdate: "cascade" }),
+    /** 1, 2, 3 per session, in the order the log was written. */
+    seq: integer("seq").notNull(),
+    markdown: text("markdown").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sessionId, t.seq] }),
+    check("session_log_entry_seq_check", sql`seq >= 1`),
   ],
 );

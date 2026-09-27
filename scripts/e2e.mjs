@@ -269,9 +269,13 @@ async function createCopy() {
   // Make the review step deterministic: whatever the owner has already cleared,
   // the earliest card in the copy is due now. `review` is a projection of the
   // event log, and this is a throwaway copy, so rewriting one row is harmless.
+  // `self_learn.copy_ok` because the template may itself be a copy once the
+  // primary has moved (edge case 14 of docs/CONTENT-MIGRATION.md), and a copy
+  // refuses every write that does not say it means it.
   const due = await pg('psql', [
     '-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc',
-    `update review set due = now() - interval '1 minute'
+    `set self_learn.copy_ok = on;
+     update review set due = now() - interval '1 minute'
       where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
   ]);
   if (due.status !== 0) throw new Error(`could not mark a review due in the copy: ${due.stderr.trim()}`);
@@ -310,6 +314,9 @@ async function startServer(port) {
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
     ASSET_FILES_ENABLED: '1',
+    // The copy is throwaway, and may have been made from a database marked
+    // `copy`; this is the flag that says writing to it is intended.
+    CATALOG_COPY_OK: '1',
     // Blank rather than unset: Next loads apps/web/.env.local and fills in any
     // variable that is *undefined*, so deleting a key would let a real one back
     // in. An empty string is defined, and the provider cascade treats it as absent.

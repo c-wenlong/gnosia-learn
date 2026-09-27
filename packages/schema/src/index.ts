@@ -12,20 +12,29 @@ export * from "./content";
 export * from "./operations";
 export * from "./state";
 export * from "./studio";
+export * from "./authoring";
 
+import { catalogInstance, contentRevision, contentSource } from "./authoring";
 import {
   asset,
   assetConcept,
   assetDerivation,
   assetTopic,
+  blobObject,
   collection,
   collectionItem,
+  collectionTag,
   concept,
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
   curriculumItemTopic,
+  diagram,
+  manimkcTopic,
+  sessionLogEntry,
+  tag,
   topic,
+  topicRelation,
 } from "./content";
 import { indexRun, mirror } from "./operations";
 import {
@@ -45,11 +54,20 @@ import { assetJob, job, session } from "./studio";
  * truncate would walk it backwards.
  */
 export const tables = {
+  // First since the phase 0 expand migration: every content entity's
+  // `owner_id` points at it.
+  learner,
+  blobObject,
   topic,
+  tag,
+  topicRelation,
+  manimkcTopic,
   concept,
   collection,
+  collectionTag,
   curriculumItem,
   asset,
+  diagram,
   assetTopic,
   assetConcept,
   conceptPrerequisite,
@@ -57,8 +75,8 @@ export const tables = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
-  learner,
   session,
+  sessionLogEntry,
   event,
   mastery,
   review,
@@ -67,19 +85,33 @@ export const tables = {
   preference,
   job,
   assetJob,
+  contentRevision,
   indexRun,
   mirror,
+  contentSource,
+  catalogInstance,
 } as const;
 
 export type TableName = keyof typeof tables;
 
-/** Which half of the catalog a table belongs to. Content is derived; state is not. */
+/**
+ * Which half of the catalog a table belongs to. Content was derived from files
+ * until the content migration; from its phase 0 the revision history and the
+ * blob rows sit here too, as the record of that content rather than a copy of
+ * a file.
+ */
 export const CONTENT_TABLES = [
+  "blobObject",
   "topic",
+  "tag",
+  "topicRelation",
+  "manimkcTopic",
   "concept",
   "collection",
+  "collectionTag",
   "curriculumItem",
   "asset",
+  "diagram",
   "assetTopic",
   "assetConcept",
   "conceptPrerequisite",
@@ -87,6 +119,8 @@ export const CONTENT_TABLES = [
   "assetDerivation",
   "curriculumItemTopic",
   "conceptCurriculumItem",
+  "sessionLogEntry",
+  "contentRevision",
 ] as const satisfies readonly TableName[];
 
 /**
@@ -94,7 +128,12 @@ export const CONTENT_TABLES = [
  * the indexers recorded, about their own runs and about the mirrors they
  * audited. Counted apart so a status line cannot read it as either.
  */
-export const OPERATIONAL_TABLES = ["indexRun", "mirror"] as const satisfies readonly TableName[];
+export const OPERATIONAL_TABLES = [
+  "indexRun",
+  "mirror",
+  "contentSource",
+  "catalogInstance",
+] as const satisfies readonly TableName[];
 
 /**
  * Who asked for a file to be made, and what came out. As durable as the state
@@ -140,6 +179,26 @@ export type CurriculumItemTopic = typeof curriculumItemTopic.$inferSelect;
 export type NewCurriculumItemTopic = typeof curriculumItemTopic.$inferInsert;
 export type ConceptCurriculumItem = typeof conceptCurriculumItem.$inferSelect;
 export type NewConceptCurriculumItem = typeof conceptCurriculumItem.$inferInsert;
+export type BlobObject = typeof blobObject.$inferSelect;
+export type NewBlobObject = typeof blobObject.$inferInsert;
+export type Tag = typeof tag.$inferSelect;
+export type NewTag = typeof tag.$inferInsert;
+export type CollectionTag = typeof collectionTag.$inferSelect;
+export type NewCollectionTag = typeof collectionTag.$inferInsert;
+export type TopicRelation = typeof topicRelation.$inferSelect;
+export type NewTopicRelation = typeof topicRelation.$inferInsert;
+export type ManimkcTopic = typeof manimkcTopic.$inferSelect;
+export type NewManimkcTopic = typeof manimkcTopic.$inferInsert;
+export type Diagram = typeof diagram.$inferSelect;
+export type NewDiagram = typeof diagram.$inferInsert;
+export type SessionLogEntry = typeof sessionLogEntry.$inferSelect;
+export type NewSessionLogEntry = typeof sessionLogEntry.$inferInsert;
+export type ContentRevision = typeof contentRevision.$inferSelect;
+export type NewContentRevision = typeof contentRevision.$inferInsert;
+export type ContentSource = typeof contentSource.$inferSelect;
+export type NewContentSource = typeof contentSource.$inferInsert;
+export type CatalogInstance = typeof catalogInstance.$inferSelect;
+export type NewCatalogInstance = typeof catalogInstance.$inferInsert;
 
 export type Learner = typeof learner.$inferSelect;
 export type NewLearner = typeof learner.$inferInsert;

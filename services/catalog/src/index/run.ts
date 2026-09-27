@@ -8,6 +8,7 @@ import {
   type SourceRepo,
 } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
+import { execFileSync } from "node:child_process";
 
 import type { CatalogDatabase } from "../db";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
@@ -130,6 +131,26 @@ export interface RunOptions {
   manimkcRoot?: string;
   /** Sources to run. Defaults to all of them; always reordered to dependency order. */
   only?: readonly IndexSource[];
+  /** The author the run's `import` revisions carry. Defaults to `import:<git sha>` of the tree. */
+  author?: string;
+}
+
+/**
+ * `import:<sha>` of the commit the tree is at, or `import:unknown` when it is
+ * not a git checkout (a test fixture) or git is missing. The sha is what makes
+ * an import revision traceable to the files it read; a tree with uncommitted
+ * edits still names its commit, which is the nearest honest answer.
+ */
+export function importAuthor(repoRoot: string): string {
+  try {
+    const sha = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? `import:${sha}` : "import:unknown";
+  } catch {
+    return "import:unknown";
+  }
 }
 
 export interface RunResult {
@@ -216,6 +237,7 @@ export async function runIndex(
   const selected = INDEXERS.filter((i) => wanted.has(i.source));
 
   const vocabulary = await loadVocabulary(repoRoot);
+  const author = options.author ?? importAuthor(repoRoot);
 
   // Sources produced earlier in this run answer the cross-source lookups; a
   // partial run falls back to the database, which holds what the last full run
@@ -324,6 +346,7 @@ export async function runIndex(
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
       metadata,
+      author,
     });
     sources.push(write);
 

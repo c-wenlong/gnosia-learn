@@ -8,17 +8,20 @@ generates. When they disagree, the code is right and this file is stale.
 The plan is [#27](https://github.com/c-wenlong/self-learn/issues/27); this is
 the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues/21).
 
-[docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the proposed
-plan that makes Postgres the source of truth for content, and this document
-describes the files-as-truth state that plan replaces.
+[docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
+that makes Postgres the source of truth for content. Its phase 0 expand
+migration, `0010_content_expand`, has landed: every table and column the plan
+needs exists, and [The content migration's foundation](#the-content-migrations-foundation)
+below describes them. The files are still the truth for every type until that
+type's flip; the rest of this document describes that files-as-truth state.
 
 ## The two halves
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables | Files in git. Every row is rebuildable by re-running the indexers. |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision` | Files in git, until each type flips (docs/CONTENT-MIGRATION.md). Every row the indexers write is rebuildable by re-running them. `content_revision` is not: it is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
-| Operational | `index_run`, `mirror` | Neither. One row per source saying when it was last read and what it produced. |
+| Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
 `index_run` is the third thing because it is neither of the first two: it is not
@@ -71,6 +74,14 @@ goes is the record of which brief produced them.
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
 | `curriculum_item_topic` | This checklist row covers this topic. How a course reaches the assets. |
 | `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
+| `tag` | A cross-course theme from `content/tags.yaml`, at its position in the file. Since 0010; empty until Track A. |
+| `collection_tag` | This course carries this tag. Makes a stale tag a `23503` instead of a string in jsonb. |
+| `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. |
+| `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
+| `diagram` | A `.tldr` document in jsonb, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
+| `blob_object` | One object in the blob store: `<owner_id>/<sha256>.<ext>`, its size, type, provider and whether the upload is confirmed. |
+| `session_log_entry` | One appended piece of a session log. Append-only; its own history, so no revisions. |
+| `content_revision` | One row per content write: the whole entity after it, its hash, who wrote it and why. Append-only. |
 
 ### State
 
@@ -90,6 +101,8 @@ goes is the record of which brief produced them.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
+| `content_source` | Which content types the database owns, written by `catalog flip`. A type with no row is read from files. |
+| `catalog_instance` | One row: this database is `primary` or `copy`. A copy refuses every write (the copy guard below). |
 
 ### Studio
 
@@ -556,10 +569,10 @@ Each source writes in one transaction: clear the link rows it owns, upsert its
 entities, delete the entities it no longer produces, insert the links. Two
 things make that safe.
 
-**Entities are upserted, never replaced.** `concept` and `curriculum_item` are
-the target of `ON DELETE CASCADE` foreign keys from `mastery`, `review`,
-`progress` and `recap`, so deleting and reinserting a row would destroy the
-learner's record of it and put an identical-looking row back. The upsert's SET
+**Entities are upserted, never replaced.** `concept` is the target of `ON
+DELETE CASCADE` foreign keys from `mastery` and `review`, and `curriculum_item`
+of `ON DELETE RESTRICT` ones from `progress` and `recap`, so deleting and
+reinserting a row would destroy the learner's record of it or fail on it. The upsert's SET
 clause is built from the table's columns rather than the supplied keys, so a
 field deleted from a file becomes null instead of living on as the last value
 anyone wrote.
@@ -574,6 +587,151 @@ audited, because such a row would never be cleared again.
 
 Because deletions cascade, `index` prints the keys it removed rather than a
 count.
+
+**Courses and their items are archived, not pruned** (D12, since 0010). A
+module or checklist row the course files stop listing gets `archived_at`, and
+listing it again clears it, because the upsert's SET clause takes every column
+from the insert and `archived_at` defaults to null. Archiving runs before the
+upsert, so a module that replaces an archived one can reuse its slug:
+`collection_parent_slug_key` covers only live rows. `index` prints the archived
+keys beside the deleted ones.
+
+**Every entity a run touched gets an `import` revision when its snapshot
+changed.** The run's author is `import:<git sha>` of the tree it read. A second
+run over an unchanged tree appends none, which `catalog.test.ts` asserts on the
+real tree.
+
+## The content migration's foundation
+
+Migration `0010_content_expand` is phase 0 section 0.2 of
+[docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md): every table and
+column the five phase 1 tracks need, landed at once so no track generates a
+migration of its own (D10). It changes nothing any reader sees. The write seam
+that uses it (0.3) is in `src/content/`.
+
+### Owners
+
+Every content entity carries `owner_id text not null default 'local'
+references learner(id) on delete restrict`: `topic`, `tag`, `topic_relation`,
+`manimkc_topic`, `concept`, `collection`, `curriculum_item`, `asset`,
+`diagram`, `blob_object`, `content_revision`, and `job` and `asset_job`. Link
+tables carry none; they belong to the entity at their owning end. Primary keys
+did not change, so ids stay global across owners (D3). The migration inserts
+the `local` learner before the first `owner_id` column, because a database that
+was indexed and never studied has no learner row and every foreign key default
+would have failed on it.
+
+### Revisions
+
+`content_revision` is the history git used to give. One row per content write,
+with `seq` per entity, `previous_id`, `op`, `author_kind`, `author` and a
+non-empty `reason`, and a `snapshot`: the entity after the write with its owned
+links nested under it, keys sorted, link rows sorted, `created_at`,
+`updated_at` and `collection_item.id` left out as facts about the write rather
+than the content. `snapshot_hash` is sha256 of that canonical form, which is
+how an import that changes nothing appends nothing. Which link belongs to which
+parent is `src/content/entities.ts`; the seam and the importer both read it, so
+they cannot snapshot the same entity two ways.
+
+| Parent | Owned links |
+| --- | --- |
+| `topic` | `topic_relation` (as `from`), `manimkc_topic` |
+| `collection` | `collection_tag`, `collection_item` |
+| `curriculum_item` | `curriculum_item_topic`, `concept_curriculum_item` |
+| `concept` | `concept_prerequisite` |
+| `asset` | `asset_topic`, `asset_concept`, `asset_derivation` |
+| `tag`, `diagram` | none |
+
+`writeContent` in `src/content/write.ts` is the one authored write: one
+transaction that takes the revision locks, refuses when the writer's `base` is
+not the latest revision, sets `self_learn.revision_id`, upserts the row and any
+links given in a savepoint, reads the snapshot back and appends the revision.
+A write whose snapshot equals the latest revision's rolls the savepoint back,
+so it appends nothing and changes nothing, `updated_at` included. The id comes
+from the identity's own sequence before the entity write, which is why the
+identity is `BY DEFAULT`: the setting has to name the revision before the write
+the guard checks.
+
+An import that deletes an entity (a topic, concept or asset its files stopped
+producing) appends a `delete` revision holding the state it was deleted in.
+The history then ends with a word, and an entity that comes back is always a
+new revision even when its snapshot matches the one before it went.
+
+`seq` is the latest plus one, so two writers of one entity must not read the
+latest at once. Both take transaction-scoped advisory locks before reading and
+before any row lock: the seam takes its entity type shared and the entity
+exclusive, and an import takes every entity type it may touch exclusive, in
+sorted order, up front. Seam writes of different entities run side by side, an
+import waits for the ones in flight, and no two writers can each hold what the
+other is waiting for.
+
+### Positions
+
+`topic`, `tag`, `collection_tag`, `manimkc_topic` and `concept_prerequisite`
+gained `position`, because each holds a list a person wrote in an order and the
+export has to write it back in that order. The indexers do not fill them yet;
+0.5's import does.
+
+### Triggers
+
+Every trigger in the database, and the state migration `0010` leaves it in.
+The functions qualify table names with `public.`, so a caller's `search_path`
+cannot point them elsewhere.
+
+| Trigger | Table | Kind | State | What it does |
+| --- | --- | --- | --- | --- |
+| `event_no_update`, `event_no_delete` | `event` | before, per row | on | Append-only (0001, per row since 0003) |
+| `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, `catalog_append_only()` |
+| `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, same function, its own hint |
+| `<table>_write_guard` | the 17 tables in `WRITE_GUARDS` (`src/content/rules.ts`) | before, per row | **off** | Refuses a write unless the transaction set `self_learn.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s stays off until Track D replaces `assert-output` |
+| `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
+| `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
+| `concept_curriculum_item_concept_topic`, `concept_concept_topic`, `curriculum_item_concept_topic`, `collection_item_concept_topic` | the four tables that can move either side | constraint, deferred | **off** | Rule `item-concept-in-module-topic` |
+| `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `self_learn.copy_ok = on` |
+
+Why each is shaped the way it is:
+
+- **The write guard is per row**, for the reason `0003` exists: a statement
+  trigger fires on a referential action that touches no row. It checks a
+  transaction-local setting, so a pooled connection cannot carry the seam's
+  permission into the next caller's write.
+- **The completeness rules are constraint triggers deferred to commit.** A
+  `CHECK` sees one row, and "at least one child" is a question about others.
+  Deferred, so a course written in one transaction is judged whole. Each is
+  attached to the parent (a new module, a new item) and to the child (the last
+  item or concept link leaving), since a trigger on the parent alone would
+  never see a child go. `catalog doctor` runs the same predicates as queries,
+  from `COMPLETENESS_RULES` in `src/content/rules.ts`, and `catalog flip
+  <type> --strict` will arm them when it reports zero.
+- **The copy guard is per statement**, because on a copy even a statement that
+  would change nothing is a write aimed at the wrong database, and `TRUNCATE`
+  has no rows. It is a trigger rather than a check in each writer for the same
+  reason `event` is append-only by trigger: it binds the web app and psql too.
+  `pg_dump` puts triggers in its post-data section, so a restore loads rows
+  before any guard exists. `CATALOG_COPY_OK=1` makes `connect()` add `-c
+  self_learn.copy_ok=on`; `catalog migrate` always does, since a copy's schema
+  must still follow the primary's.
+
+### The hand-written statements in 0010
+
+drizzle generates DDL for tables, columns, indexes and constraints. Everything
+else in `0010_content_expand.sql` was added by hand, above and below the
+generated block, as `0001`, `0003` and `0006` did before it:
+
+| Statement | Why drizzle cannot express it |
+| --- | --- |
+| `CREATE EXTENSION IF NOT EXISTS pg_trgm` | Extensions are not schema objects drizzle models. First, since the trigram indexes need it |
+| `INSERT INTO learner (id) VALUES ('local') ON CONFLICT DO NOTHING` | Data. Before any `owner_id` foreign key |
+| `INSERT INTO catalog_instance ... 'primary'` | Data. The local database is the primary (D2) |
+| `catalog_append_only()` and its four triggers | Functions and triggers |
+| `content_write_guard()`, its triggers, and `DISABLE TRIGGER` | Same, in a `DO` loop over the table list |
+| The three `catalog_check_*()` functions, their eight constraint triggers, and `DISABLE TRIGGER` | Same |
+| `catalog_copy_guard()` and its triggers | Same, in a `DO` loop |
+
+The trigram indexes themselves are drizzle's: `topic_title_trgm_idx` on
+`title` and `topic_aliases_trgm_idx` on `aliases::text`, since an index
+expression cannot unnest an array. Near-duplicate search is `title % $1` and
+`$1 <% aliases::text`.
 
 ## Working on it
 
@@ -592,6 +750,9 @@ npm run catalog -- ls algorithms               # one domain's topics
 npm run catalog -- show master-theorem         # one entity, and its paths
 npm run catalog -- path big-o-witness-definition master-theorem
 npm run catalog -- search "common data bus"    # titles and aliases, top 20
+npm run catalog -- doctor                      # completeness rules, guards, primary or copy
+npm run catalog -- history topic tomasulo-algorithm   # every revision, oldest first
+npm run catalog -- diff 42                     # what revision 42 changed; or diff 41 42
 ```
 
 `show` returns paths, never bodies. The database says which file to read; git
@@ -641,10 +802,10 @@ an edit makes the migration look unapplied everywhere it has already run.
   `SET NULL` the delete fired an UPDATE that the append-only trigger refused,
   so the rule was already this — it just arrived as an error about a trigger.
   `mastery` and `review` still cascade, because they are projections this log
-  rebuilds; `progress` and `recap` cascade from `curriculum_item`, which is a
-  real remaining sharp edge: deleting a curriculum item from the course YAML
-  silently takes the learner's tick and recap with it, and nothing rebuilds
-  those.
+  rebuilds. **Settled in migration `0010`:** `progress` and `recap` are
+  `RESTRICT` on `curriculum_item`, and `curriculum_item` is `RESTRICT` on
+  `collection`, so dropping an item from the course YAML archives it and the
+  learner's tick and recap stay.
 - `learner` holds one row by convention, not by constraint. A `CHECK (id =
   'local')` would enforce it and would have to be dropped the day authentication
   arrives, so the convention is documented instead.

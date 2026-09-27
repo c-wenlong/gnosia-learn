@@ -21,7 +21,10 @@ export async function runMigrate(): Promise<MigrateResult> {
       applied: after.applied.filter((tag) => !before.applied.includes(tag)),
       alreadyApplied: before.applied,
     };
-  });
+    // A copy refuses every write (the copy guard in 0010), and a migration's
+    // data statements are writes. Migrating a copy is still right: its schema
+    // has to follow the primary's for tests and e2e to mean anything.
+  }, { copyOk: true });
 }
 
 export function formatMigrate(result: MigrateResult): string {
