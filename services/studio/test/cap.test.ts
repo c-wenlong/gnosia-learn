@@ -34,6 +34,11 @@ const catalogMock = vi.hoisted(() => ({
   sessionStart: vi.fn(),
   sessionEnd: vi.fn(),
   status: vi.fn(),
+  // The diagram, as the catalog would answer about it. Unreachable here, so the
+  // runner answers from the checkout on disk (D16), which is what these tests
+  // write when they need a diagram to extend.
+  diagramShow: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
+  diagramCheckout: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
 }));
 vi.mock("../src/catalog", () => catalogMock);
 

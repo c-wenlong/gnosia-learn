@@ -198,9 +198,9 @@ Rules of engagement:
   not on `ASSET_FILES_ENABLED`: from the browser they are served from
   `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
   behind the `/studio/api/*` rewrite), deliberately not from
-  `/api/assets/{id}/file`, because that route also needs the file indexed,
-  and the one diagram a person most needs a tile for is the untopiced one
-  with no asset row. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
+  `/api/assets/{id}/file`, which a second switch gates. The runner streams the
+  blob the diagram's row names, by the key in its (cached) diagram list, so a
+  tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
 - The spawned agent does not inherit the runner's Anthropic credentials.
   `agentEnv` in `services/studio/src/agent.ts` strips the auth variables
@@ -222,12 +222,20 @@ Rules of engagement:
   `REPO_ROOT` at spawn time, not relative ones, because manimkc already
   shipped the bug where a relative rule stops matching the moment its data
   root moves.
-- A job writes only to `learn/assets/.candidates/`; nothing under
-  `learn/assets/` changes until a person presses Accept, and Accept never runs
-  `git add`. It renames the candidate into place and tells the person the
-  `git add` line to run themselves. `indexed: false` after an accept is a
-  banner asking for a manual reindex, not a failure: the files are the output
-  and the catalog row is derived from them.
+- A job writes only to `learn/assets/.candidates/`, and since Track D of
+  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md) Accept lands nothing
+  in the tree: it is `catalog diagram put --job`, the diagram as rows and its
+  SVG as a blob, with the job's starting revision as the base, so a commit that
+  landed while the job ran refuses it. There is nothing to `git add`. With
+  Postgres down Accept refuses and the candidate waits. `indexed: false` after
+  an accept means the diagram landed and the job row did not record it;
+  Reindex finishes it.
+- Every `canvas` verb and the mirror run on the diagram's checkout,
+  `$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout` with a
+  record of the revision it came from. The canvas saves there, and only an
+  explicit Commit (`catalog diagram commit`, a reason required) reaches the
+  database, refused when the diagram moved since the checkout; a checkout with
+  uncommitted edits is never overwritten.
 - `job.cost_source` in `services/studio/src/cost.ts` says where `cost_usd`
   came from: `result` when the agent's session exited cleanly and reported its
   own `total_cost_usd`, `stream` when the runner accumulated it from

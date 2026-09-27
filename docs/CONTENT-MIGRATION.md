@@ -817,20 +817,20 @@ list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
       writes the `diagram` row, uploads the SVG blob, upserts the two `asset`
       rows with their existing `diagram:` ids and the derivation, and appends
       the revision, in one transaction after the upload is `present`.
-- [ ] Studio Accept (`review.ts:218-227`) calls `diagram put` instead of the two
+- [x] Studio Accept (`review.ts:218-227`) calls `diagram put` instead of the two
       renames and `assert-output`. Candidates stay files in the job workspace;
       the runner still writes nothing tracked, and now there is nothing
       tracked to write.
-- [ ] `catalog diagram checkout <slug>` materialises the document to a temp
+- [x] `catalog diagram checkout <slug>` materialises the document to a temp
       `.tldr` under `$STUDIO_HOME/work/`; the mirror (`canvas serve`) and every
       `canvas` verb run on that file, since every verb takes a path. Saving
       from the mirror is followed by an explicit commit, with the same base
       check as notes (edge case 18).
-- [ ] `catalog diagram list --json` replaces `canvas list learn/assets`
+- [x] `catalog diagram list --json` replaces `canvas list learn/assets`
       (`services/studio/src/diagrams.ts:146-199`): slug, title, topic,
       concepts, shape count (counted in jsonb), freshness from the two hashes.
       The studio's own `/api/diagrams/{name}/svg` streams the blob.
-- [ ] `job.target_path` keeps its value as a logical name and keeps working
+- [x] `job.target_path` keeps its value as a logical name and keeps working
       as the lease key (`job_active_target_key`).
 - [ ] The plugin's `diagram-maker` draws in a checkout path and ends with
       `learn diagram commit`, a wrapper over `catalog diagram put`; its
@@ -863,6 +863,17 @@ around the list above, and why:
   terminal. `commit` always passes the checkout's base, and the studio passes
   the revision its job started from. A retried `put --job` whose own earlier
   write is the latest is the same write again and changes nothing.
+- **The studio (part 2).** Accept is `diagram put --job` with the job's
+  starting revision as its base, then `job accept`, which no longer takes
+  `--path`; `assert-output` is deleted and the grep test allows no writer
+  outside the seam. The list is `catalog diagram list`, cached under
+  `$STUDIO_HOME/cache/diagrams.json` for edge case 1. Every `canvas` verb, the
+  mirror and an extend job's starting copy run on the checkout in
+  `$STUDIO_HOME/work/`, which the agent's permission file denies like the rest
+  of the corpus. A Commit button stores the canvas's edits with a reason, and
+  Export SVG stores the fresh SVG when the canvas holds no uncommitted edits.
+  With the database down, Accept refuses and the candidate waits, as edge case
+  1 says; drawing runs on the checkouts already on disk.
 - **Checkouts keep a record beside the file** (`<slug>.checkout.json`: base
   revision, the hash of what was written), so a commit needs no base passed in
   and an uncommitted edit is visible without the database. A checkout with

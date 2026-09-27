@@ -26,7 +26,6 @@ import { REPO_ROOT } from "../env";
 import { ASSETS_DIR } from "../index/diagrams";
 import { fileFacts } from "../index/files";
 import { constraintName, SQLSTATE, sqlstate } from "../state/errors";
-import { assertOutput, type AssertOutputResult } from "./assert-output";
 
 /**
  * `catalog job`: the job lifecycle, driven by hand.
@@ -102,7 +101,10 @@ export interface JobOutput {
   contentHash: string;
   bytes: number;
   writtenAt: string;
-  /** True when the bytes on disk still hash to what the job wrote. */
+  /**
+   * True when the asset still holds the bytes the job wrote: its row's
+   * `content_hash` is the one the job recorded. Null when the asset is gone.
+   */
   current: boolean | null;
 }
 
@@ -127,8 +129,8 @@ export interface TransitionResult {
   from: string;
   to: string;
   job: JobSummary;
-  /** Only `accept` writes these, and only when it was given paths. */
-  outputs: AssertOutputResult[];
+  /** What an accepted job landed, from its `asset_job` rows. Empty for the other verdicts. */
+  outputs: JobOutput[];
 }
 
 export interface ListResult {
@@ -670,23 +672,20 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
 
 export interface VerdictOptions {
   jobId: string;
-  /** Repo-relative paths this job landed. `accept` only. */
-  paths?: string[];
-  repoRoot?: string;
 }
 
 /**
- * Accept: the candidate has been renamed into place, so record what landed.
+ * Accept: record that the job's output landed, and move the row to
+ * `accepted`.
  *
- * The assert and the transition share one transaction, so a job can never be
- * `accepted` with no `asset_job` row to show for it, and a failed assert leaves
- * the job in `awaiting_review` for another try rather than half-accepted.
- *
- * The rename itself is not here. Phase 0 has no runner, so a person (or the
- * `tldrawkc-diagram` skill) puts the file where it belongs and then says so.
+ * The landing itself is `catalog diagram put --job` (Track D of
+ * docs/CONTENT-MIGRATION.md): the diagram, its SVG, its asset rows and the
+ * `asset_job` rows that name this job, in one transaction. This is the
+ * transition after it, refused until those rows exist, so a job can never be
+ * `accepted` with nothing to show for it. Its own call, so a put that landed
+ * and an accept that did not is a retry of this alone (the studio's Reindex).
  */
 export async function runAccept(options: VerdictOptions): Promise<TransitionResult> {
-  const repoRoot = options.repoRoot ?? REPO_ROOT;
   return withDatabase(({ db }) =>
     db.transaction(async (tx) => {
       const rows = await tx
@@ -704,24 +703,14 @@ export async function runAccept(options: VerdictOptions): Promise<TransitionResu
         throw await explainRefusal(tx, options.jobId, "accepted");
       }
 
-      const outputs: AssertOutputResult[] = [];
-      for (const given of options.paths ?? []) {
-        outputs.push(await assertOutput(tx, { jobId: options.jobId, path: given, repoRoot }));
-      }
-
-      // An accepted job says which files it landed, so one with nothing to
-      // point at is not accepted, it is a row claiming a result it cannot name.
-      // Counted rather than requiring `--path`, because a retried accept whose
-      // asserts already went through on an earlier attempt is legitimate and
-      // has the rows to prove it.
-      const landed = await tx
-        .select({ assetId: assetJob.assetId })
-        .from(assetJob)
-        .where(eq(assetJob.jobId, options.jobId));
-      if (landed.length === 0) {
+      // An accepted job says what it landed, so one with nothing to point at is
+      // not accepted, it is a row claiming a result it cannot name.
+      const outputs = await jobOutputs(tx, options.jobId);
+      if (outputs.length === 0) {
+        const slug = /^learn\/assets\/(.+)\.tldr$/.exec(before.targetPath)?.[1] ?? "<slug>";
         throw new JobError(
-          `job ${options.jobId} has no output to accept. Rename the candidate into place and ` +
-            `pass it: \`catalog job accept --job ${options.jobId} --path ${before.targetPath}\`.`,
+          `job ${options.jobId} has no output to accept. Land it first: \`catalog diagram put ` +
+            `--slug ${slug} --tldr <candidate> --svg <candidate.svg> --job ${options.jobId} --reason "..."\`.`,
         );
       }
 
@@ -818,7 +807,7 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
   });
 }
 
-export async function runShow(jobId: string, repoRoot = REPO_ROOT): Promise<ShowResult> {
+export async function runShow(jobId: string): Promise<ShowResult> {
   return withDatabase(async ({ db }) => {
     const rows = await db.select().from(jobTable).where(eq(jobTable.id, jobId)).limit(1);
     const row = rows[0];
@@ -835,38 +824,7 @@ export async function runShow(jobId: string, repoRoot = REPO_ROOT): Promise<Show
             .where(eq(sessionTable.id, row.sessionId))
             .limit(1);
 
-    const outputRows = await db
-      .select({
-        assetId: assetJob.assetId,
-        contentHash: assetJob.contentHash,
-        bytes: assetJob.bytes,
-        writtenAt: assetJob.writtenAt,
-        path: asset.path,
-        kind: asset.kind,
-        title: asset.title,
-      })
-      .from(assetJob)
-      .leftJoin(asset, eq(asset.id, assetJob.assetId))
-      .where(eq(assetJob.jobId, jobId))
-      .orderBy(asc(assetJob.assetId));
-
-    const outputs: JobOutput[] = [];
-    for (const output of outputRows) {
-      outputs.push({
-        assetId: output.assetId,
-        path: output.path,
-        kind: output.kind,
-        title: output.title,
-        contentHash: output.contentHash,
-        bytes: output.bytes,
-        writtenAt: output.writtenAt.toISOString(),
-        // Comparing the hash the job wrote against the bytes on disk is the
-        // only way an edit that landed after the accept becomes visible. A file
-        // that is gone answers null rather than false: "changed" and "not there
-        // to look at" are different things.
-        current: await stillCurrent(repoRoot, output.path, output.contentHash),
-      });
-    }
+    const outputs = await jobOutputs(db, jobId);
 
     const children = await db
       .select({ id: jobTable.id })
@@ -898,15 +856,37 @@ export async function runShow(jobId: string, repoRoot = REPO_ROOT): Promise<Show
   });
 }
 
-async function stillCurrent(
-  repoRoot: string,
-  relative: string | null,
-  contentHash: string,
-): Promise<boolean | null> {
-  if (relative === null) return null;
-  const absolute = path.join(repoRoot, relative);
-  if ((await stat(absolute).catch(() => null)) === null) return null;
-  return (await fileFacts(absolute)).contentHash === contentHash;
+/**
+ * What a job landed: its `asset_job` rows, each with whether the asset still
+ * holds those bytes. The hash the job recorded against the row's own, since
+ * the bytes are a database row and a blob now, not a file to hash.
+ */
+async function jobOutputs(db: CatalogDatabase, jobId: string): Promise<JobOutput[]> {
+  const rows = await db
+    .select({
+      assetId: assetJob.assetId,
+      contentHash: assetJob.contentHash,
+      bytes: assetJob.bytes,
+      writtenAt: assetJob.writtenAt,
+      path: asset.path,
+      kind: asset.kind,
+      title: asset.title,
+      current: asset.contentHash,
+    })
+    .from(assetJob)
+    .leftJoin(asset, eq(asset.id, assetJob.assetId))
+    .where(eq(assetJob.jobId, jobId))
+    .orderBy(asc(assetJob.assetId));
+  return rows.map((row) => ({
+    assetId: row.assetId,
+    path: row.path,
+    kind: row.kind,
+    title: row.title,
+    contentHash: row.contentHash,
+    bytes: row.bytes,
+    writtenAt: row.writtenAt.toISOString(),
+    current: row.kind === null ? null : row.current === row.contentHash,
+  }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -936,9 +916,7 @@ export function formatJob(result: JobResult): string {
     case "discard": {
       const lines = [`${result.job.id}: ${result.from} → ${result.to}`];
       for (const output of result.outputs) {
-        lines.push(
-          `  ${output.firstAssert ? "+" : "="} ${output.path}  ${output.assetId} (${output.kind})`,
-        );
+        lines.push(`  + ${output.path ?? "(asset gone)"}  ${output.assetId} (${output.kind ?? "?"})`);
       }
       return lines.join("\n");
     }

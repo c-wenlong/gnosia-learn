@@ -94,7 +94,20 @@ export interface JobRecord {
   /** What the person asked to be different, verbatim. The revise prompt. */
   changes: string | null;
   idempotencyKey: string;
+  /**
+   * The document the job started from: the diagram's `document_hash` when the
+   * catalog answered at enqueue, else the sha256 of the checkout on disk.
+   * What the comparison's before side is labelled with.
+   */
   targetHashBefore: string | null;
+  /**
+   * The diagram's latest revision when the job was enqueued, or null when
+   * there was no diagram: the base `diagram put` checks at Accept, so a
+   * commit that landed while the job ran refuses the Accept (S4, edge case
+   * 18). Absent on a job recorded before diagrams moved into the database,
+   * whose Accept then writes over whatever is latest.
+   */
+  targetRevisionBefore?: number | null;
   /**
    * The candidate's sha256 when the reconcile pass marked this job
    * `interrupted`, or null when there was nothing there.

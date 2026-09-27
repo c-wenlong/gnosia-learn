@@ -1,7 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -20,14 +18,15 @@ import type { JobRecord } from "../src/store";
 import { fixtureDocument } from "./fixture-document";
 
 /**
- * Accept, and the ordering that makes its two failure windows survivable.
+ * Accept, and the ordering that makes its failure windows survivable.
  *
- * The test that matters is the forced export failure: everything that can fail
- * has to happen before anything moves, so a failed export must leave the
- * candidate where it was and `learn/assets/` untouched. The alternative
- * ordering — rename first, export onto the committed path — passes a happy-path
- * test and loses the work the first time the export throws, because a retry
- * cannot repeat a rename that already happened.
+ * A diagram lives in the database (Track D of docs/CONTENT-MIGRATION.md), so
+ * Accept lands through one `catalog diagram put --job`, and everything that
+ * can fail happens before it: a failed export or verify, a stuck canvas, a
+ * base that moved or a database that is down all leave the candidate where it
+ * was and the put never made. The catalog is faked here as a small in-memory
+ * diagram (its own suite, `services/catalog/test/diagrams.test.ts`, holds the
+ * put to its word), so these tests pin the order and the refusals.
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
@@ -36,10 +35,16 @@ vi.mock("../src/canvas", async (importOriginal) => {
   return { ...actual, canvas: canvasMock.canvas };
 });
 
-const catalogMock = vi.hoisted(() => ({ jobAccept: vi.fn(), jobDiscard: vi.fn() }));
+const catalogMock = vi.hoisted(() => ({
+  jobAccept: vi.fn(),
+  jobDiscard: vi.fn(),
+  diagramShow: vi.fn(),
+  diagramPut: vi.fn(),
+  diagramCheckout: vi.fn(),
+}));
 vi.mock("../src/catalog", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/catalog")>();
-  return { ...actual, jobAccept: catalogMock.jobAccept, jobDiscard: catalogMock.jobDiscard };
+  return { ...actual, ...catalogMock };
 });
 
 const { accept, discard } = await import("../src/review");
@@ -91,6 +96,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     changes: null,
     idempotencyKey: "k",
     targetHashBefore: null,
+    targetRevisionBefore: 5,
     requestedAt: new Date().toISOString(),
     startedAt: new Date().toISOString(),
     finishedAt: new Date().toISOString(),
@@ -122,6 +128,11 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
 
 let store: InstanceType<typeof JobStore>;
 
+/** The diagram as the fake catalog holds it: its latest revision, and which job wrote it. */
+const diagram = { revision: 5, revisionJob: null as string | null };
+
+const offline = { ok: false, json: null, error: "connect ECONNREFUSED 127.0.0.1:5432", offline: true };
+
 /**
  * The record, in the store. `accept` and `discard` write it themselves — the
  * disk record before the database row, which is rule 7 — so a fixture that only
@@ -151,6 +162,23 @@ beforeEach(async () => {
   catalogMock.jobAccept.mockReset();
   catalogMock.jobAccept.mockResolvedValue({ ok: true, json: {}, error: null });
   catalogMock.jobDiscard.mockResolvedValue({ ok: true, json: {}, error: null });
+  diagram.revision = 5;
+  diagram.revisionJob = null;
+  catalogMock.diagramShow.mockReset();
+  catalogMock.diagramShow.mockImplementation(async () => ({
+    ok: true,
+    json: { diagram: { revision: diagram.revision, revisionJob: diagram.revisionJob }, checkout: null },
+    error: null,
+    offline: false,
+  }));
+  catalogMock.diagramPut.mockReset();
+  catalogMock.diagramPut.mockImplementation(async (input: { jobId: string }) => {
+    diagram.revision += 1;
+    diagram.revisionJob = input.jobId;
+    return { ok: true, json: { revision: diagram.revision, changed: true }, error: null, offline: false };
+  });
+  catalogMock.diagramCheckout.mockReset();
+  catalogMock.diagramCheckout.mockResolvedValue({ ok: true, json: { exists: true, revision: 6, note: "checked out" }, error: null, offline: false });
   await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
   await writeFile(files.candidate, fixtureDocument(), "utf8");
   await writeFile(files.candidateSvg, "<svg/>", "utf8");
@@ -166,7 +194,7 @@ afterEach(async () => {
 });
 
 describe("a forced export failure", () => {
-  it("moves nothing, so the candidate and the target are both where they were", async () => {
+  it("lands nothing, so the candidate is where it was", async () => {
     await rm(files.candidateSvg, { force: true });
     canvasMock.canvas.mockImplementationOnce(() => reply(4));
     const result = await accept(
@@ -177,7 +205,7 @@ describe("a forced export failure", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("export-failed");
     expect(await exists(files.candidate)).toBe(true);
-    expect(await exists(files.target)).toBe(false);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
     // The job is still awaiting review, so Accept, Discard and a follow-up job
     // are all still available. That is the whole point of the ordering.
     expect(result.written).toHaveLength(0);
@@ -185,85 +213,120 @@ describe("a forced export failure", () => {
 });
 
 describe("a verify that refuses the export", () => {
-  it("also moves nothing, because the loop does not end at export", async () => {
+  it("also lands nothing, because the loop does not end at export", async () => {
     canvasMock.canvas.mockImplementationOnce(() =>
       reply(3, { checks: [{ rule: "text-visible", ok: false, detail: "text outside the frame" }] }),
     );
     const result = await accept(store, await place());
     expect(result.ok).toBe(false);
     expect(result.error).toBe("verify-failed");
-    expect(await exists(files.target)).toBe(false);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
     expect(await exists(files.candidate)).toBe(true);
   });
 });
 
 describe("a clean accept", () => {
-  it("renames both files and then records them, in that order", async () => {
+  it("puts the candidates with the job's base, records the job, and writes no file under learn/", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
     const result = await accept(store, await place());
 
     expect(result.ok).toBe(true);
+    expect(result.revision).toBe(6);
     expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
-    expect(await exists(files.target)).toBe(true);
-    expect(await exists(files.targetSvg)).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: SLUG,
+        tldr: files.candidate,
+        svg: files.candidateSvg,
+        jobId: "job-accept",
+        base: 5,
+      }),
+    );
+    expect(catalogMock.jobAccept).toHaveBeenCalledWith("job-accept");
+    // Nothing is renamed into the tree any more: the diagram is its rows.
+    expect(await exists(files.target)).toBe(false);
+    expect(await exists(files.targetSvg)).toBe(false);
+    // The candidates landed, so they go.
     expect(await exists(files.candidate)).toBe(false);
-    // One call, both paths: the asserts and the transition share the catalog's
-    // own transaction, so a job can never be accepted with no output row.
-    expect(catalogMock.jobAccept).toHaveBeenCalledWith("job-accept", [
-      targetPath(SLUG),
-      targetSvgPath(SLUG),
-    ]);
-    // The disk record moved before the catalog call, so a crash in between
-    // leaves a job that says what actually happened to the two files.
     expect(store.get("job-accept")?.state).toBe("accepted");
-    expect(store.get("job-accept")?.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
+    expect(store.get("job-accept")?.indexed).toBe(true);
+    expect(result.note).toMatch(/nothing to commit/);
   });
 
-  it("lands the files and reports indexed: false when Postgres is unreachable", async () => {
+  it("reports indexed: false when the job row does not record it, with the diagram landed", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
-    catalogMock.jobAccept.mockResolvedValue({
-      ok: false,
-      json: null,
-      error: "connection refused",
-    });
+    catalogMock.jobAccept.mockResolvedValue({ ok: false, json: null, error: "connection refused" });
     const result = await accept(store, await place());
 
     expect(result.ok).toBe(true);
     expect(result.indexed).toBe(false);
     expect(result.note).toContain("connection refused");
-    // D16: the files are the output and the index is derived from them.
-    expect(await exists(files.target)).toBe(true);
+    expect(result.note).toContain("reindex");
+    expect(catalogMock.diagramPut).toHaveBeenCalledTimes(1);
+    // The disk record says what happened: the diagram is in the database.
+    expect(store.get("job-accept")?.state).toBe("accepted");
+  });
+
+  it("is a retry, not a move, when this job's own earlier put is the latest revision", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    diagram.revision = 6;
+    diagram.revisionJob = "job-accept";
+    const result = await accept(store, await place());
+    expect(result.ok).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledWith(expect.objectContaining({ base: 6 }));
   });
 });
 
-describe("a human edit that landed while the job ran", () => {
-  it("refuses rather than overwriting it", async () => {
-    await writeFile(files.target, "someone else's work", "utf8");
-    const result = await accept(
-      store,
-      await place({ targetHashBefore: createHash("sha256").update("something older").digest("hex") }),
-    );
+describe("the database is down", () => {
+  it("refuses, lands nothing and keeps the candidate, since a diagram lives in the database", async () => {
+    catalogMock.diagramShow.mockResolvedValue(offline);
+    const result = await accept(store, await place());
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("catalog-offline");
+    expect(result.note).toMatch(/press Accept again once Postgres answers/);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
+    expect(canvasMock.canvas).not.toHaveBeenCalled();
+    expect(await exists(files.candidate)).toBe(true);
+    expect(store.get("job-accept")?.state).toBe("awaiting_review");
+  });
+});
+
+describe("a commit that landed while the job ran", () => {
+  it("refuses rather than writing over it", async () => {
+    diagram.revision = 7;
+    diagram.revisionJob = null;
+    const result = await accept(store, await place());
     expect(result.ok).toBe(false);
     expect(result.error).toBe("target-moved");
-    expect(await readFile(files.target, "utf8")).toBe("someone else's work");
+    expect(result.note).toMatch(/revision 5 then, 7 now/);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the catalog's own base check catches it after the last look", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    catalogMock.diagramPut.mockResolvedValue({
+      ok: false,
+      json: { ok: false, code: "stale-base", error: "moved on" },
+      error: "moved on",
+      offline: false,
+    });
+    const result = await accept(store, await place());
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("target-moved");
+    expect(await exists(files.candidate)).toBe(true);
+    expect(store.get("job-accept")?.state).toBe("awaiting_review");
   });
 });
 
 /**
- * A6, end to end: the rename happens behind a writer that is already gone.
+ * A6, end to end: the diagram lands behind a canvas that is already gone.
  *
- * The three tests above mock the close, so they pin *when* accept asks for it
- * and not whether asking achieves anything. This one wires `closeMirror` to the
- * real `stopChild` over a real process that ignores `SIGTERM` for a quarter of
- * a second, which is the shape of the bug: `serve` holds the document as its
- * tab last loaded it, so a save landing between the close and the rename PUTs
- * the old diagram back over the accepted one, silently, with a `git diff`
- * nobody is looking at as the only evidence.
- *
- * The assertion is read from inside the child's own `exit` handler, because
- * that is the one moment where "is the writer still alive?" and "has the file
- * been replaced?" can be asked of each other. With the close sending a signal
- * and returning, the rename had already happened by then.
+ * The canvas edits the checkout, and the checkout is refreshed to the
+ * accepted revision after the put, so a save landing after that would put the
+ * old drawing back on it. This wires `closeMirror` to the real `stopChild`
+ * over a real process that ignores `SIGTERM` for a quarter of a second, and
+ * asks, from inside the child's own `exit` handler, whether the put has
+ * happened yet.
  */
 describe("the mirror on the target", () => {
   let child: ChildProcess | null = null;
@@ -277,9 +340,8 @@ describe("the mirror on the target", () => {
     child = null;
   });
 
-  it("is gone before the candidate is renamed over it", async () => {
+  it("is gone before the diagram lands", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
-    // Detached, like a real mirror: the close signals the process group.
     child = spawn(
       process.execPath,
       ["-e", 'process.on("SIGTERM", () => {}); setTimeout(() => process.exit(0), 250); console.log("up");'],
@@ -288,9 +350,9 @@ describe("the mirror on the target", () => {
     const writer = child;
     await new Promise<void>((resolve) => writer.stdout?.once("data", () => resolve()));
 
-    let targetWhenTheWriterDied: string | null = null;
+    let landedWhenTheWriterDied: boolean | null = null;
     writer.on("exit", () => {
-      targetWhenTheWriterDied = existsSync(files.target) ? "already renamed" : "not yet renamed";
+      landedWhenTheWriterDied = catalogMock.diagramPut.mock.calls.length > 0;
     });
 
     const result = await accept(store, await place(), {
@@ -299,22 +361,13 @@ describe("the mirror on the target", () => {
 
     expect(result.ok).toBe(true);
     expect(result.mirrorClosed).toBe(true);
-    expect(targetWhenTheWriterDied).toBe("not yet renamed");
-    expect(await exists(files.target)).toBe(true);
+    expect(landedWhenTheWriterDied).toBe(false);
+    expect(catalogMock.diagramPut).toHaveBeenCalledTimes(1);
   });
 });
 
-/**
- * A writer that will not die, which is the one case the waiting is for.
- *
- * `stopChild` only answers `gone: false` after a `SIGTERM`, a grace window, a
- * `SIGKILL` and a second one. Renaming anyway at that point would make every
- * line of that waiting decorative, so accept refuses: nothing has moved, and
- * Discard, a retry and a follow-up job are all still there. Raised on the
- * phase 4 PR after the first fix landed.
- */
 describe("a mirror that will not shut down", () => {
-  it("refuses the accept rather than renaming behind a live writer", async () => {
+  it("refuses the accept rather than landing behind a live writer", async () => {
     canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
     const result = await accept(store, await place(), {
       closeMirror: () => Promise.resolve({ found: true, gone: false }),
@@ -324,10 +377,9 @@ describe("a mirror that will not shut down", () => {
     expect(result.error).toBe("mirror-stuck");
     expect(result.mirrorClosed).toBe(true);
     expect(result.written).toHaveLength(0);
-    // Nothing moved, so every way out of this is still open.
-    expect(await exists(files.target)).toBe(false);
     expect(await exists(files.candidate)).toBe(true);
     expect(store.get("job-accept")?.state).toBe("awaiting_review");
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
     expect(catalogMock.jobAccept).not.toHaveBeenCalled();
   });
 
@@ -336,11 +388,8 @@ describe("a mirror that will not shut down", () => {
     const result = await accept(store, await place(), {
       closeMirror: () => Promise.resolve({ found: false, gone: true }),
     });
-
     expect(result.ok).toBe(true);
-    // `found` is what the UI reports, and nobody had a canvas open.
     expect(result.mirrorClosed).toBe(false);
-    expect(await exists(files.target)).toBe(true);
   });
 });
 
@@ -349,17 +398,17 @@ describe("the state guard", () => {
     const result = await accept(store, await place({ state: "failed" }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe("wrong-state");
-    expect(await exists(files.target)).toBe(false);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
   });
 });
 
 describe("discard", () => {
-  it("deletes both candidates and leaves learn/assets/ alone", async () => {
+  it("deletes both candidates and changes nothing in the database", async () => {
     const result = await discard(store, await place());
     expect(result.ok).toBe(true);
     expect(await exists(files.candidate)).toBe(false);
     expect(await exists(files.candidateSvg)).toBe(false);
-    expect(await exists(files.target)).toBe(false);
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
     expect(store.get("job-accept")?.state).toBe("discarded");
   });
 });

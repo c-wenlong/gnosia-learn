@@ -81,12 +81,10 @@ export interface Subject {
 }
 
 /**
- * One diagram file as an `asset` row: the single definition of that shape.
- *
- * The full index calls it once per file and `catalog assert-output` calls it
- * once, for one file, so a row written by a job and a row written by a sweep
- * cannot drift apart. That is the whole argument for `assert-output` existing
- * rather than the studio shelling out to `index --only diagrams`.
+ * One diagram file as an `asset` row, as the import writes it. `catalog
+ * diagram put` builds the same row from a document it was handed
+ * (`content/diagrams.ts`), and `test/diagrams.test.ts` holds an imported
+ * diagram and a put one to the same listing.
  */
 export function diagramAsset(
   where: string,

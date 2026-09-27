@@ -7,7 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import type { JobRecord } from "../src/store";
-import { absolute, jobDir, rejectedDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import {
+  absolute,
+  jobDir,
+  rejectedDir,
+  targetPath,
+  targetSvgPath,
+  workDir,
+  workPath,
+  CANDIDATES_DIR,
+} from "../src/paths";
+
 import { fixtureDocument } from "./fixture-document";
 import { allSettled, until } from "./wait";
 
@@ -31,6 +41,11 @@ const catalogMock = vi.hoisted(() => ({
   sessionStart: vi.fn(),
   sessionEnd: vi.fn(),
   status: vi.fn(),
+  // The diagram, as the catalog would answer about it. Unreachable here, so the
+  // runner answers from the checkout on disk (D16), which is what these tests
+  // write when they need a diagram to extend.
+  diagramShow: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
+  diagramCheckout: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
 }));
 vi.mock("../src/catalog", () => catalogMock);
 
@@ -177,6 +192,13 @@ const hash = (body: string): string => createHash("sha256").update(body).digest(
 
 const SLUG = "studio-queue-fixture";
 
+/** A diagram to extend: its checkout, which is the file every verb and the runner read. */
+async function writeCheckout(body: string, encoding: BufferEncoding): Promise<void> {
+  await mkdir(workDir(), { recursive: true });
+  await writeFile(workPath(SLUG), body, encoding);
+}
+
+
 async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
   return validateBrief(
     {
@@ -296,6 +318,7 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
+  await rm(workPath(SLUG), { force: true });
   // The candidates directory is shared with the real one, so a fixture left
   // there is a fixture the next `catalog index` reads.
   await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
@@ -602,7 +625,7 @@ describe("an agent whose first request is refused", () => {
   });
 
   it("treats the runner's untouched copy in extend mode as nothing written", async () => {
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
     refuseFirstRequest();
 
     const { record } = await runner.enqueue(await brief({ mode: "extend" }));
@@ -736,7 +759,7 @@ describe("a resume", () => {
    * review on the phase 3 PR.
    */
   it("leaves the partial candidate alone rather than copying the target over it", async () => {
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
     const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
     const partial = fixtureDocument({ title: "half-drawn" });
     await writeFile(candidate, partial, "utf8");
@@ -768,7 +791,7 @@ describe("a resume", () => {
    * is what tells them apart. Caught in review on the phase 3 PR.
    */
   it("does not adopt a candidate that is not the one it was interrupted with", async () => {
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
     const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
     await writeFile(candidate, fixtureDocument({ title: "somebody else's" }), "utf8");
     // The parent was interrupted holding something *else* at that path.
@@ -792,7 +815,7 @@ describe("a resume", () => {
   });
 
   it("still copies the target when a revision extends it, because nothing is half-drawn", async () => {
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
     await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
     await store.create(parentRecord("parent-four", Date.now() - 300_000, "accepted"));
 
@@ -820,7 +843,7 @@ describe("a resume", () => {
 
 describe("extend mode", () => {
   it("tells the gate what the copy looked like, so an untouched one cannot pass", async () => {
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await writeCheckout(fixtureDocument(), "utf8");
 
     await runner.enqueue(await brief({ mode: "extend" }));
     const input = await gateInput<{ unchangedHash?: string | null }>();

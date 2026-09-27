@@ -280,6 +280,13 @@ still running until the runner has killed Chromium, and the row should say so.
 
 ### The write path
 
+**Since Track D of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#track-d-diagrams)
+this is `catalog diagram put --job <id>`**, one transaction that writes the
+`diagram` row, both asset rows and the `asset_job` rows after the SVG upload is
+confirmed, with the job's starting revision as its base; `catalog job accept
+--job <id>` then moves the job row, refused until those `asset_job` rows exist.
+What follows is the design it replaced, kept for the reasoning.
+
 The studio does not write `asset` rows. On accept it calls one command, and that
 command is the indexer:
 
@@ -629,6 +636,17 @@ appears in the transcript and in the narration, never as a job state. D4 is the
 mapping.
 
 ### Accept and discard
+
+**Since Track D** the steps are: the base check (the diagram's latest revision
+against the one the job recorded at enqueue, asked of the catalog), the export,
+the verify, the canvas closed, the base check again, then one `catalog diagram
+put --job` whose own base check closes the last window, then the disk record,
+then `catalog job accept`. Nothing is renamed and nothing lands in the tree; the
+candidates are deleted once the put succeeds, and the checkout is refreshed to
+the accepted revision unless it holds edits nobody committed. A database that is
+down refuses the accept (`catalog-offline`) and the candidate waits. The rest of
+this section describes the file-based design it replaced; its ordering argument
+carries over unchanged.
 
 **Everything that can fail happens before anything lands.** Accept finishes the
 artifacts in the candidates directory first, and only then moves them. The
@@ -1169,7 +1187,7 @@ raised it: S schema, A API and runner, U interface.
 | A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
 | U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
-| U3 | Postgres is down | The studio keeps working. The asset list comes from `list --json`, the topics through the content reader seam (`content/topics.yaml` today, with the last good read cached under `$STUDIO_HOME/cache/` for the day topics are rows; `/api/health` reports `vocabulary.stale` and its `readAt`), and the jobs from disk. An amber banner in the existing `StoreBanner` position says `not connected to the catalog, browsing and drawing still work`. Accept still renames, exports and verifies, and reports `indexed: false` with a Reindex button. The concept picker falls back to the slugs in `topics.yaml` | Accept step 4; `GET /api/health` |
+| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D), the topics through the content reader seam (with the last good read cached the same way; `/api/health` reports `vocabulary.stale` and its `readAt`), and the jobs from disk. An amber banner in the existing `StoreBanner` position says the catalog is unreachable and that browsing and drawing still work. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits, because a diagram lands in the database (edge case 1 of the migration plan). The concept picker falls back to the cached vocabulary | Accept; `GET /api/health` |
 | U4 | tldrawkc is not built | The studio runs `doctor` once on entry and, on failure, replaces the whole content region with one card: the failing checks as doctor reported them, the two commands, and a Recheck button. Nothing else renders, because a grid that half-works is worse than a page that says what is wrong | Studio entry; A8 covers the API side |
 | U5 | `dist/page` is stale | A banner, and everything still runs. That is how `doctor` treats it: a stale bundle still works | Studio entry |
 | U6 | A `.tldr` will not parse | It is absent from the grid and listed under Errors in the panel with its file name and message, which is the only place it is visible | `list --json` errors |
@@ -1189,6 +1207,15 @@ are the studio's own; the tool's D1 to D43 in
 hold and are not renumbered here.
 
 ### D1. Write-back is a single-file `catalog assert-output`, not `catalog index --only diagrams`
+
+**Amended by Track D of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#track-d-diagrams).**
+A diagram is rows and a blob now, and `assert-output` is gone. The write-back
+is one `catalog diagram put --job <id>`: the document as the `diagram` row, the
+SVG into the blob store, both asset rows and the job's `asset_job` rows, in one
+transaction after the upload is confirmed. The reasons below still hold, for
+`put` in place of `assert-output`: it is one diagram, never a sweep, it writes
+the provenance inside the transaction that made the rows, and it checks the
+stamp with the same `resolveSubject` the import uses.
 
 **Verdict:** accept runs the single-file write path only, `catalog assert-output
 --job <id> --path <p>` once per file. The studio never runs a full
@@ -1211,6 +1238,14 @@ deleting something by mistake. That row sits stale until a person presses
 Reindex or runs the CLI's own full index.
 
 ### D2. A job writes a candidate; accept renames it into place
+
+**Amended by Track D.** Candidates are still files in
+`learn/assets/.candidates/` (phase 2 of the migration moves them into the job
+workspace), but Accept no longer renames them: it puts them into the database
+and deletes them. `job.target_path` keeps its value, `learn/assets/<slug>.tldr`,
+as the logical name and the lease key (D11 of the migration plan). The file a
+job extends and the mirror edits is the diagram's checkout,
+`$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout`.
 
 **Verdict:** the agent's only writable artifact paths are
 `learn/assets/.candidates/<slug>.tldr` and `.svg`. Nothing under
@@ -1285,6 +1320,15 @@ into the second. D25 keeps the same independence one layer up: manimkc gets its
 own runner and its own queue rather than sharing this one's.
 
 ### D6. The person commits, and the runner has no mutating git access
+
+**Amended by Track D.** Accept lands nothing in the working tree, so there is
+no `git add` to show and nothing to commit: the diagram is its rows, and every
+write carries its author, its reason and its job in `content_revision`, which
+`catalog history diagram <slug>` reads. Edits made on the canvas reach the
+database only through an explicit Commit (`catalog diagram commit`), refused
+when the diagram moved since the checkout. The runner still runs no mutating
+git command, and `git status --porcelain` stays the backstop for anything a job
+writes into the tree, which is now nothing at all.
 
 **Verdict:** Accept lands both files in `learn/assets/` as working-tree changes
 and stops. The panel shows the two paths and the `git add` line. The runner runs

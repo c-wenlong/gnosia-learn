@@ -80,9 +80,13 @@ export function studioHome(): string {
   return path.resolve(REPO_ROOT, expanded);
 }
 
-/** An absolute path for a repo-relative one. The only join that crosses that line. */
+/**
+ * An absolute path for a repo-relative one. The only join that crosses that
+ * line. A path that is already absolute (a checkout under `$STUDIO_HOME`, see
+ * `workPath`) comes back as it is, rather than glued onto the repo root.
+ */
 export function absolute(relative: string): string {
-  return path.join(REPO_ROOT, relative);
+  return path.resolve(REPO_ROOT, relative);
 }
 
 /** `learn/assets/<slug>.tldr`: the committed path a job intends to land on. */
@@ -93,6 +97,37 @@ export function targetPath(slug: string): string {
 /** The SVG beside it, which accept claims alongside the `.tldr`. */
 export function targetSvgPath(slug: string): string {
   return `${ASSETS_DIR}/${slug}.svg`;
+}
+
+/**
+ * Where diagrams are checked out to: `$STUDIO_HOME/work/`, the directory
+ * `catalog diagram checkout` writes to by default (Track D of
+ * docs/CONTENT-MIGRATION.md). A diagram lives in the database now, and every
+ * `canvas` verb and the mirror take a file, so they run on this copy, and an
+ * edit reaches the database only through `catalog diagram commit`.
+ *
+ * `job.target_path` keeps its value, `learn/assets/<slug>.tldr`, as the
+ * logical name the lease, the job rows and the asset ids all use (D11); the
+ * checkout is where that name is materialised.
+ */
+export function workDir(): string {
+  return path.join(studioHome(), "work");
+}
+
+/** `$STUDIO_HOME/work/<slug>.tldr`, absolute. */
+export function workPath(slug: string): string {
+  return path.join(workDir(), `${slug}.tldr`);
+}
+
+/** The SVG a checkout writes beside the document, and `export` writes to. */
+export function workSvgPath(slug: string): string {
+  return path.join(workDir(), `${slug}.svg`);
+}
+
+/** The slug a logical name like `learn/assets/<slug>.tldr` names, or null. */
+export function slugOf(target: string): string | null {
+  const match = new RegExp(`^${ASSETS_DIR}/([a-z0-9][a-z0-9-]*)\\.(tldr|svg)$`).exec(target);
+  return match?.[1] ?? null;
 }
 
 /** `learn/assets/.candidates/<slug>.tldr`: where the job actually writes. */

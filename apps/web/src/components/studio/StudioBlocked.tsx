@@ -85,10 +85,10 @@ export function EmptyDirectory({ dir }: { dir: string }) {
         <p className="font-mono text-xs text-[var(--muted)]">
           <Mono>{dir}</Mono>
         </p>
-        <p className="mt-2 text-sm font-medium">no .tldr files here yet</p>
+        <p className="mt-2 text-sm font-medium">no diagrams yet</p>
         <p className="mt-3 text-xs text-[var(--muted)]">
-          A diagram needs a topic from <Mono>content/topics.yaml</Mono> before the indexer will take
-          it, so give it one when you make it.
+          Start a job to draw one. A diagram needs a topic from the vocabulary before the catalog
+          will take it, so give it one when you make it.
         </p>
       </div>
     </div>

@@ -21,7 +21,8 @@ import {
   type AgentAuth,
 } from "./config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
-import { jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
+import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
+import { ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
@@ -35,6 +36,9 @@ import {
   shotPath,
   targetPath,
   targetSvgPath,
+  workDir,
+  workPath,
+  workSvgPath,
   CANDIDATES_DIR,
 } from "./paths";
 import { buildPrompt, buildResumePrompt, buildRetryPrompt, buildRevisePrompt } from "./prompt";
@@ -256,6 +260,31 @@ export class Runner {
   /* ------------------------------------------------------------------ */
 
   /**
+   * What a job on `slug` starts from: whether the diagram exists, its latest
+   * revision (Accept's base) and its document hash (the before side's label).
+   *
+   * Asked of the catalog. When it cannot answer, the checkout on disk says
+   * whether there is a diagram and its hash labels it, and the revision is
+   * left unknown, which Accept treats as "whatever is latest" once the
+   * database is back: the one case a base cannot be had, and it is the same
+   * degraded mode D16 already allows.
+   */
+  async startingPoint(
+    slug: string,
+  ): Promise<{ exists: boolean; revision: number | null | undefined; hash: string | null }> {
+    const shown = await diagramShow(slug, workDir());
+    const answer = shown.ok ? (shown.json as { diagram?: { revision: number | null; documentHash: string } | null } | null) : null;
+    // Only an answer that names the diagram, or says there is none, counts.
+    if (answer !== null && answer.diagram !== undefined) {
+      return answer.diagram === null
+        ? { exists: false, revision: null, hash: null }
+        : { exists: true, revision: answer.diagram.revision, hash: answer.diagram.documentHash };
+    }
+    const hash = await sha256(workPath(slug));
+    return { exists: hash !== null, revision: undefined, hash };
+  }
+
+  /**
    * Record the job on disk, then in Postgres, then wake the queue.
    *
    * That order is rule 7, and the refusals are checked in the order that costs
@@ -285,7 +314,11 @@ export class Runner {
       );
     }
 
-    const targetExists = (await stat(absolute(target)).catch(() => null)) !== null;
+    // The diagram is its rows now, so whether it exists is the catalog's
+    // answer, with the revision the job starts from: Accept's base. With the
+    // database down (D16) the last checkout on disk is what there is.
+    const base = await this.startingPoint(brief.slug);
+    const targetExists = base.exists;
     if (brief.mode === "new" && targetExists) {
       throw new JobRefused(
         409,
@@ -329,7 +362,8 @@ export class Runner {
       parentJobId: parent?.jobId ?? null,
       changes: parent?.changes ?? null,
       idempotencyKey: brief.idempotencyKey,
-      targetHashBefore: targetExists ? await sha256(absolute(target)) : null,
+      targetHashBefore: base.hash,
+      ...(base.revision === undefined ? {} : { targetRevisionBefore: base.revision }),
       requestedAt: new Date().toISOString(),
       startedAt: null,
       finishedAt: null,
@@ -600,14 +634,20 @@ export class Runner {
 
     /* The before half of the comparison, and the only moment it can be read.
      *
-     * After an accept there is no before left on disk: the rename replaces the
-     * committed file, and the picture of what was there is gone with it. So the
-     * screenshot and the counts are taken now, against the committed file as it
-     * is at this instant, and stored on the record.
+     * After an accept the diagram's row is the new drawing, and the picture of
+     * what was there is a revision nobody will photograph. So the screenshot
+     * and the counts are taken now, against the checkout as it is at this
+     * instant, and stored on the record.
      *
      * A job in `new` mode has no before at all, and the panel says so rather
      * than showing an empty tile — there is nothing to compare a first drawing
      * against, and an empty box beside a real one reads as a failure. */
+    // The file this job extends and photographs: the checkout, brought up to
+    // the latest revision unless it holds edits nobody committed.
+    if (record.brief.mode === "extend") {
+      const checkout = await ensureCheckout(record.slug);
+      await this.store.emit(id, { type: "step", state: "running", note: checkout.note });
+    }
     const before = await this.readBefore(record);
     await this.store.update(id, { comparison: buildComparison(before, null, { beforeHash: record.targetHashBefore }) });
 
@@ -633,7 +673,7 @@ export class Runner {
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
       if (!resumedWork) {
-        await copyFile(absolute(record.targetPath), absolute(record.candidatePath));
+        await copyFile(workPath(record.slug), absolute(record.candidatePath));
         // Remembered so the gate can tell "extended it" from "left the copy
         // exactly as it found it". Without it, an agent that did nothing at all
         // presents the runner's own copy of the committed diagram for review and
@@ -864,7 +904,7 @@ export class Runner {
     /* The A4 backstop. A zero exit and a clean gate still do not entitle a job
      * to have written anything outside the candidates directory. */
     const dirtyAfter = await dirtyFiles();
-    const stray = dirtyAfter.filter((file) => !dirtyBefore.has(file) && !isOutput(file, record));
+    const stray = dirtyAfter.filter((file) => !dirtyBefore.has(file));
     if (stray.length > 0) {
       await this.finish(entry, "failed", {
         errorKind: "wrote-outside",
@@ -998,10 +1038,10 @@ export class Runner {
    * about the job's own output.
    */
   private async readBefore(record: JobRecord): Promise<Side | null> {
-    if ((await stat(absolute(record.targetPath)).catch(() => null)) === null) return null;
+    if ((await stat(workPath(record.slug)).catch(() => null)) === null) return null;
     const side = await readSide({
-      file: record.targetPath,
-      svgFile: record.targetSvgPath,
+      file: workPath(record.slug),
+      svgFile: workSvgPath(record.slug),
       shotPath: shotPath(record.id, "before"),
     });
     await this.store.emit(record.id, {
@@ -1009,8 +1049,8 @@ export class Runner {
       state: "running",
       note:
         side.shapes === null
-          ? `the committed ${record.targetPath} would not inspect, so there is no before to compare against`
-          : `read the committed diagram: ${side.shapes} shapes, ${side.lints.length} lint${side.lints.length === 1 ? "" : "s"}`,
+          ? `the checkout of ${record.targetPath} would not inspect, so there is no before to compare against`
+          : `read the diagram as it is in the database: ${side.shapes} shapes, ${side.lints.length} lint${side.lints.length === 1 ? "" : "s"}`,
     });
     return side;
   }
@@ -1272,11 +1312,6 @@ async function sha256(file: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** The two files a job is entitled to leave dirty once it has been accepted. */
-function isOutput(file: string, record: JobRecord): boolean {
-  return file === record.targetPath || file === record.targetSvgPath;
 }
 
 /**

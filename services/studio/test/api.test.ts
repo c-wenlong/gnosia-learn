@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +14,8 @@ import {
   shotPath,
   targetPath,
   targetSvgPath,
+  workDir,
+  workPath,
 } from "../src/paths";
 import type { JobRecord } from "../src/store";
 import type { Runner } from "../src/runner";
@@ -31,6 +34,23 @@ vi.mock("../src/canvas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/canvas")>();
   return { ...actual, doctor: canvasMock.doctor };
 });
+
+const catalogMock = vi.hoisted(() => ({
+  diagramShow: vi.fn(),
+  diagramCheckout: vi.fn(),
+  diagramList: vi.fn(),
+  diagramPut: vi.fn(),
+  diagramCommit: vi.fn(),
+  jobAccept: vi.fn(),
+  jobDiscard: vi.fn(),
+}));
+vi.mock("../src/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/catalog")>();
+  return { ...actual, ...catalogMock };
+});
+
+/** The diagram's latest revision as the fake catalog answers it. */
+let latestRevision = 5;
 
 const { createApi } = await import("../src/api");
 const { JobStore } = await import("../src/store");
@@ -100,6 +120,16 @@ beforeEach(async () => {
   store = new JobStore();
   enqueued.length = 0;
   canvasMock.doctor.mockResolvedValue({ code: 0, signal: null, stdout: "", stderr: "", json: null, timedOut: false });
+  latestRevision = 5;
+  const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
+  catalogMock.diagramShow.mockImplementation(async () =>
+    answer({ ok: true, diagram: { revision: latestRevision, revisionJob: null }, checkout: null }),
+  );
+  catalogMock.diagramCheckout.mockImplementation(async () => answer({ ok: true, exists: false, revision: null, note: "no diagram" }));
+  catalogMock.diagramList.mockResolvedValue(answer({ ok: true, diagrams: [] }));
+  catalogMock.diagramPut.mockResolvedValue(answer({ ok: true, revision: 6, changed: true }));
+  catalogMock.jobAccept.mockResolvedValue(answer({}));
+  catalogMock.jobDiscard.mockResolvedValue(answer({}));
 
   const runner = {
     enqueue: (brief: Record<string, unknown>, parent?: Record<string, unknown>) => {
@@ -111,6 +141,13 @@ beforeEach(async () => {
       });
     },
     busy: 0,
+    // Whether there is a diagram to extend: the checkout on disk stands in for
+    // the catalog's answer here, as it does in the runner with Postgres down.
+    startingPoint: async (slug: string) => ({
+      exists: existsSync(workPath(slug)),
+      revision: null,
+      hash: null,
+    }),
   } as unknown as Runner;
 
   mirrors = new Mirrors();
@@ -135,8 +172,8 @@ describe("revising a diagram that was accepted", () => {
     // brief said `new`, and re-posting `new` walks into the guard that refuses
     // a `new` brief over an existing target — so the route was unreachable for
     // exactly the case it exists for.
-    await mkdir(absolute("learn/assets"), { recursive: true });
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath(SLUG), fixtureDocument(), "utf8");
     await store.create(record());
 
     const response = await fetch(`${base}/api/jobs/job-api/revise`, {
@@ -209,8 +246,8 @@ describe("resuming a job the runner died under", () => {
   });
 
   it("is a new job when the target is not there, and an extend when it is", async () => {
-    await mkdir(absolute("learn/assets"), { recursive: true });
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath(SLUG), fixtureDocument(), "utf8");
     await store.create(record({ state: "interrupted" }));
 
     const response = await fetch(`${base}/api/jobs/job-api/resume`, {
@@ -435,13 +472,12 @@ describe("accepting", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
-  it("flags a hash refusal as one the UI should offer to re-compare, not retry", async () => {
-    // The candidate is there and the target has moved under it, which is S4.
-    await mkdir(absolute("learn/assets"), { recursive: true });
+  it("flags a moved diagram as one the UI should offer to re-compare, not retry", async () => {
+    // The candidate is there and the diagram was committed under it, which is S4.
     await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
     await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "edited by hand" }), "utf8");
-    await store.create(record({ state: "awaiting_review", targetHashBefore: "a-hash-from-before" }));
+    latestRevision = 9;
+    await store.create(record({ state: "awaiting_review", targetRevisionBefore: 5 }));
 
     const response = await fetch(`${base}/api/jobs/job-api/accept`, {
       method: "POST",
