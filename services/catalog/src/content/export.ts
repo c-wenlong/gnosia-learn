@@ -5,6 +5,7 @@ import { COURSES_DIR, TAGS_FILE, TOPICS_FILE } from "@self-learn/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { ASSET_PREFIX } from "../index/source";
 import { type ExportFile, type ExportType, sha256 } from "./layout";
 import { blockScalar, flowList, flowMapping, pad } from "./yaml-out";
 
@@ -252,7 +253,7 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
       db,
       sql`select m.collection_id, a.id, a.title, a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
-          where a.kind = 'link'
+          where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})
           order by m.collection_id, m.position, a.id`,
     ),
     (r) => r.collection_id,
@@ -265,6 +266,10 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
     const code = typeof meta.code === "string" ? meta.code : null;
     if (code === null) {
       problems.push(`course "${course.id}" has no metadata.code, so it has no file name`);
+      continue;
+    }
+    if (typeof meta.credits !== "number" || typeof meta.inferred !== "boolean") {
+      problems.push(`course "${course.id}" has no numeric metadata.credits or boolean metadata.inferred`);
       continue;
     }
     const lines = [
@@ -315,7 +320,7 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
           if (link.resource_type === null) {
             problems.push(`link "${link.id}" has no resource_type; re-import the course so the column is filled`);
           }
-          lines.push(`${pad(6)}- id: ${blockScalar(link.id.replace(/^link:/, ""))}`);
+          lines.push(`${pad(6)}- id: ${blockScalar(link.id.slice(ASSET_PREFIX.courses.length))}`);
           lines.push(`${pad(8)}title: ${blockScalar(link.title ?? "")}`);
           lines.push(`${pad(8)}url: ${blockScalar(link.url ?? "")}`);
           lines.push(`${pad(8)}type: ${blockScalar(link.resource_type ?? "")}`);
@@ -331,16 +336,16 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
   return files;
 }
 
-/** The asset rows whose files a copy-through type exports, and the index source that read them. */
+/** The asset rows whose files a copy-through type exports. The index source of the same name read them. */
 const COPIED = {
   // One per live concept: its note asset carries the hash of what was read.
   concepts: sql`select a.path, a.content_hash from concept c
-                join asset a on a.id = 'note:' || c.path
+                join asset a on a.id = ${ASSET_PREFIX.concepts} || c.path
                 where c.archived_at is null order by a.path`,
   sessions: sql`select path, content_hash from asset
-                where kind = 'session' and starts_with(id, 'session:') order by path`,
+                where kind = 'session' and starts_with(id, ${ASSET_PREFIX.sessions}) order by path`,
   diagrams: sql`select path, content_hash from asset
-                where kind in ('diagram_source', 'diagram_svg') and starts_with(id, 'diagram:')
+                where kind in ('diagram_source', 'diagram_svg') and starts_with(id, ${ASSET_PREFIX.diagrams})
                 order by path`,
 } as const;
 

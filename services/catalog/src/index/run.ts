@@ -278,9 +278,7 @@ export async function runIndex(
   const manimkcRoot = options.manimkcRoot ?? resolveManimkcRoot(toolsRoot);
   const requested = options.only ?? INDEX_SOURCES;
   const wanted = selection(requested);
-  const prerequisites = new Set(
-    [...wanted].flatMap((source) => (wanted.has(source) ? REQUIRES[source] : [])),
-  );
+  const prerequisites = new Set([...wanted].flatMap((source) => REQUIRES[source]));
   const addedAsPrerequisite = [...wanted].filter((s) => !requested.includes(s) && prerequisites.has(s));
   const addedForSafety = [...wanted].filter(
     (s) => !requested.includes(s) && !addedAsPrerequisite.includes(s),

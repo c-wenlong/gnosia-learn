@@ -164,8 +164,13 @@ function cut(type: ExportType, files: readonly ExportFile[]): Cut {
         case "tags": {
           const list = type === "topics" ? "topics" : "tags";
           const key = type === "topics" ? "slug" : "id";
-          const doc = parse(body) as Record<string, unknown> | null;
-          const entries = Array.isArray(doc?.[list]) ? (doc[list] as Record<string, unknown>[]) : [];
+          const parsed: unknown = parse(body);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            add(file.path, parsed);
+            break;
+          }
+          const doc = parsed as Record<string, unknown>;
+          const entries = Array.isArray(doc[list]) ? (doc[list] as Record<string, unknown>[]) : [];
           // Anything beside the list is part of the file too, and would be
           // lost by a round trip that only knew about the list.
           const rest: Record<string, unknown> = { ...doc };
