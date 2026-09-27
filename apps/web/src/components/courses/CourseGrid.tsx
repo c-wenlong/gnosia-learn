@@ -9,6 +9,7 @@ import type { FilterOption } from "@/components/ui/filter-menu";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
+import type { ItemStanding } from "@/lib/course-path";
 import {
   ALL_COURSES,
   courseStatus,
@@ -31,22 +32,25 @@ const ANY_TAG = "";
  * A client component because it filters as you type and because progress comes
  * from `LearnerProvider`, so ticking a topic on another page shows here
  * without a reload. The server page hands it `CourseSummary` projections, not
- * whole courses.
+ * whole courses, and the `ItemStanding` that says which topics are mastered;
+ * a tick still only counts for a topic with no concepts, the path's rule.
  */
 export function CourseGrid({
   summaries,
   tags,
+  standing,
 }: {
   summaries: CourseSummary[];
   tags: { id: string; label: string }[];
+  standing: ItemStanding;
 }) {
   const { state } = useLearner();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CourseFilter>(ALL_COURSES);
 
   const shown = useMemo(
-    () => filterCourses(summaries, query, filter, state.completed),
-    [summaries, query, filter, state.completed],
+    () => filterCourses(summaries, query, filter, state.completed, standing),
+    [summaries, query, filter, state.completed, standing],
   );
 
   const progressOptions: FilterOption<CourseProgressFilter>[] = [
@@ -54,7 +58,7 @@ export function CourseGrid({
     {
       value: "in-progress",
       label: "In progress",
-      count: summaries.filter((s) => isInProgress(s, state.completed)).length,
+      count: summaries.filter((s) => isInProgress(s, state.completed, standing)).length,
     },
   ];
   const tagOptions = useMemo(() => {
@@ -115,7 +119,7 @@ export function CourseGrid({
         <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))]">
           {shown.map((s) => (
             <li key={s.slug} className="flex">
-              <CourseTile summary={s} completed={state.completed} />
+              <CourseTile summary={s} completed={state.completed} standing={standing} />
             </li>
           ))}
         </ul>
@@ -127,11 +131,13 @@ export function CourseGrid({
 function CourseTile({
   summary,
   completed,
+  standing,
 }: {
   summary: CourseSummary;
   completed: Record<string, true>;
+  standing: ItemStanding;
 }) {
-  const status = courseStatus(summary, completed);
+  const status = courseStatus(summary, completed, standing);
   return (
     <Card as="article" className="w-full gap-2.5">
       {/* No course has cover art yet; the code stands in for it. */}
