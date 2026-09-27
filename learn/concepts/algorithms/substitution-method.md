@@ -6,7 +6,6 @@ requires: [recurrence-for-recursive-running-time]
 assumes: [recursion-tree-method, big-o-witness-definition]
 tags: [asymptotics, recurrences, proof]
 sources: []
-topics: []
 created: 2026-08-20T08:05:34.883Z
 ---
 

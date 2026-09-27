@@ -6,7 +6,6 @@ requires: [big-o-witness-definition]
 assumes: [little-o-and-little-omega, theta-as-both-bounds]
 tags: [asymptotics, growth-rates]
 sources: []
-topics: []
 created: 2026-08-20T08:05:32.019Z
 ---
 

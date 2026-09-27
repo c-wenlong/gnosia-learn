@@ -5,7 +5,6 @@ summary: A model emits a structured call against a declared schema; the harness 
 requires: []
 tags: [agentic-ai]
 sources: []
-topics: [cp4284-m3-t2]
 created: 2026-08-18T01:45:41.367Z
 assumes: [transformer-block]
 ---

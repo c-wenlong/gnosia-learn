@@ -5,7 +5,6 @@ summary: Several attention heads run in parallel over different learned subspace
 requires: [self-attention]
 tags: [transformers]
 sources: []
-topics: [cp4284-m1-t1]
 created: 2026-08-18T01:45:41.270Z
 ---
 

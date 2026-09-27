@@ -6,7 +6,6 @@ requires: [counting-operations-with-summations, case-analysis-worst-best-average
 assumes: [asymptotic-abstraction-and-when-it-lies, problem-vs-algorithm-bounds, master-theorem-limits, average-case-needs-a-distribution, logarithm-base-is-a-constant-factor]
 tags: [asymptotics, goal]
 sources: []
-topics: []
 created: 2026-08-20T08:05:37.017Z
 ---
 

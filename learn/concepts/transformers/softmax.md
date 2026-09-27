@@ -5,7 +5,6 @@ summary: Softmax exponentiates a score vector and normalises it, producing a pea
 requires: [vector-as-a-list-of-numbers]
 tags: [transformers]
 sources: []
-topics: []
 created: 2026-08-18T01:45:41.024Z
 ---
 

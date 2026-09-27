@@ -4,6 +4,7 @@ import type {
   NewAssetTopic,
   NewCollection,
   NewCollectionItem,
+  NewConceptCurriculumItem,
   NewCurriculumItem,
   NewCurriculumItemTopic,
 } from "@self-learn/schema";
@@ -33,6 +34,13 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * module teaches, and giving items their own vocabulary entry would mean 300
  * more slugs to maintain for no query anyone has asked for.
  *
+ * A row's `concepts:` list becomes `concept_curriculum_item` rows with the
+ * list's order as `position`. The course file is the one place that link is
+ * authored (docs/proposals/course-items-declare-concepts.md); the reader has
+ * already checked each id sits under the module's topic in the vocabulary,
+ * and what is left here is that a note with that id exists, which only the
+ * catalog knows. The concepts source runs first for exactly that reason.
+ *
  * Curated resources become `link` assets: they have a URL and no bytes, which
  * is exactly what `asset`'s `num_nonnulls(path, url) = 1` check describes.
  */
@@ -41,19 +49,27 @@ export { COURSES_DIR };
 
 export const coursesIndexer: Indexer = {
   source: "courses",
-  owns: ["collection", "curriculumItem", "collectionItem", "curriculumItemTopic"],
+  owns: [
+    "collection",
+    "curriculumItem",
+    "collectionItem",
+    "curriculumItemTopic",
+    "conceptCurriculumItem",
+  ],
   assetPrefix: ASSET_PREFIX.courses,
   root: () => COURSES_DIR,
 
-  read: async ({ repoRoot, vocabulary }) => {
+  read: async ({ repoRoot, vocabulary, knownConcepts }) => {
     const courses = asIndexError(() =>
       loadCourses({ root: repoRoot, topics: vocabulary.entries }),
     );
+    const concepts = await knownConcepts();
 
     const collections: NewCollection[] = [];
     const curriculumItems: NewCurriculumItem[] = [];
     const collectionItems: NewCollectionItem[] = [];
     const curriculumItemTopics: NewCurriculumItemTopic[] = [];
+    const conceptLinks: NewConceptCurriculumItem[] = [];
     const assets: NewAsset[] = [];
     const assetTopics: NewAssetTopic[] = [];
 
@@ -140,6 +156,24 @@ export const coursesIndexer: Indexer = {
           // Every item inherits the module's topic: that is how a course row
           // reaches the videos and notes about the same subject.
           curriculumItemTopics.push({ curriculumItemId: item.id, topicSlug: declared });
+
+          // Checked against the concepts just indexed rather than left to the
+          // foreign key, so the error names the course file and the id rather
+          // than a constraint.
+          for (const [conceptIndex, slug] of item.concepts.entries()) {
+            if (!concepts.has(slug)) {
+              problems.add(
+                `${where}: item "${item.id}" lists concept "${slug}", which is not a note ` +
+                  `in learn/concepts`,
+              );
+              continue;
+            }
+            conceptLinks.push({
+              conceptSlug: slug,
+              curriculumItemId: item.id,
+              position: conceptIndex + 1,
+            });
+          }
         }
 
         for (const resource of mod.resources) {
@@ -179,12 +213,13 @@ export const coursesIndexer: Indexer = {
       assetTopic: assetTopics,
       collectionItem: collectionItems,
       curriculumItemTopic: curriculumItemTopics,
+      conceptCurriculumItem: conceptLinks,
     };
     return {
       rows,
       notes: [
         `${courses.length} courses, ${moduleCount} modules, ${curriculumItems.length} curriculum items`,
-        `${assets.length} curated links`,
+        `${assets.length} curated links, ${conceptLinks.length} concept links`,
       ],
     };
   },

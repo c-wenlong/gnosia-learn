@@ -6,7 +6,6 @@ requires: []
 assumes: []
 tags: [asymptotics, cost-model]
 sources: []
-topics: []
 created: 2026-08-20T08:05:29.894Z
 ---
 

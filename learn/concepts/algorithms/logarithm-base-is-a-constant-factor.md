@@ -6,7 +6,6 @@ requires: [theta-as-both-bounds]
 assumes: [comparing-growth-rates]
 tags: [asymptotics, growth-rates]
 sources: []
-topics: []
 created: 2026-08-20T08:05:32.372Z
 ---
 

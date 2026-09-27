@@ -6,7 +6,6 @@ requires: [machine-model-and-input-size]
 assumes: [case-analysis-worst-best-average, counting-operations-with-summations, big-o-witness-definition]
 tags: [asymptotics, amortised]
 sources: []
-topics: []
 created: 2026-08-20T08:05:35.950Z
 ---
 

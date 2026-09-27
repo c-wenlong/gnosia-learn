@@ -5,7 +5,6 @@ summary: Self-attention lets every token attend to every other token in the same
 requires: [attention-weights]
 tags: [transformers]
 sources: []
-topics: [cp4284-m1-t1]
 created: 2026-08-18T01:45:41.171Z
 ---
 
