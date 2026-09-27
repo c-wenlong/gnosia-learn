@@ -110,5 +110,9 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", ()
       },
     });
     expect(await overridden.topics()).toEqual(await files.topics());
+    expect(await overridden.tags()).toEqual(await files.tags());
+    const back = await overridden.resolution();
+    expect(back.topics).toEqual({ kind: "files", from: "variable" });
+    expect(back.tags).toEqual({ kind: "files", from: "variable" });
   }, 60_000);
 });
