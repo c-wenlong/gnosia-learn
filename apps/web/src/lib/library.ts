@@ -190,8 +190,8 @@ export interface LibraryFilters {
  * The query string for one filter state, with empty values left out.
  *
  * Every filter lives in the URL so a view is linkable and the back button
- * works: the page builds each filter menu option's destination with this, and
- * the menu only pushes the one picked. A cleared filter drops its key rather than writing
+ * works: the Library's filter menus push the URL this builds for a pick. A
+ * cleared filter drops its key rather than writing
  * `?kind=`, so the default view has a bare `/library` URL, and the default sort
  * is never written either.
  */

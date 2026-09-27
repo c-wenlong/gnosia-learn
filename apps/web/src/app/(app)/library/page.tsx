@@ -45,9 +45,9 @@ export const metadata: Metadata = {
  * **The filters are the URL.** `?kind=`, `?course=`, `?topic=`, `?q=` and
  * `?sort=` are the whole state, so a view is linkable and the back button
  * undoes a filter. Each filter group is a `FilterMenu` (Type, Course, and
- * Topic when one is set); the page works out every option's URL here and the
- * small client `LibraryFilterMenus` pushes the one picked, so the page itself
- * stays a server component. The search box is a GET form (`next/form`, so
+ * Topic when one is set); the page reads the filters and the options here, and
+ * the small client `LibraryFilterMenus` pushes the `libraryHref` of a pick, so
+ * the page itself stays a server component. The search box is a GET form (`next/form`, so
  * submitting it is a client-side navigation) that carries the other filters
  * along as hidden fields.
  *
@@ -141,25 +141,13 @@ export default async function LibraryPage({
     (hidden > 0 && kind === null ? ` · ${hidden} companion ${hidden === 1 ? "file" : "files"} not in All kinds` : "");
 
   const typeOptions: LibraryMenu["options"] = [
-    { value: "", label: "All kinds", short: "All", count: facets.standalone, href: libraryHref({ ...filters, kind: null }) },
-    ...facets.primary.map((f) => ({ value: f.kind, label: f.label, count: f.count, href: libraryHref({ ...filters, kind: f.kind }) })),
-    ...facets.companion.map((f) => ({
-      value: f.kind,
-      label: f.label,
-      count: f.count,
-      section: "Companion files",
-      href: libraryHref({ ...filters, kind: f.kind }),
-    })),
+    { value: "", label: "All kinds", short: "All", count: facets.standalone },
+    ...facets.primary.map((f) => ({ value: f.kind, label: f.label, count: f.count })),
+    ...facets.companion.map((f) => ({ value: f.kind, label: f.label, count: f.count, section: "Companion files" })),
   ];
   const courseOptions: LibraryMenu["options"] = [
-    { value: "", label: "All courses", short: "All", href: libraryHref({ ...filters, course: null }) },
-    ...courseChips.map((f) => ({
-      value: f.slug,
-      label: f.code,
-      detail: f.title,
-      count: f.count,
-      href: libraryHref({ ...filters, course: f.slug }),
-    })),
+    { value: "", label: "All courses", short: "All" },
+    ...courseChips.map((f) => ({ value: f.slug, label: f.code, detail: f.title, count: f.count })),
   ];
   // A chosen course with no assets, or a slug no course has, still shows as
   // the checked row, so the menu agrees with its trigger.
@@ -169,20 +157,20 @@ export default async function LibraryPage({
       label: chosenCourse?.code ?? course,
       detail: chosenCourse?.title ?? "No course has this name",
       count: 0,
-      href: libraryHref(filters),
     });
   }
   const menus: LibraryMenu[] = [
-    { label: "Type", value: kind ?? "", options: typeOptions },
-    { label: "Course", value: course ?? "", options: courseOptions },
+    { label: "Type", param: "kind", value: kind ?? "", options: typeOptions },
+    { label: "Course", param: "course", value: course ?? "", options: courseOptions },
   ];
   if (topic !== null) {
     menus.push({
       label: "Topic",
+      param: "topic",
       value: topic,
       options: [
-        { value: "", label: "All topics", short: "All", href: libraryHref({ ...filters, topic: null }) },
-        { value: topic, label: titles[topic] ?? topic, href: libraryHref(filters) },
+        { value: "", label: "All topics", short: "All" },
+        { value: topic, label: titles[topic] ?? topic },
       ],
     });
   }
@@ -211,7 +199,7 @@ export default async function LibraryPage({
           {/* Type, Course (and Topic when set), the sort, then the search at
               the right from 768px; below that the search takes its own line. */}
           <section aria-label="Filters" className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <LibraryFilterMenus menus={menus} />
+            <LibraryFilterMenus filters={filters} menus={menus} />
             <SortToggle filters={filters} sort={sort} />
             <Form action="/library" role="search" className="w-full md:ml-auto md:w-[340px]">
               {/* The other filters ride along, so a search narrows the view the

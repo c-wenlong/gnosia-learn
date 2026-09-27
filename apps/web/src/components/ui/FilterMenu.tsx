@@ -72,6 +72,8 @@ export function FilterMenu<V extends string>({
   const selected = options.findIndex((o) => o.value === value);
 
   const show = (at: number, byKey: boolean) => {
+    // A prefix typed into the last opening does not carry into this one.
+    typed.current = { buffer: "", at: 0 };
     setActive(at);
     setKeyboard(byKey);
     setOpen(true);
@@ -107,15 +109,20 @@ export function FilterMenu<V extends string>({
   }, [open]);
 
   // Opening: keep the list inside the viewport, then give it focus. A layout
-  // effect, so the list never paints at the edge before it moves.
+  // effect, so the list never paints at the edge before it moves. Measured
+  // again on a resize, since a narrower window narrows the list too.
   useLayoutEffect(() => {
     if (!open) return;
-    const at = trigger.current?.getBoundingClientRect();
-    const box = list.current;
-    if (at !== undefined && box !== null) {
+    const place = () => {
+      const at = trigger.current?.getBoundingClientRect();
+      const box = list.current;
+      if (at === undefined || box === null) return;
       setShift(popoverShift({ triggerLeft: at.left, width: box.offsetWidth, viewport: document.documentElement.clientWidth }));
-    }
-    box?.focus({ preventScroll: true });
+    };
+    place();
+    list.current?.focus({ preventScroll: true });
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
   }, [open]);
 
   // Keep the highlighted row in view in a list long enough to scroll.
