@@ -123,9 +123,9 @@ export interface WriteThroughSummary {
   written: { type: string; path: string; root: string }[];
   /**
    * Files that changed on disk while the write ran and were left alone; the
-   * database's version of each is beside it as `<path>.incoming`.
+   * database's version of each is beside it at `incoming`.
    */
-  conflicts: { type: string; path: string; root: string }[];
+  conflicts: { type: string; path: string; root: string; incoming: string | null }[];
   skipped: { type: string; reason: string }[];
   /** Types whose export hash was recorded, because the database owns them. */
   recorded: string[];
@@ -134,7 +134,12 @@ export interface WriteThroughSummary {
 export function summarise(plan: WriteThroughPlan, apply: boolean): WriteThroughSummary {
   return {
     written: apply ? plan.files.map((file) => ({ type: file.type, path: file.path, root: file.root })) : [],
-    conflicts: plan.conflicts.map((file) => ({ type: file.type, path: file.path, root: file.root })),
+    conflicts: plan.conflicts.map((file) => ({
+      type: file.type,
+      path: file.path,
+      root: file.root,
+      incoming: file.incoming ?? null,
+    })),
     skipped: plan.skipped,
     recorded: apply ? plan.recorded : [],
   };

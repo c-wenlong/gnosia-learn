@@ -73,6 +73,8 @@ export interface PlannedFile {
   bytes: Buffer | null;
   /** What was on disk when the write was checked, or null for no file. */
   seen: Buffer | null;
+  /** For a conflict: where the database's version was written instead, repo-relative. */
+  incoming?: string;
 }
 
 export interface WriteThroughPlan {
@@ -217,7 +219,8 @@ export async function planWriteThrough(
  * Each file is read once more just before it is replaced. One that changed
  * since the check (an editor saved it, or another writer got there first) is
  * left alone, and the database's version goes beside it as
- * `<file>.incoming`, which no reader picks up; the result lists it. The
+ * `<file>.incoming` (or `.incoming.2` and on, when an earlier one is still
+ * waiting to be merged), which no reader picks up; the result lists it. The
  * window between that read and the rename is the only one left, and it is
  * the width of one rename.
  */
@@ -226,8 +229,15 @@ export async function applyWriteThrough(plan: WriteThroughPlan): Promise<WriteTh
   const conflicts: PlannedFile[] = [];
   for (const file of plan.files) {
     if (!same(await readOrNull(file.target), file.seen)) {
-      if (file.bytes !== null) await replace(`${file.target}.incoming`, file.bytes);
-      conflicts.push(file);
+      if (file.bytes === null) {
+        conflicts.push(file);
+        continue;
+      }
+      // An earlier conflict's copy may still be waiting to be merged, so a
+      // later one takes the next free name rather than replacing it.
+      const incoming = await freeName(`${file.target}.incoming`);
+      await replace(incoming, file.bytes);
+      conflicts.push({ ...file, incoming: path.relative(file.root, incoming) });
       continue;
     }
     if (file.bytes === null) await rm(file.target, { force: true });
@@ -235,6 +245,14 @@ export async function applyWriteThrough(plan: WriteThroughPlan): Promise<WriteTh
     written.push(file);
   }
   return { ...plan, files: written, conflicts };
+}
+
+/** `base`, or `base.2`, `base.3` ..., whichever does not exist yet. */
+async function freeName(base: string): Promise<string> {
+  for (let n = 1; ; n += 1) {
+    const candidate = n === 1 ? base : `${base}.${n}`;
+    if ((await readOrNull(candidate)) === null) return candidate;
+  }
 }
 
 async function replace(target: string, bytes: Buffer): Promise<void> {

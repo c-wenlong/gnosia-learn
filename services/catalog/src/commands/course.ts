@@ -69,8 +69,10 @@ function writeThroughLines(summary: WriteThroughSummary): string[] {
   const lines = summary.written.map((file) => `  wrote ${file.path}  (under ${file.root})`);
   for (const file of summary.conflicts) {
     lines.push(
-      `  NOT written: ${file.path} (under ${file.root}) changed on disk while this ran. The database's ` +
-        `version is beside it as ${file.path}.incoming; merge the two and import the result.`,
+      `  NOT written: ${file.path} (under ${file.root}) changed on disk while this ran. ` +
+        (file.incoming === null
+          ? "The database no longer has it; decide whether to keep it."
+          : `The database's version is beside it as ${file.incoming}; merge the two and import the result.`),
     );
   }
   for (const skip of summary.skipped) lines.push(`  not written: ${skip.reason}`);

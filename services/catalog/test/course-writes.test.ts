@@ -181,6 +181,18 @@ describe("the write-through, when a file changes between the check and the write
       expect(applied.conflicts.map((f) => f.path)).toEqual(["content/courses/xx1000.yaml"]);
       expect(await readFile(target, "utf8")).toBe("saved by an editor after the check\n");
       expect(await readFile(`${target}.incoming`, "utf8")).toBe("the database's version\n");
+      expect(applied.conflicts[0]?.incoming).toBe("content/courses/xx1000.yaml.incoming");
+
+      // A second conflict before anyone merged the first keeps the first copy.
+      const again = await applyWriteThrough({
+        files: [{ ...applied.conflicts[0]!, incoming: undefined, bytes: Buffer.from("a later version\n") }],
+        conflicts: [],
+        skipped: [],
+        recorded: [],
+      });
+      expect(again.conflicts[0]?.incoming).toBe("content/courses/xx1000.yaml.incoming.2");
+      expect(await readFile(`${target}.incoming`, "utf8")).toBe("the database's version\n");
+      expect(await readFile(`${target}.incoming.2`, "utf8")).toBe("a later version\n");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
