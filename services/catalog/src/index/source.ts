@@ -20,6 +20,7 @@ import type {
   SourceRepo,
 } from "@self-learn/schema";
 
+import type { ImportedLog } from "../content/session-logs";
 import type { Vocabulary } from "./vocabulary";
 
 /**
@@ -123,6 +124,12 @@ export interface SourceResult extends SourceNotes {
    * on `index_run.metadata`, and overwritten every run like the rest of it.
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Session logs read whole, for `session_log_entry` (Track C). Not rows: the
+   * table is append-only, so the writer appends what each file holds beyond
+   * the entries already stored, rather than replacing anything.
+   */
+  logs?: ImportedLog[];
 }
 
 /**
