@@ -5,6 +5,10 @@ Three files and two folders hold the content this repo authors. The catalog in
 a Postgres index from them; nothing here is generated, and nothing here is
 written by the catalog.
 
+[docs/CONTENT-MIGRATION.md](../docs/CONTENT-MIGRATION.md) is the proposed plan
+that moves this content into Postgres, and this document describes the
+files-as-truth state that plan replaces.
+
 Everything under `content/` is parsed by one reader,
 [`packages/content`](../packages/content/src/index.ts), which the web app and
 the catalog both import. That is deliberate: while the courses existed as both
