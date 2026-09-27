@@ -6,7 +6,6 @@ requires: [amortised-cost-and-aggregate-method]
 assumes: [accounting-method]
 tags: [asymptotics, amortised]
 sources: []
-topics: []
 created: 2026-08-20T08:05:36.661Z
 ---
 

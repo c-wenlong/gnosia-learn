@@ -6,7 +6,6 @@ requires: [recurrence-for-recursive-running-time, comparing-growth-rates]
 assumes: [recursion-tree-method]
 tags: [asymptotics, recurrences]
 sources: []
-topics: []
 created: 2026-08-20T08:05:35.239Z
 ---
 

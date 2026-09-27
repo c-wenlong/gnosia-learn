@@ -5,7 +5,6 @@ summary: "Each token is projected into three roles: what it seeks, what it offer
 requires: [vector-as-a-list-of-numbers]
 tags: [transformers]
 sources: []
-topics: [cp4284-m1-t1]
 created: 2026-08-18T01:45:41.075Z
 ---
 

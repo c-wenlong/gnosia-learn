@@ -292,7 +292,6 @@ interface Values {
   domain?: string;
   tags?: string;
   sources?: string;
-  topics?: string;
   body?: string;
   text?: string;
   topic?: string;
@@ -431,7 +430,6 @@ commands.concept = async ({ values, positionals }, session) => {
       assumes: list(values.assumes),
       tags: list(values.tags),
       sources: list(values.sources),
-      topics: list(values.topics),
       created:
         typeof existing?.created === "string" ? existing.created : new Date().toISOString(),
     };
@@ -513,7 +511,7 @@ commands.concept = async ({ values, positionals }, session) => {
     for (const field of ["title", "summary"] as const) {
       if (values[field] !== undefined) patch[field] = values[field];
     }
-    for (const field of ["requires", "assumes", "tags", "topics", "sources"] as const) {
+    for (const field of ["requires", "assumes", "tags", "sources"] as const) {
       if (values[field] !== undefined) patch[field] = list(values[field]);
     }
     if (Object.keys(patch).length === 0 && values.domain === undefined) {
@@ -1435,10 +1433,9 @@ commands.help = async () => {
                                  assumes  = useful background: orders the plan,
                                    never blocks, never moves belief
   check add --concept C --question Q --answer A [--why W]
-                                 (concept add also takes --topics <item-id,…>,
-                                  which is a different thing: those are
-                                  curriculum *item* ids like cp4284-m1-t1, not
-                                  the vocabulary slug --topic takes)
+                                 (a note's place on a course is the course
+                                  file's to say: list the id under the row's
+                                  concepts: in content/courses/<code>.yaml)
   check list [--concept C]       stored verification questions
   probe [--goal G] [--limit N]   what to ask next, by information gain
   observe --concept C --correct true|false [--source probe|teach|review]
@@ -1500,7 +1497,6 @@ const OPTIONS = {
   domain: { type: "string" },
   tags: { type: "string" },
   sources: { type: "string" },
-  topics: { type: "string" },
   body: { type: "string" },
   text: { type: "string" },
   topic: { type: "string" },

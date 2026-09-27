@@ -5,7 +5,6 @@ summary: A transformer block is multi-head attention plus a feed-forward network
 requires: [multi-head-attention, positional-encoding]
 tags: [transformers]
 sources: []
-topics: [cp4284-m1-t1]
 created: 2026-08-18T01:45:41.317Z
 ---
 

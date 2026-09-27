@@ -315,7 +315,7 @@ Each of these came out of the same audit and is a separate change:
 | Step | Landed in |
 | --- | --- |
 | Reader accepts `topics[].concepts`, with the refusals above; migration 0009 adds `position`; `cp4284.yaml` lists the eight concepts its notes already name | the PR that follows #114 |
-| Courses indexer owns the link, order becomes topics, concepts, courses, frontmatter `topics:` refused and removed | not started |
+| Courses indexer owns the link, order becomes topics, concepts, courses, frontmatter `topics:` refused and removed from the 32 notes, `concept add --topics` gone | the PR that follows #118 |
 | `positions` on the knowledge base, `conceptsForTopic` sorts by it | not started |
 | Today and the Courses grid use `mastered` | not started |
 | `concept add --item`, `catalog status` coverage | not started |

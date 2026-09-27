@@ -6,7 +6,6 @@ requires: [big-o-witness-definition, big-omega-witness-definition]
 assumes: []
 tags: [asymptotics, notation]
 sources: []
-topics: []
 created: 2026-08-20T08:05:31.311Z
 ---
 
