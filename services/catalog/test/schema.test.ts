@@ -9,6 +9,7 @@ import {
   learner,
   LOCAL_LEARNER_ID,
   session,
+  tables,
   topic,
 } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
@@ -51,11 +52,12 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       expect(after.pending).toEqual([]);
       expect(after.head).toBe(after.latest);
       // Every table in the schema package exists, not just the ones the rest of
-      // this file touches.
+      // this file touches, and nothing the package does not know about.
       const { rows } = await scratch.db.execute<{ n: number }>(
         sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
       );
-      expect(rows[0]?.n).toBe(24);
+      expect(rows[0]?.n).toBe(Object.keys(tables).length);
+      expect(rows[0]?.n).toBe(34);
     });
 
     it("is idempotent", async () => {
@@ -70,7 +72,9 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
   describe("constraints", () => {
     beforeAll(async () => {
       await applyMigrations(scratch.db);
-      await scratch.db.insert(learner).values({ id: LOCAL_LEARNER_ID });
+      // Migration 0010 seeds the `local` row, so this is a no-op on a fresh
+      // database and stays here for the older migrations' sake.
+      await scratch.db.insert(learner).values({ id: LOCAL_LEARNER_ID }).onConflictDoNothing();
       await scratch.db
         .insert(topic)
         .values({ slug: "asymptotics", title: "Asymptotics", domain: "algorithms" });

@@ -10,6 +10,9 @@ import {
 import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { loadCourses } from "@self-learn/content";
+
+import { runDoctor } from "../src/commands/doctor";
 import { runIndexCommand } from "../src/commands/index-command";
 import { runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
@@ -163,8 +166,44 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     it("is idempotent: a second run changes nothing", async () => {
       const second = await runIndexCommand({});
       expect(second.totals.deleted).toBe(0);
+      // Nothing changed, so no entity's snapshot moved and no revision is
+      // appended (docs/CONTENT-MIGRATION.md 0.3), and nothing is archived.
+      expect(second.sources.map((s) => [s.source, s.revisions])).toEqual(
+        second.sources.map((s) => [s.source, {}]),
+      );
+      expect(second.sources.flatMap((s) => s.archivedKeys)).toEqual([]);
       expect(await scratch.db.select().from(topic)).toHaveLength(EXPECTED.topics);
       expect(await scratch.db.select().from(concept)).toHaveLength(EXPECTED.concepts);
+    });
+  });
+
+  describe("doctor", () => {
+    it("lists every course with no concept on any item, the ones the course files show", async () => {
+      // Computed from the files rather than pinned: the owner is filling these
+      // in (Track B), and the count is supposed to fall. It was nine when the
+      // rule was written down.
+      const expected = loadCourses({ root: REPO_ROOT })
+        .filter((course) =>
+          course.modules.every((mod) => mod.topics.every((item) => item.concepts.length === 0)),
+        )
+        .map((course) => course.id)
+        .sort();
+
+      const result = await runDoctor();
+      expect(result.conceptlessCourses).toEqual(expected);
+      const rule = result.rules.find((r) => r.name === "item-has-concept");
+      expect(rule?.state).toBe("disarmed");
+      // Every item of those courses is a violator, plus any stragglers elsewhere.
+      const inThem = result.courses
+        .filter((row) => expected.includes(row.course))
+        .reduce((a, row) => a + row.items, 0);
+      expect(rule?.violators).toBeGreaterThanOrEqual(inThem);
+      // The two rules the parser already enforces hold on the real tree.
+      expect(result.rules.find((r) => r.name === "module-has-item")?.violators).toBe(0);
+      expect(result.rules.find((r) => r.name === "item-concept-in-module-topic")?.violators).toBe(0);
+      expect(result.conceptsWithoutTopic).toEqual([]);
+      expect(result.instance?.role).toBe("primary");
+      expect(result.ok).toBe(true);
     });
   });
 

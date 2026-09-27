@@ -13,7 +13,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-import { createdAt, instant, updatedAt } from "./columns";
+import { createdAt, instant, ownerId, updatedAt } from "./columns";
 import { asset, topic } from "./content";
 import { learner } from "./state";
 import {
@@ -214,6 +214,8 @@ export const job = pgTable(
     errorKind: text("error_kind"),
     error: text("error"),
     errorDetail: jsonb("error_detail"),
+    /** Whose job it is. Only `session` carried a learner before (D3). */
+    ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -262,6 +264,7 @@ export const job = pgTable(
     index("job_topic_slug_idx").on(t.topicSlug),
     index("job_parent_job_id_idx").on(t.parentJobId),
     index("job_requested_at_idx").on(t.requestedAt),
+    index("job_owner_id_idx").on(t.ownerId),
   ],
 );
 
@@ -296,6 +299,7 @@ export const assetJob = pgTable(
     contentHash: text("content_hash").notNull(),
     bytes: bigint("bytes", { mode: "number" }).notNull(),
     writtenAt: instant("written_at").notNull().default(sql`now()`),
+    ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -303,5 +307,6 @@ export const assetJob = pgTable(
     primaryKey({ columns: [t.assetId, t.jobId] }),
     check("asset_job_bytes_check", sql`bytes >= 0`),
     index("asset_job_job_id_idx").on(t.jobId),
+    index("asset_job_owner_id_idx").on(t.ownerId),
   ],
 );
