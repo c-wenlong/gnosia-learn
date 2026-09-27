@@ -302,6 +302,20 @@ export function parseSources(raw: string): IndexSource[] {
   return names as IndexSource[];
 }
 
+/**
+ * The refusal `runIndex` would open with for these sources, and nothing else:
+ * a `db`-owned type whose files are not its recorded export (edge case 12).
+ * Reads only, so a command can ask before it writes anything and still leave
+ * the catalog as it was when the answer is no.
+ */
+export async function checkOwnedFiles(
+  db: CatalogDatabase,
+  options: { only: readonly IndexSource[]; repoRoot?: string },
+): Promise<void> {
+  const wanted = selection(options.only);
+  await ownedSkips(db, options.repoRoot ?? REPO_ROOT, INDEXERS.filter((i) => wanted.has(i.source)));
+}
+
 export async function runIndex(
   db: CatalogDatabase,
   options: RunOptions = {},
