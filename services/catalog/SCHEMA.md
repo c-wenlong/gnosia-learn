@@ -364,6 +364,7 @@ erDiagram
     concept_curriculum_item {
         text concept_slug PK_FK
         text curriculum_item_id PK_FK
+        int position "teaching order, from the course file"
     }
 ```
 

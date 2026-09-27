@@ -22,12 +22,18 @@ export function makeFixture(): Fixture {
   };
 }
 
-export function topicsYaml(slugs: string[]): string {
+/** `concepts` is each slug's `maps.concepts`; a slug not in it maps nothing. */
+export function topicsYaml(slugs: string[], concepts: Record<string, string[]> = {}): string {
   const lines = ["topics:"];
   for (const slug of slugs) {
     lines.push(`  - slug: ${slug}`);
     lines.push(`    title: ${slug}`);
     lines.push("    domain: testing");
+    const mapped = concepts[slug];
+    if (mapped !== undefined) {
+      lines.push("    maps:");
+      lines.push(`      concepts: [${mapped.join(", ")}]`);
+    }
   }
   return `${lines.join("\n")}\n`;
 }
