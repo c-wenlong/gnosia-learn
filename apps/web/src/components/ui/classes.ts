@@ -16,6 +16,17 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
+/**
+ * The empty part of a bar or meter: the `--track` fill inside a 1px inset
+ * ring of `--border`. In the dark palettes the track is black, so every fill
+ * clears 3:1 on it, and black is barely apart from the dark card and page
+ * (1.26:1 and 1.14:1); the ring is what shows an empty bar's extent there
+ * (1.94:1 and 2.15:1 in `.dark`). The fill is drawn over the ring, so it
+ * never touches the fill's contrast. In the light palettes the ring is the
+ * track's own colour and cannot be seen.
+ */
+export const TRACK = "bg-track inset-ring inset-ring-border";
+
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 
