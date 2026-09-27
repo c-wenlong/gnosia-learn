@@ -6,15 +6,19 @@ import {
   assetTopic,
   collection,
   collectionItem,
+  collectionTag,
   concept,
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
   curriculumItemTopic,
   indexRun,
+  manimkcTopic,
   mirror,
   type RevisionEntityType,
+  tag,
   topic,
+  topicRelation,
 } from "@self-learn/schema";
 import { and, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -113,6 +117,7 @@ const ARCHIVED_NOT_PRUNED = new Set<EntityName>(["collection", "curriculumItem"]
 /** The revision entity type of each entity table. */
 const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
   topic: "topic",
+  tag: "tag",
   concept: "concept",
   collection: "collection",
   curriculumItem: "curriculum_item",
@@ -122,6 +127,7 @@ const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
 /** The entity tables an indexer may own, and the column identifying a row. */
 const ENTITY_KEY = {
   topic: "slug",
+  tag: "id",
   concept: "slug",
   collection: "id",
   curriculumItem: "id",
@@ -129,11 +135,14 @@ const ENTITY_KEY = {
 } as const;
 
 /** Entity tables, in the order a foreign key needs them written. */
-const ENTITY_ORDER = ["topic", "concept", "collection", "curriculumItem", "asset"] as const;
+const ENTITY_ORDER = ["topic", "tag", "concept", "collection", "curriculumItem", "asset"] as const;
 type EntityName = (typeof ENTITY_ORDER)[number];
 
 /** Link tables, written after every entity they point at exists. */
 const LINK_ORDER = [
+  "topicRelation",
+  "manimkcTopic",
+  "collectionTag",
   "assetTopic",
   "assetConcept",
   "conceptPrerequisite",
@@ -154,6 +163,7 @@ const ASSET_LINKED = new Set<LinkName>(["assetTopic", "assetConcept", "assetDeri
 
 const TABLES = {
   topic,
+  tag,
   concept,
   collection,
   curriculumItem,
@@ -165,12 +175,16 @@ const TABLES = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
+  topicRelation,
+  manimkcTopic,
+  collectionTag,
   mirror,
 } as const satisfies Record<keyof SourceRows, PgTable>;
 
 /** Conflict targets for the entity upserts, matching each table's primary key. */
 const CONFLICT_TARGET = {
   topic: topic.slug,
+  tag: tag.id,
   concept: concept.slug,
   collection: collection.id,
   curriculumItem: curriculumItem.id,
@@ -184,9 +198,9 @@ type AnyRow = Record<string, unknown>;
  * The two places this file admits it is generic.
  *
  * drizzle types `.values()` and every column against one specific table. This
- * writer is deliberately generic over twelve of them, and the row shapes are
+ * writer is deliberately generic over every table in `SourceRows`, and the row shapes are
  * already guaranteed at the indexer boundary by `SourceRows`, which is built
- * from drizzle's own `$inferInsert` types. Two narrow casts here beat twelve
+ * from drizzle's own `$inferInsert` types. Two narrow casts here beat sixteen
  * near-identical copies of the same forty lines, each free to drift.
  */
 
@@ -234,6 +248,13 @@ export async function writeSource(
     metadata?: Record<string, unknown>;
     /** The revision author, `import:<git sha>` of the tree read. */
     author?: string;
+    /**
+     * The courses source runs later in the same import and rewrites every
+     * course's `collection_tag` rows, so a tag this run prunes may take its
+     * links with it. False when courses is not running (the database owns
+     * it), and then a pruned tag a course still wears is refused.
+     */
+    tagLinksRewritten?: boolean;
   } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
@@ -326,7 +347,7 @@ export async function writeSource(
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const pruned = await pruneEntity(tx, indexer, name, rows);
+      const pruned = await pruneEntity(tx, indexer, name, rows, options.tagLinksRewritten ?? false);
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
       prunedReads.set(
@@ -584,6 +605,7 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
+  tagLinksRewritten: boolean,
 ): Promise<string[]> {
   const keys = await staleKeys(tx, indexer, name, rows);
   if (keys.length === 0) return [];
@@ -591,6 +613,20 @@ async function pruneEntity(
   const table = TABLES[name];
   const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
+  // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
+  // a course still wears. An import that also runs the courses source is
+  // different: that source rewrites every course's tags from the files later
+  // in this run, so a tag gone from tags.yaml takes its links with it here,
+  // the way a pruned topic's links go by cascade, and a course file that still
+  // names it is refused by the course reader. When the database owns courses
+  // nothing would put the links back, so the prune is refused by name instead.
+  if (name === "tag") {
+    if (tagLinksRewritten) {
+      await tx.delete(collectionTag).where(inArray(collectionTag.tagId, keys));
+    } else {
+      await assertTagsUnworn(tx, keys);
+    }
+  }
   try {
     await tx.delete(table).where(inArray(column, keys));
   } catch (error) {
@@ -669,6 +705,26 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
   if (blocked.length === 0) return;
 
   throw evidenceError(blocked);
+}
+
+/**
+ * Refuse to prune a tag a course still wears, naming both, when the courses
+ * source is not running to rewrite the links: the database owns courses, and
+ * silently dropping a tag from one would be an edit nobody made.
+ */
+async function assertTagsUnworn(tx: CatalogDatabase, tags: string[]): Promise<void> {
+  const worn = await tx
+    .select({ tag: collectionTag.tagId, course: collectionTag.collectionId })
+    .from(collectionTag)
+    .where(inArray(collectionTag.tagId, tags))
+    .orderBy(collectionTag.tagId, collectionTag.collectionId);
+  if (worn.length === 0) return;
+  throw new IndexError(
+    `content/tags.yaml no longer lists tags that courses still wear: ` +
+      `${worn.map((w) => `${w.tag} (${w.course})`).join(", ")}. The database owns courses, so ` +
+      `this import will not rewrite them. Remove the tag from those courses through the catalog ` +
+      `first, or put it back in tags.yaml.`,
+  );
 }
 
 function evidenceError(slugs: string[]): IndexError {

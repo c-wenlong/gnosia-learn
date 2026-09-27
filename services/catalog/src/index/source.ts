@@ -6,13 +6,17 @@ import type {
   NewAssetTopic,
   NewCollection,
   NewCollectionItem,
+  NewCollectionTag,
   NewConcept,
   NewConceptCurriculumItem,
   NewConceptPrerequisite,
   NewCurriculumItem,
   NewCurriculumItemTopic,
+  NewManimkcTopic,
   NewMirror,
+  NewTag,
   NewTopic,
+  NewTopicRelation,
   SourceRepo,
 } from "@self-learn/schema";
 
@@ -28,8 +32,19 @@ import type { Vocabulary } from "./vocabulary";
  */
 
 export interface IndexContext {
-  /** Absolute path to the repository root. */
+  /**
+   * Absolute path to the root the content is read from: the repository for
+   * `catalog index`, any directory in the same layout for `catalog import`.
+   */
   repoRoot: string;
+  /**
+   * Where the pinned tool checkouts (tools/manimkc, tools/tldrawkc) resolve
+   * from, when that is not `repoRoot`. `catalog import <dir>` reads content
+   * from an export directory that holds no tools, so it points this at the
+   * repository. Absent means `repoRoot`, which is what every test and
+   * `catalog index` want.
+   */
+  toolsRoot?: string;
   /** Absolute path to the manimkc checkout to read. Only the manimkc source uses it. */
   manimkcRoot: string;
   /** `content/topics.yaml`, loaded once and shared by every source. */
@@ -59,6 +74,7 @@ export interface IndexContext {
 /** Rows produced by one source, keyed by the table they belong in. */
 export interface SourceRows {
   topic?: NewTopic[];
+  tag?: NewTag[];
   concept?: NewConcept[];
   collection?: NewCollection[];
   curriculumItem?: NewCurriculumItem[];
@@ -70,6 +86,9 @@ export interface SourceRows {
   assetDerivation?: NewAssetDerivation[];
   curriculumItemTopic?: NewCurriculumItemTopic[];
   conceptCurriculumItem?: NewConceptCurriculumItem[];
+  topicRelation?: NewTopicRelation[];
+  manimkcTopic?: NewManimkcTopic[];
+  collectionTag?: NewCollectionTag[];
   mirror?: NewMirror[];
 }
 
@@ -130,13 +149,17 @@ export type AssetPrefix = (typeof ASSET_PREFIX)[keyof typeof ASSET_PREFIX];
  */
 export type OwnedTable =
   | "topic"
+  | "tag"
   | "concept"
   | "collection"
   | "curriculumItem"
   | "conceptPrerequisite"
   | "collectionItem"
   | "curriculumItemTopic"
-  | "conceptCurriculumItem";
+  | "conceptCurriculumItem"
+  | "topicRelation"
+  | "manimkcTopic"
+  | "collectionTag";
 
 export interface Indexer {
   source: IndexSource;
