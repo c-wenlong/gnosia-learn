@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileSource } from "@self-learn/content";
 import { collection, curriculumItem } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
+import type { PgTransactionConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DB_READERS } from "../src/content/flip";
@@ -56,6 +57,21 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.topics.length, 0), 0)).toBe(137);
     expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.resources.length, 0), 0)).toBe(68);
     expect(JSON.stringify(rows)).toBe(JSON.stringify(files));
+  });
+
+  it("reads the whole tree from one snapshot", async () => {
+    const statements: string[] = [];
+    const logged = new Proxy(scratch.db, {
+      get(target, key, receiver) {
+        if (key !== "transaction") return Reflect.get(target, key, receiver);
+        return (fn: never, config: PgTransactionConfig) => {
+          statements.push(`${config.isolationLevel ?? ""} ${config.accessMode ?? ""}`);
+          return target.transaction(fn, config);
+        };
+      },
+    });
+    await readCourses(logged);
+    expect(statements).toEqual(["repeatable read read only"]);
   });
 
   it("leaves out archived items, modules and courses", async () => {

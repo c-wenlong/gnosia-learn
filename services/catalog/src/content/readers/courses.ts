@@ -31,9 +31,9 @@ import type { TypeReader } from "./reader";
  *   `collection_item`, in position order, its id without the `link:` prefix
  *   and its `type` the asset's `resource_type`.
  *
- * Six queries per call, whatever the number of courses, each ordered the way
- * the export orders it (`../export.ts`), so the reader and the export cannot
- * disagree about a list's order.
+ * Six queries per call, whatever the number of courses, in one snapshot, each
+ * ordered the way the export orders it (`../export.ts`), so the reader and the
+ * export cannot disagree about a list's order.
  */
 
 interface CourseRow extends Record<string, unknown> {
@@ -77,7 +77,17 @@ function optional(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
+/**
+ * Every live course, read in one repeatable-read, read-only transaction, so
+ * the six queries see one snapshot. Separately, an import or an archive that
+ * committed between two of them could hand a page a course from before it
+ * and modules from after it.
+ */
 export async function readCourses(db: CatalogDatabase): Promise<Course[]> {
+  return db.transaction((tx) => readTree(tx), { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
+async function readTree(db: CatalogDatabase): Promise<Course[]> {
   const courses = await rows<CourseRow>(
     db,
     sql`select id, slug, title, position, metadata from collection
