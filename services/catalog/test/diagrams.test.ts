@@ -528,7 +528,10 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
         const deadline = Date.now() + 10_000;
         for (;;) {
           const waiting = await tx.execute<{ n: number }>(
-            sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`,
+            // This scratch database is this file's alone, and its tests run one at a time.
+            sql`select count(*)::int as n from pg_locks
+                where locktype = 'advisory' and not granted
+                  and database = (select oid from pg_database where datname = current_database())`,
           );
           if ((waiting.rows[0]?.n ?? 0) > 0) break;
           if (Date.now() > deadline) throw new Error("the SVG-only put never waited on the lock");
