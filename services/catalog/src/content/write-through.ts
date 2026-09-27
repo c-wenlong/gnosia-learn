@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -34,7 +34,11 @@ import { mayRecord, recordExport } from "./ownership";
  *    `content_source` row, which is what lets an import of a flipped type skip
  *    the file it now matches (edge case 12).
  * 4. If anything after the first file write fails, commit included, the files
- *    are put back as they were, so the tree and the rows never disagree.
+ *    are put back as they were, so the tree and the rows never disagree. The
+ *    transaction's locks are gone by then, so the put-back takes them again,
+ *    and leaves any file whose bytes are no longer the ones this write put
+ *    there: another writer committed and rewrote it in between, and its bytes
+ *    are the rows'.
  *
  * The root is the one the type's last import read (`index_run.metadata.root`),
  * not the repository, so a write against a scratch database imported from a
@@ -146,13 +150,30 @@ export async function writeThrough<T>(
   write: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<WriteThroughResult<T>> {
   const sorted = [...new Set(types)].sort();
-  /** Every file touched so far, with the bytes it held before (null: it did not exist). */
-  const touched: { file: string; before: Buffer | null }[] = [];
+  /** Every file touched so far: the bytes it held before and the bytes written (null: absent). */
+  const touched: { file: string; before: Buffer | null; wrote: Buffer | null }[] = [];
 
-  const restore = async () => {
-    for (const { file, before } of touched.reverse()) {
+  const putBack = async () => {
+    for (const { file, before, wrote } of [...touched].reverse()) {
+      const now = await readFile(file).catch(() => null);
+      const ours = now === null ? wrote === null : wrote !== null && now.equals(wrote);
+      if (!ours) continue;
       if (before === null) await rm(file, { force: true });
       else await replaceFile(file, before);
+    }
+  };
+  const restore = async () => {
+    if (touched.length === 0) return;
+    try {
+      await db.transaction(async (tx) => {
+        for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+        await putBack();
+      });
+    } catch {
+      // The database is what failed, so its locks cannot be had. The check
+      // for bytes still ours is the guard left: a writer that committed in
+      // between rewrote the file, and its bytes are left where they are.
+      await putBack();
     }
   };
 
@@ -174,8 +195,8 @@ export async function writeThrough<T>(
         const removed: string[] = [];
         for (const relative of changed) {
           const file = path.join(root, relative);
-          touched.push({ file, before: previous.get(relative) ?? null });
           const bytes = next.get(relative);
+          touched.push({ file, before: previous.get(relative) ?? null, wrote: bytes ?? null });
           if (bytes === undefined) {
             await rm(file, { force: true });
             removed.push(relative);

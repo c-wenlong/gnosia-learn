@@ -57,17 +57,28 @@ async function latestId(db: CatalogDatabase, id: string): Promise<number | null>
   return (await latestRevisions(db, "tag", [id])).get(id)?.id ?? null;
 }
 
+/**
+ * What a tag add can be refused for without the database. The CLI runs it
+ * before it connects, so a malformed invocation is exit 2.
+ */
+export function checkTagInput(input: { id: string; label: string; description: string }): {
+  id: string;
+  label: string;
+  description: string;
+} {
+  const id = required(input.id, "--id");
+  if (!KEBAB.test(id)) throw new TagError("invalid", `--id "${id}" is not kebab-case`);
+  // The file's reader requires a description, so the export must always have one to write.
+  return { id, label: required(input.label, "--label"), description: required(input.description, "--description") };
+}
+
 /** `catalog tag add --id --label --description`: a new theme, at the end of the list. */
 export async function addTag(
   db: CatalogDatabase,
   input: { id: string; label: string; description: string },
   by: By,
 ): Promise<TagWriteResult> {
-  const id = required(input.id, "--id");
-  if (!KEBAB.test(id)) throw new TagError("invalid", `--id "${id}" is not kebab-case`);
-  const label = required(input.label, "--label");
-  // The file's reader requires one, so the export must always have one to write.
-  const description = required(input.description, "--description");
+  const { id, label, description } = checkTagInput(input);
   const done = await writeThrough(db, ["tags"], async (tx) => {
     const [existing] = await tx.select().from(tag).where(eq(tag.id, id));
     if (existing !== undefined) {

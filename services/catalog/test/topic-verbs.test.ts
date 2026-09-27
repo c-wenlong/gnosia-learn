@@ -28,9 +28,10 @@ import {
   restoreTopic,
 } from "../src/content/topics";
 import { writeContent } from "../src/content/write";
+import { writeThrough } from "../src/content/write-through";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { createScratchDatabase, probe, type Scratch, sqlMessage } from "./scratch-database";
 
 /**
  * Track A's writers (docs/CONTENT-MIGRATION.md, Track A; edge cases 2 and 17):
@@ -291,6 +292,30 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
     }
   });
 
+  it("puts the file back when the commit fails after it was written", async () => {
+    // A deferred foreign key fails at commit, after the file is replaced.
+    await scratch.db.execute(sql`create table if not exists late_check (
+      slug text references topic (slug) deferrable initially deferred)`);
+    const before = await topicsFile();
+    await expect(
+      writeThrough(scratch.db, ["topics"], async (tx) => {
+        const [row] = await tx.select().from(topic).where(eq(topic.slug, "beta"));
+        await writeContent(tx, {
+          type: "topic",
+          id: "beta",
+          next: { row: { ...row, summary: "Written, then rolled back." } },
+          base: Number((await tx.execute<{ id: string }>(sql`select max(id) as id from content_revision where entity_type = 'topic' and entity_id = 'beta'`)).rows[0]?.id),
+          ...by,
+        });
+        await tx.execute(sql`insert into late_check values ('no-such-topic')`);
+      }),
+    ).rejects.toSatisfy((error) => /late_check/.test(sqlMessage(error)));
+    expect(await topicsFile()).toBe(before);
+    const [row] = await scratch.db.select().from(topic).where(eq(topic.slug, "beta"));
+    expect(row?.summary).toBeNull();
+    await scratch.db.execute(sql`drop table late_check`);
+  });
+
   it("edits title, aliases and domain, moving the topic into its new group; an edit that changes nothing writes nothing", async () => {
     const result = await editTopic(
       scratch.db,
@@ -443,6 +468,21 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
     await expect(runTopic(["topic", "relate", "beta"], { reason: ["r"] })).rejects.toBeInstanceOf(TopicUsage);
     await expect(runTag(["tag", "add"], { id: "x", reason: ["r"] })).rejects.toBeInstanceOf(TopicUsage);
     await expect(runTopic(["topic", "fly"], {})).rejects.toBeInstanceOf(TopicUsage);
+    // Malformed values are usage errors too, found before the database is asked anything.
+    const never = async () => {
+      throw new Error("the database was reached");
+    };
+    const usage = async (run: Promise<unknown>, message: RegExp) => {
+      const error = await run.then(() => null, (e: unknown) => e);
+      expect(error).toBeInstanceOf(TopicUsage);
+      expect((error as Error).message).toMatch(message);
+    };
+    await usage(runTopic(["topic", "relate", "beta", "above", "gamma"], { reason: ["r"] }, never), /relation kind must be one of/);
+    await usage(runTopic(["topic", "add"], { slug: "Bad Slug", title: "X", domain: "one", reason: ["r"] }, never), /not kebab-case/);
+    await usage(runTopic(["topic", "add"], { slug: "x", title: "X", domain: "one", relate: ["sideways:y"], reason: ["r"] }, never), /kind:slug/);
+    await usage(runTopic(["topic", "rename"], { from: "a", to: "a", reason: ["r"] }, never), /same slug/);
+    await usage(runTopic(["topic", "edit", "beta"], { domain: "Not Kebab", reason: ["r"] }, never), /not kebab-case/);
+    await usage(runTag(["tag", "add"], { id: "x", label: "X", description: " ", reason: ["r"] }, never), /--description is required/);
     // A dry run needs no reason: it writes nothing.
     const dry = await runTopic(["topic", "add"], { slug: "heaps", title: "Heaps", domain: "two", "dry-run": true });
     expect(dry).toMatchObject({ verb: "add", dryRun: true });

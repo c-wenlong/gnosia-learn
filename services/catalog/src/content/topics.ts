@@ -516,12 +516,59 @@ interface AddPlan {
   inputs: WriteContentInput[];
 }
 
-async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promise<AddPlan> {
+/**
+ * What an add can be refused for without reading the database: the shapes of
+ * the slug, domain, title, aliases and relations. The CLI runs it before it
+ * connects, so a malformed invocation is exit 2 whatever state the database
+ * is in; the writer runs it again, since it is the writer's rule.
+ */
+export function checkAddInput(input: AddTopicInput): {
+  slug: string;
+  title: string;
+  domain: string;
+  summary: string | null;
+  aliases: string[];
+  relations: RelationInput[];
+} {
   const slug = slugOf(input.slug, "--slug");
-  const title = text(input.title, "--title");
-  const domain = slugOf(input.domain, "--domain");
-  const summary = summaryOf(input.summary);
-  const aliases = aliasList(input.aliases ?? []);
+  const relations: RelationInput[] = [];
+  const seen = new Set<string>();
+  for (const relation of input.relations ?? []) {
+    const kind = relationKind(relation.kind);
+    const to = slugOf(relation.to, "a relation's topic");
+    if (to === slug) throw new TopicError("invalid", `"${slug}" cannot relate to itself`);
+    const key = `${kind} ${to}`;
+    if (seen.has(key)) throw new TopicError("invalid", `--relate ${kind}:${to} is given twice`);
+    seen.add(key);
+    relations.push({ kind, to });
+  }
+  return {
+    slug,
+    title: text(input.title, "--title"),
+    domain: slugOf(input.domain, "--domain"),
+    summary: summaryOf(input.summary),
+    aliases: aliasList(input.aliases ?? []),
+    relations,
+  };
+}
+
+/** The same, for an edit: the slug's shape and the shape of every field given. */
+export function checkEditInput(input: EditTopicInput): void {
+  slugOf(input.slug, "the topic");
+  if (input.title !== undefined) text(input.title, "--title");
+  if (input.domain !== undefined) slugOf(input.domain, "--domain");
+  if (input.aliases !== undefined) aliasList(input.aliases);
+  aliasList(input.addAliases ?? []);
+  aliasList(input.dropAliases ?? []);
+}
+
+/** The same, for a verb that names topics by slug: rename, relate, archive, restore. */
+export function checkSlugs(...slugs: [string | undefined, string][]): void {
+  for (const [value, field] of slugs) slugOf(value, field);
+}
+
+async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promise<AddPlan> {
+  const { slug, title, domain, summary, aliases, relations } = checkAddInput(input);
 
   const existing = await rowOf(db, slug);
   if (existing !== undefined) {
@@ -536,14 +583,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
 
   const own: RelationInput[] = [];
   const others = new Map<string, RelationInput[]>();
-  const seen = new Set<string>();
-  for (const relation of input.relations ?? []) {
-    const kind = relationKind(relation.kind);
-    const to = slugOf(relation.to, "a relation's topic");
-    if (to === slug) throw new TopicError("invalid", `"${slug}" cannot relate to itself`);
-    const key = `${kind} ${to}`;
-    if (seen.has(key)) throw new TopicError("invalid", `--relate ${kind}:${to} is given twice`);
-    seen.add(key);
+  for (const { kind, to } of relations) {
     await liveRow(db, to, "related topic");
     await assertNoCycle(db, slug, kind, to, own);
     const { owner, other } = storedAs(slug, kind, to);
@@ -798,6 +838,12 @@ async function usesOf(db: CatalogDatabase, slug: string): Promise<string[]> {
       "relations to or from it",
       sql`select from_slug || ' ' || kind || ' ' || to_slug as id from topic_relation
           where from_slug = ${slug} or to_slug = ${slug} order by 1`,
+    ],
+    [
+      "live curriculum items linked to it",
+      sql`select l.curriculum_item_id as id from curriculum_item_topic l
+          join curriculum_item i on i.id = l.curriculum_item_id
+          where l.topic_slug = ${slug} and i.archived_at is null order by 1`,
     ],
     ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id`],
     ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug`],
