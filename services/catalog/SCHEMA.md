@@ -604,6 +604,15 @@ upsert, so a module that replaces an archived one can reuse its slug:
 `collection_parent_slug_key` covers only live rows. `index` prints the archived
 keys beside the deleted ones.
 
+An archived row is kept for the learner rows under it and is on no page, so
+the readers leave it out: `catalog status`'s coverage, `catalog ls`, and the
+lists `catalog show` returns count and list live rows only, and `show` or
+`ls` of an archived entity named directly says `archived: true`. A tick, note
+or recap written to an archived item is refused by name (`assertKnownItems` in
+`src/state/progress.ts`), while what was recorded on it before stays, and the
+Settings export still carries it; importing that export back
+(`src/state/import.ts`) restores it, since it is the learner's own record.
+
 **Every entity a run touched gets an `import` revision when its snapshot
 changed.** The run's author is `import:<git sha>` of the commit the files it
 read are tracked at, `import:<sha>-dirty` when some under `content/` or
@@ -862,8 +871,13 @@ npm run catalog -- diff 42                     # what revision 42 changed; or di
 holds the words.
 
 Every command exits 0 when it worked, 1 when it failed, 2 on a wrong
-invocation, and 3 when the database is unreachable: nothing listening, or a host
-name that does not resolve. A server that answered and refused (bad password,
+invocation, 3 when the database is unreachable: nothing listening, or a host
+name that does not resolve, and 4 when the database is behind this code.
+`index`, `import`, `export`, `parity`, `flip`, `ls`, `show`, `history`,
+`diff` and `renumber` (and `learn index`) check the migration journal first and refuse with how many
+migrations are outstanding and `Run: npm run catalog -- migrate`, rather than
+with drizzle's `Failed query: ...` for a table the database does not have yet.
+A server that answered and refused (bad password,
 no such database, too many clients) is 1. Either way stderr carries one line
 naming the cause, such as `database unreachable: connection refused
 (ECONNREFUSED)`, read from the driver's error code in

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -106,7 +107,7 @@ describe("fsStore on disk", () => {
     const k = key("local", sha256(data), "mp4");
     await store.put(k, chunked(data), meta(data));
 
-    const stream = await store.get(k);
+    const { body: stream } = await store.get(k);
     await store.delete(k);
 
     expect(await collect(stream)).toEqual(data);
@@ -183,6 +184,37 @@ describe("fsStore on disk", () => {
     expect(existsSync(target)).toBe(true);
   });
 
+  it("refuses a FIFO under a key at once, where opening it used to wait for a writer forever", async () => {
+    const root = tempDir();
+    const store = fsStore(root);
+    const k = key("local", sha256(bytes(10, 12)), "bin");
+    mkdirSync(path.join(root, "local"));
+    execFileSync("mkfifo", [path.join(root, k)]);
+
+    const settled = <T>(promise: Promise<T>) =>
+      Promise.race([
+        promise.then(
+          () => "resolved",
+          (error: { code?: string }) => error.code,
+        ),
+        new Promise((resolve) => setTimeout(() => resolve("still waiting"), 2_000)),
+      ]);
+    expect(await settled(store.head(k))).toBe("BLOB_NOT_FILE");
+    expect(await settled(store.stat(k))).toBe("BLOB_NOT_FILE");
+    expect(await settled(store.get(k))).toBe("BLOB_NOT_FILE");
+  });
+
+  it("refuses a directory under a key instead of handing back a stream that fails when read", async () => {
+    const root = tempDir();
+    const store = fsStore(root);
+    const k = key("local", sha256(bytes(10, 13)), "bin");
+    mkdirSync(path.join(root, k), { recursive: true });
+
+    await expect(store.get(k)).rejects.toMatchObject({ code: "BLOB_NOT_FILE" });
+    await expect(store.head(k)).rejects.toMatchObject({ code: "BLOB_NOT_FILE" });
+    await expect(store.stat(k)).rejects.toMatchObject({ code: "BLOB_NOT_FILE" });
+  });
+
   it("answers an empty listing, null heads and not-found gets before anything was ever put", async () => {
     const store = fsStore(path.join(tempDir(), "never-created"));
     const k = key("local", sha256(bytes(1, 8)), "bin");
@@ -230,6 +262,23 @@ describe("the fs root", () => {
 
     expect(() => fsStore(path.join(checkout, "data", "blobs"))).toThrow(/inside the self-learn checkout/);
     expect(() => fsStore(path.join(outer, "link", "blobs"))).toThrow(/inside the self-learn checkout/);
+  });
+
+  it("refuses a root inside a directory whose package.json names self-learn, with or without .git", () => {
+    const copy = tempDir();
+    writeFileSync(path.join(copy, "package.json"), JSON.stringify({ name: "self-learn", private: true }));
+
+    expect(() => fsStore(path.join(copy, "blobs"))).toThrow(/inside the self-learn checkout/);
+  });
+
+  it("accepts a root under a package.json that names something else, or is not JSON", () => {
+    const other = tempDir();
+    writeFileSync(path.join(other, "package.json"), JSON.stringify({ name: "self-learn-fork-of-nothing" }));
+    const broken = tempDir();
+    writeFileSync(path.join(broken, "package.json"), "{ not json");
+
+    expect(() => fsStore(path.join(other, "blobs"))).not.toThrow();
+    expect(() => fsStore(path.join(broken, "blobs"))).not.toThrow();
   });
 
   it("accepts a root inside some other git repository, such as a home directory of dotfiles", () => {

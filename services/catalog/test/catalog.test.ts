@@ -14,7 +14,7 @@ import { loadCourses } from "@self-learn/content";
 
 import { runDoctor } from "../src/commands/doctor";
 import { runIndexCommand } from "../src/commands/index-command";
-import { runLs } from "../src/commands/ls";
+import { formatLs, runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
 import { runSearch } from "../src/commands/search";
 import {
@@ -22,6 +22,7 @@ import {
   type ShowAsset,
   type ShowCollection,
   type ShowConcept,
+  type ShowCurriculumItem,
   type ShowTopic,
 } from "../src/commands/show";
 import { runStatus } from "../src/commands/status";
@@ -401,6 +402,83 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       await expect(runPath("master-theorem", "recurrence-relations")).rejects.toThrow(
         /is not a concept/,
       );
+    });
+  });
+
+  describe("archived rows", () => {
+    // A module and an item the course file stopped listing: archived by the
+    // import (D12), kept for the learner rows under them, on no page. Set
+    // directly here and put back, so the cases above see the tree as it is.
+    const archive = async (on: boolean) => {
+      const at = on ? sql`now()` : sql`null`;
+      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where id = 'cp4284-m1-t1'`);
+      await scratch.db.execute(sql`update collection set archived_at = ${at} where id = 'cs4263-m7'`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where collection_id = 'cs4263-m7'`);
+    };
+
+    it("leaves them out of status's coverage, ls, and show's lists, and says so when shown directly", async () => {
+      const before = await runStatus();
+      const cs4263 = (await runLs("cs4263")) as Extract<Awaited<ReturnType<typeof runLs>>, { kind: "collection" }>;
+      const m7Items = cs4263.children.find((c) => c.id === "cs4263-m7")?.curriculumItems.length ?? 0;
+      expect(m7Items).toBeGreaterThan(0);
+      await archive(true);
+      try {
+        const after = await runStatus();
+        const cp4284 = (report: typeof before) => report.coverage.find((c) => c.course === "cp4284");
+        const cs = (report: typeof before) => report.coverage.find((c) => c.course === "cs4263");
+        expect(cp4284(after)).toEqual({ ...cp4284(before), items: (cp4284(before)?.items ?? 0) - 1, withConcepts: 2 });
+        expect(cs(after)?.items).toBe((cs(before)?.items ?? 0) - m7Items);
+
+        const tree = await runLs("cs4263");
+        if (tree.kind !== "collection") throw new Error("not a collection");
+        expect(tree.children.map((c) => c.id)).not.toContain("cs4263-m7");
+        expect(tree.archived).toBe(false);
+        // Named directly it still answers, since its id is how the learner
+        // rows kept under it are found, and says it is archived.
+        const gone = await runLs("cs4263-m7");
+        if (gone.kind !== "collection") throw new Error("not a collection");
+        expect(gone.archived).toBe(true);
+        expect(formatLs(gone)).toContain("archived: its course file no longer lists it");
+        const overview = await runLs(undefined);
+        if (overview.kind !== "overview") throw new Error("not the overview");
+        expect(overview.collections.find((c) => c.id === "cs4263")?.children).toBe(6);
+
+        const shown = (await runShow("cp4284-m1")) as ShowCollection;
+        expect(shown.curriculumItems.map((i) => i.id)).not.toContain("cp4284-m1-t1");
+        expect(shown.archived).toBe(false);
+        const course = (await runShow("cs4263")) as ShowCollection;
+        expect(course.children.map((c) => c.id)).not.toContain("cs4263-m7");
+        const item = (await runShow("cp4284-m1-t1")) as ShowCurriculumItem;
+        expect(item.archived).toBe(true);
+        const topic = (await runShow("transformer-architecture-and-training")) as ShowTopic;
+        expect(topic.curriculumItems.map((i) => i.id)).not.toContain("cp4284-m1-t1");
+      } finally {
+        await archive(false);
+      }
+    });
+  });
+
+  describe("archived rows, all of a course's", () => {
+    it("keeps a live course whose items are all archived in the coverage, at zero", async () => {
+      const courses = (await runStatus()).coverage.map((c) => c.course);
+      await scratch.db.execute(
+        sql`update curriculum_item set archived_at = now()
+            where collection_id in (select id from collection where parent_id = 'cs3249')`,
+      );
+      try {
+        const after = await runStatus();
+        expect(after.coverage.map((c) => c.course)).toEqual(courses);
+        expect(after.coverage.find((c) => c.course === "cs3249")).toEqual({
+          course: "cs3249",
+          items: 0,
+          withConcepts: 0,
+        });
+      } finally {
+        await scratch.db.execute(
+          sql`update curriculum_item set archived_at = null
+              where collection_id in (select id from collection where parent_id = 'cs3249')`,
+        );
+      }
     });
   });
 

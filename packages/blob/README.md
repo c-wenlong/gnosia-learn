@@ -40,7 +40,11 @@ interface BlobStore {
   readonly provider: "fs" | "vercel-blob" | "r2";
   put(key: string, body: Readable, meta: { sha256: string; bytes: number; mime: string }): Promise<void>;
   head(key: string): Promise<{ bytes: number; sha256?: string } | null>;
-  get(key: string, range?: { start: number; end: number }): Promise<Readable>;
+  stat(key: string): Promise<{ bytes: number } | null>;
+  get(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<{ body: Readable; size: number; start: number; end: number }>;
   signedUrl(key: string, ttlSeconds: number): Promise<string | null>;
   delete(key: string): Promise<void>;
   list(prefix: string): AsyncIterable<{ key: string; bytes: number; uploadedAt: Date }>;
@@ -50,8 +54,9 @@ interface BlobStore {
 | Method | Promise |
 | --- | --- |
 | `put` | Stores the body or stores nothing. The stream is hashed and counted as it arrives; a hash or length that differs from `meta`, or a `meta.sha256` that differs from the key, rejects with `BlobIntegrityError`, and a body that overruns `meta.bytes` is refused there instead of being read to the end. The object appears to `head`, `get` and `list` all at once. Putting an existing key succeeds. `put` owns the body and destroys it on any refusal |
-| `head` | `null` when absent. `sha256`, when present, is what the store measured, never the key repeated back |
-| `get` | Rejects with `BlobNotFoundError` before returning a stream. A range is inclusive at both ends; an `end` past the object is clamped; a `start` at or past the end, or a malformed pair, is `BlobRangeError` (HTTP's 416) |
+| `head` | `null` when absent. `sha256`, when present, is what the store measured, never the key repeated back. It may read every byte to measure it: it is the integrity check |
+| `stat` | The size alone, without reading the bytes; `null` when absent. What a route asks before it knows whether to stream |
+| `get` | Rejects with `BlobNotFoundError` before returning a stream. Returns the body with the object's `size` and the inclusive `start` and `end` the body holds, so a route can write `Content-Length` and `Content-Range: bytes start-end/size` without a second request. A range is inclusive at both ends; an `end` past the object is clamped, and `end` says to where; a `start` at or past the end, or a malformed pair, is `BlobRangeError` (HTTP's 416). A whole read is `start 0, end size - 1`, so an empty object is `0, -1` |
 | `signedUrl` | A URL that serves the bytes and honours `Range`, or `null`, meaning the caller streams through `get` |
 | `delete` | Idempotent |
 | `list` | Every key starting with the prefix, as a plain string prefix the way S3 lists, with its size and upload time (the orphan sweep in edge case 9 spares anything under a day old). Order unspecified; an in-flight `put` is never listed |
@@ -60,20 +65,37 @@ Two additions to the interface drawn in 0.4: `list`, which tenancy needs, and
 `provider`, so the upload command can fill `blob_object.provider` from the
 store it was handed rather than from a second setting that could disagree.
 
+`stat`, and the `{ body, size, start, end }` shape of `get`, were added after
+the phase 0 review: `get` used to return a bare stream, so a route serving a
+Range request could learn the object's size only from `head`, which hashes the
+whole file.
+
 Every refusal is a `BlobError` with a stable `code` (`BLOB_KEY`,
 `BLOB_INTEGRITY`, `BLOB_NOT_FOUND`, `BLOB_RANGE`, `BLOB_ROOT`, and the `fs`
-adapter's `BLOB_LINK`).
+adapter's `BLOB_LINK` and `BLOB_NOT_FILE`).
 
 ## The `fs` adapter
 
 `fsStore(root?)` keeps objects at `<root>/<owner_id>/<sha256>.<ext>`. The root
 defaults to `$SELF_LEARN_HOME/blobs`, or `~/.self-learn/blobs` when that is
-unset. A leading `~` is expanded and a relative value is refused.
+unset. A leading `~` is expanded and a relative value is refused. Callers do
+not read the variable themselves: `blobRoot()` in
+`services/catalog/src/env.ts`, exported to the web app through
+`@self-learn/catalog/state`, reads it after `services/catalog/.env` the way
+`DATABASE_URL` is read, so the catalog CLI and the app cannot open different
+stores.
 
 - **Never inside the repository.** Moving the manimkc submodule on 2026-09-13
   deleted 25 rendered videos, because git does not carry gitignored files
   across a move. `fsStore` refuses a root inside any self-learn checkout,
-  symlinks resolved, and says which.
+  symlinks resolved, and says which. A checkout is a directory whose
+  `package.json` is named `self-learn` (a clone, a worktree, an old checkout,
+  a copy with no `.git`), or one with a `.git` and this package in it; any
+  other repository, such as a dotfiles home directory, is fine.
+- **Only regular files are objects.** Objects are opened non-blocking and
+  `fstat`ed before a byte is read, and anything else under a key is refused
+  with `BLOB_NOT_FILE`: a FIFO would otherwise hang the open until a writer
+  appeared, and a directory would open and fail only once read.
 - **No link under the root is followed.** An owner directory, `.tmp/` or an
   object that is a symlink would carry a write, read or delete somewhere the
   root check never saw, and `list` would not show it. Each is refused with
@@ -90,8 +112,8 @@ unset. A leading `~` is expanded and a relative value is refused.
   confirming what it wrote, `catalog blob audit` looking for a missing or
   damaged object) are asking whether the bytes on disk are intact, and only
   reading them answers that. One sequential read of the largest video (37 MB)
-  costs tens of milliseconds. A hot path that needs only the size, such as a
-  Range request, takes it from the `blob_object` row.
+  costs tens of milliseconds. A hot path that needs only the size calls
+  `stat`, or reads it off `get`, or takes it from the `blob_object` row.
 - **`get` reads from an open handle**, so a delete that lands mid-read does not
   cut the stream short.
 - **`signedUrl` is always `null`.** The route streams through `get`, reusing the
@@ -127,6 +149,9 @@ data. What it demands that a cloud SDK does not give for free:
   keeps no checksum of its own;
 - `BlobNotFoundError` and `BlobRangeError` mapped from the provider's 404 and
   416;
+- `get`'s `size`, `start` and `end` filled from the response
+  (`Content-Range`, or `Content-Length` for a whole read), and `stat` from a
+  metadata call that does not download the object;
 - a signed URL that answers `Range: bytes=10-19` with a 206, because the
   browser's seeks go straight to the store (edge cases 10 and 15);
 - `list` paginating to the end, since a provider returns a page at a time.

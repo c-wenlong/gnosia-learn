@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createWriteStream, existsSync, realpathSync } from "node:fs";
+import { constants, createWriteStream, existsSync, readFileSync, realpathSync } from "node:fs";
 import { lstat, mkdir, open, readdir, rename, rm, stat, type FileHandle } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -15,6 +15,8 @@ import {
   type BlobListing,
   type BlobMeta,
   type BlobRange,
+  type BlobRead,
+  type BlobStat,
   type BlobStore,
 } from "./store";
 
@@ -32,8 +34,14 @@ const TEMP_DIR = ".tmp";
  * above it is checked by `realDirectory`. See `fsStore` for why links are
  * refused rather than followed. Windows has no `O_NOFOLLOW`, and `fsStore`
  * refuses to start there rather than let this quietly become a plain read.
+ *
+ * `O_NONBLOCK` because the open itself must not wait: opening a FIFO for
+ * reading blocks until a writer appears, so a FIFO planted under a key hung
+ * `head` forever. With it the open returns at once, and the `fstat` after it
+ * refuses anything that is not a regular file before a byte is read. It
+ * changes nothing for a regular file, which never blocks.
  */
-const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
+const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 /**
  * Where the laptop's blobs live: `$SELF_LEARN_HOME/blobs`, or
@@ -78,8 +86,8 @@ export function defaultBlobRoot(env: NodeJS.ProcessEnv = process.env): string {
  * `catalog blob audit` (edge case 9), and both are asking the store whether
  * the bytes are intact. Reading the file answers that; the cost is one
  * sequential read, which for the largest video today (37 MB) is tens of
- * milliseconds. A hot path that only needs the size, such as a Range request,
- * takes it from the `blob_object` row and never calls `head`.
+ * milliseconds. A hot path that only needs the size calls `stat`, or reads
+ * it off what `get` returns, and never calls `head`.
  *
  * **No symlink under the root is followed.** The root is checked once, links
  * resolved, but an owner directory, `.tmp` or an object that is itself a link
@@ -168,12 +176,12 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
     },
 
     async head(key: string): Promise<BlobHead | null> {
-      const handle = await openObject(objectPath(parseKey(key)));
-      if (handle === null) return null;
+      const opened = await openObject(objectPath(parseKey(key)));
+      if (opened === null) return null;
+      const { handle, size } = opened;
       try {
         // Size and hash from one open handle, so both describe the same file
         // even if a put replaces it midway.
-        const { size } = await handle.stat();
         const hash = createHash("sha256");
         for await (const chunk of handle.createReadStream({ autoClose: false, start: 0 })) {
           hash.update(chunk as Buffer);
@@ -184,16 +192,27 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
       }
     },
 
-    async get(key: string, range?: BlobRange): Promise<Readable> {
-      const handle = await openObject(objectPath(parseKey(key)));
-      if (handle === null) throw new BlobNotFoundError(key);
+    async stat(key: string): Promise<BlobStat | null> {
+      const opened = await openObject(objectPath(parseKey(key)));
+      if (opened === null) return null;
+      await opened.handle.close();
+      return { bytes: opened.size };
+    },
+
+    async get(key: string, range?: BlobRange): Promise<BlobRead> {
+      const opened = await openObject(objectPath(parseKey(key)));
+      if (opened === null) throw new BlobNotFoundError(key);
+      const { handle, size } = opened;
       try {
-        if (range === undefined) return handle.createReadStream({ start: 0 });
-        const { size } = await handle.stat();
+        // The size is the open handle's, so it describes the bytes this
+        // stream will read even if a put replaces the file a moment later.
+        const { start, end } = range === undefined ? { start: 0, end: size - 1 } : resolveRange(range, size);
         // The stream closes the handle when it ends or is destroyed; reading
         // from an open handle rather than a path means a delete that lands
-        // mid-read cannot cut the stream short.
-        return handle.createReadStream(resolveRange(range, size));
+        // mid-read cannot cut the stream short. An empty object has no byte
+        // to start at, so its stream is given no end rather than end -1.
+        const body = handle.createReadStream(size === 0 ? { start: 0 } : { start, end });
+        return { body, size, start, end };
       } catch (error) {
         await handle.close();
         throw error;
@@ -247,24 +266,39 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
 }
 
 /**
- * The nearest directory at or above `dir` that is a self-learn checkout: it has
- * a `.git` and this package in it. Symlinks are resolved first, so a root that
- * is a link into the tree is caught too. Checking for this package rather than
- * for any `.git` keeps a home directory that happens to be a dotfiles
- * repository from refusing the default root.
+ * The nearest directory at or above `dir` that is a self-learn checkout.
+ * Symlinks are resolved first, so a root that is a link into the tree is
+ * caught too.
+ *
+ * A checkout is a directory whose `package.json` is named `self-learn`, which
+ * holds for a clone, a worktree, an older checkout from before this package
+ * existed, and a copy with no `.git` at all, any of which a `git clean` or a
+ * move can empty. A directory with a `.git` and this package in it counts too.
+ * Neither test is "any `.git`", so a home directory that happens to be a
+ * dotfiles repository does not refuse the default root.
  */
 function selfLearnCheckoutAbove(dir: string): string | null {
   let current = resolveExisting(dir);
   for (;;) {
     if (
-      existsSync(path.join(current, ".git")) &&
-      existsSync(path.join(current, "packages", "blob", "package.json"))
+      isSelfLearnPackage(path.join(current, "package.json")) ||
+      (existsSync(path.join(current, ".git")) && existsSync(path.join(current, "packages", "blob", "package.json")))
     ) {
       return current;
     }
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
+  }
+}
+
+/** Whether `file` is a `package.json` naming the self-learn repository. */
+function isSelfLearnPackage(file: string): boolean {
+  try {
+    return (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name === "self-learn";
+  } catch {
+    // Absent, unreadable or not JSON: not this repository's root manifest.
+    return false;
   }
 }
 
@@ -284,13 +318,30 @@ function resolveExisting(dir: string): string {
   }
 }
 
-async function openObject(file: string): Promise<FileHandle | null> {
+/**
+ * The object at `file`, opened, with its size from the same handle; null when
+ * absent. Refuses a symlink (`BLOB_LINK`) and anything that is not a regular
+ * file (`BLOB_NOT_FILE`): a directory opens read-only and would fail only once
+ * read, and a FIFO would hang. The handle is the caller's to close.
+ */
+async function openObject(file: string): Promise<{ handle: FileHandle; size: number } | null> {
   if (!(await realDirectory(path.dirname(file)))) return null;
+  let handle: FileHandle;
   try {
-    return await open(file, READ_NO_FOLLOW);
+    handle = await open(file, READ_NO_FOLLOW);
   } catch (error) {
     if (isNotFound(error)) return null;
     if (codeOf(error) === "ELOOP") throw linkRefused(file);
+    throw error;
+  }
+  try {
+    const facts = await handle.stat();
+    if (!facts.isFile()) {
+      throw new BlobError("BLOB_NOT_FILE", `${file} is not a regular file; the blob store holds only files under its keys`);
+    }
+    return { handle, size: facts.size };
+  } catch (error) {
+    await handle.close();
     throw error;
   }
 }
