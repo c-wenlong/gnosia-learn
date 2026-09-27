@@ -764,7 +764,7 @@ modules allow: every one of the 32 notes is filed under one of seven topics,
 and an item's concepts must sit under its module's topic, which for 55 of the
 61 modules has no note at all. `cp4283-m6-t1` (Self-attention mechanics) takes
 the four attention notes, and `cs3216-m2-t1..t3` take `tool-calling` and
-`react-loop`: 7 of 137 items now name a concept (15 links), and
+`react-loop`: 7 of 137 items now name a concept (16 links), and
 `catalog doctor` lists 130 violators of `item-has-concept`. Zero is not
 reachable without new notes, which are the owner's to write, so the strict
 flip waits on them; the list of items is in the PR that filled these.
