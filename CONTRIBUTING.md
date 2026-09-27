@@ -80,6 +80,7 @@ there.
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
 | `packages/content/` | The reader both the app and the catalog parse `content/` with |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
+| `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.self-learn/blobs` ([README](packages/blob/README.md)) |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `learn/` | The knowledge base's files: `concepts/<domain>/`, `sessions/`, `assets/`, `map.md`. The state is in Postgres |
