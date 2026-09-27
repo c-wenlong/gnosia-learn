@@ -1,4 +1,5 @@
 import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@self-learn/schema";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { applyMigrations } from "../src/migrations";
@@ -128,6 +129,33 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       await expect(setProgress(scratch.db, "no-such-item", true)).rejects.toThrow(
         /no curriculum item in the catalog for "no-such-item"/,
       );
+    });
+
+    it("refuses a tick, a note or a recap on an archived item, and keeps what was recorded on it", async () => {
+      await setProgress(scratch.db, ITEMS[1], true);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id = ${ITEMS[1]}`);
+      try {
+        for (const write of [
+          () => setProgress(scratch.db, ITEMS[1], true),
+          () => setNote(scratch.db, ITEMS[1], "a note"),
+          () =>
+            upsertRecap(scratch.db, ITEMS[1], {
+              summary: "s",
+              keyPoints: [],
+              misconceptions: [],
+              openQuestions: [],
+              source: "manual",
+            }),
+        ]) {
+          await expect(write()).rejects.toBeInstanceOf(StateError);
+          await expect(write()).rejects.toThrow(new RegExp(`"${ITEMS[1]}" is archived: its course no longer lists it`));
+        }
+        // The tick from before the archive is still the learner's, and still exported.
+        expect((await readProgress(scratch.db)).map((row) => row.curriculumItemId)).toContain(ITEMS[1]);
+      } finally {
+        await scratch.db.execute(sql`update curriculum_item set archived_at = null where id = ${ITEMS[1]}`);
+        await setProgress(scratch.db, ITEMS[1], false);
+      }
     });
 
     it("resets only what it is asked to, and never a recap", async () => {
@@ -879,6 +907,23 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(snapshot.notes[ITEMS[0]]).toBe("written here");
       expect(snapshot.theme).toBe("light");
       expect(result.skippedExisting).toBeGreaterThan(0);
+    });
+
+    it("carries what the learner recorded on an item the course has since archived", async () => {
+      // An export includes ticks, notes and recaps on archived items (D12), so
+      // importing one back must not stop at the first of them.
+      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      try {
+        const result = await importLegacyState(scratch.db, payload);
+        expect(result).toMatchObject({ progress: 1, notes: 1, recaps: 1, unknownItems: ["gone-m9-t9"] });
+        const snapshot = await readLearnerSnapshot(scratch.db);
+        expect(snapshot.completed).toEqual({ [ITEMS[0]]: true });
+        expect(snapshot.knowledge[ITEMS[1]]?.summary).toBe("carried over");
+        // And the ordinary write path still refuses them.
+        await expect(setProgress(scratch.db, ITEMS[1], true)).rejects.toThrow(/is archived/);
+      } finally {
+        await scratch.db.execute(sql`update curriculum_item set archived_at = null where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      }
     });
 
     it("carries a theme mode newer than the localStorage document", async () => {

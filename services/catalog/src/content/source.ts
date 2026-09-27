@@ -1,54 +1,63 @@
-import type { ContentSource, ContentType } from "@self-learn/content";
+import { type ContentSource, type ContentType, METHOD_TYPES } from "@self-learn/content";
 
 import type { CatalogDatabase } from "../db";
+import { reader as concept } from "./readers/concepts";
+import { reader as courses } from "./readers/courses";
+import { reader as diagram } from "./readers/diagrams";
+import type { TypeReader } from "./readers/reader";
+import { reader as sessionLog } from "./readers/sessions";
+import { reader as tags } from "./readers/tags";
+import { reader as topics } from "./readers/topics";
+
+export { NotMigratedError } from "./readers/reader";
 
 /**
- * The database implementation of `ContentSource`, one method per track.
+ * The database implementation of `ContentSource`, composed from one reader
+ * per content type.
  *
- * Every method refuses until its track fills it in (docs/CONTENT-MIGRATION.md,
- * phase 1): track A answers `topics` and `tags`, B `courses`, C `concept` and
- * `sessionLog`, D `diagram`. It lives in the catalog because the catalog owns
- * the connection; the interface and the switch that chooses between this and
- * `fileSource` live in `packages/content`.
+ * **The layout.** Each type's reader is its own file under `readers/`:
+ * `topics.ts` and `tags.ts` (track A), `courses.ts` (B), `concepts.ts` and
+ * `sessions.ts` (C), `diagrams.ts` (D). Each exports `reader`, a
+ * `{ ready, read }` pair (`readers/reader.ts`), and starts as
+ * `{ ready: false, read: notMigrated("<type>") }`, which refuses with
+ * `NotMigratedError`. A track implements `read` and sets `ready: true` in its
+ * own file and nowhere else: this file composes them, and `flip.ts` derives
+ * `DB_READERS` from the flags, so five tracks building at once never edit a
+ * shared line.
  *
- * A refusal rather than an empty answer, because an empty vocabulary or course
- * list would render as a site with nothing in it and no error anywhere. Nothing
- * reaches these today: every type resolves to files until `catalog flip`
- * writes its `content_source` row or `CONTENT_SOURCE` names it.
+ * It lives in the catalog because the catalog owns the connection; the
+ * interface and the switch that chooses between this and `fileSource` live in
+ * `packages/content`. Nothing reaches a refusing reader today: every type
+ * resolves to files until `catalog flip` writes its `content_source` row or
+ * `CONTENT_SOURCE` names it.
  */
-export class NotMigratedError extends Error {
-  readonly type: ContentType;
-  constructor(type: ContentType) {
-    super(
-      `${type} is not migrated yet: nothing reads it from the database until its track lands. ` +
-        `Unset CONTENT_SOURCE for ${type}, or set it to files.`,
-    );
-    this.name = "NotMigratedError";
-    this.type = type;
-  }
-}
-
-/**
- * The types whose method below answers from rows. Empty until a track fills
- * one in, and each track adds its type in the same change: `catalog flip`
- * refuses a type that is not here, because readers follow the flipped row and
- * would all fail on the refusal below. `test/content-source.test.ts` holds
- * this set and the methods to each other.
- */
-export const DB_READERS: ReadonlySet<ContentType> = new Set<ContentType>();
+export const READERS: { readonly [M in keyof ContentSource]: TypeReader<M> } = {
+  topics,
+  tags,
+  courses,
+  concept,
+  sessionLog,
+  diagram,
+};
 
 export function dbSource(db: CatalogDatabase): ContentSource {
-  // Held for the tracks that fill these in; no query runs yet.
-  void db;
-  const refuse = (type: ContentType) => async (): Promise<never> => {
-    throw new NotMigratedError(type);
-  };
   return {
-    topics: refuse("topics"),
-    tags: refuse("tags"),
-    courses: refuse("courses"),
-    concept: refuse("concepts"),
-    sessionLog: refuse("sessions"),
-    diagram: refuse("diagrams"),
+    topics: READERS.topics.read(db),
+    tags: READERS.tags.read(db),
+    courses: READERS.courses.read(db),
+    concept: READERS.concept.read(db),
+    sessionLog: READERS.sessionLog.read(db),
+    diagram: READERS.diagram.read(db),
   };
+}
+
+/** The content types whose reader says it is ready. */
+export function readyTypes(
+  readers: { readonly [M in keyof ContentSource]: { readonly ready: boolean } } = READERS,
+): ReadonlySet<ContentType> {
+  return new Set(
+    (Object.keys(readers) as (keyof ContentSource)[])
+      .filter((method) => readers[method].ready)
+      .map((method) => METHOD_TYPES[method]),
+  );
 }

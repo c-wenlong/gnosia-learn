@@ -1,3 +1,4 @@
+import { defaultBlobRoot } from "@self-learn/blob";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -137,6 +138,26 @@ export function resolveManimkcRoot(repoRoot: string = REPO_ROOT): string {
  */
 export function resolveTldrawkcRoot(repoRoot: string = REPO_ROOT): string {
   return checkoutRoot(TLDRAWKC_ROOT_ENV, TLDRAWKC_DIR, repoRoot);
+}
+
+/** Where the laptop's blob store lives: its data root, with `blobs` under it. */
+export const SELF_LEARN_HOME_ENV = "SELF_LEARN_HOME";
+
+/**
+ * The `fs` blob store's root: `$SELF_LEARN_HOME/blobs`, else
+ * `~/.self-learn/blobs` (`defaultBlobRoot` in `@self-learn/blob` has the rules).
+ *
+ * One function for every process that opens the store, so the catalog CLI
+ * that uploads and the web app that serves cannot resolve two roots: the
+ * variable is read after `services/catalog/.env` like `DATABASE_URL`, which
+ * Next reaches through this same module, so a value set in either
+ * `services/catalog/.env` or the shell is seen by both. A root set only in
+ * `apps/web/.env.local` would reach the app alone, which is why
+ * `.env.example` says to set it in the catalog's file.
+ */
+export function blobRoot(): string {
+  loadEnv();
+  return defaultBlobRoot(process.env);
 }
 
 /** The connection string with any password blanked, safe to print or log. */

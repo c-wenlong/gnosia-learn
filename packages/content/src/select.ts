@@ -131,7 +131,13 @@ export interface SelectSourceOptions {
   ownership?: () => Ownership | Promise<Ownership>;
   /** `CONTENT_SOURCE`'s value. Defaults to `process.env.CONTENT_SOURCE`. */
   variable?: string | undefined;
-  /** Told why the rows could not be read. Defaults to one `console.warn`. */
+  /**
+   * Told why the rows could not be read. Defaults to one `console.warn`. A
+   * reporter that throws fails the read with what it threw instead of falling
+   * back to files, which is how a framework's own control flow thrown through
+   * the callback (Next's "dynamic server usage" during a prerender) gets back
+   * to the framework.
+   */
   onOwnershipError?: (error: unknown) => void;
 }
 

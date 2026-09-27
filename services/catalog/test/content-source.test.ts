@@ -1,7 +1,8 @@
 import { CONTENT_TYPES, METHOD_TYPES, type ContentSource } from "@self-learn/content";
 import { describe, expect, it } from "vitest";
 
-import { DB_READERS, dbSource, NotMigratedError } from "../src/content/source";
+import { DB_READERS } from "../src/content/flip";
+import { dbSource, NotMigratedError, READERS, readyTypes } from "../src/content/source";
 import type { CatalogDatabase } from "../src/db";
 
 /**
@@ -48,8 +49,18 @@ describe("dbSource", () => {
 
   it("names no type as readable while every method still refuses", () => {
     // `catalog flip` refuses a type missing from DB_READERS. A track that
-    // fills in a method adds its type there in the same change, and moves its
-    // method out of the refusal cases above.
+    // fills in its reader sets `ready` in its own file, and moves its method
+    // out of the refusal cases above.
     expect([...DB_READERS]).toEqual([]);
+    expect(Object.values(READERS).map((reader) => reader.ready)).toEqual([false, false, false, false, false, false]);
+  });
+
+  it("derives the readable types from each reader's own flag", () => {
+    const flags = (ready: (keyof ContentSource)[]) =>
+      Object.fromEntries(
+        (Object.keys(READERS) as (keyof ContentSource)[]).map((method) => [method, { ready: ready.includes(method) }]),
+      ) as Record<keyof ContentSource, { ready: boolean }>;
+    expect([...readyTypes(flags(["concept", "topics"]))].sort()).toEqual(["concepts", "topics"]);
+    expect([...readyTypes(flags([]))]).toEqual([]);
   });
 });

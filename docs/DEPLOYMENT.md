@@ -210,6 +210,30 @@ deployment domain, and the app falls back to `http://localhost:3000` locally.
 Set it only if you want social preview images to resolve against a specific
 canonical origin.
 
+## The blob store
+
+Videos, their posters and sidecars, and diagram SVGs are moving out of the
+repository and the manimkc data root into a content-addressed blob store
+(docs/CONTENT-MIGRATION.md 0.4, D5). Until go-live it is local only: the `fs`
+adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
+`~/.self-learn/blobs` when the variable is unset.
+
+- **Set `SELF_LEARN_HOME` in `services/catalog/.env`**, if at all, not in
+  `apps/web/.env.local`. Both the catalog CLI (which uploads) and the web app
+  (which serves) resolve the root through `blobRoot()` in
+  `services/catalog/src/env.ts`, which reads that file the way `DATABASE_URL`
+  is read, so one setting reaches both. A value only the app can see would
+  have it serve from one store while the CLI uploads to another.
+- **Absolute, or starting with `~/`.** A relative value is refused rather than
+  resolved against wherever a command runs, and a root inside a self-learn
+  checkout is refused outright, since a git operation can delete it. Moving the
+  manimkc submodule once deleted 25 rendered videos that way.
+- **Vercel reads no blob store today.** The `fs` store is on the laptop and a
+  function cannot reach it, so the file routes serve nothing in production,
+  as they serve nothing now. The cloud adapter (R2 on Hobby, Vercel Blob on
+  Pro, open question 3 of the plan) and its token arrive with the cloud
+  database in step 0.1, and the bytes move with the rows in the same window.
+
 ## Deploying from the command line
 
 For a one-off deploy from the local tree, without going through `main`:

@@ -14,7 +14,7 @@ import {
   mirror,
   topic,
 } from "@self-learn/schema";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";
 import {
@@ -67,6 +67,11 @@ export interface ShowTopic {
   domain: string;
   summary: string | null;
   aliases: string[];
+  /**
+   * The entity itself is archived: kept for the learner rows under it (D12),
+   * on no page. The lists below it hold live rows only.
+   */
+  archived: boolean;
   concepts: { slug: string; title: string; path: string }[];
   curriculumItems: { id: string; title: string; collectionId: string }[];
   /** Assets about this topic, grouped by kind so the shape is obvious at a glance. */
@@ -81,6 +86,7 @@ export interface ShowConcept {
   summary: string | null;
   topicSlug: string | null;
   path: string;
+  archived: boolean;
   /** What this concept depends on. */
   requires: { slug: string; title: string; kind: string }[];
   /** What depends on this concept. The reverse edge, which the graph needs as much. */
@@ -101,6 +107,7 @@ export interface ShowCollection {
   parentId: string | null;
   metadata: unknown;
   topicSlug: string | null;
+  archived: boolean;
   children: { id: string; kind: string; title: string }[];
   curriculumItems: { id: string; title: string; subtopics: string[] }[];
   assets: Record<string, AssetRef[]>;
@@ -113,6 +120,7 @@ export interface ShowCurriculumItem {
   title: string;
   collectionId: string;
   subtopics: string[];
+  archived: boolean;
   topics: string[];
   concepts: { slug: string; title: string }[];
   alternatives?: string[];
@@ -204,7 +212,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
   const concepts = await db
     .select({ slug: concept.slug, title: concept.title, path: concept.path })
     .from(concept)
-    .where(eq(concept.topicSlug, slug))
+    .where(and(eq(concept.topicSlug, slug), isNull(concept.archivedAt)))
     .orderBy(asc(concept.slug));
 
   const items = await db
@@ -215,7 +223,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
     })
     .from(curriculumItemTopic)
     .innerJoin(curriculumItem, eq(curriculumItem.id, curriculumItemTopic.curriculumItemId))
-    .where(eq(curriculumItemTopic.topicSlug, slug))
+    .where(and(eq(curriculumItemTopic.topicSlug, slug), isNull(curriculumItem.archivedAt)))
     .orderBy(asc(curriculumItem.id));
 
   return {
@@ -225,6 +233,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
     domain: found.domain,
     summary: found.summary,
     aliases: Array.isArray(found.aliases) ? (found.aliases as string[]) : [],
+    archived: found.archivedAt !== null,
     concepts,
     curriculumItems: items,
     assets: byKind(await assetsForTopic(db, slug)),
@@ -261,7 +270,7 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
     .select({ id: curriculumItem.id, title: curriculumItem.title })
     .from(conceptCurriculumItem)
     .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
-    .where(eq(conceptCurriculumItem.conceptSlug, slug))
+    .where(and(eq(conceptCurriculumItem.conceptSlug, slug), isNull(curriculumItem.archivedAt)))
     .orderBy(asc(curriculumItem.id));
 
   // Mastery is per learner and per concept, so it is selected by both. There
@@ -288,6 +297,7 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
     summary: found.summary,
     topicSlug: found.topicSlug,
     path: found.path,
+    archived: found.archivedAt !== null,
     requires,
     requiredBy,
     curriculumItems: items,
@@ -311,7 +321,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
   const children = await db
     .select({ id: collection.id, kind: collection.kind, title: collection.title })
     .from(collection)
-    .where(eq(collection.parentId, id))
+    .where(and(eq(collection.parentId, id), isNull(collection.archivedAt)))
     .orderBy(asc(collection.position), asc(collection.id));
 
   const items = await db
@@ -321,7 +331,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
       subtopics: curriculumItem.subtopics,
     })
     .from(curriculumItem)
-    .where(eq(curriculumItem.collectionId, id))
+    .where(and(eq(curriculumItem.collectionId, id), isNull(curriculumItem.archivedAt)))
     .orderBy(asc(curriculumItem.position), asc(curriculumItem.id));
 
   const topicRow = (
@@ -343,6 +353,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
     parentId: found.parentId,
     metadata: found.metadata,
     topicSlug: topicRow?.topicSlug ?? null,
+    archived: found.archivedAt !== null,
     children,
     curriculumItems: items.map((i) => ({
       id: i.id,
@@ -378,6 +389,7 @@ async function showCurriculumItem(db: Db, id: string): Promise<ShowCurriculumIte
     title: found.title,
     collectionId: found.collectionId,
     subtopics: Array.isArray(found.subtopics) ? (found.subtopics as string[]) : [],
+    archived: found.archivedAt !== null,
     topics: topics.map((t) => t.slug),
     concepts,
   };
@@ -458,6 +470,7 @@ export function formatShow(result: ShowResult): string {
 
   if (result.type === "topic") {
     lines.push(`topic     ${result.slug}`);
+    if (result.archived) note("archived", "yes: kept, on no page");
     note("title", result.title);
     note("domain", result.domain);
     note("summary", result.summary);
@@ -474,6 +487,7 @@ export function formatShow(result: ShowResult): string {
     if (assets.length > 0) lines.push("", "assets", ...assets);
   } else if (result.type === "concept") {
     lines.push(`concept   ${result.slug}`);
+    if (result.archived) note("archived", "yes: kept, on no page");
     note("title", result.title);
     note("summary", result.summary);
     note("topic", result.topicSlug);
@@ -500,6 +514,7 @@ export function formatShow(result: ShowResult): string {
     if (assets.length > 0) lines.push("", "assets", ...assets);
   } else if (result.type === "collection") {
     lines.push(`${result.kind.padEnd(9)} ${result.id}`);
+    if (result.archived) note("archived", "yes: its course file no longer lists it");
     note("title", result.title);
     note("parent", result.parentId);
     note("topic", result.topicSlug);
@@ -515,6 +530,7 @@ export function formatShow(result: ShowResult): string {
     if (assets.length > 0) lines.push("", "assets", ...assets);
   } else if (result.type === "curriculumItem") {
     lines.push(`item      ${result.id}`);
+    if (result.archived) note("archived", "yes: its course file no longer lists it");
     note("title", result.title);
     note("module", result.collectionId);
     if (result.topics.length > 0) note("topics", result.topics.join(", "));

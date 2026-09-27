@@ -19,7 +19,7 @@ import { loadTopics, TOPICS_FILE } from "./topics";
  * module load, once per server process. Behind the seam it asks per request,
  * and parsing every course file on every request costs about 18 ms (*measured*
  * on the owner's laptop, 2026-09-28) for nothing. So each of the three keeps
- * its last result keyed on the size and modification time of every file it
+ * its last result keyed on the size, times and inode of every file it
  * read, which costs a `stat` per file, and a course file edited while the
  * server runs is picked up on the next request instead of at the next restart.
  * The result is shared between callers exactly as the module-level constants
@@ -73,13 +73,23 @@ function courseFiles(root: string): string[] {
   }
 }
 
-/** `path size mtime` for each file, or `path missing`. Two equal strings mean nothing changed. */
+/**
+ * `path size mtime ctime inode` for each file, or `path missing`. Two equal
+ * strings mean nothing changed.
+ *
+ * Size and mtime alone miss two ordinary edits: a same-length rewrite within
+ * the filesystem's mtime granularity, and a file replaced by a rename (how
+ * editors and `git checkout` save) whose mtime was preserved or set back, as
+ * `cp -p`, `touch -r` and archive extraction do. The inode changes on a rename
+ * and the ctime on any write or metadata change, and neither can be set by a
+ * caller, so together they catch what the first two let through.
+ */
 function signatureOf(files: readonly string[]): string {
   return files
     .map((file) => {
       try {
         const facts = statSync(file);
-        return `${file} ${facts.size} ${facts.mtimeMs}`;
+        return `${file} ${facts.size} ${facts.mtimeMs} ${facts.ctimeMs} ${facts.ino}`;
       } catch {
         return `${file} missing`;
       }
@@ -127,25 +137,45 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-// The frontmatter fence as the notes' own dialect reads it
-// (`services/catalog/src/index/frontmatter.ts`), and only far enough to find
-// the `id:` line: the id, not the filename, is what a note's primary key is.
+// The frontmatter fence and line shapes of the notes' own dialect
+// (`services/catalog/src/index/frontmatter.ts`), read only as far as the
+// `id:` key: the id, not the filename, is what a note's primary key is. Line
+// by line, as the dialect reads, so no pattern can run past the end of a line.
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
-const ID_LINE_RE = /^id:\s*(.*)$/gm;
+const BLOCK_ITEM_RE = /^\s*-\s+(.*)$/;
+const PAIR_RE = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/;
 
 /**
  * The concept id a note declares, falling back to its filename stem exactly as
  * the concepts indexer does (`readText(data, "id") ?? basename`).
  *
- * The dialect's rules for that one key: the last `id:` line wins, as it does
- * when the dialect fills its record key by key; an empty value, `null`, `~`
- * or an inline list is no id; quotes are stripped.
+ * The dialect's rules for that one key, which `services/catalog/test/`
+ * holds this function to on the same inputs: the last `id:` line wins; an
+ * empty value, `null`, `~`, an inline list, or a block list (`- a` lines
+ * under it) is no id; quotes are stripped; a number is read as a number, so
+ * `007` is `7`; blank and `#` lines are skipped without ending a list.
  */
 export function noteId(markdown: string, stem: string): string {
   const block = FRONTMATTER_RE.exec(markdown)?.[1];
-  const lines = block === undefined ? [] : [...block.matchAll(ID_LINE_RE)];
-  const raw = lines.at(-1)?.[1]?.trim();
-  if (raw === undefined || raw === "" || raw === "null" || raw === "~" || raw.startsWith("[")) return stem;
+  if (block === undefined || block === "") return stem;
+  let current: string | null = null;
+  /** The id's raw text, or null for no id (absent, empty, or a list). */
+  let raw: string | null = null;
+  for (const line of block.split(/\r?\n/)) {
+    if (line.trim() === "" || line.trim().startsWith("#")) continue;
+    if (BLOCK_ITEM_RE.test(line) && current !== null) {
+      if (current === "id") raw = null;
+      continue;
+    }
+    const pair = PAIR_RE.exec(line);
+    if (pair === null) continue;
+    current = pair[1] as string;
+    if (current !== "id") continue;
+    const value = (pair[2] as string).trim();
+    raw = value === "" || value.startsWith("[") ? null : value;
+  }
+  if (raw === null || raw === "null" || raw === "~") return stem;
+  if (/^-?\d+(\.\d+)?$/.test(raw)) return String(Number(raw));
   const quoted =
     raw.length >= 2 &&
     ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")));

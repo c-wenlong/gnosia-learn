@@ -7,7 +7,7 @@ import type { ParityRecord } from "./ownership";
 import { parity } from "./parity";
 import { lockTypes } from "./revisions";
 import { COMPLETENESS_RULES, setTriggers, WRITE_GUARDS, writeGuardName } from "./rules";
-import { DB_READERS } from "./source";
+import { readyTypes } from "./source";
 
 /**
  * `catalog flip <type>`: the moment the database starts owning a type
@@ -36,6 +36,13 @@ import { DB_READERS } from "./source";
  * counted by `--strict`, and disarmed, including when an earlier strict flip
  * had armed it: the phase 3 escape hatch, with its reason on file.
  */
+
+/**
+ * The types whose database reader works, from each reader's own `ready` flag
+ * (`readers/<type>.ts`). A track that fills in its reader flips the flag in
+ * its own file, and this follows.
+ */
+export const DB_READERS: ReadonlySet<ContentType> = readyTypes();
 
 export class FlipRefused extends Error {
   constructor(message: string) {
@@ -95,7 +102,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
   }
   if (!(options.readers ?? DB_READERS).has(type)) {
     throw new FlipRefused(
-      `${type} has no database reader yet: its track fills in dbSource's method, and until then ` +
+      `${type} has no database reader yet: its track fills in readers/${type}.ts and sets ready, and until then ` +
         `every reader that follows the content_source row would fail. Flip it in that track's PR.`,
     );
   }

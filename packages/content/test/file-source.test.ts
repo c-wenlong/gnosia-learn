@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, utimesSync } from "node:fs";
+import { readdirSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -143,6 +143,32 @@ describe("fileSource over a fixture", () => {
     utimesSync(path.join(f.root, "content/topics.yaml"), new Date(2031, 0, 1), new Date(2031, 0, 1));
     expect(await files.courses()).not.toBe(second);
     expect((await files.topics()).map((t) => t.slug)).toEqual(["alpha", "another"]);
+  });
+
+  it("sees a same-size edit whose modification time was put back, and a file replaced by a rename", async () => {
+    const f = tree();
+    const files = fileSource(f.root);
+    const file = path.join(f.root, "content/courses/xx1000.yaml");
+    f.write("content/courses/xx1000.yaml", courseYaml({ title: "Course AAAA" }));
+    const first = await files.courses();
+    const { atime, mtime, size } = statSync(file);
+
+    // Same length, then the modification time set back, as `cp -p`,
+    // `touch -r` and an archive extraction do.
+    f.write("content/courses/xx1000.yaml", courseYaml({ title: "Course BBBB" }));
+    utimesSync(file, atime, mtime);
+    expect(statSync(file).size).toBe(size);
+    expect(statSync(file).mtimeMs).toBe(mtime.getTime());
+    const second = await files.courses();
+    expect(second[0]?.title).toBe("Course BBBB");
+    expect(second).not.toBe(first);
+
+    // Replaced by a rename, the way editors and git save, same size and time again.
+    const staged = `${file}.tmp`;
+    writeFileSync(staged, courseYaml({ title: "Course CCCC" }));
+    utimesSync(staged, atime, mtime);
+    renameSync(staged, file);
+    expect((await files.courses())[0]?.title).toBe("Course CCCC");
   });
 
   it("files a note under the id it declares, not the name it was saved as", async () => {

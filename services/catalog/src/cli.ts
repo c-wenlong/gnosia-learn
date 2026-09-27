@@ -52,7 +52,9 @@ import {
   describeConnectionFailure,
   EXIT_UNREACHABLE,
 } from "./connection-failure";
+import { withDatabase } from "./db";
 import { databaseUrl, redactUrl } from "./env";
+import { assertMigrated, EXIT_MIGRATIONS_OUTSTANDING, MigrationsOutstanding } from "./migrations";
 import { parseSources } from "./index/run";
 
 /**
@@ -203,6 +205,10 @@ Exit codes:
   2  The invocation was wrong.
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
+  4  The database is behind this code: index, import, export, parity,
+     flip, ls, show, history, diff and renumber read tables or columns a
+     migration it has not had adds. stderr says how many are outstanding and to run
+     migrate.
 
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
@@ -264,6 +270,20 @@ const COMMANDS: readonly Command[] = [
   "renumber",
 ];
 
+/**
+ * For the commands that read tables or columns added after 0009
+ * (`content_source`, `archived_at`, the revision table): `index`, `import`,
+ * `export`, `parity`, `flip`, `ls`, `show`, `history`, `diff` and `renumber`. On a database behind the
+ * journal they refuse by name, with exit 4, instead of failing on drizzle's
+ * `Failed query: ...` for a relation the person never heard of. Each calls it
+ * after checking its own arguments, so a wrong invocation is still exit 2
+ * whatever state the database is in. `status`, `doctor` and `migrate` never
+ * call it: saying what is outstanding is their job.
+ */
+async function schemaCurrent(): Promise<void> {
+  await withDatabase(({ db }) => assertMigrated(db));
+}
+
 function isCommand(value: string | undefined): value is Command {
   return value !== undefined && (COMMANDS as readonly string[]).includes(value);
 }
@@ -273,7 +293,7 @@ class Usage extends Error {}
 
 /**
  * Exit codes: 0 ok, 1 the command failed, 2 the invocation was wrong, 3 the
- * database is unreachable.
+ * database is unreachable, 4 migrations are outstanding.
  *
  * 3 exists for the studio, which has to tell "nothing there to talk to" (run
  * the job without the database, D16) from "a live database said no" (refuse
@@ -357,8 +377,10 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "index": {
         const root = values["manimkc-root"];
+        const only = values.only === undefined ? undefined : parseSources(values.only);
+        await schemaCurrent();
         const result = await runIndexCommand({
-          only: values.only === undefined ? undefined : parseSources(values.only),
+          only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
@@ -368,9 +390,11 @@ export async function main(argv: string[]): Promise<number> {
         const dir = positionals[1];
         if (dir === undefined) throw new Usage("import needs a directory");
         const root = values["manimkc-root"];
+        const only = values.only === undefined ? undefined : parseSources(values.only);
+        await schemaCurrent();
         const result = await runImportCommand({
           dir,
-          only: values.only === undefined ? undefined : parseSources(values.only),
+          only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
@@ -378,14 +402,18 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "export": {
         if (values.out === undefined) throw new Usage("export needs --out <dir>");
-        const result = await runExport({ out: values.out, only: exportTypes(values.only) });
+        const only = exportTypes(values.only);
+        await schemaCurrent();
+        const result = await runExport({ out: values.out, only });
         emit(result, formatExport(result));
         break;
       }
       case "parity": {
         const dir = positionals[1];
         if (dir === undefined) throw new Usage("parity needs a directory to compare against");
-        const result = await runParity({ dir, only: exportTypes(values.only) });
+        const only = exportTypes(values.only);
+        await schemaCurrent();
+        const result = await runParity({ dir, only });
         emit(result, formatParity(result));
         if (!result.clean) return 1;
         break;
@@ -400,6 +428,7 @@ export async function main(argv: string[]): Promise<number> {
         if (waive.length !== reasons.length) {
           throw new Usage("flip: every --waive needs its own --reason, in the same order");
         }
+        await schemaCurrent();
         const result = await runFlip({
           type: type as ContentType,
           strict: values.strict,
@@ -419,6 +448,7 @@ export async function main(argv: string[]): Promise<number> {
           throw new Usage(`renumber ${list} needs --topic <slug>`);
         }
         if (list === "items" && values.module === undefined) throw new Usage("renumber items needs --module <id>");
+        await schemaCurrent();
         const result = await runRenumber({
           list: list as RenumberList,
           topic: values.topic,
@@ -438,15 +468,16 @@ export async function main(argv: string[]): Promise<number> {
         break;
       }
       case "ls": {
-        const result = await runLs(positionals[1], {
-          kinds: values.kind === undefined ? undefined : parseKinds(values.kind),
-        });
+        const kinds = values.kind === undefined ? undefined : parseKinds(values.kind);
+        await schemaCurrent();
+        const result = await runLs(positionals[1], { kinds });
         emit(result, formatLs(result));
         break;
       }
       case "show": {
         const target = positionals[1];
         if (target === undefined) throw new Usage("show needs a slug or an id");
+        await schemaCurrent();
         const result = await runShow(target);
         emit(result, formatShow(result));
         break;
@@ -496,6 +527,7 @@ export async function main(argv: string[]): Promise<number> {
         const type = parseEntityType(positionals[1]);
         const id = positionals[2];
         if (id === undefined) throw new Usage(`history ${type} needs an id`);
+        await schemaCurrent();
         const result = await runHistory(type, id);
         emit(result, formatHistory(result));
         break;
@@ -504,6 +536,7 @@ export async function main(argv: string[]): Promise<number> {
         const first = parseRevisionId(positionals[1], "a first revision");
         const second =
           positionals[2] === undefined ? undefined : parseRevisionId(positionals[2], "the second revision");
+        await schemaCurrent();
         const result = await runDiff(first, second);
         emit(result, formatDiff(result));
         break;
@@ -526,6 +559,15 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof MigrationsOutstanding) {
+      if (values.json) {
+        process.stdout.write(
+          `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, pending: error.pending }, null, 2)}\n`,
+        );
+      }
+      process.stderr.write(`catalog ${command}: ${redactUrl(databaseUrl())} is behind this code. ${message}\n`);
+      return EXIT_MIGRATIONS_OUTSTANDING;
+    }
     const failure = classifyConnectionFailure(error);
     const reason = failure === null ? null : describeConnectionFailure(failure);
     if (values.json) {
