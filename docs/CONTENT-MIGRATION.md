@@ -802,6 +802,16 @@ list above, and why:
   **Create topic and draw**) is not built, per phase 1's rule: the verbs it
   will call are, and `topic add --dry-run --json` is the validation step D16
   names.
+- **Flip day for topics and tags** is, on the migrated primary: `catalog index`
+  (so both were last imported from the repository), `catalog parity . --only
+  topics,tags`, `catalog flip topics`, `catalog flip tags`, then
+  `catalog export --only topics,tags --out .`. The last step matters: `flip`
+  checks parity but records no export hash, and until one is recorded every
+  import that reaches a flipped type refuses with "No export of tags is
+  recorded", `learn concept add --topic` included (its index run pulls in
+  courses, and courses pull in tags). The export into the working tree is a
+  no-op on the files; any `catalog topic` or `catalog tag` write records the
+  hash too.
 - **`--author`** names the person a write is for (the studio's Draw press);
   the default is the local learner. Every write needs `--reason`; a dry run
   does not.
