@@ -59,12 +59,23 @@ export class PositionGapError extends Error {
  * {@link POSITION_STEP} apart past either end. A list with nothing kept is
  * numbered `STEP, 2 * STEP, ...`.
  *
+ * When several sets of that largest size exist, the one kept is one that
+ * leaves room in every gap, if any does. Two kept rows `i < j` (by authored
+ * index) leave room for the `j - i - 1` rows between them exactly when
+ * `p[j] - p[i] >= j - i`, that is when `p[i] - i <= p[j] - j`, so the
+ * largest set with room is a longest non-decreasing run of `p - index`. With
+ * `a=1000, b=1001, c=2000, d=1002, e=3000` in that order, keeping `a, b, c, e`
+ * and moving `d` fits where keeping `a, b, d, e` and moving `c` does not.
+ *
  * A position two keys share says nothing about their order, so neither keeps
  * it. That is also what a list looks like before it was ever positioned
  * (every row at the column's default), which is therefore numbered afresh.
  *
- * Throws {@link PositionGapError} when a gap is too narrow for the rows that
- * must go in it. Pure and deterministic: the same input places the same way.
+ * Throws {@link PositionGapError} only when no largest set leaves room: every
+ * way of keeping the most rows puts some moved or new row between two
+ * neighbours with no whole number free, and making room would move a row
+ * whose place did not change. Pure and deterministic: the same input places
+ * the same way.
  */
 export function placePositions(
   order: readonly string[],
@@ -83,7 +94,12 @@ export function placePositions(
     return at === undefined || !Number.isSafeInteger(at) || counts.get(at) !== 1 ? null : at;
   };
 
-  const kept = keptIndices(order.map(usable));
+  const values = order.map(usable);
+  const increasing = longestRun(values, (v) => v, true);
+  // The same length with room in every gap, when one exists; otherwise the
+  // plain longest run, whose narrowest gap the loop below then refuses.
+  const roomy = longestRun(values, (v, index) => v - index, false);
+  const kept = roomy.length === increasing.length ? roomy : increasing;
   const out = new Map<string, number>();
   for (const index of kept) out.set(order[index] as string, usable(order[index] as string) as number);
 
@@ -122,22 +138,28 @@ function fill(low: number | null, high: number | null, count: number): number[] 
 }
 
 /**
- * Indices of a longest strictly increasing subsequence of the non-null
- * values, in index order: the most rows that can keep their positions.
- * O(n log n); ties between equally long answers go to the earliest ending,
- * which is deterministic.
+ * Indices of a longest run of the non-null values whose `key` increases
+ * (strictly, or never decreasing), in index order. O(n log n) patience
+ * sorting; ties between equally long answers go to the earliest ending, which
+ * is deterministic.
  */
-function keptIndices(values: readonly (number | null)[]): number[] {
-  /** tails[k]: index of the smallest last value of an increasing run of length k + 1. */
+function longestRun(
+  values: readonly (number | null)[],
+  key: (value: number, index: number) => number,
+  strict: boolean,
+): number[] {
+  const keys = values.map((value, index) => (value === null ? null : key(value, index)));
+  /** tails[k]: index ending the run of length k + 1 with the smallest last key. */
   const tails: number[] = [];
   const previous = new Array<number>(values.length).fill(-1);
-  values.forEach((value, index) => {
+  keys.forEach((value, index) => {
     if (value === null) return;
     let lo = 0;
     let hi = tails.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if ((values[tails[mid] as number] as number) < value) lo = mid + 1;
+      const tail = keys[tails[mid] as number] as number;
+      if (strict ? tail < value : tail <= value) lo = mid + 1;
       else hi = mid;
     }
     if (lo > 0) previous[index] = tails[lo - 1] as number;

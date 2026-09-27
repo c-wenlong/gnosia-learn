@@ -95,6 +95,22 @@ describe("placePositions", () => {
     }
   });
 
+  it("keeps the set of rows that leaves room, when one of that size does", () => {
+    // Keeping a, b, d, e would leave c nowhere between 1001 and 1002; keeping
+    // a, b, c, e moves d instead, into the gap between 2000 and 3000.
+    const before = { a: 1000, b: 1001, c: 2000, d: 1002, e: 3000 };
+    const after = place(["a", "b", "c", "d", "e"], before);
+    expect(moved(before, after)).toEqual(["d"]);
+    expect(after["d"]).toBeGreaterThan(2000);
+    expect(after["d"]).toBeLessThan(3000);
+  });
+
+  it("refuses rather than move a row whose place did not change", () => {
+    // New rows around a narrowed gap: the only way to fit them is to move b,
+    // which stayed where it was. That is a renumber, and not the import's call.
+    expect(() => place(["a", "x", "y", "b", "c"], { a: 1000, b: 1002, c: 5000 })).toThrow(PositionGapError);
+  });
+
   it("refuses a gap too narrow for what must go in it, naming both sides", () => {
     expect(() => place(["a", "x", "b"], { a: 1000, b: 1001 })).toThrow(PositionGapError);
     try {

@@ -1250,9 +1250,11 @@ other rows).
 `curriculum_item.position` and a module's `collection_item.topic_position` are
 stored in steps of 1000 in file order. On re-import a row keeps its number
 while its place relative to its neighbours is unchanged (the most rows that
-can, a longest increasing run); only a moved or new row is numbered, from the
-gap it landed in: a midpoint between two neighbours, or one step past either
-end. When a gap has no whole number left the import refuses and names
+can, a longest increasing run, and among runs that long one that leaves room
+for the rest); only a moved or new row is numbered, from the gap it landed
+in: a midpoint between two neighbours, or one step past either end. When no
+run that long leaves room, so fitting the rest would move a row whose place
+did not change, the import refuses and names
 `catalog renumber <list> --reason`, which spreads the list back out and writes
 one revision per row it moves, on purpose. A row whose entity has no revision
 yet was positioned before revisions existed, and is numbered afresh. Positions
