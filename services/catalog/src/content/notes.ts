@@ -142,8 +142,9 @@ function unheldAsWritten(text: string, where: string): string[] {
   for (const entry of entries) {
     if (twice.has(entry.key)) continue;
     // `tags: one` then `- two` is read as `[two]`: the parser lets the list
-    // replace the value on the key line.
-    if (entry.raw !== "" && entry.items.length > 0) {
+    // replace a plain value on the key line. An inline list (`tags: [one]`
+    // then `- two`) is extended instead, and is read as written.
+    if (entry.raw !== "" && !entry.raw.startsWith("[") && entry.items.length > 0) {
       problems.push(
         `${where}: ${entry.key} has a value on its own line and a list under it; only the list would be kept. ` +
           `Write one or the other.`,
@@ -151,12 +152,12 @@ function unheldAsWritten(text: string, where: string): string[] {
       continue;
     }
     if (LIST_KEYS.has(entry.key)) {
-      const written =
-        entry.items.length > 0
-          ? entry.items
-          : entry.raw.startsWith("[")
-            ? entry.raw.replace(/^\[|\]$/g, "").split(",")
-            : [entry.raw];
+      const inline = entry.raw.startsWith("[")
+        ? entry.raw.replace(/^\[|\]$/g, "").split(",")
+        : entry.raw === ""
+          ? []
+          : [entry.raw];
+      const written = [...inline, ...entry.items];
       const expected = written.map(unquote).filter((item) => item !== "");
       const read = readList(data, entry.key);
       if (JSON.stringify(expected) !== JSON.stringify(read)) {
