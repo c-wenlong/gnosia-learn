@@ -55,7 +55,11 @@ module was added, dropped or moved to another topic, are rewritten in the tree
 the courses were imported from (D17), so the files and the database never
 disagree. A course file or `topics.yaml` there that holds edits the database
 has not imported is never overwritten: the import refuses and names it. The
-file being imported is the exception, since it is the edit.
+file being imported is the exception, since it is the edit. The check compares
+bytes, so a file whose content matches but whose formatting does not (quoting,
+spacing, a comment) is refused too. The files in this repository are
+byte-for-byte the export's own; a tree written by hand is brought to that form
+once with `npm run catalog -- export --only courses,topics --out <the tree>`.
 
 When writing the file itself:
 
