@@ -215,10 +215,14 @@ npm run learn -- concept add --title "Master Theorem" --domain algorithms \
   --topic recurrence-relations --requires comparing-growth-rates
 ```
 
-It checks the slug against the vocabulary *before* writing anything, appends the
-new id to that topic's `maps.concepts`, and runs the concepts indexer, so the
-note is queryable at the next command. `--json` reports
-`{ id, path, topic, item, indexed }`.
+It checks the slug against the catalog *before* writing anything (the topic is
+a live row, the concept sits under no other topic, and `content/topics.yaml` is
+what the database would export, so no unimported edit is overwritten), then
+files the concept under the topic through the catalog's write seam, as
+`concept.topic_slug` with a revision whose reason is `--reason` or a default,
+rewrites `content/topics.yaml` from the rows so its `maps.concepts` lists the
+new id, and runs the concepts indexer, so the note is queryable at the next
+command. `--json` reports `{ id, path, topic, item, indexed }`.
 
 `--item <row-id>` is the course-side half. A row id is a `topics[].id` in a
 course file, like `cp4284-m1-t1`; the flag lists the new id under that row's
@@ -226,22 +230,22 @@ course file, like `cp4284-m1-t1`; the flag lists the new id under that row's
 because the row's module names the topic the note must be mapped to. Passing
 both with a topic that is not the module's is refused before anything is
 written, since the course reader would refuse the file that resulted. The edit
-is textual like the vocabulary one, locked, and read back through the real
-reader before it is kept.
+is textual, locked, and read back through the real reader before it is kept,
+until courses move into the database.
 
 ```bash
 npm run learn -- concept add --title "Tokenization pipelines" --domain transformers \
   --item cp4284-m1-t1
 ```
 
-The edit is textual, one line of the YAML, so the file keeps its comments,
-section banners and ordering and the diff stays reviewable. It is checked
-afterwards by re-reading the file through the real parser: if the slug did not
-land under the topic that was asked for, the original text goes back and the
-command fails.
+The course edit is textual, one line of the YAML, so the file keeps its
+comments and ordering and the diff stays reviewable. It is checked afterwards by
+re-reading the file through the real parser: if the id did not land on the row
+that was asked for, the original text goes back and the command fails.
 
-Two refusals, both before the write: a slug that is in no topic, and a concept
-another topic already claims. Each source id belongs to exactly one topic, which
+Three refusals, all before the note is written: a slug that is no live topic, a
+concept another topic already claims, and a `content/topics.yaml` holding an
+edit the database has not imported. Each source id belongs to exactly one topic, which
 is what makes a query for "everything about this subject" answerable.
 
 Without `--topic` the note is still written and the command says which edit is
