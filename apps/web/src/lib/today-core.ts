@@ -23,6 +23,7 @@ import {
   type StreakDay,
   type StreakDayState,
 } from "@/lib/habit-core";
+import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { numberWord } from "@/lib/preferences";
 
@@ -547,15 +548,21 @@ export function leewayLine(habit: Habit): string {
   return `${leewayLeft} free ${leewayLeft === 1 ? "miss" : "misses"} left this week`;
 }
 
-/** Every course with at least one topic ticked, furthest along first. */
+/**
+ * Every course with at least one topic done, furthest along first. Done is
+ * the path's rule: mastered when the topic has concepts, ticked when it has
+ * none, which is what `standing` and `completed` say between them.
+ */
 export function coursesInProgress(
   courses: readonly { slug: string; code: string; title: string; order: number; topicIds: readonly string[] }[],
   completed: Readonly<Record<string, true>>,
+  standing: ItemStanding = EMPTY_STANDING,
 ): CourseInProgress[] {
+  const isDone = itemDoneWith(standing, completed);
   return courses
     .map((c) => {
       const total = c.topicIds.length;
-      const done = c.topicIds.filter((id) => completed[id]).length;
+      const done = c.topicIds.filter(isDone).length;
       const row: CourseInProgress = {
         slug: c.slug,
         code: c.code,

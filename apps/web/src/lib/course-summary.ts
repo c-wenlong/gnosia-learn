@@ -1,3 +1,4 @@
+import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import type { Course, TagMeta } from "@/lib/types";
 
 /**
@@ -9,6 +10,12 @@ import type { Course, TagMeta } from "@/lib/types";
  * whatever it gets travels in the page payload. A whole `Course` carries every
  * subtopic and curated link; this is the projection a card actually renders.
  * Pure, so the server page and the client grid share it and a test can call it.
+ *
+ * Done is the path's rule (`topicDone`): a topic with concepts counts when
+ * they are mastered, a topic without counts when it is ticked. The server
+ * page hands the grid an `ItemStanding` for the first half; the ticks stay
+ * the client's. Without a standing, every topic is tick-only, which is what
+ * the page falls back to when the catalog cannot be read.
  */
 
 export interface CourseSummaryTopic {
@@ -52,10 +59,12 @@ export interface CourseStatus {
 export function courseStatus(
   summary: CourseSummary,
   completed: Readonly<Record<string, true>>,
+  standing: ItemStanding = EMPTY_STANDING,
 ): CourseStatus {
+  const isDone = itemDoneWith(standing, completed);
   const total = summary.topics.length;
-  const done = summary.topics.filter((t) => completed[t.id]).length;
-  const next = summary.topics.find((t) => !completed[t.id]) ?? null;
+  const done = summary.topics.filter((t) => isDone(t.id)).length;
+  const next = summary.topics.find((t) => !isDone(t.id)) ?? null;
   const percent = total === 0 ? 0 : Math.round((done / total) * 100);
   let label: string;
   if (total > 0 && next === null) label = "Completed";
@@ -79,8 +88,12 @@ export interface CourseFilter {
 export const ALL_COURSES: CourseFilter = { progress: "all", tag: null };
 
 /** Started and not finished: at least one topic done and one left. */
-export function isInProgress(summary: CourseSummary, completed: Readonly<Record<string, true>>): boolean {
-  const status = courseStatus(summary, completed);
+export function isInProgress(
+  summary: CourseSummary,
+  completed: Readonly<Record<string, true>>,
+  standing: ItemStanding = EMPTY_STANDING,
+): boolean {
+  const status = courseStatus(summary, completed, standing);
   return status.completed > 0 && status.next !== null;
 }
 
@@ -89,11 +102,12 @@ export function filterCourses(
   query: string,
   filter: CourseFilter,
   completed: Readonly<Record<string, true>>,
+  standing: ItemStanding = EMPTY_STANDING,
 ): CourseSummary[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return summaries.filter((s) => {
     if (filter.tag !== null && !s.tags.some((t) => t.id === filter.tag)) return false;
-    if (filter.progress === "in-progress" && !isInProgress(s, completed)) return false;
+    if (filter.progress === "in-progress" && !isInProgress(s, completed, standing)) return false;
     if (words.length === 0) return true;
     const haystack = [s.code, s.title, ...s.tags.map((t) => t.label)].join(" ").toLowerCase();
     return words.every((w) => haystack.includes(w));

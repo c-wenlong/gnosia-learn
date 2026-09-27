@@ -63,6 +63,14 @@ describe("courseStatus", () => {
   it("says completed when every topic is done", () => {
     expect(courseStatus(hci, { "cs2111-m1-t1": true })).toMatchObject({ percent: 100, next: null, label: "Completed" });
   });
+
+  it("counts a mastered topic without a tick, and not a ticked one whose concepts are unmastered", () => {
+    const standing = { mastered: ["cp4281-m1-t1"], withConcepts: ["cp4281-m1-t1", "cp4281-m1-t2"] };
+    // t1 mastered and unticked; t2 ticked but its concepts are not mastered;
+    // the module-2 topic has no concepts, so its tick counts.
+    const status = courseStatus(graphics, { "cp4281-m1-t2": true, "cp4281-m2-t1": true }, standing);
+    expect(status).toMatchObject({ completed: 2, total: 3, percent: 67, label: "Next: Dot product" });
+  });
 });
 
 describe("filterCourses", () => {
@@ -79,6 +87,15 @@ describe("filterCourses", () => {
     const done = { "cp4281-m1-t1": true as const, "cs2111-m1-t1": true as const };
     // CS2111 is complete, so it is not in progress.
     expect(filterCourses(all, "", { progress: "in-progress", tag: null }, done)).toEqual([graphics]);
+  });
+
+  it("reads in-progress from mastery when a standing is given", () => {
+    // Nothing ticked: only mastery can start a course.
+    const standing = { mastered: ["cs2111-m1-t1"], withConcepts: ["cs2111-m1-t1", "cp4281-m1-t1"] };
+    // CS2111 is complete by mastery, so not in progress; CP4281 has nothing done.
+    expect(filterCourses(all, "", { progress: "in-progress", tag: null }, {}, standing)).toEqual([]);
+    const started = { mastered: ["cp4281-m1-t1"], withConcepts: ["cp4281-m1-t1"] };
+    expect(filterCourses(all, "", { progress: "in-progress", tag: null }, {}, started)).toEqual([graphics]);
   });
 
   it("combines the two menus", () => {
