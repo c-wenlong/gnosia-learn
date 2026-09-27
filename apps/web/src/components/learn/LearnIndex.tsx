@@ -93,7 +93,7 @@ export function LearnIndex({
           <Button
             variant="secondary"
             disabled
-            title="Concepts are added with the learn CLI: npm run learn -- concept add"
+            disabledReason="Add one with npm run learn -- concept add"
           >
             Add concept
           </Button>
