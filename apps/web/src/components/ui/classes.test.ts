@@ -31,6 +31,21 @@ describe("buttonClasses", () => {
     expect(buttonClasses({ size: "sm", variant: "secondary" })).toContain("px-[18px]");
   });
 
+  it("dims a disabled button without taking its pointer events", () => {
+    // pointer-events-none hid a disabled button's title and its hover from everyone.
+    for (const variant of ["primary", "secondary", "ghost", "ok", "warn", "accent", "brand"] as const) {
+      const c = buttonClasses({ variant });
+      expect(c).toContain("disabled:opacity-50");
+      expect(c).toContain("disabled:cursor-not-allowed");
+      expect(c).not.toContain("pointer-events-none");
+      expect(c).not.toContain("aria-disabled:");
+      // So hover and press are scoped to an enabled button, or a disabled one would still react.
+      for (const token of c.split(" ").filter((t) => /(^|:)(hover|active):/.test(t))) {
+        expect(token).toMatch(/^not-disabled:/);
+      }
+    }
+  });
+
   it("keeps the ghost padding tight and adds width and extra classes on request", () => {
     expect(buttonClasses({ variant: "ghost" })).toContain("px-2");
     expect(buttonClasses({ block: true, className: "mt-4" })).toMatch(/w-full mt-4$/);
@@ -55,6 +70,11 @@ describe("chipClasses", () => {
 });
 
 describe("inputClasses and cardClasses", () => {
+  it("dims a disabled input with the not-allowed cursor", () => {
+    expect(inputClasses()).toContain("disabled:opacity-50");
+    expect(inputClasses()).toContain("disabled:cursor-not-allowed");
+  });
+
   it("rounds an input to 8px or a pill", () => {
     expect(inputClasses()).toContain("rounded-lg");
     expect(inputClasses({ pill: true })).toContain("rounded-full");

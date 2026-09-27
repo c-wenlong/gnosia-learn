@@ -109,7 +109,12 @@ export function NoteAndSources({
           ))}
         </ul>
         <span className="mt-1">
-          <Button variant="secondary" size="sm" disabled title="Adding a source from here is not built yet. Add it to the note's sources: frontmatter.">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled
+            disabledReason="Not built yet. Add it to the note's sources: frontmatter."
+          >
             Add source
           </Button>
         </span>
