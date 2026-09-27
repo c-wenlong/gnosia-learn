@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -5,17 +6,81 @@ import {
   parseFrontmatter,
   stringifyFrontmatter,
 } from "../../../../scripts/learn/lib/markdown.mjs";
-import { allDirs, conceptsDir, sessionsDir } from "./paths";
+import { readContentSources } from "../content/ownership";
+import { commitNoteText as commitRows, noteText, readNoteRows, writeNoteRow, type NoteRow } from "../content/note-rows";
+import { ContentWriteError } from "../content/write";
+import { NOTE_KEYS, type NoteFields } from "../content/notes";
+import { appendLog, listLogIds, logPath, readEntries } from "../content/session-logs";
+import type { CatalogDatabase } from "../db";
+import { sqlstate } from "../state/errors";
+import { allDirs, conceptsDir, rel, repoRoot, sessionsDir } from "./paths";
 
 /**
- * The file half of the old `scripts/learn/lib/store.mjs`, unchanged in
- * behaviour and ported to TypeScript.
+ * Concept notes and session logs, for the `learn` CLI: the file half of the
+ * old `scripts/learn/lib/store.mjs`, and since Track C of
+ * docs/CONTENT-MIGRATION.md the same functions over rows.
  *
- * The state half of that module — `readModel`, `writeReviews`, `appendEvent` —
- * is gone; those are `../state/`. What is left is exactly the part that was
- * never state: concept notes, session logs, and the scanning rules that make an
- * id a filename.
+ * **Which one answers is the `content_source` row's call** (D18). While a
+ * type is on files (no row, or `files`) every function here reads and writes
+ * `learn/` exactly as it always has. Once `catalog flip concepts` or
+ * `catalog flip sessions` says `db`, the same calls read and write rows through
+ * the seam and no file under `learn/` is touched. The signatures do not
+ * change, so the CLI does not branch; what the row side adds (a reason for
+ * the revision, the session that made it) rides in the options.
+ *
+ * `bindCatalog` hands this module the CLI's lazily opened connection. Without
+ * one (a test of the file half) everything is files. With one, a writer that
+ * cannot reach the database refuses rather than guessing which side owns the
+ * type: that is the offline change the plan accepts (`concept add`,
+ * `check add` and `session log` need the database now). A reader falls back to
+ * the files, as `selectSource` does, so `doctor` can still say what is wrong.
  */
+
+type CatalogGetter = () => Promise<CatalogDatabase>;
+
+let catalog: CatalogGetter | null = null;
+let owned: Promise<ReadonlySet<string>> | null = null;
+
+/** Bind the connection the row side uses, or unbind it with null. */
+export function bindCatalog(get: CatalogGetter | null): void {
+  catalog = get;
+  owned = null;
+}
+
+/** The types the database owns, read once per process. A database before 0010 owns none. */
+async function ownedTypes(db: CatalogDatabase): Promise<ReadonlySet<string>> {
+  owned ??= readContentSources(db).then(
+    (rows) => new Set([...rows.values()].filter((row) => row.source === "db").map((row) => row.type)),
+    (error: unknown) => {
+      owned = null;
+      // `content_source` does not exist before migration 0010: nothing is flipped there.
+      if (sqlstate(error) === "42P01") return new Set<string>();
+      throw error;
+    },
+  );
+  return owned;
+}
+
+/**
+ * The connection to write `type` through, or null when the type is on files.
+ * `write` says what an unreachable database means: a writer refuses, a
+ * reader reads the files.
+ */
+async function rowsFor(type: "concepts" | "sessions", write: boolean): Promise<CatalogDatabase | null> {
+  if (catalog === null) return null;
+  try {
+    const db = await catalog();
+    return (await ownedTypes(db)).has(type) ? db : null;
+  } catch (error) {
+    if (write) throw error;
+    return null;
+  }
+}
+
+/** Whether the database owns `type`, for a command that says so in its output. */
+export async function ownedByDatabase(type: "concepts" | "sessions"): Promise<boolean> {
+  return (await rowsFor(type, true)) !== null;
+}
 
 export interface ConceptNote {
   id: string;
@@ -32,6 +97,23 @@ export interface ConceptNote {
   body: string;
   path: string;
   [key: string]: unknown;
+}
+
+/** A row as the note object a file read gives, keys as the rendered note writes them. */
+function noteFromRow(row: NoteRow): ConceptNote {
+  return {
+    id: row.slug,
+    title: row.title,
+    ...(row.summary !== null ? { summary: row.summary } : {}),
+    requires: row.requires,
+    ...(row.assumes.length > 0 ? { assumes: row.assumes } : {}),
+    tags: row.tags,
+    sources: row.sources,
+    ...(row.created !== null ? { created: row.created.toISOString() } : {}),
+    domain: row.domain,
+    body: row.body ?? "",
+    path: path.join(repoRoot(), row.path),
+  };
 }
 
 export async function ensureDirs(): Promise<void> {
@@ -107,6 +189,8 @@ export async function conceptPath(id: string, domain?: string | null): Promise<s
  * Obsidian resolves `[[wikilinks]]` the same way. Reported by `doctor`.
  */
 export async function conceptCollisions(): Promise<Scan["collisions"]> {
+  // Rows cannot collide: the slug is the primary key.
+  if ((await rowsFor("concepts", false)) !== null) return [];
   return (await scanConcepts()).collisions;
 }
 
@@ -129,6 +213,11 @@ async function readConceptAt(
 }
 
 export async function readConcept(id: string): Promise<ConceptNote | null> {
+  const db = await rowsFor("concepts", false);
+  if (db !== null) {
+    const [row] = await readNoteRows(db, [id]);
+    return row === undefined ? null : noteFromRow(row);
+  }
   const { index } = await scanConcepts();
   const entry = index.get(id);
   if (entry === undefined) return null;
@@ -136,6 +225,10 @@ export async function readConcept(id: string): Promise<ConceptNote | null> {
 }
 
 export async function listConcepts(): Promise<ConceptNote[]> {
+  const db = await rowsFor("concepts", false);
+  if (db !== null) {
+    return (await readNoteRows(db)).map(noteFromRow).sort((a, b) => a.id.localeCompare(b.id));
+  }
   const { index } = await scanConcepts();
   const concepts: ConceptNote[] = [];
   for (const [id, { file, domain }] of [...index].sort((a, b) => a[0].localeCompare(b[0]))) {
@@ -147,9 +240,13 @@ export async function listConcepts(): Promise<ConceptNote[]> {
 
 /** Every domain folder currently in use, with its concept count. */
 export async function listDomains(): Promise<{ domain: string | null; count: number }[]> {
-  const { index } = await scanConcepts();
+  const db = await rowsFor("concepts", false);
+  const domains =
+    db !== null
+      ? (await readNoteRows(db)).map((row) => ({ domain: row.domain }))
+      : [...(await scanConcepts()).index.values()];
   const counts = new Map<string, number>();
-  for (const { domain } of index.values()) {
+  for (const { domain } of domains) {
     const key = domain ?? "";
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -159,11 +256,92 @@ export async function listDomains(): Promise<{ domain: string | null; count: num
 /** Keys that are derived, not frontmatter, and must never be serialised. */
 const NON_FRONTMATTER = new Set(["body", "path", "id", "domain"]);
 
+export interface WriteOptions {
+  /** The folder to file the note under. On files it moves the note; on rows a new note needs it and a move is refused. */
+  domain?: string | null;
+  /** The topic a new note is filed under, on rows (`concept.topic_slug`). */
+  topic?: string;
+  /** The revision's reason, on rows. */
+  reason?: string;
+  /** The revision a checkout started from, on rows; a moved one is refused. Left out, the latest. */
+  base?: number | null;
+  /** The tutoring session the write came from, on rows. */
+  session?: string;
+}
+
+/** What `writeConcept` wrote. `revision` is null on files, where there is none. */
+export interface Written {
+  path: string;
+  revision: number | null;
+  changed: boolean;
+}
+
 /**
- * Write a concept. Passing `domain` moves the file; omitting it keeps the note
- * wherever it already lives.
+ * The note object `writeConcept` takes, as the fields a row holds. Refuses a
+ * key no column holds rather than dropping it on the way in.
+ */
+function fieldsOf(note: Record<string, unknown> & { id: string }): NoteFields {
+  const extra = Object.keys(note).filter(
+    (key) => !(NOTE_KEYS as readonly string[]).includes(key) && !NON_FRONTMATTER.has(key),
+  );
+  if (extra.length > 0) {
+    throw new Error(`${note.id}: ${extra.join(", ")} ${extra.length === 1 ? "has" : "have"} no column in the catalog`);
+  }
+  const text = (value: unknown) => (typeof value === "string" && value.trim() !== "" ? value.trim() : null);
+  const list = (value: unknown) =>
+    (Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value])
+      .map((item) => String(item).trim())
+      .filter((item) => item !== "");
+  const created = text(note["created"]);
+  if (created !== null && Number.isNaN(new Date(created).getTime())) {
+    throw new Error(`${note.id}: created "${created}" is not a date`);
+  }
+  return {
+    slug: note.id,
+    title: text(note["title"]) ?? note.id,
+    summary: text(note["summary"]),
+    requires: list(note["requires"]),
+    assumes: list(note["assumes"]),
+    tags: list(note["tags"]),
+    sources: list(note["sources"]),
+    created: created === null ? null : new Date(created),
+    body: typeof note["body"] === "string" ? note["body"] : "",
+  };
+}
+
+/**
+ * Write a concept, as a file or as rows. Returns the note's path (absolute,
+ * logical on rows, D11). Passing `domain` moves a file; omitting it keeps the
+ * note wherever it already lives.
  */
 export async function writeConcept(
+  note: Record<string, unknown> & { id: string },
+  options: WriteOptions = {},
+): Promise<string> {
+  return (await writeConceptNote(note, options)).path;
+}
+
+/** `writeConcept`, saying which revision it wrote and whether anything changed. */
+export async function writeConceptNote(
+  note: Record<string, unknown> & { id: string },
+  options: WriteOptions = {},
+): Promise<Written> {
+  const db = await rowsFor("concepts", true);
+  if (db !== null) {
+    const written = await writeNoteRow(db, {
+      fields: fieldsOf(note),
+      ...(options.domain !== undefined ? { domain: options.domain } : {}),
+      ...(options.topic !== undefined ? { topicSlug: options.topic } : {}),
+      ...(options.base !== undefined ? { base: options.base } : {}),
+      reason: options.reason ?? `learn: write ${note.id}`,
+      sessionId: options.session,
+    });
+    return { path: path.join(repoRoot(), written.path), revision: written.revision, changed: written.changed };
+  }
+  return { path: await writeConceptFile(note, options), revision: null, changed: true };
+}
+
+async function writeConceptFile(
   note: Record<string, unknown> & { id: string },
   options: { domain?: string | null } = {},
 ): Promise<string> {
@@ -196,6 +374,8 @@ export function sessionPath(id: string): string {
 }
 
 export async function listSessions(): Promise<string[]> {
+  const db = await rowsFor("sessions", false);
+  if (db !== null) return (await listLogIds(db)).map((id) => `${id}.md`);
   try {
     const files = await fs.readdir(sessionsDir());
     return files.filter((f) => f.endsWith(".md")).sort();
@@ -210,9 +390,123 @@ export async function listSessions(): Promise<string[]> {
  * narrates into a file the learner can keep open in Obsidian while the session
  * runs.
  */
-export async function appendSession(id: string, markdown: string): Promise<string> {
+export async function appendSession(
+  id: string,
+  markdown: string,
+  options: { reason?: string } = {},
+): Promise<string> {
+  const chunk = `${markdown.replace(/\s+$/, "")}\n\n`;
+  const db = await rowsFor("sessions", true);
+  if (db !== null) {
+    await appendLog(db, id, chunk, { reason: options.reason ?? `learn: append to the log of ${id}` });
+    return path.join(repoRoot(), logPath(id));
+  }
   const file = sessionPath(id);
   await fs.mkdir(sessionsDir(), { recursive: true });
-  await fs.appendFile(file, `${markdown.replace(/\s+$/, "")}\n\n`, "utf8");
+  await fs.appendFile(file, chunk, "utf8");
   return file;
+}
+
+/**
+ * Open a log with the header `session start` writes, unless it already has
+ * one. As a file, the header is written only when there is no file; as rows,
+ * it is the first entry, written only when there is none.
+ */
+export async function startSessionLog(id: string, header: string): Promise<string> {
+  const db = await rowsFor("sessions", true);
+  if (db !== null) {
+    if ((await readEntries(db, id)).length === 0) {
+      await appendLog(db, id, header, { reason: `learn session start ${id}` });
+    }
+    return path.join(repoRoot(), logPath(id));
+  }
+  await fs.mkdir(sessionsDir(), { recursive: true });
+  const file = sessionPath(id);
+  const existing = await fs.readFile(file, "utf8").catch(() => null);
+  if (existing === null) await fs.writeFile(file, header, "utf8");
+  return file;
+}
+
+/* ------------------------------------------------------------ note checkout */
+
+/** A note's whole text as a checkout copies it, and what the copy is based on. */
+export interface NoteSnapshot {
+  text: string;
+  /** The concept's revision on rows; null on files, where `hash` is the base. */
+  revision: number | null;
+  /** sha256 of the note file on files; of `text` on rows. */
+  hash: string;
+  owner: "files" | "db";
+}
+
+export async function readNoteText(id: string): Promise<NoteSnapshot | null> {
+  const db = await rowsFor("concepts", true);
+  if (db !== null) {
+    const found = await noteText(db, id);
+    return found === null ? null : { text: found.text, revision: found.revision, hash: sha256(found.text), owner: "db" };
+  }
+  const note = await readConcept(id);
+  if (note === null) return null;
+  const text = await fs.readFile(note.path, "utf8");
+  return { text, revision: null, hash: sha256(text), owner: "files" };
+}
+
+/** A commit refused because the note moved past the checkout's base (edge case 16). */
+export class MovedBaseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MovedBaseError";
+  }
+}
+
+/**
+ * Write back a note's whole text against the base it was read at. On rows,
+ * through the seam, which refuses a moved revision. On files, the note file is
+ * replaced only while it still hashes to the base, so an edit made to it since
+ * the checkout is not overwritten.
+ */
+export async function commitNoteText(
+  id: string,
+  text: string,
+  base: Pick<NoteSnapshot, "revision" | "hash" | "owner">,
+  options: { reason: string; session?: string },
+): Promise<Written> {
+  const db = await rowsFor("concepts", true);
+  const owner = db === null ? "files" : "db";
+  if (owner !== base.owner) {
+    throw new MovedBaseError(
+      `${id} was checked out while the notes were ${base.owner === "db" ? "rows" : "files"}, and they are ` +
+        `${owner === "db" ? "rows" : "files"} now. Check it out again and reapply the edit.`,
+    );
+  }
+  if (db !== null) {
+    try {
+      const written = await commitRows(db, id, text, { base: base.revision, reason: options.reason, sessionId: options.session });
+      return { path: path.join(repoRoot(), written.path), revision: written.revision, changed: written.changed };
+    } catch (error) {
+      if (error instanceof ContentWriteError && error.code === "stale-base") throw new MovedBaseError(error.message);
+      throw error;
+    }
+  }
+  const note = await readConcept(id);
+  if (note === null) throw new MovedBaseError(`${id} no longer exists as a note under ${rel(conceptsDir())}`);
+  const current = await fs.readFile(note.path, "utf8");
+  if (sha256(current) !== base.hash) {
+    throw new MovedBaseError(
+      `${rel(note.path)} has changed since it was checked out. Check it out again and reapply the edit; ` +
+        `nothing was merged.`,
+    );
+  }
+  const declared = parseFrontmatter(text) as { data: Record<string, unknown> };
+  const declaredId = typeof declared.data["id"] === "string" ? declared.data["id"] : id;
+  if (declaredId !== id) {
+    throw new Error(`the checkout of "${id}" now says id: ${declaredId}; a note cannot be renamed by editing it`);
+  }
+  if (current === text) return { path: note.path, revision: null, changed: false };
+  await fs.writeFile(note.path, text, "utf8");
+  return { path: note.path, revision: null, changed: true };
+}
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }

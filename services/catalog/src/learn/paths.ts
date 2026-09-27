@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { loadEnv, REPO_ROOT } from "../env";
@@ -43,6 +44,22 @@ export const mapFile = () => path.join(kbDir(), "map.md");
  * confusing husk in every checkout.
  */
 export const allDirs = () => [kbDir(), conceptsDir(), sessionsDir(), assetsDir()];
+
+/**
+ * Where `learn concept checkout` puts the copy a session edits: under
+ * `$LEARN_ROOT/work/` when `LEARN_ROOT` is set (a test's fixture tree, or a
+ * knowledge base kept outside the repository), else under the OS temp
+ * directory. Never under the repository itself, where a checkout would be an
+ * untracked file in the owner's `git status`. `LEARN_WORK_DIR` overrides both.
+ */
+export function workDir(): string {
+  loadEnv();
+  const explicit = process.env["LEARN_WORK_DIR"]?.trim();
+  if (explicit !== undefined && explicit !== "") return path.resolve(explicit);
+  const root = process.env[LEARN_ROOT_ENV]?.trim();
+  if (root !== undefined && root !== "") return path.join(path.resolve(root), "work");
+  return path.join(tmpdir(), "self-learn", "work");
+}
 
 /** Path relative to the repo root, for display. */
 export function rel(target: string): string {

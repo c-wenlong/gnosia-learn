@@ -30,6 +30,7 @@
  */
 
 import fs from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 
@@ -100,6 +101,7 @@ import {
   type Model,
   type ReviewCard,
 } from "../state";
+import { CheckoutError, checkoutConcept, commitConcept, MovedBaseError } from "./checkout";
 import {
   appendSession,
   conceptCollisions,
@@ -107,11 +109,18 @@ import {
   listConcepts,
   listDomains,
   listSessions,
+  ownedByDatabase,
   readConcept,
   sessionPath,
+  startSessionLog,
+  bindCatalog,
   writeConcept,
 } from "./files";
-import { kbDir, mapFile, rel, repoRoot } from "./paths";
+import { NoteError } from "../content/notes";
+import { NoteWriteError } from "../content/note-rows";
+import { LogError } from "../content/session-logs";
+import { ContentWriteError } from "../content/write";
+import { kbDir, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
 import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { checkMapping, mapConceptToTopic, VocabularyEditError } from "./vocabulary-edit";
@@ -159,10 +168,11 @@ function bar(x: number, width = 16): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `concept add`, `check add` and `session log` touch only files, and there is
- * no reason a learner writing a note should need Postgres running. So the
- * connection is lazy: the first command that asks for it opens it, and one
- * that never asks never notices the database is down.
+ * The connection is lazy: the first command that asks for it opens it. Since
+ * Track C of docs/CONTENT-MIGRATION.md every command that writes a note or a
+ * log asks, because the `content_source` row decides whether that write is a
+ * file or rows, so `concept add`, `check add` and `session log` need the
+ * database now, where they used to work offline.
  *
  * The flip side is that `status` — which the `/learn` and `/review` skills run
  * first and stop on — does ask, and fails loudly when it cannot connect. That
@@ -177,6 +187,11 @@ class Session {
       try {
         await ensureLearner(this.connection.db);
       } catch (error) {
+        // Not kept: a later caller must fail the same way, not be handed a
+        // pool that cannot connect as though it had.
+        const failed = this.connection;
+        this.connection = null;
+        await failed.close().catch(() => undefined);
         const message = error instanceof Error ? error.message : String(error);
         throw new CliError(
           `cannot reach the database at ${redactUrl(databaseUrl())}\n` +
@@ -307,6 +322,8 @@ interface Values {
   mermaid?: boolean;
   rebuild?: boolean;
   force?: boolean;
+  "body-file"?: string;
+  out?: string;
 }
 
 interface Parsed {
@@ -491,9 +508,20 @@ commands.concept = async ({ values, positionals }, session) => {
     }
     const body = values.body ?? existing?.body ?? `${sections.join("\n\n")}\n`;
 
+    // On rows the note is filed under its topic in the same write, and a new
+    // note needs both a topic and a folder; an existing one keeps its folder
+    // unless --domain names another, which rows refuse. On files, omitting
+    // --domain files the note at the root, as it always has.
+    const rows = await ownedByDatabase("concepts");
     const file = await writeConcept(
       { ...concept, body },
-      { domain: values.domain === undefined ? null : values.domain || null },
+      rows
+        ? {
+            ...(values.domain !== undefined ? { domain: values.domain || null } : {}),
+            ...(topicSlug !== undefined ? { topic: topicSlug } : {}),
+            reason: values.reason ?? `learn concept add ${id}${topicSlug !== undefined ? ` --topic ${topicSlug}` : ""}`,
+          }
+        : { domain: values.domain === undefined ? null : values.domain || null },
     );
     await ensureDirs();
 
@@ -529,7 +557,8 @@ commands.concept = async ({ values, positionals }, session) => {
           }
         }
         // Concepts, and courses behind it, which is what writes the row's link.
-        await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
+        // On rows there is nothing to read: the write above was the row.
+        if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
       } catch (error) {
         if (
           error instanceof VocabularyEditError ||
@@ -543,7 +572,7 @@ commands.concept = async ({ values, positionals }, session) => {
       }
       indexed = true;
     } else {
-      indexed = await isIndexed(session, id);
+      indexed = rows || (await isIndexed(session, id));
     }
 
     if (values.json) {
@@ -586,7 +615,22 @@ commands.concept = async ({ values, positionals }, session) => {
     for (const field of ["requires", "assumes", "tags", "sources"] as const) {
       if (values[field] !== undefined) patch[field] = list(values[field]);
     }
-    if (Object.keys(patch).length === 0 && values.domain === undefined) {
+    // `--body-file`: the one-shot form of checkout, edit, commit. The file is
+    // the markdown after the frontmatter; the frontmatter is the flags'.
+    let body: string | undefined;
+    if (values["body-file"] !== undefined) {
+      if (values.reason === undefined) fail("concept edit --body-file requires --reason (what the edit changed)");
+      body = await fs.readFile(values["body-file"], "utf8").catch((error: NodeJS.ErrnoException) =>
+        fail(`cannot read --body-file ${values["body-file"]}: ${error.code ?? error.message}`),
+      );
+      if (/^---\r?\n/.test(body)) {
+        fail(
+          `--body-file ${values["body-file"]} starts with frontmatter. It takes the body alone; ` +
+            `for a whole note use: learn concept checkout ${id}, then learn concept commit ${id}`,
+        );
+      }
+    }
+    if (Object.keys(patch).length === 0 && values.domain === undefined && body === undefined) {
       fail("concept edit needs at least one field to change");
     }
 
@@ -594,10 +638,16 @@ commands.concept = async ({ values, positionals }, session) => {
     // Passing domain moves the file; omitting it leaves the note where it is.
     const moved = values.domain !== undefined;
     const file = await writeConcept(
-      { ...concept, ...patch },
-      moved ? { domain: values.domain || null } : {},
+      { ...concept, ...patch, ...(body !== undefined ? { body } : {}) },
+      {
+        ...(moved ? { domain: values.domain || null } : {}),
+        reason:
+          values.reason ??
+          `learn concept edit ${id}: ${[...Object.keys(patch), ...(moved ? ["domain"] : [])].join(", ")}`,
+      },
     );
     if (moved) patch.domain = values.domain || "(unfiled)";
+    if (body !== undefined) patch.body = `${body.length} characters`;
 
     if (values.json) {
       return out({ id, changed: Object.keys(patch), path: rel(file), ...patch }, true);
@@ -606,6 +656,48 @@ commands.concept = async ({ values, positionals }, session) => {
       `Updated ${id}: ${Object.entries(patch)
         .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") || "(none)" : v}`)
         .join("  ")}`,
+      false,
+    );
+  }
+
+  // Checkout and commit: how a whole note is edited (D15). The copy is written
+  // outside the repository, and the commit refuses a note that moved since.
+  if (sub === "checkout") {
+    const id = positionals[2] ?? values.id;
+    if (id === undefined) fail("concept checkout requires an id");
+    const checkout = await checkoutConcept(id, { force: values.force === true });
+    if (values.json) return out(checkout, true);
+    return out(
+      `Checked out ${id}${checkout.revision === null ? "" : ` at revision ${checkout.revision}`}\n  ${checkout.path}\n` +
+        `Edit it, then: learn concept commit ${id} --reason "..."`,
+      false,
+    );
+  }
+
+  if (sub === "commit") {
+    const id = positionals[2] ?? values.id;
+    if (id === undefined) fail("concept commit requires an id");
+    if (values.reason === undefined || values.reason.trim() === "") {
+      fail("concept commit requires --reason: it is what a commit message used to say");
+    }
+    const commit = await commitConcept(id, { reason: values.reason, session: values.session });
+    // While notes are files, the catalog reads the file the commit wrote.
+    let indexed = commit.owner === "db";
+    if (commit.owner === "files" && commit.changed) {
+      try {
+        await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
+        indexed = true;
+      } catch (error) {
+        if (!(error instanceof IndexError)) throw error;
+        fail(`${rel(commit.path)} was written, but it is not in the catalog: ${error.message}`);
+      }
+    }
+    const result = { id, path: rel(commit.path), revision: commit.revision, changed: commit.changed, indexed };
+    if (values.json) return out(result, true);
+    return out(
+      commit.changed
+        ? `Committed ${id}${commit.revision === null ? "" : ` as revision ${commit.revision}`}`
+        : `Nothing to commit: ${id} already reads as the checkout does`,
       false,
     );
   }
@@ -664,7 +756,7 @@ commands.concept = async ({ values, positionals }, session) => {
     return;
   }
 
-  fail("usage: concept add|edit|list|show");
+  fail("usage: concept add|edit|checkout|commit|list|show");
 };
 
 /** Is this slug a row in the catalog? Used only to warn, never to gate. */
@@ -696,7 +788,10 @@ commands.check = async ({ values, positionals }) => {
       source: values.sources ?? "",
     }) as string;
     // writeConcept strips body/path/id itself, so pass the note straight back.
-    await writeConcept({ ...concept, body });
+    await writeConcept(
+      { ...concept, body },
+      { reason: values.reason ?? `learn check add ${id}: ${values.question}` },
+    );
 
     const checks = parseChecks(body) as Check[];
     if (values.json) return out({ concept: id, checks: checks.length }, true);
@@ -849,7 +944,9 @@ commands.observe = async ({ values }, session) => {
         explain: values.explain ?? "",
       }),
     ];
-    await appendSession(values.session, blocks.join("\n\n"));
+    await appendSession(values.session, blocks.join("\n\n"), {
+      reason: `learn observe --concept ${id} --session ${values.session}`,
+    });
     logged = true;
   }
 
@@ -1102,15 +1199,15 @@ commands.session = async ({ values, positionals }, session) => {
       ``,
     ].join("\n");
 
-    await ensureDirs();
-    const existing = await fs.readFile(sessionPath(id), "utf8").catch(() => null);
-    if (existing === null) await fs.writeFile(sessionPath(id), header, "utf8");
     const db = await session.db();
     // The `session` row before the event that references it. This is what let
     // `event.session_id` become a foreign key in migration `0006`: the referent
     // now exists at write time, where before it was a markdown file nothing had
-    // indexed yet.
+    // indexed yet. Before the log too, which on rows points at it.
     await ensureSession(db, { id, kind: "tutor", title: topic, goal: values.goal ?? null });
+    // The header, as a new file or as the log's first entry, unless the log
+    // already has one: starting a session twice does not rewrite its opening.
+    await startSessionLog(id, header);
     await appendEvent(db, {
       type: "session-start",
       session: id,
@@ -1126,7 +1223,7 @@ commands.session = async ({ values, positionals }, session) => {
     if (id === undefined) fail("session log requires --id");
     const text = values.text ?? "";
     if (!text.trim()) fail("session log requires --text");
-    const file = await appendSession(id, text);
+    const file = await appendSession(id, text, { reason: values.reason ?? `learn session log ${id}` });
     if (values.json) return out({ path: rel(file) }, true);
     return out(`Appended to ${rel(file)}`, false);
   }
@@ -1154,7 +1251,7 @@ commands.session = async ({ values, positionals }, session) => {
       `Closed ${new Date().toISOString()}`,
     ];
 
-    await appendSession(id, summaryLines.join("\n"));
+    await appendSession(id, summaryLines.join("\n"), { reason: `learn session close ${id}` });
 
     // Link back from every concept the session touched, so the graph is
     // navigable in both directions and a concept carries its own history.
@@ -1170,7 +1267,10 @@ commands.session = async ({ values, positionals }, session) => {
       const detail = `${right}/${answered.length} correct, ${pct(masteryOf(model, conceptId) as number).trim()}`;
       const body = appendSessionLink(concept.body, id, detail) as string;
       if (body !== concept.body) {
-        await writeConcept({ ...concept, body });
+        await writeConcept(
+          { ...concept, body },
+          { reason: `learn session close ${id}: link the note back to the session`, session: id },
+        );
         linked.push(conceptId);
       }
 
@@ -1303,16 +1403,28 @@ commands.model = async ({ values }, session) => {
   );
 };
 
+/**
+ * The concept map as a document, rendered from what the graph and the model
+ * hold now. Nothing is stored (docs/CONTENT-MIGRATION.md, "Where each type
+ * lives"): it goes to stdout, or to `--out <file>`, which is how
+ * `learn/map.md` is regenerated when someone wants the file.
+ */
 commands.map = async ({ values }, session) => {
   const db = await session.db();
   const graph = await loadGraph();
   const model = await readModel(db);
   const front = frontierOf(graph, model);
   const doc = renderMapDocument(graph, model, front) as string;
-  await ensureDirs();
-  await fs.writeFile(mapFile(), doc, "utf8");
-  if (values.json) return out({ path: rel(mapFile()), concepts: graph.nodes.size }, true);
-  out(`Wrote ${rel(mapFile())} (${graph.nodes.size} concepts)`, false);
+  if (values.out === undefined) {
+    if (values.json) return out({ path: null, concepts: graph.nodes.size, document: doc }, true);
+    process.stdout.write(doc.endsWith("\n") ? doc : `${doc}\n`);
+    return;
+  }
+  const target = path.resolve(values.out);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, doc, "utf8");
+  if (values.json) return out({ path: rel(target), concepts: graph.nodes.size }, true);
+  out(`Wrote ${rel(target)} (${graph.nodes.size} concepts)`, false);
 };
 
 /**
@@ -1336,13 +1448,19 @@ commands.index = async ({ values }, session) => {
 
   let written = 0;
   let deleted = 0;
-  try {
-    const run = await runIndex(db, { only: ["concepts"], repoRoot: repoRoot() });
-    written = run.totals.written;
-    deleted = run.totals.deleted;
-  } catch (error) {
-    if (error instanceof IndexError) fail(error.message);
-    throw error;
+  // Once the database owns the notes there is nothing to read: every write
+  // was already a row, and the files are an export an import would refuse to
+  // take back (edge case 12). The snapshot below is reported either way.
+  const rows = await ownedByDatabase("concepts");
+  if (!rows) {
+    try {
+      const run = await runIndex(db, { only: ["concepts"], repoRoot: repoRoot() });
+      written = run.totals.written;
+      deleted = run.totals.deleted;
+    } catch (error) {
+      if (error instanceof IndexError) fail(error.message);
+      throw error;
+    }
   }
 
   const graph = await loadGraph();
@@ -1352,6 +1470,9 @@ commands.index = async ({ values }, session) => {
   const index = buildIndex(graph, model, reviews, front);
 
   if (values.json) return out(index, true);
+  if (rows) {
+    return out(`The database owns the notes; nothing to index. ${graph.nodes.size} concepts in ${redactUrl(databaseUrl())}.`, false);
+  }
   out(
     `Indexed ${rel(kbDir())}/concepts into ${redactUrl(databaseUrl())}: ` +
       `${written} row(s) written${deleted > 0 ? `, ${deleted} removed` : ""}.`,
@@ -1507,6 +1628,14 @@ commands.help = async () => {
   concept edit <id> [--domain D] [--requires …] [--assumes …] [--title …]
                                  --domain files the note under concepts/<D>/;
                                    the id stays the bare slug either way
+  concept checkout <id> [--force]
+                                 writes the note to a scratch copy (outside the
+                                   repository) and prints its path and revision
+  concept commit <id> --reason R
+                                 writes the edited copy back; refused if the
+                                   note moved since the checkout
+  concept edit <id> --body-file F --reason R
+                                 replaces the body in one step
   concept list|show <id>
                                  requires = cannot be understood without it:
                                    gates teaching, carries evidence
@@ -1530,13 +1659,17 @@ commands.help = async () => {
   review rebuild                 replay the log into the schedule
   session start|log|close|list   the session log
   void --session S --reason R    retract a session's evidence as unreliable\n  model [--rebuild]              mastery table; rebuild replays the event log
-  map                            regenerate learn/map.md
-  index                          re-read the notes into the catalog
+  map [--out F]                  the concept map, to stdout or to F
+  index                          re-read the notes into the catalog (a no-op
+                                   once the database owns them)
   doctor                         validate the graph and the state store
 
-Notes, checks, sessions and map.md are files under learn/. Mastery, the
+Notes and session logs are files under learn/ until \`catalog flip concepts\`
+and \`catalog flip sessions\`, and rows after; the same commands work on
+either, and every one that writes them needs the database. Mastery, the
 schedule and the event log are tables; DATABASE_URL points at them and
-defaults to postgres://localhost:5432/self_learn.
+defaults to postgres://localhost:5432/self_learn. --reason R names why, on
+any command that writes a note or a log.
 
 Add --json to any command for machine-readable output.`,
     false,
@@ -1583,6 +1716,8 @@ const OPTIONS = {
   mermaid: { type: "boolean", default: false },
   rebuild: { type: "boolean", default: false },
   force: { type: "boolean", default: false },
+  "body-file": { type: "string" },
+  out: { type: "string" },
 } as const;
 
 export async function main(argv: string[]): Promise<number> {
@@ -1605,6 +1740,7 @@ export async function main(argv: string[]): Promise<number> {
   const command = commands[name] as Command;
 
   const session = new Session();
+  bindCatalog(() => session.db());
   try {
     await ensureDirs();
     await command(parsed as Parsed, session);
@@ -1620,13 +1756,22 @@ export async function main(argv: string[]): Promise<number> {
     // person reading it. Anything else is a bug, and its stack is the useful
     // part — which is what the old `main().catch` printed for everything.
     const expected =
-      error instanceof CliError || error instanceof StateError || error instanceof IndexError;
+      error instanceof CliError ||
+      error instanceof StateError ||
+      error instanceof IndexError ||
+      error instanceof NoteError ||
+      error instanceof NoteWriteError ||
+      error instanceof LogError ||
+      error instanceof CheckoutError ||
+      error instanceof MovedBaseError ||
+      error instanceof ContentWriteError;
     const message = expected
       ? (error as Error).message
       : ((error as Error)?.stack ?? String(error));
     process.stderr.write(`learn: ${message}\n`);
     return 1;
   } finally {
+    bindCatalog(null);
     await session.close();
   }
 }
