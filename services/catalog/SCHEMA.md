@@ -8,6 +8,10 @@ generates. When they disagree, the code is right and this file is stale.
 The plan is [#27](https://github.com/c-wenlong/self-learn/issues/27); this is
 the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues/21).
 
+[docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the proposed
+plan that makes Postgres the source of truth for content, and this document
+describes the files-as-truth state that plan replaces.
+
 ## The two halves
 
 | Half | Tables | Source of truth |
