@@ -889,23 +889,66 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
 `apps/web/src/app/api/assets/[id]/file/route.ts` and `poster/route.ts`,
 `apps/web/src/lib/asset-files.ts`, `apps/web/src/lib/asset-posters.ts`.
 
-- [ ] `catalog asset upload --source manimkc [--dry-run]` reads the report the
+- [x] `catalog asset upload --source manimkc [--dry-run]` reads the report the
       manimkc indexer already reads (`manimkc topics --json`, with its
       `outRoot`), hashes each deliverable and sidecar, skips keys already
       `present`, uploads the rest, makes a poster with ffmpeg on the laptop and
       uploads it, and sets `asset.blob_key`. Resumable by construction, since a
       content-addressed key that is `present` is done.
-- [ ] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
+- [x] `/api/assets/{id}/file` resolution order: `blob_key` first (redirect to
       `signedUrl` with a TTL of an hour, or stream when the adapter returns
       null), then the legacy file. `ASSET_FILES_ENABLED` keeps gating the
       legacy branch only. `/api/assets/{id}/poster` does the same with the
       poster asset.
-- [ ] The mirror ledger stays as it is (open question 8): it audits manimkc's
+- [x] The mirror ledger stays as it is (open question 8): it audits manimkc's
       own Drive and Seafile copies, and its join key, the logical
       `out/...` path, survives (D11).
 
+- [x] `catalog blob audit [--fix]` (edge case 9), added when it was built: an
+      object with no row, a `present` row whose object is gone or no longer
+      hashes to its key, a stale `pending` row, an object nothing points at, a
+      poster whose video is gone.
+
+**Built** (branch `p1/e-videos`). The upload is `services/catalog/src/content/asset-upload.ts`
+behind `commands/asset-upload.ts`, on Track D's `uploadBlob`. Three things the
+plan did not say, found while building it:
+
+- **A re-index would have unhooked every blob.** The writer's upsert sets every
+  column from the row an indexer gives it, and an indexer never names a blob,
+  so `catalog index --only manimkc` after an upload set every `blob_key` back
+  to null. `services/catalog/src/index/blob-keys.ts` carries a stored key
+  forward while the stored blob's sha256 is the `content_hash` just read, so a
+  re-render drops it and nothing else does.
+- **A poster's id is `poster:<video id>`, outside `manimkc:`**, because the
+  manimkc prune deletes every row in its namespace it did not produce. It has
+  no `path` and `source_repo = 'self-learn'`, and it is a companion kind in the
+  library. The recipe moved to `services/catalog/src/poster/recipe.ts`, shared
+  with the route's ffmpeg fallback, so the two cannot cut different pictures.
+  A poster cut from a video's old bytes is unhooked from the video when the
+  upload links new bytes and cannot cut a new poster, since nothing later
+  would notice it showed the old render.
+- **The upload refuses a file whose bytes are not its row's `content_hash`**
+  (a re-render since the last index), rather than hooking new bytes to an old
+  row, since that is the one parity rule this track has.
+
+The routes resolve through `resolveAsset` in `apps/web/src/lib/asset-files.ts`,
+which the status route and the pages' pre-render check (`readFileProblems`,
+`readAssetText`) share, so a blob that serves is `ok` everywhere. With the
+switch off and no catalog the routes still answer `files-off`, exactly as
+before. Not built: edge case 15's one retry in the player for an expired URL,
+since the `fs` store signs nothing and it belongs with the cloud adapter; and
+per-row servability on the pages, which still read the switch deployment-wide
+(`readFileAccess`), so with it off a page shows the "files off" state even for
+an asset the route would serve from the store. Both are go-live work.
+
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
-`content_hash` equals its blob's `sha256`. **Tests:** the redirect carries no
+`content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
+`createdb -T self_learn` copy migrated to 0011 with a temporary
+`SELF_LEARN_HOME`: 36 videos, 87 sidecars and 36 posters uploaded, 433.6 MB,
+159 of 159 rows with `blob_object.sha256 = asset.content_hash` and equal
+bytes; a second run uploaded nothing and wrote no revision; `catalog index
+--only manimkc` afterwards kept all 159 keys; `catalog blob audit` found
+nothing. **Tests:** the redirect carries no
 path; a Range request on the fs adapter still returns 206; an asset with a
 `pending` blob answers 404 `not-uploaded` rather than 500. **Docs:**
 [DEPLOYMENT.md](DEPLOYMENT.md) gains the blob store; AGENTS.md's poster gotcha

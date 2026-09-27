@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { assetFilesEnabled } from "@/lib/asset-files";
-import { POSTER_CONTENT_TYPE, posterBody, posterTarget } from "@/lib/asset-posters";
+import {
+  assetFilesEnabled,
+  blobStoreProblem,
+  FILES_OFF,
+  openBlob,
+  webStreamFrom,
+  type AssetFileProblem,
+  type AssetStored,
+} from "@/lib/asset-files";
+import { POSTER_CONTENT_TYPE, posterBody, posterSource } from "@/lib/asset-posters";
+import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -38,9 +47,17 @@ import { withLearnerStore } from "@/lib/learner-store";
  * `Accept-Ranges` is absent on purpose: a poster is tens of kilobytes and there
  * is nothing to seek in it.
  *
- * **Off unless a machine opts in**, on the same `ASSET_FILES_ENABLED` switch as
- * the file route. A deployment with no videos to read has no frames to extract,
- * and one gate for one class of request is easier to reason about than two.
+ * **A stored poster first** (docs/CONTENT-MIGRATION.md, Track E).
+ * `catalog asset upload` cuts one per video on the laptop with the same recipe
+ * and stores it as a blob; when the video has one it is served exactly as the
+ * file route serves a blob (redirect to a signed URL, or streamed), with its
+ * sha256 as the `ETag`, and ffmpeg is never looked for. `posterSource` in
+ * `@/lib/asset-posters` makes that choice.
+ *
+ * **The ffmpeg fallback is off unless a machine opts in**, on the same
+ * `ASSET_FILES_ENABLED` switch as the file route's legacy branch. A deployment
+ * with no videos to read has no frames to extract, and one gate for one class
+ * of request is easier to reason about than two.
  *
  * **A failure here is ordinary.** No ffmpeg, an unreadable file, a video that
  * is somehow all seek errors: each is a 503 that names its reason, never a 500
@@ -61,21 +78,15 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  if (!assetFilesEnabled()) {
-    // Worded exactly as the file route words it: on a deployment this route
-    // does not exist, and a second phrasing would only advertise the switch.
-    return NextResponse.json(
-      { error: "Not found.", code: "files-off", detail: "Asset files are not served by this deployment." },
-      { status: 404 },
-    );
-  }
-
   const { id } = await params;
 
   let target;
   try {
-    target = await withLearnerStore((db) => posterTarget(db, id));
+    target = await withLearnerStore((db) => posterSource(db, id));
   } catch (error) {
+    // Worded exactly as the file route words it: with the switch off and no
+    // catalog there is neither a stored poster nor a file to cut one from.
+    if (!assetFilesEnabled()) return problem(FILES_OFF);
     // A read that cannot reach the database degrades and says so
     // (ARCHITECTURE.md rule 14). There is no degraded version of a picture, so
     // what it degrades to is an honest 503.
@@ -91,22 +102,11 @@ export async function GET(
     );
   }
 
-  if (target.ok === false) {
-    return NextResponse.json(
-      { error: target.error, code: target.code, detail: target.detail },
-      { status: target.status },
-    );
-  }
+  if (target.ok === false) return problem(target);
+  if ("source" in target) return serveStored(request, target);
 
   const etag = `"${target.key}"`;
-  const headers: Record<string, string> = {
-    "Content-Type": POSTER_CONTENT_TYPE,
-    "Content-Disposition": `inline; filename="${target.filename}"`,
-    "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": POSTER_CSP,
-    "Cache-Control": "private, max-age=0, must-revalidate",
-    ETag: etag,
-  };
+  const headers = posterHeaders(target.filename, etag);
 
   // Answered before the cache is read and long before ffmpeg is looked for: a
   // browser that sends this tag back already has the picture, and the tag only
@@ -116,17 +116,58 @@ export async function GET(
   }
 
   const poster = await posterBody(target);
-  if (poster.ok === false) {
-    return NextResponse.json(
-      { error: poster.error, code: poster.code, detail: poster.detail },
-      { status: poster.status },
-    );
-  }
+  if (poster.ok === false) return problem(poster);
 
   return new Response(new Uint8Array(poster.body), {
     status: 200,
     headers: { ...headers, "Content-Length": String(poster.body.length) },
   });
+}
+
+function problem(p: AssetFileProblem): Response {
+  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
+}
+
+function posterHeaders(filename: string, etag: string): Record<string, string> {
+  return {
+    "Content-Type": POSTER_CONTENT_TYPE,
+    "Content-Disposition": `inline; filename="${filename}"`,
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": POSTER_CSP,
+    "Cache-Control": "private, max-age=0, must-revalidate",
+    ETag: etag,
+  };
+}
+
+/**
+ * The stored poster. Its tag is the object's sha256, so it changes exactly when
+ * the upload stores a different picture, and a grid revalidating thirty of
+ * them costs thirty 304s and no reads. A signed URL is a 302 with `no-store`,
+ * as in the file route; otherwise the whole object is streamed, since a poster
+ * is tens of kilobytes and there is nothing to seek in it.
+ */
+async function serveStored(request: Request, stored: AssetStored): Promise<Response> {
+  const etag = `"${stored.sha256}"`;
+  const headers = posterHeaders(stored.filename, etag);
+  if (matchesEtag(request.headers.get("if-none-match"), etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+  try {
+    const url = await assetBlobStore().signedUrl(stored.key, SIGNED_URL_TTL_SECONDS);
+    if (url !== null) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
+      });
+    }
+    const read = await openBlob(stored.key);
+    return new Response(webStreamFrom(read.body), {
+      status: 200,
+      headers: { ...headers, "Content-Length": String(read.size) },
+    });
+  } catch (error) {
+    return problem(blobStoreProblem(error));
+  }
 }
 
 /**

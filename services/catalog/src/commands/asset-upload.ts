@@ -1,0 +1,73 @@
+import path from "node:path";
+
+import { fsStore } from "@self-learn/blob";
+
+import { uploadAssets, type AssetUploadResult, type UploadSource } from "../content/asset-upload";
+import { withDatabase } from "../db";
+import { blobRoot, databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot } from "../env";
+import { findFfmpeg } from "../poster/extract";
+
+/**
+ * `catalog asset upload --source manimkc [--dry-run] [--blob-root DIR]`: the
+ * connection, the store and the printing. What it uploads and why each rule
+ * holds is in `../content/asset-upload.ts`.
+ *
+ * `--blob-root` is for a scratch run against a temporary store; without it the
+ * store is the one `SELF_LEARN_HOME` names, the same one the web app serves.
+ */
+
+export interface AssetUploadCommandOptions {
+  source: UploadSource;
+  dryRun: boolean;
+  blobRoot?: string;
+  manimkcRoot?: string;
+  reason?: string;
+}
+
+export interface AssetUploadCommandResult extends AssetUploadResult {
+  database: string;
+  blobRoot: string;
+}
+
+export async function runAssetUpload(options: AssetUploadCommandOptions): Promise<AssetUploadCommandResult> {
+  const root = options.blobRoot === undefined ? blobRoot() : path.resolve(options.blobRoot);
+  const store = fsStore(root);
+  const ffmpeg = await findFfmpeg();
+  const url = databaseUrl();
+  return withDatabase(async ({ db }) => ({
+    database: redactUrl(url),
+    blobRoot: root,
+    ...(await uploadAssets(db, {
+      store,
+      repoRoot: REPO_ROOT,
+      manimkcRoot: options.manimkcRoot ?? resolveManimkcRoot(REPO_ROOT),
+      dryRun: options.dryRun,
+      ffmpeg,
+      reason: options.reason,
+    })),
+  }));
+}
+
+function megabytes(bytes: number): string {
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+export function formatAssetUpload(result: AssetUploadCommandResult): string {
+  const tally = new Map<string, number>();
+  for (const item of result.items) tally.set(item.action, (tally.get(item.action) ?? 0) + 1);
+  const lines = [
+    `database   ${result.database}`,
+    `blob root  ${result.blobRoot}`,
+    `outRoot    ${result.outRoot}`,
+    `${result.dryRun ? "dry run: nothing written. " : ""}${result.counts.videos} videos, ${result.counts.sidecars} sidecars, ${result.counts.posters} posters`,
+    `  ${[...tally].map(([action, n]) => `${action} ${n}`).join(", ")}`,
+  ];
+  if (!result.dryRun) {
+    lines.push(`  ${result.uploaded} objects uploaded (${megabytes(result.uploadedBytes)}), ${result.rowsWritten} asset rows written`);
+  }
+  if (result.postersSkipped !== null) lines.push(`posters skipped: ${result.postersSkipped}`);
+  for (const item of result.items) {
+    if (item.action === "refused") lines.push(`REFUSED ${item.id}: ${item.detail ?? ""}`);
+  }
+  return lines.join("\n");
+}
