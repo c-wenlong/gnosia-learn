@@ -28,7 +28,8 @@ import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
  * ```
  *
  * **Reachable three ways, so nothing is hidden.** Every companion kind has its
- * own chip with its true count, `?kind=transcript` is a linkable view of them,
+ * own row, with its true count, in the Type menu's "Companion files" section,
+ * `?kind=transcript` is a linkable view of them,
  * and each one is listed on the detail page of the video or drawing it belongs
  * to. The library also says out loud how many rows it is not showing, because a
  * page that quietly displays 135 of 206 is a page that is wrong about the size
@@ -189,8 +190,8 @@ export interface LibraryFilters {
  * The query string for one filter state, with empty values left out.
  *
  * Every filter lives in the URL so a view is linkable and the back button
- * works, which means every chip is a plain `<a>` and the whole rail needs no
- * client JavaScript. A cleared filter drops its key rather than writing
+ * works: the page builds each filter menu option's destination with this, and
+ * the menu only pushes the one picked. A cleared filter drops its key rather than writing
  * `?kind=`, so the default view has a bare `/library` URL, and the default sort
  * is never written either.
  */

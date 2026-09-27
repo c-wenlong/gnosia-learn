@@ -4,21 +4,29 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
+import { FilterMenu } from "@/components/ui/FilterMenu";
+import type { FilterOption } from "@/components/ui/filter-menu";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import {
+  ALL_COURSES,
   courseStatus,
   filterCourses,
+  isInProgress,
+  tagCounts,
   type CourseFilter,
+  type CourseProgressFilter,
   type CourseSummary,
 } from "@/lib/course-summary";
 import { useLearner } from "@/lib/learner-context";
 
+/** The Tag menu's value for every tag. No tag id is empty, so it cannot collide. */
+const ANY_TAG = "";
+
 /**
  * The Courses page's interactive half (hi-fi screen 02): the search field, the
- * filter chips and the card grid.
+ * two filter menus (Progress and Tag) and the card grid.
  *
  * A client component because it filters as you type and because progress comes
  * from `LearnerProvider`, so ticking a topic on another page shows here
@@ -34,15 +42,28 @@ export function CourseGrid({
 }) {
   const { state } = useLearner();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<CourseFilter>({ kind: "all" });
+  const [filter, setFilter] = useState<CourseFilter>(ALL_COURSES);
 
   const shown = useMemo(
     () => filterCourses(summaries, query, filter, state.completed),
     [summaries, query, filter, state.completed],
   );
 
-  const isOn = (f: CourseFilter) =>
-    f.kind === filter.kind && (f.kind !== "tag" || (filter.kind === "tag" && filter.tag === f.tag));
+  const progressOptions: FilterOption<CourseProgressFilter>[] = [
+    { value: "all", label: "All courses", short: "All", count: summaries.length },
+    {
+      value: "in-progress",
+      label: "In progress",
+      count: summaries.filter((s) => isInProgress(s, state.completed)).length,
+    },
+  ];
+  const tagOptions = useMemo(() => {
+    const counts = tagCounts(summaries);
+    return [
+      { value: ANY_TAG, label: "All tags", short: "All" },
+      ...tags.map((t) => ({ value: t.id, label: t.label, count: counts[t.id] ?? 0 })),
+    ];
+  }, [summaries, tags]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -57,18 +78,23 @@ export function CourseGrid({
         />
       </div>
 
-      <div role="group" aria-label="Filter courses" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
-        <Chip active={isOn({ kind: "all" })} onClick={() => setFilter({ kind: "all" })}>
-          All
-        </Chip>
-        <Chip active={isOn({ kind: "in-progress" })} onClick={() => setFilter({ kind: "in-progress" })}>
-          In progress
-        </Chip>
-        {tags.map((t) => (
-          <Chip key={t.id} active={isOn({ kind: "tag", tag: t.id })} onClick={() => setFilter({ kind: "tag", tag: t.id })}>
-            {t.label}
-          </Chip>
-        ))}
+      <div role="group" aria-label="Filter courses" className="flex flex-wrap items-center gap-2">
+        <FilterMenu
+          label="Progress"
+          options={progressOptions}
+          value={filter.progress}
+          defaultValue="all"
+          onChange={(progress) => setFilter((f) => ({ ...f, progress }))}
+        />
+        {tags.length > 0 && (
+          <FilterMenu
+            label="Tag"
+            options={tagOptions}
+            value={filter.tag ?? ANY_TAG}
+            defaultValue={ANY_TAG}
+            onChange={(tag) => setFilter((f) => ({ ...f, tag: tag === ANY_TAG ? null : tag }))}
+          />
+        )}
       </div>
 
       {shown.length === 0 ? (
@@ -79,7 +105,7 @@ export function CourseGrid({
             size="sm"
             onClick={() => {
               setQuery("");
-              setFilter({ kind: "all" });
+              setFilter(ALL_COURSES);
             }}
           >
             Clear search and filter

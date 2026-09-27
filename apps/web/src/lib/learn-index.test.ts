@@ -9,6 +9,7 @@ import {
   parseFilter,
   parseScope,
   parseView,
+  statusFilterOptions,
   type IndexRow,
 } from "@/lib/learn-index";
 
@@ -89,5 +90,23 @@ describe("filters and search", () => {
       learning: 2,
       untouched: 1,
     });
+  });
+});
+
+describe("statusFilterOptions", () => {
+  it("counts every filter over all the rows", () => {
+    const rows = [
+      row(),
+      row({ id: "a", bucket: "mastered", isDue: true }),
+      row({ id: "b", bucket: "untouched", leech: true }),
+    ];
+    expect(statusFilterOptions(rows).map((o) => [o.value, o.count])).toEqual([
+      ["all", 3],
+      ["due", 1],
+      ["learning", 1],
+      ["mastered", 1],
+      ["untouched", 1],
+      ["leeches", 1],
+    ]);
   });
 });

@@ -169,6 +169,7 @@ implementation should keep the same vocabulary.
 | Mastery dot | path, lists, workspace | three buckets: mastered, learning, untouched |
 | Progress bar | courses, path rail, close screen | fill proportional to a fraction |
 | Chip, Pill | filters, citations, top bar | citation chips carry `[n] source, locator` |
+| Filter menu | courses, learn, library | a chip reading "Type: Video" that opens a list of the group's options with counts; replaced the hi-fi's chip rows once the option count outgrew a row (IMPLEMENTATION.md, Deviations) |
 | Button | everywhere | primary (filled) and secondary (outlined); one primary per region |
 | Path node, Unit card | course path | node = mastery dot in a ring; active ring in the accent colour |
 | Message | workspace | who, body, citation, Save to note, Why |

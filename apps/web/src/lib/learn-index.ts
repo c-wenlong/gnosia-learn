@@ -42,6 +42,19 @@ export interface IndexRow {
   domain: string | null;
 }
 
+/**
+ * The Status menu's options: every filter with how many concepts it shows,
+ * counted over all rows (not the search), so a number does not move as the
+ * learner types.
+ */
+export function statusFilterOptions(rows: readonly IndexRow[]): { value: IndexFilter; label: string; count: number }[] {
+  return INDEX_FILTERS.map((f) => ({
+    value: f.key,
+    label: f.label,
+    count: rows.filter((r) => matchesFilter(r, f.key)).length,
+  }));
+}
+
 export function parseFilter(value: string | null | undefined): IndexFilter {
   return INDEX_FILTERS.some((f) => f.key === value) ? (value as IndexFilter) : "all";
 }
