@@ -195,8 +195,9 @@ Exit codes:
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
   4  The database is behind this code: index, import, export, parity,
-     flip, ls and show read tables or columns a migration it has not had
-     adds. stderr says how many are outstanding and to run migrate.
+     flip, ls, show, history and diff read tables or columns a migration it
+     has not had adds. stderr says how many are outstanding and to run
+     migrate.
 
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
@@ -259,7 +260,7 @@ const COMMANDS: readonly Command[] = [
 /**
  * For the commands that read tables or columns added after 0009
  * (`content_source`, `archived_at`, the revision table): `index`, `import`,
- * `export`, `parity`, `flip`, `ls` and `show`. On a database behind the
+ * `export`, `parity`, `flip`, `ls`, `show`, `history` and `diff`. On a database behind the
  * journal they refuse by name, with exit 4, instead of failing on drizzle's
  * `Failed query: ...` for a relation the person never heard of. Each calls it
  * after checking its own arguments, so a wrong invocation is still exit 2
@@ -490,6 +491,7 @@ export async function main(argv: string[]): Promise<number> {
         const type = parseEntityType(positionals[1]);
         const id = positionals[2];
         if (id === undefined) throw new Usage(`history ${type} needs an id`);
+        await schemaCurrent();
         const result = await runHistory(type, id);
         emit(result, formatHistory(result));
         break;
@@ -498,6 +500,7 @@ export async function main(argv: string[]): Promise<number> {
         const first = parseRevisionId(positionals[1], "a first revision");
         const second =
           positionals[2] === undefined ? undefined : parseRevisionId(positionals[2], "the second revision");
+        await schemaCurrent();
         const result = await runDiff(first, second);
         emit(result, formatDiff(result));
         break;
