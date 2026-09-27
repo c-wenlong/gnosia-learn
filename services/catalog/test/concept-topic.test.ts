@@ -186,6 +186,16 @@ modules:
           gamma,
           delta
         ]  # over lines
+      - id: xx1000-m1-t6
+        title: Commented spread row
+        concepts: [
+          gamma,   # first
+          delta,   # last, with a trailing comma
+        ]
+      - id: xx1000-m1-t7
+        title: Closing shares a line
+        concepts: [gamma,
+          delta,]
     resources: []
 `;
 
@@ -214,6 +224,16 @@ describe("addConceptToItem", () => {
     const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "cogs");
     expect(after).toContain("          gamma,\n          delta, cogs\n        ]  # over lines");
     expect(addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "delta")).toBe(COURSE_DOC);
+  });
+
+  it("puts the new id ahead of a last item's comment, and after its trailing comma", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t6", "cogs");
+    expect(after).toContain("          delta, cogs   # last, with a trailing comma\n        ]");
+  });
+
+  it("adds one separator when the closing line carries an item and a trailing comma", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t7", "cogs");
+    expect(after).toContain("        concepts: [gamma,\n          delta, cogs]");
   });
 
   it("is idempotent, and touches no other row", () => {
@@ -407,12 +427,16 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(rows).toEqual([{ curriculum_item_id: "xx1000-m1-t2", position: 1 }]);
   });
 
-  it("finishes on a --force re-run without repeating any edit", async () => {
-    // The way out of a listing that failed after the mapping landed: every
-    // step is idempotent, so the same command again completes the job.
+  it("finishes on a --force re-run without repeating any edit or losing one", async () => {
+    // The way out of a listing that failed after the mapping landed: the same
+    // command again completes the job, and a field the re-run's flags do not
+    // name keeps what the note has by then.
     const courseFile = path.join(root, "content", "courses", "xx1000.yaml");
+    const noteFile = path.join(root, "learn", "concepts", "fixtures", "cogs.md");
     const before = await readFile(courseFile, "utf8");
     const vocabulary = await topics();
+    await learn("concept", "edit", "cogs", "--summary", "Edited by hand", "--requires", "alpha");
+
     const { stdout } = await learn(
       "concept", "add", "--title", "Cogs", "--domain", "fixtures",
       "--item", "xx1000-m1-t2", "--force", "--json",
@@ -420,6 +444,9 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(JSON.parse(stdout)).toMatchObject({ id: "cogs", item: "xx1000-m1-t2", indexed: true });
     expect(await readFile(courseFile, "utf8")).toBe(before);
     expect(await topics()).toBe(vocabulary);
+    const note = await readFile(noteFile, "utf8");
+    expect(note).toContain("summary: Edited by hand");
+    expect(note).toContain("requires: [alpha]");
   });
 
   it("refuses --item with a --topic that is not the row's module topic, before writing", async () => {

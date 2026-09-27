@@ -454,14 +454,21 @@ commands.concept = async ({ values, positionals }, session) => {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);
     }
 
+    // With --force over an existing note, a field no flag names keeps what
+    // the note has. A re-run is then a way to finish a half-done `--item`
+    // without undoing edits made to the note in between, which is what the
+    // failure message for that case promises.
+    const kept = (flag: string | undefined, prior: unknown): string[] =>
+      flag !== undefined ? list(flag) : Array.isArray(prior) ? prior.map(String) : [];
     const concept = {
       id,
       title: values.title,
-      summary: values.summary ?? "",
-      requires: list(values.requires),
-      assumes: list(values.assumes),
-      tags: list(values.tags),
-      sources: list(values.sources),
+      summary:
+        values.summary ?? (typeof existing?.summary === "string" ? existing.summary : ""),
+      requires: kept(values.requires, existing?.requires),
+      assumes: kept(values.assumes, existing?.assumes),
+      tags: kept(values.tags, existing?.tags),
+      sources: kept(values.sources, existing?.sources),
       created:
         typeof existing?.created === "string" ? existing.created : new Date().toISOString(),
     };
@@ -509,7 +516,8 @@ commands.concept = async ({ values, positionals }, session) => {
               fail(
                 `${rel(file)} was written and mapped to "${topicSlug}", but not listed on ` +
                   `${itemId}: ${error.message}\n  The note and the mapping are in place. Re-run the ` +
-                  `same command with --force to finish; every step it repeats is idempotent.`,
+                  `same command with --force to finish: the note keeps its body and any field ` +
+                  `no flag names, and the mapping and listing are idempotent.`,
               );
             }
             throw error;

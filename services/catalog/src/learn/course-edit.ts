@@ -100,7 +100,11 @@ function flowList(
       continue;
     }
     const body = i === at ? line.slice(0, close) : `${text}\n${line.slice(0, close)}`;
+    // Comments are not items, whichever line they sit on.
     const items = body
+      .split("\n")
+      .map((l) => l.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, ""))
+      .join("\n")
       .split(/[,\n]/)
       .map((s) => s.trim().replace(/^["']|["']$/g, ""))
       .filter((s) => s !== "");
@@ -152,7 +156,8 @@ export function addConceptToItem(text: string, itemId: string, conceptId: string
     const closing = lines[flow.closeLine] as string;
     const head = closing.slice(0, closing.indexOf("]")).replace(/\s+$/, "");
     if (head.trim() !== "") {
-      lines[flow.closeLine] = `${head}, ${conceptId}]${trailer}`;
+      // `delta]` or `delta,]`: one separator either way.
+      lines[flow.closeLine] = `${head.replace(/,$/, "")}, ${conceptId}]${trailer}`;
       return lines.join(newline);
     }
     let last = flow.closeLine - 1;
@@ -162,8 +167,13 @@ export function addConceptToItem(text: string, itemId: string, conceptId: string
       lines[concepts] = `${line.replace(/\s+$/, "")}${conceptId}`;
       return lines.join(newline);
     }
-    const item = (lines[last] as string).replace(/\s+$/, "");
-    lines[last] = item.endsWith(",") ? `${item} ${conceptId}` : `${item}, ${conceptId}`;
+    // The last item's line, which may carry its own `# comment`: the new id
+    // goes ahead of that, or it would be part of the comment.
+    const itemLine = lines[last] as string;
+    const comment = /\s+#/.exec(itemLine);
+    const code = (comment === null ? itemLine : itemLine.slice(0, comment.index)).replace(/\s+$/, "");
+    const rest = comment === null ? "" : itemLine.slice(comment.index);
+    lines[last] = `${code.replace(/,$/, "")}, ${conceptId}${rest}`;
     return lines.join(newline);
   }
 
