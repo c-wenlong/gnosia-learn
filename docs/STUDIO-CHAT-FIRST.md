@@ -160,17 +160,22 @@ runs it through `validateBrief` from
 - **Valid**: the draft moves to `briefed`, the brief is stored on the draft,
   and a `brief` event carries it to the panel, which renders the confirm
   message with Draw.
-- **Valid except for the topic**: `validateBrief` reports exactly one
-  failure, `topic` is not in the vocabulary, and the same reply carries a
-  fenced `yaml` block whose `slug` is that topic. This is the planner saying
-  nothing fits (D39), so the runner does not treat it as a refusal: the draft
+- **Valid except for the topic**: `validateBrief` refuses on `topic`, and the
+  same reply carries a fenced `yaml` block whose `slug` is that topic. This is
+  the planner saying nothing fits (D39). `validateBrief` throws at its first
+  failure and checks the topic first, so a refusal on `topic` says nothing
+  about the other fields; the runner therefore validates the brief a second
+  time against a vocabulary widened with the proposed entry (its slug and
+  concept ids, in memory only, the file untouched). If that passes, the draft
   moves to `briefed` with `pending_topic` set to the slug, the brief and the
   YAML entry are stored, and the card renders with Draw disabled, reason "Add
   `<slug>` to `content/topics.yaml`" and the entry beside it with Copy. When
   the panel regains focus, and on every Draw, the runner re-runs
   `validateBrief` against the file as it is; once the topic exists the reason
-  clears and Draw is live. Any other failure alongside the topic, or a
-  missing or mismatched YAML block, is an ordinary refusal below.
+  clears and Draw is live, and nothing else can be wrong with the brief,
+  because everything else was already checked. If the widened validation fails,
+  or the YAML block is missing or names a different slug, it is an ordinary
+  refusal below, with the widened run's field and sentence.
 - **Invalid, the first time**: the person sees no brief. While a reply
   streams, the panel never renders a `brief` block raw; it shows "Checking the
   brief" in its place. On a refusal the runner resumes the planner once with a
@@ -908,18 +913,23 @@ answers concern 2: the person is no longer limited to topics that exist.
 ### D40. A draft that produced a job is not pruned
 
 **Verdict:** pruning removes a draft untouched for seven days, row and
-workspace, only when no `job` row carries its id: `NOT EXISTS (SELECT 1 FROM job
-WHERE draft_id = draft.id)`, whatever the draft's state. A failed or cancelled
-drawing returns its draft to `briefed`, so a rule by state would prune exactly
-the conversations whose job needs explaining. A draft with a job lives as long
-as the job.
+workspace, only when no job carries its id in either place a job lives: no
+`job` row (`NOT EXISTS (SELECT 1 FROM job WHERE draft_id = draft.id)`) and no
+`job.json` under `$STUDIO_HOME/jobs/` with that `draftId`. The disk check is
+required, since a job enqueued while Postgres was down has a workspace and no
+row (U3 of the existing doc), and the runner, which owns `JobStore`, is the
+pruner. The draft's state plays no part. A failed or cancelled drawing returns
+its draft to `briefed`, so a rule by state would prune exactly the
+conversations whose job needs explaining. A draft with a job lives as long as
+the job.
 
 **Why:** the conversation is the only record of why a diagram looks as it does,
 and jobs are never pruned (a known gap in the existing doc).
 
 **Rejected:** pruning every draft at seven days, nulling `job.draft_id` on
-every job older than a week; and pruning by state (`open`, `briefed`,
-`abandoned`), which reaches a `briefed` draft whose drawing failed.
+every job older than a week; pruning by state (`open`, `briefed`,
+`abandoned`), which reaches a `briefed` draft whose drawing failed; and a
+Postgres-only check, which reaches a draft whose job was enqueued offline.
 
 ### D41. The planner knows the corpus
 
@@ -959,8 +969,9 @@ started, `[x]` done.
       panel, prefilled from the latest brief when there is one
 - [ ] Tests: the planner spawn's argv (no tool name, the four seals), a brief
       extracted and validated from a recorded reply, the retry sent once and
-      only once, a reply whose only failure is an unknown topic with a
-      matching YAML block stored as `briefed` with `pending_topic`, the turn
+      only once, a reply refused on `topic` with a matching YAML block
+      re-validated against the widened vocabulary and stored as `briefed` with
+      `pending_topic`, and the same reply with a bad relation refused, the turn
       cap, a 409 on a second in-flight turn, the cap counting a draft's turns
       at their own times
 
@@ -1006,7 +1017,8 @@ drawing.
 Done when: an edited label reaches the job's brief and the planner's next reply
 refers to it; a draft closed in one tab is reopened from the list in another; a
 draft untouched for eight days is gone from disk and from Postgres while one
-that produced a job is not, including a `briefed` draft whose only job failed.
+that produced a job is not, including a `briefed` draft whose only job failed
+and a draft whose only job was enqueued with Postgres down.
 
 ## Open questions
 
