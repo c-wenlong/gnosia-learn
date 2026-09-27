@@ -470,6 +470,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
             concept: CONCEPTS.filter((slug) => slug !== "gamma").map((slug) => ({
               slug,
               title: slug,
+              topicSlug: TOPIC_SLUG,
               path: `learn/concepts/fixtures/${slug}.md`,
             })),
           },

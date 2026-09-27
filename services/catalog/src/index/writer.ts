@@ -807,6 +807,7 @@ async function pruneEntity(
   const table = TABLES[name];
   const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
+  if (name === "topic") await assertTopicsUnfiled(tx, keys);
   // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
   // a course still wears. An import that also runs the courses source is
   // different: that source rewrites every course's tags from the files later
@@ -906,6 +907,31 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
  * source is not running to rewrite the links: the database owns courses, and
  * silently dropping a tag from one would be an edit nobody made.
  */
+/**
+ * A topic the vocabulary dropped while a concept is still filed under it.
+ *
+ * `concept.topic_slug` is `NOT NULL` and `RESTRICT` since migration 0012, so
+ * the delete would fail on the constraint. The topics source runs before the
+ * concepts source, so even an edit that moves the concepts to another topic in
+ * the same breath reaches this point first: the move has to land in one run
+ * and the removal in the next. Refused by name, archived concepts included,
+ * since the constraint binds them too.
+ */
+async function assertTopicsUnfiled(tx: CatalogDatabase, topics: string[]): Promise<void> {
+  const filed = await tx
+    .select({ topic: concept.topicSlug, slug: concept.slug })
+    .from(concept)
+    .where(inArray(concept.topicSlug, topics))
+    .orderBy(concept.topicSlug, concept.slug);
+  if (filed.length === 0) return;
+  throw new IndexError(
+    `content/topics.yaml no longer lists topics that concepts are still filed under: ` +
+      `${filed.map((f) => `${f.topic} (${f.slug})`).join(", ")}. Every concept needs a topic. ` +
+      `Move those concepts to their new topic's maps.concepts and run \`catalog index\` with the old ` +
+      `topic still listed, then remove it and index again.`,
+  );
+}
+
 async function assertTagsUnworn(tx: CatalogDatabase, tags: string[]): Promise<void> {
   const worn = await tx
     .select({ tag: collectionTag.tagId, course: collectionTag.collectionId })

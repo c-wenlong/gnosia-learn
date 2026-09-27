@@ -897,11 +897,17 @@ an edit makes the migration look unapplied everywhere it has already run.
 
 ## Still open
 
-- `concept.topic_slug` is still nullable, though every one of the 32 notes now
-  resolves through `maps.concepts` and the end-to-end test asserts none is null.
-  Tightening it to `NOT NULL` is a one-line migration and is deliberately not in
-  this bundle: the constraint should land after bundle 4 has exercised the
-  column, not on the same day the indexer that fills it does.
+- **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its
+  foreign key is `ON DELETE RESTRICT` instead of the `SET NULL` that could
+  only produce the null the column no longer allows. The migration counts the
+  concepts with no topic first, archived ones included, and refuses with every
+  slug rather than failing on the constraint; `catalog doctor` reports the
+  same list, and whether the constraint is in force, on a database behind only
+  on 0012. One consequence for an import while topics are files: the topics
+  source runs before the concepts source, so dropping a topic from
+  `topics.yaml` in the same edit that moves its concepts elsewhere is refused
+  by name (`assertTopicsUnfiled` in `src/index/writer.ts`). Move the concepts
+  and index with the old topic still listed, then remove it.
 - **Settled in migration `0006`: `event.session_id` is a foreign key.** Not to
   `asset(id)`, which is what this section used to propose and what could never
   have worked — `learn session start` writes the event before the markdown log
