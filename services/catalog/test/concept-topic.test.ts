@@ -7,25 +7,27 @@ import { promisify } from "node:util";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { renderType } from "../src/content/export";
+import { fileConceptUnderTopic } from "../src/content/topics";
+import { writeThrough } from "../src/content/write-through";
+import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { addConceptToItem, CourseEditError } from "../src/learn/course-edit";
-import {
-  addConceptToTopic,
-  mapConceptToTopic,
-  VocabularyEditError,
-} from "../src/learn/vocabulary-edit";
+import { connect } from "../src/db";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `learn concept add --topic <slug>`: the one workflow gap that made a tutoring
  * session hand-edit `content/topics.yaml`.
  *
- * Two halves, tested apart. The text edit is pure and gets a scratch document
- * with every list shape the file could be in; the command gets a scratch
- * database and a temporary knowledge base, and is checked on what a session
- * actually depends on — the slug lands under the right entry and nowhere else,
- * a wrong slug costs nothing, and the `--json` shape says whether the note is
- * queryable yet.
+ * The topic half used to be a text splice on `content/topics.yaml`. It is a
+ * write through the catalog now (`fileConceptUnderTopic`): `concept.topic_slug`
+ * through the seam, and the file rewritten from the rows. The course half
+ * (`--item`) is still a text edit, tested pure below. The command gets a
+ * scratch database and a temporary knowledge base imported into it, and is
+ * checked on what a session actually depends on: the slug lands under the
+ * right topic and nowhere else, a wrong slug costs nothing, and the `--json`
+ * shape says whether the note is queryable yet.
  */
 
 const execFileAsync = promisify(execFile);
@@ -80,74 +82,6 @@ topics:
       courses: []
       concepts:   # concept note ids
 `;
-
-describe("addConceptToTopic", () => {
-  /** Lines that changed, so "and nowhere else" is checked rather than assumed. */
-  function diff(before: string, after: string): { added: string[]; removed: string[] } {
-    const a = before.split("\n");
-    const b = after.split("\n");
-    return { added: b.filter((l) => !a.includes(l)), removed: a.filter((l) => !b.includes(l)) };
-  }
-
-  it("appends to a flow list and touches nothing else", () => {
-    const after = addConceptToTopic(DOCUMENT, "fixture-topic", "widgets");
-    expect(after).toContain("      concepts: [alpha, beta, gamma, widgets]");
-    expect(diff(DOCUMENT, after)).toEqual({
-      added: ["      concepts: [alpha, beta, gamma, widgets]"],
-      removed: ["      concepts: [alpha, beta, gamma]"],
-    });
-    // Every other entry is byte-identical.
-    expect(after.split("\n").length).toBe(DOCUMENT.split("\n").length);
-    expect(after).toContain("  - slug: empty-topic");
-  });
-
-  it("fills an empty flow list without a stray space", () => {
-    const after = addConceptToTopic(DOCUMENT, "empty-topic", "widgets");
-    expect(after).toContain("      concepts: [widgets]");
-    expect(after).toContain("      concepts: [alpha, beta, gamma]");
-  });
-
-  it("appends an item to a block list at the item's own indent", () => {
-    const after = addConceptToTopic(DOCUMENT, "block-topic", "widgets");
-    expect(after).toContain("        - delta\n        - widgets");
-  });
-
-  it("adds the concepts key when maps has none", () => {
-    const after = addConceptToTopic(DOCUMENT, "keyless-topic", "widgets");
-    expect(after).toContain("      courses: []\n      concepts: [widgets]");
-  });
-
-  it("is idempotent on a flow list", () => {
-    const once = addConceptToTopic(DOCUMENT, "fixture-topic", "widgets");
-    expect(addConceptToTopic(once, "fixture-topic", "widgets")).toBe(once);
-    // And on a slug that was already there before anyone touched it.
-    expect(addConceptToTopic(DOCUMENT, "fixture-topic", "beta")).toBe(DOCUMENT);
-  });
-
-  it("is idempotent on a block list", () => {
-    expect(addConceptToTopic(DOCUMENT, "block-topic", "delta")).toBe(DOCUMENT);
-    const once = addConceptToTopic(DOCUMENT, "block-topic", "widgets");
-    expect(addConceptToTopic(once, "block-topic", "widgets")).toBe(once);
-  });
-
-  it("keeps the inline comment on an empty key", () => {
-    const after = addConceptToTopic(DOCUMENT, "commented-topic", "widgets");
-    expect(after).toContain("      concepts: [widgets]  # concept note ids");
-  });
-
-  it("refuses a slug that is not in the file", () => {
-    expect(() => addConceptToTopic(DOCUMENT, "no-such-topic", "widgets")).toThrow(
-      VocabularyEditError,
-    );
-  });
-
-  it("keeps CRLF line endings", () => {
-    const crlf = DOCUMENT.replace(/\n/g, "\r\n");
-    const after = addConceptToTopic(crlf, "fixture-topic", "widgets");
-    expect(after).toContain("\r\n");
-    expect(after).not.toMatch(/[^\r]\n/);
-  });
-});
 
 /** A course file in the block form the real files use, plus the other shapes. */
 const COURSE_DOC = `id: xx1000
@@ -320,16 +254,16 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
       ].join("\n"),
       "utf8",
     );
-    // The topic rows the concepts index resolves against. Written directly
-    // rather than through the topics indexer: this suite is about one flag, and
-    // a full index run would drag in the manimkc submodule.
-    await scratch.db.execute(
-      "insert into topic (slug, title, domain) values " +
-        "('fixture-topic', 'Fixture topic', 'fixtures'), " +
-        "('empty-topic', 'Empty topic', 'fixtures'), " +
-        "('block-topic', 'Block topic', 'fixtures'), " +
-        "('keyless-topic', 'Keyless topic', 'fixtures') on conflict do nothing",
-    );
+    // The tree imported, as `catalog index` would: the topic is a row and the
+    // flag writes through the catalog, which rewrites the vocabulary file from
+    // the rows, so it refuses a file the database has never seen. manimkc is
+    // pointed at nothing, and has never been indexed here, so it is skipped.
+    await runIndex(scratch.db, { repoRoot: root, manimkcRoot: path.join(root, "no-manimkc") });
+    // The file in the house style the rows export, as `catalog export` leaves it.
+    const [vocabulary] = await renderType(scratch.db, "topics");
+    if (vocabulary !== undefined) {
+      await writeFile(path.join(root, vocabulary.path), vocabulary.bytes);
+    }
   }, 60_000);
 
   afterAll(async () => {
@@ -367,6 +301,26 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(rows).toEqual([{ slug: "widgets", topic_slug: "empty-topic" }]);
   });
 
+  it("writes the note's prerequisites with the concept, so the index after it adds no revision", async () => {
+    const { stdout } = await learn(
+      "concept", "add", "--title", "Gears", "--domain", "fixtures",
+      "--topic", "fixture-topic", "--requires", "alpha,beta", "--assumes", "gamma", "--json",
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ id: "gears", topic: "fixture-topic", indexed: true });
+    const { rows } = await scratch.db.execute<{ op: string; author: string }>(
+      "select op, author from content_revision where entity_type = 'concept' and entity_id = 'gears' order by seq",
+    );
+    expect(rows).toEqual([{ op: "create", author: "local" }]);
+    const links = await scratch.db.execute(
+      "select prerequisite_slug, kind, position from concept_prerequisite where concept_slug = 'gears' order by kind, position",
+    );
+    expect(links.rows).toEqual([
+      { prerequisite_slug: "gamma", kind: "assumes", position: 1 },
+      { prerequisite_slug: "alpha", kind: "requires", position: 1 },
+      { prerequisite_slug: "beta", kind: "requires", position: 2 },
+    ]);
+  });
+
   it("refuses an unknown slug before writing anything", async () => {
     const before = await topics();
     const failure = await learn(
@@ -383,6 +337,27 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     await expect(
       readFile(path.join(root, "learn", "concepts", "fixtures", "gadgets.md"), "utf8"),
     ).rejects.toThrow(/ENOENT/);
+  });
+
+  it("refuses a vocabulary file edited since the import, before writing anything", async () => {
+    const file = path.join(root, "content", "topics.yaml");
+    const before = await topics();
+    await writeFile(file, before.replace("title: Fixture topic", "title: Edited by hand"), "utf8");
+    try {
+      const failure = await learn(
+        "concept", "add", "--title", "Gizmos", "--domain", "fixtures", "--topic", "empty-topic",
+      ).then(
+        () => null,
+        (error: { stderr: string; code: number }) => error,
+      );
+      expect(failure?.code).toBe(1);
+      expect(failure?.stderr).toContain("is not what the database holds");
+      await expect(
+        readFile(path.join(root, "learn", "concepts", "fixtures", "gizmos.md"), "utf8"),
+      ).rejects.toThrow(/ENOENT/);
+    } finally {
+      await writeFile(file, before, "utf8");
+    }
   });
 
   it("refuses a concept another topic already claims", async () => {
@@ -478,31 +453,55 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     ).rejects.toThrow(/ENOENT/);
   });
 
-  it("keeps both mappings when two edits race", async () => {
-    // Two read-modify-writes over one file. Without the lock the second read
-    // sees the first's original and its write drops that mapping, and both
-    // calls still report success because each only verifies its own slug.
-    await writeFile(path.join(root, "learn", "concepts", "fixtures", "racer-one.md"),
-      "---\nid: racer-one\ntitle: Racer one\n---\n", "utf8");
-    await writeFile(path.join(root, "learn", "concepts", "fixtures", "racer-two.md"),
-      "---\nid: racer-two\ntitle: Racer two\n---\n", "utf8");
+  it("makes a second writer wait for the first, so neither drops the other's mapping", async () => {
+    // Two writers, two topics, one vocabulary file. The first holds the
+    // export lock with its row written and its commit pending; the second,
+    // on its own connection, must wait rather than render the file without
+    // the first's row and write over it.
+    const by = { author: "local", authorKind: "person" as const, reason: "race" };
+    const file = (slug: string) => ({ title: slug, summary: null, path: `learn/concepts/fixtures/${slug}.md` });
+    for (const slug of ["racer-one", "racer-two"]) {
+      await writeFile(path.join(root, "learn", "concepts", "fixtures", `${slug}.md`), `---\nid: ${slug}\ntitle: ${slug}\n---\n`, "utf8");
+    }
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered = () => {};
+    const holding = new Promise<void>((resolve) => (entered = resolve));
 
-    await Promise.all([
-      mapConceptToTopic(root, "fixture-topic", "racer-one"),
-      mapConceptToTopic(root, "block-topic", "racer-two"),
-    ]);
+    const other = connect({ url: scratch.url });
+    try {
+      const first = writeThrough(scratch.db, ["topics"], async (tx) => {
+        await fileConceptUnderTopic(tx, { concept: "racer-one", topic: "fixture-topic", row: file("racer-one") }, by);
+        entered();
+        await gate;
+      });
+      await holding;
+      let settled = false;
+      const second = fileConceptUnderTopic(other.db, { concept: "racer-two", topic: "block-topic", row: file("racer-two") }, by).finally(
+        () => (settled = true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(settled).toBe(false);
+      release();
+      await first;
+      expect((await second).changed).toBe(true);
+    } finally {
+      release();
+      await other.close();
+    }
 
     const after = await topics();
     expect(after).toContain("racer-one");
     expect(after).toContain("racer-two");
-    // No lock or temp file left behind.
-    await expect(
-      readFile(path.join(root, "content", "topics.yaml.lock"), "utf8"),
-    ).rejects.toThrow(/ENOENT/);
-
-    for (const slug of ["racer-one", "racer-two"]) {
-      await rm(path.join(root, "learn", "concepts", "fixtures", `${slug}.md`), { force: true });
-    }
+    const [rendered] = await renderType(scratch.db, "topics");
+    expect(after).toBe(rendered?.bytes.toString("utf8"));
+    const { rows } = await scratch.db.execute<{ slug: string; topic_slug: string }>(
+      "select slug, topic_slug from concept where slug like 'racer-%' order by slug",
+    );
+    expect(rows).toEqual([
+      { slug: "racer-one", topic_slug: "fixture-topic" },
+      { slug: "racer-two", topic_slug: "block-topic" },
+    ]);
   });
 
   it("without --topic, names the flag and the exact edit", async () => {
@@ -512,6 +511,7 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(stdout).toContain("--topic <slug>");
     expect(stdout).toContain("maps.concepts");
     expect(stdout).toContain("content/topics.yaml");
+    expect(stdout).toContain("catalog -- search");
     expect(await topics()).not.toContain("sprockets");
 
     const { stdout: asJson } = await learn(
