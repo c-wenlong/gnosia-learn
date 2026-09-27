@@ -200,11 +200,12 @@ export function TutorChat({
               actions={
                 i === lastTutor && !busy ? (
                   <>
-                    <Button variant="ghost" size="sm" disabled title="Saving an answer to the note is not built yet">
-                      Save to note
-                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => void ask("Why?")}>
                       Why?
+                    </Button>
+                    {/* Last, so its reason trails it rather than sitting between two buttons. */}
+                    <Button variant="ghost" size="sm" disabled disabledReason="Not built yet.">
+                      Save to note
                     </Button>
                   </>
                 ) : undefined
