@@ -229,9 +229,9 @@ Exit codes:
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
   4  The database is behind this code: index, import, export, parity,
-     flip, ls, show, history, diff, renumber, asset upload and blob audit read tables or columns a
-     migration it has not had adds. stderr says how many are outstanding and to run
-     migrate.
+     flip, ls, show, history, diff, renumber, asset upload and blob
+     audit read tables or columns a migration it has not had adds. stderr
+     says how many are outstanding and to run migrate.
 
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
