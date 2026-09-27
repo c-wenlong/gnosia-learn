@@ -223,19 +223,22 @@ carry it out.
 | A module's topic exists | parse (`courses.ts:257-264`) | foreign key |
 | An item's concepts sit under its module's topic | parse (`courses.ts:282-295`) | a constraint trigger on `concept_curriculum_item` comparing `concept.topic_slug` with the item's topic |
 | A course's tags exist | parse (`courses.ts:351-357`) | `collection_tag` foreign key |
-| Every module has at least one item | parse (`courses.ts:269-274`) | a deferred constraint trigger on `collection`, checked at commit |
-| **Every curriculum item names at least one concept** | nothing; nine courses fail it today | a deferred constraint trigger on `curriculum_item`, armed by `catalog flip courses --strict` once `catalog doctor` reports zero violations |
-| Every concept is filed under a topic | `concept.topic_slug` nullable; the indexer refuses at run time | `NOT NULL`, the one-line migration SCHEMA.md already names as pending |
-| Every diagram has a topic | the indexer refuses an unstamped `.tldr` | `diagram.topic_slug NOT NULL` |
+| Every module has at least one item | parse (`courses.ts:269-274`) | a deferred constraint trigger checked at commit, fired by an insert of a module and by any insert, update or delete of a `curriculum_item`, re-checking every module the statement touched |
+| **Every curriculum item names at least one concept** | nothing; nine courses fail it today | a deferred constraint trigger fired by an insert of an item and by any insert, update or delete of a `concept_curriculum_item` row, re-checking every item the statement touched; armed by `catalog flip courses --strict` once `catalog doctor` reports zero violations, and required before cut-over (phase 3) |
+| Every concept is filed under a topic | `concept.topic_slug` nullable; the indexer refuses at run time | `NOT NULL`, the one-line migration SCHEMA.md already names as pending. It is Track C's contract migration, not phase 0's expand: `ON DELETE SET NULL` on that column (`packages/schema/src/content.ts:100`) means a pruned topic can have left a null, so `catalog doctor` must report zero null rows first, and the migration itself raises if it finds one rather than failing on the constraint |
+| Every diagram has a topic | the indexer refuses an unstamped `.tldr` | `diagram.topic_slug NOT NULL`, from the table's creation; Track D's import refuses an untopiced `.tldr` by name as the indexer does today |
 | An asset has exactly one location | the `asset` location `CHECK` | the same check, widened for `blob_key` |
 | A relation points at two real topics and never at itself | nowhere; relations do not exist | foreign keys at both ends and the no-self check |
 | Ids are permanent | convention in `content/README.md` | `ON UPDATE CASCADE` everywhere, one `rename` verb, and a `rename` revision |
 
 A `CHECK` sees one row, so "at least one child" cannot be a `CHECK`. It is a
-`CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` on the parent, which
-runs once at commit: the write seam imports a whole course in one transaction,
-so the moment between inserting a module and inserting its items is never
-visible to the rule. `catalog doctor` runs the same predicates as plain queries
+`CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` that runs once at
+commit, and it is attached to both sides: to the parent, so a new module or
+item is checked, and to the child table, so deleting a module's last item or
+an item's last concept link re-checks that parent (a trigger on the parent
+alone would never see a child row leave). The write seam imports a whole
+course in one transaction, so the moment between inserting a module and
+inserting its items is never visible to the rule. `catalog doctor` runs the same predicates as plain queries
 and lists every violator by id, which is how the distance to `--strict` is
 measured; `catalog flip <type> --strict` refuses while doctor reports any.
 Filling the nine courses is content work, not migration work, and it happens
@@ -681,6 +684,16 @@ built app serving every route against the cloud database.
 
 One PR, one agent, Opus.
 
+- [ ] Every completeness trigger in [Integrity the database
+      enforces](#integrity-the-database-enforces) armed: `catalog flip --strict`
+      for each type, which refuses while `catalog doctor` lists a violator.
+      For the item-to-concept rule that means the nine courses have been given
+      their concepts first, by the owner or a session, as content work Track B
+      tracks with `catalog status`. Cut-over refuses while any trigger is
+      disarmed, unless the PR records `catalog flip --waive <rule> --reason
+      "..."`, which writes the waiver onto `content_source` where doctor
+      reports it on every run; a forgotten rule is then impossible, and a
+      deferred one is a written decision.
 - [ ] Final `catalog import` of the tree into the cloud database (a no-op if
       the flips held), then `catalog parity` of a fresh export against the
       tree, pasted into the PR body.
@@ -697,8 +710,10 @@ One PR, one agent, Opus.
       the skills and agents.
 - [ ] The nightly export to the private archive repository starts.
 
-**Done when:** a fresh clone with only `seed/` passes the local gate, and the
-production site and a `/learn` session both work against the cloud database.
+**Done when:** a fresh clone with only `seed/` passes the local gate, the
+production site and a `/learn` session both work against the cloud database,
+and `catalog doctor` reports every completeness rule armed or waived with a
+reason.
 
 ## Phase 4: tenancy
 
