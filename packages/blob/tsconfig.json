@@ -1,0 +1,17 @@
+{
+  "//": "Its own tsconfig, for the reason packages/schema/tsconfig.json gives: a Node-only library, type-checked with Node's libs and nothing of the web app's. `test/` is included so the conformance suite a later adapter imports is checked too.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

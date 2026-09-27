@@ -377,35 +377,55 @@ if the studio's `draft` table lands first. Contract migrations follow serially.
 
 ### 0.4 The blob store
 
-- [ ] `packages/blob/` (a new workspace with its own `tsconfig.json` and
+- [x] `packages/blob/` (a new workspace with its own `tsconfig.json` and
       `typecheck` script, per the AGENTS.md gotcha) exports:
 
 ```ts
 interface BlobStore {
+  readonly provider: "fs" | "vercel-blob" | "r2";
   put(key: string, body: Readable, meta: { sha256: string; bytes: number; mime: string }): Promise<void>;
   head(key: string): Promise<{ bytes: number; sha256?: string } | null>;
   get(key: string, range?: { start: number; end: number }): Promise<Readable>;
   signedUrl(key: string, ttlSeconds: number): Promise<string | null>; // null: the caller streams instead
   delete(key: string): Promise<void>;
+  list(prefix: string): AsyncIterable<{ key: string; bytes: number; uploadedAt: Date }>;
 }
 ```
 
-- [ ] An `fs` adapter rooted at `$SELF_LEARN_HOME/blobs` (default
+It also exports `key(ownerId, sha256, ext)`. Two members were added when it
+was built: `list`, by plain string prefix, because phase 4 counts, caps and
+deletes by owner prefix (D3, D5) and edge case 9's orphan sweep needs each
+object's upload time; and `provider`, so the upload command fills
+`blob_object.provider` from the store it holds rather than from a second
+setting that could disagree. The contract per method, the key rules and the
+refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
+
+- [x] An `fs` adapter rooted at `$SELF_LEARN_HOME/blobs` (default
       `~/.self-learn/blobs`), outside the repo for the reason `$MANIMKC_HOME`
-      exists. Its `signedUrl` returns null and the route streams, reusing the
-      Range code already in `apps/web/src/lib/asset-files.ts:328-405`.
+      exists, and refusing a root inside a self-learn checkout. Writes go to a
+      temp file under the root and are renamed into place after the hash and
+      length check; `head` hashes the file on every call rather than trusting
+      the key or a sidecar, since its callers are asking whether the bytes are
+      intact. Its `signedUrl` returns null and the route streams, reusing the
+      Range code already in `apps/web/src/lib/asset-files.ts:328-405`; that
+      route is Track E's.
 - [ ] The cloud adapter is deferred with 0.1 (the owner: everything local for
       now). When it comes: R2 while the project is on Vercel Hobby, Vercel Blob
       on Pro (open question 3). A Vercel Blob adapter would need a private
       store, `@vercel/blob` 2.3 or later and presigned `GET` URLs (Vercel's
       private storage documentation, read 2026-09-27). The interface above is
       what makes it one file later.
-- [ ] One conformance suite, written now against the `fs` adapter and run
+- [x] One conformance suite, written now against the `fs` adapter and run
       against any later adapter unchanged: round trip, a Range read, `head` of
       a missing key, a wrong hash refused, and `signedUrl` either null or
       fetchable. A cloud run skips with a named reason when no token is set,
       the way the Postgres suites skip
-      (`services/catalog/test/scratch-database.ts:30-53`).
+      (`services/catalog/test/scratch-database.ts:30-53`). It is
+      `conformance(name, makeStore, { skip })` in
+      `packages/blob/test/conformance.ts`, and also covers a wrong length, an
+      overrun stopped early, a body that fails midway, an object invisible
+      until its put finishes, malformed keys, delete, and listing by owner
+      prefix.
 - [ ] `upload(file)` in the catalog: write the `pending` row, stream to the
       store, `head` it, then mark it `present`. D5.
 
