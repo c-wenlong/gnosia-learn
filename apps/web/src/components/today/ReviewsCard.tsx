@@ -51,10 +51,8 @@ export function ReviewsCard({ reviews, reachable }: { reviews: TodayModel["revie
               <span className="md:hidden">Start review · {total}</span>
               <span className="max-md:hidden">Start review · {total} due</span>
             </Button>
-            {/* The title sits on a wrapper: a disabled button takes no pointer
-                events, so its own title would never show. */}
-            <span className="max-md:hidden" title="Snoozing is not built yet.">
-              <Button variant="secondary" disabled>
+            <span className="max-md:hidden">
+              <Button variant="secondary" disabled disabledReason="Not built yet.">
                 Snooze to tomorrow
               </Button>
             </span>

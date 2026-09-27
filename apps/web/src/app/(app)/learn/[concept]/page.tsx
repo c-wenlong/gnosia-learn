@@ -31,8 +31,7 @@ import { readTutorStyle } from "@/lib/settings";
  *
  * When a session could ask nothing (no check in the note, no tutor model
  * configured) the header says so under Teach me, before the learner starts.
- * The button stays live: the session still teaches, and a disabled kit button
- * takes no pointer events, so a `title` on it would never show.
+ * The button stays live, because the session still teaches.
  *
  * Everything is read on the server through `loadConceptWorkspace`, the same
  * object `GET /api/concepts/[slug]` returns. Dynamic, like every page: it

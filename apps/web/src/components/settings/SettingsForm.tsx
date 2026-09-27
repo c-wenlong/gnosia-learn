@@ -138,7 +138,7 @@ export function SettingsForm({
         </Field>
         <Field label="Reminders" note="Not built yet, so nothing is stored or sent.">
           {(id) => (
-            <Select id={id} value="off" disabled onChange={() => undefined}>
+            <Select id={id} value="off" disabled describedBy={`${id}-note`} onChange={() => undefined}>
               <option value="off">Off</option>
             </Select>
           )}
@@ -219,7 +219,11 @@ function Field({
         <label id={`${id}-label`} htmlFor={id} className="text-[14px] font-medium text-text">
           {label}
         </label>
-        {note !== undefined && <p className="text-[12px] text-text2">{note}</p>}
+        {note !== undefined && (
+          <p id={`${id}-note`} className="text-[12px] text-text2">
+            {note}
+          </p>
+        )}
       </div>
       <div className="w-full md:w-[300px] md:shrink-0">{children(id)}</div>
       <p aria-live="polite" className="min-w-0 text-[12px] md:flex-1">
@@ -237,12 +241,15 @@ function Select({
   value,
   onChange,
   disabled,
+  describedBy,
   children,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** The id of the text that says why it is disabled. */
+  describedBy?: string;
   children: ReactNode;
 }) {
   return (
@@ -251,8 +258,9 @@ function Select({
         id={id}
         value={value}
         disabled={disabled}
+        aria-describedby={describedBy}
         onChange={(e) => onChange(e.target.value)}
-        className={inputClasses({ className: "cursor-pointer appearance-none pr-10 disabled:cursor-not-allowed" })}
+        className={inputClasses({ className: "cursor-pointer appearance-none pr-10" })}
       >
         {children}
       </select>

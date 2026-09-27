@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { ConceptGraph } from "@/components/ConceptGraph";
@@ -58,6 +58,8 @@ export function StudioCards({
   const w = workspace;
   const bars = historyBars(w.history);
   const checks = w.checks;
+  // The empty-checks line is Quiz me's reason; the button points at it rather than repeating it.
+  const noChecksId = useId();
 
   return (
     <>
@@ -93,7 +95,9 @@ export function StudioCards({
       <Card tight className="gap-1.5" aria-label="Checks">
         <CardHeading>Checks · {checks.length}</CardHeading>
         {checks.length === 0 ? (
-          <p className="text-[13px] text-text3">The note has no checks yet.</p>
+          <p id={noChecksId} className="text-[13px] text-text3">
+            The note has no checks yet.
+          </p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {checks.map((c) => (
@@ -111,7 +115,7 @@ export function StudioCards({
               Quiz me
             </Button>
           ) : (
-            <Button variant="secondary" size="sm" disabled title="Add a check to the note first">
+            <Button variant="secondary" size="sm" disabled aria-describedby={noChecksId}>
               Quiz me
             </Button>
           )}
@@ -140,7 +144,7 @@ export function StudioCards({
           </ul>
         )}
         <span className="mt-1">
-          <Button variant="secondary" size="sm" disabled title="Generating flashcards is not built yet">
+          <Button variant="secondary" size="sm" disabled disabledReason="Not built yet.">
             Generate flashcards
           </Button>
         </span>
