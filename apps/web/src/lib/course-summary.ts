@@ -64,8 +64,25 @@ export function courseStatus(
   return { completed: done, total, percent, next, label };
 }
 
-/** The filter the chips set: everything, only courses with progress, or one theme tag. */
-export type CourseFilter = { kind: "all" } | { kind: "in-progress" } | { kind: "tag"; tag: string };
+/**
+ * The Courses page's two filter menus: Progress (every course, or only the
+ * ones started and not finished) and Tag (one theme tag, or `null` for every
+ * tag). The two combine: "In progress" and "Graphics" is the graphics courses
+ * the learner has started.
+ */
+export type CourseProgressFilter = "all" | "in-progress";
+export interface CourseFilter {
+  progress: CourseProgressFilter;
+  tag: string | null;
+}
+
+export const ALL_COURSES: CourseFilter = { progress: "all", tag: null };
+
+/** Started and not finished: at least one topic done and one left. */
+export function isInProgress(summary: CourseSummary, completed: Readonly<Record<string, true>>): boolean {
+  const status = courseStatus(summary, completed);
+  return status.completed > 0 && status.next !== null;
+}
 
 export function filterCourses(
   summaries: readonly CourseSummary[],
@@ -75,15 +92,19 @@ export function filterCourses(
 ): CourseSummary[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return summaries.filter((s) => {
-    if (filter.kind === "tag" && !s.tags.some((t) => t.id === filter.tag)) return false;
-    if (filter.kind === "in-progress") {
-      const status = courseStatus(s, completed);
-      if (status.completed === 0 || status.next === null) return false;
-    }
+    if (filter.tag !== null && !s.tags.some((t) => t.id === filter.tag)) return false;
+    if (filter.progress === "in-progress" && !isInProgress(s, completed)) return false;
     if (words.length === 0) return true;
     const haystack = [s.code, s.title, ...s.tags.map((t) => t.label)].join(" ").toLowerCase();
     return words.every((w) => haystack.includes(w));
   });
+}
+
+/** How many courses carry each tag, for the Tag menu's counts. */
+export function tagCounts(summaries: readonly CourseSummary[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of summaries) for (const t of s.tags) out[t.id] = (out[t.id] ?? 0) + 1;
+  return out;
 }
 
 /** The theme tags any course uses, in the order `content/tags.yaml` lists them. */
