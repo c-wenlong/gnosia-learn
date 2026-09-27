@@ -51,8 +51,8 @@ const withManimkc = hasManimkcCli(REPO_ROOT);
 
 /** What `content/` and `learn/` hold today. Update deliberately. */
 const EXPECTED = {
-  topics: 81,
-  domains: 22,
+  topics: 86,
+  domains: 23,
   concepts: 32,
   courses: 10,
   modules: 61,
