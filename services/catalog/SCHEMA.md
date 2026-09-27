@@ -582,6 +582,15 @@ npm run catalog -- search "common data bus"    # titles and aliases, top 20
 `show` returns paths, never bodies. The database says which file to read; git
 holds the words.
 
+Every command exits 0 when it worked, 1 when it failed, 2 on a wrong
+invocation, and 3 when the database is unreachable: nothing listening, or a host
+name that does not resolve. A server that answered and refused (bad password,
+no such database, too many clients) is 1. Either way stderr carries one line
+naming the cause, such as `database unreachable: connection refused
+(ECONNREFUSED)`, read from the driver's error code in
+`src/connection-failure.ts`. The studio runs a job without the database on 3
+and refuses it on 1 (D16 in `docs/TLDRAWKC-INTEGRATION.md`).
+
 After changing anything in `packages/schema/src/`:
 
 ```bash

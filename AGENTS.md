@@ -538,6 +538,15 @@ not have to be worked out again.
   first — so `npm run build` succeeds with no database, which is what Vercel
   has today. Verify both after touching the layout: build with `DATABASE_URL`
   pointed at a dead port, then serve it and load a page.
+- **A drizzle error's message never says why the database failed.** drizzle
+  wraps every driver error as `Failed query: <sql>` and puts the driver's error
+  on `cause`, and a refused `localhost` connection arrives there as an
+  `AggregateError` with an empty message. So a dead port, a bad password and a
+  missing database all read the same. Read the `code` down the `cause` chain,
+  as `services/catalog/src/connection-failure.ts` does; the catalog CLI turns
+  it into exit 3 for unreachable, which is what the studio's D16 degrade keys
+  on. A regex over the text is how the studio once refused every job with the
+  database down.
 - **Never edit an applied migration, including its comments.** drizzle keys
   migrations by the sha256 of the whole file, so rewording a comment in
   `services/catalog/drizzle/*.sql` makes it look unapplied and
