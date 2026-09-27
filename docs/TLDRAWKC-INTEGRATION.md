@@ -4,6 +4,10 @@ A local screen for the diagrams in [`learn/assets/`](../learn/assets): browse
 them, open one on a live tldraw canvas, and ask an agent to draw a new version.
 One user, one machine, one job at a time.
 
+**The sequel is [`STUDIO-CHAT-FIRST.md`](STUDIO-CHAT-FIRST.md)**, which proposes
+replacing the brief form with a planner agent the person talks to and carries
+only what that changes.
+
 **Status: built and in use.** Phases 0 to 4 are done, which is the whole loop —
 brief, job, gate, comparison, Accept or Discard. Run it with `npm run studio`
 from the repository root and `STUDIO_ENABLED=1` on the app; the roadmap's
