@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { applyMigrations } from "../src/migrations";
+import { addConceptToItem, CourseEditError } from "../src/learn/course-edit";
 import {
   addConceptToTopic,
   mapConceptToTopic,
@@ -148,6 +149,106 @@ describe("addConceptToTopic", () => {
   });
 });
 
+/** A course file in the block form the real files use, plus the other shapes. */
+const COURSE_DOC = `id: xx1000
+slug: xx1000
+code: XX1000
+title: Fixture course
+credits: 4
+order: 1
+inferred: false
+tags: [fixtures]
+capstone: none
+modules:
+  - id: xx1000-m1
+    slug: m1-first
+    title: First
+    order: 1
+    topic: fixture-topic
+    topics:
+      - id: xx1000-m1-t1
+        title: Block row
+        concepts:
+          - alpha
+        subtopics: [one]
+      - id: xx1000-m1-t2
+        title: Flow row
+        concepts: [beta]   # inline
+      - id: xx1000-m1-t3
+        title: Bare row
+        subtopics: [two]
+      - id: xx1000-m1-t4
+        title: Empty key row
+        concepts:
+      - id: xx1000-m1-t5
+        title: Spread row
+        concepts: [
+          gamma,
+          delta
+        ]  # over lines
+      - id: xx1000-m1-t6
+        title: Commented spread row
+        concepts: [
+          gamma,   # first
+          delta,   # last, with a trailing comma
+        ]
+      - id: xx1000-m1-t7
+        title: Closing shares a line
+        concepts: [gamma,
+          delta,]
+    resources: []
+`;
+
+describe("addConceptToItem", () => {
+  it("appends to a block list at the item's own indent", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t1", "cogs");
+    expect(after).toContain("          - alpha\n          - cogs\n        subtopics: [one]");
+  });
+
+  it("appends to a flow list and keeps its comment", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t2", "cogs");
+    expect(after).toContain("        concepts: [beta, cogs]  # inline");
+  });
+
+  it("adds the key after title: when the row has none", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t3", "cogs");
+    expect(after).toContain("        title: Bare row\n        concepts: [cogs]\n        subtopics: [two]");
+  });
+
+  it("fills an empty key rather than leaving it to be refused", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t4", "cogs");
+    expect(after).toContain("        title: Empty key row\n        concepts: [cogs]\n      - id: xx1000-m1-t5");
+  });
+
+  it("appends to a flow list spread over lines, on its closing line", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "cogs");
+    expect(after).toContain("          gamma,\n          delta, cogs\n        ]  # over lines");
+    expect(addConceptToItem(COURSE_DOC, "xx1000-m1-t5", "delta")).toBe(COURSE_DOC);
+  });
+
+  it("puts the new id ahead of a last item's comment, and after its trailing comma", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t6", "cogs");
+    expect(after).toContain("          delta, cogs   # last, with a trailing comma\n        ]");
+  });
+
+  it("adds one separator when the closing line carries an item and a trailing comma", () => {
+    const after = addConceptToItem(COURSE_DOC, "xx1000-m1-t7", "cogs");
+    expect(after).toContain("        concepts: [gamma,\n          delta, cogs]");
+  });
+
+  it("is idempotent, and touches no other row", () => {
+    expect(addConceptToItem(COURSE_DOC, "xx1000-m1-t1", "alpha")).toBe(COURSE_DOC);
+    expect(addConceptToItem(COURSE_DOC, "xx1000-m1-t2", "beta")).toBe(COURSE_DOC);
+    const once = addConceptToItem(COURSE_DOC, "xx1000-m1-t1", "cogs");
+    expect(addConceptToItem(once, "xx1000-m1-t1", "cogs")).toBe(once);
+    expect(once.split("\n").length).toBe(COURSE_DOC.split("\n").length + 1);
+  });
+
+  it("refuses a row that is not in the file", () => {
+    expect(() => addConceptToItem(COURSE_DOC, "xx1000-m9-t1", "cogs")).toThrow(CourseEditError);
+  });
+});
+
 const reachable = await probe();
 
 describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
@@ -212,6 +313,8 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
         "      - id: xx1000-m1-t1",
         "        title: An item",
         "        concepts: [alpha]",
+        "      - id: xx1000-m1-t2",
+        "        title: Another item",
         "    resources: []",
         "",
       ].join("\n"),
@@ -245,6 +348,7 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
       id: "widgets",
       path: "learn/concepts/fixtures/widgets.md",
       topic: "empty-topic",
+      item: null,
       indexed: true,
     });
 
@@ -295,6 +399,85 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     expect(await topics()).toBe(before);
   });
 
+  it("with --item, lists the note on the row and takes the topic from its module", async () => {
+    const courseFile = path.join(root, "content", "courses", "xx1000.yaml");
+    const before = await readFile(courseFile, "utf8");
+    const { stdout } = await learn(
+      "concept", "add", "--title", "Cogs", "--domain", "fixtures",
+      "--item", "xx1000-m1-t2", "--json",
+    );
+
+    expect(JSON.parse(stdout)).toEqual({
+      id: "cogs",
+      path: "learn/concepts/fixtures/cogs.md",
+      topic: "fixture-topic",
+      item: "xx1000-m1-t2",
+      indexed: true,
+    });
+
+    const after = await readFile(courseFile, "utf8");
+    expect(after).toContain("        title: Another item\n        concepts: [cogs]\n");
+    expect(after.replace("        concepts: [cogs]\n", "")).toBe(before);
+    expect(await topics()).toContain("cogs");
+
+    // Indexed, with the link the course run writes from the row.
+    const { rows } = await scratch.db.execute<{ curriculum_item_id: string; position: number }>(
+      "select curriculum_item_id, position from concept_curriculum_item where concept_slug = 'cogs'",
+    );
+    expect(rows).toEqual([{ curriculum_item_id: "xx1000-m1-t2", position: 1 }]);
+  });
+
+  it("finishes on a --force re-run without repeating any edit or losing one", async () => {
+    // The way out of a listing that failed after the mapping landed: the same
+    // command again completes the job, and a field the re-run's flags do not
+    // name keeps what the note has by then.
+    const courseFile = path.join(root, "content", "courses", "xx1000.yaml");
+    const noteFile = path.join(root, "learn", "concepts", "fixtures", "cogs.md");
+    const before = await readFile(courseFile, "utf8");
+    const vocabulary = await topics();
+    await learn("concept", "edit", "cogs", "--summary", "Edited by hand", "--requires", "alpha");
+
+    const { stdout } = await learn(
+      "concept", "add", "--title", "Cogs", "--domain", "fixtures",
+      "--item", "xx1000-m1-t2", "--force", "--json",
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ id: "cogs", item: "xx1000-m1-t2", indexed: true });
+    expect(await readFile(courseFile, "utf8")).toBe(before);
+    expect(await topics()).toBe(vocabulary);
+    const note = await readFile(noteFile, "utf8");
+    expect(note).toContain("summary: Edited by hand");
+    expect(note).toContain("requires: [alpha]");
+  });
+
+  it("refuses --item with a --topic that is not the row's module topic, before writing", async () => {
+    const failure = await learn(
+      "concept", "add", "--title", "Sprockets", "--domain", "fixtures",
+      "--item", "xx1000-m1-t2", "--topic", "empty-topic",
+    ).then(
+      () => null,
+      (error: { stderr: string; code: number }) => error,
+    );
+    expect(failure?.code).toBe(1);
+    expect(failure?.stderr).toContain('whose topic is "fixture-topic", not "empty-topic"');
+    await expect(
+      readFile(path.join(root, "learn", "concepts", "fixtures", "sprockets.md"), "utf8"),
+    ).rejects.toThrow(/ENOENT/);
+  });
+
+  it("refuses an unknown item before writing anything", async () => {
+    const failure = await learn(
+      "concept", "add", "--title", "Flanges", "--domain", "fixtures", "--item", "xx9999-m1-t1",
+    ).then(
+      () => null,
+      (error: { stderr: string; code: number }) => error,
+    );
+    expect(failure?.code).toBe(1);
+    expect(failure?.stderr).toContain('no curriculum item "xx9999-m1-t1"');
+    await expect(
+      readFile(path.join(root, "learn", "concepts", "fixtures", "flanges.md"), "utf8"),
+    ).rejects.toThrow(/ENOENT/);
+  });
+
   it("keeps both mappings when two edits race", async () => {
     // Two read-modify-writes over one file. Without the lock the second read
     // sees the first's original and its write drops that mapping, and both
@@ -338,6 +521,7 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
       id: "sprockets",
       path: "learn/concepts/fixtures/sprockets.md",
       topic: null,
+      item: null,
       indexed: false,
     });
     await rm(path.join(root, "learn", "concepts", "fixtures", "sprockets.md"), { force: true });

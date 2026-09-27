@@ -576,7 +576,7 @@ count.
 ```bash
 createdb self_learn                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
-npm run catalog -- status --json       # row counts, migration head, source freshness
+npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
 npm run catalog -- index               # fill it from content/ and learn/
 ```
 
