@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { SettingsForm } from "@/components/settings/SettingsForm";
-import { getAllTopicIds } from "@/data/courses";
+import { getAllTopicIds, getCourses } from "@/data/courses";
 import { resolveProviders } from "@/lib/agent/providers";
 import { loadSettings } from "@/lib/settings";
 
@@ -17,14 +17,14 @@ export const metadata: Metadata = { title: "Settings" };
  * `/api/learner/preference` one field at a time.
  */
 export default async function SettingsPage() {
-  const settings = await loadSettings();
+  const [settings, courses] = await Promise.all([loadSettings(), getCourses()]);
   // Ids rather than labels: "NVIDIA NIM → Google Gemini → OpenRouter" does
   // not fit the 300px box, and the ids are the names the env variables use.
   const providers = resolveProviders().map((p) => ({ id: p.id, label: `${p.label} (${p.model})` }));
   return (
     <div data-layout="app" className="flex max-w-[852px] flex-col gap-4">
       <h1 className="font-display text-[28px] leading-tight font-bold text-text">Settings</h1>
-      <SettingsForm settings={settings} providers={providers} topicIds={getAllTopicIds()} />
+      <SettingsForm settings={settings} providers={providers} topicIds={getAllTopicIds(courses)} />
     </div>
   );
 }

@@ -71,15 +71,17 @@ another repo.
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to a file on disk, safely), `asset-posters.ts` (a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
-| `apps/web/src/data/courses/index.ts` | Server-only view of `content/courses/`: the course lookups every page calls |
-| `apps/web/src/data/content.ts` | Server-only view of `content/tags.yaml`: the cross-course themes |
+| `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, files unless a type resolves to the database |
+| `apps/web/src/data/courses/index.ts` | Server-only `getCourses()` and the course lookups every page calls |
+| `apps/web/src/data/content.ts` | Server-only `getTags()`: the cross-course themes |
+| `apps/web/src/data/topics.ts` | Server-only `getTopics()`: the shared vocabulary, and the maps and picker options the studio builds from it |
 
 `packages/` and `services/` are npm workspaces, Node-only, with their own
 tsconfigs.
 
 | Directory | Owns |
 | --- | --- |
-| `packages/content/` | The reader for `content/`: `loadCourses`, `loadTopics`, `loadTags`, and the `Course` types |
+| `packages/content/` | The reader for `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
@@ -125,7 +127,7 @@ client of the store, never of the database directly.
 
 | Workspace | Owns |
 | --- | --- |
-| `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types. Reads files, connects to nothing. |
+| `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types; `ContentSource`, the async interface every reader holds, with `fileSource(root)` over those parsers and `selectSource` choosing files or the database per type. Reads files, connects to nothing: the database implementation, `dbSource`, is the catalog's. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
 | `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$SELF_LEARN_HOME/blobs`, outside the repo. Imports nothing but Node. Nothing uses it yet; the catalog's upload command is next. |
 | `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
@@ -205,8 +207,10 @@ empty cache reads as "not made yet" and a retry, never as a broken video.
 `apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
 concurrency reasoning.
 
-The session route declares `generateStaticParams()` over every course and
-module pair, so the shell is prerendered and only the chat is live.
+The session route renders on demand, like every page: it used to declare
+`generateStaticParams()` over every course and module pair, and that went when
+the course list became a per-request read (the root layout already made every
+page dynamic, so nothing was being prerendered from it).
 
 **Today** reads everything in one pass through `apps/web/src/lib/today.ts`: the
 knowledge base, the event log, the preferences, the due queue and the snapshot,
@@ -387,10 +391,24 @@ literals on one side, a private `YamlCourse` interface on the other, and a
 parity test that could only notice drift after it happened.
 
 `apps/web/src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
-one `loadCourses()` at module scope (read once per process), and the lookups
-pages call — `getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
-`getRelatedCourses`, `totalTopicCount`. `apps/web/src/data/content.ts` is the same shape
-over `content/tags.yaml`.
+`getCourses()` (async, wrapped in React's `cache()` so a render reads once),
+and the lookups pages call: `getCourse`, `getModule`, `findTopic`,
+`getCourseTopicIds`, `getRelatedCourses`, `totalTopicCount`. The ones that need
+every course take the list as an argument, so a page reads it once and the
+helpers under `lib/` stay synchronous. `apps/web/src/data/content.ts`
+(`getTags()`) and `apps/web/src/data/topics.ts` (`getTopics()`) are the same
+shape over the themes and the vocabulary.
+
+**Through the reader seam.** None of the three calls a parser. They ask
+`contentSource()` in `apps/web/src/data/source.ts`, which hands back
+`selectSource` over `fileSource(REPO_ROOT)` and, for any type that resolves to
+it, the catalog's `dbSource`. Every type resolves to files today; the plan in
+[docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) moves them into
+Postgres one track at a time, and this is the one place in the app that
+changes when it does. The file source keeps its last parse until a file it
+read changes, so a per-request read costs a `stat` per file rather than a YAML
+parse, and a course file edited while the server runs shows on the next
+request.
 
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
 reaches either of them fail the build with the import chain printed, rather

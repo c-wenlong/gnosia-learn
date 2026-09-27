@@ -19,7 +19,7 @@ import {
   StudioStrip,
   VerbNotice,
 } from "@/components/studio/StudioChrome";
-import { topicOptions } from "@/data/topics";
+import { getTopics, topicOptionsOf } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import {
   canvasHref,
@@ -175,7 +175,10 @@ export default async function CanvasPage({
     timeoutMs: 60_000,
   });
 
-  const jobList = await studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200");
+  const [jobList, topics] = await Promise.all([
+    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
+    getTopics(),
+  ]);
   // Only on the render that shows a picture: `GET /api/jobs` carries neither
   // the brief nor the comparison, and the full-width view needs both to say why
   // the other side is not there rather than linking to a 404.
@@ -240,7 +243,7 @@ export default async function CanvasPage({
           {panel.brief !== null ? (
             <BriefForm
               path={path}
-              topics={topicOptions}
+              topics={topicOptionsOf(topics)}
               from={panel.brief}
               // This screen names one document, so a new job started from it is
               // about that document until somebody says otherwise: the slug is

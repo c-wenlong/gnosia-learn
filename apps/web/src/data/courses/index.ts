@@ -1,32 +1,36 @@
 import "server-only";
 
-import { loadCourses } from "@self-learn/content";
+import { cache } from "react";
 
-import { REPO_ROOT } from "@/data/repo-root";
+import { contentSource } from "@/data/source";
 import type { Course, Module, Topic } from "@/lib/types";
 
 /**
- * The app's view of `content/courses/*.yaml`.
+ * The app's view of the courses.
  *
  * Ten TypeScript files used to live here and a parity test kept them in step
  * with the YAML. Now there is one representation, read by one parser that the
  * catalog indexer also uses, so "what does this course file mean" has a single
  * answer.
  *
- * **Server only.** `loadCourses()` reads the filesystem, and `server-only`
- * makes a `"use client"` module that reaches it fail at build time rather than
- * shipping a YAML parser and every course file to the browser. Client
- * components take the course, module and topic they need as props; the pure
- * helpers they still want are in `@/lib/curriculum`.
+ * **Async, and once per request.** The list used to be a module-level
+ * constant, read once per process. That cannot be served from Postgres, so it
+ * is `getCourses()` now, through the content seam (`@/data/source`), and
+ * wrapped in React's `cache()` so one render asks once however many
+ * components want it. Pages hold the list and pass it on; the lookups below
+ * that need every course take it as an argument, so nothing under `lib/` has
+ * to be async to use them.
  *
- * Read once per process. Course files do not change while the server is up,
- * and a Next build resolves `generateStaticParams` for every route from this
- * array.
+ * **Server only.** Reading content touches the filesystem or the database, and
+ * `server-only` makes a `"use client"` module that reaches it fail at build
+ * time rather than shipping a YAML parser and every course file to the
+ * browser. Client components take the course, module and topic they need as
+ * props; the pure helpers they still want are in `@/lib/curriculum`.
  */
-export const courses: Course[] = loadCourses({ root: REPO_ROOT });
+export const getCourses = cache(async (): Promise<Course[]> => contentSource().courses());
 
-export function getCourse(slug: string): Course | undefined {
-  return courses.find((c) => c.slug === slug);
+export async function getCourse(slug: string): Promise<Course | undefined> {
+  return (await getCourses()).find((c) => c.slug === slug);
 }
 
 export function getModule(
@@ -36,9 +40,9 @@ export function getModule(
   return course.modules.find((m) => m.slug === moduleSlug);
 }
 
-export function getAllTopicIds(course?: Course): string[] {
-  const list = course ? [course] : courses;
-  return list.flatMap((c) =>
+/** Every curriculum item id across `courses`, in course and module order. */
+export function getAllTopicIds(courses: readonly Course[]): string[] {
+  return courses.flatMap((c) =>
     c.modules.flatMap((m) => m.topics.map((t) => t.id)),
   );
 }
@@ -51,7 +55,11 @@ export function getModuleTopicIds(module: Module): string[] {
   return module.topics.map((t) => t.id);
 }
 
-export function getRelatedCourses(course: Course): Course[] {
+/** The other courses in `courses` that share a theme with `course`. */
+export function getRelatedCourses(
+  courses: readonly Course[],
+  course: Course,
+): Course[] {
   if (course.tags.length === 0) return [];
   return courses.filter(
     (c) =>
@@ -70,6 +78,6 @@ export function findTopic(
   return undefined;
 }
 
-export function totalTopicCount(): number {
-  return getAllTopicIds().length;
+export function totalTopicCount(courses: readonly Course[]): number {
+  return getAllTopicIds(courses).length;
 }

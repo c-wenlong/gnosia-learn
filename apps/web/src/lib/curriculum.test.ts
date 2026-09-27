@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { courses } from "@/data/courses";
+import { getCourses } from "@/data/courses";
 import { courseTopicIds, moduleTopicIds } from "@/lib/curriculum";
+
+// Read once for the file: the list is per request in the app, and a test file is one request.
+const courses = await getCourses();
 
 const course = courses[0];
 

@@ -20,7 +20,7 @@ import {
   SortMenu,
   TopicChips,
 } from "@/components/studio/StudioControls";
-import { topicDomains, topicOptions, topicTitles } from "@/data/topics";
+import { getTopics, topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import {
   filterDiagrams,
@@ -113,10 +113,13 @@ export default async function StudioPage({
     );
   }
 
-  const [listed, jobList] = await Promise.all([
+  const [listed, jobList, topics] = await Promise.all([
     studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
+    getTopics(),
   ]);
+  const topicTitles = topicTitleMap(topics);
+  const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
     return (
       <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
@@ -247,7 +250,7 @@ export default async function StudioPage({
         {view.panel && (
           <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
             {view.brief !== null ? (
-              <BriefForm path={path} topics={topicOptions} from={view.brief} suggested={undefined} />
+              <BriefForm path={path} topics={topicOptionsOf(topics)} from={view.brief} suggested={undefined} />
             ) : view.job !== null ? (
               <JobPanel jobId={view.job} path={path} />
             ) : (
