@@ -158,7 +158,10 @@ Answers are classified into four cases, each with its own response:
 
 Diagrams come from the `diagram-maker` subagent, which **views its own SVG
 and fixes it** before returning. Writing SVG blind produces overlapping text
-and arrows pointing at nothing.
+and arrows pointing at nothing. A diagram lives in the catalog, not under
+`learn/assets/`: the agent draws in the file `learn diagram checkout <id>`
+prints and ends with `learn diagram commit <id> --reason`, which stores the
+document and its SVG as one revision.
 
 ### Phase 4 — Close
 
@@ -194,6 +197,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `model [--rebuild]` | Mastery table; rebuild replays the event log |
 | `review rebuild` | Replay the log into the schedule |
 | `map` / `index` | Regenerate `map.md` / re-read the notes into the catalog |
+| `diagram checkout\|commit\|put\|list\|show` | Diagrams in the catalog, as `catalog diagram` does them, attributed to the `diagram-maker` agent unless `--author-kind` says otherwise. `put --svg --topic` stores an SVG drawn without the canvas |
 | `doctor` | Validate the graph — cycles, dangling edges, orphans |
 
 ### A new concept needs a topic

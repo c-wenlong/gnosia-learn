@@ -22,6 +22,7 @@ import {
   documentHash,
   listDiagrams,
   putDiagram,
+  putSvgOnly,
   type PutInput,
 } from "../src/content/diagrams";
 import { REPO_ROOT } from "../src/env";
@@ -448,6 +449,37 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(await readFile(path.join(dir, "second-diagram.svg"), "utf8")).toBe(svgOf("exported, not committed"));
   });
 
+  const putSvg = async (slug: string, topic: string, concepts: string[], contents: string) =>
+    putSvgOnly(scratch.db, store, {
+      slug,
+      svg: await file(`${slug}-only.svg`, contents),
+      topic,
+      concepts,
+      reason: "drawn by hand",
+      author: "diagram-maker",
+      authorKind: "agent",
+    });
+
+  it("stores an SVG drawn without the canvas as an asset and a blob, which the next import leaves alone", async () => {
+    const result = await putSvg("base", "alpha", ["base"], svgOf("by hand"));
+    expect(result).toMatchObject({ changed: true, concepts: ["base"], files: ["learn/assets/base.svg"] });
+    expect(await readFile(path.join(fixture.root, "learn/assets/base.svg"), "utf8")).toBe(svgOf("by hand"));
+    const [row] = await scratch.db.select().from(blobObject).where(eq(blobObject.key, result.svg?.key ?? ""));
+    expect(row?.state).toBe("present");
+    // Filed by its name, which is what the import reads it back as.
+    const again = await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
+    expect(again.sources.find((s) => s.source === "diagrams")?.revisions).toEqual({});
+  });
+
+  it("refuses an SVG on its own that the import would file differently, or whose slug has a document", async () => {
+    // "hand-drawn" names no concept, so the import would file it under no topic.
+    await expect(putSvg("hand-drawn", "alpha", [], svgOf("x"))).rejects.toMatchObject({ code: "write-through" });
+    // "base" is under alpha, not beta.
+    await expect(putSvg("base", "beta", ["base"], svgOf("x"))).rejects.toMatchObject({ code: "write-through" });
+    await expect(putSvg("first-diagram", "alpha", [], svgOf("x"))).rejects.toMatchObject({ code: "unresolved" });
+    await expect(readdir(path.join(fixture.root, "learn/assets"))).resolves.not.toContain("hand-drawn.svg");
+  });
+
   it("writes no file once the database owns diagrams", async () => {
     await flip(scratch.db, { type: "diagrams", readers: new Set(["diagrams"]) });
     const before = await readdir(path.join(fixture.root, "learn/assets"));
@@ -461,6 +493,10 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
     const [listed] = await listDiagrams(scratch.db, "after-the-flip");
     expect(listed?.svgState).toBe("current");
+    // An SVG on its own is filed as named once no import reads files back.
+    const bare = await putSvg("hand-drawn", "beta", [], svgOf("after, by hand"));
+    expect(bare).toMatchObject({ changed: true, files: [], concepts: [] });
+    expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
   });
 
   it.skipIf(!hasCanvasCli(REPO_ROOT))("lists what `tldrawkc list` lists for the same documents", async () => {
