@@ -118,7 +118,7 @@ import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { FileLockError } from "./file-lock";
 import { checkConceptTopic, fileConceptUnderTopic, TopicError } from "../content/topics";
 import { WriteThroughError } from "../content/write-through";
-import { parseFrontmatter, readText } from "../index/frontmatter";
+import { parseFrontmatter, readList, readText } from "../index/frontmatter";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
 class CliError extends Error {}
@@ -522,7 +522,14 @@ commands.concept = async ({ values, positionals }, session) => {
           {
             concept: id,
             topic: topicSlug,
-            row: { title: readText(data, "title") ?? id, summary: readText(data, "summary"), path: rel(file) },
+            row: {
+              title: readText(data, "title") ?? id,
+              summary: readText(data, "summary"),
+              path: rel(file),
+              prerequisites: (["requires", "assumes"] as const).flatMap((kind) =>
+                readList(data, kind).map((slug) => ({ slug, kind })),
+              ),
+            },
           },
           {
             author: LOCAL_LEARNER_ID,
