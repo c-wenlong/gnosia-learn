@@ -704,7 +704,7 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
       `catalog topic rename --from --to` (edge case 2), `catalog topic relate`,
       `catalog topic archive`.
 - [x] `catalog tag add|edit`.
-- [ ] `learn concept add --topic` calls `catalog topic` internals to set
+- [x] `learn concept add --topic` calls `catalog topic` internals to set
       `concept.topic_slug`, replacing the text splice, lock and verify in
       `vocabulary-edit.ts:244-397`. The invariant that code enforces (a concept
       in exactly one topic, checked after the write) is now a column and a
@@ -718,8 +718,10 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
       author and the draft id in the reason, then enqueues the job. This
       supersedes D39 there (D16 here).
 - [ ] The planner's VOCABULARY block includes relations, so it can say "this
-      sits under `computer-networks`".
-- [ ] The web app's topic and tag readers switch to `dbSource`.
+      sits under `computer-networks`". The planner is not built (phase 1 of
+      STUDIO-CHAT-FIRST.md); what it will read is: `catalog topic ls --json`
+      returns every live topic with its relations, `incoming` edges and maps.
+- [x] The web app's topic and tag readers switch to `dbSource`.
 
 **Built** (the verbs) in `services/catalog/src/content/topics.ts`, `tags.ts`,
 `write-through.ts` and `commands/topic.ts`, tested in
@@ -772,6 +774,50 @@ list above, and why:
 - **`topic ls --json`** is what the planner will read in place of its
   VOCABULARY block: every live topic's slug, title, domain, summary, aliases,
   `relations`, `maps` and the `incoming` edges other topics hold.
+- **`learn concept add --topic`** calls `fileConceptUnderTopic` in
+  `content/topics.ts`: before the note is written, `checkConceptTopic` refuses
+  a topic that is not a live row, a concept already under another topic, a
+  knowledge base other than the tree topics were imported from, and a
+  `topics.yaml` out of step; after it, `concept.topic_slug` goes through the
+  seam (the row created from the note's title and summary when the catalog
+  has none, at the end of the topic's `maps.concepts`), `topics.yaml` is
+  rewritten from the rows, and the concepts indexer runs as before. The
+  `--json` shape is unchanged; `--reason` is optional there, with a default,
+  since the plugin's calls cannot be made to pass one (D15).
+  `vocabulary-edit.ts` is deleted before the flip rather than at it, since
+  nothing calls it; its lock and atomic replace moved to
+  `services/catalog/src/learn/file-lock.ts` for `course-edit.ts`, the one text
+  edit left until Track B.
+- **The readers** are `services/catalog/src/content/readers/topics.ts` and
+  `tags.ts`, both `ready`: `readTopicEntries` and `readTags` run the export's
+  own queries, so they return what `fileSource` returns for the database's own
+  export. `test/topic-readers.test.ts` holds them equal to the file reader on
+  the real tree, value for value, then flips both and reads them back through
+  `selectSource`. On a `createdb -T self_learn` copy migrated, imported and
+  flipped (parity clean: 86 topics, 23 domains, 294 aliases, 35 manimkc paths,
+  61 module and 32 concept mappings, 8 tags), two `next start` servers on
+  identical copies, one with the rows in charge and one with
+  `CONTENT_SOURCE=topics=files,tags=files`, served byte-identical server HTML
+  for all 47 routes tried (`/today`, `/courses`, the ten course pages,
+  `/learn`, every concept page, `/library`, `/review`), once the request's
+  own `asOf` timestamp is set aside. A single fetch can differ in the order
+  React streams its rows, between two fetches from the same server too, so
+  each route was fetched until a pair matched. The rendered DOM and full-page
+  screenshots at 1440 wide, light and dark, matched for 21 of those routes,
+  and `scripts/e2e.mjs` passed 12 of 12 against a copy of that database. The studio's planner path (the confirm card's
+  **Create topic and draw**) is not built, per phase 1's rule: the verbs it
+  will call are, and `topic add --dry-run --json` is the validation step D16
+  names.
+- **Flip day for topics and tags** is, on the migrated primary: `catalog index`
+  (so both were last imported from the repository), `catalog parity . --only
+  topics,tags`, `catalog flip topics`, `catalog flip tags`, then
+  `catalog export --only topics,tags --out .`. The last step matters: `flip`
+  checks parity but records no export hash, and until one is recorded every
+  import that reaches a flipped type refuses with "No export of tags is
+  recorded", `learn concept add --topic` included (its index run pulls in
+  courses, and courses pull in tags). The export into the working tree is a
+  no-op on the files; any `catalog topic` or `catalog tag` write records the
+  hash too.
 - **`--author`** names the person a write is for (the studio's Draw press);
   the default is the local learner. Every write needs `--reason`; a dry run
   does not.

@@ -890,6 +890,18 @@ maintainers.
 
 ### D39. When nothing fits, the planner writes the topic entry; drawing with no topic stays refused
 
+**Superseded by D16 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#d16-one-topic-writer-the-planners-topic-is-created-on-the-draw-press)**
+(2026-09-28). A topic is a database row written by one command,
+`catalog topic add`, so there is no YAML to paste and no index to wait for:
+the planner proposes the entry and its relations, the runner validates it with
+`catalog topic add --dry-run --json` (which also names near matches, edge case
+17 there) and stores it on the draft as `pending_topic`, and the confirm card's
+one button, **Create topic and draw**, runs `catalog topic add` with the person
+as author and the draft id in the reason, then enqueues. Drawing with no topic
+stays refused. The planner reads the vocabulary from
+`catalog topic ls --json`, relations included. The text below is kept as the
+decision it was.
+
 **Verdict:** the planner says nothing fits and writes the YAML entry for the
 person to add to `content/topics.yaml`. The runner recognises that reply (one
 validation failure, on `topic`, and a YAML block with the same slug) and stores
