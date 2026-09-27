@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/classes";
+import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
 import {
   bucketCounts,
-  INDEX_FILTERS,
   matchesFilter,
   matchesQuery,
+  statusFilterOptions,
   type GraphScope,
   type IndexFilter,
   type IndexRow,
@@ -66,6 +67,7 @@ export function LearnIndex({
     [rows, filter, query],
   );
   const counts = bucketCounts(rows);
+  const statusOptions = useMemo(() => statusFilterOptions(rows), [rows]);
   const nodes: GraphNode[] = useMemo(
     () => rows.map((r) => ({ id: r.id, title: r.title, bucket: r.bucket, pL: r.pL, courses: r.courses, domain: r.domain })),
     [rows],
@@ -101,13 +103,7 @@ export function LearnIndex({
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 basis-full flex-wrap gap-2 sm:basis-auto" role="group" aria-label="Filter by mastery">
-          {INDEX_FILTERS.map((f) => (
-            <Chip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
-              {f.label}
-            </Chip>
-          ))}
-        </div>
+        <FilterMenu label="Status" options={statusOptions} value={filter} defaultValue="all" onChange={setFilter} />
         <div className="ml-auto flex gap-2" role="group" aria-label="View">
           <Chip active={view === "table"} onClick={() => { setView("table"); setScope("neighbourhood"); }}>
             Table

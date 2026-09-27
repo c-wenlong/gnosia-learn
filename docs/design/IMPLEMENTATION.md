@@ -105,7 +105,9 @@ delete the alias block.
 
 Under [apps/web/src/components/ui/](../../apps/web/src/components/ui/), one
 file each, all safe in a server component (no `"use client"`, no state or
-effects; `Button` calls `useId`, which React allows there). The
+effects; `Button` calls `useId`, which React allows there), except
+`FilterMenu`, which holds open state and takes an `onChange`, so a client
+component renders it. The
 class strings live in the React-free [classes.ts](../../apps/web/src/components/ui/classes.ts),
 so a client component, a server component or a test can compose them.
 Import from `@/components/ui` or from the file.
@@ -117,6 +119,7 @@ Import from `@/components/ui` or from the file.
 | `CardAction` | `href`, `children`: the "See all" link for a card's `action` slot | `Card` action |
 | `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
 | `Chip` | `active?: boolean`, `size?: "md" \| "sm"` (34px or 28px), `href?` (a link), `onClick?` (a toggle with `aria-pressed`), `title?`, `className?`. Neither `href` nor `onClick` renders a static label | `Chip` |
+| `FilterMenu` | `label: string` ("Type"), `options: FilterOption[]` (`value`, `label`, `short?` for the trigger, `count?` at the right, `detail?` as a muted second line, `section?` heading), `value`, `defaultValue` (the "All" value; any other fills the trigger), `onChange(value)`, `busy?` (dims the trigger while a navigation runs), `className?`. A `Chip`-styled trigger reading "Label: Value" over an ARIA listbox: arrows, Home, End, typeahead, Enter or Space picks, Escape, Tab or a click outside closes. The first option is "All" and is how a filter is cleared. Single-select. A client component, the kit's only one; its model is the React-free `filter-menu.ts` | none (see Deviations) |
 | `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
 | `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "div"`, `className?` | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
@@ -138,6 +141,7 @@ The pure helpers beside them:
 
 | Module | Exports |
 | --- | --- |
+| [`@/components/ui/filter-menu`](../../apps/web/src/components/ui/filter-menu.ts) | `type FilterOption`, `sectionsOf`, `triggerText`, `nextIndexForKey`, `typeaheadIndex`, `popoverShift`: the option model and keyboard rules behind `FilterMenu` |
 | [`@/components/ui/classes`](../../apps/web/src/components/ui/classes.ts) | `cx(...)`, `buttonClasses({ variant, size, block, className })`, `chipClasses({ active, size, interactive, className })`, `inputClasses({ pill, className })`, `cardClasses({ tight, className })` |
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
@@ -549,6 +553,7 @@ in that session.
 | Settings, Reminders | "Facts only · 9:00" | a disabled select reading "Off", with a note that nothing is stored | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
 | Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what the choice does today (Reminders and Motion that they are not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
+| Filter rows on Courses, Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Courses has Progress and Tag, Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows, Courses eleven. Picking "All" clears a group, so there is no separate clear button. Courses' two menus combine (in progress and tagged), where the old chips were one choice among all eleven |
 
 ### Session focus mode (phase 1d)
 
@@ -573,8 +578,8 @@ in that session.
 
 | Where | Hi-fi | Built | Why |
 | --- | --- | --- | --- |
-| Library filter row | six kind chips and three course chips on one line | the kind chips, then a chip for every course that has an asset (ten today), wrapping; the companion kinds (captions, chapters, diagram source, transcript) on a quiet line of small chips under it | ten courses do not fit one line; the companion files keep the chips, counts and `?kind=` views the old page gave them |
-| Library course chips | "CP4281" | the course code, with the course's title and asset count as the tooltip; the active chip clears itself | there is no "All courses" chip in the frame |
+| Library filter row | six kind chips and three course chips on one line | a Type menu and a Course menu, then the sort and the search on the right; the companion kinds (captions, chapters, diagram source, transcript) are a "Companion files" section at the foot of the Type menu, and the count line says how many rows All kinds leaves out | ten courses and four companion kinds did not fit one line; the companion kinds are values of the same `?kind=`, so a second control for them would disagree with the Type trigger whenever one was chosen |
+| Library course options | "CP4281" | the course code, with its title as a muted second line and its asset count at the right | the title was a tooltip on the old chips; in a list it has room to be read |
 | Library count | "208 assets" | the standalone count (135), or "12 of 135 assets" once anything is filtered | the other 71 rows are companion files the default view leaves out |
 | Library card meta | "4:12 · manim" | the tool and the size ("manim · 9.6 MB") | the catalog records no duration |
 | Library card concept | a concept with a mastery dot on every card | the first concept from `asset_concept` with its dot and "+n" for more; with none, the asset's topic in plain text and no dot | only notes, sessions and the two diagrams have `asset_concept` rows; no video does yet |
