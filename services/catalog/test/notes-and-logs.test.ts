@@ -6,6 +6,7 @@ import { session, sessionLogEntry } from "@self-learn/schema";
 import { asc, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderType } from "../src/content/export";
+import { DB_READERS } from "../src/content/flip";
 import { dbSource } from "../src/content/source";
 import { compare } from "../src/content/parity";
 import { readTypeFiles } from "../src/content/layout";
@@ -148,6 +149,8 @@ describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch
     }
     expect(await rows.concept("no-such-note")).toBeNull();
     expect(await rows.sessionLog("no-such-log")).toBeNull();
+    // Both readers say so, which is what lets `catalog flip` take the types.
+    expect(DB_READERS.has("concepts") && DB_READERS.has("sessions")).toBe(true);
   });
 
   it("imports each existing log as one entry, and a second import appends nothing", async () => {
