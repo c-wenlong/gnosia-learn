@@ -65,6 +65,19 @@ describe("nothing there to talk to", () => {
     });
   });
 
+  it("reads every attempt, however many addresses the host resolved to", () => {
+    const many = new AggregateError(
+      Array.from({ length: 40 }, () => errno("ECONNREFUSED")),
+      "",
+    );
+    expect(classifyConnectionFailure(wrapped(many))?.unreachable).toBe(true);
+    const lastIsLive = new AggregateError(
+      [...Array.from({ length: 39 }, () => errno("ECONNREFUSED")), errno("ETIMEDOUT")],
+      "",
+    );
+    expect(classifyConnectionFailure(wrapped(lastIsLive))?.unreachable).toBe(false);
+  });
+
   it("is unknown when one address failed for a reason it cannot read", () => {
     const partial = Object.assign(new AggregateError([errno("ECONNREFUSED"), new Error("??")], ""), {
       code: "ECONNREFUSED",

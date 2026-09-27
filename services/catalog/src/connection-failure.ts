@@ -65,17 +65,29 @@ const KNOWN: Record<string, { unreachable: boolean; reason: string }> = {
  * nothing else is using the database, which is what exit 3 promises.
  */
 export function classifyConnectionFailure(error: unknown): ConnectionFailure | null {
-  return classify(error, new Set());
+  return classify(error, []);
 }
 
-function classify(node: unknown, seen: Set<unknown>): ConnectionFailure | null {
-  // Bounded, because `cause` is just a property and nothing stops a cycle.
-  if (typeof node !== "object" || node === null || seen.has(node) || seen.size >= 16) return null;
-  seen.add(node);
+/**
+ * How deep a `cause` chain is followed. drizzle's wrapper, then the driver's
+ * error, then an aggregate's attempts is three; the rest is headroom.
+ */
+const MAX_DEPTH = 8;
+
+/**
+ * `path` is the chain from the root to `node`, so a cycle is caught where it
+ * closes and the bound is on depth, not on how many nodes were visited: a
+ * host that resolved to many addresses has many sibling attempts, and every
+ * one of them has to be read for "every attempt" to mean every attempt.
+ */
+function classify(node: unknown, path: readonly unknown[]): ConnectionFailure | null {
+  if (typeof node !== "object" || node === null) return null;
+  if (path.length >= MAX_DEPTH || path.includes(node)) return null;
+  const below = [...path, node];
 
   const errors = (node as { errors?: unknown }).errors;
   if (Array.isArray(errors) && errors.length > 0) {
-    const attempts = errors.map((attempt) => classify(attempt, seen));
+    const attempts = errors.map((attempt) => classify(attempt, below));
     const live = attempts.find((attempt) => attempt !== null && !attempt.unreachable);
     if (live !== undefined) return live;
     if (attempts.every((attempt) => attempt !== null)) return attempts[0]!;
@@ -86,7 +98,7 @@ function classify(node: unknown, seen: Set<unknown>): ConnectionFailure | null {
   if (typeof code === "string" && Object.hasOwn(KNOWN, code)) {
     return { ...KNOWN[code]!, code };
   }
-  return classify((node as { cause?: unknown }).cause, seen);
+  return classify((node as { cause?: unknown }).cause, below);
 }
 
 /** The one line the CLI prints for it, e.g. `database unreachable: connection refused (ECONNREFUSED)`. */
