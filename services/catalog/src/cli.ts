@@ -49,6 +49,7 @@ import {
   type SessionStartResult,
 } from "./commands/session";
 import { formatShow, runShow } from "./commands/show";
+import { formatTag, formatTopic, runTag, runTopic, TopicUsage } from "./commands/topic";
 import { formatStatus, runStatus } from "./commands/status";
 import {
   classifyConnectionFailure,
@@ -155,6 +156,25 @@ Commands:
                            pending blob. --fix deletes day-old
                            orphans, marks broken rows pending, and deletes
                            day-old pending rows nothing points at.
+  topic <verb>             The topic vocabulary, written through the catalog
+                           with a --reason, and content/topics.yaml rewritten
+                           from the rows after each write:
+                             add --slug S --title T --domain D [--summary X]
+                               [--alias A]... [--relate kind:slug]...
+                               [--dry-run]: --dry-run validates and lists
+                               near matches (pg_trgm) without writing
+                             edit <slug> [--title] [--summary] [--domain]
+                               [--alias A]... [--add-alias A]...
+                               [--drop-alias A]...
+                             rename --from OLD --to NEW
+                               [--restamp-diagrams-later]
+                             relate <slug> <kind> <other> [--remove], kind
+                               one of broader, related, precedes
+                             archive <slug>, restore <slug>
+                             ls [--domain D]
+  tag <verb>               The cross-course themes, the same way:
+                             add --id ID --label L --description D
+                             edit <id> [--label] [--description]
   renumber <list>          Spread a list's positions back out to 1000, 2000,
                            ... in its current order, one revision per row
                            moved. Needs --reason. Lists: topics, tags,
@@ -174,6 +194,8 @@ Options:
   --out DIR                export: where to write. Created if missing.
   --source NAME            asset upload: what to upload. Only manimkc.
   --dry-run                asset upload: hash and report, write nothing.
+                           topic add: validate, place and list near
+                           matches, write nothing.
   --blob-root DIR          asset upload, blob audit: the fs store's root.
                            Default: $SELF_LEARN_HOME/blobs, else
                            ~/.self-learn/blobs.
@@ -183,7 +205,10 @@ Options:
                            with its own --reason, in the same order.
   --reason TEXT            flip: why a --waive is acceptable. renumber: why
                            the list is being renumbered. asset upload: the
-                           reason on each asset revision it writes.
+                           reason on each asset revision it writes. topic,
+                           tag: the revision's reason, required on every write.
+  --author ID              topic, tag: who the revision names. Default:
+                           the local learner.
   --topic SLUG             renumber concepts, modules: which topic's list.
   --module ID              renumber items: which module.
   --manimkc-root PATH      index, asset upload: the manimkc checkout to read,
@@ -273,7 +298,9 @@ type Command =
   | "flip"
   | "renumber"
   | "asset"
-  | "blob";
+  | "blob"
+  | "topic"
+  | "tag";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -296,6 +323,8 @@ const COMMANDS: readonly Command[] = [
   "renumber",
   "asset",
   "blob",
+  "topic",
+  "tag",
 ];
 
 /**
@@ -373,6 +402,19 @@ export async function main(argv: string[]): Promise<number> {
         "dry-run": { type: "boolean", default: false },
         "blob-root": { type: "string" },
         fix: { type: "boolean", default: false },
+        slug: { type: "string" },
+        domain: { type: "string" },
+        summary: { type: "string" },
+        alias: { type: "string", multiple: true },
+        "add-alias": { type: "string", multiple: true },
+        "drop-alias": { type: "string", multiple: true },
+        relate: { type: "string", multiple: true },
+        to: { type: "string" },
+        remove: { type: "boolean", default: false },
+        "restamp-diagrams-later": { type: "boolean", default: false },
+        label: { type: "string" },
+        description: { type: "string" },
+        author: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -592,6 +634,16 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatDiff(result));
         break;
       }
+      case "topic": {
+        const result = await runTopic(positionals, values, schemaCurrent);
+        emit(result, formatTopic(result));
+        break;
+      }
+      case "tag": {
+        const result = await runTag(positionals, values, schemaCurrent);
+        emit(result, formatTag(result));
+        break;
+      }
       case "doctor": {
         const result = await runDoctor();
         emit(result, formatDoctor(result));
@@ -605,7 +657,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     return 0;
   } catch (error) {
-    if (error instanceof Usage || error instanceof RevisionUsage) {
+    if (error instanceof Usage || error instanceof RevisionUsage || error instanceof TopicUsage) {
       process.stderr.write(`${error.message}\n\n${USAGE}`);
       return 2;
     }
