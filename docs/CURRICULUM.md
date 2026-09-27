@@ -15,9 +15,11 @@ everywhere.
 | `content/tags.yaml` | The cross-course themes each course's `tags:` names |
 
 There is no TypeScript copy. `apps/web/src/data/courses/index.ts` is a thin
-server-only module over the reader, holding the lookups pages call (`getCourse`,
-`getModule`, `findTopic`, `getCourseTopicIds`, `getRelatedCourses`,
-`totalTopicCount`) and nothing else.
+server-only module over the reader, holding `getCourses()` and the lookups pages
+call (`getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
+`getRelatedCourses`, `totalTopicCount`) and nothing else. It reads through the
+content seam once per request, so an edit to a course file shows on the next
+page load of a running server, with no restart.
 
 ## Adding or changing a course
 

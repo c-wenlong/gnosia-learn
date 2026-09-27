@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { CoursePath, type PathModuleData } from "@/components/course-path/CoursePath";
-import { courses, getCourse, getRelatedCourses } from "@/data/courses";
-import { topics } from "@/data/topics";
+import { getCourse, getCourses, getRelatedCourses } from "@/data/courses";
+import { getTopics } from "@/data/topics";
 import { loadCourseAssets } from "@/lib/course-assets";
 import {
   conceptsForTopic,
@@ -12,13 +12,9 @@ import {
 } from "@/lib/course-path";
 import { loadKnowledgeBase } from "@/lib/kb/load";
 
-export function generateStaticParams() {
-  return courses.map((c) => ({ slug: c.slug }));
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const course = getCourse(slug);
+  const course = await getCourse(slug);
   if (!course) return { title: "Course not found" };
   return { title: `${course.code} · ${course.title}` };
 }
@@ -39,13 +35,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  */
 export default async function CoursePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const course = getCourse(slug);
+  const course = await getCourse(slug);
   if (!course) notFound();
 
   const moduleTopics = course.modules.map((m) => m.topic);
-  const [{ kb, reachable: kbReachable }, assets] = await Promise.all([
+  const [{ kb, reachable: kbReachable }, assets, courses, topics] = await Promise.all([
     loadKnowledgeBase(),
     loadCourseAssets(moduleTopics),
+    getCourses(),
+    getTopics(),
   ]);
 
   const authoredBySlug = new Map(topics.map((t) => [t.slug, t.maps.concepts]));
@@ -66,7 +64,7 @@ export default async function CoursePage({ params }: { params: Promise<{ slug: s
     };
   }
 
-  const related = getRelatedCourses(course).map((r) => ({
+  const related = getRelatedCourses(courses, course).map((r) => ({
     slug: r.slug,
     code: r.code,
     title: r.title,

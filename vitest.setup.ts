@@ -65,7 +65,10 @@ function farm(from: string, into: string, rebuilt: readonly string[] = []): void
 
 function studioRepoRoot(): string {
   const root = mkdtempSync(path.join(realpathSync(tmpdir()), "self-learn-studio-"));
-  farm(REPO_ROOT, root, ["learn"]);
+  // `.studio` is rebuilt as nothing at all: it is the runner's real state
+  // (job workspaces, the content cache), and a suite that does not set
+  // STUDIO_HOME would otherwise write through the link into it.
+  farm(REPO_ROOT, root, ["learn", ".studio"]);
   farm(path.join(REPO_ROOT, "learn"), path.join(root, "learn"), ["assets"]);
   farm(TRACKED_ASSETS, path.join(root, "learn", "assets"), [".candidates"]);
   // The studio writes candidates here and the catalog never indexes a dot

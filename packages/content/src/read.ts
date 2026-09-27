@@ -4,14 +4,13 @@ import path from "node:path";
 import { ContentError } from "./errors";
 
 /**
- * Reading is synchronous on purpose.
+ * The parsers are synchronous, and the readers are not.
  *
- * The web app's entry point is a module-level `export const courses`, evaluated
- * once per server process, and `generateStaticParams` is called for it before
- * anything can await. An async loader would push a promise through every one of
- * those call sites to save microseconds on a read that happens once. The
- * catalog's indexers are async but call this from inside an async function, so
- * they lose nothing.
+ * `loadCourses` and friends stay synchronous because the catalog's indexers
+ * call them and gain nothing from a promise. Readers do not call them: they go
+ * through `ContentSource` (`./source.ts`), which is async because the database
+ * implementation behind it has to be, and `fileSource` wraps these functions
+ * so the validation is the same on both paths.
  */
 
 /** Every reader takes the repo root, defaulting to where the process started. */

@@ -1,0 +1,48 @@
+import { CONTENT_TYPES, METHOD_TYPES, type ContentSource } from "@self-learn/content";
+import { describe, expect, it } from "vitest";
+
+import { dbSource, NotMigratedError } from "../src/content/source";
+import type { CatalogDatabase } from "../src/db";
+
+/**
+ * The database half of the reader seam, before any track fills it in.
+ *
+ * Needs no Postgres: the stub runs no query, and that is part of what is
+ * pinned. A method that answered with an empty list instead of refusing would
+ * render a site with nothing in it and no error anywhere.
+ */
+
+// Never touched: a method that reached for it would throw on the property read.
+const db = new Proxy({} as CatalogDatabase, {
+  get: (_, key) => {
+    throw new Error(`dbSource queried the database (${String(key)}) before its track landed`);
+  },
+});
+
+describe("dbSource", () => {
+  const source = dbSource(db);
+  const calls: Record<keyof ContentSource, () => Promise<unknown>> = {
+    topics: () => source.topics(),
+    tags: () => source.tags(),
+    courses: () => source.courses(),
+    concept: () => source.concept("dot-product"),
+    sessionLog: () => source.sessionLog("2026-08-19-react-agents"),
+    diagram: () => source.diagram("dot-product"),
+  };
+
+  it.each(Object.keys(calls) as (keyof ContentSource)[])("refuses %s with its type named", async (method) => {
+    const type = METHOD_TYPES[method];
+    const refused = calls[method]().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    const error = await refused;
+    expect(error).toBeInstanceOf(NotMigratedError);
+    expect((error as NotMigratedError).type).toBe(type);
+    expect((error as Error).message).toMatch(new RegExp(`^${type} is not migrated yet`));
+  });
+
+  it("covers every content type", () => {
+    expect(new Set(Object.values(METHOD_TYPES))).toEqual(new Set(CONTENT_TYPES));
+  });
+});
