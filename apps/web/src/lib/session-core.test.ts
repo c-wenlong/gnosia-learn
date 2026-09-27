@@ -7,6 +7,8 @@ import {
   isEmptyStep,
   sessionCanAsk,
   withoutEmptySteps,
+  withConsequence,
+  NOTHING_TO_ASK,
   distractorPool,
   nextConcept,
   wrongOptionsFor,
@@ -230,6 +232,54 @@ describe("buildSessionPlan", () => {
     expect(parseMode("learn")).toBe("learn");
     expect(parseMode(undefined)).toBe("learn");
     expect(parseMode(["check"])).toBe("learn");
+  });
+});
+
+describe("withConsequence", () => {
+  const then = "Nothing is recorded; carry on.";
+
+  it("adds the full stop an error string leaves off", () => {
+    expect(withConsequence("All free providers failed", then)).toBe(
+      "All free providers failed. Nothing is recorded; carry on.",
+    );
+  });
+
+  it.each([
+    ["The tutor could not be reached."],
+    ["Is the tutor configured?"],
+    ["The tutor is resting!"],
+    ["The tutor is thinking…"],
+    ["The tutor did not answer (HTTP 502)."],
+    ["The tutor did not answer (HTTP 502.)"],
+  ])("leaves a reason that already ends a sentence alone: %s", (reason) => {
+    expect(withConsequence(reason, then)).toBe(`${reason} ${then}`);
+  });
+
+  it("collapses a doubled full stop, and leaves a three-dot ellipsis", () => {
+    expect(withConsequence("The tutor failed..", then)).toBe(`The tutor failed. ${then}`);
+    expect(withConsequence("The tutor failed...", then)).toBe(`The tutor failed... ${then}`);
+  });
+
+  it("lets the consequence stand alone when there is no reason", () => {
+    expect(withConsequence("", then)).toBe(then);
+    expect(withConsequence("   ", then)).toBe(then);
+  });
+
+  it("ignores trailing whitespace on the reason", () => {
+    expect(withConsequence("All free providers failed  \n", then)).toBe(
+      "All free providers failed. Nothing is recorded; carry on.",
+    );
+    expect(withConsequence("The tutor could not be reached. ", then)).toBe(
+      "The tutor could not be reached. Nothing is recorded; carry on.",
+    );
+  });
+
+  it("still ends the reason when there is no consequence", () => {
+    expect(withConsequence("Concept not found", "")).toBe("Concept not found.");
+  });
+
+  it("prints the fixed reason unchanged", () => {
+    expect(withConsequence(NOTHING_TO_ASK, then)).toBe(`${NOTHING_TO_ASK} ${then}`);
   });
 });
 
