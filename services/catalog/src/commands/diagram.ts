@@ -266,6 +266,7 @@ export function formatDiagram(verb: ParsedDiagram["verb"], result: DiagramComman
     `  svg       ${put.svg === null ? "none" : `${put.svg.key}${put.svg.current ? "" : " (stale: exported from an earlier document)"}`}`,
   ];
   if (put.job !== null) lines.push(`  job       ${put.job}`);
+  if (put.files.length > 0) lines.push(`  files     ${put.files.join(", ")}`);
   for (const note of put.notes) lines.push(`  note      ${note}`);
   return lines.join("\n");
 }

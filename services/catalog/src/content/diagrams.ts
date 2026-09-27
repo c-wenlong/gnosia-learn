@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { BlobStore } from "@self-learn/blob";
+import { key as blobKey, type BlobStore } from "@self-learn/blob";
 import {
   assetJob,
   blobObject,
   concept,
+  contentSource,
   diagram,
   job as jobTable,
   LOCAL_LEARNER_ID,
@@ -21,7 +22,7 @@ import { ASSETS_DIR, resolveSubject, type Subject } from "../index/diagrams";
 import { IndexErrors } from "../index/errors";
 import { ASSET_PREFIX } from "../index/source";
 import { metaFromDocument, type DiagramMeta } from "../index/tldr";
-import { readBlob, uploadBlob } from "./blob";
+import { hashFile, readBlob, uploadBlob } from "./blob";
 import { DIAGRAM_SLUG, diagramPaths, documentBytes, documentProblem, sha256 } from "./diagram-document";
 import { latestRevisions } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
@@ -61,7 +62,8 @@ export class DiagramError extends Error {
       | "job"
       | "no-checkout"
       | "dirty-checkout"
-      | "stale-base",
+      | "stale-base"
+      | "write-through",
     message: string,
   ) {
     super(message);
@@ -179,6 +181,8 @@ export interface PutResult {
   changed: boolean;
   revisions: { type: string; id: string; revision: number; changed: boolean }[];
   job: string | null;
+  /** Files written through to the tree while the files still own diagrams (D17); empty after the flip. */
+  files: string[];
   notes: string[];
 }
 
@@ -236,16 +240,53 @@ export async function putDiagram(
 
   const job = input.jobId === undefined ? null : await checkJob(db, input.jobId, slug, subject.topicSlug);
 
-  // The bytes go first and on their own: a failure from here to the commit
-  // below leaves at most a pending row, and no row pointing at it.
-  let svg: PutResult["svg"] = null;
+  let svgFacts: { sha256: string; bytes: number; key: string } | null = null;
   if (input.svg !== null) {
     await readText(input.svg, "an SVG");
-    const uploaded = await uploadBlob(db, store, { ownerId, file: input.svg, mime: "image/svg+xml", ext: "svg" });
-    svg = { key: uploaded.key, sha256: uploaded.sha256, bytes: uploaded.bytes, uploaded: uploaded.uploaded, current: true };
+    const facts = await hashFile(input.svg);
+    svgFacts = { ...facts, key: blobKey(ownerId, facts.sha256, "svg") };
   }
 
   const [existing] = await db.select().from(diagram).where(eq(diagram.slug, slug)).limit(1);
+  const latestDiagram = (await latestRevisions(db, "diagram", [slug])).get(slug);
+
+  // A retried put under the same job: its own earlier write is the latest
+  // revision and holds exactly these bytes, so this is that write again, and
+  // the base it started from is honoured as the one that write moved past.
+  // Anything else under a job is judged as a new write.
+  let ownRetry = false;
+  if (input.jobId !== undefined && latestDiagram !== undefined && !latestDiagram.deleted && existing !== undefined) {
+    const [own] = await db
+      .execute<{ job_id: string | null }>(sql`select job_id from content_revision where id = ${latestDiagram.id}`)
+      .then((r) => r.rows);
+    ownRetry =
+      own?.job_id === input.jobId &&
+      existing.documentHash === docHash &&
+      (svgFacts === null || existing.svgBlobKey === svgFacts.key);
+  }
+  if (job?.state === "accepted" && !ownRetry) {
+    throw new DiagramError(
+      "job",
+      `job ${input.jobId} is accepted: what it landed is recorded and is not rewritten under its ` +
+        `name. Put without --job to change the diagram.`,
+    );
+  }
+
+  // The bytes go first and on their own: a failure from here to the commit
+  // below leaves at most a pending row, and no row pointing at it.
+  let svg: PutResult["svg"] = null;
+  if (input.svg !== null && svgFacts !== null) {
+    const uploaded = await uploadBlob(db, store, {
+      ownerId,
+      file: input.svg,
+      mime: "image/svg+xml",
+      ext: "svg",
+      sha256: svgFacts.sha256,
+      bytes: svgFacts.bytes,
+    });
+    svg = { key: uploaded.key, sha256: uploaded.sha256, bytes: uploaded.bytes, uploaded: uploaded.uploaded, current: true };
+  }
+
   let svgDocumentHash: string | null = svg === null ? null : docHash;
   if (svg === null && existing !== undefined && existing.svgBlobKey !== null) {
     // Keep the SVG there is. It was exported from `svg_document_hash`, which
@@ -263,17 +304,9 @@ export async function putDiagram(
     }
   }
 
-  const latestDiagram = (await latestRevisions(db, "diagram", [slug])).get(slug);
   const latestAssets = await latestRevisions(db, "asset", [ids.tldr, ids.svg]);
-  let base = input.base === undefined ? (latestDiagram?.id ?? null) : input.base;
-  if (input.jobId !== undefined && latestDiagram !== undefined && base !== latestDiagram.id) {
-    // A retried accept: this job's own earlier put is the latest, so the
-    // write is the same one again, not a write over somebody else's.
-    const [own] = await db.execute<{ job_id: string | null }>(
-      sql`select job_id from content_revision where id = ${latestDiagram.id}`,
-    ).then((r) => r.rows);
-    if (own?.job_id === input.jobId) base = latestDiagram.id;
-  }
+  const base =
+    input.base === undefined || ownRetry ? (latestDiagram?.id ?? null) : input.base;
 
   const common = {
     author: input.author,
@@ -371,6 +404,7 @@ export async function putDiagram(
     throw error;
   }
 
+  const files = await writeThrough(db, slug, input.tldr, input.svg, notes);
   const own = results[0] as WriteContentResult;
   return {
     ok: true,
@@ -384,8 +418,66 @@ export async function putDiagram(
     changed: results.some((r) => r.changed),
     revisions: results.map((r) => ({ type: r.type, id: r.id, revision: r.revisionId, changed: r.changed })),
     job: input.jobId ?? null,
+    files,
     notes,
   };
+}
+
+/**
+ * D17 of docs/CONTENT-MIGRATION.md: while the files still own diagrams, the
+ * write reaches them too, or the next `catalog index` would read the old files
+ * back and undo it (a new diagram pruned, an edit reverted). They are written
+ * under the directory the diagrams were last imported from, which for the
+ * owner is the repository and for a test its own fixture tree, exactly as the
+ * writer was given them. Once `catalog flip diagrams` hands the type to the
+ * database nothing reads those files, the import skips them, and a put writes
+ * none.
+ *
+ * After the commit, and loud when it fails: the rows are written, and a rerun
+ * of the same put changes nothing and writes the files again.
+ */
+async function writeThrough(
+  db: CatalogDatabase,
+  slug: string,
+  tldr: string,
+  svg: string | null,
+  notes: string[],
+): Promise<string[]> {
+  const [owner] = await db
+    .select({ source: contentSource.source })
+    .from(contentSource)
+    .where(eq(contentSource.type, "diagrams"));
+  if (owner?.source === "db") return [];
+  const [run] = await db
+    .execute<{ root: string | null }>(sql`select metadata ->> 'root' as root from index_run where source = 'diagrams'`)
+    .then((r) => r.rows);
+  const root = run?.root ?? null;
+  if (root === null) {
+    notes.push(
+      "diagrams have never been imported here, so no directory owns their files and none was written",
+    );
+    return [];
+  }
+  const paths = diagramPaths(slug);
+  const written: string[] = [];
+  try {
+    await mkdir(path.join(root, ASSETS_DIR), { recursive: true });
+    await writeAtomic(path.join(root, paths.tldr), await readFile(tldr));
+    written.push(paths.tldr);
+    if (svg !== null) {
+      await writeAtomic(path.join(root, paths.svg), await readFile(svg));
+      written.push(paths.svg);
+    }
+  } catch (error) {
+    throw new DiagramError(
+      "write-through",
+      `${slug} is stored, and writing it to ${root} failed (${(error as Error).message}). The files ` +
+        `still own diagrams until the flip, so an index would read the old ones back: run the ` +
+        `same put again, which changes nothing and writes them.`,
+    );
+  }
+  notes.push(`the files still own diagrams until \`catalog flip diagrams\`, so ${written.join(" and ")} were written under ${root}`);
+  return written;
 }
 
 function subjectLinks(subject: Subject, derivedFrom: string | null): Record<string, Record<string, unknown>[]> {
@@ -663,7 +755,9 @@ export async function checkoutState(db: CatalogDatabase, slug: string, dir: stri
   // the stored document: nothing says what it started from, so it is kept.
   let dirty: boolean;
   if (record !== null) {
-    dirty = current !== record.fileHash;
+    // The SVG counts too: one exported since the checkout and not committed
+    // is work a refresh would throw away as surely as an edited drawing.
+    dirty = current !== record.fileHash || (await fileHash(paths.svg)) !== record.svgHash;
   } else if (current === null) {
     dirty = false;
   } else {

@@ -853,16 +853,20 @@ around the list above, and why:
   into the working tree after the diagrams flip rewrites the two tracked
   files' key order once, and that export is also what records the export hash
   a later `catalog index` checks the tree against (edge case 12).
-- **No write-through export for diagrams (D17).** D17 exists because other
-  types' readers validate against files (courses against `topics.yaml`).
-  Nothing validates against a diagram file: the embed resolves through the
-  asset row and `/api/assets/{id}/file`, which reads the blob first. So an
-  Accept lands rows and a blob and no file, as the done-when asks, and the
-  tree's files stay the last export, which `catalog index` skips.
+- **Write-through until the flip, then no file (D17).** While the files own
+  diagrams, `put` also writes the `.tldr` and `.svg` it was given under the
+  directory diagrams were last imported from, or the next `catalog index`
+  would read the old files back and undo it (caught in review). Once
+  `catalog flip diagrams` hands the type to the database nothing validates
+  against a diagram file (the embed resolves through the asset row and
+  `/api/assets/{id}/file`, which reads the blob first), the import skips them,
+  and a put writes none: the done-when's "a row and a blob and no file".
 - **`put` without `--base` writes over whatever is latest**, for a person at a
   terminal. `commit` always passes the checkout's base, and the studio passes
   the revision its job started from. A retried `put --job` whose own earlier
-  write is the latest is the same write again and changes nothing.
+  write is the latest and holds the same bytes is that write again and
+  changes nothing; different bytes are judged as a new write, and an accepted
+  job's output is never rewritten under its name.
 - **Checkouts keep a record beside the file** (`<slug>.checkout.json`: base
   revision, the hash of what was written), so a commit needs no base passed in
   and an uncommitted edit is visible without the database. A checkout with
