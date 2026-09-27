@@ -509,7 +509,8 @@ refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
 - [x] `catalog flip <type> [--strict] [--waive <rule> --reason ...]`: writes
       the `content_source` row, arms the type's write guards, and with
       `--strict` arms its completeness rules once `catalog doctor` reports no
-      violator. Built and tested on scratch databases; nothing is flipped.
+      violator. Built and tested on scratch databases; nothing is flipped, and
+      nothing can be until a track builds its type's database reader.
 
 **Built** in `services/catalog/src/content/` (`layout.ts`, `export.ts`,
 `yaml-out.ts`, `parity.ts`, `ownership.ts`, `flip.ts`), the `tags` indexer, and
@@ -544,12 +545,22 @@ around the list above, and why:
   directory their import read (`index_run.metadata.root`), each checked
   against its row's `content_hash`, until Tracks C and D move the text into
   rows. The export refuses a file it cannot vouch for.
-- **`catalog parity` records its result** on `content_source.parity_report`,
-  and `catalog flip` refuses without a clean one newer than the type's last
-  import: the plan's "parity clean, then flip" as a check rather than a habit.
-  Flip arms the triggers before counting violators, inside its transaction,
-  so the count cannot go stale before the commit. `manimkc` cannot be flipped
+- **`catalog flip` runs parity itself**, against the files the type was last
+  imported from and under the type's revision locks, and records it on
+  `content_source.parity_report`: the plan's "parity clean, then flip" as a
+  check rather than a habit, and one no edit made since the import can slip
+  past. It also refuses a type whose `dbSource` method is not built
+  (`DB_READERS`, empty today), because readers follow the row and would all
+  fail. Flip arms the triggers before counting violators, inside its
+  transaction, so the count cannot go stale before the commit, and a waiver
+  disarms a rule an earlier strict flip armed. `manimkc` cannot be flipped
   until Track E defines a video's parity.
+- **A tag gone from `tags.yaml` while the database owns courses is refused**
+  by name, since the courses source will not run to rewrite the course's
+  links; while courses is on files the prune clears them and the courses
+  source writes them back in the same import.
+- **`catalog export` refuses to write outside `--out`**, checking every
+  rendered path before writing any.
 - **An import of a `db` type** skips it when its files hash to the last
   export and refuses otherwise, naming the files that differ from what the
   database would write; with no export recorded it refuses and says to export

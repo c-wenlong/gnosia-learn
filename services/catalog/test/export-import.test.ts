@@ -409,6 +409,9 @@ describe.skipIf(!reachable.ok)("the round trip on a small tree", () => {
   });
 });
 
+/** The types these tests flip. No track has built a database reader yet, so the real set is empty. */
+const READERS = new Set(["tags", "courses"] as const);
+
 describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", () => {
   let scratch: Scratch;
   let fixture: Fixture;
@@ -431,36 +434,49 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     if (out !== undefined) await rm(out, { recursive: true, force: true });
   });
 
-  it("refuses to flip a type with no parity report, and one whose report is not clean", async () => {
-    await expect(runFlip({ type: "tags" })).rejects.toThrow(/tags has no parity report/);
-    const empty = await tempDir("flip-empty");
-    try {
-      await runParity({ dir: empty, only: ["tags"] });
-    } finally {
-      await rm(empty, { recursive: true, force: true });
-    }
-    await expect(runFlip({ type: "tags" })).rejects.toThrow(/found \d+ mismatch/);
+  it("refuses a type whose database reader is not built, since every reader would then fail", async () => {
+    await expect(runFlip({ type: "tags" })).rejects.toThrow(/tags has no database reader yet/);
   });
 
   it("refuses manimkc, which has no export and so no parity", async () => {
-    await expect(runFlip({ type: "manimkc" })).rejects.toThrow(/cannot be flipped yet/);
+    await expect(runFlip({ type: "manimkc", readers: new Set(["manimkc"]) })).rejects.toThrow(/cannot be flipped yet/);
   });
 
-  it("flips tags after a clean parity, arms its guard, and hands readers the row", async () => {
-    await runExport({ out });
-    expect((await runParity({ dir: out })).clean).toBe(true);
-    const result = await runFlip({ type: "tags" });
+  it("refuses while the files the type was imported from say something the database does not", async () => {
+    const file = path.join(fixture.root, "content/tags.yaml");
+    const original = await readFile(file, "utf8");
+    await writeFile(file, original.replace("label: later", "label: edited after the import"));
+    try {
+      await expect(runFlip({ type: "tags", readers: READERS })).rejects.toThrow(
+        /tags is not the same in the database as in .*changed tag later: label/s,
+      );
+      expect((await contentOwnership(scratch.db)).tags).toBeUndefined();
+    } finally {
+      await writeFile(file, original);
+    }
+  });
+
+  it("flips tags when parity is clean, arms its guard, and hands readers the row", async () => {
+    const result = await runFlip({ type: "tags", readers: READERS });
     expect(result).toMatchObject({ type: "tags", source: "db", already: false, guardsArmed: ["tag"] });
+    expect(result.parity).toMatchObject({ clean: true, dir: fixture.root, expected: 2, actual: 2 });
     expect((await triggerStates(scratch.db, ["tag_write_guard", "topic_write_guard"])).get("tag_write_guard")).toBe(true);
     // A write that did not come through the seam is refused now.
     await expect(
       scratch.db.insert(tag).values({ id: "raw", label: "Raw", description: "not through the seam" }),
     ).rejects.toSatisfy((error) => /content write seam/.test(sqlMessage(error)));
-    // The row is what `selectSource` reads for a reader; the others stay on files.
-    expect(await contentOwnership(scratch.db)).toMatchObject({ tags: "db", topics: "files" });
+    // The row is what `selectSource` reads for a reader; a type with no row stays on files.
+    const owners = await contentOwnership(scratch.db);
+    expect(owners.tags).toBe("db");
+    expect(owners.topics).toBeUndefined();
+  });
+
+  it("refuses an import of the owned type when no export of it is recorded", async () => {
+    await expect(runImportCommand({ dir: fixture.root })).rejects.toThrow(/No export of tags is recorded/);
   });
 
   it("skips the owned type with a named line when its files are the database's own export", async () => {
+    await runExport({ out });
     const result = await runImportCommand({ dir: out });
     expect(result.skipped).toContainEqual({
       source: "tags",
@@ -486,35 +502,28 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
   }, 60_000);
 
   it("refuses --strict while doctor lists violators, and names them", async () => {
-    expect((await runParity({ dir: fixture.root })).clean).toBe(true);
-    await expect(runFlip({ type: "courses", strict: true })).rejects.toThrow(
+    await expect(runFlip({ type: "courses", strict: true, readers: READERS })).rejects.toThrow(
       /--strict would arm rules that 1 row\(s\) break.*item-has-concept: xx1000-m1-t2/s,
     );
     // Refused means nothing moved: no row, no guard, no rule armed.
-    expect((await contentOwnership(scratch.db)).courses).toBe("files");
+    expect((await contentOwnership(scratch.db)).courses).not.toBe("db");
     const states = await triggerStates(scratch.db, ["collection_write_guard", "curriculum_item_item_has_concept"]);
     expect([...states.values()]).toEqual([false, false]);
   });
 
-  it("refuses a stale parity report: the type was imported again since", async () => {
-    // Tags are the database's now, so the tree's tags file has to be its
-    // export or the import is refused, the case above. A writer keeps it so
-    // after every write (D17); here it is copied once.
-    await fixture.write("content/tags.yaml", await readFile(path.join(out, "content/tags.yaml"), "utf8"));
-    await fixture.write(
-      "content/courses/xx1000.yaml",
-      (await readFile(path.join(fixture.root, "content/courses/xx1000.yaml"), "utf8")).replace(
+  it("allows --strict once the violators are fixed and imported, and arms the rules", async () => {
+    // The last import read `out`; the fix goes there, where the tags file is
+    // the database's own export.
+    const course = path.join(out, "content/courses/xx1000.yaml");
+    await writeFile(
+      course,
+      (await readFile(course, "utf8")).replace(
         "        title: Second item\n",
         "        title: Second item\n        concepts:\n          - derived\n",
       ),
     );
-    await runImportCommand({ dir: fixture.root });
-    await expect(runFlip({ type: "courses", strict: true })).rejects.toThrow(/imported again .* after its last parity run/);
-  }, 60_000);
-
-  it("allows --strict once the violators are fixed, and arms the rules", async () => {
-    expect((await runParity({ dir: fixture.root, only: ["courses"] })).clean).toBe(true);
-    const result = await runFlip({ type: "courses", strict: true });
+    await runImportCommand({ dir: out });
+    const result = await runFlip({ type: "courses", strict: true, readers: READERS });
     expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
     const report = await doctor(scratch.db, "scratch");
     expect(report.rules.map((r) => [r.name, r.state, r.violators])).toEqual([
@@ -523,7 +532,61 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
       ["item-concept-in-module-topic", "armed", 0],
     ]);
     expect(report.ok).toBe(true);
+  }, 60_000);
+
+  it("disarms a rule an earlier flip armed when a later one waives it", async () => {
+    const result = await runFlip({
+      type: "courses",
+      strict: true,
+      readers: READERS,
+      waive: [{ rule: "item-has-concept", reason: "testing the escape hatch" }],
+    });
+    expect(result.already).toBe(true);
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.rules.find((r) => r.name === "item-has-concept")).toMatchObject({
+      state: "disarmed",
+      waived: { type: "courses", reason: "testing the escape hatch" },
+    });
+    expect(report.rules.find((r) => r.name === "module-has-item")?.state).toBe("armed");
   });
+});
+
+describe.skipIf(!reachable.ok)("a tag gone from tags.yaml while the database owns courses", () => {
+  let scratch: Scratch;
+  let fixture: Fixture;
+  let out: string;
+  let restore: () => void;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    fixture = await smallTree({ secondItemConcepts: ["derived"] });
+    out = await tempDir("owned-courses");
+    restore = pointAt(scratch.name);
+    await runImportCommand({ dir: fixture.root });
+    await runExport({ out });
+    await runImportCommand({ dir: out });
+    await runFlip({ type: "courses", readers: READERS });
+  }, 60_000);
+
+  afterAll(async () => {
+    restore?.();
+    await scratch?.drop();
+    await fixture?.cleanup();
+    if (out !== undefined) await rm(out, { recursive: true, force: true });
+  });
+
+  it("is refused by name, since nothing in the import would put the course's tag back", async () => {
+    const file = path.join(out, "content/tags.yaml");
+    const text = await readFile(file, "utf8");
+    await writeFile(file, text.replace(/\n {2}- id: later\n[^\n]*\n[^\n]*\n/, "\n"));
+    expect(await readFile(file, "utf8")).not.toMatch(/id: later/);
+    await expect(runImportCommand({ dir: out })).rejects.toThrow(
+      /no longer lists tags that courses still wear: later \(xx1000\)/,
+    );
+    const links = await scratch.db.execute(sql`select tag_id from collection_tag order by position`);
+    expect(links.rows).toEqual([{ tag_id: "testing" }, { tag_id: "later" }]);
+  }, 60_000);
 });
 
 describe.skipIf(!reachable.ok)("flip --waive", () => {
@@ -537,7 +600,6 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
     fixture = await smallTree();
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: fixture.root });
-    await runParity({ dir: fixture.root, only: ["courses"] });
   }, 60_000);
 
   afterAll(async () => {
@@ -548,10 +610,10 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
 
   it("refuses a waiver with no reason, or for another type's rule", async () => {
     await expect(
-      runFlip({ type: "courses", strict: true, waive: [{ rule: "item-has-concept", reason: " " }] }),
+      runFlip({ type: "courses", strict: true, readers: READERS, waive: [{ rule: "item-has-concept", reason: " " }] }),
     ).rejects.toThrow(/needs a --reason/);
     await expect(
-      runFlip({ type: "tags", waive: [{ rule: "item-has-concept", reason: "because" }] }),
+      runFlip({ type: "tags", readers: READERS, waive: [{ rule: "item-has-concept", reason: "because" }] }),
     ).rejects.toThrow(/armed by courses, not tags/);
   });
 
@@ -559,6 +621,7 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
     const result = await runFlip({
       type: "courses",
       strict: true,
+      readers: READERS,
       waive: [{ rule: "item-has-concept", reason: "nine courses are still being filled in" }],
     });
     expect(result.rulesArmed).toEqual(["module-has-item", "item-concept-in-module-topic"]);

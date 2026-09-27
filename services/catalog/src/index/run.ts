@@ -402,6 +402,7 @@ export async function runIndex(
     const { rows, notes = [], scope, metadata } = await indexer.read(context);
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
+      tagLinksRewritten: runnable.some((i) => i.source === "courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs
       // and diagrams from until their tracks move the bytes into rows. The

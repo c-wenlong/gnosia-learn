@@ -92,14 +92,14 @@ Commands:
   parity <dir>             Compare the database with <dir> entity by entity:
                            counts per type, sha256 per entity over a canonical
                            form. Lists every mismatch by id; exits 1 on any.
-                           Records the result for flip.
   flip <type>              Make the database the owner of one content type:
                            write its content_source row and arm its write
-                           guards. Refused without a clean parity since the
-                           type's last import. --strict also arms its
-                           completeness rules, refused while doctor lists a
-                           violator; --waive <rule> --reason <why> leaves one
-                           disarmed, on the record.
+                           guards. Refused until the type's database reader
+                           is built, and unless parity is clean against the
+                           files the type was last imported from. --strict
+                           also arms its completeness rules, refused while
+                           doctor lists a violator; --waive <rule> --reason
+                           <why> leaves one disarmed, on the record.
   backfill                 One-off: move learn/state/*.json into the state
                            tables, then assert the rebuilt mastery equals
                            model.json and the cards equal reviews.json.

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { renderType } from "../content/export";
+import { ExportError, renderType } from "../content/export";
 import {
   EXPORT_TYPES,
   type ExportFile,
@@ -57,6 +57,19 @@ export async function runExport(options: { out: string; only?: readonly ExportTy
   return withDatabase(async ({ db }) => {
     const rendered = new Map<ExportType, ExportFile[]>();
     for (const type of types) rendered.set(type, await renderType(db, type));
+    // Every path comes from a row, and a row written through the seam is only
+    // as careful as its writer, so each target is held inside `out` here, at
+    // the one place that writes, before anything is written.
+    const outside = [...rendered.values()]
+      .flat()
+      .filter((file) => {
+        const relative = path.relative(out, path.resolve(out, file.path));
+        return relative === "" || relative.startsWith("..") || path.isAbsolute(relative);
+      })
+      .map((file) => file.path);
+    if (outside.length > 0) {
+      throw new ExportError(`refusing to write outside ${out}: ${outside.join(", ")}`);
+    }
 
     const record = await mayRecord(db);
     const results: ExportTypeResult[] = [];

@@ -1,10 +1,13 @@
-import { contentSource, type ContentType, indexRun } from "@self-learn/schema";
+import { contentSource, type ContentType, indexRun, type RevisionEntityType } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { isExportType } from "./layout";
+import { isExportType, type ExportType } from "./layout";
 import type { ParityRecord } from "./ownership";
+import { parity } from "./parity";
+import { lockTypes } from "./revisions";
 import { COMPLETENESS_RULES, setTriggers, WRITE_GUARDS, writeGuardName } from "./rules";
+import { DB_READERS } from "./source";
 
 /**
  * `catalog flip <type>`: the moment the database starts owning a type
@@ -13,20 +16,25 @@ import { COMPLETENESS_RULES, setTriggers, WRITE_GUARDS, writeGuardName } from ".
  * In one transaction it writes the type's `content_source` row as `db`, arms
  * the write guard on each of the type's tables (D4: from then on a write that
  * did not come through the seam is refused), and with `--strict` arms the
- * type's completeness rules. Three refusals come first, each naming what to
- * run instead:
+ * type's completeness rules. The refusals come first, each naming what to do
+ * instead:
  *
- * - no clean `catalog parity` recorded for the type, or one older than the
- *   type's last import, since the plan's order is parity clean, then flip;
+ * - the type's database reader is not built yet (`DB_READERS`): readers
+ *   follow the row, and every one of them would fail;
+ * - parity is not clean between the database and the files the type was last
+ *   imported from, checked here and now rather than taken from a report, so
+ *   an edit made to those files since the import, or a report taken against
+ *   some other directory, cannot slip through. The type's revision locks are
+ *   held first, so no import or seam write moves the rows under the check;
  * - with `--strict`, any violator of a rule the flip would arm, the same rows
- *   `catalog doctor` lists. The triggers are armed before that check, inside
+ *   `catalog doctor` lists. The triggers are armed before that count, inside
  *   the transaction: arming takes each table's lock, so no writer can add a
  *   violator between the count and the commit;
  * - a `--waive` naming a rule that is not the type's, or with no reason.
  *
- * A waived rule is recorded on the row, reported by `catalog doctor`, left
- * disarmed, and not counted by `--strict`: the phase 3 escape hatch, with its
- * reason on file.
+ * A waived rule is recorded on the row, reported by `catalog doctor`, not
+ * counted by `--strict`, and disarmed, including when an earlier strict flip
+ * had armed it: the phase 3 escape hatch, with its reason on file.
  */
 
 export class FlipRefused extends Error {
@@ -45,6 +53,12 @@ export interface FlipOptions {
   type: ContentType;
   strict?: boolean;
   waive?: readonly Waiver[];
+  /**
+   * The types whose database reader works. Defaults to `DB_READERS`; the
+   * tests pass their own, to flip types on a scratch database before any
+   * track has built a reader.
+   */
+  readers?: ReadonlySet<ContentType>;
 }
 
 export interface FlipResult {
@@ -61,12 +75,28 @@ export interface FlipResult {
 
 const SHOWN = 20;
 
+/** The revision types a content type's rows are, whose locks an import of it takes. */
+const LOCKS: Readonly<Record<ExportType, readonly RevisionEntityType[]>> = {
+  topics: ["topic"],
+  tags: ["tag"],
+  courses: ["collection", "curriculum_item", "asset"],
+  concepts: ["concept", "asset"],
+  sessions: ["asset"],
+  diagrams: ["diagram", "asset"],
+};
+
 export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<FlipResult> {
   const { type } = options;
   if (!isExportType(type)) {
     throw new FlipRefused(
       `${type} has no export format and so no parity to check, until Track E defines what a ` +
         `video's parity is. It cannot be flipped yet.`,
+    );
+  }
+  if (!(options.readers ?? DB_READERS).has(type)) {
+    throw new FlipRefused(
+      `${type} has no database reader yet: its track fills in dbSource's method, and until then ` +
+        `every reader that follows the content_source row would fail. Flip it in that track's PR.`,
     );
   }
   const rules = COMPLETENESS_RULES.filter((rule) => rule.type === type);
@@ -87,28 +117,39 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
   }
 
   return db.transaction(async (tx) => {
+    await lockTypes(tx, LOCKS[type]);
     const [row] = await tx.select().from(contentSource).where(eq(contentSource.type, type)).for("update");
-    const report = row?.parityReport as ParityRecord | null | undefined;
-    if (report === null || report === undefined) {
-      throw new FlipRefused(
-        `${type} has no parity report. Run \`catalog parity --only ${type} <dir>\` against the files ` +
-          `the type is read from today, and flip once it reports zero mismatches.`,
-      );
-    }
-    if (!report.clean) {
-      throw new FlipRefused(
-        `the last \`catalog parity --only ${type}\` (${report.at}, against ${report.dir}) found ` +
-          `${report.mismatches} mismatch(es). Fix them, run parity again, then flip.`,
-      );
-    }
     const [run] = await tx
-      .select({ finishedAt: indexRun.finishedAt })
+      .select({ metadata: indexRun.metadata })
       .from(indexRun)
       .where(eq(indexRun.source, type));
-    if (run !== undefined && run.finishedAt.getTime() > Date.parse(report.at)) {
+    const root = (run?.metadata as { root?: unknown } | undefined)?.root;
+    if (typeof root !== "string") {
       throw new FlipRefused(
-        `${type} was imported again (${run.finishedAt.toISOString()}) after its last parity run ` +
-          `(${report.at}), so that report no longer describes the database. Run parity again.`,
+        `${type} has not been imported since 0.5, so nothing records which files it came from. ` +
+          `Run \`catalog index\` (or \`catalog import <dir>\`), then flip.`,
+      );
+    }
+    const checked = await parity(tx, root, [type]);
+    const result = checked.types[0];
+    const mismatches = checked.mismatches;
+    const report: ParityRecord = {
+      at: new Date().toISOString(),
+      dir: checked.dir,
+      clean: checked.clean,
+      expected: result?.expected ?? 0,
+      actual: result?.actual ?? 0,
+      mismatches,
+    };
+    if (!checked.clean) {
+      const lines = [
+        ...(result?.error === null || result?.error === undefined ? [] : [result.error]),
+        ...(result?.mismatches ?? []).map((m) => `${m.kind} ${m.id}: ${m.detail}`),
+      ];
+      throw new FlipRefused(
+        `${type} is not the same in the database as in ${checked.dir}, the files it was last ` +
+          `imported from (${mismatches} mismatch(es)). Import them, or put them back, then flip:\n  - ` +
+          lines.slice(0, SHOWN).join("\n  - "),
       );
     }
 
@@ -120,6 +161,9 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     const waived = new Set(waive.map((w) => w.rule));
     const armedRules = options.strict === true ? rules.filter((rule) => !waived.has(rule.name)) : [];
     await setTriggers(tx, armedRules.flatMap((rule) => rule.triggers), true);
+    // A rule an earlier strict flip armed and this one waives goes off: a
+    // waiver on record for a rule still refusing writes would be a lie.
+    await setTriggers(tx, rules.filter((rule) => waived.has(rule.name)).flatMap((rule) => rule.triggers), false);
     const violators: string[] = [];
     for (const rule of armedRules) {
       const { rows } = await tx.execute<{ id: string; detail: string }>(rule.violators);
@@ -143,11 +187,12 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     const already = row?.source === "db";
     const [written] = await tx
       .insert(contentSource)
-      .values({ type, source: "db", flippedAt: sql`now()`, waivers })
+      .values({ type, source: "db", flippedAt: sql`now()`, waivers, parityReport: report })
       .onConflictDoUpdate({
         target: contentSource.type,
         set: {
           source: "db",
+          parityReport: report,
           // A second flip re-arms; it is not a new moment of ownership.
           flippedAt: sql`coalesce(${contentSource.flippedAt}, now())`,
           waivers,

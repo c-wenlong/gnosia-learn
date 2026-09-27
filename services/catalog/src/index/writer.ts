@@ -248,6 +248,13 @@ export async function writeSource(
     metadata?: Record<string, unknown>;
     /** The revision author, `import:<git sha>` of the tree read. */
     author?: string;
+    /**
+     * The courses source runs later in the same import and rewrites every
+     * course's `collection_tag` rows, so a tag this run prunes may take its
+     * links with it. False when courses is not running (the database owns
+     * it), and then a pruned tag a course still wears is refused.
+     */
+    tagLinksRewritten?: boolean;
   } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
@@ -340,7 +347,7 @@ export async function writeSource(
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const pruned = await pruneEntity(tx, indexer, name, rows);
+      const pruned = await pruneEntity(tx, indexer, name, rows, options.tagLinksRewritten ?? false);
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
       prunedReads.set(
@@ -598,6 +605,7 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
+  tagLinksRewritten: boolean,
 ): Promise<string[]> {
   const keys = await staleKeys(tx, indexer, name, rows);
   if (keys.length === 0) return [];
@@ -606,12 +614,19 @@ async function pruneEntity(
   const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
   // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
-  // a course still wears. An import is different: the courses source is a
-  // dependent of tags and rewrites every course's tags from the files later in
-  // this run, so a tag gone from tags.yaml takes its links with it here, the
-  // way a pruned topic's links go by cascade. A course file that still names
-  // the tag is refused by the course reader when that source runs.
-  if (name === "tag") await tx.delete(collectionTag).where(inArray(collectionTag.tagId, keys));
+  // a course still wears. An import that also runs the courses source is
+  // different: that source rewrites every course's tags from the files later
+  // in this run, so a tag gone from tags.yaml takes its links with it here,
+  // the way a pruned topic's links go by cascade, and a course file that still
+  // names it is refused by the course reader. When the database owns courses
+  // nothing would put the links back, so the prune is refused by name instead.
+  if (name === "tag") {
+    if (tagLinksRewritten) {
+      await tx.delete(collectionTag).where(inArray(collectionTag.tagId, keys));
+    } else {
+      await assertTagsUnworn(tx, keys);
+    }
+  }
   try {
     await tx.delete(table).where(inArray(column, keys));
   } catch (error) {
@@ -690,6 +705,26 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
   if (blocked.length === 0) return;
 
   throw evidenceError(blocked);
+}
+
+/**
+ * Refuse to prune a tag a course still wears, naming both, when the courses
+ * source is not running to rewrite the links: the database owns courses, and
+ * silently dropping a tag from one would be an edit nobody made.
+ */
+async function assertTagsUnworn(tx: CatalogDatabase, tags: string[]): Promise<void> {
+  const worn = await tx
+    .select({ tag: collectionTag.tagId, course: collectionTag.collectionId })
+    .from(collectionTag)
+    .where(inArray(collectionTag.tagId, tags))
+    .orderBy(collectionTag.tagId, collectionTag.collectionId);
+  if (worn.length === 0) return;
+  throw new IndexError(
+    `content/tags.yaml no longer lists tags that courses still wear: ` +
+      `${worn.map((w) => `${w.tag} (${w.course})`).join(", ")}. The database owns courses, so ` +
+      `this import will not rewrite them. Remove the tag from those courses through the catalog ` +
+      `first, or put it back in tags.yaml.`,
+  );
 }
 
 function evidenceError(slugs: string[]): IndexError {

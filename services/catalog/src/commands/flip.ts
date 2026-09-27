@@ -1,6 +1,4 @@
-import type { ContentType } from "@self-learn/schema";
-
-import { flip, type FlipResult, type Waiver } from "../content/flip";
+import { flip, type FlipOptions, type FlipResult } from "../content/flip";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 
@@ -14,11 +12,7 @@ export interface FlipCommandResult extends FlipResult {
   database: string;
 }
 
-export async function runFlip(options: {
-  type: ContentType;
-  strict?: boolean;
-  waive?: readonly Waiver[];
-}): Promise<FlipCommandResult> {
+export async function runFlip(options: FlipOptions): Promise<FlipCommandResult> {
   const url = databaseUrl();
   return withDatabase(async ({ db }) => ({ database: redactUrl(url), ...(await flip(db, options)) }));
 }
@@ -27,7 +21,7 @@ export function formatFlip(result: FlipCommandResult): string {
   const lines = [
     `database  ${result.database}`,
     `${result.type} is owned by the database${result.already ? " (already was; guards re-armed)" : ""}, since ${result.flippedAt}`,
-    `parity    clean against ${result.parity.dir} at ${result.parity.at}`,
+    `parity    clean against ${result.parity.dir}, the files it was last imported from`,
     `guards    ${result.guardsArmed.length === 0 ? "none for this type" : result.guardsArmed.join(", ")}`,
     `rules     ${result.rulesArmed.length === 0 ? "none armed" : result.rulesArmed.join(", ")}`,
   ];

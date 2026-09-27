@@ -101,7 +101,7 @@ goes is the record of which brief produced them.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
-| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the last parity result. A type with no row is read from files. See [Who owns a type](#who-owns-a-type). |
+| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. A type with no row is read from files. See [Who owns a type](#who-owns-a-type). |
 | `catalog_instance` | One row: this database is `primary` or `copy`. A copy refuses every write (the copy guard below). |
 
 ### Studio
@@ -699,22 +699,28 @@ once per outage.
 
 | Column | Written by | Read by |
 | --- | --- | --- |
-| `source` | `catalog flip` sets `db`; a row created by an export or a parity run says `files` | the importers: a `db` type is not read from files. Readers, through `ownership()` |
+| `source` | `catalog flip` sets `db`; a row created by an export says `files` | the importers: a `db` type is not read from files. Readers, through `ownership()` |
 | `flipped_at` | `catalog flip`, the first time; a second flip re-arms and keeps it | `catalog import`'s skip line |
 | `export_hash`, `exported_at` | `catalog export`: sha256 over `path<TAB>sha256(bytes)` lines of every file it wrote for the type | `catalog import`: a `db` type whose files hash to this is its own export and is skipped with a named line; any other hash is refused, naming the files that differ (edge case 12) |
-| `parity_report` | `catalog parity`: when, against which directory, the entity counts, the mismatch count, clean or not | `catalog flip`: refused unless clean and newer than the type's last `index_run` |
+| `parity_report` | `catalog flip`: the parity it checked before flipping, against the files the type was last imported from (`index_run.metadata.root`) | a person asking what the flip rested on |
 | `waivers` | `catalog flip --waive <rule> --reason` | `catalog doctor`, on every run; `flip --strict` leaves a waived rule disarmed |
 
-`catalog export` and `catalog parity` are reads. On a copy they record nothing,
-rather than failing on the copy guard at their last step.
+`catalog export` is a read of the database, so on a copy it records nothing
+rather than failing on the copy guard at its last step. `catalog parity`
+records nothing anywhere.
 
 `catalog flip <type>` does three things in one transaction: writes the row as
 `db`, arms the type's write guards (`WRITE_GUARDS` in `src/content/rules.ts`),
-and with `--strict` arms the type's completeness rules. It arms the triggers
-first and counts the violators after, because arming takes each table's lock,
-so nothing can add a violator between the count and the commit; a refusal rolls
-the arming back with everything else. `manimkc` cannot be flipped until Track E
-gives videos a parity.
+and with `--strict` arms the type's completeness rules. Before any of it, it
+refuses a type whose database reader is not built (`DB_READERS` in
+`src/content/source.ts`, empty until a track fills one in), since readers
+follow the row, and it runs parity itself against the files the type was last
+imported from, holding the type's revision locks so no import moves the rows
+under the check. It arms the triggers first and counts the violators after,
+because arming takes each table's lock, so nothing can add a violator between
+the count and the commit; a refusal rolls the arming back with everything
+else. A waived rule is disarmed even if an earlier strict flip armed it.
+`manimkc` cannot be flipped until Track E gives videos a parity.
 
 ### Export, import and parity
 
