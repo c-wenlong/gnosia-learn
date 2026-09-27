@@ -234,6 +234,63 @@ adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
   Pro, open question 3 of the plan) and its token arrive with the cloud
   database in step 0.1, and the bytes move with the rows in the same window.
 
+### Filling it
+
+```bash
+npm run catalog -- asset upload --source manimkc --dry-run   # what would move
+npm run catalog -- asset upload --source manimkc
+```
+
+It reads `manimkc topics --json` (so the rendered files are found wherever
+manimkc's `MANIMKC_HOME` puts them), and for every video and sidecar the
+catalog already has a row for: hashes the file, refuses it by name if the
+bytes are no longer the ones the last `catalog index --only manimkc` recorded,
+uploads it (`pending` row, put, `head`, `present`), cuts a poster per video
+with ffmpeg and uploads that too, then points each asset row at its blob with
+one revision each. When a video's bytes changed and no new poster can be cut
+(no ffmpeg, or ffmpeg found no frame), its old poster is unhooked from it in the
+same write, so the page cuts a frame from the file rather than showing the old
+render, until a later upload makes a new one. Measured on 2026-09-28 against a copy of the local
+database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
+seconds. A rerun skips everything already `present` without reading a file,
+so an interrupted run is finished by running it again. With no ffmpeg on the
+machine the posters are skipped and the output says so; `FFMPEG_PATH` points
+at one elsewhere. `--blob-root DIR` uploads to another root, for a scratch run.
+
+A later `catalog index --only manimkc` keeps every key whose bytes it hashes
+again unchanged; a re-rendered video loses its key and is served from its file
+until the next upload.
+
+### Serving from it
+
+`/api/assets/{id}/file` and `/api/assets/{id}/poster` ask the store first
+whenever the row names a blob, and `ASSET_FILES_ENABLED` gates only the legacy
+branch that reads a file from disk. With the `fs` store the route streams the
+object with Range support; a cloud store's signed URL (an hour) would be a
+302 instead, so a video never streams through a Vercel function (edge case 10
+of the plan). An asset whose blob is `pending`, or whose object the store has
+lost, answers 404 with the code `not-uploaded`. A database not yet migrated
+to 0010 has no blob columns, and the routes then serve the legacy file exactly
+as before, with one warning in the server log saying to migrate.
+
+### Checking it
+
+```bash
+npm run catalog -- blob audit          # list; exits 1 while anything cannot be served
+npm run catalog -- blob audit --fix    # act on what it lists
+```
+
+It lists objects with no row, `present` rows whose object is gone or no
+longer hashes to its key, stale `pending` rows, objects nothing points at (the
+old bytes of a re-render), and posters whose video is gone. `--fix` deletes an
+orphan object once it is a day old, sends a broken row back to `pending` (its
+asset then answers `not-uploaded` until the upload reruns), and deletes a
+day-old `pending` row with no object and nothing pointing at it. It never
+deletes a row or an object that anything references. It exits 1 while the
+table and the store disagree or while any asset points at a `pending` blob,
+including one `--fix` just sent back, so a clean exit means every stored asset
+serves.
+
 ## Deploying from the command line
 
 For a one-off deploy from the local tree, without going through `main`:
