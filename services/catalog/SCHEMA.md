@@ -562,7 +562,9 @@ import records each SVG as exported from the document beside it, since
 nothing on disk says otherwise. `catalog diagram put|checkout|commit|list|show`
 (`src/content/diagrams.ts`) is the write path the studio's Accept and the
 plugin use; `commit` carries the revision its checkout started from and is
-refused when the diagram moved past it.
+refused when the diagram moved past it. Until `catalog flip diagrams`, a put
+also writes its files under the directory diagrams were last imported from
+(D17), so the next import reads back what was written rather than undoing it.
 
 ### The mirror ledger
 

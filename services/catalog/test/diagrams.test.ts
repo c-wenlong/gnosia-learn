@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
+import { flip } from "../src/content/flip";
 import {
   checkoutDiagram,
   commitDiagram,
@@ -232,8 +233,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     }
   });
 
-  it("puts a diagram as a row and a blob and writes no file into the tree", async () => {
-    const before = await readdir(path.join(fixture.root, "learn/assets"));
+  it("puts a diagram as a row and a blob, and writes it through to the files that still own diagrams", async () => {
     const result = await put({
       slug: "second-diagram",
       tldr: await file("second.tldr", documentOf({ title: "Second" })),
@@ -242,7 +242,11 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     });
     expect(result.changed).toBe(true);
     expect(result.svg?.uploaded).toBe(true);
-    expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
+    // D17: until the flip an index reads these files, so they must hold the write.
+    expect(result.files).toEqual(["learn/assets/second-diagram.tldr", "learn/assets/second-diagram.svg"]);
+    expect(await readFile(path.join(fixture.root, "learn/assets/second-diagram.svg"), "utf8")).toBe(svgOf("second"));
+    const again = await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
+    expect(again.sources.find((s) => s.source === "diagrams")?.revisions).toEqual({});
 
     const history = await scratch.db.execute<{ entity_type: string; op: string; reason: string }>(
       sql`select entity_type, op, reason from content_revision
@@ -401,6 +405,45 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     const again = await put({ slug: "job-diagram", tldr, svg, jobId: "job-one", base: null });
     expect(again.changed).toBe(false);
     expect(again.revision).toBe(first.revision);
+
+    // Different bytes from the same base are a new write, not a retry.
+    await expect(
+      put({ slug: "job-diagram", tldr: await file("job-b.tldr", documentOf({ title: "Changed" })), jobId: "job-one", base: null }),
+    ).rejects.toMatchObject({ code: "stale-base" });
+
+    // Once accepted, the job's output is a record: an identical retry is still
+    // fine, and anything else under its name is refused.
+    await scratch.db.update(job).set({ state: "accepted" }).where(eq(job.id, "job-one"));
+    expect((await put({ slug: "job-diagram", tldr, svg, jobId: "job-one", base: null })).changed).toBe(false);
+    await expect(
+      put({ slug: "job-diagram", tldr: await file("job-c.tldr", documentOf({ title: "Later" })), jobId: "job-one" }),
+    ).rejects.toThrow(/is accepted/);
+  });
+
+  it("counts an exported SVG as an edit a refresh must not throw away", async () => {
+    const dir = path.join(work, "svg-checkouts");
+    await checkoutDiagram(scratch.db, store, "second-diagram", dir);
+    await writeFile(path.join(dir, "second-diagram.svg"), svgOf("exported, not committed"));
+    await put({ slug: "second-diagram", tldr: await file("second-c.tldr", documentOf({ title: "Moved on" })) });
+    await expect(checkoutDiagram(scratch.db, store, "second-diagram", dir)).rejects.toMatchObject({
+      code: "dirty-checkout",
+    });
+    expect(await readFile(path.join(dir, "second-diagram.svg"), "utf8")).toBe(svgOf("exported, not committed"));
+  });
+
+  it("writes no file once the database owns diagrams", async () => {
+    await flip(scratch.db, { type: "diagrams", readers: new Set(["diagrams"]) });
+    const before = await readdir(path.join(fixture.root, "learn/assets"));
+    const result = await put({
+      slug: "after-the-flip",
+      tldr: await file("after.tldr", documentOf({ title: "After" })),
+      svg: await file("after.svg", svgOf("after")),
+    });
+    expect(result.changed).toBe(true);
+    expect(result.files).toEqual([]);
+    expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
+    const [listed] = await listDiagrams(scratch.db, "after-the-flip");
+    expect(listed?.svgState).toBe("current");
   });
 
   it.skipIf(!hasCanvasCli(REPO_ROOT))("lists what `tldrawkc list` lists for the same documents", async () => {
