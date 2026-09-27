@@ -25,6 +25,7 @@ import {
   putSvgOnly,
   type PutInput,
 } from "../src/content/diagrams";
+import { connect } from "../src/db";
 import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
 import { lockEntity } from "../src/content/revisions";
@@ -512,24 +513,39 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
 
   it("refuses an SVG on its own when a document lands while it waits, rather than replacing that document's SVG", async () => {
     // Review on #143: the no-document answer has to hold through the write.
-    // A document put holds the SVG asset's lock until it commits; the SVG-only
-    // put waits on that lock and then finds the document.
+    // A second connection plays the document put: it holds the SVG asset's
+    // lock, waits until the SVG-only put is blocked on that lock (so it has
+    // already passed its early check and read nothing under the lock yet),
+    // then lands the document and commits. The put must find it then.
     const slug = "raced";
+    const other = connect({ url: scratch.url });
     let pending: Promise<unknown> = Promise.resolve();
-    await scratch.db.transaction(async (tx) => {
-      await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
-      pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
-      pending.catch(() => undefined);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      await putDiagram(tx, store, {
-        slug,
-        tldr: await file("raced.tldr", documentOf({ title: "Raced" })),
-        svg: await file("raced.svg", svgOf("exported")),
-        reason: "a test",
-        author: "local",
-        authorKind: "person",
+    try {
+      await other.db.transaction(async (tx) => {
+        await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
+        pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
+        pending.catch(() => undefined);
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const waiting = await tx.execute<{ n: number }>(
+            sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`,
+          );
+          if ((waiting.rows[0]?.n ?? 0) > 0) break;
+          if (Date.now() > deadline) throw new Error("the SVG-only put never waited on the lock");
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        await putDiagram(tx, store, {
+          slug,
+          tldr: await file("raced.tldr", documentOf({ title: "Raced" })),
+          svg: await file("raced.svg", svgOf("exported")),
+          reason: "a test",
+          author: "local",
+          authorKind: "person",
+        });
       });
-    });
+    } finally {
+      await other.close();
+    }
     await expect(pending).rejects.toMatchObject({ code: "unresolved" });
     const [row] = await scratch.db.select().from(diagram).where(eq(diagram.slug, slug));
     const assets = await scratch.db.execute<{ blob_key: string }>(
