@@ -877,7 +877,10 @@ around the list above, and why:
   of the corpus. A Commit button stores the canvas's edits with a reason, and
   Export SVG stores the fresh SVG when the canvas holds no uncommitted edits.
   With the database down, Accept refuses and the candidate waits, as edge case
-  1 says; drawing runs on the checkouts already on disk. Until the flip the
+  1 says; drawing runs on the checkouts already on disk. The database reader
+  (`readers/diagrams.ts`) is built and `ready` in the same PR, since that is
+  the PR that retires the last writer outside the seam, so `catalog flip
+  diagrams` is possible from here on. Until the flip the
   put writes the files through, so an Accept then leaves the two files in the
   working tree, as it did before; after it, nothing.
 - **Checkouts keep a record beside the file** (`<slug>.checkout.json`: base
