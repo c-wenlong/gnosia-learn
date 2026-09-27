@@ -6,7 +6,6 @@ requires: [machine-model-and-input-size]
 assumes: [counting-operations-with-summations, case-analysis-worst-best-average]
 tags: [asymptotics, recurrences]
 sources: []
-topics: []
 created: 2026-08-20T08:05:34.162Z
 ---
 

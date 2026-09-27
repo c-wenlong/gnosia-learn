@@ -6,7 +6,6 @@ requires: [big-o-witness-definition, big-omega-witness-definition]
 assumes: [case-analysis-worst-best-average, comparing-growth-rates]
 tags: [asymptotics, lower-bounds]
 sources: []
-topics: []
 created: 2026-08-20T08:05:33.815Z
 ---
 

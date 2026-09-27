@@ -106,7 +106,8 @@ export function note(fields: {
   lines.push(`requires: [${(fields.requires ?? []).join(", ")}]`);
   lines.push(`assumes: [${(fields.assumes ?? []).join(", ")}]`);
   lines.push(`tags: [${(fields.tags ?? []).join(", ")}]`);
-  lines.push(`topics: [${(fields.topics ?? []).join(", ")}]`);
+  // The retired key, written only when a case asks for it, to watch it refused.
+  if (fields.topics !== undefined) lines.push(`topics: [${fields.topics.join(", ")}]`);
   lines.push("---", "", fields.body ?? `# ${fields.title ?? fields.id}`, "");
   return lines.join("\n");
 }

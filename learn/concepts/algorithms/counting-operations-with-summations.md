@@ -6,7 +6,6 @@ requires: [machine-model-and-input-size]
 assumes: []
 tags: [asymptotics, counting]
 sources: []
-topics: []
 created: 2026-08-20T08:05:30.260Z
 ---
 

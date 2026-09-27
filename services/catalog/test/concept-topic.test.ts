@@ -43,7 +43,7 @@ topics:
     aliases: [fixtures]
     maps:
       manimkc: []
-      courses: []
+      courses: [xx1000-m1]
       concepts: [alpha, beta, gamma]
 
   - slug: empty-topic
@@ -181,9 +181,45 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     for (const [slug, body] of Object.entries(notes)) {
       await writeFile(path.join(root, "learn", "concepts", "fixtures", `${slug}.md`), body, "utf8");
     }
+    // `learn index` runs the courses source behind concepts, since a course
+    // row's `concepts:` list points at concept rows, so the tree needs one
+    // course for that run to read. The smallest one that resolves.
+    await mkdir(path.join(root, "content", "courses"), { recursive: true });
+    await writeFile(
+      path.join(root, "content", "tags.yaml"),
+      "tags:\n  - id: fixtures\n    label: Fixtures\n    description: the fixture theme\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(root, "content", "courses", "xx1000.yaml"),
+      [
+        "id: xx1000",
+        "slug: xx1000",
+        "code: XX1000",
+        "title: Fixture course",
+        "credits: 4",
+        "order: 1",
+        "inferred: false",
+        "tags: [fixtures]",
+        "capstone: none",
+        "modules:",
+        "  - id: xx1000-m1",
+        "    slug: m1-first",
+        "    title: First",
+        "    order: 1",
+        "    topic: fixture-topic",
+        "    topics:",
+        "      - id: xx1000-m1-t1",
+        "        title: An item",
+        "        concepts: [alpha]",
+        "    resources: []",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
     // The topic rows the concepts index resolves against. Written directly
     // rather than through the topics indexer: this suite is about one flag, and
-    // a full index run would drag in the course YAML and the manimkc submodule.
+    // a full index run would drag in the manimkc submodule.
     await scratch.db.execute(
       "insert into topic (slug, title, domain) values " +
         "('fixture-topic', 'Fixture topic', 'fixtures'), " +

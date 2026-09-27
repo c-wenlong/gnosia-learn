@@ -5,7 +5,6 @@ summary: The dot product of two vectors measures alignment, and is the sum of el
 requires: [vector-as-a-list-of-numbers]
 tags: []
 sources: []
-topics: []
 created: 2026-08-18T01:45:40.975Z
 ---
 

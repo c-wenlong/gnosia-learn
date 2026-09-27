@@ -66,7 +66,7 @@ goes is the record of which brief produced them.
 | `collection_item` | This collection contains exactly one of a topic, a concept or an asset, at a position. |
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
 | `curriculum_item_topic` | This checklist row covers this topic. How a course reaches the assets. |
-| `concept_curriculum_item` | This note contributes to this checklist row. |
+| `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
 
 ### State
 
@@ -255,9 +255,13 @@ application code, where it already is.
 
 The course data calls `cs4263-m1-t1` a topic, and the plan calls the shared
 vocabulary a topic. They are different things and the schema names them apart:
-`curriculum_item` for the first, `topic` for the second. Concept frontmatter's
-`topics: [cp4284-m1-t1]` names the *first* kind, which is why the link table for
-it is `concept_curriculum_item` and not `asset_topic`'s sibling.
+`curriculum_item` for the first, `topic` for the second. A course row's
+`concepts:` list names notes that teach the *first* kind, which is why the link
+table for it is `concept_curriculum_item` and not `asset_topic`'s sibling. That
+link used to be authored the other way round, as a `topics:` key in the note's
+frontmatter; the courses source owns it now and the concepts source refuses a
+note that still carries the key
+([the proposal](../../docs/proposals/course-items-declare-concepts.md)).
 
 ### Indexes
 
@@ -453,16 +457,18 @@ rows. Seven sources, run in the order the foreign keys require regardless of how
 | Source | Reads | Produces |
 | --- | --- | --- |
 | `topics` | `content/topics.yaml` | `topic` |
-| `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `curriculum_item_topic`, `link` assets |
-| `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `concept_curriculum_item`, `note` assets |
+| `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `note` assets |
+| `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets |
 | `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
 | `diagrams` | `tldrawkc list learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
 | `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
 | `mirrors` | `manimkc mirrors --json` | `mirror` |
 
-`courses` runs before `concepts` because a note's `topics:` frontmatter names
-curriculum items, and everything runs after `topics` because every other source
-resolves a slug from the shared vocabulary. `mirrors` runs last: it reads no
+`concepts` runs before `courses` because a course row's `concepts:` list
+becomes rows pointing at concepts, and the courses source refuses an id no note
+defines by checking what the concepts source just produced. Everything runs
+after `topics` because every other source resolves a slug from the shared
+vocabulary. `mirrors` runs last: it reads no
 content tree, only a ledger joined onto asset rows `manimkc` has already
 written.
 

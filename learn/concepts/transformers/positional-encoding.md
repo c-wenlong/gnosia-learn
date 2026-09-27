@@ -5,7 +5,6 @@ summary: Self-attention is permutation-equivariant, so order must be injected ex
 requires: [self-attention]
 tags: [transformers]
 sources: []
-topics: [cp4284-m1-t1]
 created: 2026-08-18T01:45:41.222Z
 ---
 

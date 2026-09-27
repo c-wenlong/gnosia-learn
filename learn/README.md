@@ -230,9 +230,11 @@ Without `--topic` the note is still written and the command says which edit is
 missing. Do not hand-edit `content/topics.yaml` from inside a tutoring session:
 the flag exists so a session never has to.
 
-Note the singular. `--topic` is one vocabulary slug; `--topics` is a
-comma-separated list of curriculum *item* ids like `cp4284-m1-t1`, which is a
-different link with a confusingly similar name.
+Note the singular. `--topic` is one vocabulary slug. A note's place on a
+course is a different link and is not the note's to state: the course file
+lists concept ids under each row's `concepts:`
+([content/courses/README.md](../content/courses/README.md)), and the indexer
+refuses a note that still carries the old `topics:` key.
 
 ### The three data structures
 
@@ -246,7 +248,6 @@ title: Attention weights
 summary: Attention weights are a softmax over scaled query-key dot products.
 requires: [dot-product, softmax, query-key-value-projections]
 tags: [transformers]
-topics: [cp4284-m1-t1]
 ---
 
 # Attention weights
@@ -326,8 +327,10 @@ ordering knowledge is kept, the blocking is gone.
 When in doubt, use `assumes`. Over-declaring a hard prerequisite produces a
 graph where nothing is ever at the frontier.
 
-`topics` links a concept back to a course topic in the web hub, which is how
-the two halves of this repo connect.
+A concept's place on a course is authored on the course side, as
+`topics[].concepts` in `content/courses/<code>.yaml`, which is how the two
+halves of this repo connect. The `topics` field the `--json` index still
+reports per concept is always empty now and stays for the plugin's sake.
 
 **Event** — one row of the trajectory, append-only. `at`, `type`,
 `concept_slug` and `session_id` are columns; everything type-specific is in a

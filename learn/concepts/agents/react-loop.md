@@ -5,7 +5,6 @@ summary: ReAct interleaves reasoning traces with tool calls, so each observation
 requires: [tool-calling]
 tags: [agentic-ai]
 sources: []
-topics: [cp4284-m3-t1]
 created: 2026-08-18T01:45:41.416Z
 ---
 

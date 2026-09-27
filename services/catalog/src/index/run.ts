@@ -50,10 +50,13 @@ import { writeSource, type SourceWrite } from "./writer";
 const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
   // Every other source resolves a slug from the vocabulary.
   topics: ["courses", "concepts", "manimkc", "diagrams", "sessions"],
-  // A note's `topics:` frontmatter references curriculum items.
-  courses: ["concepts", "diagrams", "sessions"],
-  // Diagrams and sessions link to concepts by slug.
-  concepts: ["diagrams", "sessions"],
+  // Nothing another source owns points at a collection or a curriculum item:
+  // the concept link is the courses source's own row, and progress and recap
+  // are learner state, not index output.
+  courses: [],
+  // A course row's `concepts:` list, diagrams and sessions all link to
+  // concepts by slug.
+  concepts: ["courses", "diagrams", "sessions"],
   // `mirror` rows hang off manimkc's asset rows and cascade when one is
   // pruned, so re-reading manimkc alone would silently empty the ledger for a
   // renamed video. `topics` reaches mirrors through here, transitively.
@@ -86,11 +89,16 @@ const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
   mirrors: ["manimkc"],
 };
 
-/** Every indexer, in the order they must run. */
+/**
+ * Every indexer, in the order they must run. Concepts before courses, because
+ * a course row's `concepts:` list is written as `concept_curriculum_item`
+ * rows that point at concept rows, and the courses source refuses an id no
+ * note defines by checking what the concepts source just produced.
+ */
 export const INDEXERS: readonly Indexer[] = [
   topicsIndexer,
-  coursesIndexer,
   conceptsIndexer,
+  coursesIndexer,
   manimkcIndexer,
   diagramsIndexer,
   sessionsIndexer,

@@ -6,7 +6,6 @@ import type {
   NewAssetConcept,
   NewAssetTopic,
   NewConcept,
-  NewConceptCurriculumItem,
   NewConceptPrerequisite,
 } from "@self-learn/schema";
 
@@ -20,19 +19,23 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * `learn/concepts/<domain>/*.md` into concepts, prerequisites and note assets.
  *
  * A concept is the only thing in the catalog that carries mastery and
- * prerequisites, so this indexer produces three different kinds of edge from
+ * prerequisites, so this indexer produces two different kinds of edge from
  * one file:
  *
  * - `concept_prerequisite`, from the note's `requires:` and `assumes:` lists.
  *   Both point at other concepts; `requires` is hard, `assumes` is soft, and
  *   the distinction is kept because the graph code reads them differently.
- * - `concept_curriculum_item`, from the note's `topics:` list. That key is
- *   misleadingly named: its values are *curriculum item* ids like
- *   `cp4284-m1-t1`, not shared-vocabulary topic slugs. This is the one
- *   cross-tree link that already existed in the files before the catalog.
  * - `asset_concept` and `asset_topic`, because the note itself is a file with
  *   bytes — an agent that wants to read it needs the path, and `show` gives it
  *   the path rather than the body.
+ *
+ * The link from a note to a course row, `concept_curriculum_item`, used to be
+ * a third edge here, read from a `topics:` frontmatter key whose values were
+ * curriculum item ids. It is authored in the course file now, as
+ * `topics[].concepts`, and the courses source writes it
+ * (docs/proposals/course-items-declare-concepts.md). A note that still
+ * carries the key is refused by name rather than read, because a link that
+ * two files can state is a link two files can disagree about.
  *
  * The concept's own topic comes from `maps.concepts` in `content/topics.yaml`,
  * because the note frontmatter has no field for it. Every one of the notes must
@@ -42,13 +45,16 @@ import { VOCABULARY_FILE } from "./vocabulary";
 
 export const CONCEPTS_DIR = "learn/concepts";
 
+/** The retired frontmatter key; see the module comment. */
+const RETIRED_LINK_KEY = "topics";
+
 export const conceptsIndexer: Indexer = {
   source: "concepts",
-  owns: ["concept", "conceptPrerequisite", "conceptCurriculumItem"],
+  owns: ["concept", "conceptPrerequisite"],
   assetPrefix: ASSET_PREFIX.concepts,
   root: () => CONCEPTS_DIR,
 
-  read: async ({ repoRoot, vocabulary, knownCurriculumItems }) => {
+  read: async ({ repoRoot, vocabulary }) => {
     const directory = path.join(repoRoot, CONCEPTS_DIR);
     const files: string[] = [];
     for (const domain of await directoriesIn(directory)) {
@@ -62,7 +68,6 @@ export const conceptsIndexer: Indexer = {
     /** Deferred until every concept slug is known, so a prerequisite can be checked. */
     const prerequisiteDrafts: { from: string; to: string; kind: "requires" | "assumes"; where: string }[] =
       [];
-    const curriculumDrafts: { concept: string; item: string; where: string }[] = [];
 
     const problems = new IndexErrors();
     const slugs = new Set<string>();
@@ -70,6 +75,14 @@ export const conceptsIndexer: Indexer = {
     for (const file of files) {
       const where = relativeTo(repoRoot, file);
       const { data } = parseFrontmatter(await readFile(file, "utf8"));
+
+      if (RETIRED_LINK_KEY in data) {
+        problems.add(
+          `${where}: has a \`${RETIRED_LINK_KEY}:\` key. A note no longer names its course rows; ` +
+            `list the concept under the row's \`concepts:\` in content/courses/ and delete the key.`,
+        );
+        continue;
+      }
 
       // The id in the frontmatter wins over the filename. They agree today, and
       // when they do not the id is what every `requires:` list in every other
@@ -102,9 +115,6 @@ export const conceptsIndexer: Indexer = {
         for (const target of readList(data, kind)) {
           prerequisiteDrafts.push({ from: slug, to: target, kind, where });
         }
-      }
-      for (const item of readList(data, "topics")) {
-        curriculumDrafts.push({ concept: slug, item, where });
       }
 
       // The note is also a file. Hashing it is what lets bundle 6 notice a
@@ -154,28 +164,6 @@ export const conceptsIndexer: Indexer = {
       });
     }
 
-    // `topics:` names curriculum items, which the courses indexer produces.
-    // Checking against the vocabulary's course modules would not be enough:
-    // these ids are item-level (`cp4284-m1-t1`), one level below a module.
-    // Without this check the failure is a bare foreign-key error naming a
-    // constraint rather than the note that has the typo.
-    const known = await knownCurriculumItems();
-    const curriculumItems: NewConceptCurriculumItem[] = [];
-    const seenCurriculum = new Set<string>();
-    for (const draft of curriculumDrafts) {
-      if (!known.has(draft.item)) {
-        problems.add(
-          `${draft.where}: topics: "${draft.item}", which is not a curriculum item in any ` +
-            `course. That key names curriculum items, not shared-vocabulary topic slugs.`,
-        );
-        continue;
-      }
-      const key = `${draft.concept} ${draft.item}`;
-      if (seenCurriculum.has(key)) continue;
-      seenCurriculum.add(key);
-      curriculumItems.push({ conceptSlug: draft.concept, curriculumItemId: draft.item });
-    }
-
     problems.throwIfAny(CONCEPTS_DIR);
 
     if (concepts.length === 0) {
@@ -188,14 +176,10 @@ export const conceptsIndexer: Indexer = {
       assetTopic: assetTopics,
       assetConcept: assetConcepts,
       conceptPrerequisite: prerequisites,
-      conceptCurriculumItem: curriculumItems,
     };
     return {
       rows,
-      notes: [
-        `${concepts.length} notes, ${prerequisites.length} prerequisites, ` +
-          `${curriculumItems.length} curriculum links`,
-      ],
+      notes: [`${concepts.length} notes, ${prerequisites.length} prerequisites`],
     };
   },
 };

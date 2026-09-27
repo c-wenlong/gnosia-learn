@@ -90,8 +90,8 @@ export const topic = pgTable(
 /**
  * One authored note under `learn/concepts/<domain>/`. A concept is the only
  * thing that carries mastery and prerequisites; it is optional enrichment
- * *under* a topic, which is why `topicSlug` is nullable for now (most notes
- * have an empty `topics:` frontmatter list today).
+ * *under* a topic, which is why `topicSlug` is nullable for now, though every
+ * note resolves through `maps.concepts` today.
  */
 export const concept = pgTable(
   "concept",
@@ -370,13 +370,10 @@ export const curriculumItemTopic = pgTable(
 );
 
 /**
- * This concept note contributes to this checklist item. The one cross-tree link
- * that already exists in the files: a note's `topics: [cp4284-m1-t1]`
- * frontmatter names curriculum item ids, not shared-vocabulary topic slugs.
- *
- * `position` is the teaching order within the item, from the course file's
- * `topics[].concepts` list (docs/proposals/course-items-declare-concepts.md).
- * Until the courses indexer owns this table it is 0 on every row.
+ * This concept note contributes to this checklist item, at this position. The
+ * one cross-tree link, authored in the course file as `topics[].concepts` and
+ * written by the courses source (docs/proposals/course-items-declare-concepts.md).
+ * `position` is the list's order, 1-based like `curriculum_item.position`.
  */
 export const conceptCurriculumItem = pgTable(
   "concept_curriculum_item",

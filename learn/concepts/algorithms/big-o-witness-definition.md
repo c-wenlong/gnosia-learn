@@ -6,7 +6,6 @@ requires: []
 assumes: [machine-model-and-input-size]
 tags: [asymptotics, notation]
 sources: []
-topics: []
 created: 2026-08-20T08:05:30.611Z
 ---
 
