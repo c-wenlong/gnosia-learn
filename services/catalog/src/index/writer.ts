@@ -33,6 +33,7 @@ import {
   reserveRevisionIds,
   type PendingRevision,
 } from "../content/revisions";
+import { placePositions, PositionGapError } from "../content/positions";
 import { readSnapshots, type SnapshotRead } from "../content/snapshot";
 import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
@@ -218,9 +219,6 @@ function columnOf(table: PgTable, name: string): PgColumn {
   return column;
 }
 
-/** Re-exported: `assert-output` upserts an asset with the same rule. */
-export { updateSet };
-
 /** The scope of everything one source owns in a table keyed by asset id. */
 function inNamespace(column: unknown, prefix: string): SQL {
   return sql`starts_with(${column as SQL}, ${prefix})`;
@@ -248,6 +246,8 @@ export async function writeSource(
     metadata?: Record<string, unknown>;
     /** The revision author, `import:<git sha>` of the tree read. */
     author?: string;
+    /** The revision reason. Defaults to naming the source and what it read. */
+    reason?: string;
     /**
      * The courses source runs later in the same import and rewrites every
      * course's `collection_tag` rows, so a tag this run prunes may take its
@@ -289,6 +289,12 @@ export async function writeSource(
     );
     await markSeam(tx, `import:${indexer.source}`);
 
+    // Sparse positions (D22): the indexers hand over each list's order as a
+    // rank, and the stored numbers are placed here, under the locks, against
+    // what the rows hold now, so a row whose place did not change keeps its
+    // number and its snapshot.
+    const placed = await placeSparsePositions(tx, rows);
+
     // The last state of every entity this run will delete, read before step 1
     // clears the link rows it owns, so a `delete` revision records the entity
     // as it was and not half stripped.
@@ -328,7 +334,7 @@ export async function writeSource(
 
     // 3. Upsert the entities, parents before children.
     for (const name of ENTITY_ORDER) {
-      const batch = (rows[name] ?? []) as AnyRow[];
+      const batch = (placed[name] ?? []) as AnyRow[];
       if (batch.length === 0) continue;
       const table = TABLES[name];
       for (const part of chunked(batch)) {
@@ -367,7 +373,7 @@ export async function writeSource(
 
     // 5. Insert the links, now that everything they point at exists.
     for (const name of LINK_ORDER) {
-      const batch = (rows[name] ?? []) as AnyRow[];
+      const batch = (placed[name] ?? []) as AnyRow[];
       const table = TABLES[name];
       for (const part of chunked(batch)) await tx.insert(table).values(rowsFor(part));
       if (batch.length > 0) record(table, written, batch.length);
@@ -381,7 +387,7 @@ export async function writeSource(
     //    with a word and an entity that comes back later starts a new line.
     const by = {
       author: options.author ?? "import:unknown",
-      reason: `catalog index read ${root} (${indexer.source})`,
+      reason: options.reason ?? `catalog import of ${root} (${indexer.source})`,
     };
     for (const name of ENTITY_ORDER) {
       const key = ENTITY_KEY[name];
@@ -426,6 +432,178 @@ export async function writeSource(
     archivedKeys,
     revisions,
   };
+}
+
+/**
+ * A list whose stored positions are sparse (D22): the rows of one table, cut
+ * into lists by `group`, each row named within its list by `key`.
+ *
+ * `entity` and `entityKey` say whose revision a row's position is part of. A
+ * position is kept only when that entity already has a revision: one with
+ * none was written before revisions existed (dense `1, 2, 3`, or the
+ * column's default), and its first revision is being written now whatever
+ * the number is, so it is placed afresh at no cost.
+ */
+interface SparseList {
+  table: "topic" | "tag" | "concept" | "curriculumItem" | "collectionItem";
+  column: "position" | "topicPosition";
+  key: string;
+  group: string | null;
+  /** Only these rows of the table are in a list; the rest keep what they were given. */
+  inList: (row: AnyRow) => boolean;
+  inListSql: SQL | undefined;
+  entity: RevisionEntityType;
+  /** What the list is, for a refusal: "the topics in content/topics.yaml". */
+  describe: (group: string | null) => string;
+  /** The command that spreads the list out again. */
+  renumber: (group: string | null) => string;
+}
+
+const SPARSE_LISTS: readonly SparseList[] = [
+  {
+    table: "topic",
+    column: "position",
+    key: "slug",
+    group: null,
+    inList: () => true,
+    inListSql: undefined,
+    entity: "topic",
+    describe: () => "the topics in content/topics.yaml",
+    renumber: () => "renumber topics",
+  },
+  {
+    table: "tag",
+    column: "position",
+    key: "id",
+    group: null,
+    inList: () => true,
+    inListSql: undefined,
+    entity: "tag",
+    describe: () => "the tags in content/tags.yaml",
+    renumber: () => "renumber tags",
+  },
+  {
+    table: "concept",
+    column: "topicPosition",
+    key: "slug",
+    group: "topicSlug",
+    inList: () => true,
+    inListSql: undefined,
+    entity: "concept",
+    describe: (topicSlug) => `maps.concepts of topic "${String(topicSlug)}"`,
+    renumber: (topicSlug) => `renumber concepts --topic ${String(topicSlug)}`,
+  },
+  {
+    table: "curriculumItem",
+    column: "position",
+    key: "id",
+    group: "collectionId",
+    inList: () => true,
+    inListSql: undefined,
+    entity: "curriculum_item",
+    describe: (moduleId) => `the items of module "${String(moduleId)}"`,
+    renumber: (moduleId) => `renumber items --module ${String(moduleId)}`,
+  },
+  {
+    // A module's topic row: its place in the topic's `maps.courses`. The row
+    // belongs to the module's snapshot, so the module is the entity.
+    table: "collectionItem",
+    column: "topicPosition",
+    key: "collectionId",
+    group: "topicSlug",
+    inList: (row) => row["topicSlug"] !== null && row["topicSlug"] !== undefined,
+    inListSql: sql`${collectionItem.topicSlug} is not null`,
+    entity: "collection",
+    describe: (topicSlug) => `maps.courses of topic "${String(topicSlug)}"`,
+    renumber: (topicSlug) => `renumber modules --topic ${String(topicSlug)}`,
+  },
+];
+
+/**
+ * `rows` with every sparse list's positions placed: each list's rows ordered
+ * by the rank the indexer gave (file order), then numbered by
+ * `placePositions` against the positions stored now. Returns a copy; the
+ * indexer's rows are left as they were.
+ */
+async function placeSparsePositions(tx: CatalogDatabase, rows: SourceRows): Promise<SourceRows> {
+  const out: SourceRows = { ...rows };
+  for (const list of SPARSE_LISTS) {
+    const given = (rows[list.table] ?? []) as AnyRow[];
+    if (!given.some(list.inList)) continue;
+    const table = TABLES[list.table];
+    const keyColumn = columnOf(table, list.key);
+    const positionColumn = columnOf(table, list.column);
+    const groupColumn = list.group === null ? null : columnOf(table, list.group);
+
+    const stored = (await tx
+      .select({
+        key: keyColumn,
+        position: positionColumn,
+        group: groupColumn ?? sql<null>`null`,
+      })
+      .from(table)
+      .where(list.inListSql)) as { key: string; position: number; group: string | null }[];
+    const revised = await entitiesWithRevisions(
+      tx,
+      list.entity,
+      stored.map((row) => row.key),
+    );
+
+    const groups = new Map<string | null, { index: number; row: AnyRow }[]>();
+    given.forEach((row, index) => {
+      if (!list.inList(row)) return;
+      const group = list.group === null ? null : (row[list.group] as string | null);
+      const members = groups.get(group);
+      if (members === undefined) groups.set(group, [{ index, row }]);
+      else members.push({ index, row });
+    });
+
+    const copy = [...given];
+    for (const [group, members] of groups) {
+      const rank = (entry: { index: number; row: AnyRow }) => Number(entry.row[list.column] ?? 0);
+      const ordered = [...members].sort((a, b) => rank(a) - rank(b) || a.index - b.index);
+      const existing = new Map(
+        stored
+          .filter((row) => row.group === group && revised.has(row.key))
+          .map((row) => [row.key, row.position] as const),
+      );
+      let positions: Map<string, number>;
+      try {
+        positions = placePositions(
+          ordered.map((entry) => String(entry.row[list.key])),
+          existing,
+        );
+      } catch (error) {
+        if (!(error instanceof PositionGapError)) throw error;
+        throw new IndexError(
+          `${list.describe(group)}: ${error.message}. The rows around them are kept where they ` +
+            `are so their revisions do not change, and here that leaves no whole number free. Run ` +
+            `\`npm run catalog -- ${list.renumber(group)} --reason "<why>"\`, which spreads the ` +
+            `list out again with one revision per row it moves, then import again.`,
+        );
+      }
+      for (const entry of ordered) {
+        copy[entry.index] = { ...entry.row, [list.column]: positions.get(String(entry.row[list.key])) };
+      }
+    }
+    (out as Record<string, AnyRow[]>)[list.table] = copy;
+  }
+  return out;
+}
+
+/** The ids of `type` among `ids` that have at least one revision. */
+async function entitiesWithRevisions(
+  tx: CatalogDatabase,
+  type: RevisionEntityType,
+  ids: readonly string[],
+): Promise<Set<string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Set();
+  const { rows } = await tx.execute<{ entity_id: string }>(sql`
+    select distinct entity_id from content_revision
+    where entity_type = ${type} and entity_id = any(${sql.param(unique)}::text[])
+  `);
+  return new Set(rows.map((row) => row.entity_id));
 }
 
 /**
@@ -565,11 +743,6 @@ function assertInScope(rows: SourceRows, replace: ReplaceScope | undefined): voi
 }
 
 /**
- * Delete the rows of one entity table that are in this source's scope and were
- * not produced this run. Returns the keys deleted; a table the source does not
- * own is left entirely alone.
- */
-/**
  * The keys of one entity table that are in this source's scope and were not
  * produced this run: what a prune would delete. Empty for a table the source
  * does not own.
@@ -600,6 +773,11 @@ async function staleKeys(
   return stale.map((row) => row.key);
 }
 
+/**
+ * Delete the rows of one entity table that are in this source's scope and were
+ * not produced this run. Returns the keys deleted; a table the source does not
+ * own is left entirely alone.
+ */
 async function pruneEntity(
   tx: CatalogDatabase,
   indexer: Indexer,

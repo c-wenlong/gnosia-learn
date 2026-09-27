@@ -17,6 +17,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
+import { formatHistory } from "../src/commands/revisions";
 import { diffRevisions, diffSnapshots, history, lineDiff } from "../src/content/history";
 import type { Snapshot } from "../src/content/snapshot";
 import {
@@ -27,7 +28,7 @@ import {
   writeGuardName,
 } from "../src/content/rules";
 import { lockTypes } from "../src/content/revisions";
-import { ContentWriteError, writeContent, type WriteContentInput } from "../src/content/write";
+import { ContentWriteError, writeContent, writeContents, type WriteContentInput } from "../src/content/write";
 import { connect, connectionOptions } from "../src/db";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
@@ -81,6 +82,30 @@ function topicWrite(
     reason: `set ${slug} to ${title}`,
     ...extra,
   };
+}
+
+function tagWrite(id: string, label: string, base: number | null): WriteContentInput {
+  return {
+    type: "tag",
+    id,
+    next: { row: { id, label } },
+    base,
+    author: "local",
+    authorKind: "person",
+    reason: `set ${id} to ${label}`,
+  };
+}
+
+/** Resolves once `pid` is waiting on an advisory lock, so a test can order two transactions exactly. */
+async function waitingOnLock(db: Scratch["db"], pid: number): Promise<void> {
+  for (let i = 0; i < 200; i += 1) {
+    const { rows } = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from pg_locks where pid = ${pid} and locktype = 'advisory' and not granted`,
+    );
+    if ((rows[0]?.n ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`backend ${pid} never waited on a lock`);
 }
 
 /** A stand-in for the courses indexer, owning what it owns. */
@@ -361,6 +386,140 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
       await importer.close();
     }
   });
+
+  it("composes inside an outer transaction: both writes commit with it, or neither does", async () => {
+    await scratch.db.transaction(async (tx) => {
+      await writeContent(tx, topicWrite("outer-a", "A", null));
+      await writeContent(tx, topicWrite("outer-b", "B", null));
+    });
+    expect((await history(scratch.db, "topic", "outer-a")).map((r) => r.op)).toEqual(["create"]);
+    expect((await history(scratch.db, "topic", "outer-b")).map((r) => r.op)).toEqual(["create"]);
+
+    await expect(
+      scratch.db.transaction(async (tx) => {
+        await writeContent(tx, topicWrite("outer-c", "C", null));
+        throw new Error("the caller changed its mind");
+      }),
+    ).rejects.toThrow(/changed its mind/);
+    expect(await scratch.db.select().from(topic).where(eq(topic.slug, "outer-c"))).toEqual([]);
+    expect(await history(scratch.db, "topic", "outer-c")).toEqual([]);
+  });
+
+  it("writes several entities in one transaction, in the order given, each with its own revision", async () => {
+    const results = await writeContents(scratch.db, [
+      topicWrite("multi-z", "Z", null),
+      tagWrite("multi-tag", "Tag", null),
+      topicWrite("multi-a", "A", null),
+    ]);
+    expect(results.map((r) => [r.type, r.id, r.op, r.seq])).toEqual([
+      ["topic", "multi-z", "create", 1],
+      ["tag", "multi-tag", "create", 1],
+      ["topic", "multi-a", "create", 1],
+    ]);
+    // In the order given, not the lock order: the revision ids say which ran first.
+    expect(results[0]!.revisionId).toBeLessThan(results[1]!.revisionId);
+    expect(results[1]!.revisionId).toBeLessThan(results[2]!.revisionId);
+  });
+
+  it("rolls every write back when one of them is refused", async () => {
+    const first = await writeContent(scratch.db, topicWrite("multi-stale", "One", null));
+    await writeContent(scratch.db, topicWrite("multi-stale", "Two", first.revisionId));
+    await expect(
+      writeContents(scratch.db, [
+        topicWrite("multi-fresh", "Fresh", null),
+        topicWrite("multi-stale", "Three", first.revisionId),
+      ]),
+    ).rejects.toMatchObject({ code: "stale-base" });
+    expect(await scratch.db.select().from(topic).where(eq(topic.slug, "multi-fresh"))).toEqual([]);
+    const [row] = await scratch.db.select().from(topic).where(eq(topic.slug, "multi-stale"));
+    expect(row?.title).toBe("Two");
+    await expect(
+      writeContents(scratch.db, [topicWrite("multi-twice", "A", null), topicWrite("multi-twice", "B", null)]),
+    ).rejects.toThrow(/named twice/);
+  });
+
+  it("deadlocks when two writeContent calls in one transaction lock out of order, which is why writeContents exists", async () => {
+    // The shape the review found: a writer holding `topic` that then wants
+    // `tag`, against an import that takes `tag` and then wants `topic`.
+    const writer = connect({ url: scratch.url });
+    const importer = connect({ url: scratch.url });
+    let wrote!: () => void;
+    const topicHeld = new Promise<void>((resolve) => {
+      wrote = resolve;
+    });
+    let go!: () => void;
+    const importWaiting = new Promise<void>((resolve) => {
+      go = resolve;
+    });
+    try {
+      const naive = writer.db.transaction(async (tx) => {
+        await writeContent(tx, topicWrite("dl-topic", "T", null));
+        wrote();
+        await importWaiting;
+        await writeContent(tx, tagWrite("dl-tag", "T", null));
+      });
+      await topicHeld;
+      const importing = importer.db.transaction(async (tx) => {
+        const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        const pid = rows[0]!.pid;
+        const locking = lockTypes(tx, ["tag", "topic"]);
+        await waitingOnLock(scratch.db, pid);
+        go();
+        await locking;
+      });
+      const outcomes = await Promise.allSettled([naive, importing]);
+      const deadlocked = outcomes.filter((o) => o.status === "rejected" && sqlstate(o.reason) === "40P01");
+      expect(deadlocked).toHaveLength(1);
+      expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    } finally {
+      go();
+      await writer.close();
+      await importer.close();
+    }
+  }, 30_000);
+
+  it("never deadlocks writeContents against another composite writer or an import, whatever order they name things in", async () => {
+    // By construction every one of them takes its locks in (type, id) order
+    // (revisions.ts, "The lock order"); this runs them against each other.
+    const connections = Array.from({ length: 3 }, () => connect({ url: scratch.url }));
+    try {
+      const bases = new Map<string, number | null>();
+      const write = async (db: Scratch["db"], order: string[], round: number) => {
+        const inputs = order.map((name) => {
+          const [type, id] = name.split(":") as ["topic" | "tag", string];
+          const base = bases.get(name) ?? null;
+          return type === "topic" ? topicWrite(id, `r${round}`, base) : tagWrite(id, `r${round}`, base);
+        });
+        for (;;) {
+          try {
+            return await writeContents(db, inputs);
+          } catch (error) {
+            // Losing a race for the same entity is a stale base, never a deadlock.
+            if (!(error instanceof ContentWriteError && error.code === "stale-base")) throw error;
+            for (const input of inputs) {
+              input.base = (await history(scratch.db, input.type, input.id)).at(-1)?.id ?? null;
+            }
+          }
+        }
+      };
+      for (let round = 0; round < 6; round += 1) {
+        const [a, b, c] = connections;
+        const results = await Promise.all([
+          write(a!.db, ["topic:mix-1", "tag:mix-1", "topic:mix-2"], round),
+          write(b!.db, ["tag:mix-1", "topic:mix-2", "topic:mix-1"], round),
+          c!.db.transaction(async (tx) => {
+            await lockTypes(tx, ["topic", "tag"]);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }),
+        ]);
+        for (const result of results.slice(0, 2) as Awaited<ReturnType<typeof writeContents>>[]) {
+          for (const r of result) bases.set(`${r.type}:${r.id}`, r.revisionId);
+        }
+      }
+    } finally {
+      for (const connection of connections) await connection.close();
+    }
+  }, 60_000);
 
   it("puts owned links in the snapshot, so a link-only change is a revision of the parent", async () => {
     const note = (slug: string, body: string) => ({
@@ -803,6 +962,23 @@ describe.skipIf(!reachable.ok)("the copy guard", () => {
       connectionOptions("postgres://h/db?options=-c%20search_path%3Dx", { copyOk: true }),
     ).toBe("-c search_path=x -c self_learn.copy_ok=on");
     expect(connectionOptions("postgres://h/db", { options: "-c a=b", copyOk: false })).toBe("-c a=b");
+  });
+});
+
+describe("catalog history's byline", () => {
+  const revision = (authorKind: string, author: string) =>
+    ({ id: 1, seq: 1, op: "import", createdAt: "2026-09-28T00:00:00.000Z", authorKind, author, reason: "r", jobId: null, sessionId: null }) as never;
+
+  it("prints an import's author once, and a person's with its kind", () => {
+    const text = formatHistory({
+      database: "x",
+      type: "topic",
+      id: "alpha",
+      revisions: [revision("import", "import:abc123"), revision("person", "local")],
+    });
+    expect(text).toContain("  import:abc123\n");
+    expect(text).not.toContain("import:import:");
+    expect(text).toContain("  person:local\n");
   });
 });
 
