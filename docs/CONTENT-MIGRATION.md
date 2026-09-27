@@ -736,14 +736,14 @@ PRs (*guessed*).
 **Owns:** `services/catalog/src/content/courses.ts`, the `course` and `item`
 commands, the courses indexer's import mode.
 
-- [ ] `catalog course import <file.yaml> --reason`: parses with
+- [x] `catalog course import <file.yaml> --reason`: parses with
       `packages/content`'s course parser (every rule in its section 7 of the
       inventory, `packages/content/src/courses.ts:136-357`), validates
       references against rows instead of other files, and writes the diff
       through the seam. An item the file no longer lists is archived and
       reported by id, never deleted.
-- [ ] `catalog course export <id>` writes the one YAML file to edit.
-- [ ] `catalog item archive|restore|purge`. `purge` refuses while `progress`
+- [x] `catalog course export <id>` writes the one YAML file to edit.
+- [x] `catalog item archive|restore|purge`. `purge` refuses while `progress`
       or `recap` rows name the item unless `--with-learner-data` is passed, and
       then snapshots those rows into the revision before deleting.
 - [ ] Readers filter `archived_at is null`; an archived item with a learner's
@@ -758,6 +758,40 @@ commands, the courses indexer's import mode.
       `catalog status` showing the distance to zero. When it reaches zero,
       `catalog flip courses --strict` arms the rule (D21), so phase 3 does not
       have to waive it.
+
+**Built** (the writers) in `services/catalog/src/content/courses.ts`,
+`items.ts` and `write-through.ts`, with `parseCourse`, the one-file half of
+the course parser, in `packages/content`. Where it goes past or around the
+list above, and why:
+
+- **The writers write through (D17) from day one, not from the flip.** After a
+  course write commits, every export file the write changed (the course's
+  file, and `topics.yaml` when a module's topic moved) is rewritten in the tree
+  the type was last imported from, and on a flipped type the export hash is
+  recorded in the same transaction. While courses are on files that is what
+  keeps the next `catalog index` from undoing the write; after the flip it is
+  D17. A changed file that does not say what the database rendered before the
+  write (compared parsed, as parity compares it) holds edits nobody imported,
+  and the write is refused rather than overwrite them; the file being imported
+  is the one exception.
+- **The rows are the indexer's rows**, column for column and placed with the
+  same sparse positions, so importing an unchanged file writes no revision and
+  a `catalog index` after an import writes none either.
+- **An archived row keeps its links.** The indexer drops them (it replaces its
+  link tables whole); the seam does not, and `item restore` of an item the
+  indexer archived takes its concept links from its last live revision.
+- **A curated link no module lists any more is deleted**, with a `delete`
+  revision, as the indexer prunes it. It carries no learner data.
+- **`purge` refuses a live item**: archive first, so deleting is always the
+  second of two steps. The learner rows go into the `delete` revision's
+  snapshot as `links.progress` and `links.recap`, and `item restore` of a
+  purged item rebuilds the row, its links and those rows from it.
+- **Course order is unique by the seam's check, not a constraint.** A unique
+  index on live courses' `position` would be a migration, and D10 keeps
+  phase 1 free of them; every course write goes through `course import`,
+  which refuses a taken order by name. Slug uniqueness is the existing partial
+  index, and the import names a clash before the index would.
+- **`--dry-run`** runs the whole write and rolls it back, for the planner.
 
 **Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
 **Tests:** an import that drops an item archives it and leaves `progress`; a

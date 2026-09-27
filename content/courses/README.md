@@ -1,10 +1,27 @@
 # Course data
 
-**These files are the course data.** There is no TypeScript copy any more: the
-web app and `catalog index` both go through `loadCourses()` in
+**These files are the course data until the `courses` type is flipped, and its
+export after.** There is no TypeScript copy: the web app, `catalog index` and
+`catalog course import` all read them with the parser in
 [`packages/content`](../../packages/content/src/courses.ts), so a course file
-means one thing in both places. Editing a page to change a course title is not
-a thing that can work.
+means one thing everywhere. Editing a page to change a course title is not a
+thing that can work.
+
+**Change a course by importing its file.** Edit the file here, or export it
+first, and import it with a reason:
+
+```bash
+npm run catalog -- course export cs2111 --out /tmp/cs2111.yaml
+npm run catalog -- course import /tmp/cs2111.yaml --reason "why this changed"
+```
+
+The import writes one revision per module, item or link that changed, and
+rewrites the file here (and `../topics.yaml` when a module's topic changed)
+to match, so the two never disagree. A module or item the file stops listing
+is archived, never deleted, and the learner's progress and recap on it stay.
+[docs/CURRICULUM.md](../../docs/CURRICULUM.md) has the whole loop, the item
+verbs and every refusal. Once the database owns courses, a hand edit here that
+was not imported is refused by the next `catalog index`, by name.
 
 One YAML file per course, named `<code>.yaml` in lowercase (e.g. `cs2111.yaml`).
 The reader refuses a file whose name and `code:` disagree.
@@ -41,8 +58,9 @@ modules:
 ```
 
 **Ids are permanent.** Learner progress, notes and recaps are keyed by topic id
-in browser storage, and concept notes under `learn/concepts/` link back through
-the same ids. An id must never be renamed or renumbered. See
+in the `progress` and `recap` tables, and concept links hang off the same ids.
+An id must never be renamed or renumbered: a renamed item is an archived one
+plus a new, empty one. See
 [docs/CURRICULUM.md](../../docs/CURRICULUM.md) for the full rule, the list of
 refusals, and how to add topics safely.
 
@@ -51,6 +69,12 @@ gives a different sequence from the curated shortlist, and nothing would say so,
 so the key is authored and has to be unique.
 
 **`topic:` is a lookup key, not free text.** Add or rename a topic in
-[`../topics.yaml`](../topics.yaml), and list the module's id under that topic's
-`maps.courses`. `catalog index` refuses to run when the two files disagree in
-either direction.
+[`../topics.yaml`](../topics.yaml). `course import` lists a new module under
+that topic's `maps.courses` itself; if you edit the files and run
+`catalog index` instead, list it there by hand, since the index refuses to
+run when the two files disagree in either direction.
+
+**`concepts:` on every item.** Each item names the concept notes that teach it,
+filed under the module's topic. `npm run catalog -- doctor` lists every item
+without one; the database refuses the gap once `catalog flip courses --strict`
+arms the rule.

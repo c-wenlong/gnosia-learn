@@ -613,6 +613,18 @@ or recap written to an archived item is refused by name (`assertKnownItems` in
 Settings export still carries it; importing that export back
 (`src/state/import.ts`) restores it, since it is the learner's own record.
 
+The course writers (`catalog course import`, `catalog item archive|restore`,
+`src/content/courses.ts` and `src/content/items.ts`) archive through the seam
+and keep the archived row's links, so a restore brings its concept links
+back; the courses indexer replaces its link tables wholesale and so drops
+them, and a restore of such an item takes them from the last revision that
+recorded it live. The one way an item leaves the table is `catalog item
+purge`, which refuses a live item, refuses while a `progress` or `recap` row
+names it, and with `--with-learner-data` copies those rows into its `delete`
+revision's snapshot (under `links.progress` and `links.recap`, by column name)
+before deleting them, so `catalog item restore` of a purged item rebuilds the
+row, its links and the learner rows from that revision alone.
+
 **Every entity a run touched gets an `import` revision when its snapshot
 changed.** The run's author is `import:<git sha>` of the commit the files it
 read are tracked at, `import:<sha>-dirty` when some under `content/` or
