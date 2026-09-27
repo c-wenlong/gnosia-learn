@@ -521,6 +521,13 @@ async function run() {
     await go('/learn');
     const table = main.getByRole('table');
     await table.getByRole('columnheader', { name: 'Concept' }).waitFor();
+    // The Status menu opens on its listbox and closes on Escape, focus back on the trigger.
+    const status = main.getByRole('button', { name: /^Status:/ });
+    await clickHydrated(page, status);
+    await main.getByRole('listbox', { name: 'Status' }).getByRole('option', { name: /^All\b/ }).waitFor();
+    await page.keyboard.press('Escape');
+    await main.getByRole('listbox', { name: 'Status' }).waitFor({ state: 'detached' });
+    assert(await status.evaluate((el) => el === document.activeElement), 'Escape did not return focus to the Status trigger');
     const first = table.getByRole('link').first();
     await first.waitFor();
     const href = await first.getAttribute('href');
@@ -588,7 +595,9 @@ async function run() {
 
   await step('library: first video, Mark watched', page, async () => {
     await go('/library');
-    await page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('link', { name: /^Video\b/ }).click();
+    // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
+    await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
+    await page.getByRole('listbox', { name: 'Type' }).getByRole('option', { name: /^Video\b/ }).click();
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
     await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
