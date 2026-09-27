@@ -6,9 +6,10 @@ import { dbSource, NotMigratedError, READERS, readyTypes } from "../src/content/
 import type { CatalogDatabase } from "../src/db";
 
 /**
- * The database half of the reader seam, before any track fills it in.
+ * The database half of the reader seam, for the types whose track has not
+ * filled it in yet.
  *
- * Needs no Postgres: the stub runs no query, and that is part of what is
+ * Needs no Postgres: a stub runs no query, and that is part of what is
  * pinned. A method that answered with an empty list instead of refusing would
  * render a site with nothing in it and no error anywhere.
  */
@@ -31,7 +32,11 @@ describe("dbSource", () => {
     diagram: () => source.diagram("dot-product"),
   };
 
-  it.each(Object.keys(calls) as (keyof ContentSource)[])("refuses %s with its type named", async (method) => {
+  // A track that fills in its reader sets `ready` in its own file, and its
+  // method leaves these cases by that flag alone.
+  const refusing = (Object.keys(calls) as (keyof ContentSource)[]).filter((method) => !READERS[method].ready);
+
+  it.each(refusing)("refuses %s with its type named", async (method) => {
     const type = METHOD_TYPES[method];
     const refused = calls[method]().then(
       () => null,
@@ -47,12 +52,15 @@ describe("dbSource", () => {
     expect(new Set(Object.values(METHOD_TYPES))).toEqual(new Set(CONTENT_TYPES));
   });
 
-  it("names no type as readable while every method still refuses", () => {
-    // `catalog flip` refuses a type missing from DB_READERS. A track that
-    // fills in its reader sets `ready` in its own file, and moves its method
-    // out of the refusal cases above.
-    expect([...DB_READERS]).toEqual([]);
-    expect(Object.values(READERS).map((reader) => reader.ready)).toEqual([false, false, false, false, false, false]);
+  it("names as readable exactly the types whose reader says it is ready", () => {
+    // `catalog flip` refuses a type missing from DB_READERS, and readers
+    // follow a flipped row, so the two must never disagree.
+    expect([...DB_READERS].sort()).toEqual([...readyTypes()].sort());
+    for (const method of Object.keys(READERS) as (keyof ContentSource)[]) {
+      expect(DB_READERS.has(METHOD_TYPES[method]), method).toBe(READERS[method].ready);
+    }
+    // Track B's: courses answers from rows (test/courses-reader.test.ts).
+    expect(DB_READERS.has("courses")).toBe(true);
   });
 
   it("derives the readable types from each reader's own flag", () => {
