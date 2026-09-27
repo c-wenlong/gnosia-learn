@@ -253,7 +253,7 @@ appends to `maps.concepts` in `content/topics.yaml`. Both edits happen in the
 same command so a note written during a `/learn` session lands on the course
 path in one step.
 
-`catalog status` gains a per-course line: `cp4284: 3 of 22 items have
+`catalog status` gains a per-course line: `cp4284: 3 of 13 items have
 concepts`. `catalog doctor` (or the content test) fails on a concept listed on
 an item whose module topic does not name it.
 
@@ -275,7 +275,8 @@ an item whose module topic does not name it.
 
 `concepts:` stays optional per item until the shortlist has coverage. Making it
 required today would refuse nine courses that have nothing to put there.
-Required is the end state, and `catalog status` is how to see the distance.
+Required is the end state, and `catalog status` is how to see the distance:
+its `coverage` block prints, per course, how many rows list a concept.
 
 ## Tests
 
@@ -318,4 +319,4 @@ Each of these came out of the same audit and is a separate change:
 | Courses indexer owns the link, order becomes topics, concepts, courses, frontmatter `topics:` refused and removed from the 32 notes, `concept add --topics` gone | the PR that follows #118 |
 | `positions` on the knowledge base, `conceptsForTopic` sorts by it | the PR that follows #119 |
 | Today and the Courses grid use `mastered` | the PR that follows #121 |
-| `concept add --item`, `catalog status` coverage | not started |
+| `concept add --item`, `catalog status` coverage | the PR that follows #122 |

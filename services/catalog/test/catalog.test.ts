@@ -182,6 +182,25 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       }
     });
 
+    it("says how many of each course's rows list a concept", async () => {
+      const status = await runStatus();
+      // Every course on the shortlist, in shortlist order.
+      expect(status.coverage.map((c) => c.course)).toEqual([
+        "cs2111", "cs4263", "cp4281", "cp4282", "cp4283", "cp4284", "cp4285", "cs3216", "cs3227", "cs3249",
+      ]);
+      // The one course whose rows list concepts today, and the rest untouched.
+      expect(status.coverage.find((c) => c.course === "cp4284")).toEqual({
+        course: "cp4284",
+        items: 13,
+        withConcepts: 3,
+      });
+      for (const c of status.coverage) {
+        if (c.course === "cp4284") continue;
+        expect(c.withConcepts, c.course).toBe(0);
+        expect(c.items, c.course).toBeGreaterThan(0);
+      }
+    });
+
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
       // `index_run` arrives in 0002, so a database stopped at 0000 or 0001 has
       // a non-null head and no such table. Counting there used to throw
@@ -199,6 +218,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         expect(status.migrations.pending.length).toBeGreaterThan(0);
         expect(status.rows).toEqual({});
         expect(status.sources.every((s) => s.lastIndexedAt === null)).toBe(true);
+        expect(status.coverage).toEqual([]);
       } finally {
         if (saved !== undefined) process.env["DATABASE_URL"] = saved;
         await partial.drop();
