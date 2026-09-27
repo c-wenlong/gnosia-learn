@@ -160,6 +160,17 @@ runs it through `validateBrief` from
 - **Valid**: the draft moves to `briefed`, the brief is stored on the draft,
   and a `brief` event carries it to the panel, which renders the confirm
   message with Draw.
+- **Valid except for the topic**: `validateBrief` reports exactly one
+  failure, `topic` is not in the vocabulary, and the same reply carries a
+  fenced `yaml` block whose `slug` is that topic. This is the planner saying
+  nothing fits (D39), so the runner does not treat it as a refusal: the draft
+  moves to `briefed` with `pending_topic` set to the slug, the brief and the
+  YAML entry are stored, and the card renders with Draw disabled, reason "Add
+  `<slug>` to `content/topics.yaml`" and the entry beside it with Copy. When
+  the panel regains focus, and on every Draw, the runner re-runs
+  `validateBrief` against the file as it is; once the topic exists the reason
+  clears and Draw is live. Any other failure alongside the topic, or a
+  missing or mismatched YAML block, is an ordinary refusal below.
 - **Invalid, the first time**: the person sees no brief. While a reply
   streams, the panel never renders a `brief` block raw; it shows "Checking the
   brief" in its place. On a refusal the runner resumes the planner once with a
@@ -210,8 +221,10 @@ prompt.
 4. What connects to what, and what each arrow means. These become
    `relations`. A comparison or a timeline may have none.
 5. New or extend. `extend` only when this conversation opened on an existing
-   diagram (the EXTENDING block below) or the person names one from the
-   CORPUS block.
+   diagram (the EXTENDING block below), the person names one from the CORPUS
+   block, or a STUDIO note in this conversation says a diagram was accepted
+   and gives its slug. That note lists what was drawn, and is the only record
+   of it you have: the CORPUS block was written before it existed.
 6. A title a stranger would understand, and a slug: lower-case words joined by
    single hyphens, not already in the CORPUS block unless you are extending it.
 7. The topic, from the VOCABULARY block.
@@ -423,6 +436,7 @@ edited.
 | `transcript_path` | text, not null | `drafts/<id>/transcript.ndjson`, relative to `$STUDIO_HOME`, because that directory moves between machines and the repo root does not |
 | `brief` | jsonb, null | The latest brief that passed `validateBrief` |
 | `brief_at` | timestamptz, null | When it did |
+| `pending_topic` | text, null | The slug of a topic the planner proposed and `content/topics.yaml` does not have yet; cleared when it does (D39) |
 | `turns` | integer, not null | The person's turns so far, against the turn cap |
 | `cost_usd`, `cost_source` | numeric, text, null | Every turn summed; `result` or `stream` as on `job`, with the same paired `CHECK` |
 | `error_kind`, `error` | text, null | The last failure: `agent`, `brief-invalid`, `timeout`, `interrupted` |
@@ -588,8 +602,13 @@ the chat. The job strip still shows the job when the panel is closed.
 ### After a job: another diagram
 
 When a job reaches a terminal state the runner appends a STUDIO note to the
-draft and the panel offers two things under the verdict: Back to the
-conversation, and New diagram. The conversation's composer reads "Ask for
+draft: the verdict, the slug, and on an accept the labels and bindings the
+gate found in the drawing (the same shape as the EXTENDING block, from the
+gate's own `inspect --json`, capped the same way). The planner has no other way
+to learn that the diagram now exists, since its CORPUS block was written before
+it did, and rule 5 of its prompt names this note as a ground for `extend`. The
+panel offers two things under the verdict: Back to the conversation, and New
+diagram. The conversation's composer reads "Ask for
 another diagram, or a change to this one". A request for another diagram gets a
 new brief with a new slug and a new job on the same draft; a change to the one
 just accepted gets an `extend` brief on the same slug. Either way the person
@@ -669,7 +688,7 @@ C for the chat and planner, M for the manual.
 | C2 | Two tabs post to one draft at once | The second gets 409 while a turn is in flight. Both tabs follow the same SSE stream, so both show the reply |
 | C3 | The planner's session cannot be resumed (the CLI's transcript was deleted) | The `--resume` exits without a turn, as the runner already detects for a revise. The runner starts a fresh session, replays the transcript into its first message as a fenced data block, and says so in a STUDIO note |
 | C4 | `content/topics.yaml` changes during a draft | The planner's snapshot is frozen, but Draw validates against the file as it is. A brief naming a topic since removed is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added |
-| C5 | Nothing in the vocabulary fits | The planner says so and writes the YAML entry; Draw stays off until the entry is in the file. If Postgres is up, the enqueue also needs the topic indexed, and the refusal names `npm run catalog -- index` (D39) |
+| C5 | Nothing in the vocabulary fits | The planner says so and writes the YAML entry; the brief is stored with `pending_topic` rather than refused, and Draw is disabled with the entry beside it until it is in the file (see the hand-off). If Postgres is up, the enqueue also needs the topic indexed, and the refusal names `npm run catalog -- index` (D39) |
 | C6 | The planner proposes a slug that already exists, as `new` | `runner.enqueue` refuses it with 409, which reaches the planner as a STUDIO note. The CORPUS block exists so this is rare, and the refusal exists because the block can be a week old |
 | C7 | The target is held by another job | 409 naming the holder; the confirm card's Draw is disabled with the job's name and an Open link |
 | C8 | The person pastes a mermaid flowchart | The runner, not the planner, finds a fenced `mermaid` block in the person's own messages and attaches the latest one to the brief as `mermaid` at Draw, where it is written to scratch and lifted by `from-mermaid` as today. The confirm card says "Flowchart attached" with a way to drop it. The planner sees the text and plans around it, but never carries it |
@@ -867,8 +886,13 @@ maintainers.
 ### D39. When nothing fits, the planner writes the topic entry; drawing with no topic stays refused
 
 **Verdict:** the planner says nothing fits and writes the YAML entry for the
-person to add to `content/topics.yaml`; Draw stays off until it exists. **This
-amends D28, which proposed "no topic yet".**
+person to add to `content/topics.yaml`. The runner recognises that reply (one
+validation failure, on `topic`, and a YAML block with the same slug) and stores
+the brief as `briefed` with `pending_topic`, so the card and its disabled Draw
+are on screen with the entry to copy; Draw goes live once the file has the
+topic. Without that recognition the brief would fall into the invalid-brief
+retry path and never be stored. **This amends D28, which proposed "no topic
+yet".**
 
 **Why, and it is a hard problem:** today a job cannot produce an untopiced
 diagram. `validateBrief` refuses a topic outside the vocabulary,
@@ -883,14 +907,19 @@ answers concern 2: the person is no longer limited to topics that exist.
 
 ### D40. A draft that produced a job is not pruned
 
-**Verdict:** pruning removes drafts in `open`, `briefed` or `abandoned` untouched
-for seven days, row and workspace. A draft with a job lives as long as the job.
+**Verdict:** pruning removes a draft untouched for seven days, row and
+workspace, only when no `job` row carries its id: `NOT EXISTS (SELECT 1 FROM job
+WHERE draft_id = draft.id)`, whatever the draft's state. A failed or cancelled
+drawing returns its draft to `briefed`, so a rule by state would prune exactly
+the conversations whose job needs explaining. A draft with a job lives as long
+as the job.
 
 **Why:** the conversation is the only record of why a diagram looks as it does,
 and jobs are never pruned (a known gap in the existing doc).
 
 **Rejected:** pruning every draft at seven days, nulling `job.draft_id` on
-every job older than a week.
+every job older than a week; and pruning by state (`open`, `briefed`,
+`abandoned`), which reaches a `briefed` draft whose drawing failed.
 
 ### D41. The planner knows the corpus
 
@@ -930,8 +959,10 @@ started, `[x]` done.
       panel, prefilled from the latest brief when there is one
 - [ ] Tests: the planner spawn's argv (no tool name, the four seals), a brief
       extracted and validated from a recorded reply, the retry sent once and
-      only once, the turn cap, a 409 on a second in-flight turn, the cap
-      counting a draft's turns at their own times
+      only once, a reply whose only failure is an unknown topic with a
+      matching YAML block stored as `briefed` with `pending_topic`, the turn
+      cap, a 409 on a second in-flight turn, the cap counting a draft's turns
+      at their own times
 
 Done when: from a cold start, typing the tailscale sentence and then "just draw
 it" produces a brief that passes `validateBrief`, Draw queues a job with
@@ -975,7 +1006,7 @@ drawing.
 Done when: an edited label reaches the job's brief and the planner's next reply
 refers to it; a draft closed in one tab is reopened from the list in another; a
 draft untouched for eight days is gone from disk and from Postgres while one
-that produced a job is not.
+that produced a job is not, including a `briefed` draft whose only job failed.
 
 ## Open questions
 
