@@ -11,12 +11,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { renderType } from "../src/content/export";
 import { flip } from "../src/content/flip";
+import { exportHash, readTypeFiles } from "../src/content/layout";
+import { recordExport } from "../src/content/ownership";
 import { conceptsIndexer } from "../src/index/concepts";
+import { coursesIndexer } from "../src/index/courses";
+import { tagsIndexer } from "../src/index/tags";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
-import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
+import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -79,15 +83,25 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db);
     fixture = await makeFixture();
-    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma"] }]));
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma"], courses: ["xx1000-m1"] }]));
     await fixture.write("learn/concepts/fixtures/alpha.md", note({ id: "alpha", title: "Alpha", summary: "The first one." }));
     await fixture.write("learn/concepts/fixtures/beta.md", note({ id: "beta", title: "Beta", requires: ["alpha"] }));
     await fixture.write("learn/concepts/fixtures/gamma.md", note({ id: "gamma", title: "Gamma", requires: ["beta"] }));
     await fixture.write("learn/sessions/2026-01-01-old.md", OLD_LOG);
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      [
+        "id: xx1000", "slug: xx1000", "code: XX1000", "title: A test course", "credits: 4", "order: 1",
+        "inferred: false", "tags: [testing]", "modules:", "  - id: xx1000-m1", "    slug: m1",
+        "    title: Module one", "    order: 1", "    topic: alpha", "    topics:", "      - id: xx1000-m1-t1",
+        "        title: First item", "        subtopics: []", "    resources: []", "capstone: Build something", "",
+      ].join("\n"),
+    );
 
     // Imported the way `catalog index` would, source by source, then flipped.
     const context = await fixture.context({ knownConcepts: async () => new Set(["alpha", "beta", "gamma"]) });
-    for (const indexer of [topicsIndexer, conceptsIndexer, sessionsIndexer]) {
+    for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer, coursesIndexer, sessionsIndexer]) {
       const { rows, logs } = await indexer.read(context);
       await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root } });
     }
@@ -100,6 +114,12 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     const readers = new Set(["concepts", "sessions"] as const);
     await flip(scratch.db, { type: "concepts", readers });
     await flip(scratch.db, { type: "sessions", readers });
+    // The files under learn/ are the database's export as of the flip, as
+    // the flip day's `catalog export` records; an import of courses then
+    // skips the notes and logs instead of refusing them.
+    for (const type of ["concepts", "sessions"] as const) {
+      await recordExport(scratch.db, type, exportHash(await readTypeFiles(fixture.root, type)));
+    }
     before = await tree(path.join(fixture.root, "learn"));
   }, 60_000);
 
@@ -134,6 +154,15 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     expect(await readFile(path.join(fixture.root, "content", "topics.yaml"), "utf8")).toContain(
       "concepts: [alpha, beta, gamma, delta]",
     );
+  });
+
+  it("lists a new note on a course row, and the courses source links it", async () => {
+    const added = await json("concept", "add", "--title", "Epsilon", "--domain", "fixtures", "--item", "xx1000-m1-t1");
+    expect(added).toMatchObject({ id: "epsilon", topic: "alpha", item: "xx1000-m1-t1", indexed: true });
+    const { rows } = await scratch.db.execute<{ concept_slug: string }>(
+      sql`select concept_slug from concept_curriculum_item where curriculum_item_id = 'xx1000-m1-t1'`,
+    );
+    expect(rows.map((r) => r.concept_slug)).toEqual(["epsilon"]);
   });
 
   it("refuses a new note with no topic, and a move to another folder", async () => {
