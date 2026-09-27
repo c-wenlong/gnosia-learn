@@ -24,7 +24,7 @@ import {
 } from "./revisions";
 import { canonical, type JsonValue, readSnapshots, type Snapshot, snapshotHash } from "./snapshot";
 import { writeContent } from "./write";
-import { applyWriteThrough, captureExports, planWriteThrough } from "./write-through";
+import { writeThrough } from "./write-through";
 
 /**
  * `catalog item archive|restore|purge <id>`: one curriculum item's lifecycle
@@ -100,24 +100,20 @@ async function courseOf(db: CatalogDatabase, moduleId: string): Promise<string> 
 }
 
 /**
- * Run `write` in a transaction with the courses export captured around it,
- * then write the course file through once it commits. `lock` takes the
- * write's locks first, so the capture reads the state the write starts from
- * and not one another writer is about to replace.
+ * Run `write` through the shared write-through (D17), which keeps the course
+ * files in step: `lock` takes the write's own locks first, after the
+ * write-through's export lock and before anything is read.
  */
 async function withWriteThrough<T>(
   db: CatalogDatabase,
   lock: (tx: CatalogDatabase) => Promise<void>,
   write: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<{ value: T; writeThrough: WriteThroughSummary }> {
-  const { value, plan } = await db.transaction(async (tx) => {
+  const { value, exported } = await writeThrough(db, ["courses"], async (tx) => {
     await lock(tx);
-    const before = await captureExports(tx, ["courses"]);
-    const value = await write(tx);
-    return { value, plan: await planWriteThrough(tx, before) };
+    return write(tx);
   });
-  const applied = await applyWriteThrough(plan);
-  return { value, writeThrough: summarise(applied, true) };
+  return { value, writeThrough: summarise(exported) };
 }
 
 /** One item's lock, alone: for the verbs that touch no other item. */

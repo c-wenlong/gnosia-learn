@@ -28,12 +28,7 @@ import {
 import { COMPLETENESS_RULES, triggerStates } from "./rules";
 import { readSnapshots } from "./snapshot";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
-import {
-  applyWriteThrough,
-  captureExports,
-  planWriteThrough,
-  type WriteThroughPlan,
-} from "./write-through";
+import { assertInStep, type ExportedType, writeThrough } from "./write-through";
 
 /**
  * `catalog course import <file.yaml>` and `catalog course export <id>`: one
@@ -60,9 +55,11 @@ import {
  * file, column for column, so importing an unchanged file appends no revision
  * and a later `catalog index` of the same tree appends none either.
  *
- * **The file is kept in step** (D17, `write-through.ts`): after the write the
- * course file, and `topics.yaml` when a module's topic changed, are rewritten
- * in the tree the type was imported from.
+ * **The file is kept in step** (D17, the shared `write-through.ts`): in the
+ * same transaction the course file, and `topics.yaml` when a module's topic
+ * changed, are rewritten in the tree the type was imported from, and the
+ * write is refused while either holds an edit the database has not imported,
+ * the file being imported aside.
  *
  * **Export** writes one course's file as the database would export it: the
  * file a person edits and imports back.
@@ -121,27 +118,19 @@ export interface CourseImportResult {
 export interface WriteThroughSummary {
   /** Files rewritten, repo-relative, with the root they were written under. */
   written: { type: string; path: string; root: string }[];
-  /**
-   * Files that changed on disk while the write ran and were left alone; the
-   * database's version of each is beside it at `incoming`.
-   */
-  conflicts: { type: string; path: string; root: string; incoming: string | null }[];
-  skipped: { type: string; reason: string }[];
-  /** Types whose export hash was recorded, because the database owns them. */
+  /** Files removed because the rows no longer produce them. */
+  removed: { type: string; path: string; root: string }[];
+  /** Types whose export hash was recorded on `content_source`. */
   recorded: string[];
 }
 
-export function summarise(plan: WriteThroughPlan, apply: boolean): WriteThroughSummary {
+const NOTHING_WRITTEN: WriteThroughSummary = { written: [], removed: [], recorded: [] };
+
+export function summarise(exported: readonly ExportedType[]): WriteThroughSummary {
   return {
-    written: apply ? plan.files.map((file) => ({ type: file.type, path: file.path, root: file.root })) : [],
-    conflicts: plan.conflicts.map((file) => ({
-      type: file.type,
-      path: file.path,
-      root: file.root,
-      incoming: file.incoming ?? null,
-    })),
-    skipped: plan.skipped,
-    recorded: apply ? plan.recorded : [],
+    written: exported.flatMap((e) => e.written.map((file) => ({ type: e.type, path: file, root: e.root }))),
+    removed: exported.flatMap((e) => e.removed.map((file) => ({ type: e.type, path: file, root: e.root }))),
+    recorded: exported.filter((e) => e.recorded).map((e) => e.type),
   };
 }
 
@@ -786,7 +775,8 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
     // read the other live courses, and two imports of different courses
     // lock different rows, so without this both could pass against the old
     // rows and commit the same order or code. Only this command takes the
-    // lock, and always first, so it cannot take part in a lock cycle.
+    // lock, always right after the write-through's export locks and before
+    // any revision lock, so it cannot take part in a lock cycle.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${COURSE_IDENTITY_LOCK}, 0))`);
     await checkReferences(tx, course, options.file);
 
@@ -808,16 +798,14 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
       );
     }
 
-    const before = await captureExports(tx, ["courses", "topics"]);
     const results: WriteContentResult[] = await writeContents(tx, planned.inputs);
     const deleted = await deleteAssets(tx, planned.orphans, planned.base, by);
-    const writeThrough = await planWriteThrough(tx, before, { input: options.file });
 
     const changes: EntityChange[] = [
       ...results.map((r) => ({ type: r.type, id: r.id, op: r.op, revisionId: r.revisionId })),
       ...deleted,
     ].map((change) => (dryRun ? { ...change, revisionId: null } : change));
-    const result = {
+    return {
       course: course.id,
       file: options.file,
       dryRun,
@@ -827,18 +815,31 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
       deletedLinks: deleted.map((d) => d.id),
       revisions: changes.filter((c) => c.op !== null).length,
     };
-    if (dryRun) throw new DryRun({ ...result, writeThrough: summarise(writeThrough, false) });
-    return { result, writeThrough };
   };
 
-  try {
-    const { result, writeThrough } = await db.transaction(run);
-    return { ...result, writeThrough: summarise(await applyWriteThrough(writeThrough), true) };
-  } catch (error) {
-    if (error instanceof DryRun) return error.result as CourseImportResult;
-    throw error;
+  // The course's file, and topics.yaml for a module that moved topic, are
+  // kept in step by the shared write-through (D17): refused up front unless
+  // they are what the database would export, the file being imported aside,
+  // and rewritten from the rows in the same transaction.
+  const through = { exempt: [options.file] };
+  if (dryRun) {
+    try {
+      await db.transaction(async (tx) => {
+        await assertInStep(tx, WRITES_THROUGH, through);
+        throw new DryRun({ ...(await run(tx)), writeThrough: NOTHING_WRITTEN });
+      });
+    } catch (error) {
+      if (error instanceof DryRun) return error.result as CourseImportResult;
+      throw error;
+    }
+    throw new Error("a dry run returned without rolling back");
   }
+  const { value, exported } = await writeThrough(db, WRITES_THROUGH, run, through);
+  return { ...value, writeThrough: summarise(exported) };
 }
+
+/** The types a course write can change the export of: its file, and `maps.courses` in the vocabulary. */
+const WRITES_THROUGH = ["courses", "topics"] as const;
 
 export interface CourseExportResult {
   course: string;

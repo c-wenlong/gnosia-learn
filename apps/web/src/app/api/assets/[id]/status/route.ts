@@ -2,11 +2,11 @@ import { stat } from "node:fs/promises";
 
 import { NextResponse } from "next/server";
 
-import { assetFilesEnabled, resolveAssetFile, type AssetFileResult } from "@/lib/asset-files";
+import { assetFilesEnabled, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
 import {
   ffmpegIdentity,
   freshPosterFailure,
-  posterTarget,
+  posterSource,
   resolveFfmpeg,
   type PosterTargetResult,
 } from "@/lib/asset-posters";
@@ -55,8 +55,11 @@ import { withLearnerStore } from "@/lib/learner-store";
  * ffmpeg is found with the same `resolveFfmpeg` the poster route uses, so the
  * two cannot disagree about whether a marker is current.
  *
- * Same gate as the routes it describes: with `ASSET_FILES_ENABLED` off every
- * answer is `files-off`, which is exactly as much as the file route says.
+ * Same resolvers as the routes it describes (`resolveAsset`, `posterSource`),
+ * so a stored blob is `ok` or `not-uploaded` whatever the switch says, and a
+ * legacy file with `ASSET_FILES_ENABLED` off is `files-off`, which is exactly
+ * as much as the file route says. A stored poster never reaches the cache
+ * checks below: nothing is cut for it.
  */
 
 export const runtime = "nodejs";
@@ -72,17 +75,16 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  if (!assetFilesEnabled()) return answer(404, "files-off");
-
   const { id } = await params;
   const forPoster = new URL(request.url).searchParams.get("for") === "poster";
 
-  let resolved: PosterTargetResult | AssetFileResult;
+  let resolved: PosterTargetResult | AssetSourceResult;
   try {
-    resolved = await withLearnerStore<PosterTargetResult | AssetFileResult>((db) =>
-      forPoster ? posterTarget(db, id) : resolveAssetFile(db, id),
+    resolved = await withLearnerStore<PosterTargetResult | AssetSourceResult>((db) =>
+      forPoster ? posterSource(db, id) : resolveAsset(db, id),
     );
   } catch (error) {
+    if (!assetFilesEnabled()) return answer(404, "files-off");
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`asset status: catalog unreachable: ${message}`);
     return answer(503, "catalog-unreachable");

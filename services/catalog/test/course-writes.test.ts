@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,7 +12,6 @@ import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
 import { CourseWriteError, exportCourse, importCourse } from "../src/content/courses";
 import { archiveItem, purgeItem, restoreItem } from "../src/content/items";
-import { applyWriteThrough } from "../src/content/write-through";
 import { type CatalogDatabase, connect } from "../src/db";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
@@ -155,50 +154,6 @@ async function revisionTotal(scratch: Scratch): Promise<number> {
 
 const reason = "a test edit";
 
-describe("the write-through, when a file changes between the check and the write", () => {
-  it("leaves the newer file alone and puts the database's version beside it", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "catalog-write-through-"));
-    try {
-      const target = path.join(root, "content/courses/xx1000.yaml");
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, "saved by an editor after the check\n");
-      const applied = await applyWriteThrough({
-        files: [
-          {
-            type: "courses",
-            path: "content/courses/xx1000.yaml",
-            root,
-            target,
-            bytes: Buffer.from("the database's version\n"),
-            seen: Buffer.from("what the check read\n"),
-          },
-        ],
-        conflicts: [],
-        skipped: [],
-        recorded: [],
-      });
-      expect(applied.files).toEqual([]);
-      expect(applied.conflicts.map((f) => f.path)).toEqual(["content/courses/xx1000.yaml"]);
-      expect(await readFile(target, "utf8")).toBe("saved by an editor after the check\n");
-      expect(await readFile(`${target}.incoming`, "utf8")).toBe("the database's version\n");
-      expect(applied.conflicts[0]?.incoming).toBe("content/courses/xx1000.yaml.incoming");
-
-      // A second conflict before anyone merged the first keeps the first copy.
-      const again = await applyWriteThrough({
-        files: [{ ...applied.conflicts[0]!, incoming: undefined, bytes: Buffer.from("a later version\n") }],
-        conflicts: [],
-        skipped: [],
-        recorded: [],
-      });
-      expect(again.conflicts[0]?.incoming).toBe("content/courses/xx1000.yaml.incoming.2");
-      expect(await readFile(`${target}.incoming`, "utf8")).toBe("the database's version\n");
-      expect(await readFile(`${target}.incoming.2`, "utf8")).toBe("a later version\n");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-});
-
 describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs", () => {
   let scratch: Scratch;
   let fixture: Fixture;
@@ -247,6 +202,9 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
     edits = await mkdtemp(path.join(tmpdir(), "catalog-course-edits-"));
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: fixture.root });
+    // The fixture's YAML is hand-written; the write-through keeps files in
+    // step only from the database's own export of them, so start from that.
+    await runExport({ out: fixture.root, only: ["topics", "tags", "courses"] });
   }, 60_000);
 
   afterAll(async () => {
@@ -384,7 +342,7 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
       const before = await revisionTotal(scratch);
       const file = await edited("other-edit.yaml", onDisk.replace("Module two", "Module two, retitled"));
       await expect(importCourse(scratch.db, { file, reason })).rejects.toThrow(
-        /edits the database has not imported[\s\S]*content\/courses\/xx1000\.yaml/,
+        /content\/courses\/\*\.yaml under .* is not what the database holds: content\/courses\/xx1000\.yaml differ/,
       );
       expect(await revisionTotal(scratch)).toBe(before);
     } finally {
@@ -410,10 +368,10 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
     expect(deletion?.op).toBe("delete");
     // The vocabulary lists a topic's live modules, so beta's list is empty now.
     const topics = await readFile(path.join(fixture.root, "content/topics.yaml"), "utf8");
-    expect(result.writeThrough.written.map((w) => w.path).sort()).toEqual([
-      "content/courses/xx1000.yaml",
-      "content/topics.yaml",
-    ]);
+    // The course file is the one imported, already what the rows now say;
+    // the vocabulary is rewritten from the rows.
+    expect(result.writeThrough.written.map((w) => w.path)).toEqual(["content/topics.yaml"]);
+    expect(await readFile(courseFile(), "utf8")).toBe((await exportCourse(scratch.db, "xx1000")).yaml);
     expect(topics).toMatch(/slug: beta[\s\S]*?courses: \[\]/);
     const reimport = await runImportCommand({ dir: fixture.root });
     expect(reimport.sources.flatMap((s) => Object.keys(s.revisions))).toEqual([]);
@@ -517,7 +475,7 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
     const file = await edited("flipped.yaml", text);
     const result = await importCourse(scratch.db, { file, reason: "after the flip" });
     expect(result.changes.find((c) => c.id === "xx1000")?.op).toBe("update");
-    expect(result.writeThrough.recorded).toEqual(["courses"]);
+    expect(result.writeThrough.recorded).toContain("courses");
     // The import of the tree now skips courses as the database's own export.
     const reimport = await runImportCommand({ dir: fixture.root });
     expect(reimport.skipped).toContainEqual({ source: "courses", reason: expect.stringMatching(/its own last export/) });

@@ -1,115 +1,155 @@
-import { readFile, realpath, rename, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 
-import { contentSource, indexRun } from "@self-learn/schema";
-import { eq } from "drizzle-orm";
-import { parse } from "yaml";
+import { indexRun } from "@self-learn/schema";
+import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { renderType } from "./export";
-import { type ExportFile, exportHash, type ExportType } from "./layout";
+import { type ExportFile, exportHash, type ExportType, readTypeFiles, TYPE_LOCATION } from "./layout";
 import { mayRecord, recordExport } from "./ownership";
-import { canonicalJson } from "./snapshot";
 
 /**
- * The write-through of D17 (docs/CONTENT-MIGRATION.md): after a writer changes
- * rows, the export files those rows render to are rewritten in the tree the
- * type was last imported from, so the files and the database never disagree.
+ * A content write that keeps the type's files in step with the rows
+ * (D17 of docs/CONTENT-MIGRATION.md).
  *
- * Both halves of the migration need it. While a type is on files, the files
- * are the truth, and a write that did not reach them would be undone by the
- * next `catalog index`. Once a type is flipped, the files are its export, and
- * a stale one would make the next import of the tree refuse (edge case 12)
- * and the files rollback silently older than the database. So a writer calls
- * {@link captureExports} before it writes and {@link planWriteThrough} after,
- * inside its transaction, and {@link applyWriteThrough} once it commits.
+ * Until the phase 3 cut-over some reader still parses files: the course
+ * reader checks every module's topic against `content/topics.yaml`, the
+ * concepts importer takes each note's topic from it, and every type that has
+ * not flipped is read from its files. So a writer rewrites its type's export
+ * after each write, from the rows, in the same transaction:
  *
- * **Only the files the write changed are written**, found by rendering the
- * type before and after. A file nobody's write touched is left as it is, so a
- * hand edit in another course file is never overwritten by an edit to this
- * one.
+ * 1. It takes an advisory lock per type (`content_export:<type>`), before any
+ *    revision lock, so two writers of one type cannot interleave their file
+ *    writes and leave the older render on disk.
+ * 2. It refuses unless the files under the root the type was last imported
+ *    from are exactly what the database would export now. Anything else is an
+ *    edit the database has not seen (the type is still on files and someone
+ *    changed the file, or the type is flipped and someone edited its export),
+ *    and rewriting the file from rows would silently throw that edit away.
+ * 3. It runs the write, renders the type again inside the same transaction
+ *    (so the render sees the write), and replaces each changed file with a
+ *    temp file and a rename, then records the export's hash on the type's
+ *    `content_source` row, which is what lets an import of a flipped type skip
+ *    the file it now matches (edge case 12).
+ * 4. If anything after the first file write fails, commit included, the files
+ *    are put back as they were, so the tree and the rows never disagree. The
+ *    transaction's locks are gone by then, so the put-back takes them again,
+ *    and leaves any file whose bytes are no longer the ones this write put
+ *    there: another writer committed and rewrote it in between, and its bytes
+ *    are the rows'.
  *
- * **A changed file must say what the database rendered before the write**
- * (compared parsed, for YAML), or the write is refused and rolled back. A file that differs holds edits the
- * database never imported, and rewriting it would lose them without a word.
- * The one exception is the file the writer was handed: `catalog course import
- * content/courses/cs2111.yaml` after editing that file in place is the
- * ordinary way to change a course, and that file is what is being imported.
- *
- * **The whole type's export hash is recorded when the database owns it**, in
- * the same transaction, so the next `catalog import` of the tree recognises
- * the files as the database's own export and skips them.
+ * The root is the one the type's last import read (`index_run.metadata.root`),
+ * not the repository, so a write against a scratch database imported from a
+ * scratch tree writes that tree. A type never imported has no files to keep in
+ * step, and the write is refused with the command that fixes it.
  */
 
-export class WriteThroughRefused extends Error {
+export class WriteThroughError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "WriteThroughRefused";
+    this.name = "WriteThroughError";
   }
 }
 
-/** One type's files as the database rendered them, by repo-relative path. */
-export type Rendered = Map<ExportType, Map<string, Buffer>>;
-
-export async function captureExports(db: CatalogDatabase, types: readonly ExportType[]): Promise<Rendered> {
-  const out: Rendered = new Map();
-  for (const type of types) out.set(type, byPath(await renderType(db, type)));
-  return out;
-}
-
-function byPath(files: readonly ExportFile[]): Map<string, Buffer> {
-  return new Map(files.map((file) => [file.path, file.bytes]));
-}
-
-/** One file the write changed: where it goes, and its bytes, or null to remove it. */
-export interface PlannedFile {
+export interface ExportedType {
   type: ExportType;
-  /** Repo-relative. */
-  path: string;
-  /** The type's import root, which `path` is under. */
+  /** The directory the files were written under: the type's last import root. */
   root: string;
-  /** Absolute: `root` joined with `path`. */
-  target: string;
-  bytes: Buffer | null;
-  /** What was on disk when the write was checked, or null for no file. */
-  seen: Buffer | null;
-  /** For a conflict: where the database's version was written instead, repo-relative. */
-  incoming?: string;
+  /** Repo-relative paths rewritten, because their bytes changed. */
+  written: string[];
+  /** Repo-relative paths removed, because the rows no longer produce them. */
+  removed: string[];
+  /** The export hash of the type's files after the write. */
+  hash: string;
+  /** Whether the hash was recorded on `content_source`. False on a copy. */
+  recorded: boolean;
 }
 
-export interface WriteThroughPlan {
-  files: PlannedFile[];
-  /**
-   * Files that changed on disk between the check and the write, so were not
-   * overwritten: the database's version is beside each, as `<file>.incoming`.
-   * Filled in by `applyWriteThrough`.
-   */
-  conflicts: PlannedFile[];
-  /** Types whose rendering changed but that were never imported from a tree, so there is nowhere to write. */
-  skipped: { type: ExportType; reason: string }[];
-  /** Types whose export hash was recorded on `content_source` in this transaction. */
-  recorded: ExportType[];
+export interface WriteThroughResult<T> {
+  value: T;
+  exported: ExportedType[];
 }
 
-/** The directory each type was last imported from, `index_run.metadata.root`, or null. */
-async function importRoot(db: CatalogDatabase, type: ExportType): Promise<string | null> {
-  const [run] = await db
-    .select({ metadata: indexRun.metadata })
-    .from(indexRun)
-    .where(eq(indexRun.source, type));
+const exportLock = (type: ExportType) => sql`hashtextextended(${`content_export:${type}`}, 0)`;
+
+/** The root the type's rows were last imported from, or null when it never was. */
+export async function importRoot(db: CatalogDatabase, type: ExportType): Promise<string | null> {
+  const [run] = await db.select({ metadata: indexRun.metadata }).from(indexRun).where(eq(indexRun.source, type));
   const root = (run?.metadata as { root?: unknown } | undefined)?.root;
   return typeof root === "string" ? root : null;
 }
 
-async function readOrNull(file: string): Promise<Buffer | null> {
-  try {
-    return await readFile(file);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
+/** The paths whose bytes differ between two sets of files, sorted. */
+function differing(a: readonly ExportFile[], b: readonly ExportFile[]): string[] {
+  const left = new Map(a.map((f) => [f.path, f.bytes]));
+  const right = new Map(b.map((f) => [f.path, f.bytes]));
+  return [...new Set([...left.keys(), ...right.keys()])]
+    .filter((p) => {
+      const x = left.get(p);
+      const y = right.get(p);
+      return x === undefined || y === undefined || !x.equals(y);
+    })
+    .sort();
 }
 
+interface InStep {
+  type: ExportType;
+  root: string;
+  before: ExportFile[];
+}
+
+/**
+ * Refuse unless each type's files are the database's own export. Exported so
+ * a dry run can say up front that the real write would be refused.
+ */
+export async function assertInStep(
+  db: CatalogDatabase,
+  types: readonly ExportType[],
+  options: WriteThroughOptions = {},
+): Promise<InStep[]> {
+  const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolved)));
+  const out: InStep[] = [];
+  for (const type of types) {
+    const root = await importRoot(db, type);
+    if (root === null) {
+      throw new WriteThroughError(
+        `${type} has never been imported into this database, so there are no files to keep in step ` +
+          `with the write. Run \`catalog index\` (or \`catalog import <dir>\`) first.`,
+      );
+    }
+    const before = await readTypeFiles(root, type);
+    const expected = await renderType(db, type);
+    const changed: string[] = [];
+    for (const relative of differing(before, expected)) {
+      if (!exempt.has(await resolved(path.join(root, relative)))) changed.push(relative);
+    }
+    if (changed.length > 0) {
+      throw new WriteThroughError(
+        `${TYPE_LOCATION[type]} under ${root} is not what the database holds: ${changed.join(", ")} ` +
+          `differ. Writing from the rows would throw that edit away. If the edit is wanted and ${type} ` +
+          `is still read from files, import it first (\`catalog index --only ${type}\`); otherwise put ` +
+          `the file back (\`catalog export --only ${type} --out <dir>\` writes what the database holds).`,
+      );
+    }
+    out.push({ type, root, before });
+  }
+  return out;
+}
+
+/**
+ * `exempt`: files the writer was handed as its input, which may differ from
+ * the database because they are the edit being written. `catalog course
+ * import content/courses/cs2111.yaml` after editing that file in place is the
+ * ordinary way to change a course, and refusing it as an unimported edit
+ * would refuse the import of exactly that edit.
+ */
+export interface WriteThroughOptions {
+  exempt?: readonly string[];
+}
+
+/** A path with its symlinks resolved, so two spellings of one file compare equal. */
 async function resolved(file: string): Promise<string> {
   try {
     return await realpath(file);
@@ -118,146 +158,110 @@ async function resolved(file: string): Promise<string> {
   }
 }
 
-function same(a: Buffer | null | undefined, b: Buffer | null | undefined): boolean {
-  if (a === null || a === undefined) return b === null || b === undefined;
-  return b !== null && b !== undefined && a.equals(b);
-}
+let temporaryCounter = 0;
 
-/**
- * Whether the file on disk says what the database rendered, as content: a
- * YAML file is compared parsed, the way `catalog parity` compares it, so a
- * file that differs only in comments, quoting or spacing is not taken for an
- * edit. Rewriting it loses only that formatting, which the export format
- * does not carry anyway.
- */
-function sameContent(file: string, onDisk: Buffer | null, rendered: Buffer | undefined): boolean {
-  if (same(onDisk, rendered)) return true;
-  if (onDisk === null || rendered === undefined || !/\.ya?ml$/.test(file)) return false;
-  try {
-    return canonicalJson(parse(onDisk.toString("utf8"))) === canonicalJson(parse(rendered.toString("utf8")));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * What the write changed on disk, checked against what is there now. Runs
- * inside the writer's transaction, after its writes: a refusal here rolls the
- * whole write back, and nothing has touched the disk yet.
- *
- * `input` is the file the writer was handed, if any, which may differ from
- * what the database rendered before the write because it is the edit.
- */
-export async function planWriteThrough(
-  db: CatalogDatabase,
-  before: Rendered,
-  options: { input?: string } = {},
-): Promise<WriteThroughPlan> {
-  const input = options.input === undefined ? null : await resolved(options.input);
-  const files: PlannedFile[] = [];
-  const skipped: WriteThroughPlan["skipped"] = [];
-  const recorded: ExportType[] = [];
-  const edited: string[] = [];
-
-  const owners = new Map(
-    (await db.select({ type: contentSource.type, source: contentSource.source }).from(contentSource)).map(
-      (row) => [row.type, row.source],
-    ),
-  );
-
-  for (const [type, was] of before) {
-    const now = byPath(await renderType(db, type));
-    const changed = [...new Set([...was.keys(), ...now.keys()])]
-      .filter((file) => !same(was.get(file), now.get(file)))
-      .sort();
-    if (changed.length === 0) continue;
-
-    const root = await importRoot(db, type);
-    if (root === null) {
-      skipped.push({
-        type,
-        reason: `${type} was never imported from a tree, so there is no file to keep in step`,
-      });
-      continue;
-    }
-    for (const file of changed) {
-      const target = path.join(root, file);
-      // Every path comes from a row, so it is held inside the root here, at
-      // the one place that turns it into a file name, as `catalog export` does.
-      const relative = path.relative(root, target);
-      if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
-        throw new WriteThroughRefused(`refusing to write outside ${root}: ${file}`);
-      }
-      const onDisk = await readOrNull(target);
-      const isInput = input !== null && (await resolved(target)) === input;
-      if (!isInput && !sameContent(file, onDisk, was.get(file))) edited.push(`${file} (under ${root})`);
-      files.push({ type, path: file, root, target, bytes: now.get(file) ?? null, seen: onDisk });
-    }
-    if (owners.get(type) === "db" && (await mayRecord(db))) {
-      await recordExport(db, type, exportHash([...now].map(([file, bytes]) => ({ path: file, bytes }))));
-      recorded.push(type);
-    }
-  }
-
-  if (edited.length > 0) {
-    throw new WriteThroughRefused(
-      `this write changes files that hold edits the database has not imported, and rewriting them ` +
-        `would lose those edits. Import them first (for a course, \`catalog course import <file> ` +
-        `--reason ...\`), or put them back, then run this again. Nothing was written.\n  - ` +
-        edited.join("\n  - "),
-    );
-  }
-  return { files, conflicts: [], skipped, recorded };
-}
-
-/**
- * Write the planned files, each through a temporary file renamed into place
- * so a reader never sees half of one. Called after the transaction commits:
- * a crash between the two leaves the files one write behind, which the next
- * import reports by name (edge case 12) rather than losing anything.
- *
- * Each file is read once more just before it is replaced. One that changed
- * since the check (an editor saved it, or another writer got there first) is
- * left alone, and the database's version goes beside it as
- * `<file>.incoming` (or `.incoming.2` and on, when an earlier one is still
- * waiting to be merged), which no reader picks up; the result lists it. The
- * window between that read and the rename is the only one left, and it is
- * the width of one rename.
- */
-export async function applyWriteThrough(plan: WriteThroughPlan): Promise<WriteThroughPlan> {
-  const written: PlannedFile[] = [];
-  const conflicts: PlannedFile[] = [];
-  for (const file of plan.files) {
-    if (!same(await readOrNull(file.target), file.seen)) {
-      if (file.bytes === null) {
-        conflicts.push(file);
-        continue;
-      }
-      // An earlier conflict's copy may still be waiting to be merged, so a
-      // later one takes the next free name rather than replacing it.
-      const incoming = await freeName(`${file.target}.incoming`);
-      await replace(incoming, file.bytes);
-      conflicts.push({ ...file, incoming: path.relative(file.root, incoming) });
-      continue;
-    }
-    if (file.bytes === null) await rm(file.target, { force: true });
-    else await replace(file.target, file.bytes);
-    written.push(file);
-  }
-  return { ...plan, files: written, conflicts };
-}
-
-/** `base`, or `base.2`, `base.3` ..., whichever does not exist yet. */
-async function freeName(base: string): Promise<string> {
-  for (let n = 1; ; n += 1) {
-    const candidate = n === 1 ? base : `${base}.${n}`;
-    if ((await readOrNull(candidate)) === null) return candidate;
-  }
-}
-
-async function replace(target: string, bytes: Buffer): Promise<void> {
+async function replaceFile(target: string, bytes: Buffer): Promise<void> {
   await mkdir(path.dirname(target), { recursive: true });
-  const temporary = `${target}.${process.pid}.tmp`;
+  temporaryCounter += 1;
+  const temporary = `${target}.${process.pid}.${temporaryCounter}.tmp`;
   await writeFile(temporary, bytes);
   await rename(temporary, target);
+}
+
+/**
+ * Run `write` in one transaction and rewrite the files of `types` from the
+ * rows it leaves. See the module comment for the order and why.
+ */
+export async function writeThrough<T>(
+  db: CatalogDatabase,
+  types: readonly ExportType[],
+  write: (tx: CatalogDatabase) => Promise<T>,
+  options: WriteThroughOptions = {},
+): Promise<WriteThroughResult<T>> {
+  const sorted = [...new Set(types)].sort();
+  /** Every file touched so far: the bytes it held before and the bytes written (null: absent). */
+  const touched: { file: string; before: Buffer | null; wrote: Buffer | null }[] = [];
+
+  const putBack = async () => {
+    for (const { file, before, wrote } of [...touched].reverse()) {
+      const now = await readFile(file).catch(() => null);
+      const ours = now === null ? wrote === null : wrote !== null && now.equals(wrote);
+      if (!ours) continue;
+      if (before === null) await rm(file, { force: true });
+      else await replaceFile(file, before);
+    }
+  };
+  /**
+   * Put the files back after a failed write. Falls back to doing it without
+   * the locks only when the locks themselves cannot be had (the database is
+   * what failed); a put-back that fails while holding them is not retried
+   * unlocked, since that retry could overwrite a newer writer's export.
+   */
+  const restore = async (): Promise<string | null> => {
+    if (touched.length === 0) return null;
+    let locked = false;
+    try {
+      await db.transaction(async (tx) => {
+        for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+        locked = true;
+        await putBack();
+      });
+      return null;
+    } catch (error) {
+      if (locked) return (error as Error).message;
+    }
+    // The locks could not be had. The check for bytes still ours is the guard
+    // left: a writer that committed in between rewrote the file, and its
+    // bytes are left where they are.
+    try {
+      await putBack();
+      return null;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+
+  try {
+    return await db.transaction(async (tx) => {
+      for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+      const steps = await assertInStep(tx, sorted, options);
+
+      const value = await write(tx);
+
+      const record = await mayRecord(tx);
+      const exported: ExportedType[] = [];
+      for (const { type, root, before } of steps) {
+        const after = await renderType(tx, type);
+        const changed = differing(before, after);
+        const previous = new Map(before.map((f) => [f.path, f.bytes]));
+        const next = new Map(after.map((f) => [f.path, f.bytes]));
+        const written: string[] = [];
+        const removed: string[] = [];
+        for (const relative of changed) {
+          const file = path.join(root, relative);
+          const bytes = next.get(relative);
+          touched.push({ file, before: previous.get(relative) ?? null, wrote: bytes ?? null });
+          if (bytes === undefined) {
+            await rm(file, { force: true });
+            removed.push(relative);
+          } else {
+            await replaceFile(file, bytes);
+            written.push(relative);
+          }
+        }
+        const hash = exportHash(after);
+        if (record) await recordExport(tx, type, hash);
+        exported.push({ type, root, written, removed, hash, recorded: record });
+      }
+      return { value, exported };
+    });
+  } catch (error) {
+    const failed = await restore();
+    if (failed === null) throw error;
+    throw new WriteThroughError(
+      `${(error as Error).message}\n  The write was rolled back, but putting the files back failed too ` +
+        `(${failed}), so they may not match the database. Rewrite them from the rows with ` +
+        `\`catalog export --only ${sorted.join(",")} --out <the tree it was imported from>\`.`,
+    );
+  }
 }

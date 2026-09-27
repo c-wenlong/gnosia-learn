@@ -17,9 +17,26 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import type { CatalogDatabase } from "@self-learn/catalog/state";
+import {
+  ffmpegArgs,
+  POSTER_CONTENT_TYPE,
+  POSTER_EXTENSION,
+  POSTER_OFFSETS_SECONDS,
+  POSTER_QUALITY,
+  POSTER_WIDTH,
+  posterBlob,
+  type CatalogDatabase,
+} from "@self-learn/catalog/state";
 
-import { resolveAssetFile, safeFilename, type AssetFileProblem } from "@/lib/asset-files";
+import {
+  assetFilesEnabled,
+  FILES_OFF,
+  resolveAssetFile,
+  resolveBlob,
+  safeFilename,
+  type AssetFileProblem,
+  type AssetStored,
+} from "@/lib/asset-files";
 
 /**
  * A still frame from a video asset, for the library's cards.
@@ -53,63 +70,28 @@ import { resolveAssetFile, safeFilename, type AssetFileProblem } from "@/lib/ass
 /* The recipe                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Where to seek, in order, until one of them yields a frame.
- *
- * **Not the first frame.** A manimkc render opens on a fade-in and then a title
- * card, so frame 0 of `inverse_kinematics.mp4` is 1.5 kB of flat #333 — a
- * thumbnail that is strictly worse than the placeholder it replaces, because it
- * looks like a working image of nothing. Fifteen seconds in, the same video is
- * a tracked hand beside a two-link arm: a picture that says what the video is
- * about, which is the entire job of a card in a grid.
- *
- * **Not the title card either, at ~3 seconds.** It is legible, but the card
- * already prints the title above the image, so thirty title cards would be
- * thirty near-identical dark rectangles restating text the reader can read.
- * Content frames are what tell one card from another.
- *
- * Fifteen seconds rather than a fraction of the duration because a fraction
- * needs the duration, and asking for it means `ffprobe`: a second binary that
- * can be absent independently of the first, doubling the "the tool is missing"
- * surface for a number that only chooses between 13% and 25% of the way in. The
- * thirty indexed videos run 9s to 20 minutes, median 115s, so 15s is past the
- * title card on all but the shortest and well short of the end on every one.
- *
- * The shortest are what the fallbacks are for. Seeking past the end of a file
- * makes ffmpeg write no frame at all, which is detected and retried closer to
- * the start; three seconds catches a short clip's title card, and zero catches
- * anything at all. Worst case is three spawns for a file that is only a few
- * seconds long, and the common case is one.
+/*
+ * The recipe itself (the offsets, the width, the quality, the encoder and the
+ * argument array) lives in `services/catalog/src/poster/recipe.ts`, with the
+ * reasoning for each value, and is re-exported here. It is shared with
+ * `catalog asset upload`, which cuts each video's poster once on the laptop
+ * and stores it as a blob, so this fallback and the stored poster cannot be
+ * two different pictures. `RECIPE_VERSION` below stays here: it keys this
+ * route's cache.
  */
-export const POSTER_OFFSETS_SECONDS = [15, 3, 0] as const;
+export {
+  ffmpegArgs,
+  POSTER_CONTENT_TYPE,
+  POSTER_EXTENSION,
+  POSTER_OFFSETS_SECONDS,
+  POSTER_QUALITY,
+  POSTER_WIDTH,
+};
+
 
 /**
- * How wide the poster is, and what it is encoded as.
- *
- * The cards are a grid: roughly 320 CSS pixels across at desktop widths, less
- * on a phone. 640 is that at 2x, and nothing on the page can use more. The
- * source is 1920x1080, so this is a 9x reduction in pixels before any encoder
- * sees it, and `-2` keeps the aspect ratio while landing on an even height,
- * which every JPEG chroma subsampler needs.
- *
- * JPEG rather than PNG: a 1920x1080 PNG of a frame of animation is megabytes,
- * and thirty of them on one page would be a worse experience than the grey box
- * this replaces. A 640px q5 JPEG of the same frame measures 8 kB. PNG would win
- * on flat-colour manim frames if the size were equal, but it is not, and at
- * this scale the text in a frame is unreadable either way, so the compression
- * artefacts nobody can see cost nothing.
- *
- * WebP or AVIF would be smaller again and are deliberately not used: they
- * depend on encoders a given ffmpeg build may not carry, and this is a feature
- * whose whole point is to degrade quietly. mjpeg is built into every ffmpeg.
- */
-export const POSTER_WIDTH = 640;
-export const POSTER_QUALITY = 5;
-export const POSTER_CONTENT_TYPE = "image/jpeg";
-export const POSTER_EXTENSION = ".jpg";
-
-/**
- * Bumped whenever anything above changes the picture.
+ * Bumped whenever the recipe (`services/catalog/src/poster/recipe.ts`) changes
+ * the picture.
  *
  * It is part of the cache key, so changing the offset, the width or the encoder
  * invalidates every cached poster instead of serving yesterday's recipe until
@@ -489,52 +471,12 @@ export async function freshPosterFailure(
 /* Running ffmpeg                                                              */
 /* -------------------------------------------------------------------------- */
 
-/**
- * The argument array, built from constants and one absolute path.
- *
- * Nothing here is a string that was concatenated from anything a request chose:
- * the offset, the width and the quality are the constants above, and `file` is
- * what `resolveAssetFile` proved to be inside its root. It is passed as its own
- * element of the array, so a filename containing a space, a quote or a
- * semicolon is one argument either way.
- *
- * `-ss` before `-i` is input seeking, which jumps by keyframe instead of
- * decoding from the start: it is the difference between 0.12s and several
- * seconds on a twenty-minute file. `thumbnail=n=60` then reads about two
- * seconds of frames and keeps the one least like the average of them, which is
- * what stops a poster landing on a cross-fade or a frame that is briefly blank.
- * `format=yuvj420p` is not decoration: without it the mjpeg encoder refuses a
- * limited-range source outright ("Non full-range YUV is non-standard") and
- * writes nothing at all.
+/*
+ * `ffmpegArgs`, the argument array, is part of the recipe and lives with it in
+ * `services/catalog/src/poster/recipe.ts`: every element is a constant or the
+ * one absolute path `resolveAssetFile` proved to be inside its root, passed as
+ * its own element, and `format=yuvj420p` in the filter is load-bearing.
  */
-export function ffmpegArgs(file: string, offsetSeconds: number): string[] {
-  return [
-    "-nostdin",
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-ss",
-    String(offsetSeconds),
-    "-i",
-    file,
-    "-map",
-    "0:v:0",
-    "-an",
-    "-sn",
-    "-dn",
-    "-frames:v",
-    "1",
-    "-vf",
-    `thumbnail=n=60,scale=${POSTER_WIDTH}:-2,format=yuvj420p`,
-    "-f",
-    "image2pipe",
-    "-vcodec",
-    "mjpeg",
-    "-q:v",
-    String(POSTER_QUALITY),
-    "-",
-  ];
-}
 
 /**
  * What one ffmpeg run showed.
@@ -896,6 +838,29 @@ export async function posterBody(target: PosterTarget): Promise<PosterBodyResult
   if (outcome.kind === "frame") return { ok: true, body: outcome.body, cached: false };
   if (outcome.kind === "no-frame") return POSTER_FAILED;
   return POSTER_NOT_MADE;
+}
+
+/**
+ * Where a video's poster comes from, in the file route's order
+ * (docs/CONTENT-MIGRATION.md, Track E): the one `catalog asset upload` stored,
+ * when there is one, and otherwise a frame cut here from the legacy file, which
+ * `ASSET_FILES_ENABLED` gates as it gates that file.
+ *
+ * The stored poster is found by what it is, the `poster` asset derived from
+ * this video, not by guessing its id. A stored poster that is `pending` or
+ * gone answers `not-uploaded` like any other blob, rather than starting an
+ * ffmpeg: the fix is to rerun the upload, and a route that quietly made its
+ * own would hide that the store is missing an object.
+ */
+export async function posterSource(
+  db: CatalogDatabase,
+  id: string,
+  env: Record<string, string | undefined> = process.env,
+): Promise<AssetStored | PosterTargetResult> {
+  const stored = await posterBlob(db, id);
+  if (stored !== null) return resolveBlob(stored, id);
+  if (!assetFilesEnabled(env)) return FILES_OFF;
+  return posterTarget(db, id);
 }
 
 const POSTER_FAILED: AssetFileProblem = {
