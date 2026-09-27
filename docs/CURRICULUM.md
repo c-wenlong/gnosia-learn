@@ -58,8 +58,12 @@ has not imported is never overwritten: the import refuses and names it. The
 file being imported is the exception, since it is the edit. The check compares
 bytes, so a file whose content matches but whose formatting does not (quoting,
 spacing, a comment) is refused too. The files in this repository are
-byte-for-byte the export's own; a tree written by hand is brought to that form
-once with `npm run catalog -- export --only courses,topics --out <the tree>`.
+byte-for-byte the export's own. A tree written by hand is brought to that form
+once, in this order so no edit is lost: `npm run catalog -- index --only
+courses` (while courses are still read from files) reads every edit in, then
+`npm run catalog -- export --only courses,topics --out <the tree>` rewrites
+the same content in the export's form. Exporting first would overwrite an
+edit the database had not read yet.
 
 When writing the file itself:
 
