@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -15,6 +15,7 @@ import { exportHash, readTypeFiles } from "../src/content/layout";
 import { recordExport } from "../src/content/ownership";
 import { conceptsIndexer } from "../src/index/concepts";
 import { coursesIndexer } from "../src/index/courses";
+import { runIndex } from "../src/index/run";
 import { tagsIndexer } from "../src/index/tags";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
@@ -183,6 +184,40 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     );
     expect(rows.map((r) => r.concept_slug)).toEqual(["epsilon"]);
   });
+
+  it("names what is missing when an unrelated course file stops the courses source after the write", async () => {
+    // A module no topic's maps.courses names: the course reader accepts it,
+    // the courses source does not, and it is in a file this command never touched.
+    const stray = "content/courses/yy2000.yaml";
+    await fixture.write(
+      stray,
+      [
+        "id: yy2000", "slug: yy2000", "code: YY2000", "title: Another course", "credits: 4", "order: 2",
+        "inferred: false", "tags: [testing]", "modules:", "  - id: yy2000-m1", "    slug: m1",
+        "    title: Module one", "    order: 1", "    topic: alpha", "    topics:", "      - id: yy2000-m1-t1",
+        "        title: First item", "        subtopics: []", "    resources: []", "capstone: Build something", "",
+      ].join("\n"),
+    );
+    const links = async () =>
+      (
+        await scratch.db.execute<{ concept_slug: string }>(
+          sql`select concept_slug from concept_curriculum_item where curriculum_item_id = 'xx1000-m1-t1' order by position`,
+        )
+      ).rows.map((r) => r.concept_slug);
+    try {
+      const message = await refused("concept", "add", "--title", "Eta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
+      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the courses source refused/);
+      expect(message).toMatch(/yy2000-m1/);
+      expect(message).toMatch(/catalog -- index --only courses/);
+      expect(await row("eta")).toMatchObject({ topicSlug: "alpha" });
+      expect(await links()).not.toContain("eta");
+    } finally {
+      await rm(path.join(fixture.root, stray));
+    }
+    // The recovery the message names is enough: the listing is in the file.
+    await runIndex(scratch.db, { only: ["courses"], repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
+    expect(await links()).toContain("eta");
+  }, 60_000);
 
   it("refuses a new note with no topic, and a move to another folder", async () => {
     expect(await refused("concept", "add", "--title", "Loose", "--domain", "fixtures")).toMatch(/a new note needs a topic/);
