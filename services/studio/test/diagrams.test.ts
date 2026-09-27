@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,7 +24,7 @@ vi.mock("../src/catalog", async (importOriginal) => {
   return { ...actual, ...catalogMock };
 });
 
-const { checkoutOf, checkoutRevision, ensureCheckout, forgetDiagramList, isDiagramName, listDiagrams, readDiagram, svgKeyOf } =
+const { checkoutOf, checkoutRevision, documentHashOf, ensureCheckout, forgetDiagramList, isDiagramName, listDiagrams, readDiagram, svgKeyOf } =
   await import("../src/diagrams");
 const { workPath } = await import("../src/paths");
 
@@ -183,6 +184,20 @@ describe("the checkout", () => {
     expect(catalogMock.diagramCheckout).not.toHaveBeenCalled();
     expect(await checkoutRevision("dot-product")).toBe(6);
     expect(await checkoutRevision("no-record")).toBeUndefined();
+  });
+
+  it("hashes a document the way the catalog does, whatever order its keys are in", async () => {
+    // Review on #142: a job started offline is checked at Accept by this hash
+    // against the stored `document_hash`, which is of canonical JSON.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    const a = path.join(home, "work", "a.tldr");
+    const b = path.join(home, "work", "b.tldr");
+    await writeFile(a, '{"records":[{"id":"x","typeName":"shape"}],"schema":{"v":2}}');
+    await writeFile(b, '{\n  "schema": { "v": 2 },\n  "records": [{ "typeName": "shape", "id": "x" }]\n}\n');
+    const expected = createHash("sha256").update('{"records":[{"id":"x","typeName":"shape"}],"schema":{"v":2}}').digest("hex");
+    expect(await documentHashOf(a)).toBe(expected);
+    expect(await documentHashOf(b)).toBe(expected);
+    expect(await documentHashOf(path.join(home, "work", "missing.tldr"))).toBeNull();
   });
 
   it("falls back to the file on disk with the database down (D16)", async () => {

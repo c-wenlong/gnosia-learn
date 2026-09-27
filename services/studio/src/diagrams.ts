@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -244,6 +245,35 @@ export interface Checkout {
    * be an older revision than the diagram, so nothing should build on it.
    */
   failed: boolean;
+}
+
+/** Keys sorted at every depth, which is the catalog's canonical JSON (`content/snapshot.ts`) for anything `JSON.parse` returns. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) out[key] = canonical((value as Record<string, unknown>)[key]);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * A document file's hash as the catalog defines `document_hash`: the sha256
+ * of its canonical JSON, so a file whose keys are in another order still
+ * matches the row it came from. Null when there is no file; the file's raw
+ * sha256 when it is not JSON, which then matches nothing, as it should.
+ */
+export async function documentHashOf(file: string): Promise<string | null> {
+  const bytes = await readFile(file).catch(() => null);
+  if (bytes === null) return null;
+  let text: string;
+  try {
+    text = JSON.stringify(canonical(JSON.parse(bytes.toString("utf8"))));
+  } catch {
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 /**

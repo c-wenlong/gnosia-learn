@@ -22,7 +22,7 @@ import {
 } from "./config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
 import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
-import { checkoutRevision, ensureCheckout } from "./diagrams";
+import { checkoutRevision, documentHashOf, ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
@@ -286,7 +286,9 @@ export class Runner {
         ? { exists: false, revision: null, hash: null }
         : { exists: true, revision: answer.diagram.revision, hash: answer.diagram.documentHash };
     }
-    const hash = await sha256(workPath(slug));
+    // The catalog's own definition of a document's hash (canonical JSON), not
+    // the file's bytes, so Accept can compare it with `document_hash`.
+    const hash = await documentHashOf(workPath(slug));
     return { exists: hash !== null, revision: undefined, hash };
   }
 
@@ -683,14 +685,20 @@ export class Runner {
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
       if (!resumedWork) {
-        await copyFile(workPath(record.slug), absolute(record.candidatePath));
         // The base Accept checks is the revision this copy was written from,
         // which the checkout's record says with no database needed. It can be
         // older than the latest at enqueue (a checkout kept for its
         // uncommitted edits), or the only revision there is (a job enqueued
         // with the database down), and either way it is what the agent is
         // extending, so a newer revision makes Accept refuse.
+        //
+        // Read before the copy, not after: a checkout writes the document and
+        // then the record, so a record read first is never newer than the
+        // document copied next. A refresh landing in between leaves a base
+        // older than the copy, which Accept refuses; the other order could
+        // pair an old drawing with a new base, which Accept would land.
         const copiedFrom = await checkoutRevision(record.slug);
+        await copyFile(workPath(record.slug), absolute(record.candidatePath));
         if (copiedFrom !== undefined && copiedFrom !== record.targetRevisionBefore) {
           await this.store.update(id, { targetRevisionBefore: copiedFrom });
         }
