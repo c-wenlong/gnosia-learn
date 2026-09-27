@@ -30,6 +30,11 @@ import {
 } from "./commands/session";
 import { formatShow, runShow } from "./commands/show";
 import { formatStatus, runStatus } from "./commands/status";
+import {
+  classifyConnectionFailure,
+  describeConnectionFailure,
+  EXIT_UNREACHABLE,
+} from "./connection-failure";
 import { databaseUrl, redactUrl } from "./env";
 import { parseSources } from "./index/run";
 
@@ -122,6 +127,15 @@ Options:
   --agent-session UUID     session start: the headless session id, for Resume.
   -h, --help               Show this text.
 
+Exit codes:
+  0  The command worked.
+  1  The command failed. A database that answered and refused (bad
+     credentials, no such database, too many clients) is this code too,
+     with a line on stderr naming the cause.
+  2  The invocation was wrong.
+  3  The database is unreachable: nothing is listening, or the host name
+     does not resolve. stderr names which.
+
 Environment:
   DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
   MANIMKC_ROOT   The manimkc checkout. Defaults to <repo>/tools/manimkc.
@@ -170,7 +184,16 @@ function isCommand(value: string | undefined): value is Command {
 /** A command that needs arguments and did not get them. Exit code 2, not 1. */
 class Usage extends Error {}
 
-/** Exit codes: 0 ok, 1 the command failed, 2 the invocation was wrong. */
+/**
+ * Exit codes: 0 ok, 1 the command failed, 2 the invocation was wrong, 3 the
+ * database is unreachable.
+ *
+ * 3 exists for the studio, which has to tell "nothing there to talk to" (run
+ * the job without the database, D16) from "a live database said no" (refuse
+ * it). Both used to be 1 with the same `Failed query: ...` text, so the studio
+ * could not tell them apart. The split is read from the driver's error codes in
+ * `connection-failure.ts`, never from message text.
+ */
 export async function main(argv: string[]): Promise<number> {
   let parsed;
   try {
@@ -320,16 +343,26 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const message = error instanceof Error ? error.message : String(error);
+    const failure = classifyConnectionFailure(error);
+    const reason = failure === null ? null : describeConnectionFailure(failure);
     if (values.json) {
+      // The shape on stdout is unchanged: it is somebody's `--json`. The reason
+      // goes to stderr, one line, where a person and the studio both read it.
       process.stdout.write(
         `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message }, null, 2)}\n`,
       );
+      if (reason !== null) {
+        const verb = command === "job" || command === "session" ? positionals[1] : undefined;
+        process.stderr.write(`catalog ${verb === undefined ? command : `${command} ${verb}`} failed: ${reason}\n`);
+      }
     } else {
       process.stderr.write(
-        `catalog ${command} failed against ${redactUrl(databaseUrl())}\n  ${message}\n`,
+        `catalog ${command} failed against ${redactUrl(databaseUrl())}\n` +
+          (reason === null ? "" : `  ${reason}\n`) +
+          `  ${message}\n`,
       );
     }
-    return 1;
+    return failure?.unreachable === true ? EXIT_UNREACHABLE : 1;
   }
 }
 

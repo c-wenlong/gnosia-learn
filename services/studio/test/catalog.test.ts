@@ -14,11 +14,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const procMock = vi.hoisted(() => ({ run: vi.fn(), NPM: "npm" }));
 vi.mock("../src/proc", () => procMock);
 
-const { status } = await import("../src/catalog");
+const { CATALOG_UNREACHABLE, status } = await import("../src/catalog");
 
-function fails(stderr: string, timedOut = false) {
+function fails(stderr: string, timedOut = false, code: number | null = 1) {
   procMock.run.mockResolvedValue({
-    code: 1,
+    code,
     signal: null,
     stdout: "",
     stderr,
@@ -39,6 +39,18 @@ describe("nothing there to talk to", () => {
     ["DATABASE_URL is not set", "there is no database to ask"],
   ])("is offline: %s", async (stderr) => {
     fails(stderr);
+    expect((await status()).offline).toBe(true);
+  });
+
+  it("is offline on the CLI's unreachable exit code, whatever the text says", async () => {
+    // What the catalog CLI printed for a dead port before it had an exit code
+    // for it: drizzle's wrapper, with the driver's ECONNREFUSED nowhere in it.
+    fails(
+      "catalog job enqueue failed: database unreachable: connection refused (ECONNREFUSED)\n" +
+        "Failed query: select 1\nparams: ",
+      false,
+      CATALOG_UNREACHABLE,
+    );
     expect((await status()).offline).toBe(true);
   });
 
@@ -64,6 +76,23 @@ describe("a database that is alive and refused this process", () => {
     ["connect ETIMEDOUT 10.0.0.4:5432", "unreachable from here, not gone"],
   ])("is not offline: %s", async (stderr) => {
     fails(stderr);
+    expect((await status()).offline).toBe(false);
+  });
+
+  it.each([
+    ["database connection failed: authentication failed (28P01)"],
+    ["database connection failed: authentication failed (28000)"],
+    ["database connection failed: database does not exist (3D000)"],
+    ["database connection failed: connection timed out (ETIMEDOUT)"],
+  ])("is not offline on exit 1 with the CLI's refusal line: %s", async (line) => {
+    fails(`catalog status failed: ${line}`);
+    expect((await status()).offline).toBe(false);
+  });
+
+  it("is not offline on exit 1 when all it says is that a query failed", async () => {
+    // The text every database failure used to share. Unclassified is a
+    // refusal, the direction that costs a job rather than corrupting one.
+    fails("Failed query: select to_regclass($1) is not null as present\nparams: x");
     expect((await status()).offline).toBe(false);
   });
 
