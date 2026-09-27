@@ -340,10 +340,11 @@ export async function writeSource(
       const scope = linkScope(indexer, name, options.scope);
       if (scope === null) continue;
       // A held topic keeps its own links, so its eventual delete revision
-      // records it whole, and a failed run leaves it as it was.
-      const heldParent =
-        held.size === 0 ? undefined : name === "topicRelation" ? topicRelation.fromSlug : name === "manimkcTopic" ? manimkcTopic.topicSlug : undefined;
-      const where = heldParent === undefined ? (scope ?? sql`true`) : and(scope ?? sql`true`, notInArray(heldParent, [...held]));
+      // records it whole, and a failed run leaves it as it was; except a
+      // manimkc path this run files under another topic, whose primary key
+      // the new row needs (the path has moved, so it is no longer the held
+      // topic's to record).
+      const where = held.size === 0 ? (scope ?? sql`true`) : and(scope ?? sql`true`, heldLinksKept(name, held, rows));
       const result = await tx.delete(TABLES[name]).where(where);
       clearedLinks[name] = result.rowCount ?? 0;
     }
@@ -962,6 +963,22 @@ async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ top
 }
 
 /**
+ * The link rows a held topic keeps through the topics pass, as a condition
+ * for the rows the pass may clear: its outgoing relations, and its manimkc
+ * paths other than any this run files under a surviving topic.
+ */
+function heldLinksKept(name: LinkName, held: ReadonlySet<string>, rows: SourceRows): SQL | undefined {
+  const topics = [...held];
+  if (name === "topicRelation") return notInArray(topicRelation.fromSlug, topics);
+  if (name === "manimkcTopic") {
+    const moved = (rows.manimkcTopic ?? []).map((row) => row.path);
+    const keep = and(inArray(manimkcTopic.topicSlug, topics), moved.length === 0 ? sql`true` : notInArray(manimkcTopic.path, moved));
+    return sql`not (${keep})`;
+  }
+  return undefined;
+}
+
+/**
  * Delete the topics the topics source held, now that the concepts source has
  * moved or pruned what was filed under them: the step that source's own prune
  * would have taken. One transaction under the topic lock, a `delete` revision
@@ -983,6 +1000,10 @@ export async function pruneHeldTopics(
     const reads = await readSnapshots(tx, "topic", topics);
     const keys = [...reads.keys()].sort();
     if (keys.length === 0) return { deleted: [], revisions: 0 };
+    // Its own links first, which the topics pass kept for this revision:
+    // `topic_relation` is RESTRICT on its topics and would refuse the delete.
+    await tx.delete(topicRelation).where(inArray(topicRelation.fromSlug, keys));
+    await tx.delete(manimkcTopic).where(inArray(manimkcTopic.topicSlug, keys));
     await tx.delete(topic).where(inArray(topic.slug, keys));
     const revisions = await recordDeletes(tx, "topic", reads, by);
     await tx

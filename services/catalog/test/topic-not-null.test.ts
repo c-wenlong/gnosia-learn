@@ -203,3 +203,61 @@ describe.skipIf(!reachable.ok)("one catalog index that moves a topic's concepts 
     expect(runRow?.deleted).toBe(1);
   }, 60_000);
 });
+
+describe.skipIf(!reachable.ok)("a held topic with a relation, and a manimkc path moving off it", () => {
+  let scratch: Scratch;
+  let fixture: Fixture;
+  const index = () => runIndex(scratch.db, { repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      [
+        "topics:",
+        "  - slug: alpha", "    title: Alpha", "    domain: one", "    aliases: []",
+        "    relations:", "      - {kind: precedes, to: beta}",
+        "    maps:", "      manimkc: [one/first, one/second]", "      courses: []", "      concepts: [base]",
+        "  - slug: beta", "    title: Beta", "    domain: one", "    aliases: []",
+        "    maps:", "      manimkc: []", "      courses: [xx1000-m1]", "      concepts: []",
+        "",
+      ].join("\n"),
+    );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      [
+        "id: xx1000", "slug: xx1000", "code: XX1000", "title: A test course", "credits: 4", "order: 1",
+        "inferred: false", "tags: [testing]", "modules:", "  - id: xx1000-m1", "    slug: m1",
+        "    title: Module one", "    order: 1", "    topic: beta", "    topics:", "      - id: xx1000-m1-t1",
+        "        title: First item", "        subtopics: []", "    resources: []", "capstone: Build something", "",
+      ].join("\n"),
+    );
+    await fixture.write("learn/concepts/testing/base.md", note({ id: "base" }));
+    await index();
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+    await fixture?.cleanup();
+  });
+
+  it("deletes the topic with its relation, and files the moved path under the topic that took it", async () => {
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "beta", domain: "one", courses: ["xx1000-m1"], concepts: ["base"], manimkc: ["one/first"] }]),
+    );
+    await index();
+    expect((await scratch.db.select().from(topic)).map((t) => t.slug)).toEqual(["beta"]);
+    const paths = await scratch.db.execute<{ path: string; topic_slug: string }>(sql`select path, topic_slug from manimkc_topic`);
+    expect(paths.rows).toEqual([{ path: "one/first", topic_slug: "beta" }]);
+    const { rows } = await scratch.db.execute<{ snapshot: { links: Record<string, { path?: string }[]> } }>(
+      sql`select snapshot from content_revision where entity_type = 'topic' and entity_id = 'alpha' and op = 'delete'`,
+    );
+    // Recorded as it was when it went: its relation, and the path it still held.
+    expect(rows[0]?.snapshot.links["topic_relation"]).toHaveLength(1);
+    expect(rows[0]?.snapshot.links["manimkc_topic"]?.map((l) => l.path)).toEqual(["one/second"]);
+  }, 60_000);
+});
