@@ -897,6 +897,12 @@ the archive rules, Sonnet for the reader. **Size:** 2 to 3 PRs (*guessed*).
       without the database (`cli.ts:156-160` chose otherwise). `status`, which
       both skills already run first and stop on, has needed the database since
       bundle 5, so a session could not start offline anyway.
+- [x] The rows hold the notes and the logs before anything is flipped:
+      `catalog import` fills `concept.body` and the frontmatter columns and
+      appends `session_log_entry` rows, and `catalog export` and `catalog
+      parity` render both types from those rows instead of copying the files
+      through. Added to this list when it was built, since parity, and so the
+      flip, needs it before any writer does.
 
 **Parity:** 32 notes, byte-exact bodies; 3 logs byte-exact after
 concatenation; 70 prerequisite rows. **Tests:** the five golden `--json`
@@ -906,6 +912,41 @@ commit with a moved base refused; `observe --session` appends one entry.
 **Done when:** a full `/learn` session run against the migrated database closes
 with filled-in notes and a log, and no file under `learn/` changed. **Tier:**
 Opus. **Size:** 4 PRs (*guessed*): writers, readers, plugin, flip.
+
+**Built, rows (PR 1 of the track).** In `services/catalog/src/content/`
+(`notes.ts`, `note-rows.ts`, `session-logs.ts`) and the two indexers. On a
+`createdb -T self_learn` copy: 32 notes, 70 prerequisite rows, 3 logs; parity
+zero mismatches; all 3 logs and 27 of the 32 notes render byte for byte. Where
+it goes past or around the list above, and why:
+
+- **A row keeps a note's frontmatter values, not their layout.** The rendered
+  note writes the eight keys in `learn concept add`'s order and leaves out an
+  empty `assumes:`. Five notes lay theirs out otherwise (four write
+  `assumes: []`, `tool-calling.md` writes `assumes` last), so an export
+  changes one frontmatter line in each and no body byte in any. Parity
+  therefore compares a note as the fields its row holds plus its body byte for
+  byte (`noteParityForm`), not its frontmatter as parsed. Keeping the layout
+  would have needed a column, and D10 put the schema in phase 0. After the
+  flip, an import of `concepts` accepts only files that are the database's
+  last recorded export (edge case 12), so the flip day ends with
+  `catalog export --only concepts --out .`, which rewrites that one line in
+  those five notes and nothing else.
+- **A frontmatter key outside the eight is refused at import**, by file and
+  key, since a row has nowhere to keep it and the flip would drop it. So is a
+  `created:` that is not a date, and a title, summary or list item the
+  dialect cannot write back as it was read (it has no escapes). None of the
+  32 notes trips any of them.
+- **A note asset's hash is of the note as its row renders it**, not of the
+  bytes on disk, so it is the same whether imported from the tree, from an
+  export, or written by the database writer.
+- **A log's first entry is the header `session start` wrote**, frontmatter
+  included, not a frontmatter rebuilt from the `session` row: the three logs'
+  `date:` is a millisecond off `session.started_at`, and one opens with a note
+  of its own. Each entry is the exact text appended, so the log is the
+  concatenation. An import appends what a file grew by as one entry, takes a
+  new log whole as its first, and starts a `session` row (`interrupted`, as
+  0006's backfill does) for a log nothing started. It refuses a log edited
+  above its end and a log whose file is gone, since the table is append-only.
 
 ### Track D: diagrams
 
