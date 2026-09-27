@@ -45,12 +45,34 @@ describe("conceptsForTopic", () => {
     expect(conceptsForTopic(concepts, "cp4284-m1-t2")).toEqual([]);
   });
 
-  it("orders by the module's maps.concepts first, then by title", () => {
+  it("orders by the module's maps.concepts first, then by title, when nothing is placed", () => {
     const order = ["self-attention", "attention-weights"];
     expect(conceptsForTopic(concepts, "cp4284-m1-t1", order).map((c) => c.slug)).toEqual([
       "self-attention",
       "attention-weights",
       "zeta-extra",
+    ]);
+  });
+
+  it("orders by the row's concepts: list first, and puts the unplaced after it", () => {
+    const placed: KbConceptLike[] = [
+      { ...kb("self-attention", 0.05, "gap", 1, ["cp4284-m1-t1"]), positions: { "cp4284-m1-t1": 3 } },
+      { ...kb("attention-weights", 0.04, "gap", 1, ["cp4284-m1-t1"]), positions: { "cp4284-m1-t1": 1 } },
+      // Placed on another row only: on this one it is unplaced.
+      { ...kb("react-loop", 0.2, "weak", 0, ["cp4284-m1-t1", "cp4284-m3-t1"]), positions: { "cp4284-m3-t1": 1 } },
+      // A link indexed before positions existed.
+      { ...kb("zeta-extra", 0.3, "weak", 2, ["cp4284-m1-t1"]), positions: { "cp4284-m1-t1": 0 } },
+      { ...kb("softmax", 0.5, "shaky", 3, ["cp4284-m1-t1"]), positions: { "cp4284-m1-t1": 2 } },
+    ];
+    // The authored order would put zeta first; the row's positions win, and
+    // the authored order only ranks the two the row has not placed.
+    const authored = ["zeta-extra", "self-attention", "react-loop"];
+    expect(conceptsForTopic(placed, "cp4284-m1-t1", authored).map((c) => c.slug)).toEqual([
+      "attention-weights",
+      "softmax",
+      "self-attention",
+      "zeta-extra",
+      "react-loop",
     ]);
   });
 

@@ -29,8 +29,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  * anchor.
  *
  * The server's half is everything that needs a database or the filesystem:
- * each topic's mastery from the concepts whose notes name it (the knowledge
- * base, read per request), each module's Guidebook concept (falling back to
+ * each topic's mastery from the concepts its `concepts:` list names (the
+ * knowledge base, read per request), each module's Guidebook concept (falling back to
  * the module topic's `maps.concepts` in `content/topics.yaml`), and each
  * module's assets from the catalog. Both reads degrade to empty when Postgres
  * is down: a topic then shows its tick, and the rail says the catalog did not

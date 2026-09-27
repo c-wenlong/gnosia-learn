@@ -47,6 +47,12 @@ export interface KbConcept {
   leech: boolean;
   /** Curriculum item ids this concept supports, linking back to the courses. */
   topics: string[];
+  /**
+   * Where the concept sits in each of those items' `concepts:` lists, keyed
+   * by item id, 1-based. Beside `topics` rather than folded into it so the
+   * readers that want only the ids keep their shape.
+   */
+  positions: Record<string, number>;
   /** Folder the note lives in, read off `concept.path`. Presentation only. */
   domain: string | null;
 }
@@ -151,10 +157,14 @@ export async function readKnowledgeBase(
   const { requires, assumes } = edgeLists(prerequisites);
 
   const topics = new Map<string, string[]>();
+  const positions = new Map<string, Record<string, number>>();
   for (const link of curriculumLinks) {
     const list = topics.get(link.conceptSlug);
     if (list === undefined) topics.set(link.conceptSlug, [link.curriculumItemId]);
     else list.push(link.curriculumItemId);
+    const at = positions.get(link.conceptSlug);
+    if (at === undefined) positions.set(link.conceptSlug, { [link.curriculumItemId]: link.position });
+    else at[link.curriculumItemId] = link.position;
   }
 
   // `buildGraph` takes the same shape `listConcepts()` returns, so it can be
@@ -181,6 +191,7 @@ export async function readKnowledgeBase(
       lapses: card?.lapses ?? 0,
       leech: card?.leech ?? false,
       topics: topics.get(row.slug) ?? [],
+      positions: positions.get(row.slug) ?? {},
       domain: domainOf(row.path),
     };
   });
