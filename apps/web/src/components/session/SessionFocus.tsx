@@ -21,6 +21,7 @@ import {
   type SessionMode,
   type SessionQuestion,
   type SessionStep,
+  withConsequence,
 } from "@/lib/session-core";
 
 import { SessionClose } from "./SessionClose";
@@ -183,6 +184,12 @@ export function SessionFocus({
   }, [index, plan, modelAvailable, slug, graded, questionFor]);
 
   const current = questionFor(index);
+  // Joined here rather than in the JSX: a call on `current.note` down there made the React Compiler
+  // treat `current` as mutable past `grade`, and it gave up memoizing `grade`.
+  const noQuestion =
+    current.status === "none"
+      ? withConsequence(current.note, `Nothing is recorded; carry on${step?.kind === "probe" ? " to the teaching" : ""}.`)
+      : null;
   const question = current.status === "ready" ? current.question : null;
   const answered = graded[index];
 
@@ -394,7 +401,7 @@ export function SessionFocus({
             <div role="status" className="flex flex-col gap-2 rounded-2xl bg-surface2 p-5">
               <p className="text-[15px] font-semibold text-text">No question this session</p>
               <p className="text-[14px] leading-[1.5] text-text2">
-                {NOTHING_TO_ASK} Nothing is recorded; Continue closes the session.
+                {withConsequence(NOTHING_TO_ASK, "Nothing is recorded; Continue closes the session.")}
               </p>
             </div>
           )}
@@ -417,11 +424,11 @@ export function SessionFocus({
             <Placeholder label="The tutor is writing a question…" height={180} className="animate-pulse" />
           )}
 
-          {current.status === "none" && (
+          {noQuestion !== null && (
             <div role="status" className="flex flex-col gap-2 rounded-2xl bg-surface2 p-5">
               <p className="text-[15px] font-semibold text-text">No question for this step</p>
               <p className="text-[14px] leading-[1.5] text-text2">
-                {current.note} Nothing is recorded; carry on{step.kind === "probe" ? " to the teaching" : ""}.
+                {noQuestion}
               </p>
             </div>
           )}
