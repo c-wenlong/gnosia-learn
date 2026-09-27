@@ -108,6 +108,9 @@ export const conceptsIndexer: Indexer = {
         title: readText(data, "title") ?? slug,
         summary: readText(data, "summary"),
         topicSlug,
+        // Where the topic lists it, so the export writes `maps.concepts` back
+        // in the order it was authored.
+        topicPosition: (vocabulary.bySlug.get(topicSlug)?.maps.concepts.indexOf(slug) ?? -1) + 1,
         path: where,
       });
 
@@ -135,6 +138,18 @@ export const conceptsIndexer: Indexer = {
       assetTopics.push({ assetId: id, topicSlug });
     }
 
+    // The other direction: a `maps.concepts` entry naming no note. The
+    // mapping is stored as the note's own `concept.topic_slug`, so a mapping
+    // with no note behind it has no row to live in and would silently vanish
+    // from the next export.
+    for (const [mapped, topicSlug] of vocabulary.byConcept) {
+      if (slugs.has(mapped)) continue;
+      problems.add(
+        `${VOCABULARY_FILE}: topic "${topicSlug}" lists concept "${mapped}" in maps.concepts, ` +
+          `but no note in ${CONCEPTS_DIR} has that id. Write the note, or remove the mapping.`,
+      );
+    }
+
     problems.throwIfAny(CONCEPTS_DIR);
 
     // Prerequisites resolve against the concepts just read, not against the
@@ -143,6 +158,8 @@ export const conceptsIndexer: Indexer = {
     // the file with the typo in it.
     const prerequisites: NewConceptPrerequisite[] = [];
     const seenPrerequisites = new Set<string>();
+    /** Next position per note and list: `requires:` and `assumes:` are two lists. */
+    const nextPosition = new Map<string, number>();
     for (const draft of prerequisiteDrafts) {
       if (!slugs.has(draft.to)) {
         problems.add(
@@ -157,10 +174,14 @@ export const conceptsIndexer: Indexer = {
       const key = `${draft.from} ${draft.to} ${draft.kind}`;
       if (seenPrerequisites.has(key)) continue;
       seenPrerequisites.add(key);
+      const list = `${draft.from} ${draft.kind}`;
+      const position = (nextPosition.get(list) ?? 0) + 1;
+      nextPosition.set(list, position);
       prerequisites.push({
         conceptSlug: draft.from,
         prerequisiteSlug: draft.to,
         kind: draft.kind,
+        position,
       });
     }
 

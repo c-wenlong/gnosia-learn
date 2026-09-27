@@ -145,8 +145,8 @@ export const mirrorsIndexer: Indexer = {
   owns: [],
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, manimkcRoot, knownAssets }) => {
-    const report = await readMirrorsReport(repoRoot, manimkcRoot);
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, knownAssets }) => {
+    const report = await readMirrorsReport(toolsRoot ?? repoRoot, manimkcRoot);
     return buildMirrorRows(report, await knownAssets("manimkc"));
   },
 };

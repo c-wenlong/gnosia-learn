@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { conceptsIndexer } from "../src/index/concepts";
-import { withDependents, withPrerequisites } from "../src/index/run";
+import { selection, withDependents, withPrerequisites } from "../src/index/run";
 import { coursesIndexer } from "../src/index/courses";
 import { diagramsIndexer } from "../src/index/diagrams";
 import { IndexError } from "../src/index/errors";
@@ -46,9 +46,81 @@ describe("topics", () => {
     const { rows } = await topicsIndexer.read(await fixture.context());
 
     expect(rows.topic).toEqual([
-      { slug: "alpha", title: "Alpha", domain: "one", summary: "First", aliases: ["a", "first"] },
-      { slug: "beta", title: "Beta", domain: "two", summary: null, aliases: [] },
+      { slug: "alpha", title: "Alpha", domain: "one", summary: "First", aliases: ["a", "first"], position: 1 },
+      { slug: "beta", title: "Beta", domain: "two", summary: null, aliases: [], position: 2 },
     ]);
+    expect(rows.topicRelation).toEqual([]);
+    expect(rows.manimkcTopic).toEqual([]);
+  });
+
+  it("reads relations and maps.manimkc, keeping each list's order", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      [
+        "topics:",
+        "  - slug: alpha",
+        "    title: Alpha",
+        "    domain: one",
+        "    relations:",
+        "      - {kind: precedes, to: gamma}",
+        "      - {kind: related, to: beta}",
+        "    maps: {manimkc: [one/b, one/a], courses: [], concepts: []}",
+        "  - slug: beta",
+        "    title: Beta",
+        "    domain: one",
+        "    relations:",
+        "      - {kind: broader, to: alpha}",
+        "  - slug: gamma",
+        "    title: Gamma",
+        "    domain: one",
+        "",
+      ].join("\n"),
+    );
+
+    const { rows } = await topicsIndexer.read(await fixture.context());
+
+    expect(rows.topicRelation).toEqual([
+      { fromSlug: "alpha", toSlug: "gamma", kind: "precedes", position: 1 },
+      { fromSlug: "alpha", toSlug: "beta", kind: "related", position: 2 },
+      { fromSlug: "beta", toSlug: "alpha", kind: "broader", position: 1 },
+    ]);
+    expect(rows.manimkcTopic).toEqual([
+      { path: "one/b", topicSlug: "alpha", position: 1 },
+      { path: "one/a", topicSlug: "alpha", position: 2 },
+    ]);
+  });
+
+  it("refuses a related edge written under the larger slug, where the export would not put it back", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      [
+        "topics:",
+        "  - slug: alpha",
+        "    title: Alpha",
+        "    domain: one",
+        "  - slug: beta",
+        "    title: Beta",
+        "    domain: one",
+        "    relations:",
+        "      - {kind: related, to: alpha}",
+        "",
+      ].join("\n"),
+    );
+    await expect(fixture.context()).rejects.toThrow(/"related" to "alpha" belongs under "alpha"/);
+  });
+
+  it("refuses a relation to a topic that does not exist, and a kind that is not one", async () => {
+    fixture = await makeFixture();
+    const one = (relation: string) =>
+      ["topics:", "  - slug: alpha", "    title: Alpha", "    domain: one", "    relations:", `      - ${relation}`, ""].join(
+        "\n",
+      );
+    await fixture.write("content/topics.yaml", one("{kind: broader, to: nowhere}"));
+    await expect(fixture.context()).rejects.toThrow(/relations names "nowhere", which is not a topic/);
+    await fixture.write("content/topics.yaml", one("{kind: sibling, to: alpha}"));
+    await expect(fixture.context()).rejects.toThrow(/kind "sibling" is not one of broader, related, precedes/);
   });
 
   it("refuses a slug claimed by two topics", async () => {
@@ -143,9 +215,13 @@ describe("courses", () => {
     expect(rows.curriculumItemTopic).toEqual([
       { curriculumItemId: "xx1000-m1-t1", topicSlug: "alpha" },
     ]);
+    // The module's topic row, at the module's place in the topic's
+    // maps.courses, then each resource at its place in the module's list.
     expect(rows.collectionItem).toEqual([
-      { collectionId: "xx1000-m1", position: 0, topicSlug: "alpha", conceptSlug: null, assetId: null },
+      { collectionId: "xx1000-m1", position: 0, topicSlug: "alpha", conceptSlug: null, assetId: null, topicPosition: 1 },
+      { collectionId: "xx1000-m1", position: 1, topicSlug: null, conceptSlug: null, assetId: "link:xx1000-m1-r1" },
     ]);
+    expect(rows.collectionTag).toEqual([{ collectionId: "xx1000", tagId: "testing", position: 1 }]);
     // The row's `concepts:` list, with its order kept as the position.
     expect(rows.conceptCurriculumItem).toEqual([
       { conceptSlug: "base", curriculumItemId: "xx1000-m1-t1", position: 1 },
@@ -161,6 +237,7 @@ describe("courses", () => {
         bytes: null,
         title: "A book",
         sourceRepo: "self-learn",
+        resourceType: "book",
       },
     ]);
     expect(rows.assetTopic).toEqual([{ assetId: "link:xx1000-m1-r1", topicSlug: "alpha" }]);
@@ -278,6 +355,7 @@ describe("concepts", () => {
         title: "Base",
         summary: null,
         topicSlug: "alpha",
+        topicPosition: 1,
         path: "learn/concepts/testing/base.md",
       },
       {
@@ -285,11 +363,12 @@ describe("concepts", () => {
         title: "Derived",
         summary: "Builds on base",
         topicSlug: "alpha",
+        topicPosition: 2,
         path: "learn/concepts/testing/derived.md",
       },
     ]);
     expect(rows.conceptPrerequisite).toEqual([
-      { conceptSlug: "derived", prerequisiteSlug: "base", kind: "requires" },
+      { conceptSlug: "derived", prerequisiteSlug: "base", kind: "requires", position: 1 },
     ]);
     // The course link is the courses source's row now, never this one's.
     expect(rows.conceptCurriculumItem).toBeUndefined();
@@ -982,6 +1061,16 @@ describe("source selection", () => {
     // `--only courses` after a note was added and listed on a row would
     // otherwise check the list against concept rows the note is not in yet,
     // and refuse a course file that is right.
-    expect([...withPrerequisites(["courses"])].sort()).toEqual(["concepts", "courses"]);
+    expect([...withPrerequisites(["courses"])].sort()).toEqual(["concepts", "courses", "tags"]);
+  });
+
+  it("closes over both directions until nothing changes", () => {
+    // `--only concepts` pulls courses in as a dependent, and courses cannot
+    // write its `collection_tag` rows before tags has written the tags. One
+    // pass of each closure would miss tags entirely.
+    expect([...selection(["concepts"])].sort()).toEqual(["concepts", "courses", "diagrams", "sessions", "tags"]);
+    // Tags go first and courses follow, because pruning a tag clears links
+    // only the courses source writes back.
+    expect([...selection(["tags"])].sort()).toEqual(["concepts", "courses", "diagrams", "sessions", "tags"]);
   });
 });

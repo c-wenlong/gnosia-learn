@@ -53,7 +53,25 @@ vi.mock("@self-learn/content", async (importOriginal) => {
   };
 });
 
+/**
+ * The `content_source` rows, as the catalog would answer them. A function the
+ * tests swap, so one request can see rows, an outage, or nothing.
+ */
+const catalog = vi.hoisted(() => ({
+  ownership: async (): Promise<Record<string, string>> => ({}),
+}));
+
+vi.mock("next/server", () => ({ connection: async () => undefined }));
+vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
+vi.mock("@self-learn/catalog/state", () => ({
+  contentOwnership: () => catalog.ownership(),
+  dbSource: () => {
+    throw new Error("no database in this test");
+  },
+}));
+
 const { getCourse, getCourses } = await import("@/data/courses");
+const { contentSource } = await import("@/data/source");
 const { getTags } = await import("@/data/content");
 const { getTopics } = await import("@/data/topics");
 
@@ -68,6 +86,7 @@ async function inRequest<T>(run: () => Promise<T>): Promise<T> {
 
 beforeEach(() => {
   reads.select = reads.topics = reads.tags = reads.courses = 0;
+  catalog.ownership = async () => ({});
 });
 
 describe("the content accessors", () => {
@@ -99,5 +118,41 @@ describe("the content accessors", () => {
     await getTopics();
     await getTopics();
     expect(reads.topics).toBe(2);
+  });
+});
+
+describe("who owns each type", () => {
+  it("follows the content_source rows", async () => {
+    catalog.ownership = async () => ({ topics: "db", courses: "files" });
+    const resolved = await inRequest(() => contentSource().resolution());
+    expect(resolved.topics).toEqual({ kind: "db", from: "row" });
+    expect(resolved.courses).toEqual({ kind: "files", from: "row" });
+    expect(resolved.tags).toEqual({ kind: "files", from: "default" });
+  });
+
+  it("reads files when the rows cannot be read, and says so once per outage", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.ownership = async () => {
+        throw new Error('relation "content_source" does not exist');
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const resolved = await inRequest(() => contentSource().resolution());
+        expect(resolved.topics).toEqual({ kind: "files", from: "default" });
+      }
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(/content_source" does not exist/);
+
+      // The database answers again, then goes away again: a new outage, a new line.
+      catalog.ownership = async () => ({});
+      await inRequest(() => contentSource().resolution());
+      catalog.ownership = async () => {
+        throw new Error("connection refused");
+      };
+      await inRequest(() => contentSource().resolution());
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

@@ -83,6 +83,20 @@ export interface TagMeta {
   description: string;
 }
 
+/**
+ * How one topic relates to another (docs/CONTENT-MIGRATION.md, `topic_relation`).
+ * `broader`: `to` is the wider subject. `related`: symmetric. `precedes`:
+ * learn this topic before `to`.
+ */
+export type TopicRelationKind = "broader" | "related" | "precedes";
+
+/** One typed edge from a topic's `relations:` list. */
+export interface TopicRelation {
+  kind: TopicRelationKind;
+  /** The other topic's slug. */
+  to: string;
+}
+
 /** One entry in the shared topic vocabulary, from `content/topics.yaml`. */
 export interface TopicEntry {
   slug: string;
@@ -90,6 +104,11 @@ export interface TopicEntry {
   domain: string;
   summary: string | null;
   aliases: string[];
+  /**
+   * Typed edges to other topics, in the order the list is written. Empty when
+   * the entry has no `relations:` key, which is every topic until Track A.
+   */
+  relations: TopicRelation[];
   maps: {
     /** manimkc topic folders, `topics/`-relative. */
     manimkc: string[];

@@ -89,9 +89,9 @@ export const diagramsIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.diagrams,
   root: () => ASSETS_DIR,
 
-  read: async ({ repoRoot, knownConcepts, vocabulary }) => {
+  read: async ({ repoRoot, toolsRoot, knownConcepts, vocabulary }) => {
     const directory = path.join(repoRoot, ASSETS_DIR);
-    const listing = await listDiagrams(repoRoot, directory);
+    const listing = await listDiagrams(toolsRoot ?? repoRoot, directory);
     const concepts = await knownConcepts();
     const problems = new IndexErrors();
     const notes: string[] = [];

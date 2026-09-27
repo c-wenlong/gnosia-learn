@@ -4,6 +4,7 @@ import type {
   NewAssetTopic,
   NewCollection,
   NewCollectionItem,
+  NewCollectionTag,
   NewConceptCurriculumItem,
   NewCurriculumItem,
   NewCurriculumItemTopic,
@@ -42,7 +43,15 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * catalog knows. The concepts source runs first for exactly that reason.
  *
  * Curated resources become `link` assets: they have a URL and no bytes, which
- * is exactly what `asset`'s `num_nonnulls(path, url) = 1` check describes.
+ * is exactly what `asset`'s location check describes. Each carries its
+ * `type:` as `asset.resource_type`, and the module holds it as a
+ * `collection_item` row at its place in the `resources:` list. Two modules can
+ * share a topic, so the topic cannot say which module a link belongs to; the
+ * membership row can, and `catalog export` reads the list back from it.
+ *
+ * A course's `tags:` become `collection_tag` rows in list order, pointing at
+ * the rows the tags source wrote. The strings stay in `metadata.tags` as well,
+ * because the web app reads them there until Track B moves its reader.
  */
 
 export { COURSES_DIR };
@@ -55,6 +64,7 @@ export const coursesIndexer: Indexer = {
     "collectionItem",
     "curriculumItemTopic",
     "conceptCurriculumItem",
+    "collectionTag",
   ],
   assetPrefix: ASSET_PREFIX.courses,
   root: () => COURSES_DIR,
@@ -72,6 +82,7 @@ export const coursesIndexer: Indexer = {
     const conceptLinks: NewConceptCurriculumItem[] = [];
     const assets: NewAsset[] = [];
     const assetTopics: NewAssetTopic[] = [];
+    const collectionTags: NewCollectionTag[] = [];
 
     const problems = new IndexErrors();
     /** Modules seen here, so the vocabulary's own `maps.courses` can be checked back. */
@@ -101,6 +112,9 @@ export const coursesIndexer: Indexer = {
           capstone: course.capstone,
         },
       });
+      for (const [index, tagId] of course.tags.entries()) {
+        collectionTags.push({ collectionId: course.id, tagId, position: index + 1 });
+      }
 
       for (const mod of course.modules) {
         moduleCount += 1;
@@ -143,6 +157,9 @@ export const coursesIndexer: Indexer = {
           topicSlug: declared,
           conceptSlug: null,
           assetId: null,
+          // Where the vocabulary lists this module under the topic, so the
+          // export writes `maps.courses` in the order it was written.
+          topicPosition: (vocabulary.bySlug.get(declared)?.maps.courses.indexOf(mod.id) ?? -1) + 1,
         });
 
         for (const [topicIndex, item] of mod.topics.entries()) {
@@ -176,7 +193,7 @@ export const coursesIndexer: Indexer = {
           }
         }
 
-        for (const resource of mod.resources) {
+        for (const [resourceIndex, resource] of mod.resources.entries()) {
           const id = `${ASSET_PREFIX.courses}${resource.id}`;
           assets.push({
             id,
@@ -187,8 +204,16 @@ export const coursesIndexer: Indexer = {
             bytes: null,
             title: resource.title,
             sourceRepo: "self-learn",
+            resourceType: resource.type,
           });
           assetTopics.push({ assetId: id, topicSlug: declared });
+          collectionItems.push({
+            collectionId: mod.id,
+            position: resourceIndex + 1,
+            topicSlug: null,
+            conceptSlug: null,
+            assetId: id,
+          });
         }
       }
     }
@@ -214,6 +239,7 @@ export const coursesIndexer: Indexer = {
       collectionItem: collectionItems,
       curriculumItemTopic: curriculumItemTopics,
       conceptCurriculumItem: conceptLinks,
+      collectionTag: collectionTags,
     };
     return {
       rows,

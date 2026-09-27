@@ -4,7 +4,12 @@ import path from "node:path";
 
 import { formatAssertOutput, runAssertOutput } from "./commands/assert-output";
 import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
-import { formatIndex, runIndexCommand } from "./commands/index-command";
+import { formatExport, runExport } from "./commands/export";
+import { formatFlip, runFlip } from "./commands/flip";
+import { formatIndex, runImportCommand, runIndexCommand } from "./commands/index-command";
+import { formatParity, runParity } from "./commands/parity";
+import { EXPORT_TYPES, type ExportType } from "./content/layout";
+import { CONTENT_TYPES, type ContentType } from "@self-learn/schema";
 import {
   formatJob,
   readBrief,
@@ -71,6 +76,30 @@ Commands:
                            was last indexed, and mirror coverage per
                            destination.
   index                    Read the content trees and rewrite the derived rows.
+                           The same code path as \`import\` of the repository.
+  import <dir>             Read a directory laid out like the repository (an
+                           export, or a checkout) into the database, every
+                           changed entity as an import revision. A type the
+                           database owns is skipped when its files are its own
+                           last export, and refused when they were edited.
+  export --out <dir>       Write the database back out as content/ and learn/
+                           files: topics.yaml, tags.yaml, courses/<code>.yaml
+                           from rows. Concept notes, session logs and diagrams
+                           are copied from the directory their import read,
+                           checked against each row's sha256, until Tracks C
+                           and D move their text into rows. Records each
+                           type's export hash on content_source.
+  parity <dir>             Compare the database with <dir> entity by entity:
+                           counts per type, sha256 per entity over a canonical
+                           form. Lists every mismatch by id; exits 1 on any.
+                           Records the result for flip.
+  flip <type>              Make the database the owner of one content type:
+                           write its content_source row and arm its write
+                           guards. Refused without a clean parity since the
+                           type's last import. --strict also arms its
+                           completeness rules, refused while doctor lists a
+                           violator; --waive <rule> --reason <why> leaves one
+                           disarmed, on the record.
   backfill                 One-off: move learn/state/*.json into the state
                            tables, then assert the rebuilt mastery equals
                            model.json and the cards equal reviews.json.
@@ -106,11 +135,18 @@ Commands:
 
 Options:
   --json                   Machine-readable output. Supported by every command.
-  --only a,b               index: run only these sources. Known sources are
-                           topics, courses, concepts, manimkc, diagrams,
-                           sessions, mirrors; they always run in dependency
-                           order, and selecting one selects everything
-                           downstream of it.
+  --only a,b               index, import: run only these sources. Known
+                           sources are topics, tags, courses, concepts,
+                           manimkc, diagrams, sessions, mirrors; they always
+                           run in dependency order, and selecting one selects
+                           everything downstream of it and everything it
+                           reads. export, parity: only these types, of
+                           topics, tags, courses, concepts, sessions, diagrams.
+  --out DIR                export: where to write. Created if missing.
+  --strict                 flip: also arm the type's completeness rules.
+  --waive RULE             flip: leave this rule disarmed. Repeatable, each
+                           with its own --reason, in the same order.
+  --reason TEXT            flip: why a --waive is acceptable.
   --manimkc-root PATH      index: the manimkc checkout to read, for both the
                            manimkc source and the mirror ledger beside it.
                            Relative to the working directory. Default:
@@ -188,7 +224,11 @@ type Command =
   | "assert-output"
   | "history"
   | "diff"
-  | "doctor";
+  | "doctor"
+  | "import"
+  | "export"
+  | "parity"
+  | "flip";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -205,6 +245,10 @@ const COMMANDS: readonly Command[] = [
   "history",
   "diff",
   "doctor",
+  "import",
+  "export",
+  "parity",
+  "flip",
 ];
 
 function isCommand(value: string | undefined): value is Command {
@@ -256,6 +300,10 @@ export async function main(argv: string[]): Promise<number> {
         title: { type: "string" },
         goal: { type: "string" },
         "agent-session": { type: "string" },
+        out: { type: "string" },
+        strict: { type: "boolean", default: false },
+        waive: { type: "string", multiple: true },
+        reason: { type: "string", multiple: true },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -299,6 +347,50 @@ export async function main(argv: string[]): Promise<number> {
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
+        break;
+      }
+      case "import": {
+        const dir = positionals[1];
+        if (dir === undefined) throw new Usage("import needs a directory");
+        const root = values["manimkc-root"];
+        const result = await runImportCommand({
+          dir,
+          only: values.only === undefined ? undefined : parseSources(values.only),
+          manimkcRoot: root === undefined ? undefined : path.resolve(root),
+        });
+        emit(result, formatIndex(result));
+        break;
+      }
+      case "export": {
+        if (values.out === undefined) throw new Usage("export needs --out <dir>");
+        const result = await runExport({ out: values.out, only: exportTypes(values.only) });
+        emit(result, formatExport(result));
+        break;
+      }
+      case "parity": {
+        const dir = positionals[1];
+        if (dir === undefined) throw new Usage("parity needs a directory to compare against");
+        const result = await runParity({ dir, only: exportTypes(values.only) });
+        emit(result, formatParity(result));
+        if (!result.clean) return 1;
+        break;
+      }
+      case "flip": {
+        const type = positionals[1];
+        if (type === undefined || !(CONTENT_TYPES as readonly string[]).includes(type)) {
+          throw new Usage(`flip needs a content type: ${CONTENT_TYPES.join(", ")}`);
+        }
+        const waive = values.waive ?? [];
+        const reasons = values.reason ?? [];
+        if (waive.length !== reasons.length) {
+          throw new Usage("flip: every --waive needs its own --reason, in the same order");
+        }
+        const result = await runFlip({
+          type: type as ContentType,
+          strict: values.strict,
+          waive: waive.map((rule, i) => ({ rule, reason: reasons[i] ?? "" })),
+        });
+        emit(result, formatFlip(result));
         break;
       }
       case "backfill": {
@@ -422,6 +514,23 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
+
+/** `--only` for export and parity: content types with an export format. */
+function exportTypes(raw: string | undefined): ExportType[] | undefined {
+  if (raw === undefined) return undefined;
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  const unknown = names.filter((n) => !(EXPORT_TYPES as readonly string[]).includes(n));
+  if (unknown.length > 0) {
+    throw new Usage(
+      `unknown type(s): ${unknown.join(", ")}. Known: ${EXPORT_TYPES.join(", ")}` +
+        (unknown.includes("manimkc") ? ". manimkc's videos never enter the export (D7)." : ""),
+    );
+  }
+  return names as ExportType[];
+}
 
 /** A numeric option, or undefined. Refuses anything that is not a number. */
 function number(value: string | undefined, flag: string): number | undefined {

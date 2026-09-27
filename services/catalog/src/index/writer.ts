@@ -6,15 +6,19 @@ import {
   assetTopic,
   collection,
   collectionItem,
+  collectionTag,
   concept,
   conceptCurriculumItem,
   conceptPrerequisite,
   curriculumItem,
   curriculumItemTopic,
   indexRun,
+  manimkcTopic,
   mirror,
   type RevisionEntityType,
+  tag,
   topic,
+  topicRelation,
 } from "@self-learn/schema";
 import { and, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -113,6 +117,7 @@ const ARCHIVED_NOT_PRUNED = new Set<EntityName>(["collection", "curriculumItem"]
 /** The revision entity type of each entity table. */
 const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
   topic: "topic",
+  tag: "tag",
   concept: "concept",
   collection: "collection",
   curriculumItem: "curriculum_item",
@@ -122,6 +127,7 @@ const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
 /** The entity tables an indexer may own, and the column identifying a row. */
 const ENTITY_KEY = {
   topic: "slug",
+  tag: "id",
   concept: "slug",
   collection: "id",
   curriculumItem: "id",
@@ -129,11 +135,14 @@ const ENTITY_KEY = {
 } as const;
 
 /** Entity tables, in the order a foreign key needs them written. */
-const ENTITY_ORDER = ["topic", "concept", "collection", "curriculumItem", "asset"] as const;
+const ENTITY_ORDER = ["topic", "tag", "concept", "collection", "curriculumItem", "asset"] as const;
 type EntityName = (typeof ENTITY_ORDER)[number];
 
 /** Link tables, written after every entity they point at exists. */
 const LINK_ORDER = [
+  "topicRelation",
+  "manimkcTopic",
+  "collectionTag",
   "assetTopic",
   "assetConcept",
   "conceptPrerequisite",
@@ -154,6 +163,7 @@ const ASSET_LINKED = new Set<LinkName>(["assetTopic", "assetConcept", "assetDeri
 
 const TABLES = {
   topic,
+  tag,
   concept,
   collection,
   curriculumItem,
@@ -165,12 +175,16 @@ const TABLES = {
   assetDerivation,
   curriculumItemTopic,
   conceptCurriculumItem,
+  topicRelation,
+  manimkcTopic,
+  collectionTag,
   mirror,
 } as const satisfies Record<keyof SourceRows, PgTable>;
 
 /** Conflict targets for the entity upserts, matching each table's primary key. */
 const CONFLICT_TARGET = {
   topic: topic.slug,
+  tag: tag.id,
   concept: concept.slug,
   collection: collection.id,
   curriculumItem: curriculumItem.id,
@@ -184,9 +198,9 @@ type AnyRow = Record<string, unknown>;
  * The two places this file admits it is generic.
  *
  * drizzle types `.values()` and every column against one specific table. This
- * writer is deliberately generic over twelve of them, and the row shapes are
+ * writer is deliberately generic over every table in `SourceRows`, and the row shapes are
  * already guaranteed at the indexer boundary by `SourceRows`, which is built
- * from drizzle's own `$inferInsert` types. Two narrow casts here beat twelve
+ * from drizzle's own `$inferInsert` types. Two narrow casts here beat sixteen
  * near-identical copies of the same forty lines, each free to drift.
  */
 
@@ -591,6 +605,13 @@ async function pruneEntity(
   const table = TABLES[name];
   const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
+  // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
+  // a course still wears. An import is different: the courses source is a
+  // dependent of tags and rewrites every course's tags from the files later in
+  // this run, so a tag gone from tags.yaml takes its links with it here, the
+  // way a pruned topic's links go by cascade. A course file that still names
+  // the tag is refused by the course reader when that source runs.
+  if (name === "tag") await tx.delete(collectionTag).where(inArray(collectionTag.tagId, keys));
   try {
     await tx.delete(table).where(inArray(column, keys));
   } catch (error) {
