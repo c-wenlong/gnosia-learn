@@ -196,13 +196,22 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       sql`select session_id from content_revision where entity_type = 'concept' and entity_id = 'alpha' order by seq desc limit 1`,
     );
     expect(rows[0]?.session_id).toBe("s1");
-    expect(await json("session", "list")).toEqual(["2026-01-01-old.md", "s1.md"]);
+    expect(await json<string[]>("session", "list")).toEqual(expect.arrayContaining(["2026-01-01-old.md", "s1.md"]));
 
     // The log is an asset that covers what it named.
     const { rows: covers } = await scratch.db.execute<{ concept_slug: string }>(
       sql`select concept_slug from asset_concept where asset_id = 'session:learn/sessions/s1.md' order by concept_slug`,
     );
     expect(covers.map((c) => c.concept_slug)).toEqual(["alpha"]);
+  });
+
+  it("writes one header when two starts race for a new log", async () => {
+    await Promise.all([
+      learn("session", "start", "--id", "s2", "--topic", "Race"),
+      learn("session", "start", "--id", "s2", "--topic", "Race"),
+      learn("session", "start", "--id", "s2", "--topic", "Race"),
+    ]);
+    expect(await entries("s2")).toHaveLength(1);
   });
 
   it("prints the map and indexes nothing", async () => {

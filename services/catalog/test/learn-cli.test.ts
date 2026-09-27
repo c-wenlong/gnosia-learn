@@ -379,10 +379,25 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
         expect(committed.stderr).toContain("was written, but it is not in the catalog");
         expect(await readFile(note, "utf8")).toContain("A line the session added.");
 
-        // A second checkout of an uncommitted copy is refused rather than lost.
+        // A second checkout of an uncommitted copy is refused rather than lost,
+        // and so is one whose sidecar is gone, since nothing vouches for it.
         await writeFile(checkout.path, "---\nid: beta\n---\n\nedited again\n", "utf8");
         const again = await learn("concept", "checkout", "beta").catch((error: { stderr: string }) => error);
         expect(again.stderr).toMatch(/has edits no commit has taken/);
+        const sidecar = path.join(root, "work", "concepts", "beta.checkout.json");
+        const kept = await readFile(sidecar, "utf8");
+        await rm(sidecar);
+        const orphan = await learn("concept", "checkout", "beta").catch((error: { stderr: string }) => error);
+        expect(orphan.stderr).toMatch(/has edits no commit has taken/);
+        await writeFile(sidecar, kept, "utf8");
+
+        // A copy checked out from another knowledge base is not committed here.
+        await writeFile(sidecar, kept.replace(/"from": "[^"]*"/, '"from": "/elsewhere postgres://elsewhere/db"'), "utf8");
+        const foreign = await learn("concept", "commit", "beta", "--reason", "wrong place").catch(
+          (error: { stderr: string }) => error,
+        );
+        expect(foreign.stderr).toMatch(/was checked out from \/elsewhere/);
+        await writeFile(sidecar, kept, "utf8");
 
         // The note moved under the copy: the commit is refused and the file kept.
         await writeFile(note, `${original}\nSomeone else's edit.\n`, "utf8");

@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { loadEnv, REPO_ROOT } from "../env";
+import { databaseUrl, loadEnv, redactUrl, REPO_ROOT } from "../env";
 
 /**
  * Where the knowledge base's *files* live. The state that used to sit beside
@@ -48,8 +49,8 @@ export const allDirs = () => [kbDir(), conceptsDir(), sessionsDir(), assetsDir()
 /**
  * Where `learn concept checkout` puts the copy a session edits: under
  * `$LEARN_ROOT/work/` when `LEARN_ROOT` is set (a test's fixture tree, or a
- * knowledge base kept outside the repository), else under the OS temp
- * directory. Never under the repository itself, where a checkout would be an
+ * knowledge base kept outside the repository), else under a folder of the OS
+ * temp directory named for this checkout and its database. Never under the repository itself, where a checkout would be an
  * untracked file in the owner's `git status`. `LEARN_WORK_DIR` overrides both.
  */
 export function workDir(): string {
@@ -58,7 +59,18 @@ export function workDir(): string {
   if (explicit !== undefined && explicit !== "") return path.resolve(explicit);
   const root = process.env[LEARN_ROOT_ENV]?.trim();
   if (root !== undefined && root !== "") return path.join(path.resolve(root), "work");
-  return path.join(tmpdir(), "self-learn", "work");
+  // One folder per checkout and database, so two worktrees, or one checkout
+  // pointed at a scratch copy, never share a copy named only by concept id.
+  const key = createHash("sha256").update(`${repoRoot()}\n${databaseUrl()}`).digest("hex").slice(0, 12);
+  return path.join(tmpdir(), "self-learn", "work", key);
+}
+
+/**
+ * Which knowledge base a checkout belongs to, recorded beside it and checked
+ * at commit: the checkout's repository root and its database, password left out.
+ */
+export function workIdentity(): string {
+  return `${repoRoot()} ${redactUrl(databaseUrl())}`;
 }
 
 /** Path relative to the repo root, for display. */

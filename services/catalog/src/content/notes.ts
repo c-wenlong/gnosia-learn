@@ -141,6 +141,15 @@ function unheldAsWritten(text: string, where: string): string[] {
   const { data } = parseFrontmatter(text);
   for (const entry of entries) {
     if (twice.has(entry.key)) continue;
+    // `tags: one` then `- two` is read as `[two]`: the parser lets the list
+    // replace the value on the key line.
+    if (entry.raw !== "" && entry.items.length > 0) {
+      problems.push(
+        `${where}: ${entry.key} has a value on its own line and a list under it; only the list would be kept. ` +
+          `Write one or the other.`,
+      );
+      continue;
+    }
     if (LIST_KEYS.has(entry.key)) {
       const written =
         entry.items.length > 0

@@ -869,9 +869,13 @@ Where it goes past or around the list above:
   cannot retire the old one yet), and writing an archived concept. A new
   note is placed one `POSITION_STEP` past the end of its topic (D22).
 - **The checkout copy lives outside the repository**: `$LEARN_ROOT/work/`
-  when `LEARN_ROOT` is set, the OS temp directory otherwise, or
-  `LEARN_WORK_DIR`, with a sidecar holding the base. Checkout refuses to
-  overwrite a copy with uncommitted edits unless `--force`. Checkout and
+  when `LEARN_ROOT` is set, a folder per checkout and database under the OS
+  temp directory otherwise, or `LEARN_WORK_DIR`, with a sidecar holding the
+  base and naming where it came from (a commit from another checkout or
+  database is refused). Checkout reads the note and its revision in one
+  snapshot, and refuses to overwrite a copy with uncommitted edits, or one
+  whose sidecar is gone, unless `--force`. `session start` writes its header
+  only onto an empty log, decided under the log's lock. Checkout and
   commit work on files too (the base is the file's hash there, and the commit
   re-indexes), so the plugin can move to them before the flip.
 - **`concept commit` and `concept edit --body-file` require `--reason`**;

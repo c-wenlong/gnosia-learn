@@ -10,7 +10,7 @@ import { readContentSources } from "../content/ownership";
 import { commitNoteText as commitRows, noteText, readNoteRows, writeNoteRow, type NoteRow } from "../content/note-rows";
 import { ContentWriteError } from "../content/write";
 import { NOTE_KEYS, type NoteFields } from "../content/notes";
-import { appendLog, listLogIds, logPath, readEntries } from "../content/session-logs";
+import { appendLog, listLogIds, logPath } from "../content/session-logs";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 import { allDirs, conceptsDir, rel, repoRoot, sessionsDir } from "./paths";
@@ -415,9 +415,7 @@ export async function appendSession(
 export async function startSessionLog(id: string, header: string): Promise<string> {
   const db = await rowsFor("sessions", true);
   if (db !== null) {
-    if ((await readEntries(db, id)).length === 0) {
-      await appendLog(db, id, header, { reason: `learn session start ${id}` });
-    }
+    await appendLog(db, id, header, { reason: `learn session start ${id}` }, { ifEmpty: true });
     return path.join(repoRoot(), logPath(id));
   }
   await fs.mkdir(sessionsDir(), { recursive: true });

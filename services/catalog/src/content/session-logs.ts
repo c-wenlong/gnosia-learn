@@ -181,7 +181,8 @@ export async function appendLog(
   id: string,
   markdown: string,
   writer: LogWriter,
-): Promise<{ seq: number; path: string }> {
+  options: { ifEmpty?: boolean } = {},
+): Promise<{ seq: number; path: string; appended: boolean }> {
   if (markdown === "") throw new LogError(`nothing to append to the log of session "${id}"`);
   return db.transaction(async (tx) => {
     const assetId = logAssetId(id);
@@ -196,10 +197,14 @@ export async function appendLog(
     } else if (existing.kind !== "tutor") {
       throw new LogError(`session "${id}" is a ${existing.kind} session, and only a tutor session keeps a log`);
     }
-    const seq = (await lastSeq(tx, id)) + 1;
+    const last = await lastSeq(tx, id);
+    // A header goes only onto an empty log, decided under the log's lock so
+    // two `session start`s at once cannot both see it empty.
+    if (options.ifEmpty === true && last > 0) return { seq: last, path: logPath(id), appended: false };
+    const seq = last + 1;
     await tx.insert(sessionLogEntry).values({ sessionId: id, seq, markdown });
     await writeLogAsset(tx, id, { ...writer, sessionId: id });
-    return { seq, path: logPath(id) };
+    return { seq, path: logPath(id), appended: true };
   });
 }
 

@@ -267,12 +267,20 @@ export async function noteText(
   db: CatalogDatabase,
   slug: string,
 ): Promise<{ text: string; revision: number | null; path: string } | null> {
-  const [row] = await readNoteRows(db, [slug]);
-  if (row === undefined) return null;
-  if (row.body === null) {
-    throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog index\` before the flip`);
-  }
-  return { text: renderNote({ ...row, body: row.body }), revision: await noteRevision(db, slug), path: row.path };
+  // One snapshot for the note and its revision: read apart, a write landing
+  // between them would pair old text with the new revision, and a commit of
+  // that copy would pass the base check and overwrite the write.
+  return db.transaction(
+    async (tx) => {
+      const [row] = await readNoteRows(tx, [slug]);
+      if (row === undefined) return null;
+      if (row.body === null) {
+        throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog index\` before the flip`);
+      }
+      return { text: renderNote({ ...row, body: row.body }), revision: await noteRevision(tx, slug), path: row.path };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }
 
 /**
