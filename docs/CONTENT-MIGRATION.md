@@ -1,6 +1,10 @@
 # Moving authored content into the database
 
-**Status: proposed, not built. 2026-09-27.** Nothing below exists yet. Numbers
+**Status: approved for phase 0, not built. 2026-09-27.** The owner answered
+the open questions the same day (see [Decided by the owner](#decided-by-the-owner)):
+everything stays local for now, so the cloud database and the cloud blob
+adapter are deferred to a go-live step and phase 0 starts at 0.2. Nothing below
+exists yet. Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
 working tree, `~/.self-learn/manimkc/out` and the local `self_learn` database;
 every other number is marked *guessed* and says what would settle it. File
@@ -269,15 +273,21 @@ reaches zero and refuses the tenth hole forever after.
 
 ## Phase 0: the foundation
 
-Serial; every phase 1 track waits on it. Five PRs (*guessed*): 0.2 with 0.1
-(the migration must exist before the data moves), 0.3, 0.4, 0.5, and 0.6.
+Serial; every phase 1 track waits on it. Five PRs (*guessed*): 0.2, 0.3, 0.4,
+0.5 and 0.6. Step 0.1 is the cloud move, which the owner deferred on
+2026-09-27: the local Postgres stays primary, and 0.1 runs as its own PR when
+the app goes live, any time after phase 0.
 
-### 0.1 A cloud database, provisioned in the order DEPLOYMENT.md requires
+### 0.1 The cloud database, deferred to go-live
 
-Vercel has no database today, and every read degrades because of that
-([DEPLOYMENT.md:163-174](DEPLOYMENT.md#the-database)). Setting `DATABASE_URL`
-on Vercel is also the moment `/api/learner/*` becomes writable to anyone who
-can pass the site password and forge an `Origin` header
+**Deferred.** The owner decided everything stays local for now. The local
+`self_learn` database is the primary, `catalog_instance` records it as such
+from 0.2, and Vercel keeps running with no database as today. The checklist
+below is the procedure for the day that changes; it is kept here so the order
+is not rediscovered. Vercel has no database today, and every read degrades
+because of that ([DEPLOYMENT.md:163-174](DEPLOYMENT.md#the-database)). Setting
+`DATABASE_URL` on Vercel is also the moment `/api/learner/*` becomes writable
+to anyone who can pass the site password and forge an `Origin` header
 (DEPLOYMENT.md:175-190). The order below is that document's, plus database
 roles and the move of the primary.
 
@@ -291,14 +301,19 @@ roles and the move of the primary.
 - [ ] Create three roles: `catalog_owner` (migrations), `catalog_writer` (the
       laptop's CLI and studio: content and state writes), `app_web` (Vercel:
       `SELECT` on content tables, writes on state tables only). D19.
-- [ ] Apply the expand migration of 0.2 to the local database first, so
-      `catalog_instance`, `owner_id` and the rest exist before any data
-      moves. 0.1 and 0.2 are therefore one PR, with 0.2's migration landing
-      before these last four steps run.
+- [ ] Confirm the local database is at the expand migration of 0.2 or later,
+      so `catalog_instance`, `owner_id` and the rest exist before any data
+      moves.
 - [ ] Move the data: `pg_dump self_learn`, restore into the cloud database,
       `npm run catalog -- migrate` against it (a no-op, since migrations are
       keyed by file hash), compare every table's row count with the local
       database, and write the `catalog_instance` row as `primary` there.
+- [ ] Move the bytes: `catalog blob migrate --to <provider>` streams every
+      `present` object from the `fs` store to the cloud adapter, `head`s each
+      one, and only then rewrites `blob_object.provider`; a key that fails
+      stays `fs` and is listed. Rows and bytes move in the same window, before
+      any reader switches adapters, because Vercel cannot reach
+      `~/.self-learn/blobs` and the uploader skips keys already `present`.
 - [ ] Mark the local database `copy`, and point the laptop's `DATABASE_URL` at
       the cloud database as `catalog_writer` (D2).
 - [ ] Set `DATABASE_URL` on Vercel production as `app_web`, and on preview
@@ -379,13 +394,17 @@ interface BlobStore {
       `~/.self-learn/blobs`), outside the repo for the reason `$MANIMKC_HOME`
       exists. Its `signedUrl` returns null and the route streams, reusing the
       Range code already in `apps/web/src/lib/asset-files.ts:328-405`.
-- [ ] A Vercel Blob adapter on a private store. Private stores need
-      `@vercel/blob` 2.3 or later and support presigned `GET` URLs (Vercel's
-      private storage documentation, read 2026-09-27).
-- [ ] One conformance suite, run against both adapters: round trip, a Range
-      read, `head` of a missing key, a wrong hash refused, and `signedUrl`
-      either null or fetchable. The Vercel Blob run is skipped with a named
-      reason when no token is set, the way the Postgres suites skip
+- [ ] The cloud adapter is deferred with 0.1 (the owner: everything local for
+      now). When it comes: R2 while the project is on Vercel Hobby, Vercel Blob
+      on Pro (open question 3). A Vercel Blob adapter would need a private
+      store, `@vercel/blob` 2.3 or later and presigned `GET` URLs (Vercel's
+      private storage documentation, read 2026-09-27). The interface above is
+      what makes it one file later.
+- [ ] One conformance suite, written now against the `fs` adapter and run
+      against any later adapter unchanged: round trip, a Range read, `head` of
+      a missing key, a wrong hash refused, and `signedUrl` either null or
+      fetchable. A cloud run skips with a named reason when no token is set,
+      the way the Postgres suites skip
       (`services/catalog/test/scratch-database.ts:30-53`).
 - [ ] `upload(file)` in the catalog: write the `pending` row, stream to the
       store, `head` it, then mark it `present`. D5.
@@ -447,10 +466,10 @@ The web app reads content synchronously at module load
       `DEPLOYMENT.md` gains the roles, the region and the blob token.
 
 **Done when:** the expand migration is applied to a `createdb -T self_learn`
-copy and to the cloud database; `catalog import` of the current tree into a
+copy and then to the local primary; `catalog import` of the current tree into a
 scratch database followed by `catalog export` yields a tree for which
-`catalog parity` reports zero mismatches against the working tree; both blob
-adapters pass the conformance suite; a second `catalog import` writes zero
+`catalog parity` reports zero mismatches against the working tree; the `fs`
+blob adapter passes the conformance suite; a second `catalog import` writes zero
 revisions; the web app renders every route from `fileSource` through the async
 seam with no visible change (`shots.mjs` before and after); and
 `npm run lint && npm run typecheck && npm test && npm run build` is green with
@@ -530,6 +549,12 @@ commands, the courses indexer's import mode.
 - [ ] Readers filter `archived_at is null`; an archived item with a learner's
       tick leaves the course path and stays in the Settings export.
 - [ ] The web app's course readers switch to `dbSource`.
+- [ ] The nine courses with no concept on any item get their concepts, as
+      content work the owner scheduled into this track on 2026-09-27: one
+      export, edit, import per course, each a revision with a reason, with
+      `catalog status` showing the distance to zero. When it reaches zero,
+      `catalog flip courses --strict` arms the rule (D21), so phase 3 does not
+      have to waive it.
 
 **Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
 **Tests:** an import that drops an item archives it and leaves `progress`; a
@@ -644,8 +669,10 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
 path; a Range request on the fs adapter still returns 206; an asset with a
 `pending` blob answers 404 `not-uploaded` rather than 500. **Docs:**
 [DEPLOYMENT.md](DEPLOYMENT.md) gains the blob store; AGENTS.md's poster gotcha
-notes the upload path. **Done when:** a video page on the production URL plays
-and seeks. **Tier:** Sonnet for the upload command, Opus for the route and the
+notes the upload path. **Done when:** a video page served by `next start` against the local primary
+plays and seeks from the `fs` blob store, through the streaming path the route
+keeps for an adapter with no signed URLs; the redirect path is exercised by a
+test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
 ## Phase 2: readers go database-only
@@ -666,6 +693,17 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       write-through export of D17 keeps running until phase 3, so
       `CONTENT_SOURCE=files` never reads an export older than the last
       write.
+- [ ] **Vault:** `learn vault pull [--out <dir>]` (default
+      `~/.self-learn/vault/`) writes every note and session log as markdown
+      with a `.vault.json` recording each file's base revision and hash;
+      `learn vault push` reads changed notes back through the write seam, one
+      revision per file with `--reason`, refusing a file whose row moved
+      (edge case 4). Session logs are append-only entries (D20) with no
+      revision to compare against, so the vault treats them as read-only:
+      pull writes them, push refuses an edited log by name and says the log is
+      a record of what happened, and a correction belongs in the note it
+      touched. Pull never overwrites a locally modified file. Decided by the
+      owner on 2026-09-27.
 - [ ] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
@@ -678,7 +716,11 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 
 **Done when:** deleting `content/` and `learn/` in a scratch worktree leaves
 `npm run lint && npm run typecheck && npm test && npm run build` green and the
-built app serving every route against the cloud database.
+built app serving every route against the local primary; `learn vault pull`
+into an empty folder and `learn vault push` with no edits round-trips with zero
+revisions written, one edited note pushes as one revision, a note edited on
+both sides is refused with the `.conflict` copy left beside it, and an edited
+session log is refused by name.
 
 ## Phase 3: cut-over
 
@@ -794,7 +836,7 @@ The shared files, and how tracks stay off them:
 | 1 | Postgres is unreachable while the studio is open | The studio reads topics, relations and the diagram list from its cache, written at the last successful read under `$STUDIO_HOME/cache/`, and the banner says the vocabulary is stale and when it was read. Drawing still runs, as D16 of TLDRAWKC-INTEGRATION.md requires. Accept cannot land a diagram, since the diagram lives in the database: the candidate stays in the job workspace with `awaiting_review`, and Accept is offered again when the database answers |
 | 2 | A topic is renamed | A title change is an ordinary `topic edit`. A slug change is `topic rename --from --to` in one transaction: the row's slug is updated and every foreign key follows (`ON UPDATE CASCADE` on all of them, `packages/schema/src/content.ts` and `studio.ts:168`); the slug inside each diagram's `meta.tldrawkc.topic` and each open job's brief is rewritten by the same command; the old slug is appended to the aliases so search still finds it; one `rename` revision is written per affected row. Revisions keep the old slug in their snapshots, which is correct history |
 | 3 | A concept with evidence is deleted | It cannot be: `event.concept_slug` is `ON DELETE RESTRICT` (migration `0004`). `learn concept archive` sets `archived_at`, readers hide it, `mastery` and `review` stay, and `restore` brings it back |
-| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.self-learn/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
+| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.self-learn/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. `pull` is just as careful in the other direction: it records each written file's hash, and a file whose hash has changed since is never overwritten; the database version is written beside it as `.incoming` and the file is listed, so an unpushed edit survives a pull. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
 | 5 | A video upload is interrupted | The `blob_object` row is `pending` and `asset.blob_key` is unchanged, so the page keeps serving the legacy file or answers `not-uploaded`. Rerunning the command resumes: a key already `present` is skipped, a `pending` one is re-uploaded (the key is the hash, so the bytes are identical). A sweep deletes `pending` rows older than a day with no object behind them |
 | 6 | Two tracks both add a column | They should not: phase 0 lands all expand schema (D10). If one must, it merges in the fixed order, rebases on the other, and regenerates its migration from the schema source; the later track's number moves, and neither applied file is edited |
 | 7 | The plugin runs against a half-migrated checkout | Its verbs and shapes are unchanged, so everything it parses still parses. What can break is a direct file edit: an old plugin version editing `learn/concepts/<id>.md` after track C flipped writes to a file the database no longer reads. `learn doctor` compares the file's hash with the last export and prints the plugin version it expects; the next `catalog import` refuses that file by name (edge case 12) |
@@ -810,7 +852,7 @@ The shared files, and how tracks stay off them:
 | 17 | The planner proposes a topic that nearly exists | The trigram check in `topic add --dry-run` returns the nearest titles and aliases above the threshold. The runner puts the match on the confirm card ("this looks like `tcp-congestion-control`, use it instead?") and the person chooses |
 | 18 | A mirror save lands after the diagram row changed | The mirror edits a checkout file. Its commit carries the checkout's base revision and is refused when the row moved, as in case 16; the checkout file is kept so nothing drawn is lost |
 | 19 | The revision table grows | Snapshots are whole entities. At today's sizes a diagram snapshot is about 25 KB and a note about 1 KB (*measured* averages), so ten thousand diagram revisions is about 250 MB (*guessed* rate). If that arrives, old diagram snapshots move to the blob store with the row keeping the key; the shape of the table does not change |
-| 20 | The cloud database is down and a visitor opens a course page | Course pages read content from the database after track B, so they degrade the way learner pages already do: the shell renders and says the catalog is unreachable. Today they would still render from files; this is the one availability property the plan gives up, and D2 says why |
+| 20 | The database is down and a visitor opens a course page | Course pages read content from the database after track B, so they degrade the way learner pages already do: the shell renders and says the catalog is unreachable. Today they would still render from files; this is the one availability property the plan gives up, and D2 says why. Until the cloud move, Vercel has no database and serves its shell without content, as it serves learner pages without state today |
 
 ## Decisions
 
@@ -825,16 +867,22 @@ truth with the database as a cache (today's design, which the studio has
 outgrown); files in object storage as truth (no transactions and no foreign
 keys, the failure SCHEMA.md's typed links exist to prevent).
 
-### D2. One primary database, in the cloud, from the end of phase 0
+### D2. One primary database; local now, cloud at go-live
 
-**Verdict:** the cloud database is primary for both halves; the laptop's CLI
-and studio connect to it; the local database is a copy for tests and e2e.
-**Why:** two databases that both take writes are two truths, and what the
-studio writes on the laptop must be what Vercel serves. The learner state was
-already meant to move ([DEPLOYMENT.md](DEPLOYMENT.md#the-database)).
-**Rejected:** a local primary pushed to the cloud by export and import (a second
-truth between pushes); logical replication (operational weight for one user);
-Vercel staying on files (the goal is a cloud service).
+**Verdict:** there is exactly one primary at any time, recorded in
+`catalog_instance`, and every writer refuses on a copy. It is the local
+`self_learn` database now, by the owner's decision of 2026-09-27, and it moves
+to the cloud in the deferred step 0.1 when the app goes live; from then the
+laptop's CLI and studio connect to the cloud and the local database is a copy
+for tests and e2e. **Why:** two databases that both take writes are two truths,
+and what the studio writes must be what the app serves. Keeping the primary
+local costs nothing while Vercel has no database at all, and the guard row is
+what makes the later move a procedure rather than a migration. **Rejected:**
+the cloud primary from the end of phase 0 (the plan's first draft; premature
+while nothing runs in the cloud); a local primary pushed to the cloud by export
+and import (a second truth between pushes); logical replication (operational
+weight for one user); Vercel staying on files for good (the goal is a cloud
+service).
 
 ### D3. `owner_id` on every content table now; ids stay global
 
@@ -997,8 +1045,8 @@ authority.
 
 ### D19. Vercel connects with a role that cannot write content
 
-**Verdict:** `app_web` has `SELECT` on content and writes on state only, until
-phase 4. **Why:** no content writer runs on Vercel before accounts, so the
+**Verdict:** when the cloud move of 0.1 happens, `app_web` has `SELECT` on
+content and writes on state only, until phase 4. **Why:** no content writer runs on Vercel before accounts, so the
 database can enforce that a route bug or a forged request never reaches
 content. **Rejected:** one role for everything, which would extend the exposure
 DEPLOYMENT.md describes to content.
@@ -1026,19 +1074,35 @@ completeness in `catalog doctor` alone (a report nobody has to read); refusing
 the whole migration until the nine courses are filled; a `CHECK` (cannot see
 other rows).
 
+## Decided by the owner
+
+Answered on 2026-09-27, the day the plan merged.
+
+| Question | Answer | Where it landed |
+| --- | --- | --- |
+| Obsidian | Build the vault pair: `learn vault pull` writes notes and session logs from the database into a folder Obsidian opens as a vault, `learn vault push` reads edits back through the write seam with base-revision conflict refusal. Not a live sync; two commands | Phase 2, edge case 4 |
+| Blob provider | Everything local for now: the `fs` adapter under `~/.self-learn/blobs`. A cloud adapter comes with go-live (R2 on Hobby, Vercel Blob on Pro) | 0.4, D5 |
+| Cloud Postgres | Local for now: the local database stays primary, Vercel keeps running without a database, and the cloud move is the deferred step 0.1 | 0.1, D2, D19 |
+| The nine courses | Fill them as content work inside track B, so strict mode arms before cut-over instead of being waived | Track B, D21 |
+| Phase 0 | Approved once these answers were in the doc | this PR |
+
 ## Open questions
 
-1. **Obsidian.** The owner edits `learn/` as an Obsidian vault (its config,
+1. **Obsidian.** Decided (above). The owner edits `learn/` as an Obsidian vault (its config,
    `learn/.obsidian/`, is gitignored at `.gitignore:51`, *measured*). After
    cut-over there is no vault. **Recommendation:** build `learn vault pull` and
    `learn vault push` in a small phase 2 PR, with base-revision conflict
    refusal (edge case 4); until then, `catalog export` gives a read-only vault.
-   Two-way live sync is not worth building for one user.
+   Two-way live sync is not worth building for one user. The owner asked
+   whether this is a sync of the database with markdown files so Obsidian can
+   view them: yes, in both directions but on command, never in the
+   background.
 2. **Courses as YAML.** Nobody writes a course through a program today; the
    files are hand-edited. **Recommendation:** keep YAML as the authoring format
    with `course export`, edit, `course import` as the write path, until the web
    editor of phase 4.
-3. **Vercel Blob or R2.** Measured need is 433 MB of indexed video plus under 2
+3. **Vercel Blob or R2.** Decided: local only for now; this decides the
+   adapter at go-live. Measured need is 433 MB of indexed video plus under 2
    MB of SVG and sidecars; 924 MB if every file under the data root were
    uploaded. Prices from the providers' pages, read 2026-09-27: Vercel Blob
    $0.023 per GB-month and $0.05 per GB transferred (the `iad1` example), with
@@ -1055,10 +1119,10 @@ other rows).
    replay history into revisions: the tag keeps every old version one
    `git show` away, and replayed revisions would carry authors and reasons
    nobody wrote.
-5. **The first cloud `DATABASE_URL`.** **Recommendation:** the order in phase
-   0.1, in its own PR: backups proven by a restore, the per-IP rule published,
+5. **The first cloud `DATABASE_URL`.** Deferred with 0.1 to go-live.
+   **Recommendation:** the order in phase 0.1, in its own PR: backups proven by a restore, the per-IP rule published,
    the `app_web` role, previews on their own database, then production.
-6. **Provider and region.** DEPLOYMENT.md lists Neon, Supabase or the
+6. **Provider and region.** Deferred to go-live. DEPLOYMENT.md lists Neon, Supabase or the
    homeserver over Tailscale. **Recommendation:** Neon through the Vercel
    integration, in the region nearest the owner with the Vercel function region
    set to match (Vercel defaults functions to `iad1`); its branches can give
