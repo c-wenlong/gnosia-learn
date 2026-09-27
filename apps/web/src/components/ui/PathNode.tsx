@@ -39,9 +39,9 @@ export function PathNode({
   className?: string;
 }) {
   // White on a learning face, as in the kit. The mastered face's mark is
-  // `--m-hi-on`: white too, except under Gnosia dark, where mastered is the
-  // bright teal and the mark turns navy. The untouched face is grey, so its
-  // mark is the tertiary text colour.
+  // `--m-hi-on`: white in the light palettes, the page colour in the dark
+  // ones, where mastered is the bright fill. The untouched face is grey, so
+  // its mark is the tertiary text colour.
   const mark = bucket === "untouched" ? "text-text3" : bucket === "mastered" ? "text-[var(--m-hi-on)]" : "text-white";
   return (
     <span

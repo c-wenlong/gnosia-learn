@@ -292,15 +292,18 @@ on `--accent`: chips and the accent button write white on it, and the close
 screen's stat tile writes the black `--on-tone` strip on it. The deep brand
 teal carries white at 7.4:1 but black at only 2.8:1. `#148285` is the brand
 teal's hue lifted to the one lightness where both clear 4.5:1 (4.60 and 4.56),
-the same trick `:root` plays with its blue. The deep teal still leads: it is
-the link colour, the primary button and the mastered node.
+the same trick `.dark` plays with its blue ([Classic dark](#classic-dark)).
+The deep teal still leads: it is the link colour, the primary button and the
+mastered node.
 
 ### Contrast, checked
 
 WCAG 2 relative luminance, computed with a script rather than read off a
 picker. Text needs 4.5:1; graphics, focus rings and hints need 3:1. Both
-Gnosia palettes pass every pair. The last two columns are the same pair in
-the Classic palettes, for comparison.
+Gnosia palettes and Classic dark (`.dark`, [below](#classic-dark)) pass
+every pair but the target bar's track, which no dark palette passes (see the
+note after the table). The `:root` column is Classic light, for comparison;
+several of its pairs are still under the minimum.
 
 | Pair | Gnosia | Gnosia dark | Needs | `:root` | `.dark` |
 | --- | --- | --- | --- | --- | --- |
@@ -318,8 +321,8 @@ the Classic palettes, for comparison.
 | `--accent-text` on `--surface` | 7.30 | 7.11 | 4.5 | 7.20 | 5.75 |
 | `--accent-text` on `--tint` | 6.29 | 6.38 | 4.5 | 6.40 | 4.82 |
 | `--btn-text` on `--btn-face` | 6.88 | 7.94 | 4.5 | 18.88 | 16.67 |
-| White on `--accent` (chips, accent button) | 4.60 | 4.60 | 4.5 | 4.30 | 4.30 |
-| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.88 | 4.88 |
+| White on `--accent` (chips, accent button) | 4.60 | 4.60 | 4.5 | 4.30 | 4.58 |
+| `--on-tone` (black) on `--accent` (stat tile) | 4.56 | 4.56 | 4.5 | 4.88 | 4.59 |
 | `--ok-text` on `--ok-tint` | 4.62 | 7.66 | 4.5 | 3.32 | 7.66 |
 | `--ok-text` on `--page` | 4.73 | 10.19 | 4.5 | 3.45 | 10.28 |
 | `--warn-text` on `--warn-tint` | 4.71 | 9.17 | 4.5 | 2.93 | 9.17 |
@@ -328,20 +331,29 @@ the Classic palettes, for comparison.
 | `--ok-on` on `--ok` | 6.97 | 6.97 | 4.5 | 2.13 | 6.97 |
 | `--danger` on `--surface` | 5.18 | 6.97 | 4.5 | 5.26 | 7.10 |
 | `--danger` on `--page` | 4.87 | 7.78 | 4.5 | 4.95 | 7.85 |
-| `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.30 | 3.88 |
-| `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 3.82 | 3.25 |
+| `--accent` on `--surface` (focus ring) | 4.53 | 3.55 | 3 | 4.30 | 3.64 |
+| `--accent` on `--page` (focus ring) | 4.27 | 3.97 | 3 | 4.05 | 4.02 |
+| `--accent` on `--tint` (selected row border) | 3.90 | 3.19 | 3 | 3.82 | 3.05 |
+| `--accent` on `--border` (the target bar's fill on its track) | 3.47 | 1.91 | 3 | 3.41 | 1.88 |
 | `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.30 | 5.75 |
-| `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 2.03 |
-| `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 2.24 |
-| `--m-hi` against `--m-mid` | 2.20 | 2.20 | (gap) | 2.27 | 2.83 |
-| `--m-mid` against `--m-lo` | 2.31 | 1.74 | (gap) | 1.51 | 1.05 |
+| `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 3.07 |
+| `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 3.39 |
+| `--m-hi` against `--m-mid` | 2.20 | 2.20 | (gap) | 2.27 | 1.87 |
+| `--m-mid` against `--m-lo` | 2.31 | 1.74 | (gap) | 1.51 | 1.58 |
 | `--streak` on `--page` (the dot, the day rings) | 3.11 | 9.86 | 3 | 2.06 | 9.76 |
 | `--streak` on `--surface` | 3.30 | 8.83 | 3 | 2.18 | 8.83 |
 | `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 8.83 | 4.5 | 4.80 | 8.83 |
 | `--streak-text` on `--page` | 4.54 | 9.86 | 4.5 | 4.52 | 9.76 |
-| Check on a `--streak` disc (`--streak-on`) | 3.36 | 9.86 | 3 | 2.18 | 1.89 |
-| Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.30 | 2.90 |
-| White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 8.22 |
+| Check on a `--streak` disc (`--streak-on`) | 3.36 | 9.86 | 3 | 2.18 | 9.76 |
+| Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.30 | 6.35 |
+| White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 5.44 |
+
+**The target bar's track.** The fill is `--accent` on a `--border` track,
+and in both dark palettes the two are under 3:1 (1.91 and 1.88). No accent
+can fix it: to clear 3:1 on `.dark`'s track the fill would need a luminance
+where a white label on it is under 3:1. The bar is never the only carrier,
+since the "x / y" count is printed beside it as text; a fix would be a
+darker track, which is a change to `--border` everywhere.
 
 Two pairs used to fall short. Each was fixed without moving a token another
 component depends on:
@@ -439,22 +451,52 @@ rules the later one wins.
 **The mastery ramp on navy.** Mastered is the brightest step, as in `.dark`,
 so the thing earned is the thing that stands out on the dark card: L* 69.9,
 46.6 and 31.6, luminance ratios of 2.20 (the same gap as Gnosia light) and
-1.74 (`:root` has 1.51, `.dark` 1.05). Learning cannot be much lighter and
+1.74 (`:root` has 1.51, `.dark` 1.58). Learning cannot be much lighter and
 still sit clearly below mastered, or much darker and still clear 3:1 on the
 card, so the bottom gap is the narrower one. Untouched is the border colour,
 as it is in `.dark`, since it is drawn as an empty ring.
 
 **Marks on a bright fill.** A bright mastered teal and a bright gold carry a
 white mark at only 2.30:1 and 1.85:1. `--m-hi-on` and `--streak-on` name
-those two marks: white in every other palette, so they are declared once on
-`:root`, and navy here (7.94:1 and 9.86:1).
+those two marks: white in both light palettes, so they are declared once on
+`:root`, and navy here (7.94:1 and 9.86:1). Classic dark has the same
+problem and the same fix, in its own page colour.
 
-**What `.dark` still misses.** The Classic dark palette falls short on four
-pairs in the table: white on `--accent` (4.30), `--m-mid` on the card
-(2.03), the check on a streak disc (1.89) and the mark on a mastered node
-(2.90). None of them is new, and changing `.dark` is outside this palette's
-scope. The last two are now a one-line value for `--streak-on` and
-`--m-hi-on` in `.dark`.
+### Classic dark
+
+The Classic dark palette on `.dark` is the kit's (Brilliant's dark values),
+and four of its pairs were under the minimum: white on `--accent` (4.30), the
+learning blue on the card (2.03), the check on a done streak day (1.89) and
+the mark on a mastered path node (2.90). Four values fix them, and a fifth
+keeps the learning node's lip darker than its new face. Every other `.dark`
+pair in the table was re-measured after the change and still passes.
+
+| Token | Was | Now | Why |
+| --- | --- | --- | --- |
+| `--accent` | `#456dff` | `#4168fa` | The same hue and chroma, a step darker (OKLCH L 0.592 to 0.577), to the one luminance where a white label and the black stat-tile strip both clear 4.5:1 (4.58 and 4.59). The focus ring stays over 3:1 on the card (3.64), the page (4.02) and the tint (3.05) |
+| `--m-mid` | `#3a4a8f` | `#5266ad` | Learning, the same hue and chroma lifted until it clears 3:1 on the card (3.07) and the page (3.39) |
+| `--m-mid-lip` | `#7e93e6` (from `:root`) | `#3a4a8f` | The lip under a learning node. `.dark` never set it, so it fell through to the light value, a lip lighter than its face; the old learning blue is the darker shade now |
+| `--streak-on` | `#ffffff` (from `:root`) | `#141414` | The check on the orange disc is the page colour, 9.76:1 |
+| `--m-hi-on` | `#ffffff` (from `:root`) | `#141414` | The mark on a mastered node is the page colour, 6.35:1 |
+
+**Why the accent moved rather than the label.** The other way out was to
+keep `#456dff` and write the black `--on-tone` on chips and the accent
+button. The accent moved because more than two components write white on
+it (the agent session and recap buttons and the studio's buttons do too),
+and a darker step of the same blue fixes all of them at once. The step is
+small enough (L* 51.2 to 49.4) that it does not read as a different or muddier
+blue beside the mastered `#7491ff`.
+
+**The mastery ramp.** Mastered stays `#7491ff`, the kit's value and the
+link colour, at L* 62.7; learning is now L* 44.7 and untouched L* 32.3.
+The gaps are 18.0 and 12.4 L*, luminance ratios of 1.87 and 1.58. The top
+gap is narrower than Gnosia's 2.2 because it has a ceiling: mastered is
+5.75:1 on the card, and learning has to clear 3:1 there, so the two can be
+at most 5.75 / 3 = 1.92 apart. Widening it to 2.2 would mean lifting
+mastered to about `#83a2ff`, away from the link colour; this change keeps
+mastered where it is. The learning dot and path node carry a second cue
+anyway: the dot is ringed in `--m-hi`, and the node's mark is white where
+the mastered node's is dark.
 
 ## What the landing page may claim
 
