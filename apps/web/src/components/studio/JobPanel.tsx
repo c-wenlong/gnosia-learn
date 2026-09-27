@@ -9,6 +9,7 @@ import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button, Chip, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import {
+  failureFooter,
   failureReport,
   formatDuration,
   isActive,
@@ -453,9 +454,7 @@ function FailureMessage({ job, report }: { job: Job; report: ReturnType<typeof f
       {report.detail !== null && report.detail !== "" && (
         <p className="mt-1 break-words text-[var(--danger)] opacity-90">{report.detail}</p>
       )}
-      <p className="mt-2 text-[var(--muted-strong)]">
-        {job.target} is unchanged. The agent&apos;s permission file never allowed it.
-      </p>
+      <p className="mt-2 text-[var(--muted-strong)]">{failureFooter(job)}</p>
     </div>
   );
 }

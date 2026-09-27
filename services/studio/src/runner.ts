@@ -8,15 +8,17 @@ import { readFile } from "node:fs/promises";
 import type { JobState } from "@self-learn/schema";
 
 import { type ValidBrief } from "./brief";
-import { AgentRun, startAgent, sweepOrphans } from "./agent";
+import { AgentRun, startAgent, sweepOrphans, type AgentInit } from "./agent";
 import { buildComparison, readSide, sideFromGate, type Side } from "./compare";
 import {
+  agentAuth,
   CONCURRENCY,
   dailyCapUsd,
   DAILY_WINDOW_MS,
   JOB_TIMEOUT_MS,
   MAX_ATTEMPTS,
   RUNNER_NAME,
+  type AgentAuth,
 } from "./config";
 import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
 import { jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
@@ -654,6 +656,11 @@ export class Runner {
     let outcome: Awaited<AgentRun["done"]> | null = null;
     /** True once this session id has a transcript, so the next call resumes it. */
     let startedSession = false;
+    // Read once for the whole job and written down before the first spawn, so
+    // every attempt runs under the same rule and the record says which one it
+    // was even if the setting is changed while this job is running.
+    const auth = agentAuth();
+    record = await this.store.update(id, { agentAuth: auth });
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       if (entry.cancelled) break;
@@ -694,6 +701,12 @@ export class Runner {
             : buildPrompt({ jobId: id, brief: record.brief, hasMermaid });
       startedSession = true;
 
+      // What is at the candidate path before this attempt touches it, so that
+      // "the agent wrote nothing" is a comparison rather than a guess. Null for
+      // a `new` job's first attempt; the runner's own copy in `extend` mode; a
+      // resumed job's preserved drawing; an earlier attempt's partial.
+      const candidateBefore = await sha256(absolute(record.candidatePath));
+
       const agent = await startAgent({
         jobId: id,
         slug: record.slug,
@@ -702,13 +715,20 @@ export class Runner {
         model: record.brief.model,
         sessionId: agentSessionId,
         resume: resumeFromParent || started,
+        auth,
         onLine: (line) => {
           void this.onAgentLine(id, line);
+        },
+        onInit: (init) => {
+          void this.onAgentInit(id, auth, init);
         },
       });
       entry.agent = agent;
       outcome = await agent.done;
       entry.agent = null;
+      if (outcome.apiKeySource !== null) {
+        record = await this.store.update(id, { apiKeySource: outcome.apiKeySource });
+      }
 
       if (entry.cancelled || outcome.stopReason === "cancelled") break;
 
@@ -743,6 +763,44 @@ export class Runner {
           state: "running",
         });
         continue;
+      }
+
+      if (
+        outcome.isError &&
+        outcome.stopReason === null &&
+        (outcome.turns ?? 0) <= 1 &&
+        (await sha256(absolute(record.candidatePath))) === candidateBefore
+      ) {
+        // The agent ran, its session ended in an error inside its first turn,
+        // and the candidate is byte-for-byte what it was before: the request
+        // itself failed. A credential the API refuses, a model this account
+        // cannot use, an exhausted quota. The gate has nothing of this
+        // attempt's to judge, and a retry sends the same request with the same
+        // credential and gets the same answer, so the job ends here with the
+        // agent's own words.
+        //
+        // Before this check the gate ran anyway, reported the candidate
+        // missing, and the runner spent two more attempts on the identical 400
+        // before calling it a gate failure: a panel that said "nothing was
+        // written" about a key the API had refused three times.
+        //
+        // An agent that erred *after* doing something is not this case: more
+        // than one turn, or a candidate that changed, still goes to the gate,
+        // because rule 4 says the gate decides what is on disk.
+        //
+        // The partials move only when an earlier attempt left some, the same
+        // thing the gate's own exhaustion path does with them.
+        if (gate !== null) await this.moveToRejected(record);
+        await this.finish(entry, "failed", {
+          errorKind: "agent",
+          error:
+            outcome.result ??
+            `the agent's session ended in an error before it did anything (${outcome.subtype ?? "no result"})`,
+          exitCode: outcome.exitCode,
+          turns: outcome.turns,
+          cost: entry.meter.read(),
+        });
+        return;
       }
       if (outcome.stopReason === "attempt-timeout" || outcome.stopReason === "idle-timeout") {
         await this.finish(entry, "failed", {
@@ -868,6 +926,22 @@ export class Runner {
     const phase = phaseFromLine(line);
     if (phase === null) return;
     await this.advancePhase(id, phase);
+  }
+
+  /**
+   * The session's `system/init` event: record nothing, say which credential.
+   *
+   * The init line is already in the raw log, verbatim, but it is a single line
+   * of several kilobytes and `apiKeySource` is one field somewhere in the
+   * middle. A step of its own is what makes "which key did the agent use?"
+   * readable in the panel without a JSON parser.
+   */
+  private async onAgentInit(id: string, auth: AgentAuth, init: AgentInit): Promise<void> {
+    await this.store.emit(id, {
+      type: "step",
+      note: credentialNote(auth, init.apiKeySource),
+      state: "running",
+    });
   }
 
   /**
@@ -1253,6 +1327,29 @@ export function phaseFromLine(line: string): string | null {
   if (line.includes("canvas -- run") || line.includes("canvas -- from-mermaid")) return "drawing";
   if (line.includes("canvas -- new") || line.includes("canvas -- api")) return "planning";
   return null;
+}
+
+/**
+ * One sentence on which credential the agent is using, from the CLI's own
+ * `apiKeySource` and the rule the runner spawned it under.
+ *
+ * The CLI's value is quoted rather than translated wherever this file cannot be
+ * sure what it means, so a source added in a later CLI still reads truthfully.
+ */
+export function credentialNote(auth: AgentAuth, source: string | null): string {
+  const setting = `STUDIO_AGENT_AUTH=${auth}`;
+  switch (source) {
+    case null:
+      return `the agent did not say which credential it is using (${setting})`;
+    case "ANTHROPIC_API_KEY":
+      return `the agent is using ANTHROPIC_API_KEY from the runner's environment (${setting})`;
+    case "none":
+    case "oauth":
+    case "/login managed key":
+      return `the agent is using this machine's claude login (apiKeySource ${source}, ${setting})`;
+    default:
+      return `the agent's credential came from ${source} (${setting})`;
+  }
 }
 
 /** The plain-English line every response carries. manimkc's `_enrich_status`. */

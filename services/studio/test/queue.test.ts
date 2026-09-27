@@ -98,6 +98,8 @@ const outcome = (over: Record<string, unknown> = {}): Record<string, unknown> =>
   turns: 9,
   subtype: "success",
   isError: false,
+  result: null,
+  apiKeySource: null,
   spawnFailed: false,
   denials: [],
   stopReason: null,
@@ -478,6 +480,131 @@ describe("an agent that never started", () => {
     expect(store.get(record.id)?.errorKind).toBe("spawn");
     // One attempt, not three: two more would be two more missing binaries.
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("an agent whose first request is refused", () => {
+  const API_ERROR =
+    "API Error: 400 This API key is not scoped to a workspace, so this request must include " +
+    "the anthropic-workspace-id header with the ID of the workspace to use.";
+
+  /**
+   * What the real CLI did on the job that prompted this: an init event naming
+   * the environment's key, the API's 400 as the only assistant text, and a
+   * result with `is_error` after one turn and a subtype of `success`. `write`
+   * lets a test have the agent touch the candidate first.
+   */
+  function refuseFirstRequest(
+    over: Record<string, unknown> = {},
+    write?: () => Promise<void>,
+  ): void {
+    agentMock.startAgent.mockImplementation(async (options: Record<string, unknown>) => {
+      started.push({ options } as FakeAgent);
+      const onInit = options.onInit as ((init: Record<string, unknown>) => void) | undefined;
+      onInit?.({ apiKeySource: "ANTHROPIC_API_KEY", model: "claude-sonnet-5" });
+      await write?.();
+      return {
+        done: Promise.resolve(
+          outcome({
+            exitCode: 1,
+            turns: 1,
+            isError: true,
+            result: API_ERROR,
+            apiKeySource: "ANTHROPIC_API_KEY",
+            ...over,
+          }),
+        ),
+        stop: async () => undefined,
+      };
+    });
+  }
+
+  it("ends the job on the first attempt, with the API's message rather than a gate finding", async () => {
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    const finished = store.get(record.id);
+    expect(finished?.state).toBe("failed");
+    expect(finished?.errorKind).toBe("agent");
+    expect(finished?.error).toBe(API_ERROR);
+    // Not three identical 400s, and no gate asked about a file nobody wrote.
+    expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
+    expect(gateMock.runGate).not.toHaveBeenCalled();
+    expect(finished?.gate).toBeNull();
+    // What it ran on, both as the runner chose it and as the CLI reported it.
+    expect(finished?.agentAuth).toBe("login");
+    expect(finished?.apiKeySource).toBe("ANTHROPIC_API_KEY");
+    expect(started[0]?.options.auth).toBe("login");
+    // The catalog row says the same thing the record does.
+    expect(catalogMock.jobFinish).toHaveBeenCalledWith(
+      expect.objectContaining({ state: "failed", errorKind: "agent", error: API_ERROR }),
+    );
+  });
+
+  it("puts the credential in the job's events, where the panel's log can show it", async () => {
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+    // The note is emitted from the init callback, alongside the attempt rather
+    // than inside its chain, so it is waited for by name. The buffer is pushed
+    // after the line is on disk, so seeing it here also means the write is done.
+    const credential = (): string | undefined =>
+      store
+        .subscribe(record.id, 0, () => undefined)
+        .replay.find((event) => event.note.includes("ANTHROPIC_API_KEY"))?.note;
+    await until(() => credential() !== undefined, "no event named the agent's credential");
+    expect(credential()).toContain("STUDIO_AGENT_AUTH=login");
+  });
+
+  it("records STUDIO_AGENT_AUTH=env on the job when that is the setting", async () => {
+    process.env.STUDIO_AGENT_AUTH = "env";
+    try {
+      refuseFirstRequest();
+      const { record } = await runner.enqueue(await brief());
+      await runner.settled(record.id);
+      expect(store.get(record.id)?.agentAuth).toBe("env");
+      expect(started[0]?.options.auth).toBe("env");
+    } finally {
+      delete process.env.STUDIO_AGENT_AUTH;
+    }
+  });
+
+  it("treats the runner's untouched copy in extend mode as nothing written", async () => {
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief({ mode: "extend" }));
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("agent");
+    expect(gateMock.runGate).not.toHaveBeenCalled();
+  });
+
+  it("still asks the gate when the agent erred after taking turns", async () => {
+    // Rule 4: an agent that ran and failed may have left work, and the gate,
+    // not the exit, decides what is on disk.
+    refuseFirstRequest({ turns: 7, result: "error_max_turns" });
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(gateMock.runGate).toHaveBeenCalled();
+    expect(store.get(record.id)?.errorKind).not.toBe("agent");
+  });
+
+  it("still asks the gate when the agent erred on its first turn but wrote the candidate", async () => {
+    refuseFirstRequest({}, async () => {
+      await writeFile(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), fixtureDocument(), "utf8");
+    });
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(gateMock.runGate).toHaveBeenCalled();
+    expect(store.get(record.id)?.errorKind).not.toBe("agent");
   });
 });
 
