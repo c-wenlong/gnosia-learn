@@ -605,9 +605,13 @@ upsert, so a module that replaces an archived one can reuse its slug:
 keys beside the deleted ones.
 
 **Every entity a run touched gets an `import` revision when its snapshot
-changed.** The run's author is `import:<git sha>` of the tree it read. A second
-run over an unchanged tree appends none, which `catalog.test.ts` asserts on the
-real tree.
+changed.** The run's author is `import:<git sha>` of the commit the files it
+read are tracked at, `import:<sha>-dirty` when some under `content/` or
+`learn/` differ from it, and `import:unknown` when nothing under the directory
+is tracked (an export in a scratch folder is not the enclosing checkout's
+commit). The reason names the directory and the file or folder read,
+repository-relative or under `~`, never a home path. A second run over an
+unchanged tree appends none, which `catalog.test.ts` asserts on the real tree.
 
 ## The content migration's foundation
 
@@ -673,6 +677,14 @@ sorted order, up front. Seam writes of different entities run side by side, an
 import waits for the ones in flight, and no two writers can each hold what the
 other is waiting for.
 
+A write of several entities in one transaction is `writeContents`, which takes
+every entity's locks before its first write, sorted by type and then id, and
+then writes in the order it was given (the order the foreign keys need). The
+lock order, and why nothing that follows it can deadlock, is written out in
+`src/content/revisions.ts`. Two `writeContent` calls inside one outer
+transaction do compose, as savepoints, but take their locks in call order, and
+`test/content-seam.test.ts` shows that deadlocking against an import.
+
 ### Positions
 
 `topic`, `tag`, `collection_tag`, `manimkc_topic` and `concept_prerequisite`
@@ -685,6 +697,22 @@ topic's `maps.concepts`, which the course path breaks ties by),
 `maps.courses`) and `topic_relation.position` (a topic's `relations:`). The
 indexers fill all eight since 0.5, and a curated link's place in its module's
 `resources:` is its `collection_item.position`.
+
+Five of them order separate entities rather than the links inside one:
+`topic.position`, `tag.position`, `concept.topic_position`,
+`curriculum_item.position` and a module's `collection_item.topic_position`.
+Each is part of its row's snapshot, so they are sparse (D22 of the plan): the
+indexers hand over each list's order as a rank, and the writer
+(`src/index/writer.ts`, with the arithmetic in `src/content/positions.ts`)
+stores steps of 1000, keeping a row's number for as long as its place relative
+to its neighbours is unchanged and giving a moved or new row a number from the
+gap it landed in. Adding a topic at the top of the vocabulary is then one
+revision, not one per topic. A row whose entity has no revision yet was
+positioned before revisions existed and is placed afresh. When a gap has no
+whole number left the import refuses and names `catalog renumber <list>`,
+which spreads the list back out to 1000, 2000, ... with one revision per row
+it moves. The other positions order links inside one snapshot and stay
+`1, 2, 3`: any change to such a list is that one entity's revision anyway.
 
 ### Who owns a type
 

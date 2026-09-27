@@ -19,6 +19,12 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * stored by the sources that own those rows, as `concept.topic_position` and
  * the module's `collection_item.topic_position`.
  *
+ * A topic's `position` here is its rank in the file. The writer turns ranks
+ * into stored positions (D22, `content/positions.ts`), keeping every topic's
+ * number while its place is unchanged, so one topic added at the top is one
+ * revision and not one per topic below it. The two link lists are dense: they
+ * sit inside one topic's snapshot, where any change is that topic's revision.
+ *
  * A `related` edge is stored once, under the smaller slug, and the reader has
  * already refused one written under the other (`packages/content/src/topics.ts`).
  */
@@ -37,6 +43,7 @@ export const topicsIndexer: Indexer = {
         domain: entry.domain,
         summary: entry.summary,
         aliases: entry.aliases,
+        // A rank; the writer places the stored number (D22).
         position: index + 1,
       });
       for (const [at, relation] of entry.relations.entries()) {

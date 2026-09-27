@@ -11,6 +11,8 @@ import {
 import { loadCourses } from "@self-learn/content";
 import { eq } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
+import path from "node:path";
 
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
@@ -166,22 +168,53 @@ export interface RunOptions {
   author?: string;
 }
 
+/** The folders an import reads under its root, as git pathspecs. */
+const CONTENT_PATHSPECS = ["content", "learn"];
+
 /**
- * `import:<sha>` of the commit the tree is at, or `import:unknown` when it is
- * not a git checkout (a test fixture) or git is missing. The sha is what makes
- * an import revision traceable to the files it read; a tree with uncommitted
- * edits still names its commit, which is the nearest honest answer.
+ * The revision author for an import of `root`: `import:<sha>` of the commit
+ * its content files are tracked at, which is what makes an import revision
+ * traceable to the files it read.
+ *
+ * Only the files under `root` count, not whatever repository happens to
+ * enclose it. An export written to a scratch folder inside the checkout is
+ * not the checkout's commit, and nothing under it is tracked, so it is
+ * `import:unknown`, as is a folder in no repository or a machine with no git.
+ * A tracked tree with local changes under `content/` or `learn/`, untracked
+ * files included, is `import:<sha>-dirty`: the nearest commit, marked as not
+ * quite it.
  */
-export function importAuthor(repoRoot: string): string {
+export function importAuthor(root: string): string {
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   try {
-    const sha = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return /^[0-9a-f]{40}$/.test(sha) ? `import:${sha}` : "import:unknown";
+    const sha = git("rev-parse", "HEAD").trim();
+    if (!/^[0-9a-f]{40}$/.test(sha)) return "import:unknown";
+    if (git("ls-files", "--", ...CONTENT_PATHSPECS).trim() === "") return "import:unknown";
+    const dirty = git("status", "--porcelain", "--", ...CONTENT_PATHSPECS).trim() !== "";
+    return `import:${sha}${dirty ? "-dirty" : ""}`;
   } catch {
     return "import:unknown";
   }
+}
+
+/**
+ * A path as a revision's reason should carry it: relative to the repository
+ * when inside it, `~/...` when inside the home directory, as given otherwise.
+ * A reason is read on another machine, or after the laptop is gone, and an
+ * absolute home path says who ran it and nothing about what was read.
+ */
+export function displayPath(target: string): string {
+  if (!path.isAbsolute(target)) return target.split(path.sep).join("/");
+  const inside = (base: string) => {
+    const relative = path.relative(base, target);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)) ? relative : null;
+  };
+  const inRepo = inside(REPO_ROOT);
+  if (inRepo !== null) return inRepo === "" ? "the repository" : inRepo.split(path.sep).join("/");
+  const inHome = inside(homedir());
+  if (inHome !== null) return inHome === "" ? "~" : `~/${inHome.split(path.sep).join("/")}`;
+  return target;
 }
 
 export interface RunResult {
@@ -422,6 +455,7 @@ export async function runIndex(
       // manimkc sources resolve against their report's `outRoot` instead.
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
       author,
+      reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
     });
     sources.push(write);
 

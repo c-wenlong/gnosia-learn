@@ -158,7 +158,8 @@ export const coursesIndexer: Indexer = {
           conceptSlug: null,
           assetId: null,
           // Where the vocabulary lists this module under the topic, so the
-          // export writes `maps.courses` in the order it was written.
+          // export writes `maps.courses` in the order it was written. A rank;
+          // the writer places the stored number (D22).
           topicPosition: (vocabulary.bySlug.get(declared)?.maps.courses.indexOf(mod.id) ?? -1) + 1,
         });
 
@@ -166,6 +167,8 @@ export const coursesIndexer: Indexer = {
           curriculumItems.push({
             id: item.id,
             collectionId: mod.id,
+            // A rank in the module; the writer places the stored number
+            // (D22), so an item added at the top is one revision.
             position: topicIndex + 1,
             title: item.title,
             subtopics: item.subtopics,
