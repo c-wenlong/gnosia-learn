@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
-import { CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
+import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
 import { isDiagramName, listDiagrams, readDiagram } from "./diagrams";
 import { MirrorRefused, type Mirrors } from "./mirrors";
@@ -185,6 +185,11 @@ function view(record: JobRecord): Record<string, unknown> {
     // be able to say that is an estimate, and it cannot if the shape does not
     // carry the difference.
     costSource: record.costSource,
+    // Which credential the agent ran on, as the runner chose it and as the CLI
+    // reported it. The failure panel names the second when the agent's first
+    // request failed, because that is the fact a person needs to fix it.
+    agentAuth: record.agentAuth ?? null,
+    apiKeySource: record.apiKeySource ?? null,
     exitCode: record.exitCode,
     gate: record.gate,
     // The finished-job screen's whole content, computed by the runner when the
@@ -994,6 +999,10 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     chromium: tldrawkc,
     claude,
     claudeVersion: claudeVersion?.stdout.trim() ?? null,
+    // Which credential the next agent will run on, and whether a key is in
+    // the runner's environment at all. A job whose first request is refused
+    // offers "doctor", and this is the line that answers it.
+    agentAuth: agentAuthReport(),
     postgres,
     queueDepth,
     running: runner.busy,

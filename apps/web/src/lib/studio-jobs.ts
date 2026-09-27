@@ -110,6 +110,13 @@ export interface Job {
    * rather than rounded into the same chip as an exact one.
    */
   costSource: "result" | "stream" | null;
+  /**
+   * The credential rule the runner spawned the agent under, and the CLI's own
+   * `apiKeySource` for it. Optional on the wire for a runner one version
+   * behind, and null on a job that predates them.
+   */
+  agentAuth?: "login" | "env" | null;
+  apiKeySource?: string | null;
   exitCode: number | null;
   gate: GateResult | null;
   /**
@@ -395,13 +402,19 @@ export interface FailureReport {
  * ever asked about 1, 2, or nothing.
  *
  * `errorKind` covers the row the table calls `none`. A timeout, an agent that
- * never spawned, a job that wrote outside its allowed paths and a gate finding
- * are four different sentences, and "the gate's own finding" is only the right
- * words for the last of them.
+ * never spawned, an agent whose first request failed, a job that wrote outside
+ * its allowed paths and a gate finding are five different sentences, and "the
+ * gate's own finding" is only the right words for the last of them.
  */
 export function failureReport(job: Job): FailureReport {
   const code = lastGateCode(job);
   const detail = job.error ?? null;
+
+  // Before the gate codes, unlike every other kind. A refused first request
+  // can end a job whose *earlier* attempt left a gate on the record, and a
+  // code 1 or 2 from that attempt would otherwise describe a failure the job
+  // recovered from, not the one that ended it. Caught in review on this PR.
+  if (job.errorKind === "agent") return agentReport(detail);
 
   if (code === 1) {
     return {
@@ -468,6 +481,58 @@ export function failureReport(job: Job): FailureReport {
         detail: job.gate?.findings.join(" ") ?? detail,
         actions: ["retry", "edit"],
       };
+  }
+}
+
+/**
+ * The process ran and its first request was refused: a credential the API would
+ * not take, a model the account cannot use, a quota. The detail is the API's
+ * own message, which is the only thing that says which, and it is never a
+ * finding about the drawing.
+ */
+function agentReport(detail: string | null): FailureReport {
+  return {
+    code: null,
+    headline: "the agent could not make its first request",
+    detail,
+    actions: ["doctor", "retry"],
+  };
+}
+
+/**
+ * The line under the failure message, about the committed diagram.
+ *
+ * It used to be one sentence for every failure: the target is unchanged, and
+ * the agent's permission file never allowed it. The second half explains why a
+ * gate failure or a stray write cannot have touched the committed file, and it is
+ * noise (worse, a wrong lead) on a job whose agent never drew anything,
+ * where a person reading "permission file" goes looking at permissions. So the
+ * reason is only given where it is the reason.
+ */
+export function failureFooter(job: Job): string {
+  const unchanged = `${job.target} is unchanged.`;
+  switch (job.errorKind) {
+    case "agent": {
+      const source =
+        job.apiKeySource === undefined || job.apiKeySource === null
+          ? ""
+          : ` This attempt's credential: ${job.apiKeySource}.`;
+      return (
+        `${unchanged} Nothing was drawn: the agent's first request failed, so no check ran.${source} ` +
+        `The studio runs the agent on this machine's claude login unless the runner has STUDIO_AGENT_AUTH=env.`
+      );
+    }
+    case "timeout":
+    case "spawn":
+    case "cancelled":
+    case "interrupted":
+    case "not-claimed":
+    case "internal":
+      return unchanged;
+    default:
+      // `gate`, `wrote-outside`, and a record with no kind at all, which is
+      // what a gate failure looked like before kinds were written.
+      return `${unchanged} The agent's permission file never allowed it.`;
   }
 }
 

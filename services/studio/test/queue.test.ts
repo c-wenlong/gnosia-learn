@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import type { JobRecord } from "../src/store";
-import { absolute, jobDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { absolute, jobDir, rejectedDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
 import { fixtureDocument } from "./fixture-document";
 import { allSettled, until } from "./wait";
 
@@ -98,6 +98,8 @@ const outcome = (over: Record<string, unknown> = {}): Record<string, unknown> =>
   turns: 9,
   subtype: "success",
   isError: false,
+  result: null,
+  apiKeySource: null,
   spawnFailed: false,
   denials: [],
   stopReason: null,
@@ -478,6 +480,160 @@ describe("an agent that never started", () => {
     expect(store.get(record.id)?.errorKind).toBe("spawn");
     // One attempt, not three: two more would be two more missing binaries.
     expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("an agent whose first request is refused", () => {
+  const API_ERROR =
+    "API Error: 400 This API key is not scoped to a workspace, so this request must include " +
+    "the anthropic-workspace-id header with the ID of the workspace to use.";
+
+  /**
+   * What the real CLI did on the job that prompted this: an init event naming
+   * the environment's key, the API's 400 as the only assistant text, and a
+   * result with `is_error` after one turn and a subtype of `success`. `write`
+   * lets a test have the agent touch the candidate first.
+   */
+  function refuseFirstRequest(
+    over: Record<string, unknown> = {},
+    write?: () => Promise<void>,
+  ): void {
+    agentMock.startAgent.mockImplementation(async (options: Record<string, unknown>) => {
+      started.push({ options } as FakeAgent);
+      const onInit = options.onInit as ((init: Record<string, unknown>) => void) | undefined;
+      onInit?.({ apiKeySource: "ANTHROPIC_API_KEY", model: "claude-sonnet-5" });
+      await write?.();
+      return {
+        done: Promise.resolve(
+          outcome({
+            exitCode: 1,
+            turns: 1,
+            isError: true,
+            result: API_ERROR,
+            apiKeySource: "ANTHROPIC_API_KEY",
+            ...over,
+          }),
+        ),
+        stop: async () => undefined,
+      };
+    });
+  }
+
+  it("ends the job on the first attempt, with the API's message rather than a gate finding", async () => {
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    const finished = store.get(record.id);
+    expect(finished?.state).toBe("failed");
+    expect(finished?.errorKind).toBe("agent");
+    expect(finished?.error).toBe(API_ERROR);
+    // Not three identical 400s, and no gate asked about a file nobody wrote.
+    expect(agentMock.startAgent).toHaveBeenCalledTimes(1);
+    expect(gateMock.runGate).not.toHaveBeenCalled();
+    expect(finished?.gate).toBeNull();
+    // What it ran on, both as the runner chose it and as the CLI reported it.
+    expect(finished?.agentAuth).toBe("login");
+    expect(finished?.apiKeySource).toBe("ANTHROPIC_API_KEY");
+    expect(started[0]?.options.auth).toBe("login");
+    // The catalog row says the same thing the record does.
+    expect(catalogMock.jobFinish).toHaveBeenCalledWith(
+      expect.objectContaining({ state: "failed", errorKind: "agent", error: API_ERROR }),
+    );
+  });
+
+  it("puts the credential in the job's events, where the panel's log can show it", async () => {
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+    // The attempt waits for the note before it goes on, so by the time the job
+    // has settled it is in the log, and ahead of the event that ended the job.
+    const events = store.subscribe(record.id, 0, () => undefined).replay;
+    const credential = events.find((event) => event.note.includes("ANTHROPIC_API_KEY"));
+    const ending = events.find((event) => event.type === "error");
+    expect(credential?.note).toContain("STUDIO_AGENT_AUTH=login");
+    expect(ending).toBeDefined();
+    expect(credential?.seq ?? Infinity).toBeLessThan(ending?.seq ?? -Infinity);
+  });
+
+  it("still reports a stray write first, because a dirty file is what a person has to look at", async () => {
+    reviewMock.dirtyFiles.mockReset().mockResolvedValueOnce([]).mockResolvedValue(["README.md"]);
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("wrote-outside");
+    expect(store.get(record.id)?.error).toContain("README.md");
+  });
+
+  it("moves a resumed job's preserved drawing out of the shared path rather than leaving it to be overwritten", async () => {
+    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
+    const partial = fixtureDocument({ title: "half-drawn" });
+    await writeFile(candidate, partial, "utf8");
+    await store.create(parentRecord("parent-refused", Date.now() - 300_000, "interrupted", hash(partial)));
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief(), {
+      jobId: "parent-refused",
+      agentSessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      changes: null,
+    });
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("agent");
+    expect(await stat(candidate).then(() => true, () => false)).toBe(false);
+    expect(await readFile(path.join(rejectedDir(record.id), `${SLUG}.tldr`), "utf8")).toContain("half-drawn");
+  });
+
+  it("records STUDIO_AGENT_AUTH=env on the job when that is the setting", async () => {
+    process.env.STUDIO_AGENT_AUTH = "env";
+    try {
+      refuseFirstRequest();
+      const { record } = await runner.enqueue(await brief());
+      await runner.settled(record.id);
+      expect(store.get(record.id)?.agentAuth).toBe("env");
+      expect(started[0]?.options.auth).toBe("env");
+    } finally {
+      delete process.env.STUDIO_AGENT_AUTH;
+    }
+  });
+
+  it("treats the runner's untouched copy in extend mode as nothing written", async () => {
+    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "committed" }), "utf8");
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief({ mode: "extend" }));
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("agent");
+    expect(gateMock.runGate).not.toHaveBeenCalled();
+  });
+
+  it("still asks the gate when the agent erred after taking turns", async () => {
+    // Rule 4: an agent that ran and failed may have left work, and the gate,
+    // not the exit, decides what is on disk.
+    refuseFirstRequest({ turns: 7, result: "error_max_turns" });
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(gateMock.runGate).toHaveBeenCalled();
+    expect(store.get(record.id)?.errorKind).not.toBe("agent");
+  });
+
+  it("still asks the gate when the agent erred on its first turn but wrote the candidate", async () => {
+    refuseFirstRequest({}, async () => {
+      await writeFile(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), fixtureDocument(), "utf8");
+    });
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(gateMock.runGate).toHaveBeenCalled();
+    expect(store.get(record.id)?.errorKind).not.toBe("agent");
   });
 });
 
