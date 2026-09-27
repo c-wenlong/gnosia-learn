@@ -268,6 +268,16 @@ export async function writeSource(
     );
     await markSeam(tx, `import:${indexer.source}`);
 
+    // The last state of every entity this run will delete, read before step 1
+    // clears the link rows it owns, so a `delete` revision records the entity
+    // as it was and not half stripped.
+    const lastStates = new Map<EntityName, Map<string, SnapshotRead>>();
+    for (const name of ENTITY_ORDER) {
+      if (ARCHIVED_NOT_PRUNED.has(name)) continue;
+      const keys = await staleKeys(tx, indexer, name, rows);
+      if (keys.length > 0) lastStates.set(name, await readSnapshots(tx, REVISION_TYPE[name], keys));
+    }
+
     // 1. Clear the link rows this source owns, and remember how many there
     //    were so step 4 can report the net change rather than the churn.
     const clearedLinks: Partial<Record<LinkName, number>> = {};
@@ -316,9 +326,16 @@ export async function writeSource(
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const { keys: pruned, reads } = await pruneEntity(tx, indexer, name, rows);
+      const pruned = await pruneEntity(tx, indexer, name, rows);
       if (pruned.length === 0) continue;
-      prunedReads.set(name, reads);
+      const before = lastStates.get(name);
+      prunedReads.set(
+        name,
+        new Map(pruned.flatMap((key) => {
+          const read = before?.get(key);
+          return read === undefined ? [] : [[key, read] as const];
+        })),
+      );
       record(table, deleted, pruned.length);
       for (const key of pruned) {
         if (deletedKeys.length < DELETED_KEYS_SHOWN) {
@@ -528,23 +545,27 @@ function assertInScope(rows: SourceRows, replace: ReplaceScope | undefined): voi
 
 /**
  * Delete the rows of one entity table that are in this source's scope and were
- * not produced this run. Returns the keys deleted and each one's snapshot from
- * just before; a table the source does not own is left entirely alone.
+ * not produced this run. Returns the keys deleted; a table the source does not
+ * own is left entirely alone.
  */
-async function pruneEntity(
+/**
+ * The keys of one entity table that are in this source's scope and were not
+ * produced this run: what a prune would delete. Empty for a table the source
+ * does not own.
+ */
+async function staleKeys(
   tx: CatalogDatabase,
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-): Promise<{ keys: string[]; reads: Map<string, SnapshotRead> }> {
-  const none = { keys: [], reads: new Map<string, SnapshotRead>() };
+): Promise<string[]> {
   let scope: SQL | undefined;
   if (name === "asset") {
     const prefix = indexer.assetPrefix;
-    if (prefix === undefined) return none;
+    if (prefix === undefined) return [];
     scope = inNamespace(asset.id, prefix);
   } else if (!(indexer.owns as readonly string[]).includes(name)) {
-    return none;
+    return [];
   }
 
   const table = TABLES[name];
@@ -554,14 +575,22 @@ async function pruneEntity(
 
   const notProduced = produced.length === 0 ? sql`true` : notInArray(column, produced);
   const where = scope === undefined ? notProduced : and(scope, notProduced);
-
   const stale = (await tx.select({ key: column }).from(table).where(where)) as { key: string }[];
-  if (stale.length === 0) return none;
+  return stale.map((row) => row.key);
+}
 
-  const keys = stale.map((row) => row.key);
+async function pruneEntity(
+  tx: CatalogDatabase,
+  indexer: Indexer,
+  name: EntityName,
+  rows: SourceRows,
+): Promise<string[]> {
+  const keys = await staleKeys(tx, indexer, name, rows);
+  if (keys.length === 0) return [];
+
+  const table = TABLES[name];
+  const column = columnOf(table, ENTITY_KEY[name]);
   if (name === "concept") await assertNoEvidence(tx, keys);
-  // The last state of each, for its `delete` revision, read while it exists.
-  const reads = await readSnapshots(tx, REVISION_TYPE[name], keys);
   try {
     await tx.delete(table).where(inArray(column, keys));
   } catch (error) {
@@ -573,7 +602,7 @@ async function pruneEntity(
     }
     throw error;
   }
-  return { keys, reads };
+  return keys;
 }
 
 /**

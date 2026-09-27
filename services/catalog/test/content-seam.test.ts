@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
 import { diffRevisions, diffSnapshots, history, lineDiff } from "../src/content/history";
+import type { Snapshot } from "../src/content/snapshot";
 import {
   COMPLETENESS_RULES,
   setTriggers,
@@ -584,25 +585,45 @@ describe.skipIf(!reachable.ok)("import revisions and the archive rule", () => {
       { slug: "c-one", title: "One", topicSlug: "alpha", path: "learn/concepts/one/c-one.md" },
       { slug: "c-two", title: "Two", topicSlug: "alpha", path: "learn/concepts/one/c-two.md" },
     ];
-    const write = (concepts: typeof keep) =>
-      writeSource(scratch.db, notes, { concept: concepts }, [], "learn/concepts", { author: "import:test" });
+    // c-gone requires c-one: an owned link, which the writer clears before it
+    // prunes, and which the delete revision must still record.
+    const requires = [{ conceptSlug: "c-gone", prerequisiteSlug: "c-one", kind: "requires", position: 1 }];
+    const write = (concepts: typeof keep, withLink: boolean) =>
+      writeSource(
+        scratch.db,
+        notes,
+        { concept: concepts, conceptPrerequisite: withLink ? requires : [] },
+        [],
+        "learn/concepts",
+        { author: "import:test" },
+      );
 
-    await write([...keep, note]);
-    const pruned = await write(keep);
+    await write([...keep, note], true);
+    const pruned = await write(keep, false);
     expect(pruned.deletedKeys).toEqual(["concept c-gone"]);
     expect(pruned.revisions).toEqual({ concept: 1 });
     const afterDelete = await revisionsOf("concept", "c-gone");
     expect(afterDelete.map((r) => r.op)).toEqual(["import", "delete"]);
-    // The delete holds the state it was deleted in.
+    // The delete holds the state it was deleted in, links included.
     expect(afterDelete[1]?.snapshotHash).toBe(afterDelete[0]?.snapshotHash);
+    expect((afterDelete[1]?.snapshot as Snapshot).links["concept_prerequisite"]).toEqual([
+      { kind: "requires", position: 1, prerequisite_slug: "c-one" },
+    ]);
     const diff = await diffRevisions(scratch.db, afterDelete[1]!.id);
     expect(diff.changes.every((c) => c.kind === "removed")).toBe(true);
-    expect(diff.changes.map((c) => c.path)).toContain("entity.title");
+    expect(diff.changes.map((c) => c.path)).toEqual(
+      expect.arrayContaining(["entity.title", "links.concept_prerequisite"]),
+    );
 
-    // Back, identical to before: still a revision, since the last one says it was gone.
-    const back = await write([...keep, note]);
+    // Back, identical to before: still a revision, since the last one says it
+    // was gone, and its diff is every field arriving rather than nothing.
+    const back = await write([...keep, note], true);
     expect(back.revisions).toEqual({ concept: 1 });
-    expect((await revisionsOf("concept", "c-gone")).map((r) => r.op)).toEqual(["import", "delete", "import"]);
+    const all = await revisionsOf("concept", "c-gone");
+    expect(all.map((r) => r.op)).toEqual(["import", "delete", "import"]);
+    const returned = await diffRevisions(scratch.db, all[2]!.id);
+    expect(returned.changes.length).toBeGreaterThan(0);
+    expect(returned.changes.every((c) => c.kind === "added")).toBe(true);
   });
 
   it("archives a dropped module rather than deleting it, and frees its slug for a successor", async () => {

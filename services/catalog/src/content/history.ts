@@ -113,16 +113,24 @@ export async function diffRevisions(
     toRow = byId.get(second)!;
   }
 
-  // A `delete` revision holds the entity's last state, so what it changed is
-  // everything going: diff against nothing rather than against its own copy.
-  const target: Snapshot = toRow.op === "delete" ? { entity: {}, links: {} } : (toRow.snapshot as Snapshot);
+  // A `delete` revision holds the entity's last state, but the entity after
+  // it is absent. So diffing *to* a delete compares against nothing, and
+  // diffing *from* one starts from nothing: a return after a delete is all
+  // additions, even when it came back exactly as it went.
+  const absent: Snapshot = { entity: {}, links: {} };
+  const before =
+    fromRow === undefined
+      ? toRow.op === "delete"
+        ? (toRow.snapshot as Snapshot)
+        : null
+      : fromRow.op === "delete"
+        ? null
+        : (fromRow.snapshot as Snapshot);
+  const after = toRow.op === "delete" ? absent : (toRow.snapshot as Snapshot);
   return {
     from: fromRow === undefined ? null : summary(fromRow),
     to: summary(toRow),
-    changes: diffSnapshots(
-      (fromRow?.snapshot as Snapshot | undefined) ?? (toRow.op === "delete" ? (toRow.snapshot as Snapshot) : null),
-      target,
-    ),
+    changes: diffSnapshots(before, after),
   };
 }
 
