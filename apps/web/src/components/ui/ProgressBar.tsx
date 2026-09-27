@@ -1,7 +1,7 @@
 import type { ProgressCounts } from "@/lib/types";
 import { formatProgress } from "@/lib/progress";
 
-import { cx } from "./classes";
+import { cx, TRACK } from "./classes";
 
 /**
  * Kit `Bar`: an 8px track in `--track` with a fill proportional to a
@@ -57,7 +57,7 @@ export function ProgressBar({
         </div>
       )}
       <div
-        className={cx(height, "w-full overflow-hidden rounded-full bg-track")}
+        className={cx(height, "w-full overflow-hidden rounded-full", TRACK)}
         role="progressbar"
         aria-label={label}
         aria-valuenow={Math.round(value)}

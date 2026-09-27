@@ -9,7 +9,7 @@ import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
-import { cx } from "@/components/ui/classes";
+import { cx, TRACK } from "@/components/ui/classes";
 import {
   feedbackNote,
   newSessionId,
@@ -577,7 +577,7 @@ function Frame({
     // its tab bar, so the actions sit at the bottom where a thumb is (hi-fi 15).
     <div className="flex min-h-[calc(100dvh-3.5rem-6.5rem-env(safe-area-inset-bottom))] flex-col md:min-h-0">
       <div
-        className="h-2 w-full bg-track md:h-3"
+        className={cx("h-2 w-full md:h-3", TRACK)}
         role="progressbar"
         aria-label="Session progress"
         aria-valuenow={Math.round(value)}

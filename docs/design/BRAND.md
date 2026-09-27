@@ -341,6 +341,8 @@ light, for comparison; several of its pairs are still under the minimum.
 | `--m-mid` on `--track` (a learning bar) | 2.54 | 4.14 | 3 | 1.51 | 3.86 |
 | `--track` against `--surface` (an empty bar on a card) | 1.30 | 1.28 | (gap) | 1.26 | 1.26 |
 | `--track` against `--page` (the session and review strips) | 1.23 | 1.15 | (gap) | 1.19 | 1.14 |
+| The track's 1px `--border` edge against `--surface` | 1.30 | 1.86 | (gap) | 1.26 | 1.94 |
+| The track's 1px `--border` edge against `--page` | 1.23 | 2.07 | (gap) | 1.19 | 2.15 |
 | `--m-hi` on `--surface` | 7.30 | 7.11 | 3 | 4.30 | 5.75 |
 | `--m-mid` on `--surface` | 3.31 | 3.23 | 3 | 1.90 | 3.07 |
 | `--m-mid` on `--page` | 3.12 | 3.60 | 3 | 1.79 | 3.39 |
@@ -366,10 +368,18 @@ cannot work: the accent is only 3.64:1 on `.dark`'s card and
 3.55:1 on Gnosia dark's, so a track any lighter than the card leaves it
 under 3:1 before the track is even visible. Darker, every fill passes, and
 the lowest, learning, is 3.86 and 4.14. Black is as far from the card as a
-darker track can get, 1.26:1 and 1.28:1: the same step `:root` has between
-its `#e5e5e5` track and the white card, so an empty bar is as visible in
-dark as it always was in light. A navy tint for Gnosia dark would sit under
-L* 1, where no one can see it, and would give up some of that step.
+darker track can get, 1.26:1 and 1.28:1, the step `:root` has between its
+`#e5e5e5` track and the white card. A navy tint for Gnosia dark would sit
+under L* 1, where no one can see it, and would give up some of that step.
+
+On the page black is only 1.14:1 and 1.15:1 apart, so an empty session or
+review strip would all but vanish. Every track therefore carries a 1px inset
+ring in `--border` (`TRACK` in
+[classes.ts](../../apps/web/src/components/ui/classes.ts)), which marks its
+extent at 1.94:1 on `.dark`'s card and 2.15:1 on its page, what the old
+`--border` track gave. The fill is drawn over the ring, so the ring never
+sits between the fill and the track. In the light palettes the ring is the
+track's own colour and cannot be seen.
 
 In the light palettes the track is the border's value, unchanged. The
 accent and mastered fills pass on it; the learning and green fills do not
