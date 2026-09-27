@@ -1,12 +1,16 @@
-import { notMigrated, type TypeReader } from "./reader";
+import { readTags } from "../tags";
+import type { TypeReader } from "./reader";
 
 /**
  * The database reader for `tags`: the cross-course themes, as `TagMeta[]` in
- * authored order.
+ * the order the home page renders the chips in.
  *
- * Track A's file (docs/CONTENT-MIGRATION.md, phase 1). It implements
- * `read` from rows, returning exactly what `fileSource` returns for the same
- * content, and sets `ready: true` in the same change; nothing outside this
- * file needs to change for `catalog flip tags` to accept the type.
+ * Track A's file (docs/CONTENT-MIGRATION.md, phase 1). The same rows, in the
+ * same order, as the export that writes `content/tags.yaml`, so it returns
+ * what `fileSource(root).tags()` returns for the database's own export;
+ * `test/topic-readers.test.ts` holds the two equal.
  */
-export const reader: TypeReader<"tags"> = { ready: false, read: notMigrated("tags") };
+export const reader: TypeReader<"tags"> = {
+  ready: true,
+  read: (db) => () => readTags(db),
+};
