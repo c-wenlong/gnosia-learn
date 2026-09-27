@@ -597,8 +597,13 @@ commands.concept = async ({ values, positionals }, session) => {
           }
         }
         // Concepts, and courses behind it, which is what writes the row's link.
-        // On rows there is nothing to read: the write above was the row.
+        // On rows the note needs no reading (its write was the row), but a
+        // listing on a course row is still a course file the courses source
+        // turns into the link, so that source runs. It skips the notes when
+        // they are the database's last export, and refuses when they are not,
+        // saying how to record one.
         if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
+        else if (itemId !== undefined) await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
       } catch (error) {
         if (
           error instanceof TopicError ||
