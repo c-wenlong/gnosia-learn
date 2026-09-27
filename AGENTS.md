@@ -15,6 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
 | [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, the `--json` shapes, known limits |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The tables, and why each one is shaped that way |
+| [packages/blob/README.md](packages/blob/README.md) | The blob store: the interface contract, the `<owner_id>/<sha256>.<ext>` keys, the `fs` adapter, and what a cloud adapter must pass |
 | [services/catalog/LEARN.md](services/catalog/LEARN.md) | What each `learn/state/*` file became, and how to recover |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The catalog: every table, why the links are typed, how `event` stays append-only, how to run migrations |
 | [content/README.md](content/README.md) | The three content folders, and the rules for editing the topic vocabulary |
