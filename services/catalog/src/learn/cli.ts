@@ -618,7 +618,24 @@ commands.concept = async ({ values, positionals }, session) => {
         // they are the database's last export, and refuses when they are not,
         // saying how to record one.
         if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
-        else if (itemId !== undefined) await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+        else if (itemId !== undefined) {
+          try {
+            await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+          } catch (error) {
+            // The courses source reads every course file, so a problem in
+            // one this command never touched stops it here, after the note
+            // and the listing are in. Both are, so what is missing is only
+            // the link that source writes, and the message says so.
+            if (error instanceof IndexError) {
+              fail(
+                `${rel(file)} was written as rows and listed on ${itemId}, but the courses source ` +
+                  `refused, so the row's link to it is not in the catalog yet: ${error.message}\n  ` +
+                  `Fix that, then run: npm run --silent catalog -- index --only courses`,
+              );
+            }
+            throw error;
+          }
+        }
       } catch (error) {
         if (
           error instanceof TopicError ||
