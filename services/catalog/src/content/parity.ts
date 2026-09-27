@@ -18,7 +18,10 @@ import { canonicalJson } from "./snapshot";
  * entities and each entity is hashed over a canonical form:
  *
  * - YAML is parsed and serialised as sorted-key JSON, so a comment, a quote
- *   style or a blank line is not a difference, and a reordered list is;
+ *   style or a blank line is not a difference, and a reordered list is. The
+ *   topics and tags files are cut one entry per entity, which would lose the
+ *   order between entries, so each also yields `<file> (order)`, the list
+ *   of keys as written;
  * - markdown has its frontmatter parsed (the knowledge base's own dialect, the
  *   one `catalog index` reads) and its body compared byte for byte;
  * - a `.tldr` is parsed as JSON;
@@ -67,6 +70,8 @@ interface Entity {
 
 interface Cut {
   entities: Map<string, Entity>;
+  /** The key order of each file cut one entry per entity, compared apart from the entities so counts stay counts of entries. */
+  orders: Map<string, unknown[]>;
   counts: Record<string, number>;
   problems: ParityMismatch[];
 }
@@ -126,6 +131,13 @@ export function compare(type: ExportType, expectedFiles: readonly ExportFile[], 
       mismatches.push({ type, id, kind: "extra", detail: "in the directory, not in the database" });
     }
   }
+  // Only where both sides hold the file: a missing file is already a missing
+  // entity per entry, and its order adds nothing to that.
+  for (const [id, want] of expected.orders) {
+    const got = actual.orders.get(id);
+    if (got === undefined || canonicalJson(got) === canonicalJson(want)) continue;
+    mismatches.push({ type, id, kind: "changed", detail: firstOrderDifference(want, got) });
+  }
 
   const byPath = new Map(actualFiles.map((file) => [file.path, file.bytes]));
   const identicalFiles = expectedFiles.filter((file) => byPath.get(file.path)?.equals(file.bytes) ?? false).length;
@@ -143,7 +155,7 @@ export function compare(type: ExportType, expectedFiles: readonly ExportFile[], 
 
 /** Cut one side's files into entities, each with its canonical hash. */
 function cut(type: ExportType, files: readonly ExportFile[]): Cut {
-  const out: Cut = { entities: new Map(), counts: {}, problems: [] };
+  const out: Cut = { entities: new Map(), orders: new Map(), counts: {}, problems: [] };
   const add = (id: string, value: unknown) => {
     if (out.entities.has(id)) {
       out.problems.push({ type, id, kind: "unreadable", detail: "appears twice" });
@@ -176,6 +188,11 @@ function cut(type: ExportType, files: readonly ExportFile[]): Cut {
           const rest: Record<string, unknown> = { ...doc };
           delete rest[list];
           if (Object.keys(rest).length > 0) add(`${file.path} (top level)`, rest);
+          // The order is authored too (the vocabulary's domain groups, the
+          // home page's chips), and no entry holds it: each topic hashes the
+          // same wherever it sits. So the list of keys is compared on its
+          // own, and a reorder is a mismatch that names it.
+          out.orders.set(`${file.path} (order)`, entries.map((item) => item?.[key] ?? null));
           for (const item of entries) {
             add(`${type === "topics" ? "topic" : "tag"} ${String(item?.[key])}`, item);
             if (type === "topics") {
@@ -216,6 +233,16 @@ function cut(type: ExportType, files: readonly ExportFile[]): Cut {
   }
   if (type === "topics") out.counts["domains"] = domains.size;
   return out;
+}
+
+/** Where two key orders part, e.g. `position 3: database "b", directory "c"`. */
+function firstOrderDifference(want: readonly unknown[], got: readonly unknown[]): string {
+  for (let i = 0; i < Math.max(want.length, got.length); i += 1) {
+    if (canonicalJson(want[i] ?? null) !== canonicalJson(got[i] ?? null)) {
+      return `position ${i + 1}: database ${JSON.stringify(want[i] ?? null)}, directory ${JSON.stringify(got[i] ?? null)}`;
+    }
+  }
+  return "";
 }
 
 function list(value: unknown): unknown[] {

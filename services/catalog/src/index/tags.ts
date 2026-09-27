@@ -5,7 +5,8 @@ import { asIndexError } from "./content-errors";
 import type { Indexer } from "./source";
 
 /**
- * `content/tags.yaml` into `tag`, in file order.
+ * `content/tags.yaml` into `tag`, in file order: `position` is the tag's rank
+ * in the file, which the writer places as a sparse position (D22).
  *
  * Before 0.5 of docs/CONTENT-MIGRATION.md a tag reached Postgres only as a
  * string inside a course's metadata, so a tag no course wore would export and

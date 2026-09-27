@@ -427,6 +427,14 @@ outside the seam by name: `assert-output`, the studio's Accept, until Track D
 replaces it. `blob_object` and `session_log_entry` carry no revisions and are
 left to Tracks E and C.
 
+Added after the phase 0 review: `writeContents(db, inputs[])`, the composite
+form Tracks B and D need (a course with its items, a diagram with its assets).
+It takes every entity's locks up front, sorted by type then id, writes in the
+order given, and commits all or nothing. The global lock order is written down
+in `services/catalog/src/content/revisions.ts`; `writeContent` still composes
+inside an outer transaction as a savepoint, but two such calls lock in call
+order and can deadlock against an import, which a test shows.
+
 ### 0.4 The blob store
 
 - [x] `packages/blob/` (a new workspace with its own `tsconfig.json` and
@@ -567,6 +575,14 @@ around the list above, and why:
   export and refuses otherwise, naming the files that differ from what the
   database would write; with no export recorded it refuses and says to export
   first. `export` and `parity` record nothing on a copy, since they are reads.
+- **After the phase 0 review:** parity compares the key order of `topics.yaml`
+  and `tags.yaml` as a mismatch of its own (`content/topics.yaml (order)`),
+  since each topic hashes the same wherever it sits; positions are sparse
+  (D22) with `catalog renumber`; an import revision's author is the commit the
+  files read are tracked at (`-dirty` with local changes, `import:unknown`
+  when nothing under the directory is tracked, rather than the enclosing
+  repository's commit), and its reason names the directory and the file read
+  without a home path.
 
 ### 0.6 The reader seam, and readers made async
 
@@ -1227,6 +1243,37 @@ content is fixed, without pretending the content is fine. **Rejected:** keeping
 completeness in `catalog doctor` alone (a report nobody has to read); refusing
 the whole migration until the nine courses are filled; a `CHECK` (cannot see
 other rows).
+
+### D22. Positions that order entities are sparse, and kept while their place holds
+
+**Verdict:** `topic.position`, `tag.position`, `concept.topic_position`,
+`curriculum_item.position` and a module's `collection_item.topic_position` are
+stored in steps of 1000 in file order. On re-import a row keeps its number
+while its place relative to its neighbours is unchanged (the most rows that
+can, a longest increasing run, and among runs that long one that leaves room
+for the rest); only a moved or new row is numbered, from the gap it landed
+in: a midpoint between two neighbours, or one step past either end. When no
+run that long leaves room, so fitting the rest would move a row whose place
+did not change, the import refuses and names
+`catalog renumber <list> --reason`, which spreads the list back out and writes
+one revision per row it moves, on purpose. A row whose entity has no revision
+yet was positioned before revisions existed, and is numbered afresh. Positions
+stay in the snapshot, so a real reorder is a revision of the moved rows only,
+and the export sorts by position, so the files do not change. Positions that
+order links inside one entity's snapshot (`relations:`, a course's `tags:`, an
+item's `concepts:`, `requires:`, `resources:`, `maps.manimkc`) stay dense,
+since any change to such a list is that one entity's revision whatever the
+numbers are. **Why:** positions are part of each snapshot, and dense ones
+turned one insertion into a revision of everything after it: adding a topic at
+the top of `topics.yaml` wrote 87 topic revisions (*measured* by the phase 0
+review). A history in which one edit touches 86 rows buries the edit, and
+every phase 1 writer that inserts a topic, an item or a concept would repeat
+it. **Rejected:** dense positions renumbered on every write (the bug);
+fractional or string keys (a type change on five columns, and an export that
+can no longer write a plain integer); positions out of the snapshot (a reorder
+would then leave no history at all); renumbering silently when a gap closes
+(it is a revision of every row it moves, so it is a decision, not a side
+effect).
 
 ## Decided by the owner
 

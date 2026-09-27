@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { TOPIC_RELATION_KINDS as READER_KINDS } from "@self-learn/content";
 import { contentRevision, tag, TOPIC_RELATION_KINDS } from "@self-learn/schema";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -13,6 +13,7 @@ import { runExport } from "../src/commands/export";
 import { runFlip } from "../src/commands/flip";
 import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
+import { runRenumber } from "../src/commands/renumber";
 import { compare } from "../src/content/parity";
 import { contentOwnership } from "../src/content/ownership";
 import { triggerStates } from "../src/content/rules";
@@ -652,4 +653,229 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
       waived: { type: "courses", reason: "nine courses are still being filled in" },
     });
   });
+});
+
+/** Every revision the import wrote, as `type id op`, sorted. */
+const revisionsWritten = async (scratch: Scratch, since: number) =>
+  (
+    await scratch.db.execute<{ line: string }>(sql`
+      select entity_type || ' ' || entity_id || ' ' || op as line from ${contentRevision}
+      where id > ${since} order by 1
+    `)
+  ).rows.map((row) => row.line);
+
+const lastRevisionId = async (scratch: Scratch) =>
+  Number(
+    (await scratch.db.execute<{ id: string | null }>(sql`select max(id) as id from ${contentRevision}`)).rows[0]?.id ??
+      0,
+  );
+
+describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the real tree", () => {
+  let scratch: Scratch;
+  let copy: string;
+  let restore: () => void;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    copy = await tempDir("sparse-copy");
+    for (const dir of ["content", "learn"]) {
+      await cp(path.join(REPO_ROOT, dir), path.join(copy, dir), { recursive: true });
+    }
+    restore = pointAt(scratch.name);
+    await runImportCommand({ dir: copy });
+  }, 120_000);
+
+  afterAll(async () => {
+    restore?.();
+    await scratch?.drop();
+    if (copy !== undefined) await rm(copy, { recursive: true, force: true });
+  });
+
+  const topicsFile = () => path.join(copy, "content/topics.yaml");
+
+  it("stores the vocabulary in steps of 1000, in file order", async () => {
+    const { rows } = await scratch.db.execute<{ slug: string; position: number }>(
+      sql`select slug, position from topic order by position`,
+    );
+    const inFile = (parse(await readFile(topicsFile(), "utf8")) as { topics: { slug: string }[] }).topics;
+    expect(rows.map((row) => row.slug)).toEqual(inFile.map((topic) => topic.slug));
+    expect(rows.map((row) => row.position)).toEqual(inFile.map((_, i) => (i + 1) * 1000));
+  });
+
+  it("writes one revision, for the new topic, when a topic is added at the top", async () => {
+    const text = await readFile(topicsFile(), "utf8");
+    const block = [
+      "  - slug: zz-added-at-the-top",
+      "    title: Added at the top",
+      "    domain: computer-architecture",
+      "    aliases: []",
+      "    maps:",
+      "      manimkc: []",
+      "      courses: []",
+      "      concepts: []",
+      "",
+    ].join("\n");
+    await writeFile(topicsFile(), text.replace("topics:\n", `topics:\n${block}\n`));
+
+    // Parity sees the new entry before the import does.
+    const before = await runParity({ dir: copy, only: ["topics"] });
+    expect(before.types[0]?.mismatches.map((m) => `${m.kind} ${m.id}`)).toEqual([
+      "changed content/topics.yaml (order)",
+      "extra topic zz-added-at-the-top",
+    ]);
+
+    const since = await lastRevisionId(scratch);
+    const result = await runImportCommand({ dir: copy });
+    expect(revisionCount(result)).toBe(1);
+    expect(await revisionsWritten(scratch, since)).toEqual(["topic zz-added-at-the-top import"]);
+    const { rows } = await scratch.db.execute<{ slug: string; position: number }>(
+      sql`select slug, position from topic order by position limit 2`,
+    );
+    expect(rows).toEqual([
+      { slug: "zz-added-at-the-top", position: 0 },
+      { slug: expect.any(String), position: 1000 },
+    ]);
+    expect((await runParity({ dir: copy })).clean).toBe(true);
+  }, 120_000);
+
+  it("writes one revision, for the moved topic, when a topic moves, and parity names the reorder first", async () => {
+    const doc = parse(await readFile(topicsFile(), "utf8")) as { topics: { slug: string }[] };
+    const [moved] = doc.topics.splice(40, 1);
+    doc.topics.splice(5, 0, moved as { slug: string });
+    await writeFile(topicsFile(), stringify(doc));
+
+    const before = await runParity({ dir: copy, only: ["topics"] });
+    expect(before.types[0]?.mismatches).toEqual([
+      expect.objectContaining({ id: "content/topics.yaml (order)", kind: "changed", detail: expect.stringMatching(/^position 6:/) }),
+    ]);
+
+    const since = await lastRevisionId(scratch);
+    const result = await runImportCommand({ dir: copy });
+    expect(revisionCount(result)).toBe(1);
+    expect(await revisionsWritten(scratch, since)).toEqual([`topic ${moved?.slug} import`]);
+    expect((await runParity({ dir: copy })).clean).toBe(true);
+  }, 120_000);
+});
+
+describe.skipIf(!reachable.ok)("sparse positions (D22) inside a module, and renumbering", () => {
+  let scratch: Scratch;
+  let fixture: Fixture;
+  let restore: () => void;
+  const course = () => path.join(fixture.root, "content/courses/xx1000.yaml");
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    fixture = await smallTree();
+    restore = pointAt(scratch.name);
+    await runImportCommand({ dir: fixture.root });
+  }, 60_000);
+
+  afterAll(async () => {
+    restore?.();
+    await scratch?.drop();
+    await fixture?.cleanup();
+  });
+
+  const items = async () =>
+    (
+      await scratch.db.execute<{ id: string; position: number }>(
+        sql`select id, position from curriculum_item where archived_at is null order by position`,
+      )
+    ).rows;
+
+  const addItem = async (id: string, before: string) => {
+    const text = await readFile(course(), "utf8");
+    const at = text.indexOf(`      - id: ${before}\n`);
+    expect(at).toBeGreaterThan(0);
+    await writeFile(
+      course(),
+      `${text.slice(0, at)}      - id: ${id}\n        title: ${id}\n        subtopics: []\n${text.slice(at)}`,
+    );
+  };
+
+  it("writes one revision, for the new item, when an item is added at the top of a module", async () => {
+    expect(await items()).toEqual([
+      { id: "xx1000-m1-t1", position: 1000 },
+      { id: "xx1000-m1-t2", position: 2000 },
+    ]);
+    await addItem("xx1000-m1-t0", "xx1000-m1-t1");
+    const since = await lastRevisionId(scratch);
+    await runImportCommand({ dir: fixture.root });
+    expect(await revisionsWritten(scratch, since)).toEqual(["curriculum_item xx1000-m1-t0 import"]);
+    expect(await items()).toEqual([
+      { id: "xx1000-m1-t0", position: 0 },
+      { id: "xx1000-m1-t1", position: 1000 },
+      { id: "xx1000-m1-t2", position: 2000 },
+    ]);
+  }, 60_000);
+
+  it("refuses an item that has no room left between its neighbours, and names the renumber", async () => {
+    // Two neighbours one apart, as ten insertions at one spot would leave them.
+    await scratch.db.execute(sql`update curriculum_item set position = 1001 where id = 'xx1000-m1-t2'`);
+    await addItem("xx1000-m1-t15", "xx1000-m1-t2");
+    const since = await lastRevisionId(scratch);
+    await expect(runImportCommand({ dir: fixture.root })).rejects.toThrow(
+      /the items of module "xx1000-m1": no room for "xx1000-m1-t15" between "xx1000-m1-t1" and "xx1000-m1-t2".*renumber items --module xx1000-m1 --reason/s,
+    );
+    expect(await revisionsWritten(scratch, since)).toEqual([]);
+  }, 60_000);
+
+  it("renumbers the list with one revision per row it moves, after which the import goes through", async () => {
+    const since = await lastRevisionId(scratch);
+    const result = await runRenumber({ list: "items", module: "xx1000-m1", reason: "make room after t1" });
+    expect(result.moved.map(({ id, from, to }) => ({ id, from, to }))).toEqual([
+      { id: "xx1000-m1-t0", from: 0, to: 1000 },
+      { id: "xx1000-m1-t1", from: 1000, to: 2000 },
+      { id: "xx1000-m1-t2", from: 1001, to: 3000 },
+    ]);
+    expect(await revisionsWritten(scratch, since)).toEqual([
+      "curriculum_item xx1000-m1-t0 update",
+      "curriculum_item xx1000-m1-t1 update",
+      "curriculum_item xx1000-m1-t2 update",
+    ]);
+    const [revision] = (
+      await scratch.db.execute<{ reason: string; author_kind: string }>(
+        sql`select reason, author_kind from ${contentRevision} where id > ${since} limit 1`,
+      )
+    ).rows;
+    expect(revision).toEqual({ reason: "make room after t1", author_kind: "person" });
+
+    const again = await lastRevisionId(scratch);
+    await runImportCommand({ dir: fixture.root });
+    expect(await revisionsWritten(scratch, again)).toEqual(["curriculum_item xx1000-m1-t15 import"]);
+    expect((await items()).map((row) => row.id)).toEqual([
+      "xx1000-m1-t0",
+      "xx1000-m1-t1",
+      "xx1000-m1-t15",
+      "xx1000-m1-t2",
+    ]);
+    // A list already evenly spread has nothing to move.
+    await runRenumber({ list: "tags", reason: "nothing to do" });
+    const none = await runRenumber({ list: "tags", reason: "still nothing" });
+    expect(none.moved).toEqual([]);
+  }, 60_000);
+
+  it("renumbers a topic's maps.courses through the module's revision, links and all", async () => {
+    // A number off the steps, which the next import keeps (its place did not
+    // change) and records as the module's latest revision.
+    await scratch.db.execute(
+      sql`update collection_item set topic_position = 7 where collection_id = 'xx1000-m1' and topic_slug is not null`,
+    );
+    const imported = await lastRevisionId(scratch);
+    await runImportCommand({ dir: fixture.root });
+    expect(await revisionsWritten(scratch, imported)).toEqual(["collection xx1000-m1 import"]);
+
+    const since = await lastRevisionId(scratch);
+    const result = await runRenumber({ list: "modules", topic: "alpha", reason: "tidy" });
+    expect(result.moved.map(({ id, from, to }) => ({ id, from, to }))).toEqual([{ id: "xx1000-m1", from: 7, to: 1000 }]);
+    expect(await revisionsWritten(scratch, since)).toEqual(["collection xx1000-m1 update"]);
+    // The module's resource rows came through the rewrite of its links.
+    const links = await scratch.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from collection_item where collection_id = 'xx1000-m1'`,
+    );
+    expect(links.rows[0]?.n).toBe(3);
+    expect((await runParity({ dir: fixture.root })).clean).toBe(true);
+  }, 60_000);
 });

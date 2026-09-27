@@ -41,6 +41,28 @@ export interface LatestRevision {
  *
  * Both take these before any row lock, and an import takes every one it needs
  * up front in one order, so no two writers can each hold what the other wants.
+ *
+ * **The lock order.** Every writer takes its advisory locks in one global
+ * order and never takes one out of it: by entity type, sorted by code unit;
+ * within a type, the type lock before any entity lock; entity locks by id.
+ * Concretely:
+ *
+ * - `writeContent` takes one type shared, then one entity: two locks, in order;
+ * - `writeContents` sorts its inputs by (type, id) and takes every pair before
+ *   its first write, so a composite writer of a course and its items holds
+ *   `collection` before `curriculum_item` whatever order it writes them in;
+ * - an import takes its types exclusive in sorted order (`lockTypes`) and no
+ *   entity locks.
+ *
+ * A cycle of waiters needs someone to wait for a lock that sorts before one
+ * it already holds, and no writer ever does, so none can form between these
+ * three, however many run at once. Re-taking a type lock a writer already
+ * holds shared is granted at once, since Postgres counts a session's own
+ * locks. What breaks the order is two `writeContent` calls in one outer
+ * transaction that write a later type before an earlier one: the second
+ * call's type lock then sorts before one already held. That is what
+ * `writeContents` is for, and `test/content-seam.test.ts` holds both the
+ * deadlock and its absence.
  */
 
 function lockKey(key: string) {

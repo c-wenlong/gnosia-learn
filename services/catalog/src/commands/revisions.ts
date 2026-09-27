@@ -59,7 +59,7 @@ export function formatHistory(result: HistoryResult): string {
   const lines = [`${result.type} ${result.id}: ${result.revisions.length} revisions, oldest first`, ""];
   for (const rev of result.revisions) {
     lines.push(
-      `#${rev.id}  seq ${rev.seq}  ${rev.op.padEnd(7)}  ${rev.createdAt}  ${rev.authorKind}:${rev.author}`,
+      `#${rev.id}  seq ${rev.seq}  ${rev.op.padEnd(7)}  ${rev.createdAt}  ${byline(rev.authorKind, rev.author)}`,
     );
     lines.push(`    ${rev.reason}`);
     const provenance = [
@@ -69,6 +69,14 @@ export function formatHistory(result: HistoryResult): string {
     if (provenance.length > 0) lines.push(`    ${provenance.join(", ")}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * `kind:author`, unless the author already says its kind: an import's author
+ * is `import:<sha>`, and printing `import:import:<sha>` says it twice.
+ */
+export function byline(kind: string, author: string): string {
+  return author.startsWith(`${kind}:`) ? author : `${kind}:${author}`;
 }
 
 export interface DiffResult extends RevisionDiff {
