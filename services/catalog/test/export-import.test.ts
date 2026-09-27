@@ -367,6 +367,25 @@ describe.skipIf(!reachable.ok)("the round trip on a small tree", () => {
     expect(topics?.counts.expected).toMatchObject({ relations: 3, "manimkc paths": 2, "concept mappings": 2, domains: 2 });
   }, 60_000);
 
+  it("refuses a tag gone from tags.yaml that a course file still names, before writing anything", async () => {
+    const file = path.join(fixture.root, "content/tags.yaml");
+    const original = await readFile(file, "utf8");
+    await writeFile(file, tagsYaml(["testing"]));
+    try {
+      await expect(runImportCommand({ dir: fixture.root })).rejects.toThrow(
+        /course "XX1000" is tagged "later", which is not in content\/tags\.yaml/,
+      );
+      // The tags source would have pruned "later" and its links, and committed,
+      // before the courses source refused. Checked first, nothing moved.
+      const links = await scratch.db.execute(sql`select tag_id from collection_tag order by position`);
+      expect(links.rows).toEqual([{ tag_id: "testing" }, { tag_id: "later" }]);
+      const tags = await scratch.db.execute(sql`select id from tag order by position`);
+      expect(tags.rows).toEqual([{ id: "later" }, { id: "testing" }]);
+    } finally {
+      await writeFile(file, original);
+    }
+  }, 60_000);
+
   it("names what differs, by entity and by field", async () => {
     const topics = await readFile(path.join(out, "content/topics.yaml"));
     const edited = Buffer.from(topics.toString("utf8").replace("{kind: precedes, to: gamma}", "{kind: precedes, to: beta}"));

@@ -8,6 +8,7 @@ import {
   type IndexSource,
   type SourceRepo,
 } from "@self-learn/schema";
+import { loadCourses } from "@self-learn/content";
 import { eq } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 
@@ -17,6 +18,7 @@ import { renderType } from "../content/export";
 import type { CatalogDatabase } from "../db";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
+import { asIndexError } from "./content-errors";
 import { coursesIndexer } from "./courses";
 import { diagramsIndexer } from "./diagrams";
 import { IndexError } from "./errors";
@@ -397,12 +399,23 @@ export async function runIndex(
     });
   }
 
+  // The tags source clears the links to a tag it prunes, trusting the
+  // courses source to write back the ones the course files still name. It
+  // commits first, so a course file still naming a pruned tag would fail the
+  // courses source only after the links were gone. Reading the course files
+  // here, before anything is written, refuses that run while nothing has
+  // moved: the same reader, so the same sentence the courses source would say.
+  const running = new Set(runnable.map((i) => i.source));
+  if (running.has("tags") && running.has("courses")) {
+    asIndexError(() => loadCourses({ root: repoRoot, topics: vocabulary.entries }));
+  }
+
   const sources: SourceWrite[] = [];
   for (const indexer of runnable) {
     const { rows, notes = [], scope, metadata } = await indexer.read(context);
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
-      tagLinksRewritten: runnable.some((i) => i.source === "courses"),
+      tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs
       // and diagrams from until their tracks move the bytes into rows. The
