@@ -16,6 +16,7 @@ import {
   whatMoved,
   type RecordedAnswer,
   type SessionStep,
+  withConsequence,
 } from "@/lib/session-core";
 
 /**
@@ -79,7 +80,7 @@ export function SessionClose({
       <Card title="What moved">
         {moved.length === 0 ? (
           <p className="text-[14px] text-text2">
-            {reason === null ? "Nothing was answered, so no belief moved." : `${reason} Nothing was recorded.`}
+            {reason === null ? "Nothing was answered, so no belief moved." : withConsequence(reason, "Nothing was recorded.")}
           </p>
         ) : (
           <ul className="flex flex-col gap-3 md:gap-2">
