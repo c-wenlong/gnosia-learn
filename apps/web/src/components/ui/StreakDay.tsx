@@ -8,7 +8,8 @@ import { cx } from "./classes";
  * is a `--streak` ring around a dot; a missed or future day is a plain
  * `--border` disc. A miss the weekly leeway covered, which the kit does not
  * draw, is a dashed `--streak` ring: kept, but not earned. The check is
- * `--streak-on`: white, except on Gnosia dark's bright gold, where it is navy.
+ * `--streak-on`: white in the light palettes, the page colour in the dark
+ * ones, whose orange and gold are too bright for a white check.
  *
  * The letter is `--streak-text` on today and `--text3` otherwise: the
  * streak's own hue, darkened in each palette until 11px text clears 4.5:1
