@@ -24,6 +24,7 @@ import {
   loadFileAccess,
   loadLastWatched,
   readAssetText,
+  readRowText,
   readFileProblems,
   withCatalog,
 } from "@/lib/asset-library";
@@ -208,10 +209,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // is what refuses a binary, and `readAssetText` refuses anything over the
   // preview cap. A null lands on `UnreadableFile`, which says so.
   const rendered = ["video", "diagram_svg", "link"];
+  // A note or a log the database owns is a row, so its text does not wait on
+  // the file being servable: the file is the export as of the flip, if it is
+  // there at all.
+  const rowText = rendered.includes(asset.kind) ? null : await withCatalog((db) => readRowText(db, asset.id));
   const text =
-    servable && !rendered.includes(asset.kind)
-      ? await withCatalog((db) => readAssetText(db, asset.id))
-      : null;
+    rowText ??
+    (servable && !rendered.includes(asset.kind) ? await withCatalog((db) => readAssetText(db, asset.id)) : null);
 
   // The pictures a note embeds are `learn/assets/<name>`, the same files the
   // diagram rows point at, so they resolve through the file route. Each one is

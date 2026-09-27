@@ -646,6 +646,23 @@ export async function readAssetText(
 }
 
 /**
+ * A note's or a session log's text when the database owns its type, within
+ * the preview cap, or null: not such an asset, not on rows, or no text. Not
+ * gated by `ASSET_FILES_ENABLED` and not dependent on the file being there,
+ * since the text is a row; the library page asks this before it asks whether
+ * the file can be served.
+ */
+export async function readRowText(db: CatalogDatabase, id: string, limit = TEXT_PREVIEW_BYTES): Promise<string | null> {
+  try {
+    const stored = await storedText(db, id);
+    return stored !== undefined && stored !== null && Buffer.byteLength(stored, "utf8") <= limit ? stored : null;
+  } catch (error) {
+    warn(`asset text ${id}`, error);
+    return null;
+  }
+}
+
+/**
  * A note's or a session log's text from the database, once it owns that type
  * (Track C of docs/CONTENT-MIGRATION.md): the file under `learn/` is then an
  * export no write touches, and reading it would show the note as it was at
