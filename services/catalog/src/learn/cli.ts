@@ -477,6 +477,19 @@ commands.concept = async ({ values, positionals }, session) => {
       }
     }
 
+    // On rows, a listing on a course row is linked by the courses source
+    // after the write (below), and that source refuses to read notes that are
+    // not the database's recorded export. Run it once now, before anything is
+    // written, so that refusal comes while nothing has moved.
+    if (itemId !== undefined && (await ownedByDatabase("concepts"))) {
+      try {
+        await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+      } catch (error) {
+        if (error instanceof IndexError) fail(`nothing was written: ${error.message}`);
+        throw error;
+      }
+    }
+
     const existing = await readConcept(id);
     if (existing !== null && !values.force) {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);

@@ -156,6 +156,18 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     );
   });
 
+  it("refuses a listing on rows before writing anything when the notes are not the recorded export", async () => {
+    await scratch.db.execute(sql`update content_source set export_hash = 'stale' where type = 'concepts'`);
+    try {
+      expect(await refused("concept", "add", "--title", "Zeta", "--domain", "fixtures", "--item", "xx1000-m1-t1")).toMatch(
+        /nothing was written: .*the database owns concepts/s,
+      );
+      expect(await row("zeta")).toBeUndefined();
+    } finally {
+      await recordExport(scratch.db, "concepts", exportHash(await readTypeFiles(fixture.root, "concepts")));
+    }
+  });
+
   it("lists a new note on a course row, and the courses source links it", async () => {
     const added = await json("concept", "add", "--title", "Epsilon", "--domain", "fixtures", "--item", "xx1000-m1-t1");
     expect(added).toMatchObject({ id: "epsilon", topic: "alpha", item: "xx1000-m1-t1", indexed: true });
