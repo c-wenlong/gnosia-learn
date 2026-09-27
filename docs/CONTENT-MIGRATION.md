@@ -104,12 +104,12 @@ track touches `packages/schema/src/` (D10).
 | --- | --- | --- |
 | `id` | bigint identity PK | |
 | `owner_id` | text FK `learner(id)`, `RESTRICT` | Whose content this is |
-| `entity_type` | text, `CHECK` | `topic`, `topic_relation`, `tag`, `collection`, `curriculum_item`, `concept`, `diagram`, `asset` |
+| `entity_type` | text, `CHECK` | `topic`, `tag`, `collection`, `curriculum_item`, `concept`, `diagram`, `asset`. Link rows have no type of their own: they are part of their parent's snapshot, so a change to a link is a revision of the parent. `topic_relation` and `manimkc_topic` belong to the `from` topic, `collection_tag` to the collection, `curriculum_item_topic` and `concept_curriculum_item` to the item, `asset_topic`, `asset_concept` and `asset_derivation` to the asset, `concept_prerequisite` to the concept |
 | `entity_id` | text | The entity's primary key, rendered as text |
 | `seq` | integer | 1, 2, 3 per entity; `UNIQUE (entity_type, entity_id, seq)` |
 | `previous_id` | bigint FK `content_revision(id)`, null | The revision this one replaced; null on create |
 | `op` | text, `CHECK` | `create`, `update`, `archive`, `restore`, `rename`, `import` |
-| `snapshot` | jsonb | The whole entity after the write, body included. For a diagram, the document; the SVG is referenced by blob key |
+| `snapshot` | jsonb | The whole entity after the write, body included, with its owned links listed under it in a canonical order. For a diagram, the document; the SVG is referenced by blob key. An import that changes only a mapping or a course link therefore changes the parent's `snapshot_hash` and writes a revision |
 | `snapshot_hash` | text | sha256 of the canonical snapshot, so an import that changes nothing writes nothing |
 | `author_kind` | text, `CHECK` | `person`, `agent`, `import` |
 | `author` | text | A learner id, an agent label such as `planner` or `diagram-maker`, or `import:<git sha>` |
@@ -204,6 +204,44 @@ The document goes in a jsonb column on `diagram` and the SVG goes in the blob
 store. The document is small JSON whose stamp the catalog already reads; the
 SVG is ten times larger and is served as bytes. D6 has the numbers.
 
+### Integrity the database enforces
+
+The owner's second reason for this plan, raised on 2026-09-27: nine of the ten
+course files carry no `concepts:` on any curriculum item (*measured*: `grep`
+over `content/courses/`), and nothing refused them, because a YAML parser can
+only check what one file says about itself and the agents editing those files
+were the only thing standing between a course and a hole in it. Under this plan
+every rule the parser enforces today becomes a constraint or a write-seam check,
+and the completeness rules that were never written down become deferred
+constraint triggers. The table is the contract; Track B and the flip command
+carry it out.
+
+| Rule | Enforced today by | Enforced after by |
+| --- | --- | --- |
+| Slugs and ids are kebab-case and unique | `ContentError` at parse (`packages/content/src/topics.ts:60-66`, `courses.ts:136-146`) | Primary keys, and a `CHECK` on the slug pattern |
+| Each manimkc path, module and concept sits under exactly one topic | `vocabulary.claim()` (`services/catalog/src/index/vocabulary.ts:41-56`) | `manimkc_topic.path` is a primary key; `concept.topic_slug` is one column; a module's topic is one `collection_item` row |
+| A module's topic exists | parse (`courses.ts:257-264`) | foreign key |
+| An item's concepts sit under its module's topic | parse (`courses.ts:282-295`) | a constraint trigger on `concept_curriculum_item` comparing `concept.topic_slug` with the item's topic |
+| A course's tags exist | parse (`courses.ts:351-357`) | `collection_tag` foreign key |
+| Every module has at least one item | parse (`courses.ts:269-274`) | a deferred constraint trigger on `collection`, checked at commit |
+| **Every curriculum item names at least one concept** | nothing; nine courses fail it today | a deferred constraint trigger on `curriculum_item`, armed by `catalog flip courses --strict` once `catalog doctor` reports zero violations |
+| Every concept is filed under a topic | `concept.topic_slug` nullable; the indexer refuses at run time | `NOT NULL`, the one-line migration SCHEMA.md already names as pending |
+| Every diagram has a topic | the indexer refuses an unstamped `.tldr` | `diagram.topic_slug NOT NULL` |
+| An asset has exactly one location | the `asset` location `CHECK` | the same check, widened for `blob_key` |
+| A relation points at two real topics and never at itself | nowhere; relations do not exist | foreign keys at both ends and the no-self check |
+| Ids are permanent | convention in `content/README.md` | `ON UPDATE CASCADE` everywhere, one `rename` verb, and a `rename` revision |
+
+A `CHECK` sees one row, so "at least one child" cannot be a `CHECK`. It is a
+`CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` on the parent, which
+runs once at commit: the write seam imports a whole course in one transaction,
+so the moment between inserting a module and inserting its items is never
+visible to the rule. `catalog doctor` runs the same predicates as plain queries
+and lists every violator by id, which is how the distance to `--strict` is
+measured; `catalog flip <type> --strict` refuses while doctor reports any.
+Filling the nine courses is content work, not migration work, and it happens
+whenever the owner or a session chooses; the trigger is armed the day the count
+reaches zero and refuses the tenth hole forever after.
+
 ## Principles
 
 - **Expand, migrate, contract.** Every change adds the new path beside the old
@@ -228,8 +266,8 @@ SVG is ten times larger and is served as bytes. D6 has the numbers.
 
 ## Phase 0: the foundation
 
-Serial; every phase 1 track waits on it. Five PRs (*guessed*): 0.1 with its
-docs, 0.2 with 0.3, 0.4, 0.5, and 0.6.
+Serial; every phase 1 track waits on it. Five PRs (*guessed*): 0.2 with 0.1
+(the migration must exist before the data moves), 0.3, 0.4, 0.5, and 0.6.
 
 ### 0.1 A cloud database, provisioned in the order DEPLOYMENT.md requires
 
@@ -250,6 +288,10 @@ roles and the move of the primary.
 - [ ] Create three roles: `catalog_owner` (migrations), `catalog_writer` (the
       laptop's CLI and studio: content and state writes), `app_web` (Vercel:
       `SELECT` on content tables, writes on state tables only). D19.
+- [ ] Apply the expand migration of 0.2 to the local database first, so
+      `catalog_instance`, `owner_id` and the rest exist before any data
+      moves. 0.1 and 0.2 are therefore one PR, with 0.2's migration landing
+      before these last four steps run.
 - [ ] Move the data: `pg_dump self_learn`, restore into the cloud database,
       `npm run catalog -- migrate` against it (a no-op, since migrations are
       keyed by file hash), compare every table's row count with the local
@@ -262,10 +304,20 @@ roles and the move of the primary.
 
 ### 0.2 The expand migration
 
+- [ ] Before any `owner_id` column: `insert into learner (id) values ('local')
+      on conflict do nothing`. The row is created only on the first state
+      write today (`services/catalog/src/state/learner.ts`), so a database
+      that has been indexed but never studied has no `local` row, and the
+      foreign key default would fail on the first existing content row.
 - [ ] Every table in [The new tables](#the-new-tables), every new column
       (`owner_id` everywhere, `archived_at` on `collection`, `curriculum_item`,
       `concept`, `topic`, `diagram`; the concept body columns; `asset.blob_key`;
-      `poster` in `ASSET_KINDS`), and the widened `asset` location check.
+      `asset.resource_type`, checked against `paper`, `docs`, `video`, `book`,
+      `other`, because the course YAML requires it on every curated link
+      (`packages/content/src/courses.ts:46`) and the indexer drops it today
+      (`services/catalog/src/index/courses.ts:181-191`), so an export could not
+      be re-imported; `poster` in `ASSET_KINDS`), and the widened `asset`
+      location check.
 - [ ] The cascade fix (D12): `progress` and `recap` switch from `ON DELETE
       CASCADE` to `RESTRICT` on `curriculum_item`
       (`packages/schema/src/state.ts:227`, `:252`), and `curriculum_item` to
@@ -273,9 +325,16 @@ roles and the move of the primary.
       instead of deleting (`pruneEntity`,
       `services/catalog/src/index/writer.ts:396`).
 - [ ] The append-only triggers on `content_revision` and
-      `session_log_entry`, and a guard trigger on every content table that
-      refuses a write unless the transaction has set
-      `self_learn.revision_id` (D4).
+      `session_log_entry`. The guard trigger that refuses a content write
+      unless the transaction has set `self_learn.revision_id` (D4) is
+      defined here but enabled per table by `catalog flip <type>`, not in
+      phase 0: until track D flips, the studio's Accept still writes `asset`
+      rows through `assert-output` outside the seam, and a guard armed early
+      would fail every acceptance in between.
+- [ ] Every constraint trigger in [Integrity the database
+      enforces](#integrity-the-database-enforces), created disarmed where the
+      data does not yet satisfy it, and `catalog doctor` extended with the same
+      predicates as queries (D21).
 - [ ] `CREATE EXTENSION pg_trgm` and a trigram index on `topic.title` and the
       aliases (D14).
 - [ ] Generated with `npm run generate -w @self-learn/catalog`, never written
@@ -330,14 +389,21 @@ interface BlobStore {
 
 ### 0.5 Export, import and parity
 
-- [ ] `catalog import [--only <type>] <dir>`: the seven indexers, reading a
-      directory argument instead of the repo root, writing through 0.3. It
+- [ ] `catalog import [--only <type>] <dir>`: the seven indexers plus a new
+      `tags` indexer for `tags.yaml` (today tags reach Postgres only as
+      strings inside course metadata, so a tag with no course would export
+      and never come back), reading a directory argument instead of the repo
+      root, writing through 0.3. The topics indexer also reads a new
+      `relations:` list per topic (`- {kind: broader, to: <slug>}`), which is
+      how `topic_relation` rows round-trip; the export writes it and parity
+      counts it. It
       skips a type whose `content_source` row says `db` with a named line, and
       refuses when that type's file hash differs from the last export (edge
       case 12).
 - [ ] `catalog export [--only <type>] --out <dir>`: new code per type, writing
       `topics.yaml` grouped by domain under the same header and divider
-      comments it has today, `tags.yaml`, one `courses/<code>.yaml` per course,
+      comments it has today, each topic carrying its `relations:` and its
+      `maps.manimkc` paths from `manimkc_topic`, `tags.yaml`, one `courses/<code>.yaml` per course,
       `concepts/<domain>/<slug>.md` with frontmatter, `sessions/<id>.md`,
       `assets/<slug>.{tldr,svg}`.
 - [ ] `catalog parity [--only <type>] <dir>`: counts per type, and sha256 per
@@ -594,7 +660,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 - [ ] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
-      write-through export of D17 stops.
+      write-through export of D17 keeps running until phase 3, so
+      `CONTENT_SOURCE=files` never reads an export older than the last
+      write.
 - [ ] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
@@ -768,7 +836,7 @@ composite keys now; no owner column until accounts.
 **Verdict:** `content_revision` with `previous_id`, `author_kind`, `author`,
 `reason` and a whole-entity snapshot with its hash, written only by the write
 seam, append-only by trigger; a guard trigger on each content table refuses a
-write outside the seam. **Why:** one shape gives back diff, history and blame
+write outside the seam, armed for a table when its type flips (0.2). **Why:** one shape gives back diff, history and blame
 for every type. A whole snapshot makes a diff a comparison of two rows and a
 restore one write, and the guard makes a psql edit a deliberate act, the
 argument that made `event` append-only by trigger. **Rejected:** a history
@@ -895,13 +963,14 @@ first); a `proposed` topic state (a filter in every reader); D39's paste path.
 
 ### D17. Writers export their type while any reader still reads files
 
-**Verdict:** from a type's flip until phase 2, its writer rewrites that type's
-export file after each write. **Why:** `loadCourses` validates against
+**Verdict:** from a type's flip until the phase 3 cut-over, its writer
+rewrites that type's export file after each write. **Why:** `loadCourses` validates against
 `topics.yaml` while courses are on files
 (`packages/content/src/courses.ts:203-209`), so a topic created in the
 database must reach the file or the next course import refuses. **Rejected:**
 deleting a type's files at its flip (cross-type validation breaks); leaving
-them stale (hand edits vanish, edge case 12).
+them stale (hand edits vanish, edge case 12); stopping the export in phase 2,
+which would make the files rollback silently older than the database.
 
 ### D18. The database records which types it owns
 
@@ -926,6 +995,21 @@ frontmatter the `session` row already holds. **Why:** every log write is an
 append today (`services/catalog/src/learn/files.ts:213-218`), so the entries are
 their own history and need no revisions. **Rejected:** a `body` column
 rewritten on each `observe`.
+
+### D21. Completeness rules live in the database, armed when the data allows
+
+**Verdict:** every rule in [Integrity the database
+enforces](#integrity-the-database-enforces) is a constraint, a foreign key or a
+deferred constraint trigger, defined in phase 0 and armed per type by
+`catalog flip <type> --strict` once `catalog doctor` reports no violators.
+**Why:** the owner's point: nine courses shipped with no concept on any item
+because the only check was an agent reading a YAML file, and a database that
+holds the rows is the one place a rule about all of them can be stated once and
+enforced on every write. Arming late is what lets the migration land before the
+content is fixed, without pretending the content is fine. **Rejected:** keeping
+completeness in `catalog doctor` alone (a report nobody has to read); refusing
+the whole migration until the nine courses are filled; a `CHECK` (cannot see
+other rows).
 
 ## Open questions
 
