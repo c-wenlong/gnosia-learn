@@ -538,7 +538,8 @@ both appearances, as Gnosia does.
 | `--accent-lip` and `--m-hi-lip` (`#2e4fd1`) against the face | 1.55 | 1.45 | (a darker lip) |
 | `--accent-text` (`#294bc6`, links) on `--page`, `--surface`, `--tint` | 6.78, 7.20, 6.40 | unchanged | 4.5 |
 
-Every pair still passes, and all but the black strip moved up. The lips
+Every pair still passes. Two went down: the black strip, still over 4.5,
+and the lip step, since the face moved toward the lip. The lips
 stay `#2e4fd1`: 10 L* below the new face (39.2 against 49.4), still visibly
 the darker shade under the button and the mastered node. `--accent-text` is
 its own darker blue and did not move.
