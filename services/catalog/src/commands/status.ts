@@ -1,5 +1,8 @@
 import {
+  collection,
+  conceptCurriculumItem,
   CONTENT_TABLES,
+  curriculumItem,
   indexRun,
   INDEX_SOURCES,
   mirror,
@@ -11,6 +14,7 @@ import {
   tables,
 } from "@self-learn/schema";
 import { asc, count, eq, getTableName, max, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -46,6 +50,18 @@ export interface MirrorCoverage {
   checked: string | null;
 }
 
+/**
+ * How much of one course the frontier can reach: its checklist rows, and how
+ * many of them list a concept. A row with no concept is a tick and nothing
+ * else, so this is the distance from "the course is in the catalog" to "the
+ * course is a mastery path" (docs/proposals/course-items-declare-concepts.md).
+ */
+export interface CourseCoverage {
+  course: string;
+  items: number;
+  withConcepts: number;
+}
+
 export interface StatusResult {
   database: string;
   migrations: {
@@ -74,6 +90,8 @@ export interface StatusResult {
    * exists anywhere else.
    */
   mirrors: Record<string, MirrorCoverage>;
+  /** Per course, how many checklist rows list a concept. Empty until courses are indexed. */
+  coverage: CourseCoverage[];
 }
 
 function half(name: TableName): "content" | "state" | "operational" | "studio" {
@@ -132,6 +150,7 @@ export async function runStatus(): Promise<StatusResult> {
         totals,
         sources: sourceStatuses([]),
         mirrors: {},
+        coverage: [],
       };
     }
 
@@ -166,8 +185,28 @@ export async function runStatus(): Promise<StatusResult> {
       totals,
       sources: sourceStatuses(runs),
       mirrors: await mirrorCoverage(db),
+      coverage: await courseCoverage(db),
     };
   });
+}
+
+/** One row per course, in shortlist order: its items and how many list a concept. */
+async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
+  const course = alias(collection, "course");
+  const rows = await db
+    .select({
+      course: course.id,
+      items: sql<number>`count(distinct ${curriculumItem.id})::int`,
+      withConcepts: sql<number>`count(distinct ${conceptCurriculumItem.curriculumItemId})::int`,
+    })
+    .from(course)
+    .innerJoin(collection, eq(collection.parentId, course.id))
+    .innerJoin(curriculumItem, eq(curriculumItem.collectionId, collection.id))
+    .leftJoin(conceptCurriculumItem, eq(conceptCurriculumItem.curriculumItemId, curriculumItem.id))
+    .where(eq(course.kind, "course"))
+    .groupBy(course.id, course.position)
+    .orderBy(asc(course.position), asc(course.id));
+  return rows;
 }
 
 type Db = Parameters<Parameters<typeof withDatabase<StatusResult>>[0]>[0]["db"];
@@ -293,15 +332,29 @@ export function formatStatus(result: StatusResult): string {
   lines.push("mirrors");
   if (destinations.length === 0) {
     lines.push("  nothing audited yet. Run `npm run catalog -- index --only mirrors`.");
+  } else {
+    const mirrorWidth = Math.max(...destinations.map((d) => d.length));
+    for (const destination of destinations) {
+      const m = result.mirrors[destination]!;
+      lines.push(
+        `  ${destination.padEnd(mirrorWidth)}  ${String(m.present).padStart(4)} present, ` +
+          `${String(m.stale).padStart(3)} stale, ${String(m.missing).padStart(3)} missing, ` +
+          `${String(m.unknown).padStart(4)} unknown  ${m.checked ?? "never"}`,
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push("coverage");
+  if (result.coverage.length === 0) {
+    lines.push("  no courses indexed yet. Run `npm run catalog -- index --only courses`.");
     return lines.join("\n");
   }
-  const mirrorWidth = Math.max(...destinations.map((d) => d.length));
-  for (const destination of destinations) {
-    const m = result.mirrors[destination]!;
+  const courseWidth = Math.max(...result.coverage.map((c) => c.course.length));
+  for (const c of result.coverage) {
     lines.push(
-      `  ${destination.padEnd(mirrorWidth)}  ${String(m.present).padStart(4)} present, ` +
-        `${String(m.stale).padStart(3)} stale, ${String(m.missing).padStart(3)} missing, ` +
-        `${String(m.unknown).padStart(4)} unknown  ${m.checked ?? "never"}`,
+      `  ${c.course.padEnd(courseWidth)}  ${String(c.withConcepts).padStart(3)} of ` +
+        `${String(c.items).padStart(3)} items have concepts`,
     );
   }
   return lines.join("\n");

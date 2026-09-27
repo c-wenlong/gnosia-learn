@@ -214,7 +214,21 @@ npm run learn -- concept add --title "Master Theorem" --domain algorithms \
 It checks the slug against the vocabulary *before* writing anything, appends the
 new id to that topic's `maps.concepts`, and runs the concepts indexer, so the
 note is queryable at the next command. `--json` reports
-`{ id, path, topic, indexed }`.
+`{ id, path, topic, item, indexed }`.
+
+`--item <row-id>` is the course-side half. A row id is a `topics[].id` in a
+course file, like `cp4284-m1-t1`; the flag lists the new id under that row's
+`concepts:` so the note is on the course path, and it implies `--topic`,
+because the row's module names the topic the note must be mapped to. Passing
+both with a topic that is not the module's is refused before anything is
+written, since the course reader would refuse the file that resulted. The edit
+is textual like the vocabulary one, locked, and read back through the real
+reader before it is kept.
+
+```bash
+npm run learn -- concept add --title "Tokenization pipelines" --domain transformers \
+  --item cp4284-m1-t1
+```
 
 The edit is textual, one line of the YAML, so the file keeps its comments,
 section banners and ordering and the diff stays reviewable. It is checked
@@ -230,11 +244,12 @@ Without `--topic` the note is still written and the command says which edit is
 missing. Do not hand-edit `content/topics.yaml` from inside a tutoring session:
 the flag exists so a session never has to.
 
-Note the singular. `--topic` is one vocabulary slug. A note's place on a
-course is a different link and is not the note's to state: the course file
+Note the singular. `--topic` is one vocabulary slug and `--item` is one course
+row. A note's place on a course is not the note's to state: the course file
 lists concept ids under each row's `concepts:`
 ([content/courses/README.md](../content/courses/README.md)), and the indexer
-refuses a note that still carries the old `topics:` key.
+refuses a note that still carries the old `topics:` key. `npm run catalog --
+status` prints, per course, how many rows list a concept.
 
 ### The three data structures
 
