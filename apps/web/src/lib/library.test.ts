@@ -35,8 +35,8 @@ const COUNTS = [
 ];
 
 describe("isCompanionKind", () => {
-  it("names the four kinds that accompany something else", () => {
-    for (const kind of ["transcript", "captions", "chapters", "diagram_source"]) {
+  it("names the five kinds that accompany something else", () => {
+    for (const kind of ["transcript", "captions", "chapters", "diagram_source", "poster"]) {
       expect(isCompanionKind(kind)).toBe(true);
     }
   });
