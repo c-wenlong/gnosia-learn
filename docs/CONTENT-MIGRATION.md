@@ -696,10 +696,14 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 - [ ] **Vault:** `learn vault pull [--out <dir>]` (default
       `~/.self-learn/vault/`) writes every note and session log as markdown
       with a `.vault.json` recording each file's base revision and hash;
-      `learn vault push` reads changed files back through the write seam, one
+      `learn vault push` reads changed notes back through the write seam, one
       revision per file with `--reason`, refusing a file whose row moved
-      (edge case 4). Pull never overwrites a locally modified file. Decided by
-      the owner on 2026-09-27.
+      (edge case 4). Session logs are append-only entries (D20) with no
+      revision to compare against, so the vault treats them as read-only:
+      pull writes them, push refuses an edited log by name and says the log is
+      a record of what happened, and a correction belongs in the note it
+      touched. Pull never overwrites a locally modified file. Decided by the
+      owner on 2026-09-27.
 - [ ] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
@@ -714,8 +718,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 `npm run lint && npm run typecheck && npm test && npm run build` green and the
 built app serving every route against the local primary; `learn vault pull`
 into an empty folder and `learn vault push` with no edits round-trips with zero
-revisions written, one edited note pushes as one revision, and a note edited on
-both sides is refused with the `.conflict` copy left beside it.
+revisions written, one edited note pushes as one revision, a note edited on
+both sides is refused with the `.conflict` copy left beside it, and an edited
+session log is refused by name.
 
 ## Phase 3: cut-over
 
