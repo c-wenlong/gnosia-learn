@@ -514,6 +514,20 @@ not have to be worked out again.
   `concept add`, `check add` and `session log` still work without it, because
   they only touch files. The file-to-table mapping is
   [services/catalog/LEARN.md](services/catalog/LEARN.md).
+- **Migration `0010` seeds two rows and guards every table, and both surprise a
+  test.** It inserts the `local` learner (before the first `owner_id` foreign
+  key) and a `catalog_instance` row saying `primary`, so a fresh scratch
+  database is no longer empty: a test that inserts `learner` without
+  `onConflictDoNothing()` fails on `learner_pkey`. And every table but
+  `catalog_instance` carries a statement trigger that refuses all writes when
+  that row says `copy`; a database made with `createdb -T` from a copy is a
+  copy too. Tests and `scripts/e2e.mjs` pass `CATALOG_COPY_OK=1` (or
+  `connect({ copyOk: true })`, or `set self_learn.copy_ok = on` in psql);
+  nothing else should. A content table is written only from
+  `services/catalog/src/content/` or `src/index/`, which
+  `services/catalog/test/content-writes.test.ts` checks by grep, and a
+  `collection` or `curriculum_item` is archived, never deleted: `progress`,
+  `recap` and the items under a module are `RESTRICT`.
 - **A new note cannot carry evidence until it is indexed.**
   `mastery.concept_slug` and `event.concept_slug` are foreign keys, so
   `learn observe` on a note that no index run has taken in refuses, `--force`
