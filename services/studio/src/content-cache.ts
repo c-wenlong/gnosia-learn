@@ -56,7 +56,30 @@ function messageOf(error: unknown): string {
 
 let writes = 0;
 
-async function writeCache<T>(type: string, readAt: string, value: T): Promise<void> {
+/**
+ * One queue of writes per type.
+ *
+ * A job being posted and a health poll can read the vocabulary at the same
+ * moment, and two renames in flight finish in whatever order the filesystem
+ * likes, so the older read could land last and become the copy an outage
+ * falls back on. `readThrough` queues its write as soon as its read returns,
+ * with no await in between, so queue order is read order and the newest read
+ * is always the last one written.
+ */
+const queues = new Map<string, Promise<void>>();
+
+function writeCache<T>(type: string, readAt: string, value: T): Promise<void> {
+  const previous = queues.get(type) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => writeNow(type, readAt, value));
+  queues.set(type, next);
+  // The map holds the tail only while it is the tail, so an idle type keeps nothing.
+  void next.finally(() => {
+    if (queues.get(type) === next) queues.delete(type);
+  }).catch(() => undefined);
+  return next;
+}
+
+async function writeNow<T>(type: string, readAt: string, value: T): Promise<void> {
   const file = cachePath(type);
   await mkdir(path.dirname(file), { recursive: true });
   const body: CacheFile<T> = { version: 1, type, readAt, value };
@@ -74,8 +97,17 @@ async function writeCache<T>(type: string, readAt: string, value: T): Promise<vo
   }
 }
 
-/** The copy on disk, or null when there is none or it cannot be read as one. */
-export async function readCache<T>(type: string): Promise<{ readAt: string; value: T } | null> {
+/**
+ * The copy on disk, or null when there is none or it cannot be read as one.
+ *
+ * `isValue` is the caller's check on the stored value: a file that parses as
+ * JSON but holds the wrong shape (hand-edited, or written by an older build)
+ * is no copy, rather than a value that breaks whatever iterates it.
+ */
+export async function readCache<T>(
+  type: string,
+  isValue?: (value: unknown) => value is T,
+): Promise<{ readAt: string; value: T } | null> {
   let text: string;
   try {
     text = await readFile(cachePath(type), "utf8");
@@ -87,6 +119,7 @@ export async function readCache<T>(type: string): Promise<{ readAt: string; valu
     if (parsed.version !== 1 || parsed.type !== type || typeof parsed.readAt !== "string" || !("value" in parsed)) {
       return null;
     }
+    if (isValue !== undefined && !isValue(parsed.value)) return null;
     return { readAt: parsed.readAt, value: parsed.value as T };
   } catch {
     return null;
@@ -102,13 +135,14 @@ export async function readCache<T>(type: string): Promise<{ readAt: string; valu
 export async function readThrough<T>(
   type: string,
   read: () => Promise<T>,
-  now: () => Date = () => new Date(),
+  options: { now?: () => Date; isValue?: (value: unknown) => value is T } = {},
 ): Promise<CachedRead<T>> {
+  const now = options.now ?? (() => new Date());
   let value: T;
   try {
     value = await read();
   } catch (error) {
-    const cached = await readCache<T>(type);
+    const cached = await readCache<T>(type, options.isValue);
     if (cached === null) throw error;
     return { value: cached.value, readAt: cached.readAt, stale: true, error: messageOf(error) };
   }

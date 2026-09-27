@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { COURSES_DIR, loadCourses } from "./courses";
 import { ContentError } from "./errors";
-import { KEBAB_SLUG } from "./read";
 import type { ConceptNoteSource, ContentSource, DiagramSource, SessionLogSource } from "./source";
 import { loadTags, TAGS_FILE } from "./tags";
 import { loadTopics, TOPICS_FILE } from "./topics";
@@ -132,16 +131,21 @@ async function isFile(file: string): Promise<boolean> {
 // (`services/catalog/src/index/frontmatter.ts`), and only far enough to find
 // the `id:` line: the id, not the filename, is what a note's primary key is.
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
-const ID_LINE_RE = /^id:\s*(.*)$/m;
+const ID_LINE_RE = /^id:\s*(.*)$/gm;
 
 /**
  * The concept id a note declares, falling back to its filename stem exactly as
  * the concepts indexer does (`readText(data, "id") ?? basename`).
+ *
+ * The dialect's rules for that one key: the last `id:` line wins, as it does
+ * when the dialect fills its record key by key; an empty value, `null`, `~`
+ * or an inline list is no id; quotes are stripped.
  */
 export function noteId(markdown: string, stem: string): string {
   const block = FRONTMATTER_RE.exec(markdown)?.[1];
-  const raw = block === undefined ? undefined : ID_LINE_RE.exec(block)?.[1]?.trim();
-  if (raw === undefined || raw === "" || raw === "null" || raw === "~") return stem;
+  const lines = block === undefined ? [] : [...block.matchAll(ID_LINE_RE)];
+  const raw = lines.at(-1)?.[1]?.trim();
+  if (raw === undefined || raw === "" || raw === "null" || raw === "~" || raw.startsWith("[")) return stem;
   const quoted =
     raw.length >= 2 &&
     ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")));
@@ -163,6 +167,18 @@ async function domainsOf(root: string): Promise<string[]> {
 }
 
 /**
+ * Can `name` be used as one file name under a content directory?
+ *
+ * The ids themselves are not required to be kebab-case (the concepts indexer
+ * takes any declared id), so this checks what matters for a path instead: one
+ * segment, not hidden, no separator. An id that fails it can still be found by
+ * the scan, which compares ids and never builds a path from one.
+ */
+function isFileName(name: string): boolean {
+  return name !== "" && !name.startsWith(".") && !/[\\/\0]/.test(name);
+}
+
+/**
  * The note whose id is `slug`.
  *
  * `<domain>/<slug>.md` is tried first because every note today is named after
@@ -171,11 +187,10 @@ async function domainsOf(root: string): Promise<string[]> {
  * the indexer applies and the slow path nobody takes today.
  */
 async function readConcept(root: string, slug: string): Promise<ConceptNoteSource | null> {
-  // A slug is also a path segment here, so anything that is not one names no note.
-  if (!KEBAB_SLUG.test(slug)) return null;
+  if (slug.trim() === "") return null;
   const domains = await domainsOf(root);
 
-  for (const domain of domains) {
+  for (const domain of isFileName(slug) ? domains : []) {
     const relative = path.posix.join(NOTES_DIR, domain, `${slug}.md`);
     const markdown = await readOrNull(path.join(root, relative));
     if (markdown !== null && noteId(markdown, slug) === slug) {
@@ -198,14 +213,15 @@ async function readConcept(root: string, slug: string): Promise<ConceptNoteSourc
 }
 
 async function readSessionLog(root: string, id: string): Promise<SessionLogSource | null> {
-  if (!KEBAB_SLUG.test(id)) return null;
+  // A session log's id is its file stem, so a name that cannot be a file names no log.
+  if (!isFileName(id)) return null;
   const relative = path.posix.join(SESSIONS_DIR, `${id}.md`);
   const markdown = await readOrNull(path.join(root, relative));
   return markdown === null ? null : { id, path: relative, markdown };
 }
 
 async function readDiagram(root: string, slug: string): Promise<DiagramSource | null> {
-  if (!KEBAB_SLUG.test(slug)) return null;
+  if (!isFileName(slug)) return null;
   const relative = path.posix.join(DIAGRAMS_DIR, `${slug}.tldr`);
   const text = await readOrNull(path.join(root, relative));
   if (text === null) return null;

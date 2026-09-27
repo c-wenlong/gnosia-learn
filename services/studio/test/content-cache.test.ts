@@ -34,15 +34,15 @@ const down = async (): Promise<never> => {
 
 describe("readThrough", () => {
   it("returns a good read as fresh and keeps a copy under STUDIO_HOME", async () => {
-    const read = await readThrough("topics", async () => ["a", "b"], at("2026-09-28T01:00:00.000Z"));
+    const read = await readThrough("topics", async () => ["a", "b"], { now: at("2026-09-28T01:00:00.000Z") });
     expect(read).toEqual({ value: ["a", "b"], readAt: "2026-09-28T01:00:00.000Z", stale: false });
     expect(cachePath("topics")).toBe(path.join(home, "cache", "topics.json"));
     expect(JSON.parse(readFileSync(cachePath("topics"), "utf8")).value).toEqual(["a", "b"]);
   });
 
   it("answers a thrown read from the copy, with the time the copy was read", async () => {
-    await readThrough("topics", async () => ["a"], at("2026-09-28T01:00:00.000Z"));
-    const read = await readThrough("topics", down, at("2026-09-28T09:00:00.000Z"));
+    await readThrough("topics", async () => ["a"], { now: at("2026-09-28T01:00:00.000Z") });
+    const read = await readThrough("topics", down, { now: at("2026-09-28T09:00:00.000Z") });
     expect(read.value).toEqual(["a"]);
     expect(read.stale).toBe(true);
     expect(read.readAt).toBe("2026-09-28T01:00:00.000Z");
@@ -50,9 +50,9 @@ describe("readThrough", () => {
   });
 
   it("replaces the copy on the next good read, so stale ends when the source answers", async () => {
-    await readThrough("topics", async () => ["old"], at("2026-09-28T01:00:00.000Z"));
+    await readThrough("topics", async () => ["old"], { now: at("2026-09-28T01:00:00.000Z") });
     await readThrough("topics", down);
-    const fresh = await readThrough("topics", async () => ["new"], at("2026-09-28T02:00:00.000Z"));
+    const fresh = await readThrough("topics", async () => ["new"], { now: at("2026-09-28T02:00:00.000Z") });
     expect(fresh.stale).toBe(false);
     const again = await readThrough("topics", down);
     expect(again.value).toEqual(["new"]);
@@ -67,6 +67,25 @@ describe("readThrough", () => {
     await mkdir(path.dirname(cachePath("topics")), { recursive: true });
     writeFileSync(cachePath("topics"), "{ half a file");
     await expect(readThrough("topics", down)).rejects.toThrow("ECONNREFUSED");
+  });
+
+  it("treats a copy of the wrong shape as no copy when the caller checks it", async () => {
+    await readThrough("topics", async () => ({ not: "a list" }));
+    const isList = (value: unknown): value is string[] => Array.isArray(value);
+    await expect(readThrough("topics", down, { isValue: isList })).rejects.toThrow("ECONNREFUSED");
+  });
+
+  it("keeps the newest read when reads finish close together", async () => {
+    // Twenty reads resolving in order, each queuing a write before the next
+    // resolves; whatever order the renames finish in, the last read is the copy.
+    const reads = Array.from({ length: 20 }, (_, i) =>
+      readThrough("topics", async () => {
+        await new Promise((resolve) => setTimeout(resolve, i));
+        return [`read-${i}`];
+      }),
+    );
+    await Promise.all(reads);
+    expect((await readThrough("topics", down)).value).toEqual(["read-19"]);
   });
 
   it("keeps one type's copy apart from another's", async () => {
@@ -97,6 +116,20 @@ describe("loadVocabulary through the seam", () => {
       expect(offline.readAt).toBe(good.readAt);
       expect(offline.staleReason).toMatch(/content\/topics\.yaml/);
       expect([...offline.topics.keys()]).toEqual([...good.topics.keys()]);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("will not stand in a cached copy that is not a topic list", async () => {
+    await mkdir(path.dirname(cachePath("topics")), { recursive: true });
+    writeFileSync(
+      cachePath("topics"),
+      JSON.stringify({ version: 1, type: "topics", readAt: "2026-09-28T01:00:00.000Z", value: [{ slug: 1 }] }),
+    );
+    const empty = mkdtempSync(path.join(tmpdir(), "studio-no-content-"));
+    try {
+      await expect(loadVocabulary(empty)).rejects.toThrow(/content\/topics\.yaml/);
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }

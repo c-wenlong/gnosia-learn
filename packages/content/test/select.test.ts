@@ -64,6 +64,9 @@ describe("parseContentSource", () => {
     ["topics=db=files", /is not <type>=<source>/],
     ["topics=db,topics=files", /"topics" is named twice/],
     ["everything", /is not <type>=<source>/],
+    ["topics=db,", /an entry is empty/],
+    [",", /an entry is empty/],
+    ["topics=db,,courses=files", /an entry is empty/],
   ])("refuses %j rather than ignoring it", (value, message) => {
     expect(() => parseContentSource(value)).toThrow(ContentError);
     expect(() => parseContentSource(value)).toThrow(message);

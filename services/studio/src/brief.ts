@@ -1,4 +1,4 @@
-import { fileSource, selectSource, type ContentSource } from "@self-learn/content";
+import { fileSource, selectSource, type ContentSource, type TopicEntry } from "@self-learn/content";
 
 import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, type Model } from "./config";
 import { readThrough } from "./content-cache";
@@ -181,7 +181,7 @@ function source(): ContentSource {
  */
 export async function loadVocabulary(repoRoot?: string): Promise<Vocabulary> {
   const from = repoRoot === undefined ? source() : fileSource(repoRoot);
-  const read = await readThrough("topics", () => from.topics());
+  const read = await readThrough("topics", () => from.topics(), { isValue: isTopicList });
   const topics = new Map<string, { title: string; concepts: string[] }>();
   for (const entry of read.value) {
     topics.set(entry.slug, { title: entry.title, concepts: [...entry.maps.concepts] });
@@ -192,6 +192,23 @@ export async function loadVocabulary(repoRoot?: string): Promise<Vocabulary> {
     stale: read.stale,
     ...(read.error === undefined ? {} : { staleReason: read.error }),
   };
+}
+
+/** The fields `loadVocabulary` reads, checked on a cached copy before it is trusted. */
+function isTopicList(value: unknown): value is TopicEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry: unknown) => {
+      if (typeof entry !== "object" || entry === null) return false;
+      const topic = entry as { slug?: unknown; title?: unknown; maps?: { concepts?: unknown } };
+      return (
+        typeof topic.slug === "string" &&
+        typeof topic.title === "string" &&
+        Array.isArray(topic.maps?.concepts) &&
+        topic.maps.concepts.every((concept: unknown) => typeof concept === "string")
+      );
+    })
+  );
 }
 
 /**

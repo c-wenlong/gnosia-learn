@@ -72,7 +72,11 @@ export function parseContentSource(value: string | undefined): Ownership {
   const out: Ownership = {};
   for (const part of text.split(",")) {
     const pair = part.trim();
-    if (pair === "") continue;
+    // A trailing or doubled comma is refused like any other malformed entry:
+    // `topics=db,` may well mean more was meant to follow.
+    if (pair === "") {
+      throw new ContentError(`${CONTENT_SOURCE_VAR}="${text}": an entry is empty. Remove the stray comma.`);
+    }
     const [rawType, rawKind, ...rest] = pair.split("=").map((s) => s.trim());
     if (rawType === undefined || rawKind === undefined || rest.length > 0) {
       throw new ContentError(

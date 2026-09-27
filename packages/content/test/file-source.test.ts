@@ -155,6 +155,16 @@ describe("fileSource over a fixture", () => {
     expect((await files.concept("plain"))?.domain).toBe("maths");
   });
 
+  it("finds a note whose declared id is not kebab-case, and builds no path from an unsafe one", async () => {
+    const f = tree();
+    f.write(`${NOTES_DIR}/maths/dot.md`, "---\nid: dot_product\n---\n\nbody\n");
+    const files = fileSource(f.root);
+    expect((await files.concept("dot_product"))?.path).toBe(`${NOTES_DIR}/maths/dot.md`);
+    expect(await files.concept("maths/dot")).toBeNull();
+    expect(await files.sessionLog("../sessions/x")).toBeNull();
+    expect(await files.diagram(".candidates")).toBeNull();
+  });
+
   it("refuses a .tldr that is not JSON, naming the file", async () => {
     const f = tree();
     f.write(`${DIAGRAMS_DIR}/broken.tldr`, "{ not json");
@@ -181,6 +191,9 @@ describe("noteId", () => {
     ["---\nid: ~\n---\n", "stem", "stem"],
     ["---\ntitle: x\n---\n", "stem", "stem"],
     ["no frontmatter\nid: not-this\n", "stem", "stem"],
+    ["---\nid: first\ntitle: t\nid: second\n---\n", "stem", "second"],
+    ["---\nid: [a, b]\n---\n", "stem", "stem"],
+    ["---\n  id: indented\n---\n", "stem", "stem"],
   ])("reads %j as %s's id", (markdown, stem, expected) => {
     expect(noteId(markdown, stem)).toBe(expected);
   });
