@@ -7,7 +7,7 @@ import type { JobState } from "@self-learn/schema";
 import type { ValidBrief } from "./brief";
 import type { CanvasLint, VerifyCheck } from "./canvas";
 import type { Comparison } from "./compare";
-import { SSE_BUFFER } from "./config";
+import { SSE_BUFFER, type AgentAuth } from "./config";
 import type { CostSource } from "./cost";
 import {
   jobDir,
@@ -124,6 +124,22 @@ export interface JobRecord {
    * this beside it. Null when no cost is recorded at all.
    */
   costSource: CostSource | null;
+  /**
+   * Which credential rule the runner spawned the agent under: `login` (the
+   * Anthropic auth variables stripped) or `env` (passed through). Read once per
+   * job from `STUDIO_AGENT_AUTH`, so this is what the job actually ran with
+   * even if the setting changed since.
+   *
+   * Optional so a job recorded before the setting existed still parses; on one
+   * of those, absent means inherited, which is what every job did then.
+   */
+  agentAuth?: AgentAuth | null;
+  /**
+   * The CLI's own answer to the same question, from its `system/init` event:
+   * `ANTHROPIC_API_KEY`, `none`, `/login managed key` and so on. The last
+   * attempt's, and null until an agent has started.
+   */
+  apiKeySource?: string | null;
   gate: GateResult | null;
   /**
    * Before and after, and the difference: the finished-job screen's whole

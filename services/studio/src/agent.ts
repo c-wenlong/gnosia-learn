@@ -2,11 +2,13 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 
 import {
+  agentAuth,
   ATTEMPT_TIMEOUT_MS,
   CLAUDE_BIN,
   IDLE_TIMEOUT_MS,
   KILL_GRACE_MS,
   MAX_TURNS,
+  type AgentAuth,
   type Model,
 } from "./config";
 import { REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
@@ -50,6 +52,28 @@ export interface AgentOptions {
   resume: boolean;
   /** Called for every raw stdout line, before anything else happens to it. */
   onLine: (line: string) => void;
+  /**
+   * Where the agent's credential comes from. The runner reads `agentAuth()`
+   * once per job, records it, and passes it here, so the record and the spawn
+   * cannot disagree. Absent means the setting as it is right now.
+   */
+  auth?: AgentAuth;
+  /**
+   * Called once per attempt with the CLI's own `system/init` event, which is
+   * the only place the stream says which credential the session is using.
+   */
+  onInit?: (init: AgentInit) => void;
+}
+
+/** What the CLI's `system/init` event says about the session it started. */
+export interface AgentInit {
+  /**
+   * `ANTHROPIC_API_KEY`, `apiKeyHelper`, `/login managed key`, `none`, and a
+   * few more: the CLI's own vocabulary, kept verbatim rather than mapped, so a
+   * value this file has never heard of still reaches the log.
+   */
+  apiKeySource: string | null;
+  model: string | null;
 }
 
 export type StopReason = "attempt-timeout" | "idle-timeout" | "cancelled" | null;
@@ -73,6 +97,17 @@ export interface AgentOutcome {
   /** The final `result` event's `subtype`: `success`, `error_max_turns`, … */
   subtype: string | null;
   isError: boolean;
+  /**
+   * The final `result` event's own `result` text, cut to `RESULT_LIMIT`.
+   *
+   * On a session that failed its first request this is the API's message,
+   * such as `API Error: 400 This API key is not scoped to a workspace…`, and
+   * it is the one sentence that says what actually went wrong. The `subtype` beside
+   * it said `success` on exactly that session, so it cannot stand in.
+   */
+  result: string | null;
+  /** From the `system/init` event: where this attempt's credential came from. */
+  apiKeySource: string | null;
   /**
    * True when the process never started: no `claude` on PATH, or a spawn the
    * OS refused.
@@ -130,6 +165,8 @@ export class AgentRun {
       let turns: number | null = null;
       let subtype: string | null = null;
       let isError = false;
+      let result: string | null = null;
+      let apiKeySource: string | null = null;
       let stderr = "";
       const denials: { tool: string; input: unknown }[] = [];
       let buffer = "";
@@ -149,6 +186,14 @@ export class AgentRun {
           this.options.onLine(line);
           const event = safeParse(line);
           if (event === null) continue;
+          if (event.type === "system" && event.subtype === "init") {
+            apiKeySource = typeof event.apiKeySource === "string" ? event.apiKeySource : null;
+            this.options.onInit?.({
+              apiKeySource,
+              model: typeof event.model === "string" ? event.model : null,
+            });
+            continue;
+          }
           if (event.type === "result") {
             // `turns` still comes from the final result event and from nowhere
             // else: there is no per-turn counter in the stream to accumulate,
@@ -158,6 +203,7 @@ export class AgentRun {
             turns = numberOrNull(event.num_turns);
             subtype = typeof event.subtype === "string" ? event.subtype : null;
             isError = event.is_error === true;
+            result = typeof event.result === "string" ? clip(event.result, RESULT_LIMIT) : null;
             for (const denial of Array.isArray(event.permission_denials) ? event.permission_denials : []) {
               const record = denial as Record<string, unknown>;
               denials.push({
@@ -182,6 +228,8 @@ export class AgentRun {
           turns,
           subtype,
           isError,
+          result,
+          apiKeySource,
           spawnFailed: false,
           denials,
           stopReason: this.stopReason,
@@ -197,6 +245,8 @@ export class AgentRun {
           turns: null,
           subtype: null,
           isError: true,
+          result: null,
+          apiKeySource: null,
           // The one outcome the gate must never be asked about: nothing ran, so
           // whatever is at the candidate path was not written by this attempt.
           spawnFailed: true,
@@ -248,6 +298,112 @@ function safeParse(line: string): Record<string, unknown> | null {
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * How much of the result text an outcome keeps. It ends up on `job.error`, in
+ * the catalog row and in the panel, so a paragraph is plenty; a session that
+ * finished normally can write a long summary here and none of it is wanted.
+ */
+const RESULT_LIMIT = 1_000;
+
+function clip(text: string, limit: number): string {
+  const trimmed = text.trim();
+  return trimmed.length <= limit ? trimmed : `${trimmed.slice(0, limit - 1)}…`;
+}
+
+/**
+ * Every environment variable the CLI reads to decide *which credential* a
+ * session uses and *where its requests go*. Under `STUDIO_AGENT_AUTH=login`,
+ * the default, none of them reaches the agent, so the CLI falls back to the
+ * account this machine is logged in to.
+ *
+ * Found by reading the variable names out of the installed CLI (2.1.274)
+ * rather than from memory, and grouped by what each one does:
+ *
+ * - The credential itself: an API key, a bearer token, an OAuth token or a
+ *   file descriptor carrying one, and the workload-identity federation set
+ *   (`ANTHROPIC_IDENTITY_TOKEN*`, `ANTHROPIC_FEDERATION_RULE_ID`,
+ *   `ANTHROPIC_SERVICE_ACCOUNT_ID`, `ANTHROPIC_SCOPE`, and `ANTHROPIC_PROFILE`
+ *   and `ANTHROPIC_CONFIG_DIR`, which name the federation config file).
+ * - Where requests go and what they carry: the base URLs, custom headers, and
+ *   the organisation and workspace ids a key-based request is scoped by.
+ *   `ANTHROPIC_BASE_URL` is here even when it names the public API, because a
+ *   base URL is half of an auth setup and a login needs neither half.
+ * - The switches to another provider (Bedrock, Vertex, Foundry and the rest)
+ *   and the credentials those take directly. Their AWS and Google variables
+ *   are left alone: with the switch off the CLI never reads them, and they
+ *   belong to other tools on the same machine.
+ * - A parent SDK host's hand-off (`CLAUDE_CODE_SDK_HAS_*_REFRESH`,
+ *   `CLAUDE_CODE_HOST_*`, `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST`,
+ *   `CLAUDE_CODE_SESSION_ACCESS_TOKEN`). A studio started from inside a Claude
+ *   session inherits these, and they tell the child that a host it does not
+ *   have will supply and refresh its credential.
+ *
+ * `CLAUDE_CONFIG_DIR` is deliberately **not** here: it is where the login
+ * itself is stored, so stripping it would move the agent off the very account
+ * this list exists to put it on.
+ */
+export const AGENT_AUTH_ENV: readonly string[] = [
+  // The credential.
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+  "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+  "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+  "ANTHROPIC_IDENTITY_TOKEN",
+  "ANTHROPIC_IDENTITY_TOKEN_FILE",
+  "ANTHROPIC_FEDERATION_RULE_ID",
+  "ANTHROPIC_SERVICE_ACCOUNT_ID",
+  "ANTHROPIC_SCOPE",
+  "ANTHROPIC_PROFILE",
+  "ANTHROPIC_CONFIG_DIR",
+  // Where requests go, and what they carry.
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_CODE_API_BASE_URL",
+  "ANTHROPIC_CUSTOM_HEADERS",
+  "ANTHROPIC_ORGANIZATION_ID",
+  "ANTHROPIC_WORKSPACE_ID",
+  "CLAUDE_CODE_ORGANIZATION_UUID",
+  // Another provider, and the credentials those take directly.
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+  "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+  "CLAUDE_CODE_USE_GATEWAY",
+  "CLAUDE_CODE_USE_MANTLE",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "ANTHROPIC_AWS_API_KEY",
+  "ANTHROPIC_FOUNDRY_API_KEY",
+  "ANTHROPIC_FOUNDRY_AUTH_TOKEN",
+  // A parent SDK host's credential hand-off.
+  "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
+  "CLAUDE_CODE_HOST_AUTH_ENV_VAR",
+  "CLAUDE_CODE_HOST_CREDS_FILE",
+  "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
+  "CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH",
+  "CLAUDE_CODE_SESSION_ACCESS_TOKEN",
+];
+
+/**
+ * The agent's environment: this process's, less the auth variables under
+ * `login`, with `TMPDIR` pointed into the job workspace.
+ *
+ * Built from a copy, never by deleting from `process.env`, because the runner
+ * itself (and `STUDIO_AGENT_AUTH=env` on the next job) still reads it.
+ */
+export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base };
+  if (auth === "login") {
+    for (const name of AGENT_AUTH_ENV) delete env[name];
+  }
+  // Playwright puts the browser profile under os.tmpdir(), so every Chromium
+  // this job launches lands under a directory named after the job. That
+  // string is what `sweepOrphans` matches on.
+  env.TMPDIR = tmp;
+  return env;
 }
 
 /**
@@ -311,13 +467,9 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     // signal to a parent whose children outlive it.
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      // Playwright puts the browser profile under os.tmpdir(), so every
-      // Chromium this job launches lands under a directory named after the
-      // job. That string is what `sweepOrphans` matches on.
-      TMPDIR: tmpDir(options.jobId),
-    },
+    // Deliberate rather than inherited: `agentEnv` and `STUDIO_AGENT_AUTH` in
+    // `config.ts` say why a shell's `ANTHROPIC_API_KEY` must not reach here.
+    env: agentEnv(process.env, options.auth ?? agentAuth(), tmpDir(options.jobId)),
   });
 
   return new AgentRun(child, options);

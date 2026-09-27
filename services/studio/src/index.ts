@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { createApi } from "./api";
-import { CONCURRENCY, HOST, PORT } from "./config";
+import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { Mirrors } from "./mirrors";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
@@ -44,7 +44,8 @@ async function main(): Promise<void> {
       `studio on http://${HOST}:${PORT}\n` +
         `  repo      ${REPO_ROOT}\n` +
         `  state     ${studioHome()}\n` +
-        `  running   ${CONCURRENCY} job at a time\n`,
+        `  running   ${CONCURRENCY} job at a time\n` +
+        `  agent     ${agentAuthReport().note}\n`,
     );
   });
 

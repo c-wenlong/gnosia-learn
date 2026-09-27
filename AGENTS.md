@@ -198,6 +198,16 @@ Rules of engagement:
   and the one diagram a person most needs a tile for is the untopiced one
   with no asset row. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
+- The spawned agent does not inherit the runner's Anthropic credentials.
+  `agentEnv` in `services/studio/src/agent.ts` strips the auth variables
+  (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and the rest, listed there) so
+  `claude -p` uses the machine's logged-in account; `STUDIO_AGENT_AUTH=env`
+  passes them through. Inheriting was wrong because `-p` uses an environment
+  key without asking, where an interactive `claude` asks and remembers a
+  refusal: a login shell exporting an unscoped organisation key made every job
+  fail its first request with a 400 while `claude` worked fine by hand. Such a
+  job now ends after one attempt as `error_kind: agent` with the API's message,
+  instead of three attempts reported as a missing file.
 - The runner is the only thing that spawns an agent; the UI's job is HTTP
   calls to the runner and nothing else. The agent's Bash permission is an
   allowlist of one command prefix, `Bash(npm run --silent canvas:*)`, not a
