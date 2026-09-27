@@ -58,6 +58,12 @@ export interface LsCollection {
   collectionKind: string;
   title: string;
   topicSlug: string | null;
+  /**
+   * The collection named is archived: its course file no longer lists it
+   * (D12). Still answered, since its id is how a person finds the learner
+   * rows kept under it, and said so, since it is on no page.
+   */
+  archived: boolean;
   children: {
     id: string;
     kind: string;
@@ -269,6 +275,7 @@ async function collectionTree(db: Db, id: string): Promise<LsCollection | null> 
     collectionKind: row.kind,
     title: row.title,
     topicSlug: topicOf.get(row.id) ?? null,
+    archived: row.archivedAt !== null,
     children: children.map((child) => ({
       id: child.id,
       kind: child.kind,
@@ -313,6 +320,7 @@ export function formatLs(result: LsResult): string {
   }
 
   const lines = [`${result.id}  ${result.collectionKind}  ${result.title}`];
+  if (result.archived) lines.push("  archived: its course file no longer lists it, and it is on no page");
   if (result.topicSlug !== null) lines.push(`  topic: ${result.topicSlug}`);
   for (const item of result.curriculumItems) {
     lines.push(`  ${item.id}  ${item.title}  (${item.subtopics} subtopics)`);

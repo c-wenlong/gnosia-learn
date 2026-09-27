@@ -52,6 +52,16 @@ async function itemStates(
 }
 
 /**
+ * `allowArchived`: the learner-state import (`import.ts`) restores a
+ * learner's own export, and an export carries what was recorded on archived
+ * items (D12), so a round trip must put it back rather than stop at the first
+ * one. Nothing else passes it.
+ */
+export interface WriteOptions {
+  allowArchived?: boolean;
+}
+
+/**
  * Refuse a write to an item the catalog does not know, or has archived.
  *
  * An archived item is one its course file stopped listing (D12 of
@@ -61,7 +71,11 @@ async function itemStates(
  * course no longer teaches. Only a stale page can send one, and a sentence
  * that says why beats a tick that silently lands nowhere.
  */
-export async function assertKnownItems(db: CatalogDatabase, ids: string[]): Promise<void> {
+export async function assertKnownItems(
+  db: CatalogDatabase,
+  ids: string[],
+  options: WriteOptions = {},
+): Promise<void> {
   const { unknown, archived } = await itemStates(db, ids);
   if (unknown.length > 0) {
     throw new StateError(
@@ -69,7 +83,7 @@ export async function assertKnownItems(db: CatalogDatabase, ids: string[]): Prom
         `Course data is indexed from content/courses/: run \`npm run catalog -- index\`.`,
     );
   }
-  if (archived.length > 0) {
+  if (archived.length > 0 && options.allowArchived !== true) {
     throw new StateError(
       `curriculum item ${archived.map((id) => `"${id}"`).join(", ")} is archived: its course no ` +
         `longer lists it. What was recorded on it is kept, and nothing new is. Reload the course page.`,
@@ -112,10 +126,10 @@ export async function setProgress(
   db: CatalogDatabase,
   curriculumItemId: string,
   completed: boolean,
-  options: { learnerId?: string; at?: Date } = {},
+  options: { learnerId?: string; at?: Date } & WriteOptions = {},
 ): Promise<void> {
   const { learnerId = LOCAL_LEARNER_ID, at = new Date() } = options;
-  await assertKnownItems(db, [curriculumItemId]);
+  await assertKnownItems(db, [curriculumItemId], options);
   await ensureLearner(db, learnerId);
   const completedAt = completed ? at : null;
   await db
@@ -134,8 +148,9 @@ export async function setNote(
   curriculumItemId: string,
   note: string,
   learnerId: string = LOCAL_LEARNER_ID,
+  options: WriteOptions = {},
 ): Promise<void> {
-  await assertKnownItems(db, [curriculumItemId]);
+  await assertKnownItems(db, [curriculumItemId], options);
   await ensureLearner(db, learnerId);
   const value = note.trim() === "" ? null : note;
   await db

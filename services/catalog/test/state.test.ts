@@ -909,6 +909,23 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect(result.skippedExisting).toBeGreaterThan(0);
     });
 
+    it("carries what the learner recorded on an item the course has since archived", async () => {
+      // An export includes ticks, notes and recaps on archived items (D12), so
+      // importing one back must not stop at the first of them.
+      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      try {
+        const result = await importLegacyState(scratch.db, payload);
+        expect(result).toMatchObject({ progress: 1, notes: 1, recaps: 1, unknownItems: ["gone-m9-t9"] });
+        const snapshot = await readLearnerSnapshot(scratch.db);
+        expect(snapshot.completed).toEqual({ [ITEMS[0]]: true });
+        expect(snapshot.knowledge[ITEMS[1]]?.summary).toBe("carried over");
+        // And the ordinary write path still refuses them.
+        await expect(setProgress(scratch.db, ITEMS[1], true)).rejects.toThrow(/is archived/);
+      } finally {
+        await scratch.db.execute(sql`update curriculum_item set archived_at = null where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      }
+    });
+
     it("carries a theme mode newer than the localStorage document", async () => {
       await importLegacyState(scratch.db, { theme: "gnosia-dark" });
       expect((await readLearnerSnapshot(scratch.db)).theme).toBe("gnosia-dark");

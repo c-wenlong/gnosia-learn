@@ -257,21 +257,18 @@ const COMMANDS: readonly Command[] = [
 ];
 
 /**
- * Commands that read tables or columns added after 0009 (`content_source`,
- * `archived_at`, the revision table). On a database behind the journal they
- * refuse first, by name, with exit 4, instead of failing on drizzle's
- * `Failed query: ...` for a relation the person never heard of. `status`,
- * `doctor` and `migrate` are exempt: saying what is outstanding is their job.
+ * For the commands that read tables or columns added after 0009
+ * (`content_source`, `archived_at`, the revision table): `index`, `import`,
+ * `export`, `parity`, `flip`, `ls` and `show`. On a database behind the
+ * journal they refuse by name, with exit 4, instead of failing on drizzle's
+ * `Failed query: ...` for a relation the person never heard of. Each calls it
+ * after checking its own arguments, so a wrong invocation is still exit 2
+ * whatever state the database is in. `status`, `doctor` and `migrate` never
+ * call it: saying what is outstanding is their job.
  */
-const NEEDS_CURRENT_SCHEMA: ReadonlySet<Command> = new Set<Command>([
-  "index",
-  "import",
-  "export",
-  "parity",
-  "flip",
-  "ls",
-  "show",
-]);
+async function schemaCurrent(): Promise<void> {
+  await withDatabase(({ db }) => assertMigrated(db));
+}
 
 function isCommand(value: string | undefined): value is Command {
   return value !== undefined && (COMMANDS as readonly string[]).includes(value);
@@ -351,7 +348,6 @@ export async function main(argv: string[]): Promise<number> {
   };
 
   try {
-    if (NEEDS_CURRENT_SCHEMA.has(command)) await withDatabase(({ db }) => assertMigrated(db));
     switch (command) {
       case "migrate": {
         const result = await runMigrate();
@@ -365,8 +361,10 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "index": {
         const root = values["manimkc-root"];
+        const only = values.only === undefined ? undefined : parseSources(values.only);
+        await schemaCurrent();
         const result = await runIndexCommand({
-          only: values.only === undefined ? undefined : parseSources(values.only),
+          only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
@@ -376,9 +374,11 @@ export async function main(argv: string[]): Promise<number> {
         const dir = positionals[1];
         if (dir === undefined) throw new Usage("import needs a directory");
         const root = values["manimkc-root"];
+        const only = values.only === undefined ? undefined : parseSources(values.only);
+        await schemaCurrent();
         const result = await runImportCommand({
           dir,
-          only: values.only === undefined ? undefined : parseSources(values.only),
+          only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
         emit(result, formatIndex(result));
@@ -386,14 +386,18 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "export": {
         if (values.out === undefined) throw new Usage("export needs --out <dir>");
-        const result = await runExport({ out: values.out, only: exportTypes(values.only) });
+        const only = exportTypes(values.only);
+        await schemaCurrent();
+        const result = await runExport({ out: values.out, only });
         emit(result, formatExport(result));
         break;
       }
       case "parity": {
         const dir = positionals[1];
         if (dir === undefined) throw new Usage("parity needs a directory to compare against");
-        const result = await runParity({ dir, only: exportTypes(values.only) });
+        const only = exportTypes(values.only);
+        await schemaCurrent();
+        const result = await runParity({ dir, only });
         emit(result, formatParity(result));
         if (!result.clean) return 1;
         break;
@@ -408,6 +412,7 @@ export async function main(argv: string[]): Promise<number> {
         if (waive.length !== reasons.length) {
           throw new Usage("flip: every --waive needs its own --reason, in the same order");
         }
+        await schemaCurrent();
         const result = await runFlip({
           type: type as ContentType,
           strict: values.strict,
@@ -426,15 +431,16 @@ export async function main(argv: string[]): Promise<number> {
         break;
       }
       case "ls": {
-        const result = await runLs(positionals[1], {
-          kinds: values.kind === undefined ? undefined : parseKinds(values.kind),
-        });
+        const kinds = values.kind === undefined ? undefined : parseKinds(values.kind);
+        await schemaCurrent();
+        const result = await runLs(positionals[1], { kinds });
         emit(result, formatLs(result));
         break;
       }
       case "show": {
         const target = positionals[1];
         if (target === undefined) throw new Usage("show needs a slug or an id");
+        await schemaCurrent();
         const result = await runShow(target);
         emit(result, formatShow(result));
         break;

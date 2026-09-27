@@ -87,6 +87,14 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
     expect(ran.stderr).not.toMatch(/Failed query|content_source|\n\s+at /);
   }, 30_000);
 
+  it("still answers a wrong invocation as one, exit 2, whatever state the database is in", async () => {
+    for (const argv of [["export"], ["show"], ["parity"], ["flip"], ["import"]]) {
+      const ran = await run(CATALOG, { DATABASE_URL: scratch.url }, ...argv);
+      expect(ran.code, `${argv.join(" ")}: ${ran.stderr}`).toBe(2);
+      expect(ran.stderr).not.toContain("migration(s) outstanding");
+    }
+  }, 60_000);
+
   it("says the same in --json, with the pending tags on stdout", async () => {
     const ran = await run(CATALOG, { DATABASE_URL: scratch.url }, "export", "--out", path.join(dir, "out"), "--json");
     expect(ran.code).toBe(EXIT_MIGRATIONS_OUTSTANDING);

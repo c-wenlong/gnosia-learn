@@ -606,11 +606,12 @@ keys beside the deleted ones.
 
 An archived row is kept for the learner rows under it and is on no page, so
 the readers leave it out: `catalog status`'s coverage, `catalog ls`, and the
-lists `catalog show` returns count and list live rows only, and `show` of an
-archived entity says `archived: true`. A tick, note or recap written to an
-archived item is refused by name (`assertKnownItems` in
+lists `catalog show` returns count and list live rows only, and `show` or
+`ls` of an archived entity named directly says `archived: true`. A tick, note
+or recap written to an archived item is refused by name (`assertKnownItems` in
 `src/state/progress.ts`), while what was recorded on it before stays, and the
-Settings export still carries it.
+Settings export still carries it; importing that export back
+(`src/state/import.ts`) restores it, since it is the learner's own record.
 
 **Every entity a run touched gets an `import` revision when its snapshot
 changed.** The run's author is `import:<git sha>` of the tree it read. A second

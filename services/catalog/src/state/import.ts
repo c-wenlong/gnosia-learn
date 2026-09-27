@@ -120,7 +120,9 @@ export async function importLegacyState(
       result.skippedExisting += 1;
       continue;
     }
-    await setProgress(db, id, true, { learnerId });
+    // `allowArchived`: this is the learner's own record coming back, and an
+    // export carries ticks on items a course has since dropped (D12).
+    await setProgress(db, id, true, { learnerId, allowArchived: true });
     result.progress += 1;
   }
 
@@ -130,7 +132,7 @@ export async function importLegacyState(
       result.skippedExisting += 1;
       continue;
     }
-    await setNote(db, id, value, learnerId);
+    await setNote(db, id, value, learnerId, { allowArchived: true });
     result.notes += 1;
   }
 
@@ -154,7 +156,12 @@ export async function importLegacyState(
         : 1;
     // `countSession: false` with a floor: the import is not a session, and the
     // count the browser recorded is the one worth keeping.
-    const saved = await upsertRecap(db, id, input, { learnerId, countSession: false, sessions });
+    const saved = await upsertRecap(db, id, input, {
+      learnerId,
+      countSession: false,
+      sessions,
+      allowArchived: true,
+    });
     if (saved !== null) result.recaps += 1;
   }
 

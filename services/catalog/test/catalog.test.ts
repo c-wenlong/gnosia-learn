@@ -14,7 +14,7 @@ import { loadCourses } from "@self-learn/content";
 
 import { runDoctor } from "../src/commands/doctor";
 import { runIndexCommand } from "../src/commands/index-command";
-import { runLs } from "../src/commands/ls";
+import { formatLs, runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
 import { runSearch } from "../src/commands/search";
 import {
@@ -432,6 +432,13 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         const tree = await runLs("cs4263");
         if (tree.kind !== "collection") throw new Error("not a collection");
         expect(tree.children.map((c) => c.id)).not.toContain("cs4263-m7");
+        expect(tree.archived).toBe(false);
+        // Named directly it still answers, since its id is how the learner
+        // rows kept under it are found, and says it is archived.
+        const gone = await runLs("cs4263-m7");
+        if (gone.kind !== "collection") throw new Error("not a collection");
+        expect(gone.archived).toBe(true);
+        expect(formatLs(gone)).toContain("archived: its course file no longer lists it");
         const overview = await runLs(undefined);
         if (overview.kind !== "overview") throw new Error("not the overview");
         expect(overview.collections.find((c) => c.id === "cs4263")?.children).toBe(6);
