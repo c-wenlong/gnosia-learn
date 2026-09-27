@@ -202,9 +202,11 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
     .from(course)
     // Live rows only: an archived module or item is off the course path (D12),
     // and counting it would put a row nobody can fill in into the distance to
-    // zero that `flip courses --strict` waits on.
-    .innerJoin(collection, and(eq(collection.parentId, course.id), isNull(collection.archivedAt)))
-    .innerJoin(
+    // zero that `flip courses --strict` waits on. Left joins, so a live course
+    // whose every item was archived still appears, with 0 items, rather than
+    // dropping out of the report.
+    .leftJoin(collection, and(eq(collection.parentId, course.id), isNull(collection.archivedAt)))
+    .leftJoin(
       curriculumItem,
       and(eq(curriculumItem.collectionId, collection.id), isNull(curriculumItem.archivedAt)),
     )

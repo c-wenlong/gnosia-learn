@@ -458,6 +458,30 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
   });
 
+  describe("archived rows, all of a course's", () => {
+    it("keeps a live course whose items are all archived in the coverage, at zero", async () => {
+      const courses = (await runStatus()).coverage.map((c) => c.course);
+      await scratch.db.execute(
+        sql`update curriculum_item set archived_at = now()
+            where collection_id in (select id from collection where parent_id = 'cs3249')`,
+      );
+      try {
+        const after = await runStatus();
+        expect(after.coverage.map((c) => c.course)).toEqual(courses);
+        expect(after.coverage.find((c) => c.course === "cs3249")).toEqual({
+          course: "cs3249",
+          items: 0,
+          withConcepts: 0,
+        });
+      } finally {
+        await scratch.db.execute(
+          sql`update curriculum_item set archived_at = null
+              where collection_id in (select id from collection where parent_id = 'cs3249')`,
+        );
+      }
+    });
+  });
+
   describe("search", () => {
     it("finds a topic by an alias that is nowhere in its title", async () => {
       const result = await runSearch("common data bus");
