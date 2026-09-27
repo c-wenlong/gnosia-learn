@@ -18,8 +18,11 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * The hi-fi palette. Values and provenance are `TOKENS` in
- * docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md; the
+ * The hi-fi palette. The starting values and their provenance are `TOKENS`
+ * in docs/design/kit/hifi.py and the token table in docs/design/DESIGN.md,
+ * which record the hi-fi frames as drawn; where the app has since moved a
+ * value for contrast (the `.dark` accent, learning blue and marks, and the
+ * tokens the kit never had), docs/design/BRAND.md has the measurement. The
  * names are the contract every redesigned page is written against, listed in
  * docs/design/IMPLEMENTATION.md. Light is on :root, dark on `.dark`.
  */

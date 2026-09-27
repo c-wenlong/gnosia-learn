@@ -47,7 +47,9 @@ not restyle a primitive for its own page.
 Declared in [apps/web/src/app/globals.css](../../apps/web/src/app/globals.css),
 light on `:root` and dark on `.dark` (the cookie-driven class on `<html>`).
 The values and where each came from are the token table in DESIGN.md and
-`TOKENS` in [kit/hifi.py](kit/hifi.py).
+`TOKENS` in [kit/hifi.py](kit/hifi.py), which record the hi-fi frames as
+drawn. Values the app has since moved for contrast, and the tokens the kit
+never had, are measured in [BRAND.md](BRAND.md#contrast-checked).
 
 **Four palettes.** `:root` is Classic light, `.dark` Classic dark, `.gnosia`
 the brand's light theme and `.gnosia.dark` the brand's dark one, each
