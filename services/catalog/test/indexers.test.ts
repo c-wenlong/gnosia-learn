@@ -430,7 +430,10 @@ describe("concepts", () => {
       "learn/concepts/testing/base.md",
       "---\nid: base\ntags: [one]\nrequires: []\ntags: [two]\n---\n\nbody\n",
     );
-    await fixture.write("learn/concepts/testing/bond.md", "---\nid: bond\ntitle: 007\ntags: [x, 1.50]\nsources: one\n  - two\n---\n\nbody\n");
+    await fixture.write(
+      "learn/concepts/testing/bond.md",
+      "---\nid: bond\ntitle: 007\ntags: [x, 1.50]\nsources: one\n  - two\ncreated: [2026-08-18T01:45:41.367Z]\n  - x\n---\n\nbody\n",
+    );
 
     const refusal = conceptsIndexer.read(await fixture.context()).catch((error: Error) => error.message);
     const message = await refusal;
@@ -438,6 +441,7 @@ describe("concepts", () => {
     expect(message).toMatch(/bond\.md: title: 007 would be read as "7"/);
     expect(message).toMatch(/bond\.md: tags \["x","1\.50"\] would be read as \["x","1\.5"\]/);
     expect(message).toMatch(/bond\.md: sources has a value on its own line and a list under it/);
+    expect(message).toMatch(/bond\.md: created is written as a list, and a note's created is one value/);
 
     // An inline list with items under it is one list, and is kept whole.
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
