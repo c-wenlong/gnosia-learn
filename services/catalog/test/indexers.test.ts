@@ -357,6 +357,12 @@ describe("concepts", () => {
         topicSlug: "alpha",
         topicPosition: 1,
         path: "learn/concepts/testing/base.md",
+        // The note itself, for the database to render it back (Track C).
+        domain: "testing",
+        body: "# Base\n",
+        tags: [],
+        sources: [],
+        authoredAt: null,
       },
       {
         slug: "derived",
@@ -365,6 +371,11 @@ describe("concepts", () => {
         topicSlug: "alpha",
         topicPosition: 2,
         path: "learn/concepts/testing/derived.md",
+        domain: "testing",
+        body: "# Derived\n",
+        tags: [],
+        sources: [],
+        authoredAt: null,
       },
     ]);
     expect(rows.conceptPrerequisite).toEqual([
@@ -383,6 +394,30 @@ describe("concepts", () => {
       assetId: "note:learn/concepts/testing/base.md",
       topicSlug: "alpha",
     });
+  });
+
+  it("refuses a frontmatter key the row has no column for, and a created that is not a date", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base", "late"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      "---\nid: base\ntitle: Base\nrequires: []\naliases: [b]\n---\n\n# Base\n",
+    );
+    await fixture.write("learn/concepts/testing/late.md", "---\nid: late\ncreated: last tuesday\n---\n\nbody\n");
+
+    const refusal = conceptsIndexer.read(await fixture.context());
+    await expect(refusal).rejects.toThrow(/base\.md: frontmatter key "aliases" has no column in the catalog/);
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(/late\.md: created: "last tuesday" is not a date/);
+  });
+
+  it("refuses a value the frontmatter cannot write back as it was read", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      '---\nid: base\nsummary: "said \\"hi\\": twice"\n---\n\nbody\n',
+    );
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(/summary .* does not survive being written as frontmatter/);
   });
 
   it("refuses a note with no topic in the vocabulary", async () => {
