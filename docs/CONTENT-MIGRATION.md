@@ -694,15 +694,15 @@ of the type's pages identical under `CONTENT_SOURCE=files` and `db`, plus
 **Owns:** `services/catalog/src/content/topics.ts` and `tags.ts`, their
 commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
 
-- [ ] `catalog topic add --slug --title --domain --summary [--alias]...
+- [x] `catalog topic add --slug --title --domain --summary [--alias]...
       [--relate kind:slug]... --reason --json`: validates what
       `packages/content/src/topics.ts:60-66` validates (kebab-case, unique),
       then a `pg_trgm` similarity check against titles and aliases that warns
       above a threshold (*guessed* 0.45) and names the near match.
-- [ ] `catalog topic edit` (title, summary, aliases, domain; never the slug),
+- [x] `catalog topic edit` (title, summary, aliases, domain; never the slug),
       `catalog topic rename --from --to` (edge case 2), `catalog topic relate`,
       `catalog topic archive`.
-- [ ] `catalog tag add|edit`.
+- [x] `catalog tag add|edit`.
 - [ ] `learn concept add --topic` calls `catalog topic` internals to set
       `concept.topic_slug`, replacing the text splice, lock and verify in
       `vocabulary-edit.ts:244-397`. The invariant that code enforces (a concept
@@ -719,6 +719,61 @@ commands, `vocabulary-edit.ts` (deleted at the flip), the planner's topic path.
 - [ ] The planner's VOCABULARY block includes relations, so it can say "this
       sits under `computer-networks`".
 - [ ] The web app's topic and tag readers switch to `dbSource`.
+
+**Built** (the verbs) in `services/catalog/src/content/topics.ts`, `tags.ts`,
+`write-through.ts` and `commands/topic.ts`, tested in
+`services/catalog/test/topic-verbs.test.ts`. Where it goes past or around the
+list above, and why:
+
+- **Every write rewrites its export in the same transaction**
+  (`writeThrough`), from the type's flip back to now: D17 said "from a type's
+  flip", but a topic written before the flip would otherwise be deleted by the
+  next `catalog index`, which reads the file. The writer takes an advisory
+  lock per type, refuses unless the files under the root the type was last
+  imported from are byte for byte what the rows would export (anything else is
+  an edit the database has not seen, and writing from rows would lose it),
+  writes, renders again inside the transaction, replaces the changed files, and
+  records the export hash on `content_source`. A failure after the first file
+  write, commit included, puts the files back. So after any verb the next
+  import of the tree writes zero revisions and parity is clean, which the
+  tests assert after every write.
+- **`add` places the topic after the last topic of its domain** (the file is
+  written in domain groups), as a sparse position between its neighbours
+  (D22); no gap left is refused with `catalog renumber topics`. It also
+  refuses a title another live topic has (case and spacing ignored), and a
+  `--relate` that would close a loop of `broader` or `precedes`. A `related`
+  edge to a smaller slug is stored under that topic, so the add is a
+  composite write and that topic gets a revision too.
+- **The near-match check** (edge case 17) compares the proposed title, each
+  alias and the slug read as words with every live topic's title, aliases and
+  slug read as words, by `similarity`, and lists up to five at or above 0.45.
+  It warns and never refuses. Kept at 0.45 after measuring the real
+  vocabulary: each of the 86 titles checked against the other topics flags 4
+  topics, three of them genuine neighbours (the ManimGL pipeline and graphics
+  pipelines, coding agents and AI code review, 3DGS and its variants) and one
+  not (the two "evaluation methods"); 0.35 flags 16.
+- **`archive` needs the database to own topics**: `topics.yaml` cannot say
+  archived, so before the flip the export would drop the topic and the next
+  import would delete it. It is refused while anything points at the topic
+  (live concepts and modules, manimkc paths, relations, assets, diagrams, open
+  jobs), listed by kind. `restore` is its inverse.
+- **`rename`** locks the six entity types an import would, takes the
+  `related` edges out and puts them back under whichever end is now smaller
+  (the order check would refuse the cascade), rewrites each diagram row's
+  `meta.tldrawkc.topic` and `document_hash`, rewrites open jobs' `brief.topic`,
+  appends the old slug to the aliases, and writes one `rename` revision per
+  entity whose snapshot changed. The topic's is under its new slug, `seq` 1,
+  with `previous_id` at the last revision under the old one. It rewrites the
+  course files too when a module sits under the topic. While diagrams are read
+  from files it refuses a topic a `.tldr` stamps, naming the files, since only
+  tldrawkc rewrites a stamp; `--restamp-diagrams-later` goes ahead and lists
+  them, and the next import refuses them by name until they are restamped.
+- **`topic ls --json`** is what the planner will read in place of its
+  VOCABULARY block: every live topic's slug, title, domain, summary, aliases,
+  `relations`, `maps` and the `incoming` edges other topics hold.
+- **`--author`** names the person a write is for (the studio's Draw press);
+  the default is the local learner. Every write needs `--reason`; a dry run
+  does not.
 
 **Parity:** 86 topics, 23 domains, 294 aliases, 8 tags, 35 manimkc paths, 32
 concept mappings, 61 module mappings (*measured* today). **Tests:** the verbs'

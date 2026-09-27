@@ -46,6 +46,7 @@ import {
   type SessionStartResult,
 } from "./commands/session";
 import { formatShow, runShow } from "./commands/show";
+import { formatTag, formatTopic, runTag, runTopic, TopicUsage } from "./commands/topic";
 import { formatStatus, runStatus } from "./commands/status";
 import {
   classifyConnectionFailure,
@@ -136,6 +137,25 @@ Commands:
                            which are armed, and every row that breaks one.
                            Also the write guards and whether this database is
                            the primary.
+  topic <verb>             The topic vocabulary, written through the catalog
+                           with a --reason, and content/topics.yaml rewritten
+                           from the rows after each write:
+                             add --slug S --title T --domain D [--summary X]
+                               [--alias A]... [--relate kind:slug]...
+                               [--dry-run]: --dry-run validates and lists
+                               near matches (pg_trgm) without writing
+                             edit <slug> [--title] [--summary] [--domain]
+                               [--alias A]... [--add-alias A]...
+                               [--drop-alias A]...
+                             rename --from OLD --to NEW
+                               [--restamp-diagrams-later]
+                             relate <slug> <kind> <other> [--remove], kind
+                               one of broader, related, precedes
+                             archive <slug>, restore <slug>
+                             ls [--domain D]
+  tag <verb>               The cross-course themes, the same way:
+                             add --id ID --label L --description D
+                             edit <id> [--label] [--description]
   renumber <list>          Spread a list's positions back out to 1000, 2000,
                            ... in its current order, one revision per row
                            moved. Needs --reason. Lists: topics, tags,
@@ -157,7 +177,10 @@ Options:
   --waive RULE             flip: leave this rule disarmed. Repeatable, each
                            with its own --reason, in the same order.
   --reason TEXT            flip: why a --waive is acceptable. renumber: why
-                           the list is being renumbered.
+                           the list is being renumbered. topic, tag: the
+                           revision's reason, required on every write.
+  --author ID              topic, tag: who the revision names. Default:
+                           the local learner.
   --topic SLUG             renumber concepts, modules: which topic's list.
   --module ID              renumber items: which module.
   --manimkc-root PATH      index: the manimkc checkout to read, for both the
@@ -246,7 +269,9 @@ type Command =
   | "export"
   | "parity"
   | "flip"
-  | "renumber";
+  | "renumber"
+  | "topic"
+  | "tag";
 
 const COMMANDS: readonly Command[] = [
   "migrate",
@@ -268,6 +293,8 @@ const COMMANDS: readonly Command[] = [
   "parity",
   "flip",
   "renumber",
+  "topic",
+  "tag",
 ];
 
 /**
@@ -339,6 +366,20 @@ export async function main(argv: string[]): Promise<number> {
         reason: { type: "string", multiple: true },
         topic: { type: "string" },
         module: { type: "string" },
+        slug: { type: "string" },
+        domain: { type: "string" },
+        summary: { type: "string" },
+        alias: { type: "string", multiple: true },
+        "add-alias": { type: "string", multiple: true },
+        "drop-alias": { type: "string", multiple: true },
+        relate: { type: "string", multiple: true },
+        "dry-run": { type: "boolean", default: false },
+        to: { type: "string" },
+        remove: { type: "boolean", default: false },
+        "restamp-diagrams-later": { type: "boolean", default: false },
+        label: { type: "string" },
+        description: { type: "string" },
+        author: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -541,6 +582,16 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatDiff(result));
         break;
       }
+      case "topic": {
+        const result = await runTopic(positionals, values, schemaCurrent);
+        emit(result, formatTopic(result));
+        break;
+      }
+      case "tag": {
+        const result = await runTag(positionals, values, schemaCurrent);
+        emit(result, formatTag(result));
+        break;
+      }
       case "doctor": {
         const result = await runDoctor();
         emit(result, formatDoctor(result));
@@ -554,7 +605,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     return 0;
   } catch (error) {
-    if (error instanceof Usage || error instanceof RevisionUsage) {
+    if (error instanceof Usage || error instanceof RevisionUsage || error instanceof TopicUsage) {
       process.stderr.write(`${error.message}\n\n${USAGE}`);
       return 2;
     }
