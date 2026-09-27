@@ -76,7 +76,7 @@ import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { IndexError } from "../index/errors";
-import { runIndex } from "../index/run";
+import { checkOwnedFiles, runIndex } from "../index/run";
 import {
   assertMigrated,
   EXIT_MIGRATIONS_OUTSTANDING,
@@ -477,22 +477,24 @@ commands.concept = async ({ values, positionals }, session) => {
       }
     }
 
+    const existing = await readConcept(id);
+    if (existing !== null && !values.force) {
+      fail(`concept "${id}" already exists (pass --force to overwrite)`);
+    }
+
     // On rows, a listing on a course row is linked by the courses source
     // after the write (below), and that source refuses to read notes that are
-    // not the database's recorded export. Run it once now, before anything is
-    // written, so that refusal comes while nothing has moved.
+    // not the database's recorded export. Ask it now, read-only, so that
+    // refusal comes while nothing has moved. The course file itself was read
+    // by `checkItem` above, which refuses a row listing a concept its
+    // module's topic does not map.
     if (itemId !== undefined && (await ownedByDatabase("concepts"))) {
       try {
-        await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+        await checkOwnedFiles(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
       } catch (error) {
         if (error instanceof IndexError) fail(`nothing was written: ${error.message}`);
         throw error;
       }
-    }
-
-    const existing = await readConcept(id);
-    if (existing !== null && !values.force) {
-      fail(`concept "${id}" already exists (pass --force to overwrite)`);
     }
 
     // With --force over an existing note, a field no flag names keeps what

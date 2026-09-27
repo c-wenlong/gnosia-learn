@@ -158,11 +158,18 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
 
   it("refuses a listing on rows before writing anything when the notes are not the recorded export", async () => {
     await scratch.db.execute(sql`update content_source set export_hash = 'stale' where type = 'concepts'`);
+    const runs = async () =>
+      (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from index_run`)).rows[0]?.n;
+    const before = await runs();
     try {
       expect(await refused("concept", "add", "--title", "Zeta", "--domain", "fixtures", "--item", "xx1000-m1-t1")).toMatch(
         /nothing was written: .*the database owns concepts/s,
       );
       expect(await row("zeta")).toBeUndefined();
+      // The check reads; it is not an index run, so it leaves no row of one.
+      expect(await runs()).toBe(before);
+      // And a note that already exists is refused before the check is asked.
+      expect(await refused("concept", "add", "--title", "Gamma", "--item", "xx1000-m1-t1")).toMatch(/already exists/);
     } finally {
       await recordExport(scratch.db, "concepts", exportHash(await readTypeFiles(fixture.root, "concepts")));
     }
