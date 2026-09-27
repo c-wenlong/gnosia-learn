@@ -30,9 +30,10 @@ const TEMP_DIR = ".tmp";
 /**
  * Opens without following a symlink at the last component; the directory
  * above it is checked by `realDirectory`. See `fsStore` for why links are
- * refused rather than followed.
+ * refused rather than followed. Windows has no `O_NOFOLLOW`, and `fsStore`
+ * refuses to start there rather than let this quietly become a plain read.
  */
-const READ_NO_FOLLOW = constants.O_RDONLY | constants.O_NOFOLLOW;
+const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
 
 /**
  * Where the laptop's blobs live: `$SELF_LEARN_HOME/blobs`, or
@@ -88,6 +89,12 @@ export function defaultBlobRoot(env: NodeJS.ProcessEnv = process.env): string {
  * what the store operates on and what it lists are the same set.
  */
 export function fsStore(root: string = defaultBlobRoot()): BlobStore {
+  // The repo runs on macOS and Linux. Without O_NOFOLLOW the no-links rule
+  // below could not hold for objects, so a platform lacking it is refused
+  // outright instead of served with a weaker contract than the one written.
+  if (constants.O_NOFOLLOW === undefined) {
+    throw new BlobError("BLOB_LINK", `the fs blob store needs O_NOFOLLOW, which ${process.platform} does not have`);
+  }
   const base = path.resolve(root);
   const checkout = selfLearnCheckoutAbove(base);
   if (checkout !== null) {

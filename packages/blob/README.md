@@ -78,6 +78,8 @@ unset. A leading `~` is expanded and a relative value is refused.
   object that is a symlink would carry a write, read or delete somewhere the
   root check never saw, and `list` would not show it. Each is refused with
   `BLOB_LINK`, so what the store touches and what it lists are the same set.
+  Objects are opened with `O_NOFOLLOW`, which Windows lacks, so `fsStore`
+  refuses to start there; the repo runs on macOS and Linux.
 - **Atomic writes.** A put streams into `<root>/.tmp/<uuid>.part`, flushed to
   disk, and is renamed into place only after the hash and length check. A
   refused put removes its temp file and never creates the owner directory.
