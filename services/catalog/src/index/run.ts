@@ -14,6 +14,9 @@ import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import type { BlobStore } from "@self-learn/blob";
+
+import { openBlobStore, uploadBlob } from "../content/blob";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { renderType } from "../content/export";
@@ -444,8 +447,20 @@ export async function runIndex(
   }
 
   const sources: SourceWrite[] = [];
+  let store: BlobStore | undefined;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata } = await indexer.read(context);
+    const { rows, notes = [], scope, metadata, blobs = [] } = await indexer.read(context);
+    // The bytes before the rows that name them, each upload committed on its
+    // own: a run that fails after this leaves present objects and no row
+    // pointing at them, which the next run finds already there.
+    if (blobs.length > 0) {
+      store ??= openBlobStore();
+      let uploaded = 0;
+      for (const blob of blobs) {
+        if ((await uploadBlob(db, store, blob)).uploaded) uploaded += 1;
+      }
+      notes.push(`${blobs.length} file(s) in the blob store, ${uploaded} uploaded by this run`);
+    }
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
       tagLinksRewritten: running.has("courses"),

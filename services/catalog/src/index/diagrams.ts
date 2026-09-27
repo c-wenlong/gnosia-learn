@@ -1,10 +1,22 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { NewAsset, NewAssetConcept, NewAssetDerivation, NewAssetTopic } from "@self-learn/schema";
+import { key as blobKey } from "@self-learn/blob";
+import {
+  LOCAL_LEARNER_ID,
+  type NewAsset,
+  type NewAssetConcept,
+  type NewAssetDerivation,
+  type NewAssetTopic,
+  type NewDiagram,
+} from "@self-learn/schema";
+
+import { DIAGRAM_SLUG, documentBytes, documentProblem, sha256 } from "../content/diagram-document";
 
 import { IndexErrors } from "./errors";
 import { fileFacts, type FileFacts, filesIn, relativeTo } from "./files";
-import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
+import { ASSET_PREFIX, type Indexer, type SourceBlob, type SourceRows } from "./source";
 import { KC_SCHEMA, listDiagrams, type DiagramMeta } from "./tldr";
 import { VOCABULARY_FILE } from "./vocabulary";
 
@@ -29,6 +41,14 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * because the guess is exactly as weak as it always was and the run should say
  * so rather than let it pass as a considered answer.
  *
+ * **Since Track D the document is a row and the SVG is a blob.** Each
+ * `.tldr` becomes a `diagram` row holding the parsed document (D6), and each
+ * SVG is handed back as a `SourceBlob` for the runner to store before the rows
+ * are written, with its asset row naming the key. The asset ids and paths are
+ * unchanged, as logical names (D11). A `.tldr` asset's hash is of the
+ * document's canonical bytes, the form the export writes, rather than of the
+ * file's own key order (`content/diagram-document.ts`).
+ *
  * `asset_derivation` still links an SVG to the `.tldr` it came from, by stem,
  * which is the layout tldrawkc writes. The SVG inherits its source's topic and
  * concepts rather than being read for its own `data-kc-topic`: the `.tldr` is
@@ -37,6 +57,9 @@ import { VOCABULARY_FILE } from "./vocabulary";
  */
 
 export const ASSETS_DIR = "learn/assets";
+
+/** Whose diagrams these are, until phase 4 knows who is importing. */
+const DIAGRAM_OWNER = LOCAL_LEARNER_ID;
 
 export const KINDS = {
   ".svg": "diagram_svg",
@@ -85,13 +108,17 @@ export function diagramAsset(
 
 export const diagramsIndexer: Indexer = {
   source: "diagrams",
-  owns: [],
+  owns: ["diagram"],
   assetPrefix: ASSET_PREFIX.diagrams,
   root: () => ASSETS_DIR,
 
   read: async ({ repoRoot, toolsRoot, knownConcepts, vocabulary }) => {
     const directory = path.join(repoRoot, ASSETS_DIR);
-    const listing = await listDiagrams(toolsRoot ?? repoRoot, directory);
+    // A tree with no `learn/assets/` has no diagrams. `tldrawkc list` calls a
+    // missing directory an error, so it is not asked; the parser says empty.
+    const listing = existsSync(directory)
+      ? await listDiagrams(toolsRoot ?? repoRoot, directory)
+      : { via: "json" as const, diagrams: [], errors: [] };
     const concepts = await knownConcepts();
     const problems = new IndexErrors();
     const notes: string[] = [];
@@ -108,20 +135,47 @@ export const diagramsIndexer: Indexer = {
 
     /** Stem to what its `.tldr` says, for the `.svg` beside it. */
     const subjects = new Map<string, Subject>();
-    /** Stems that have a `.tldr`, so an SVG can find the source it came from. */
-    const sources = new Map<string, string>();
+    /** Stem to the document it holds, parsed, with its hash. */
+    const documents = new Map<string, { document: Record<string, unknown>; hash: string; bytes: number }>();
 
     for (const entry of listing.diagrams) {
       const stem = path.basename(entry.path, ".tldr");
       const where = relativeTo(repoRoot, entry.path);
+      // The stem is the diagram's slug and the name every embed resolves, so
+      // it follows the slug rule the `diagram` table checks.
+      if (!DIAGRAM_SLUG.test(stem)) {
+        problems.add(
+          `${where}: "${stem}" is not a diagram slug (lowercase words joined by hyphens). ` +
+            `Rename the file and its SVG.`,
+        );
+        continue;
+      }
       const subject = resolveSubject(entry.meta, where, concepts, vocabulary, problems, notes);
-      if (subject !== null) subjects.set(stem, subject);
+      if (subject === null) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await readFile(entry.path, "utf8"));
+      } catch (error) {
+        problems.add(`${where} could not be read as a tldraw document: ${(error as Error).message}`);
+        continue;
+      }
+      const problem = documentProblem(parsed);
+      if (problem !== null) {
+        problems.add(`${where} is not a tldraw document: ${problem}`);
+        continue;
+      }
+      const bytes = documentBytes(parsed);
+      subjects.set(stem, subject);
+      documents.set(stem, { document: parsed as Record<string, unknown>, hash: sha256(bytes), bytes: bytes.length });
     }
 
     const assets: NewAsset[] = [];
     const assetConcepts: NewAssetConcept[] = [];
     const assetTopics: NewAssetTopic[] = [];
     const derivations: NewAssetDerivation[] = [];
+    const blobs: SourceBlob[] = [];
+    /** Stem to the key its SVG is stored under. */
+    const svgKeys = new Map<string, string>();
     let stamped = 0;
     let legacy = 0;
 
@@ -130,13 +184,30 @@ export const diagramsIndexer: Indexer = {
       const stem = path.basename(file, extension);
       const where = relativeTo(repoRoot, file);
       const id = `${ASSET_PREFIX.diagrams}${where}`;
-      const facts = await fileFacts(file);
       const subject = subjects.get(stem);
 
-      assets.push(diagramAsset(where, extension, facts, subject?.title ?? null));
       if (extension === ".tldr") {
-        sources.set(stem, id);
+        const stored = documents.get(stem);
+        // A document that was refused above has its reason recorded already.
+        if (stored === undefined || subject === undefined) continue;
+        // The document's bytes are its canonical form, which is what the
+        // export writes back, so the row's hash is of those and not of the
+        // file's own key order (`content/diagram-document.ts`).
+        assets.push(diagramAsset(where, extension, { contentHash: stored.hash, bytes: stored.bytes }, subject.title));
         stamped += 1;
+      } else {
+        const facts = await fileFacts(file);
+        const key = blobKey(DIAGRAM_OWNER, facts.contentHash, "svg");
+        blobs.push({
+          file,
+          ownerId: DIAGRAM_OWNER,
+          mime: "image/svg+xml",
+          ext: "svg",
+          sha256: facts.contentHash,
+          bytes: facts.bytes,
+        });
+        svgKeys.set(stem, key);
+        assets.push({ ...diagramAsset(where, extension, facts, subject?.title ?? null), blobKey: key });
       }
 
       if (subject !== undefined) {
@@ -166,20 +237,37 @@ export const diagramsIndexer: Indexer = {
       }
     }
 
-    for (const file of files) {
-      if (path.extname(file) !== ".svg") continue;
-      const source = sources.get(path.basename(file, ".svg"));
-      if (source === undefined) continue;
-      derivations.push({
-        assetId: `${ASSET_PREFIX.diagrams}${relativeTo(repoRoot, file)}`,
-        sourceAssetId: source,
+    // The `diagram` row: the document itself, and its SVG. An import cannot
+    // know which document an SVG on disk was exported from, so it records the
+    // pair as the files present it, exported from the document beside it.
+    const diagrams: NewDiagram[] = [];
+    for (const [stem, stored] of documents) {
+      const subject = subjects.get(stem) as Subject;
+      const svgKey = svgKeys.get(stem) ?? null;
+      diagrams.push({
+        slug: stem,
+        ownerId: DIAGRAM_OWNER,
+        title: subject.title,
+        topicSlug: subject.topicSlug,
+        document: stored.document,
+        documentHash: stored.hash,
+        svgBlobKey: svgKey,
+        svgDocumentHash: svgKey === null ? null : stored.hash,
+        archivedAt: null,
       });
+      if (svgKey !== null) {
+        derivations.push({
+          assetId: `${ASSET_PREFIX.diagrams}${ASSETS_DIR}/${stem}.svg`,
+          sourceAssetId: `${ASSET_PREFIX.diagrams}${ASSETS_DIR}/${stem}.tldr`,
+        });
+      }
     }
 
     problems.throwIfAny(`${ASSETS_DIR} (read by ${listing.via})`);
 
     const rows: SourceRows = {
       asset: assets,
+      diagram: diagrams,
       assetTopic: assetTopics,
       assetConcept: assetConcepts,
       assetDerivation: derivations,
@@ -188,7 +276,7 @@ export const diagramsIndexer: Indexer = {
       `${assets.length} diagram files read by ${listing.via}, ${stamped} stamped .tldr, ` +
         `${derivations.length} exported SVG, ${legacy} legacy SVG with no source`,
     );
-    return { rows, notes };
+    return { rows, notes, blobs };
   },
 };
 

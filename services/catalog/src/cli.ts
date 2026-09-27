@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { formatAssertOutput, runAssertOutput } from "./commands/assert-output";
 import { DEFAULT_STATE_DIR, formatBackfill, runBackfill } from "./commands/backfill";
+import { runDiagramCommand } from "./commands/diagram";
 import { formatExport, runExport } from "./commands/export";
 import { formatFlip, runFlip } from "./commands/flip";
 import { formatIndex, runImportCommand, runIndexCommand } from "./commands/index-command";
@@ -88,11 +89,12 @@ Commands:
                            last export, and refused when they were edited.
   export --out <dir>       Write the database back out as content/ and learn/
                            files: topics.yaml, tags.yaml, courses/<code>.yaml
-                           from rows. Concept notes, session logs and diagrams
-                           are copied from the directory their import read,
-                           checked against each row's sha256, until Tracks C
-                           and D move their text into rows. Records each
-                           type's export hash on content_source.
+                           from rows; diagrams from rows and the blob store.
+                           Concept notes and session logs are copied from the
+                           directory their import read, checked against each
+                           row's sha256, until Track C moves their text into
+                           rows. Records each type's export hash on
+                           content_source.
   parity <dir>             Compare the database with <dir> entity by entity:
                            counts per type, sha256 per entity over a canonical
                            form. Lists every mismatch by id; exits 1 on any.
@@ -120,6 +122,9 @@ Commands:
   job <verb>               The generation jobs behind the diagram studio:
                            enqueue --brief FILE, claim, finish --state S,
                            accept, discard, ls, show ID.
+  diagram <verb>           Diagrams in the database: put, checkout, commit,
+                           list, show. \`catalog diagram --help\` has the
+                           flags.
   assert-output            Index one file the way the owning source would, and
                            record which job produced it. Needs --job and --path.
   session <verb>           The session row a job hangs off: start --id ID
@@ -302,6 +307,8 @@ class Usage extends Error {}
  * `connection-failure.ts`, never from message text.
  */
 export async function main(argv: string[]): Promise<number> {
+  // Commands with flags of their own parse their own line.
+  if (argv[0] === "diagram") return diagram(argv.slice(1));
   let parsed;
   try {
     parsed = parseArgs({
@@ -558,37 +565,47 @@ export async function main(argv: string[]): Promise<number> {
       process.stderr.write(`${error.message}\n\n${USAGE}`);
       return 2;
     }
-    const message = error instanceof Error ? error.message : String(error);
-    if (error instanceof MigrationsOutstanding) {
-      if (values.json) {
-        process.stdout.write(
-          `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, pending: error.pending }, null, 2)}\n`,
-        );
-      }
-      process.stderr.write(`catalog ${command}: ${redactUrl(databaseUrl())} is behind this code. ${message}\n`);
-      return EXIT_MIGRATIONS_OUTSTANDING;
-    }
-    const failure = classifyConnectionFailure(error);
-    const reason = failure === null ? null : describeConnectionFailure(failure);
-    if (values.json) {
-      // The shape on stdout is unchanged: it is somebody's `--json`. The reason
-      // goes to stderr, one line, where a person and the studio both read it.
-      process.stdout.write(
-        `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message }, null, 2)}\n`,
-      );
-      if (reason !== null) {
-        const verb = command === "job" || command === "session" ? positionals[1] : undefined;
-        process.stderr.write(`catalog ${verb === undefined ? command : `${command} ${verb}`} failed: ${reason}\n`);
-      }
-    } else {
-      process.stderr.write(
-        `catalog ${command} failed against ${redactUrl(databaseUrl())}\n` +
-          (reason === null ? "" : `  ${reason}\n`) +
-          `  ${message}\n`,
-      );
-    }
-    return failure?.unreachable === true ? EXIT_UNREACHABLE : 1;
+    return reportFailure(error, command, positionals[1], values.json);
   }
+}
+
+/**
+ * A command that failed, reported the one way every command reports it:
+ * exit 4 for a database behind the journal, 3 for one that is not there, 1
+ * for anything else, with the reason on stderr and, under `--json`, the
+ * failure shape on stdout.
+ */
+function reportFailure(error: unknown, command: string, verb: string | undefined, json: boolean): number {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof MigrationsOutstanding) {
+    if (json) {
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, pending: error.pending }, null, 2)}\n`,
+      );
+    }
+    process.stderr.write(`catalog ${command}: ${redactUrl(databaseUrl())} is behind this code. ${message}\n`);
+    return EXIT_MIGRATIONS_OUTSTANDING;
+  }
+  const failure = classifyConnectionFailure(error);
+  const reason = failure === null ? null : describeConnectionFailure(failure);
+  if (json) {
+    // The shape on stdout is unchanged: it is somebody's `--json`. The reason
+    // goes to stderr, one line, where a person and the studio both read it.
+    process.stdout.write(
+      `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message }, null, 2)}\n`,
+    );
+    if (reason !== null) {
+      const named = command === "job" || command === "session" || command === "diagram" ? verb : undefined;
+      process.stderr.write(`catalog ${named === undefined ? command : `${command} ${named}`} failed: ${reason}\n`);
+    }
+  } else {
+    process.stderr.write(
+      `catalog ${command} failed against ${redactUrl(databaseUrl())}\n` +
+        (reason === null ? "" : `  ${reason}\n`) +
+        `  ${message}\n`,
+    );
+  }
+  return failure?.unreachable === true ? EXIT_UNREACHABLE : 1;
 }
 
 
@@ -755,6 +772,16 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
         "usage: job enqueue|claim|finish|accept|discard|ls|show",
       );
   }
+}
+
+/** `catalog diagram <verb>`, whose flags are its own (`commands/diagram.ts`). */
+async function diagram(argv: string[]): Promise<number> {
+  const outcome = await runDiagramCommand(argv, {
+    stdout: (text) => process.stdout.write(text),
+    stderr: (text) => process.stderr.write(text),
+  });
+  if ("code" in outcome) return outcome.code;
+  return reportFailure(outcome.error, "diagram", argv[0], outcome.json);
 }
 
 process.exitCode = await main(process.argv.slice(2));

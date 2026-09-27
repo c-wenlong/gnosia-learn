@@ -12,6 +12,7 @@ import {
   conceptPrerequisite,
   curriculumItem,
   curriculumItemTopic,
+  diagram,
   indexRun,
   manimkcTopic,
   mirror,
@@ -123,6 +124,7 @@ const REVISION_TYPE: Record<EntityName, RevisionEntityType> = {
   collection: "collection",
   curriculumItem: "curriculum_item",
   asset: "asset",
+  diagram: "diagram",
 };
 
 /** The entity tables an indexer may own, and the column identifying a row. */
@@ -133,10 +135,11 @@ const ENTITY_KEY = {
   collection: "id",
   curriculumItem: "id",
   asset: "id",
+  diagram: "slug",
 } as const;
 
 /** Entity tables, in the order a foreign key needs them written. */
-const ENTITY_ORDER = ["topic", "tag", "concept", "collection", "curriculumItem", "asset"] as const;
+const ENTITY_ORDER = ["topic", "tag", "concept", "collection", "curriculumItem", "asset", "diagram"] as const;
 type EntityName = (typeof ENTITY_ORDER)[number];
 
 /** Link tables, written after every entity they point at exists. */
@@ -169,6 +172,7 @@ const TABLES = {
   collection,
   curriculumItem,
   asset,
+  diagram,
   assetTopic,
   assetConcept,
   conceptPrerequisite,
@@ -190,6 +194,7 @@ const CONFLICT_TARGET = {
   collection: collection.id,
   curriculumItem: curriculumItem.id,
   asset: asset.id,
+  diagram: diagram.slug,
 } as const;
 
 

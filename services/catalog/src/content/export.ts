@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
+import { openBlobStore, readBlob } from "./blob";
+import { diagramPaths, documentBytes } from "./diagram-document";
 import { type ExportFile, type ExportType, sha256 } from "./layout";
 import { blockScalar, flowList, flowMapping, pad } from "./yaml-out";
 
@@ -20,9 +22,10 @@ import { blockScalar, flowList, flowMapping, pad } from "./yaml-out";
  * database holds.
  *
  * **Where a row does not hold the data yet, the file it points at is copied.**
- * A concept's body arrives with Track C, a session log's entries with Track C,
- * a diagram's document with Track D. Until then the rows hold a path and the
- * sha256 of the bytes that were imported, so the export copies the file from
+ * A concept's body arrives with Track C and a session log's entries with
+ * Track C (diagrams are rendered from rows since Track D, `renderDiagrams`).
+ * Until then the rows hold a path and the sha256 of the bytes that were
+ * imported, so the export copies the file from
  * the root the import read (`index_run.metadata.root`) and refuses when its
  * bytes no longer hash to what the row recorded. A copy the database cannot
  * vouch for would make parity compare a file with itself.
@@ -88,8 +91,9 @@ export async function renderType(db: CatalogDatabase, type: ExportType): Promise
       return renderCourses(db);
     case "concepts":
     case "sessions":
-    case "diagrams":
       return copyImported(db, type);
+    case "diagrams":
+      return renderDiagrams(db);
   }
 }
 
@@ -344,17 +348,14 @@ const COPIED = {
                 where c.archived_at is null order by a.path`,
   sessions: sql`select path, content_hash from asset
                 where kind = 'session' and starts_with(id, ${ASSET_PREFIX.sessions}) order by path`,
-  diagrams: sql`select path, content_hash from asset
-                where kind in ('diagram_source', 'diagram_svg') and starts_with(id, ${ASSET_PREFIX.diagrams})
-                order by path`,
 } as const;
 
 /**
- * Concepts, sessions and diagrams, copied from the root their import read.
+ * Concepts and sessions, copied from the root their import read.
  * Every file whose bytes no longer hash to the row's `content_hash` is listed,
  * and nothing is written: the database can only vouch for what it read.
  */
-async function copyImported(db: CatalogDatabase, type: "concepts" | "sessions" | "diagrams"): Promise<ExportFile[]> {
+async function copyImported(db: CatalogDatabase, type: "concepts" | "sessions"): Promise<ExportFile[]> {
   const assets = await rows<{ path: string | null; content_hash: string | null }>(db, COPIED[type]);
   if (assets.length === 0) return [];
   const [run] = await rows<{ root: string | null; finished_at: Date }>(
@@ -396,6 +397,57 @@ async function copyImported(db: CatalogDatabase, type: "concepts" | "sessions" |
     );
   }
   return files;
+}
+
+/**
+ * `learn/assets/`: each live diagram's document from its row, in the
+ * canonical form its hash is of, and every diagram SVG from the blob store,
+ * checked against the row's hash on the way out. An SVG asset with no blob
+ * cannot be exported: it was imported before Track D, and a re-import stores
+ * it.
+ */
+async function renderDiagrams(db: CatalogDatabase): Promise<ExportFile[]> {
+  const files: ExportFile[] = [];
+  const problems: string[] = [];
+  const documents = await rows<{ slug: string; document: unknown; document_hash: string }>(
+    db,
+    sql`select slug, document, document_hash from diagram where archived_at is null order by slug`,
+  );
+  for (const row of documents) {
+    const bytes = documentBytes(row.document);
+    if (sha256(bytes) !== row.document_hash) {
+      problems.push(`${diagramPaths(row.slug).tldr}: the stored document no longer hashes to its document_hash`);
+      continue;
+    }
+    files.push({ path: diagramPaths(row.slug).tldr, bytes });
+  }
+  const svgs = await rows<{ path: string | null; content_hash: string | null; blob_key: string | null }>(
+    db,
+    sql`select path, content_hash, blob_key from asset
+        where kind = 'diagram_svg' and starts_with(id, ${ASSET_PREFIX.diagrams})
+        order by path`,
+  );
+  if (svgs.length > 0) {
+    const store = openBlobStore();
+    for (const svg of svgs) {
+      if (svg.path === null || svg.content_hash === null || svg.blob_key === null) {
+        problems.push(
+          `${svg.path ?? "an SVG asset"}: no blob behind it (imported before diagrams moved into the ` +
+            `database). Re-run \`catalog import --only diagrams\` against the files.`,
+        );
+        continue;
+      }
+      try {
+        files.push({ path: svg.path, bytes: await readBlob(store, svg.blob_key, svg.content_hash) });
+      } catch (error) {
+        problems.push(`${svg.path}: ${(error as Error).message}`);
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new ExportError(`diagrams: ${problems.length} file(s) cannot be written back\n  - ${problems.join("\n  - ")}`);
+  }
+  return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
 function stringArray(value: unknown): string[] {
