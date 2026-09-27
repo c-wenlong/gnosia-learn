@@ -52,28 +52,41 @@ const KNOWN: Record<string, { unreachable: boolean; reason: string }> = {
 };
 
 /**
- * The first recognised code anywhere in the error: on the error itself, down
- * its `cause` chain, or inside an `AggregateError`'s `errors`. Null when there
- * is none, which is every failure that is not about reaching the database.
+ * The recognised code in the error: on the error itself, or down its `cause`
+ * chain. Null when there is none, which is every failure that is not about
+ * reaching the database.
+ *
+ * An `AggregateError` is one connection attempt per address the host resolved
+ * to, and it is read as a whole rather than by its first match: it is
+ * unreachable only when **every** attempt was. One attempt that timed out or
+ * was refused by a live server is a server that may be there, so it wins, and
+ * an attempt with no recognised code at all makes the whole thing unknown.
+ * Anything short of "every address said nothing is here" does not prove that
+ * nothing else is using the database, which is what exit 3 promises.
  */
 export function classifyConnectionFailure(error: unknown): ConnectionFailure | null {
-  const queue: unknown[] = [error];
-  const seen = new Set<unknown>();
+  return classify(error, new Set());
+}
+
+function classify(node: unknown, seen: Set<unknown>): ConnectionFailure | null {
   // Bounded, because `cause` is just a property and nothing stops a cycle.
-  while (queue.length > 0 && seen.size < 16) {
-    const current = queue.shift();
-    if (typeof current !== "object" || current === null || seen.has(current)) continue;
-    seen.add(current);
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && Object.hasOwn(KNOWN, code)) {
-      return { ...KNOWN[code]!, code };
-    }
-    const cause = (current as { cause?: unknown }).cause;
-    if (cause !== undefined) queue.push(cause);
-    const errors = (current as { errors?: unknown }).errors;
-    if (Array.isArray(errors)) queue.push(...errors);
+  if (typeof node !== "object" || node === null || seen.has(node) || seen.size >= 16) return null;
+  seen.add(node);
+
+  const errors = (node as { errors?: unknown }).errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const attempts = errors.map((attempt) => classify(attempt, seen));
+    const live = attempts.find((attempt) => attempt !== null && !attempt.unreachable);
+    if (live !== undefined) return live;
+    if (attempts.every((attempt) => attempt !== null)) return attempts[0]!;
+    return null;
   }
-  return null;
+
+  const code = (node as { code?: unknown }).code;
+  if (typeof code === "string" && Object.hasOwn(KNOWN, code)) {
+    return { ...KNOWN[code]!, code };
+  }
+  return classify((node as { cause?: unknown }).cause, seen);
 }
 
 /** The one line the CLI prints for it, e.g. `database unreachable: connection refused (ECONNREFUSED)`. */

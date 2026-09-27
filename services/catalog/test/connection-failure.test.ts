@@ -51,6 +51,27 @@ describe("nothing there to talk to", () => {
     expect(classifyConnectionFailure(wrapped(aggregate))?.unreachable).toBe(true);
   });
 
+  it("is unreachable only when every address refused", () => {
+    // Node's AggregateError carries a code of its own; the attempts are what
+    // count, so a mixed aggregate labelled ECONNREFUSED is not taken at its word.
+    const mixed = Object.assign(
+      new AggregateError([errno("ECONNREFUSED"), errno("ETIMEDOUT", "connect ETIMEDOUT 127.0.0.1:5432")], ""),
+      { code: "ECONNREFUSED" },
+    );
+    expect(classifyConnectionFailure(wrapped(mixed))).toEqual({
+      unreachable: false,
+      reason: "connection timed out",
+      code: "ETIMEDOUT",
+    });
+  });
+
+  it("is unknown when one address failed for a reason it cannot read", () => {
+    const partial = Object.assign(new AggregateError([errno("ECONNREFUSED"), new Error("??")], ""), {
+      code: "ECONNREFUSED",
+    });
+    expect(classifyConnectionFailure(wrapped(partial))).toBeNull();
+  });
+
   it.each([
     ["ENOTFOUND", "host not found"],
     ["EAI_AGAIN", "host lookup failed"],
