@@ -759,6 +759,16 @@ commands, the courses indexer's import mode.
       `catalog flip courses --strict` arms the rule (D21), so phase 3 does not
       have to waive it.
 
+**Concepts filled** where an existing note teaches the item, which only two
+modules allow: every one of the 32 notes is filed under one of seven topics,
+and an item's concepts must sit under its module's topic, which for 55 of the
+61 modules has no note at all. `cp4283-m6-t1` (Self-attention mechanics) takes
+the four attention notes, and `cs3216-m2-t1..t3` take `tool-calling` and
+`react-loop`: 7 of 137 items now name a concept (15 links), and
+`catalog doctor` lists 130 violators of `item-has-concept`. Zero is not
+reachable without new notes, which are the owner's to write, so the strict
+flip waits on them; the list of items is in the PR that filled these.
+
 **Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
 **Tests:** an import that drops an item archives it and leaves `progress`; a
 purge refused, then allowed with the flag and recoverable from the revision;

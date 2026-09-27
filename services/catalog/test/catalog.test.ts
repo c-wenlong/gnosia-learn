@@ -228,14 +228,20 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(status.coverage.map((c) => c.course)).toEqual([
         "cs2111", "cs4263", "cp4281", "cp4282", "cp4283", "cp4284", "cp4285", "cs3216", "cs3227", "cs3249",
       ]);
-      // The one course whose rows list concepts today, and the rest untouched.
-      expect(status.coverage.find((c) => c.course === "cp4284")).toEqual({
-        course: "cp4284",
-        items: 13,
-        withConcepts: 3,
-      });
+      // The courses whose rows list concepts today, and the rest untouched.
+      // cp4283 and cs3216 are the rows Track B filled where an existing note
+      // fits (docs/CONTENT-MIGRATION.md, "Concepts filled").
+      const filled: Record<string, { items: number; withConcepts: number }> = {
+        cp4283: { items: 13, withConcepts: 1 },
+        cp4284: { items: 13, withConcepts: 3 },
+        cs3216: { items: 13, withConcepts: 3 },
+      };
       for (const c of status.coverage) {
-        if (c.course === "cp4284") continue;
+        const expected = filled[c.course];
+        if (expected !== undefined) {
+          expect(c, c.course).toEqual({ course: c.course, ...expected });
+          continue;
+        }
         expect(c.withConcepts, c.course).toBe(0);
         expect(c.items, c.course).toBeGreaterThan(0);
       }
