@@ -189,6 +189,26 @@ topics:
       courses: []
       concepts: []
 
+  - slug: language-server-protocol
+    title: The Language Server Protocol
+    domain: devtools
+    summary: LSP pulls language intelligence into a per-language server process and gives every editor one thin JSON-RPC client, turning the M-by-N plugin problem into M plus N.
+    aliases: [LSP, language server, JSON-RPC, clangd, rust-analyzer]
+    maps:
+      manimkc: [devtools/language-server-protocol]
+      courses: []
+      concepts: []
+
+  - slug: coding-agent-runtime
+    title: Coding agent runtimes
+    domain: devtools
+    summary: Herdr keeps coding agents in real terminals owned by a background server — every UI is a detachable client, so agents outlive the window, report blocked versus working, and follow you across machines.
+    aliases: [herdr, agent runtime, agent multiplexer, agent terminal manager]
+    maps:
+      manimkc: [devtools/herdr]
+      courses: []
+      concepts: []
+
   # ---------------- databases ----------------
   - slug: orm-and-migrations
     title: ORMs and schema migrations
@@ -408,7 +428,7 @@ topics:
     summary: A model emits a structured call against a declared schema and the harness executes it; ReAct interleaves that with reasoning traces so each observation can revise the plan.
     aliases: [ReAct, function calling, tool calling, LangGraph]
     maps:
-      manimkc: []
+      manimkc: [agentic-ai/loop-and-graph-engineering]
       courses: [cp4284-m3, cs3216-m2]
       concepts: [react-loop, tool-calling]
 
@@ -490,6 +510,16 @@ topics:
     maps:
       manimkc: []
       courses: [cs3249-m4]
+      concepts: []
+
+  - slug: coding-agent-harness-architectures
+    title: Coding-agent harness architectures
+    domain: agentic-ai
+    summary: "The shell around the model loop decides the agent: from nanocode's 250-line file through REPL monoliths and client-server splits to sandboxed platforms and orchestration planes."
+    aliases: [agent harness, agentic loop, claude code, codex cli, opencode, acp]
+    maps:
+      manimkc: [agentic-ai/harness-architectures]
+      courses: []
       concepts: []
 
   # ---------------- product ----------------
@@ -835,4 +865,15 @@ topics:
     maps:
       manimkc: []
       courses: [cp4282-m5, cp4282-m6]
+      concepts: []
+
+  # ---------------- home-server ----------------
+  - slug: home-server-app-catalogue
+    title: A catalogue-driven home server
+    domain: home-server
+    summary: Turning a repo of one-shot setup.sh scripts into a declarative app catalogue, where manifests generate the registry, installs write receipts, and removal is graded.
+    aliases: [app store, service catalogue, tailscale serve, launcher]
+    maps:
+      manimkc: [home-server/catalogue-plan]
+      courses: []
       concepts: []
