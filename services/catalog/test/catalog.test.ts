@@ -234,7 +234,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       const filled: Record<string, { items: number; withConcepts: number }> = {
         cp4283: { items: 13, withConcepts: 1 },
         cp4284: { items: 13, withConcepts: 3 },
-        cs3216: { items: 13, withConcepts: 3 },
+        cs3216: { items: 13, withConcepts: 1 },
       };
       for (const c of status.coverage) {
         const expected = filled[c.course];

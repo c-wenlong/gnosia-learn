@@ -36,14 +36,10 @@ modules:
     topics:
       - id: cs3216-m2-t1
         title: Structured outputs with Pydantic
-        concepts:
-          - tool-calling
         subtopics:
           - Typed schemas for LLM outputs
       - id: cs3216-m2-t2
         title: Agent orchestration with LangGraph
-        concepts:
-          - react-loop
         subtopics:
           - Graphs, state, cycles
       - id: cs3216-m2-t3
