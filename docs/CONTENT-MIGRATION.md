@@ -794,11 +794,16 @@ list above, and why:
   the real tree, value for value, then flips both and reads them back through
   `selectSource`. On a `createdb -T self_learn` copy migrated, imported and
   flipped (parity clean: 86 topics, 23 domains, 294 aliases, 35 manimkc paths,
-  61 module and 32 concept mappings, 8 tags), `next start` served the same
-  server HTML under `CONTENT_SOURCE=topics=files,tags=files` and with the rows
-  in charge, for `/today`, `/courses`, the ten course pages, `/learn`, six
-  concept pages, `/library` and `/review`, once the request's own `asOf`
-  timestamp is set aside. The studio's planner path (the confirm card's
+  61 module and 32 concept mappings, 8 tags), two `next start` servers on
+  identical copies, one with the rows in charge and one with
+  `CONTENT_SOURCE=topics=files,tags=files`, served byte-identical server HTML
+  for all 47 routes tried (`/today`, `/courses`, the ten course pages,
+  `/learn`, every concept page, `/library`, `/review`), once the request's
+  own `asOf` timestamp is set aside. A single fetch can differ in the order
+  React streams its rows, between two fetches from the same server too, so
+  each route was fetched until a pair matched. The rendered DOM and full-page
+  screenshots at 1440 wide, light and dark, matched for 21 of those routes,
+  and `scripts/e2e.mjs` passed 12 of 12 against a copy of that database. The studio's planner path (the confirm card's
   **Create topic and draw**) is not built, per phase 1's rule: the verbs it
   will call are, and `topic add --dry-run --json` is the validation step D16
   names.
