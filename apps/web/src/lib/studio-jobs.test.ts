@@ -320,6 +320,19 @@ describe("what a failure says", () => {
     expect(announcement(refused)?.body).toBe("the agent could not make its first request");
   });
 
+  it("reports the refused request even when an earlier attempt left a gate code", () => {
+    const refused = job({
+      state: "failed",
+      errorKind: "agent",
+      error: "API Error: 429 rate limited",
+      gate: gate({ ok: false, steps: [step("inspect", 2, "TypeError: x is not a function (snippet:4)")] }),
+    });
+    const report = failureReport(refused);
+    expect(report.code).toBeNull();
+    expect(report.headline).toBe("the agent could not make its first request");
+    expect(report.detail).toContain("429");
+  });
+
   it("names the permission file only where it is the reason the target is safe", () => {
     const refused = job({ state: "failed", errorKind: "agent", apiKeySource: "ANTHROPIC_API_KEY" });
     const agentFooter = failureFooter(refused);

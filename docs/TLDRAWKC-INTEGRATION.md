@@ -564,7 +564,12 @@ other is **a first request the API refused**: the session's result has
 did before the attempt. A key the API will not take, a model the account
 cannot use or an exhausted quota gives the same answer to a retry, so the job
 ends there as `failed` with `error_kind` `agent` and the result event's own
-text as the error, after one attempt rather than three. The result's
+text as the error, after one attempt rather than three. The stray-write
+backstop still runs before that verdict and outranks it, and whatever is at
+the candidate path (an earlier attempt's partial, the runner's `extend` copy,
+a resumed job's preserved drawing) moves to `jobs/<id>/rejected/` so the next
+job for the slug cannot write over it. The panel reports `agent` ahead of any
+gate code an earlier attempt left on the record. The result's
 `subtype` said `success` on exactly that session, which is why the runner keys
 on `is_error` and not on the subtype. An agent that erred *after* doing
 something (more turns, or a candidate that changed) still goes to the gate. A

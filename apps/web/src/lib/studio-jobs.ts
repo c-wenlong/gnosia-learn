@@ -410,6 +410,12 @@ export function failureReport(job: Job): FailureReport {
   const code = lastGateCode(job);
   const detail = job.error ?? null;
 
+  // Before the gate codes, unlike every other kind. A refused first request
+  // can end a job whose *earlier* attempt left a gate on the record, and a
+  // code 1 or 2 from that attempt would otherwise describe a failure the job
+  // recovered from, not the one that ended it. Caught in review on this PR.
+  if (job.errorKind === "agent") return agentReport(detail);
+
   if (code === 1) {
     return {
       code,
@@ -448,17 +454,6 @@ export function failureReport(job: Job): FailureReport {
         detail,
         actions: ["doctor", "retry"],
       };
-    case "agent":
-      return {
-        code: null,
-        // The process ran and its first request was refused: a credential the
-        // API would not take, a model the account cannot use, a quota. The
-        // detail is the API's own message, which is the only thing that says
-        // which, and it is never a finding about the drawing.
-        headline: "the agent could not make its first request",
-        detail,
-        actions: ["doctor", "retry"],
-      };
     case "wrote-outside":
       return {
         code: null,
@@ -487,6 +482,21 @@ export function failureReport(job: Job): FailureReport {
         actions: ["retry", "edit"],
       };
   }
+}
+
+/**
+ * The process ran and its first request was refused: a credential the API would
+ * not take, a model the account cannot use, a quota. The detail is the API's
+ * own message, which is the only thing that says which, and it is never a
+ * finding about the drawing.
+ */
+function agentReport(detail: string | null): FailureReport {
+  return {
+    code: null,
+    headline: "the agent could not make its first request",
+    detail,
+    actions: ["doctor", "retry"],
+  };
 }
 
 /**

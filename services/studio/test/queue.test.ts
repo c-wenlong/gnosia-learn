@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
 import type { JobRecord } from "../src/store";
-import { absolute, jobDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { absolute, jobDir, rejectedDir, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
 import { fixtureDocument } from "./fixture-document";
 import { allSettled, until } from "./wait";
 
@@ -548,15 +548,44 @@ describe("an agent whose first request is refused", () => {
 
     const { record } = await runner.enqueue(await brief());
     await runner.settled(record.id);
-    // The note is emitted from the init callback, alongside the attempt rather
-    // than inside its chain, so it is waited for by name. The buffer is pushed
-    // after the line is on disk, so seeing it here also means the write is done.
-    const credential = (): string | undefined =>
-      store
-        .subscribe(record.id, 0, () => undefined)
-        .replay.find((event) => event.note.includes("ANTHROPIC_API_KEY"))?.note;
-    await until(() => credential() !== undefined, "no event named the agent's credential");
-    expect(credential()).toContain("STUDIO_AGENT_AUTH=login");
+    // The attempt waits for the note before it goes on, so by the time the job
+    // has settled it is in the log, and ahead of the event that ended the job.
+    const events = store.subscribe(record.id, 0, () => undefined).replay;
+    const credential = events.find((event) => event.note.includes("ANTHROPIC_API_KEY"));
+    const ending = events.find((event) => event.type === "error");
+    expect(credential?.note).toContain("STUDIO_AGENT_AUTH=login");
+    expect(ending).toBeDefined();
+    expect(credential?.seq ?? Infinity).toBeLessThan(ending?.seq ?? -Infinity);
+  });
+
+  it("still reports a stray write first, because a dirty file is what a person has to look at", async () => {
+    reviewMock.dirtyFiles.mockReset().mockResolvedValueOnce([]).mockResolvedValue(["README.md"]);
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("wrote-outside");
+    expect(store.get(record.id)?.error).toContain("README.md");
+  });
+
+  it("moves a resumed job's preserved drawing out of the shared path rather than leaving it to be overwritten", async () => {
+    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
+    const partial = fixtureDocument({ title: "half-drawn" });
+    await writeFile(candidate, partial, "utf8");
+    await store.create(parentRecord("parent-refused", Date.now() - 300_000, "interrupted", hash(partial)));
+    refuseFirstRequest();
+
+    const { record } = await runner.enqueue(await brief(), {
+      jobId: "parent-refused",
+      agentSessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      changes: null,
+    });
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.errorKind).toBe("agent");
+    expect(await stat(candidate).then(() => true, () => false)).toBe(false);
+    expect(await readFile(path.join(rejectedDir(record.id), `${SLUG}.tldr`), "utf8")).toContain("half-drawn");
   });
 
   it("records STUDIO_AGENT_AUTH=env on the job when that is the setting", async () => {

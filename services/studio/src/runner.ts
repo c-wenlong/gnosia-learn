@@ -654,6 +654,8 @@ export class Runner {
     let gate: GateResult | null = null;
     let findings: string[] = [];
     let outcome: Awaited<AgentRun["done"]> | null = null;
+    /** Set when an attempt's first request was refused. See the loop. */
+    let refused: Awaited<AgentRun["done"]> | null = null;
     /** True once this session id has a transcript, so the next call resumes it. */
     let startedSession = false;
     // Read once for the whole job and written down before the first spawn, so
@@ -707,6 +709,11 @@ export class Runner {
       // resumed job's preserved drawing; an earlier attempt's partial.
       const candidateBefore = await sha256(absolute(record.candidatePath));
 
+      // The credential step, held so the attempt waits for it: without that, a
+      // session that fails in under a second can put its terminal event in
+      // the log ahead of the line saying which key it used, and a write that
+      // failed would be an unhandled rejection. Caught in review on this PR.
+      let credentialNoted: Promise<void> = Promise.resolve();
       const agent = await startAgent({
         jobId: id,
         slug: record.slug,
@@ -720,12 +727,13 @@ export class Runner {
           void this.onAgentLine(id, line);
         },
         onInit: (init) => {
-          void this.onAgentInit(id, auth, init);
+          credentialNoted = this.onAgentInit(id, auth, init).catch(() => undefined);
         },
       });
       entry.agent = agent;
       outcome = await agent.done;
       entry.agent = null;
+      await credentialNoted;
       if (outcome.apiKeySource !== null) {
         record = await this.store.update(id, { apiKeySource: outcome.apiKeySource });
       }
@@ -788,19 +796,12 @@ export class Runner {
         // than one turn, or a candidate that changed, still goes to the gate,
         // because rule 4 says the gate decides what is on disk.
         //
-        // The partials move only when an earlier attempt left some, the same
-        // thing the gate's own exhaustion path does with them.
-        if (gate !== null) await this.moveToRejected(record);
-        await this.finish(entry, "failed", {
-          errorKind: "agent",
-          error:
-            outcome.result ??
-            `the agent's session ended in an error before it did anything (${outcome.subtype ?? "no result"})`,
-          exitCode: outcome.exitCode,
-          turns: outcome.turns,
-          cost: entry.meter.read(),
-        });
-        return;
+        // It leaves the loop rather than finishing here, so the stray-write
+        // backstop below still runs first: an unchanged candidate says nothing
+        // about the rest of the tree, and a dirty file outranks a refused key
+        // as the thing a person has to look at. Caught in review on this PR.
+        refused = outcome;
+        break;
       }
       if (outcome.stopReason === "attempt-timeout" || outcome.stopReason === "idle-timeout") {
         await this.finish(entry, "failed", {
@@ -875,6 +876,26 @@ export class Runner {
         turns: outcome?.turns ?? null,
         cost: entry.meter.read(),
         gate,
+      });
+      return;
+    }
+
+    if (refused !== null) {
+      // Whatever sits at the candidate path moves where a person can look at
+      // it, as on the gate's exhaustion path below: an earlier attempt's
+      // partial, the runner's own copy in `extend` mode, or a resumed job's
+      // preserved drawing. Left at the per-slug path, that last one is the
+      // only copy of the work and the next job for the slug writes over it.
+      // Caught in review on this PR.
+      await this.moveToRejected(record);
+      await this.finish(entry, "failed", {
+        errorKind: "agent",
+        error:
+          refused.result ??
+          `the agent's session ended in an error before it did anything (${refused.subtype ?? "no result"})`,
+        exitCode: refused.exitCode,
+        turns: refused.turns,
+        cost: entry.meter.read(),
       });
       return;
     }
