@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { stringifyFrontmatter } from "../../../../scripts/learn/lib/markdown.mjs";
-import { parseFrontmatter, readList, readText, type Frontmatter } from "../index/frontmatter";
+import { frontmatterEntries, parseFrontmatter, readList, readText, type Frontmatter } from "../index/frontmatter";
 
 /**
  * A concept note as the database holds it (Track C of
@@ -76,6 +76,7 @@ export function readNote(text: string, where: string, stem: string): NoteFields 
         `${extra.length === 1 ? "it" : "them"}. A note carries ${NOTE_KEYS.join(", ")}; move the rest into the body.`,
     );
   }
+  problems.push(...unheldAsWritten(text, where));
   const slug = readText(data, "id") ?? stem;
   const createdText = readText(data, "created");
   let created: Date | null = null;
@@ -101,6 +102,72 @@ export function readNote(text: string, where: string, stem: string): NoteFields 
   };
   assertRenderable(fields, where);
   return fields;
+}
+
+const NONE = new Set(["", "null", "~"]);
+const LIST_KEYS = new Set(["requires", "assumes", "tags", "sources"]);
+
+function unquote(value: string): string {
+  const quoted =
+    value.length >= 2 &&
+    ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")));
+  return (quoted ? value.slice(1, -1) : value).trim();
+}
+
+/**
+ * What the parser would change on the way in, checked against the text as
+ * written: a key written twice (only the last line is read), and a value the
+ * dialect reads as something else, such as `007` as the number 7 or a list
+ * item `null` as nothing. Either would be imported and exported changed,
+ * and parity, which parses both sides the same way, would call it equal.
+ * `created` is left out on purpose: it is an instant, and is written back in
+ * one form (`notes.ts` says so above).
+ */
+function unheldAsWritten(text: string, where: string): string[] {
+  const problems: string[] = [];
+  const entries = frontmatterEntries(text);
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const entry of entries) {
+    if (seen.has(entry.key)) twice.add(entry.key);
+    seen.add(entry.key);
+  }
+  if (twice.size > 0) {
+    problems.push(
+      `${where}: frontmatter ${[...twice].map((k) => `"${k}"`).join(", ")} written more than once; ` +
+        `only the last would be kept. Merge them into one line.`,
+    );
+  }
+  const { data } = parseFrontmatter(text);
+  for (const entry of entries) {
+    if (twice.has(entry.key)) continue;
+    if (LIST_KEYS.has(entry.key)) {
+      const written =
+        entry.items.length > 0
+          ? entry.items
+          : entry.raw.startsWith("[")
+            ? entry.raw.replace(/^\[|\]$/g, "").split(",")
+            : [entry.raw];
+      const expected = written.map(unquote).filter((item) => item !== "");
+      const read = readList(data, entry.key);
+      if (JSON.stringify(expected) !== JSON.stringify(read)) {
+        problems.push(
+          `${where}: ${entry.key} ${JSON.stringify(expected)} would be read as ${JSON.stringify(read)}. ` +
+            `The notes' frontmatter cannot keep an item that reads as a number or null; reword it.`,
+        );
+      }
+    } else if (entry.key === "id" || entry.key === "title" || entry.key === "summary") {
+      const written = unquote(entry.raw);
+      const read = readText(data, entry.key);
+      if (!(NONE.has(written) && read === null) && written !== read) {
+        problems.push(
+          `${where}: ${entry.key}: ${entry.raw} would be read as ${JSON.stringify(read)}. The notes' frontmatter ` +
+            `cannot keep a value that reads as a number or null (quoted or not, it is written back bare); reword it.`,
+        );
+      }
+    }
+  }
+  return problems;
 }
 
 /** The frontmatter object a row renders, in `NOTE_KEYS` order, empty `assumes` left out. */
