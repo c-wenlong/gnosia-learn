@@ -481,7 +481,11 @@ source therefore selects everything that points at what it owns, and the run
 reports what it added. `--only topics` is a full run, which is the honest
 answer, and `--only manimkc` stays cheap: the only thing pointing at what
 manimkc owns is `mirrors`, whose rows cascade away with the asset they name, so
-that pair runs together and nothing else has to.
+that pair runs together and nothing else has to. `--only courses` goes the
+other way and re-reads the notes first: a course row's `concepts:` list
+resolves against concept rows, and checking it against rows from the last run
+would refuse a note added since, so `concepts` is a prerequisite of `courses`
+the way `manimkc` is of `mirrors`.
 
 `manimkc` and `mirrors` are the optional sources. Both read
 `tools/manimkc/tools/cli/manimkc`, which lives in a submodule that a fresh clone and

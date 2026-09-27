@@ -194,6 +194,29 @@ describe("courses", () => {
     );
   });
 
+  it("keeps a row's concepts in the list's order, as 1-based positions", async () => {
+    fixture = await makeFixture();
+    await fixture.write(
+      "content/topics.yaml",
+      topicsYaml([{ slug: "alpha", courses: ["xx1000-m1"], concepts: ["base", "derived", "third"] }]),
+    );
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      COURSE_YAML.replace("concepts: [base]", "concepts: [third, base, derived]"),
+    );
+
+    const { rows } = await coursesIndexer.read(
+      await fixture.context({ knownConcepts: async () => new Set(["base", "derived", "third"]) }),
+    );
+
+    expect(rows.conceptCurriculumItem).toEqual([
+      { conceptSlug: "third", curriculumItemId: "xx1000-m1-t1", position: 1 },
+      { conceptSlug: "base", curriculumItemId: "xx1000-m1-t1", position: 2 },
+      { conceptSlug: "derived", curriculumItemId: "xx1000-m1-t1", position: 3 },
+    ]);
+  });
+
   it("refuses a concept the course lists but no note defines", async () => {
     fixture = await makeFixture();
     await fixture.write(
@@ -953,5 +976,12 @@ describe("source selection", () => {
     expect([...withPrerequisites(["mirrors"])].sort()).toEqual(["manimkc", "mirrors"]);
     expect([...withPrerequisites(["manimkc"])]).toEqual(["manimkc"]);
     expect([...withPrerequisites(["topics"])]).toEqual(["topics"]);
+  });
+
+  it("pulls concepts in ahead of courses, because a course row's concepts resolve against them", () => {
+    // `--only courses` after a note was added and listed on a row would
+    // otherwise check the list against concept rows the note is not in yet,
+    // and refuse a course file that is right.
+    expect([...withPrerequisites(["courses"])].sort()).toEqual(["concepts", "courses"]);
   });
 });

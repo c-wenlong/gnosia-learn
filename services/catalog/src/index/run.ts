@@ -81,7 +81,11 @@ const DEPENDENTS: Record<IndexSource, readonly IndexSource[]> = {
  */
 const REQUIRES: Record<IndexSource, readonly IndexSource[]> = {
   topics: [],
-  courses: [],
+  // A course row's `concepts:` list resolves against concept rows. Run alone,
+  // courses would check a note added since the last run against rows that do
+  // not have it yet, and refuse a course file that is correct. Re-reading the
+  // notes first costs a pass over a few dozen files.
+  courses: ["concepts"],
   concepts: [],
   manimkc: [],
   diagrams: [],
