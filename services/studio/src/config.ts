@@ -224,3 +224,32 @@ export function dailyCapUsd(): number | null {
 
 /** The window the cap counts over. Rolling, never a calendar day. */
 export const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/* -------------------------------------------------------------------------- */
+/* The planner (docs/STUDIO-CHAT-FIRST.md)                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Person turns per draft. The planner's prompt ends questioning in three;
+ * twenty is for a long conversation about several diagrams, and the cap
+ * exists for a loop nobody meant. A guess, to be reset against the first
+ * twenty real drafts (open question 9).
+ */
+export const PLANNER_TURNS = integer("STUDIO_PLANNER_TURNS", 20, 1, 200);
+
+/** One planner turn, start to finish. The two measured turns took 11.8 and 8.0 seconds. */
+export const PLANNER_TURN_MS = integer("STUDIO_PLANNER_TURN_MS", 120_000, 10_000, 900_000);
+
+/** Silence on the planner's stdout before the turn is stopped. */
+export const PLANNER_IDLE_MS = integer("STUDIO_PLANNER_IDLE_MS", 60_000, 5_000, 600_000);
+
+/**
+ * Planner turns in flight across the runner, capped at four. A turn launches
+ * no browser, so it never waits behind a drawing (D36); this is only a bound.
+ */
+export const PLANNER_CONCURRENCY = integer("STUDIO_PLANNER_CONCURRENCY", 2, 1, 4);
+
+/** The planner's model. Measured good enough on the one real case (open question 8). */
+export function plannerModel(): string {
+  return process.env.STUDIO_PLANNER_MODEL?.trim() || "sonnet";
+}
