@@ -555,6 +555,12 @@ not have to be worked out again.
   `content/` or `learn/`, with the backup at
   `~/<name>-preflip-<time>.dump`; it asks for the name to be typed on a
   terminal and has no `--yes`, so it is the owner's to run, never an agent's.
+  `--cutover` is the day after: with `--real` it backs up again, checks the
+  tree is still the database's export (parity, saved as
+  `~/<name>-cutover-<time>.parity.json`), arms every completeness rule with
+  `flip --strict` or waives `item-has-concept` with a reason typed on the
+  terminal, and tags `content-files-final` without pushing it. A rehearsal
+  with `--cutover` runs flip day and then the cut-over on one copy.
 - **`catalog migrate` can exit 0 without reaching the head, on purpose.**
   Migration `0013` requires a blob behind every video, sidecar, poster and
   diagram SVG, and on a database whose renders were never uploaded its guard
