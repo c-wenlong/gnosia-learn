@@ -923,7 +923,20 @@ pixel-identical apart from the wordmark and a few anti-aliased pixels (at most
 16, channel difference at most 3), which differ the same way between two
 captures of one server.
 
-**Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
+**Concepts filled** where an existing note teaches what the item names, which
+only one module allows: every one of the 32 notes is filed under one of seven
+topics, and an item's concepts must sit under its module's topic, which for 55
+of the 61 modules has no note at all. `cp4283-m6-t1` (Self-attention
+mechanics) takes the four attention notes. Where a note only teaches a
+component of what the row names (`tool-calling` and `react-loop` against the
+three `cs3216-m2` rows on structured outputs, LangGraph and composing agents)
+it was left out. 4 of 137 items now name a concept (12 links), and
+`catalog doctor` lists 133 violators of `item-has-concept`. Zero is not
+reachable without new notes, which are the owner's to write, so the strict
+flip waits on them; the list of items is in the PR that filled these.
+
+**Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links
+(*measured* before the filling above, which makes it 12).
 **Tests:** an import that drops an item archives it and leaves `progress`; a
 purge refused, then allowed with the flag and recoverable from the revision;
 the course order and slug uniqueness rules as constraint errors.
