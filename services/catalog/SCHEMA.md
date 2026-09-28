@@ -485,9 +485,10 @@ computed from `event` and can be thrown away and rebuilt.
 `npm run catalog -- import <dir>` reads a directory in the export layout
 (`seed/`, an export) and rewrites the rows it owns; with no directory it
 reads the repository, which has held no content since the phase 3 cut-over.
-A type the database owns is skipped when the directory holds none of its
-files or they are its own last export, so on a database that owns all six a
-bare `import` runs only manimkc and the mirror ledger. Once topics are
+A type the database owns is skipped when its files are its own last export,
+and, once the database owns every type, when the directory holds none of
+them, so on a database that owns all six a bare `import` runs only manimkc
+and the mirror ledger. Once topics are
 flipped the vocabulary every source resolves a slug against comes from the
 topic rows (`vocabularyOf` in `src/index/vocabulary.ts`), not from the
 directory's `content/topics.yaml`. `catalog index` is the old name, kept as an
@@ -879,9 +880,10 @@ else. A waived rule is disarmed even if an earlier strict flip armed it.
 reads that directory: one code path, reading any directory in the export
 layout, with the pinned tools (`tools/manimkc`, `tools/tldrawkc`) always
 the repository's own. Since the cut-over the repository root holds none of
-the six types' files, and a type the database owns is skipped when the
-directory holds none of them, its root left as it was (`ownedSkips` in
-`src/index/run.ts`). Phase 2 made `import` the name; `catalog index`, the old
+the six types' files, and once the database owns every type, a type is
+skipped when the directory holds none of them, its root left as it was
+(`ownedSkips` in `src/index/run.ts`). Before that, trees are kept in step
+(D17), and a tree missing a type's files is refused by name. Phase 2 made `import` the name; `catalog index`, the old
 one, still runs it and prints the new name once, on stderr so a `--json`
 reader's stdout is unchanged.
 
@@ -1062,7 +1064,11 @@ forever everywhere it has already run, and one drizzle will not apply again.
   0013 again. On a database without it, `migrate` applies it like any other
   migration, and its guard raises with the ids and rolls that run back if
   the data is not ready; `catalog status`, `learn init` and `learn doctor`
-  report it as outstanding and say "run migrate". The holding machinery
+  report it as outstanding and say "run migrate". Such a database cannot
+  clear it from this code, since `import` and `asset upload` refuse while a
+  migration is outstanding: it goes through flip day from
+  `content-files-final`, where 0013 is still held, and comes back. Only a
+  database never taken through flip day can be there. The holding machinery
   (`migrateHolding`, `heldMigrations`, `assertMigrated`) stays for the next
   contract migration, and `test/blob-contract.test.ts` registers 0013 through
   their `contracts` option to test it, and fails if a registered contract is

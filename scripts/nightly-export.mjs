@@ -9,7 +9,8 @@
 // (~/.self-learn/archive/ when SELF_LEARN_HOME is unset), points
 // archive/latest at it, and deletes all but the newest N exports (default 30).
 //
-// The export is written into a hidden `.<time>.partial` directory first and
+// The export is written into a hidden `.<time>.partial-<random>` directory of
+// its own first (two runs started in the same second never share one) and
 // renamed into place only when the catalog says it finished, so `latest` and
 // every `<time>` directory are always a whole export; a failed run leaves its
 // partial behind, which the next run removes once it is a day old. The
@@ -28,7 +29,18 @@
 //
 // Exit codes: 0 exported, 1 the export or the pruning failed, 2 the
 // invocation was wrong.
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,7 +52,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
 const USAGE = 'usage: node scripts/nightly-export.mjs [--keep N] [--json]';
 const STAMP = /^\d{8}T\d{6}Z$/;
-const PARTIAL = /^\.(\d{8}T\d{6}Z)\.partial$/;
+const PARTIAL = /^\.(\d{8}T\d{6}Z)\.partial(-[A-Za-z0-9]+)?$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 class Refusal extends Error {}
@@ -112,8 +124,10 @@ async function main(argv) {
 
   const stamp = fileStamp();
   const target = join(archive, stamp);
-  const partial = join(archive, `.${stamp}.partial`);
-  if (existsSync(target) || existsSync(partial)) throw new Refusal(`${target} already exists; an export is never written over`);
+  if (existsSync(target)) throw new Refusal(`${target} already exists; an export is never written over`);
+  // This run's own staging directory, made atomically: another run started
+  // in the same second gets another one, so their files never interleave.
+  const partial = mkdtempSync(join(archive, `.${stamp}.partial-`));
 
   const ran = await exec(process.execPath, ['--import', 'tsx', CLI, 'export', '--out', partial, '--json'], { cwd: ROOT });
   let exported = null;
@@ -125,6 +139,12 @@ async function main(argv) {
   if (ran.status !== 0 || exported === null) {
     const why = (ran.stderr.trim() || ran.stdout.trim()).split('\n').slice(-6).join('\n');
     process.stderr.write(`nightly-export: catalog export failed (exit ${ran.status ?? ran.signal}); ${partial} is left to look at:\n${why}\n`);
+    return 1;
+  }
+  // A rename onto a directory that exists (another run's export, finished
+  // first, holding files) fails rather than mixing the two.
+  if (existsSync(target)) {
+    process.stderr.write(`nightly-export: ${target} appeared while this run exported; ${partial} is left to look at\n`);
     return 1;
   }
   renameSync(partial, target);

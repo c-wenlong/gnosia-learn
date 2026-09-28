@@ -593,9 +593,11 @@ not have to be worked out again.
   `catalog index`; both work.
 - **A bare `catalog import` refreshes manimkc and the mirror ledger, and
   nothing else.** With no directory it reads the repository, which has held no
-  content since the cut-over. A type the database owns is skipped when the
-  directory holds none of that type's files, as well as when they are its own
-  last export (`ownedSkips` in `services/catalog/src/index/run.ts`), and once
+  content since the cut-over. Once the database owns every type, a type is
+  skipped when the directory holds none of its files, as well as when they
+  are its own last export (`ownedSkips` in
+  `services/catalog/src/index/run.ts`); while any type is still on files, a
+  tree missing a type's files is refused by name, as it always was. Once
   topics are flipped the vocabulary the other sources resolve slugs against
   comes from the topic rows, not `content/topics.yaml`. So on a database that
   owns all six types it reads nothing for them and runs manimkc and mirrors.
@@ -656,8 +658,14 @@ not have to be worked out again.
   cut-over merged, so the cut-over unregistered it and migrations may follow
   it again. On a database without it, `migrate` now applies it like any
   other, and its guard raises naming the assets and keys in the way and rolls
-  that run back: run `catalog import` and `catalog asset upload --source
-  manimkc` first (`catalog doctor` lists what is in the way). The holding
+  that run back. On such a database `catalog import` and `catalog asset
+  upload` then refuse too, since migrations are outstanding, so the way
+  forward is the code from before the cut-over, where 0013 is still held:
+  `git worktree add <dir> content-files-final`, run flip day there
+  (`node scripts/flip-rehearsal.mjs --real ...`, which uploads and applies
+  0013), then come back. Only a database that was never through flip day can
+  be in that state; a fresh one has nothing 0013 refuses, since the import
+  after 0013 stores every file before its row. The holding
   machinery stays for the next contract, and `test/blob-contract.test.ts`
   registers 0013 through the `contracts` option to keep it tested. The
   manimkc import stores each file itself, so a test fixture that writes a

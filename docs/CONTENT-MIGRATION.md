@@ -1894,9 +1894,11 @@ database has run step 1 and applied 0013; the operator half is #157,
   write's transaction, covers the topic, tag and course writers,
   `course import`, item archive, restore and purge, and `learn concept add`.
   While any type is still on files the old write-through runs as before.
-- **`catalog import` skips a type with no files in the directory.** A type
-  the database owns is skipped when the directory holds none of its files,
-  as well as when they are its own last export, and once topics are flipped
+- **`catalog import` skips a type with no files in the directory.** Once the
+  database owns every type, a type is skipped when the directory holds none
+  of its files, as well as when they are its own last export (while any type
+  is still on files a tree missing a type's files is refused, as before, since
+  trees are then kept in step). Once topics are flipped
   the vocabulary comes from the topic rows (`vocabularyOf`). So a bare
   `catalog import` on a database that owns every type reads nothing for the
   six and refreshes manimkc and the mirror ledger, and `catalog import seed`

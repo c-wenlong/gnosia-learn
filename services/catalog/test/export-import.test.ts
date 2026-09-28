@@ -649,12 +649,9 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     const edited = await tempDir("refused-root");
     try {
       await cp(out, edited, { recursive: true });
-      // Edited rather than deleted: a tree with none of a type's files is
-      // skipped for that type (a checkout after the cut-over holds none).
-      const course = path.join(edited, "content/courses/xx1000.yaml");
-      await writeFile(course, `${await readFile(course, "utf8")}# edited\n`);
+      await rm(path.join(edited, "content/courses/xx1000.yaml"));
       await expect(runImportCommand({ dir: edited })).rejects.toThrow(
-        /the database owns courses.*Changed since the last export: content\/courses\/xx1000\.yaml \(edited\)/s,
+        /the database owns courses.*Changed since the last export: content\/courses\/xx1000\.yaml \(deleted\)/s,
       );
       expect(await rootOf()).toBe(before);
     } finally {

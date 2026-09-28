@@ -136,6 +136,18 @@ describe.skipIf(!reachable.ok)("after the cut-over", () => {
     expect(result.totals.deleted).toBe(0);
   });
 
+  it("still refuses a tree missing a type's files while some type is on files", async () => {
+    // Before every type is flipped, trees are kept in step with the rows
+    // (D17), so an export with a type's files gone is one cut short, and
+    // refused by name as it always was.
+    await scratch.db.update(contentSource).set({ source: "files" }).where(eq(contentSource.type, "sessions"));
+    try {
+      await expect(runImportCommand({ dir: REPO_ROOT, only: ["tags"] })).rejects.toThrow(/content\/tags\.yaml \(deleted\)/);
+    } finally {
+      await scratch.db.update(contentSource).set({ source: "db" }).where(eq(contentSource.type, "sessions"));
+    }
+  });
+
   it("refuses a learn read on a type the database does not own, rather than reading an empty folder", async () => {
     await scratch.db.update(contentSource).set({ source: "files" }).where(eq(contentSource.type, "concepts"));
     try {

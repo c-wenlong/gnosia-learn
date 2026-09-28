@@ -106,8 +106,9 @@ npm run catalog -- parity /tmp/export           # entity by entity; exits 1 on a
 ```
 
 On a database that owns a type, `catalog import` skips that type when the
-directory holds none of its files or holds exactly the database's last export
-of it, and refuses its files by name when they were edited. So an export is
+directory holds exactly the database's last export of it, or (once the
+database owns every type) none of its files at all, and refuses its files by
+name when they were edited. So an export is
 never the way to change content: every change goes through the command for
 its type, which writes the rows with an author and a `--reason` and leaves a
 revision `catalog history` can show. Into a fresh database, where no type is

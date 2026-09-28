@@ -23,6 +23,7 @@ import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
+import { exportsFiles } from "../content/write-through";
 import { renderType } from "../content/export";
 import { readTopicEntries } from "../content/topics";
 import type { CatalogDatabase } from "../db";
@@ -602,6 +603,10 @@ async function ownedSkips(
   // refusal refuses the whole import, which must then have written nothing.
   const roots: Parameters<typeof recordRoot>[1][] = [];
   const rows = await readContentSources(db);
+  // Whether trees are still kept in step with the rows (D17): until every
+  // type is flipped a tree missing a type's files is an export someone cut
+  // short, and refused as before; after, a checkout holds no files at all.
+  const treesInStep = await exportsFiles(db);
   for (const indexer of selected) {
     const type = CONTENT_TYPE[indexer.source];
     const row = type === undefined ? undefined : rows.get(type);
@@ -615,11 +620,12 @@ async function ownedSkips(
       continue;
     }
     const files = await readTypeFiles(root, type);
-    // A tree with none of the type's files has nothing to import for it: an
-    // export of other types, or a checkout after the cut-over removed
-    // content/ and learn/. Skipped, and its root left as it was, since this
-    // tree is not where the type's files are.
-    if (files.length === 0) {
+    // Once the database owns every type, a tree with none of a type's files
+    // has nothing to import for it: a checkout after the cut-over removed
+    // content/ and learn/, or an export of other types. Skipped, and its root
+    // left as it was, since this tree is not where the type's files are.
+    // Skipping writes nothing, so no row can be lost by it.
+    if (files.length === 0 && !treesInStep) {
       out.set(indexer.source, {
         source: indexer.source,
         reason: `the database owns ${type} (since ${since}), and ${root} holds no ${TYPE_LOCATION[type]} to read`,
