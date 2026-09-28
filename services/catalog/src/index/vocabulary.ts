@@ -56,8 +56,16 @@ function claim(
 }
 
 export async function loadVocabulary(repoRoot: string): Promise<Vocabulary> {
-  const entries = asIndexError(() => loadTopics({ root: repoRoot }));
+  return vocabularyOf(asIndexError(() => loadTopics({ root: repoRoot })));
+}
 
+/**
+ * The lookup tables over entries from anywhere: the file above, or the topic
+ * rows once the database owns topics (`readTopicEntries`, the same entries
+ * the export writes), which is where an import after the cut-over takes
+ * them, since the tree it reads may hold no `content/topics.yaml` at all.
+ */
+export function vocabularyOf(entries: VocabularyEntry[]): Vocabulary {
   const bySlug = new Map<string, VocabularyEntry>();
   const byManimkcPath = new Map<string, string>();
   const byCourseModule = new Map<string, string>();

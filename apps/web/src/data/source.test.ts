@@ -160,11 +160,9 @@ describe("a type the database does not own", () => {
     await expect(inRequest(() => getTopics())).resolves.toEqual([]);
   });
 
-  it("is refused when no row names it, since nothing has flipped it", async () => {
+  it("reads the database when no row names it: the default since the cut-over", async () => {
     catalog.ownership = async () => ({});
-    const error = await refusal(() => getTopics());
-    expect(error.message).toContain("no content_source row");
-    expect(error.message).toContain("npm run catalog -- flip topics");
+    await expect(inRequest(() => getTopics())).resolves.toEqual([]);
   });
 
   it("is refused for a single note, log or diagram read too", async () => {
@@ -191,7 +189,7 @@ describe("who owns each type", () => {
     const resolved = await inRequest(() => contentSource().resolution());
     expect(resolved.topics).toEqual({ kind: "db", from: "row" });
     expect(resolved.courses).toEqual({ kind: "files", from: "row" });
-    expect(resolved.tags).toEqual({ kind: "files", from: "default" });
+    expect(resolved.tags).toEqual({ kind: "db", from: "default" });
   });
 
   it("lets Next's own dynamic-usage signal through instead of calling it an outage", async () => {

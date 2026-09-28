@@ -6,7 +6,6 @@ import path from "node:path";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
-import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "./content/blob-contract";
 import type { CatalogDatabase } from "./db";
 import { SERVICE_ROOT } from "./env";
 
@@ -136,15 +135,31 @@ export async function applyMigrations(
  *
  * So a registered contract migration must be the last entry in the journal,
  * and `test/blob-contract.test.ts` fails when one is not. Once every database
- * has applied it, its entry comes out of this table (a phase 3 checklist line
- * in docs/CONTENT-MIGRATION.md), and migrations can follow it again.
+ * has applied it, its entry comes out of this table, and migrations can
+ * follow it again.
+ *
+ * Empty since phase 3's cut-over: `0013_asset_blob_contract` was the only
+ * one, and it came out once the owner's database had applied it, which the
+ * cut-over checks (`scripts/flip-rehearsal.mjs --cutover`) before its PR
+ * merges. On a database without it, `catalog migrate` now applies it like any
+ * other migration, and its guard raises with the offending ids and rolls that
+ * run back if the data is not ready. The machinery stays for the next
+ * contract; its tests register 0013 through the `contracts` option.
  */
-const CONTRACT_MIGRATIONS: Readonly<Record<string, (db: CatalogDatabase) => Promise<string | null>>> = {
-  [BLOB_CONTRACT_MIGRATION]: async (db) => describeDistance(await blobContractDistance(db)),
-};
+export type ContractMigrations = Readonly<Record<string, (db: CatalogDatabase) => Promise<string | null>>>;
 
-export function isContractMigration(tag: string): boolean {
-  return tag in CONTRACT_MIGRATIONS;
+const CONTRACT_MIGRATIONS: ContractMigrations = {};
+
+export function isContractMigration(tag: string, contracts: ContractMigrations = CONTRACT_MIGRATIONS): boolean {
+  return tag in contracts;
+}
+
+/** Where to find migrations, and which of them are contracts; the defaults are the catalog's own. */
+export interface MigrationOptions {
+  folder?: string;
+  migrationsSchema?: string;
+  /** Replaces the registered contract migrations, for a test of the holding machinery. */
+  contracts?: ContractMigrations;
 }
 
 /** A migration `migrateHolding` did not apply, and why. */
@@ -227,21 +242,19 @@ async function applyThrough(
  * cannot roll back the migrations before it. Every run is checked to have
  * applied what it was given (`applyThrough`), which is what ends the loop.
  */
-export async function migrateHolding(
-  db: CatalogDatabase,
-  options: { folder?: string; migrationsSchema?: string } = {},
-): Promise<HeldMigration[]> {
+export async function migrateHolding(db: CatalogDatabase, options: MigrationOptions = {}): Promise<HeldMigration[]> {
+  const contracts = options.contracts ?? CONTRACT_MIGRATIONS;
   const tags = await journalTags(options.folder ?? MIGRATIONS_FOLDER);
   for (;;) {
     const { pending } = await migrationStatus(db, options);
-    const contract = pending.find(isContractMigration);
+    const contract = pending.find((tag) => isContractMigration(tag, contracts));
     if (contract === undefined) {
       if (pending.length > 0) await applyThrough(db, tags, options);
       return [];
     }
     const before = tags.indexOf(contract);
     if (pending.some((tag) => tags.indexOf(tag) < before)) await applyThrough(db, tags, options, before);
-    const reason = await CONTRACT_MIGRATIONS[contract]?.(db);
+    const reason = await contracts[contract]?.(db);
     if (reason !== null && reason !== undefined) return holding(pending, tags, contract, reason);
     // Applies the contract, so the next pass finds the next one or none.
     await applyThrough(db, tags, options, before + 1);
@@ -267,12 +280,13 @@ function holding(pending: readonly string[], tags: readonly string[], contract: 
  */
 export async function heldMigrations(
   db: CatalogDatabase,
-  options: { folder?: string; migrationsSchema?: string; status?: MigrationStatus } = {},
+  options: MigrationOptions & { status?: MigrationStatus } = {},
 ): Promise<HeldMigration[] | null> {
+  const contracts = options.contracts ?? CONTRACT_MIGRATIONS;
   const status = options.status ?? (await migrationStatus(db, options));
   const first = status.pending[0];
-  if (first === undefined || !isContractMigration(first)) return null;
-  const reason = await CONTRACT_MIGRATIONS[first]?.(db);
+  if (first === undefined || !isContractMigration(first, contracts)) return null;
+  const reason = await contracts[first]?.(db);
   if (reason === null || reason === undefined) return null;
   return holding(status.pending, await journalTags(options.folder ?? MIGRATIONS_FOLDER), first, reason);
 }
@@ -317,13 +331,10 @@ export class MigrationsOutstanding extends Error {
  * one those commands must not need, which is the rule for adding one while a
  * database anywhere still holds 0013 (SCHEMA.md, "Still open").
  */
-export async function assertMigrated(
-  db: CatalogDatabase,
-  options: { folder?: string; migrationsSchema?: string } = {},
-): Promise<void> {
+export async function assertMigrated(db: CatalogDatabase, options: MigrationOptions = {}): Promise<void> {
   const status = await migrationStatus(db, options);
   const first = status.pending[0];
-  if (first !== undefined && !isContractMigration(first)) {
+  if (first !== undefined && !isContractMigration(first, options.contracts)) {
     throw new MigrationsOutstanding(status.pending);
   }
 }

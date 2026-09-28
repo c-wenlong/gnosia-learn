@@ -350,7 +350,7 @@ export function formatDoctor(result: DoctorResult): string {
         : distance === 0
           ? ` (${BLOB_CONTRACT_MIGRATION} requires both to be none; nothing stands in its way)`
           : ` (${BLOB_CONTRACT_MIGRATION}, which requires a blob behind every video, sidecar, poster and diagram SVG, ` +
-            `is held until both are none: run catalog import, then catalog asset upload --source manimkc)`),
+            `refuses to apply until both are none: run catalog import, then catalog asset upload --source manimkc)`),
   );
   for (const row of contract.unstored.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.kind})`);
   if (contract.unstored.length > SAMPLE) lines.push(`  and ${contract.unstored.length - SAMPLE} more (--json lists all)`);

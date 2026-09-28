@@ -70,7 +70,7 @@ import {
   renderResult,
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
-import { ContentError, TOPICS_FILE } from "@self-learn/content";
+import { ContentError } from "@self-learn/content";
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
 import { runDiagramCommand } from "../commands/diagram";
@@ -110,6 +110,7 @@ import {
   appendSession,
   conceptCollisions,
   ensureDirs,
+  FilesGoneError,
   listConcepts,
   listDomains,
   listSessions,
@@ -125,7 +126,8 @@ import {
 import { NoteWriteError } from "../content/note-rows";
 import { LogError } from "../content/session-logs";
 import { ContentWriteError } from "../content/write";
-import { conceptsDir, kbDir, rel, repoRoot } from "./paths";
+import { courseTree, type CourseTree } from "./course-tree";
+import { conceptsDir, kbDir, namedTree, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
 import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { FileLockError } from "./file-lock";
@@ -367,10 +369,16 @@ commands.init = async (_parsed, session) => {
 
   out(
     [
-      `Initialised knowledge base at ${rel(kbDir())}/`,
-      `  concepts/   atomic concept notes`,
-      `  sessions/   per-session logs`,
-      `  assets/     generated diagrams`,
+      // A tree of files only when LEARN_ROOT names one: since the cut-over
+      // the notes, logs and diagrams are rows, and the repository has none.
+      ...(namedTree() !== null
+        ? [
+            `Initialised knowledge base at ${rel(kbDir())}/`,
+            `  concepts/   atomic concept notes`,
+            `  sessions/   per-session logs`,
+            `  assets/     generated diagrams`,
+          ]
+        : [`Knowledge base: notes, session logs and diagrams are rows in the catalog`]),
       ``,
       `State lives in ${redactUrl(databaseUrl())}:`,
       `  event · mastery · review  (was learn/state/*.json)`,
@@ -412,7 +420,7 @@ commands.status = async ({ values }, session) => {
     .join(" · ");
 
   const lines = [
-    `Knowledge base: ${rel(kbDir())}`,
+    `Knowledge base: ${namedTree() !== null ? rel(kbDir()) : `the catalog at ${redactUrl(databaseUrl())}`}`,
     `Concepts:  ${stats.total}  (${stats.mastered} mastered · ${stats.learning} learning · ${stats.untouched} untouched)`,
     `Domains:   ${domains || "none"}`,
     `Reviews:   ${due.length} due now`,
@@ -438,295 +446,315 @@ commands.concept = async ({ values, positionals }, session) => {
   const sub = positionals[1];
 
   if (sub === "add") {
-    if (values.title === undefined) fail("concept add requires --title");
-    const id = values.id ? slugify(values.id) : slugify(values.title);
-    if (!id) fail("could not derive an id from --title; pass --id");
+    // The course files `--item` edits: the tree's own while courses are on
+    // files, else the database's export in a temp directory (course-tree.ts),
+    // removed however the command ends.
+    let itemTree: CourseTree | null = null;
+    try {
+      if (values.title === undefined) fail("concept add requires --title");
+      const id = values.id ? slugify(values.id) : slugify(values.title);
+      if (!id) fail("could not derive an id from --title; pass --id");
 
-    // `--topic` is checked here, before a byte is written. The whole point of
-    // the flag is that a session never leaves a note the vocabulary has never
-    // heard of, and writing the note first and then discovering the slug was a
-    // typo would produce exactly that.
-    let topicSlug = values.topic?.trim();
-    if (values.topic !== undefined && !topicSlug) {
-      fail("concept add --topic needs a topic slug");
-    }
-
-    // `--item` is the course-side half: the row the note teaches. Its module
-    // names the topic the note must be mapped to, so the flag implies
-    // `--topic`, and the two are refused together when they disagree, since
-    // the course reader would refuse the file that resulted.
-    const itemId = values.item?.trim();
-    if (values.item !== undefined && !itemId) {
-      fail("concept add --item needs a curriculum item id, e.g. cp4284-m1-t1");
-    }
-    let itemFile: string | undefined;
-    if (itemId !== undefined) {
-      try {
-        const check = checkItem(repoRoot(), itemId, id);
-        itemFile = check.file;
-        if (topicSlug === undefined) topicSlug = check.moduleTopic;
-        else if (topicSlug !== check.moduleTopic) {
-          fail(
-            `--item ${itemId} is in a module whose topic is "${check.moduleTopic}", not ` +
-              `"${topicSlug}". A row's concepts sit under its module's topic; drop --topic, ` +
-              `or pick a row under "${topicSlug}".`,
-          );
-        }
-      } catch (error) {
-        if (error instanceof CourseEditError || error instanceof ContentError) {
-          fail(error.message);
-        }
-        throw error;
+      // `--topic` is checked here, before a byte is written. The whole point of
+      // the flag is that a session never leaves a note the vocabulary has never
+      // heard of, and writing the note first and then discovering the slug was a
+      // typo would produce exactly that.
+      let topicSlug = values.topic?.trim();
+      if (values.topic !== undefined && !topicSlug) {
+        fail("concept add --topic needs a topic slug");
       }
-    }
 
-    // The topic is a row now, and the concept's topic is its `topic_slug`,
-    // written through the catalog. Everything that could refuse that write is
-    // asked here, before the note exists.
-    if (topicSlug !== undefined) {
-      try {
-        await checkConceptTopic(await session.db(), { concept: id, topic: topicSlug, root: repoRoot() });
-      } catch (error) {
-        if (error instanceof TopicError || error instanceof WriteThroughError || error instanceof ContentError) {
-          fail(error.message);
-        }
-        throw error;
+      // `--item` is the course-side half: the row the note teaches. Its module
+      // names the topic the note must be mapped to, so the flag implies
+      // `--topic`, and the two are refused together when they disagree, since
+      // the course reader would refuse the file that resulted.
+      const itemId = values.item?.trim();
+      if (values.item !== undefined && !itemId) {
+        fail("concept add --item needs a curriculum item id, e.g. cp4284-m1-t1");
       }
-    }
-
-    const read = await readConceptForWrite(id);
-    const existing = read?.note ?? null;
-    if (existing !== null && !values.force) {
-      fail(`concept "${id}" already exists (pass --force to overwrite)`);
-    }
-
-    // The listing on a course row goes in through the course writer, `course
-    // import` of the edited file, which writes the row's link and keeps the
-    // course files in step (D17), whenever either side is rows. Once the
-    // database owns courses that is the only way in: an index would refuse
-    // the edited file as a hand-edited export, whatever owns concepts (S1 of
-    // the phase 1 review). And once it owns concepts the index reads no note,
-    // so the import is what writes the link. Only with both on files does
-    // the concepts index, courses behind it, take the listing in.
-    // Everything that could refuse the import is asked now, by a dry run of
-    // the file as it is, so the refusal comes while nothing has moved: every
-    // course file and topics.yaml must be what the database holds, and this
-    // one must hold no edit the database has not imported, since the import
-    // would take it in under this command's reason.
-    const rowsMode = await ownedByDatabase("concepts");
-    const courseFile = itemFile === undefined ? undefined : path.join(repoRoot(), itemFile);
-    const courseReason = values.reason?.trim() || `learn concept add ${id} --item ${itemId ?? ""}`;
-    const listByImport = courseFile !== undefined && (rowsMode || (await ownedByDatabase("courses")));
-    if (listByImport) {
-      try {
-        const dry = await importCourse(await session.db(), { file: courseFile, reason: courseReason, dryRun: true });
-        if (dry.revisions > 0) {
-          fail(
-            `nothing was written: ${itemFile} holds edits the database has not imported ` +
-              `(${dry.changes.filter((c) => c.op !== null).map((c) => `${c.type} ${c.id}`).join(", ")}). ` +
-              `Import them first with \`npm run --silent catalog -- course import ${itemFile} --reason "..."\`, ` +
-              `or put the file back with \`catalog course export\`.`,
-          );
-        }
-      } catch (error) {
-        if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
-          fail(`nothing was written: ${error.message}`);
-        }
-        throw error;
-      }
-    }
-
-    // With --force over an existing note, a field no flag names keeps what
-    // the note has. A re-run is then a way to finish a half-done `--item`
-    // without undoing edits made to the note in between, which is what the
-    // failure message for that case promises.
-    const kept = (flag: string | undefined, prior: unknown): string[] =>
-      flag !== undefined ? list(flag) : Array.isArray(prior) ? prior.map(String) : [];
-    const concept = {
-      id,
-      title: values.title,
-      summary:
-        values.summary ?? (typeof existing?.summary === "string" ? existing.summary : ""),
-      requires: kept(values.requires, existing?.requires),
-      assumes: kept(values.assumes, existing?.assumes),
-      tags: kept(values.tags, existing?.tags),
-      sources: kept(values.sources, existing?.sources),
-      created:
-        typeof existing?.created === "string" ? existing.created : new Date().toISOString(),
-    };
-
-    const sections = [
-      `# ${values.title}`,
-      values.summary || `> One-paragraph statement of the idea.`,
-      `## Why it matters`,
-      `## The idea`,
-      `## Worked example`,
-      `## Failure modes`,
-    ];
-    if (concept.requires.length > 0) {
-      sections.push(`## Prerequisites\n\n${concept.requires.map((r) => `- [[${r}]]`).join("\n")}`);
-    }
-    const body = values.body ?? existing?.body ?? `${sections.join("\n\n")}\n`;
-
-    // On rows the note is filed under its topic in the same write, and a new
-    // note needs both a topic and a folder; an existing one keeps its folder
-    // unless --domain names another, which rows refuse. On files, omitting
-    // --domain files the note at the root, as it always has.
-    const rows = rowsMode;
-    const file = await writeConcept(
-      { ...concept, body },
-      rows
-        ? {
-            ...(values.domain !== undefined ? { domain: values.domain || null } : {}),
-            ...(topicSlug !== undefined ? { topic: topicSlug } : {}),
-            reason: values.reason ?? `learn concept add ${id}${topicSlug !== undefined ? ` --topic ${topicSlug}` : ""}`,
-            base: read?.base ?? null,
+      let itemFile: string | undefined;
+      if (itemId !== undefined) {
+        try {
+          itemTree = await courseTree((await ownedByDatabase("courses")) ? await session.db() : null, repoRoot());
+          const check = checkItem(itemTree.root, itemId, id);
+          await itemTree.stamp(check.course);
+          itemFile = check.file;
+          if (topicSlug === undefined) topicSlug = check.moduleTopic;
+          else if (topicSlug !== check.moduleTopic) {
+            fail(
+              `--item ${itemId} is in a module whose topic is "${check.moduleTopic}", not ` +
+                `"${topicSlug}". A row's concepts sit under its module's topic; drop --topic, ` +
+                `or pick a row under "${topicSlug}".`,
+            );
           }
-        : { domain: values.domain === undefined ? null : values.domain || null, base: null },
-    );
-    await ensureDirs();
+        } catch (error) {
+          if (error instanceof CourseEditError || error instanceof ContentError) {
+            fail(error.message);
+          }
+          throw error;
+        }
+      }
 
-    // A note is not in the catalog until it is indexed, and it cannot be
-    // indexed until it is filed under a topic. `--topic` does both, so the
-    // note a session just wrote can carry evidence at the very next
-    // `observe`. Without it the note is a file and nothing else, which is
-    // worth saying loudly here rather than at the first refusal.
-    let indexed = false;
-    if (topicSlug !== undefined) {
-      try {
-        // The topic first: the course reader refuses a listed concept its
-        // module's topic does not map, so the listing cannot go in ahead of
-        // it. `concept.topic_slug` through the seam, and topics.yaml
-        // rewritten from the rows, whose `maps.concepts` is that column.
-        // On rows the note's own write filed it under the topic and rewrote
-        // topics.yaml with it (`writeConcept`); on files the note is read
-        // back as the concepts indexer reads it, so the row written here is
-        // the row that index would write, body included.
-        const note = rows ? null : readNote(await fs.readFile(file, "utf8"), rel(file), path.basename(file, ".md"));
-        const folder = path.relative(conceptsDir(), path.dirname(file));
-        if (note !== null) await fileConceptUnderTopic(
-          await session.db(),
-          {
-            concept: id,
-            topic: topicSlug,
-            row: {
-              title: note.title,
-              summary: note.summary,
-              path: rel(file),
-              prerequisites: (["requires", "assumes"] as const).flatMap((kind) =>
-                note[kind].map((slug) => ({ slug, kind })),
-              ),
-              note: {
-                domain: folder === "" ? null : folder,
-                body: note.body,
-                tags: note.tags,
-                sources: note.sources,
-                authoredAt: note.created,
+      // The topic is a row now, and the concept's topic is its `topic_slug`,
+      // written through the catalog. Everything that could refuse that write is
+      // asked here, before the note exists.
+      if (topicSlug !== undefined) {
+        try {
+          await checkConceptTopic(await session.db(), { concept: id, topic: topicSlug, root: repoRoot() });
+        } catch (error) {
+          if (error instanceof TopicError || error instanceof WriteThroughError || error instanceof ContentError) {
+            fail(error.message);
+          }
+          throw error;
+        }
+      }
+
+      const read = await readConceptForWrite(id);
+      const existing = read?.note ?? null;
+      if (existing !== null && !values.force) {
+        fail(`concept "${id}" already exists (pass --force to overwrite)`);
+      }
+
+      // The listing on a course row goes in through the course writer, `course
+      // import` of the edited file, which writes the row's link and keeps the
+      // course files in step (D17), whenever either side is rows. Once the
+      // database owns courses that is the only way in: an index would refuse
+      // the edited file as a hand-edited export, whatever owns concepts (S1 of
+      // the phase 1 review). And once it owns concepts the index reads no note,
+      // so the import is what writes the link. Only with both on files does
+      // the concepts index, courses behind it, take the listing in.
+      // Everything that could refuse the import is asked now, by a dry run of
+      // the file as it is, so the refusal comes while nothing has moved: every
+      // course file and topics.yaml must be what the database holds, and this
+      // one must hold no edit the database has not imported, since the import
+      // would take it in under this command's reason.
+      const rowsMode = await ownedByDatabase("concepts");
+      const courseFile = itemFile === undefined || itemTree === null ? undefined : path.join(itemTree.root, itemFile);
+      // The command that finishes a half-done listing: the file's own import
+      // while the tree holds it, else this command again, which exports afresh.
+      const finishListing =
+        itemTree?.temporary === true
+          ? `re-run this command with --force`
+          : `run: npm run --silent catalog -- course import ${itemFile ?? ""} --reason "${values.reason?.trim() || `learn concept add ${id} --item ${itemId ?? ""}`}"`;
+      const courseReason = values.reason?.trim() || `learn concept add ${id} --item ${itemId ?? ""}`;
+      const listByImport = courseFile !== undefined && (rowsMode || (await ownedByDatabase("courses")));
+      if (listByImport) {
+        try {
+          const dry = await importCourse(await session.db(), { file: courseFile, reason: courseReason, dryRun: true });
+          if (dry.revisions > 0) {
+            fail(
+              `nothing was written: ${itemTree?.temporary === true ? "the course's export" : itemFile} holds edits the database has not imported ` +
+                `(${dry.changes.filter((c) => c.op !== null).map((c) => `${c.type} ${c.id}`).join(", ")}). ` +
+                `Import them first with \`npm run --silent catalog -- course import ${itemFile} --reason "..."\`, ` +
+                `or put the file back with \`catalog course export\`.`,
+            );
+          }
+        } catch (error) {
+          if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
+            fail(`nothing was written: ${error.message}`);
+          }
+          throw error;
+        }
+      }
+
+      // With --force over an existing note, a field no flag names keeps what
+      // the note has. A re-run is then a way to finish a half-done `--item`
+      // without undoing edits made to the note in between, which is what the
+      // failure message for that case promises.
+      const kept = (flag: string | undefined, prior: unknown): string[] =>
+        flag !== undefined ? list(flag) : Array.isArray(prior) ? prior.map(String) : [];
+      const concept = {
+        id,
+        title: values.title,
+        summary:
+          values.summary ?? (typeof existing?.summary === "string" ? existing.summary : ""),
+        requires: kept(values.requires, existing?.requires),
+        assumes: kept(values.assumes, existing?.assumes),
+        tags: kept(values.tags, existing?.tags),
+        sources: kept(values.sources, existing?.sources),
+        created:
+          typeof existing?.created === "string" ? existing.created : new Date().toISOString(),
+      };
+
+      const sections = [
+        `# ${values.title}`,
+        values.summary || `> One-paragraph statement of the idea.`,
+        `## Why it matters`,
+        `## The idea`,
+        `## Worked example`,
+        `## Failure modes`,
+      ];
+      if (concept.requires.length > 0) {
+        sections.push(`## Prerequisites\n\n${concept.requires.map((r) => `- [[${r}]]`).join("\n")}`);
+      }
+      const body = values.body ?? existing?.body ?? `${sections.join("\n\n")}\n`;
+
+      // On rows the note is filed under its topic in the same write, and a new
+      // note needs both a topic and a folder; an existing one keeps its folder
+      // unless --domain names another, which rows refuse. On files, omitting
+      // --domain files the note at the root, as it always has.
+      const rows = rowsMode;
+      const file = await writeConcept(
+        { ...concept, body },
+        rows
+          ? {
+              ...(values.domain !== undefined ? { domain: values.domain || null } : {}),
+              ...(topicSlug !== undefined ? { topic: topicSlug } : {}),
+              reason: values.reason ?? `learn concept add ${id}${topicSlug !== undefined ? ` --topic ${topicSlug}` : ""}`,
+              base: read?.base ?? null,
+            }
+          : { domain: values.domain === undefined ? null : values.domain || null, base: null },
+      );
+      await ensureDirs();
+
+      // A note is not in the catalog until it is indexed, and it cannot be
+      // indexed until it is filed under a topic. `--topic` does both, so the
+      // note a session just wrote can carry evidence at the very next
+      // `observe`. Without it the note is a file and nothing else, which is
+      // worth saying loudly here rather than at the first refusal.
+      let indexed = false;
+      if (topicSlug !== undefined) {
+        try {
+          // The topic first: the course reader refuses a listed concept its
+          // module's topic does not map, so the listing cannot go in ahead of
+          // it. `concept.topic_slug` through the seam, and topics.yaml
+          // rewritten from the rows, whose `maps.concepts` is that column.
+          // On rows the note's own write filed it under the topic and rewrote
+          // topics.yaml with it (`writeConcept`); on files the note is read
+          // back as the concepts indexer reads it, so the row written here is
+          // the row that index would write, body included.
+          const note = rows ? null : readNote(await fs.readFile(file, "utf8"), rel(file), path.basename(file, ".md"));
+          const folder = path.relative(conceptsDir(), path.dirname(file));
+          if (note !== null) await fileConceptUnderTopic(
+            await session.db(),
+            {
+              concept: id,
+              topic: topicSlug,
+              row: {
+                title: note.title,
+                summary: note.summary,
+                path: rel(file),
+                prerequisites: (["requires", "assumes"] as const).flatMap((kind) =>
+                  note[kind].map((slug) => ({ slug, kind })),
+                ),
+                note: {
+                  domain: folder === "" ? null : folder,
+                  body: note.body,
+                  tags: note.tags,
+                  sources: note.sources,
+                  authoredAt: note.created,
+                },
               },
             },
-          },
-          {
-            author: LOCAL_LEARNER_ID,
-            authorKind: "person",
-            reason: values.reason?.trim() || `learn concept add ${id} --topic ${topicSlug}`,
-          },
-        );
-        if (itemId !== undefined) {
-          // The mapping is in place by now and has no inverse, so a listing
-          // that fails (the course file's lock held past its timeout, say)
-          // leaves the note mapped and unlisted. Every step is idempotent, so
-          // the way out is the same command again with --force, and the
-          // message says so rather than leaving the state to be worked out.
-          try {
-            await listConceptOnItem(repoRoot(), itemId, id);
-          } catch (error) {
-            if (error instanceof CourseEditError || error instanceof ContentError) {
-              fail(
-                `${rel(file)} was written and mapped to "${topicSlug}", but not listed on ` +
-                  `${itemId}: ${error.message}\n  The note and the mapping are in place. Re-run the ` +
-                  `same command with --force to finish: the note keeps its body and any field ` +
-                  `no flag names, and the mapping and listing are idempotent.`,
-              );
-            }
-            throw error;
-          }
-        }
-        // The listing first, through the course writer when it is the way
-        // in (above): it writes the row's link, rewrites the course file from
-        // the rows and records the export, so the concepts index that follows
-        // on files finds the course file to be the database's own export and
-        // skips it rather than refusing it.
-        if (listByImport && courseFile !== undefined) {
-          try {
-            await importCourse(await session.db(), { file: courseFile, reason: courseReason });
-          } catch (error) {
-            // The dry run above passed, so this is a write that landed in
-            // between. The note and the listing are in; the import is what
-            // is missing, and running it again is the whole recovery. Not
-            // `catalog export --only courses`, which would write the file
-            // back from the rows and drop the listing.
-            if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
-              fail(
-                `${rel(file)} was written and listed on ${itemId}, but the course import that ` +
-                  `links them refused: ${error.message}\n  Fix that, then run: npm run --silent catalog -- ` +
-                  `course import ${itemFile} --reason "${courseReason}"`,
-              );
-            }
-            throw error;
-          }
-        }
-        // Concepts on files: the note is read back as the concepts indexer
-        // reads it. With both types on files, courses run behind it and that
-        // is what writes the row's link. On rows the note needs no reading
-        // (its write was the row).
-        if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
-      } catch (error) {
-        if (
-          error instanceof TopicError ||
-          error instanceof WriteThroughError ||
-          error instanceof FileLockError ||
-          error instanceof CourseEditError ||
-          error instanceof ContentError ||
-          error instanceof IndexError ||
-          error instanceof NoteError
-        ) {
-          fail(
-            `${rel(file)} was written, but it is not in the catalog: ${error.message}` +
-              (listByImport && itemFile !== undefined
-                ? `\n  If ${itemFile} lists "${id}" on ${itemId} by now, the database owns that file: ` +
-                  `\`npm run --silent catalog -- course import ${itemFile} --reason "${courseReason}"\` takes ` +
-                  `the listing in; \`catalog export --only courses\` would write the file back without it.`
-                : ""),
+            {
+              author: LOCAL_LEARNER_ID,
+              authorKind: "person",
+              reason: values.reason?.trim() || `learn concept add ${id} --topic ${topicSlug}`,
+            },
           );
+          if (itemId !== undefined) {
+            // The mapping is in place by now and has no inverse, so a listing
+            // that fails (the course file's lock held past its timeout, say)
+            // leaves the note mapped and unlisted. Every step is idempotent, so
+            // the way out is the same command again with --force, and the
+            // message says so rather than leaving the state to be worked out.
+            try {
+              await itemTree?.refreshVocabulary();
+              await listConceptOnItem(itemTree?.root ?? repoRoot(), itemId, id);
+            } catch (error) {
+              if (error instanceof CourseEditError || error instanceof ContentError) {
+                fail(
+                  `${rel(file)} was written and mapped to "${topicSlug}", but not listed on ` +
+                    `${itemId}: ${error.message}\n  The note and the mapping are in place. Re-run the ` +
+                    `same command with --force to finish: the note keeps its body and any field ` +
+                    `no flag names, and the mapping and listing are idempotent.`,
+                );
+              }
+              throw error;
+            }
+          }
+          // The listing first, through the course writer when it is the way
+          // in (above): it writes the row's link, rewrites the course file from
+          // the rows and records the export, so the concepts index that follows
+          // on files finds the course file to be the database's own export and
+          // skips it rather than refusing it.
+          if (listByImport && courseFile !== undefined) {
+            try {
+              await importCourse(await session.db(), { file: courseFile, reason: courseReason });
+            } catch (error) {
+              // The dry run above passed, so this is a write that landed in
+              // between. The note and the listing are in; the import is what
+              // is missing, and running it again is the whole recovery. Not
+              // `catalog export --only courses`, which would write the file
+              // back from the rows and drop the listing.
+              if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
+                fail(
+                  `${rel(file)} was written and listed on ${itemId}, but the course import that ` +
+                    `links them refused: ${error.message}\n  Fix that, then ${finishListing}`,
+                );
+              }
+              throw error;
+            }
+          }
+          // Concepts on files: the note is read back as the concepts indexer
+          // reads it. With both types on files, courses run behind it and that
+          // is what writes the row's link. On rows the note needs no reading
+          // (its write was the row).
+          if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
+        } catch (error) {
+          if (
+            error instanceof TopicError ||
+            error instanceof WriteThroughError ||
+            error instanceof FileLockError ||
+            error instanceof CourseEditError ||
+            error instanceof ContentError ||
+            error instanceof IndexError ||
+            error instanceof NoteError
+          ) {
+            fail(
+              `${rel(file)} was written, but it is not in the catalog: ${error.message}` +
+                (listByImport && itemFile !== undefined
+                  ? itemTree?.temporary === true
+                    ? `\n  The listing on ${itemId} is not in yet: ${finishListing}.`
+                    : `\n  If ${itemFile} lists "${id}" on ${itemId} by now, the database owns that file: ` +
+                      `\`npm run --silent catalog -- course import ${itemFile} --reason "${courseReason}"\` takes ` +
+                      `the listing in; \`catalog export --only courses\` would write the file back without it.`
+                  : ""),
+            );
+          }
+          throw error;
         }
-        throw error;
+        indexed = true;
+      } else {
+        indexed = rows || (await isIndexed(session, id));
       }
-      indexed = true;
-    } else {
-      indexed = rows || (await isIndexed(session, id));
-    }
 
-    if (values.json) {
-      return out(
-        { id, path: rel(file), topic: topicSlug ?? null, item: itemId ?? null, indexed },
-        true,
-      );
-    }
+      if (values.json) {
+        return out(
+          { id, path: rel(file), topic: topicSlug ?? null, item: itemId ?? null, indexed },
+          true,
+        );
+      }
 
-    out(`Wrote ${rel(file)}`, false);
-    if (topicSlug !== undefined) {
-      out(`Filed "${id}" under topic "${topicSlug}" in the catalog, rewrote ${TOPICS_FILE}, and indexed it.`, false);
-      if (itemId !== undefined) out(`Listed "${id}" on ${itemId} in ${itemFile ?? ""}.`, false);
-    } else if (!indexed) {
-      out(
-        `Not in the catalog yet, so nothing can record mastery about it.\n` +
-          `  Re-run with --topic <slug> --force to file "${id}" under that topic (its ` +
-          `maps.concepts in ${TOPICS_FILE}) and index it in one step.\n` +
-          `  Pick the slug with: npm run --silent catalog -- search <term> --json`,
-        false,
-      );
+      out(`Wrote ${rel(file)}`, false);
+      if (topicSlug !== undefined) {
+        out(`Filed "${id}" under topic "${topicSlug}" in the catalog, and indexed it.`, false);
+        if (itemId !== undefined) {
+          out(`Listed "${id}" on ${itemId}${itemTree?.temporary === true ? "" : ` in ${itemFile ?? ""}`}.`, false);
+        }
+      } else if (!indexed) {
+        out(
+          `Not in the catalog yet, so nothing can record mastery about it.\n` +
+            `  Re-run with --topic <slug> --force to file "${id}" under that topic (its ` +
+            `maps.concepts) and index it in one step.\n` +
+            `  Pick the slug with: npm run --silent catalog -- search <term> --json`,
+          false,
+        );
+      }
+      return;
+    } finally {
+      await itemTree?.dispose();
     }
-    return;
   }
 
   if (sub === "edit") {
@@ -1817,17 +1845,15 @@ commands.help = async () => {
   concept add --title T [--topic S] [--item I] [--domain D] [--requires a,b]
               [--assumes c] [--tags x,y]
                                  --topic is a topic slug: it files the new id
-                                   under that topic in the catalog (rewriting
-                                   its maps.concepts in content/topics.yaml)
-                                   and indexes the note, so it can carry mastery
-                                   straight away. Without it the note is a file
-                                   and nothing else. --reason names why, for
-                                   the revision; it has a default.
+                                   under that topic in the catalog (its
+                                   maps.concepts), so it can carry mastery
+                                   straight away. --reason names why, for the
+                                   revision; it has a default.
                                  --item is a course row id like cp4284-m1-t1: it
                                    lists the new id under that row's concepts:
-                                   in content/courses/, so the note is on the
-                                   course path. It implies --topic (the row's
-                                   module names it).
+                                   through the course writer, so the note is on
+                                   the course path. It implies --topic (the
+                                   row's module names it).
   concept edit <id> [--domain D] [--requires …] [--assumes …] [--title …]
                                  --domain files the note under concepts/<D>/;
                                    the id stays the bare slug either way
@@ -1883,9 +1909,9 @@ commands.help = async () => {
                                    edited session log is refused
   doctor                         validate the graph and the state store
 
-Notes and session logs are files under learn/ until \`catalog flip concepts\`
-and \`catalog flip sessions\`, and rows after; the same commands work on
-either, and every one that writes them needs the database. Mastery, the
+Notes and session logs are rows in the catalog; the repository has held no
+files for them since the cut-over, and LEARN_ROOT names a tree of files for
+tests only. Every command that writes them needs the database. Mastery, the
 schedule and the event log are tables; DATABASE_URL points at them and
 defaults to postgres://localhost:5432/self_learn. --reason R names why, on
 any command that writes a note or a log.
@@ -2024,7 +2050,8 @@ export async function main(argv: string[]): Promise<number> {
       error instanceof ContentWriteError ||
       error instanceof WriteThroughError ||
       error instanceof TopicError ||
-      error instanceof VaultError;
+      error instanceof VaultError ||
+      error instanceof FilesGoneError;
     const message = expected
       ? (error as Error).message
       : ((error as Error)?.stack ?? String(error));

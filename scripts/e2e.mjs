@@ -1,19 +1,20 @@
 // End-to-end smoke test: the built app, a throwaway copy of the database, and
 // headless Chromium walking the flows a person uses every day.
 //
-// usage: npm run e2e [-- --keep-db] [-- --headed] [-- --seed]
+// usage: npm run e2e [-- --keep-db] [-- --headed] [-- --copy]
 //
 // What it does, in order:
-//   1. Copies `self_learn` into `self_learn_e2e_<pid>_<time>` with `createdb -T`.
+//   1. Builds `self_learn_e2e_<pid>_<time>`: an empty database, migrated,
+//      `catalog import seed/`, all six types flipped (the app reads content
+//      from the database only), and one `learn observe` so a review card is
+//      due. The default since phase 3 of docs/CONTENT-MIGRATION.md removed
+//      `content/` and `learn/`: `seed/` is the content a clone has.
+//      With --copy (or E2E_TEMPLATE_DB set) it copies a database instead,
+//      `self_learn` unless E2E_TEMPLATE_DB names another, with `createdb -T`.
 //      Every flow below that grades (a review rating, a session answer, Mark
 //      watched, a settings change) writes real rows, and AGENTS.md is plain
 //      that anything which grades runs against a copy, never `self_learn`.
-//      The copy is dropped in `finally`, on a failure and on Ctrl-C too.
-//      With --seed it builds that database instead: an empty one, migrated,
-//      `catalog import seed/`, all six types flipped (the app reads content
-//      from the database only), and one `learn observe` so a review card is due.
-//      That is what phase 3 of docs/CONTENT-MIGRATION.md makes the default,
-//      once `content/` and `learn/` are gone and `self_learn` is no template.
+//      Either database is dropped in `finally`, on a failure and on Ctrl-C too.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
 //      with a fixed test password and secret and with every provider key blank.
 //      It builds nothing: run `npm run build` first.
@@ -26,12 +27,14 @@
 // Options:
 //   --keep-db    leave the copy behind and print its name, to look at afterwards
 //   --headed     show the browser instead of running headless
-//   --seed       build the database from seed/ rather than copying self_learn.
-//                The seed has no videos (D7), so the Mark watched step is
-//                skipped and says so; its blob store is a temp directory.
+//   --copy       copy self_learn (or E2E_TEMPLATE_DB) rather than build from
+//                seed/. Built from the seed, which has no videos (D7), the
+//                Mark watched step is skipped and says so, and the blob store
+//                is a temp directory.
+//   --seed       the default; accepted so an older command line still runs.
 //
 // Environment:
-//   E2E_TEMPLATE_DB=<name>  the database to copy (default self_learn); every content type must be flipped
+//   E2E_TEMPLATE_DB=<name>  copy this database rather than build from seed/; every content type must be flipped
 //   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
@@ -59,18 +62,26 @@ const WEB = join(ROOT, 'apps/web');
 const flags = new Set(process.argv.slice(2));
 const KEEP_DB = flags.delete('--keep-db');
 const HEADED = flags.delete('--headed');
-const SEED = flags.delete('--seed');
-if (flags.size > 0) {
-  console.error(`unknown option: ${[...flags].join(' ')}\nusage: npm run e2e [-- --keep-db] [-- --headed] [-- --seed]`);
+const SEED_FLAG = flags.delete('--seed');
+const COPY = flags.delete('--copy') || Boolean(process.env.E2E_TEMPLATE_DB);
+if (flags.size > 0 || (SEED_FLAG && COPY)) {
+  console.error(
+    `${flags.size > 0 ? `unknown option: ${[...flags].join(' ')}` : '--seed and --copy (or E2E_TEMPLATE_DB) name two databases'}\n` +
+      'usage: npm run e2e [-- --keep-db] [-- --headed] [-- --copy]',
+  );
   process.exit(2);
 }
+// Built from seed/ unless a copy was asked for: the repository has held no
+// content of its own since the cut-over, and self_learn is the owner's.
+const SEED = !COPY;
 
 /** Values the server is started with. Test values only; nothing real is typed anywhere. */
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
-// The database copied. `self_learn` by default; E2E_TEMPLATE_DB names another,
-// such as a scratch copy flipped for a rehearsal, since the app reads content
-// from the database only and an unflipped template fails every content page.
+// The database copied with --copy. `self_learn` by default; E2E_TEMPLATE_DB
+// names another, such as a scratch copy flipped for a rehearsal, since the app
+// reads content from the database only and an unflipped template fails every
+// content page.
 const TEMPLATE_DB = process.env.E2E_TEMPLATE_DB || 'self_learn';
 // The pid and the start time, so a later run that happens to get the same pid
 // can never collide with (or drop) a copy an earlier run kept with --keep-db.

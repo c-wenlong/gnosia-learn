@@ -10,19 +10,22 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/env";
-import { applyMigrations } from "../src/migrations";
-import { partialMigrations } from "./partial-migrations";
+import { applyMigrations, journalTags } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { storedBlob } from "./stored-blob";
 
 /**
- * `scripts/flip-rehearsal.mjs`, the flip-day procedure that phase 3 runs
- * against the owner's database, run end to end against a copy.
+ * `scripts/flip-rehearsal.mjs`, the flip-day procedure, run end to end
+ * against a copy.
  *
- * The template is what the owner's database is today: migrated to 0009,
- * never flipped, and holding a video row whose bytes were never uploaded, so
- * the first migrate has to hold the contract migration (0013) back and the
- * last one applies it. The tree is the seed with one manimkc topic folder mapped,
+ * Since phase 3's cut-over the contract migration (0013) is no longer held
+ * back: the owner's database had applied it before the cut-over merged, and
+ * a database at 0009 holding a render nobody uploaded now fails its first
+ * migrate on 0013's guard, as it should. So the template here is a database
+ * migrated to the head and never flipped, which is what flip day can still
+ * meet: a fresh one, or one whose renders all have their blobs. The tree is
+ * the seed with one manimkc topic folder mapped,
  * and the manimkc CLI a stand-in reporting one rendered video and its
  * transcript, so the two uploads have something to store and the second has
  * nothing left to. No ffmpeg (`FFMPEG_PATH` names none), so posters are
@@ -213,12 +216,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
 
   beforeAll(async () => {
     template = await createScratchDatabase();
-    // Where the owner's database is: at 0009, never flipped, no content rows.
-    await applyMigrations(template.db, { folder: await partialMigrations(10) });
-    // The render an earlier `catalog index` recorded, as the owner's rows do.
-    await template.db.execute(
-      sql`insert into asset (id, kind, path, source_repo) values ('manimkc:out/demo/one/one.mp4', 'video', 'out/demo/one/one.mp4', 'manimkc')`,
-    );
+    // Migrated to the head, never flipped, no content rows.
+    await applyMigrations(template.db);
 
     work = await mkdtemp(path.join(tmpdir(), "catalog-flip-rehearsal-"));
     tree = path.join(work, "tree");
@@ -278,40 +277,28 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       ]);
       const step = (stepName: string) => report.steps.find((s) => s.name === stepName)?.result ?? {};
 
-      expect(step("migrate")["applied"]).toEqual([
-        "0010_content_expand",
-        "0011_content_export_positions",
-        "0012_concept_topic_not_null",
-      ]);
-      // Held, not attempted: its guard would have raised and rolled all four back.
-      expect(step("migrate")["held"]).toEqual([
-        { tag: "0013_asset_blob_contract", reason: expect.stringMatching(/^1 asset\(s\) of a stored kind have no blob/) },
-      ]);
-      expect(step("doctor")["blobContract"]).toEqual({
-        inForce: false,
-        unstored: [{ id: "manimkc:out/demo/one/one.mp4", kind: "video" }],
-        unkeyed: [],
-      });
+      // Nothing to apply and nothing held: the contract is in force from the start.
+      expect(step("migrate")["applied"]).toEqual([]);
+      expect(step("migrate")["held"]).toEqual([]);
+      expect(step("doctor")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
       expect(step("import into a throwaway copy")["totals"]).toMatchObject({ deleted: 0 });
       expect(step("import the tree")["totals"]).toMatchObject({ deleted: 0 });
       // Courses flip without --strict: two seed items name no concept.
       expect(step("flip courses")["rulesArmed"]).toEqual([]);
       const skipped = (step("import the tree again")["skipped"] as { source: string }[]).map((s) => s.source).sort();
       expect(skipped).toEqual(["concepts", "courses", "diagrams", "sessions", "tags", "topics"]);
-      expect(step("asset upload")).toMatchObject({ uploaded: 2, rowsWritten: 2, refused: 0 });
+      // Under the contract the import stored the render and its transcript
+      // before their rows, so the upload has nothing left but posters.
+      expect(step("asset upload")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
       // No ffmpeg: posters are skipped, and that is a warning, not a failure.
       expect(step("asset upload")["postersSkipped"]).toMatch(/ffmpeg was not found/);
       expect(report.steps.find((s) => s.name === "asset upload")?.warning).toMatch(/^no posters were made: ffmpeg was not found/);
       expect(report.warnings).toBe(1);
       expect(step("asset upload again")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
-      // The seed's diagram SVG, which the import stored, and the two uploads.
+      // The seed's diagram SVG, the render and its transcript: all three the import's.
       expect(step("blob audit")).toMatchObject({ rows: 3, objects: 3, outstanding: 0 });
-      expect(step("doctor again")["blobContract"]).toEqual({ inForce: false, unstored: [], unkeyed: [] });
-      expect(step("migrate the contract")).toMatchObject({
-        applied: ["0013_asset_blob_contract"],
-        head: "0013_asset_blob_contract",
-        held: [],
-      });
+      expect(step("doctor again")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
+      expect(step("migrate the contract")).toMatchObject({ applied: [], head: "0013_asset_blob_contract", held: [] });
 
       // The backup is the copy as it was before step 1, and restores as it.
       expect(report.backup).toMatchObject({ path: expect.stringMatching(new RegExp(`${name}-preflip-\\d{8}T\\d{6}Z\\.dump$`)) });
@@ -343,19 +330,19 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
                   (select count(*)::int from asset) as assets,
                   (select count(*)::int from topic) as topics`,
         );
-        expect(counts.rows[0]).toEqual({ migrations: 10, assets: 1, topics: 0 });
+        expect(counts.rows[0]).toEqual({ migrations: (await journalTags()).length, assets: 0, topics: 0 });
       } finally {
         await back.end();
       }
 
-      // The throwaway copy is gone, and the template is as it was: at 0009, no content.
+      // The throwaway copy is gone, and the template is as it was: no content.
       expect(await databasesLike("self_learn_preflight_%")).toEqual([]);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
-      expect(assets.rows[0]?.n).toBe(1);
+      expect(assets.rows[0]?.n).toBe(0);
       const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-      expect(applied.rows[0]?.n).toBe(10);
+      expect(applied.rows[0]?.n).toBe((await journalTags()).length);
     } finally {
       const env = pgToolEnv();
       await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });
@@ -372,14 +359,16 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
 
   beforeAll(async () => {
     template = await createScratchDatabase();
-    await applyMigrations(template.db, { folder: await partialMigrations(10) });
+    await applyMigrations(template.db);
     // Two renders recorded, and a manimkc checkout that reports only one:
     // the import would remove the other, as a worktree without the owner's
     // untracked files would remove theirs.
-    await template.db.execute(sql`
-      insert into asset (id, kind, path, source_repo) values
-        ('manimkc:out/demo/one/one.mp4', 'video', 'out/demo/one/one.mp4', 'manimkc'),
-        ('manimkc:out/demo/one/gone.mp4', 'video', 'out/demo/one/gone.mp4', 'manimkc')`);
+    for (const name of ["one", "gone"]) {
+      const key = await storedBlob(template.db, name, "mp4");
+      await template.db.execute(sql`
+        insert into asset (id, kind, path, source_repo, blob_key)
+        values (${`manimkc:out/demo/one/${name}.mp4`}, 'video', ${`out/demo/one/${name}.mp4`}, 'manimkc', ${key})`);
+    }
     work = await mkdtemp(path.join(tmpdir(), "catalog-flip-rehearsal-removes-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);
@@ -424,10 +413,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
 
   beforeAll(async () => {
     template = await createScratchDatabase();
-    await applyMigrations(template.db, { folder: await partialMigrations(10) });
-    await template.db.execute(
-      sql`insert into asset (id, kind, path, source_repo) values ('manimkc:out/demo/one/one.mp4', 'video', 'out/demo/one/one.mp4', 'manimkc')`,
-    );
+    // At the head and never flipped: what flip day can meet since the
+    // cut-over unregistered 0013 (see the first suite).
+    await applyMigrations(template.db);
     work = await mkdtemp(path.join(tmpdir(), "catalog-cutover-rehearsal-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);
@@ -534,7 +522,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
 
       // The template is as it was.
       const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
-      expect(applied.rows[0]?.n).toBe(10);
+      expect(applied.rows[0]?.n).toBe((await journalTags()).length);
+      const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+      expect(topics.rows[0]?.n).toBe(0);
     } finally {
       const env = pgToolEnv();
       await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });

@@ -164,8 +164,8 @@ export async function assertKnownConcepts(
   if (unknown.length > 0) {
     throw new StateError(
       `no concept in the catalog for ${unknown.map((s) => `"${s}"`).join(", ")}. ` +
-        `A note on disk is not in the catalog until it is indexed: add it to ` +
-        `maps.concepts in content/topics.yaml, then run \`npm run learn -- index\`.`,
+        `A note is in the catalog once it is filed under a topic: ` +
+        `\`npm run learn -- concept add --title "..." --topic <slug>\` writes and files it.`,
     );
   }
 }
@@ -186,8 +186,8 @@ export async function assertReadableConcepts(
   if (unknown.length > 0) {
     throw new StateError(
       `no concept in the catalog for ${unknown.map((s) => `"${s}"`).join(", ")}. ` +
-        `A note on disk is not in the catalog until it is indexed: add it to ` +
-        `maps.concepts in content/topics.yaml, then run \`npm run learn -- index\`.`,
+        `A note is in the catalog once it is filed under a topic: ` +
+        `\`npm run learn -- concept add --title "..." --topic <slug>\` writes and files it.`,
     );
   }
 }

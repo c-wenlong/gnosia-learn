@@ -1,7 +1,7 @@
 # The diagram studio
 
-A local screen for the diagrams in [`learn/assets/`](../learn/assets): browse
-them, open one on a live tldraw canvas, and ask an agent to draw a new version.
+A local screen for the diagrams in the catalog: browse them, open one on a
+live tldraw canvas, and ask an agent to draw a new version.
 One user, one machine, one job at a time.
 
 **The sequel is [`STUDIO-CHAT-FIRST.md`](STUDIO-CHAT-FIRST.md)**, which proposes
@@ -129,7 +129,7 @@ test where a grep test is possible, a named reviewer check where it is not.
    `npm run canvas` and `npm run catalog` run from, the agent's working
    directory, the `.git` it may not edit), not content, which lives in the
    database. It used to walk up to the directory holding `content/courses`,
-   which phase 3 of the migration deletes. The job workspaces, the checkouts
+   which the migration's phase 3 cut-over deleted. The job workspaces, the checkouts
    and the cache are under `studioHome()`, which `STUDIO_HOME` moves.
 6. **Nothing in the studio writes an `asset` row itself.** It calls
    `catalog diagram put --job`, the catalog's one diagram writer, which goes
@@ -189,7 +189,8 @@ What this deliberately leaves alone:
 | `event` | Changed | `session_id` becomes a foreign key to `session(id)`, `ON DELETE RESTRICT ON UPDATE CASCADE`. The column, its type and its index are unchanged |
 
 `target_path` is the diagram's logical name, `learn/assets/<slug>.tldr`, which
-is also the lease key. `candidate_path` is where the job actually writes, in its
+is also the lease key. It is a name and not a file: the diagram is its row,
+and the phase 3 cut-over removed `learn/` from the repository. `candidate_path` is where the job actually writes, in its
 own workspace: `jobs/<id>/candidate/<slug>.tldr`, stored relative to the
 runner's `STUDIO_HOME`. Relative because the database moves to the cloud at
 go-live and an absolute path would carry this machine's home directory into it,
@@ -253,8 +254,8 @@ A `tutor` session only ever uses `running`, `closed` and `interrupted`.
 | --- | --- |
 | `queued` | Accepted, no runner has claimed it |
 | `running` | Claimed. `session_id` and `started_at` are set |
-| `awaiting_review` | The candidate is written and the gate passed. Nothing under `learn/assets/` has changed |
-| `accepted` | A person accepted it. The candidates were renamed into place and one `asset_job` row exists per file the job landed. That is two when the SVG exists and one when it does not, which is the gate's exit 4 case |
+| `awaiting_review` | The candidate is written and the gate passed. Nothing has landed in the catalog |
+| `accepted` | A person accepted it. `catalog diagram put --job` stored the candidate as the diagram (its row, and the SVG as a blob), the candidates were deleted from the workspace, and one `asset_job` row exists per asset the job landed. That is two when the SVG exists and one when it does not, which is the gate's exit 4 case |
 | `discarded` | A person rejected it. The candidate is gone |
 | `failed` | The runner reached a verdict and it was no |
 | `cancelled` | Stopped on request, acknowledged by the runner |
@@ -450,7 +451,7 @@ rather than to guess.
 | `concepts` | no | `meta.tldrawkc.concepts`, the concept slugs under that topic |
 | `layout` | no | A hint: `flow-lr`, `layered`, `comparison`, `radial` |
 | `mermaidPath` | no | A pasted flowchart, written to the job scratch directory and lifted with `from-mermaid`. The text never enters the prompt |
-| `source` | no | `meta.tldrawkc.source`: the concept note path or session id that prompted the diagram |
+| `source` | no | `meta.tldrawkc.source`: the concept or session that prompted the diagram. A concept is named by slug, the form's placeholder (an older brief's `learn/concepts/<domain>/<slug>.md` or `<slug>.md` still works). A note is a row since the cut-over, so when no such file is on disk the runner reads it with `learn concept show --json` into the job's scratch directory, `source/<slug>.md`, and the agent is pointed there (`services/studio/src/source-note.ts`); a slug the database does not answer for leaves the agent drawing from the brief alone |
 | `model` | no | `sonnet` (default) or `opus`. Drawing loops are mechanical, so the default is the cheaper tier |
 | `notes` | no | Anything else the person wants the agent to know, as data |
 
@@ -480,7 +481,9 @@ Each with the reason it exists.
   no negated class (`[!x]` means `!` or `x`). Checked against the CLI (2.1.274):
   a later job's `job.json` was read without the globs and refused with them,
   while the agent's own scratch and candidate stayed readable. Any diagram file still under `learn/assets/`, a leftover
-  `.candidates/` included, is denied too. The candidate directory and the
+  `.candidates/` included, is denied too; since the cut-over there is none
+  unless a checkout keeps untracked leftovers, and the checkouts under
+  `work/` are where every diagram is materialised as a file. The candidate directory and the
   scratch directory are the agent's two `--add-dir` working directories, and
   the workspace root, which holds the runner's records, is not.
   **Three corrections phase 1 found by checking the CLI rather than assuming
@@ -538,10 +541,12 @@ Each with the reason it exists.
   this design invents.
 - **A narrowed clean-room rule.** The agent may read `canvas api`, the tool's
   [`HELPERS.md`](../tools/tldrawkc/docs/HELPERS.md), its own candidate and the
-  concept note named in `source`. Other files under `learn/assets/` are denied,
-  with one exception: in `extend` mode the runner copies the committed `.tldr`
-  to the candidate path before the agent starts, so extending reads the copy
-  rather than the original. manimkc's reason carries: lifting an existing
+  concept note named in `source` (the copy in its scratch directory, for a
+  note read from the database). Every other diagram is denied, the checkouts
+  under `work/` and anything left under `learn/assets/`, with one exception:
+  in `extend` mode the runner copies the diagram's checkout to the candidate
+  path before the agent starts, so extending reads the copy rather than the
+  original. manimkc's reason carries: lifting an existing
   document is how every diagram ends up looking like the first one.
 - **The agent's credential is chosen, not inherited.** The agent's environment
   is the runner's with the Anthropic auth variables taken out
@@ -701,9 +706,17 @@ put --job` whose own base check closes the last window, then the disk record,
 then `catalog job accept`. Nothing is renamed and nothing lands in the tree; the
 candidates are deleted once the put succeeds, and the checkout is refreshed to
 the accepted revision unless it holds edits nobody committed. A database that is
-down refuses the accept (`catalog-offline`) and the candidate waits. The rest of
-this section describes the file-based design it replaced; its ordering argument
-carries over unchanged.
+down refuses the accept (`catalog-offline`) and the candidate waits. **Since
+the phase 3 cut-over** every database the studio runs against owns diagrams,
+so the put writes no file under `learn/assets/` and the panel shows no
+`git add` line. The branch of `catalog diagram put` that also wrote the
+`.tldr` and `.svg` into a tree (D17 of the migration) runs only on a database
+that has not flipped diagrams, which now means a test's scratch one. Discard
+deletes the candidates and writes `discarded`; neither button is undoable
+inside the studio, and the panel says so: an accepted drawing is a revision
+`catalog history diagram <slug>` keeps, and a discarded one never landed. The
+rest of this section describes the file-based design it replaced; its
+ordering argument carries over unchanged.
 
 **Everything that can fail happens before anything lands.** Accept finishes the
 artifacts in the candidates directory first, and only then moves them. The
@@ -942,11 +955,14 @@ percentage is ever shown.
 
 Route `/studio`, beside `/library` and **not a second view of it**. The two
 cannot share a data source and should not: `/library` reads the `asset` table,
-and the diagram indexer refuses a `.tldr` with no topic *by name*, so such a
-file has no asset row at all — and it is the one file a person most needs to
-see, because nothing else in the repo will mention it until somebody fixes it.
-The studio lists from `canvas list --json` over `learn/assets/`, through the
-runner's `GET /api/diagrams`.
+and the studio reads the `diagram` rows through `catalog diagram list --json`
+(the runner's `GET /api/diagrams`, cached under
+`$STUDIO_HOME/cache/diagrams.json` for when Postgres is down, U3), which carry
+what the grid needs and an asset row does not: the shape count, the stamp and
+whether the SVG is current. The split was first drawn for a `.tldr` with no
+topic, which the indexer refused by name and so had no asset row at all; it
+used to list from `canvas list --json` over `learn/assets/`, which the
+cut-over removed.
 
 **Its cards are its own components, not `/library`'s.** That was the intention
 and it does not survive contact with D22: `AssetCard.tsx` ships a 16:9 tile and
@@ -964,7 +980,7 @@ a 16px gap, so a 1440px window at full rail and panel gives four columns and a
 1024px window with the panel collapsed gives three. Each card:
 
 - A thumbnail at 4:3, the exported SVG in an `<img>` with `object-fit: contain`
-  on a `--surface` ground, lazy-loaded. The committed SVGs are 200kB to 300kB
+  on a `--surface` ground, lazy-loaded. The stored SVGs are 200kB to 300kB
   each, so the grid loads them on scroll.
 - The title from `meta.tldrawkc.title` in the title role, one line, truncated.
   Then the topic chip and the modified time as a relative string, both in the
@@ -1100,7 +1116,7 @@ stream, and a reload rebuilds the same screen from the record.
 
 ### A job finished
 
-The panel switches to the comparison. Nothing under `learn/assets/` has changed.
+The panel switches to the comparison. Nothing has landed in the catalog.
 
 - **Two thumbnails**, each at 4:3 and half the panel width, Before and After,
   from the PNG each `shot` produced. Clicking either opens it full width in the
@@ -1227,11 +1243,11 @@ raised it: S schema, A API and runner, U interface.
 | S2 | A job is cancelled while Chromium is open | The API writes `cancel_requested_at` and the state stays `running`. The runner kills the browser, writes `cancelled` and `finished_at`. If the runner never acknowledges, S1 applies and the state is `interrupted`, not `cancelled`: "the user stopped it" and "it died" are different facts | `POST /api/jobs/{id}/cancel`; reconcile pass |
 | S3 | Two jobs target the same committed path | `job_active_target_key` makes the second enqueue a `23505` naming the holder. A Postgres advisory lock dies with its connection and is invisible to the UI; a row in `queued`, `running` or `awaiting_review` is durable and showable | Partial unique index; `POST /api/jobs` returns 409 with the holder's id |
 | S4 | A human edits in the mirror while a job runs | The job writes only the candidate, so there is no race on the committed file at all. The race moves to accept: three hashes make the loss visible afterwards. `job.target_hash_before`, `asset_job.content_hash`, and `asset.content_hash`. Accept refuses when the target's hash has moved since the job started, and offers to re-open the comparison | D2; accept step 3 |
-| S5 | The agent names a topic slug not in `content/topics.yaml` | It cannot: `job.topic_slug` is `NOT NULL` and a foreign key with `ON DELETE RESTRICT`, so the enqueue fails with a `23503` before any GPU time. The gate checks the output's own stamp a second time, through the same reader that refuses an unstamped `.tldr` by name today. Refuse, never skip, at both ends | `job.topic_slug` FK; gate step 3; `diagrams.ts` |
+| S5 | The agent names a topic slug that is not a topic in the catalog | It cannot: `job.topic_slug` is `NOT NULL` and a foreign key with `ON DELETE RESTRICT`, so the enqueue fails with a `23503` before any GPU time. The gate checks the output's own stamp a second time, through the same reader that refuses an unstamped `.tldr` by name today. Refuse, never skip, at both ends | `job.topic_slug` FK; gate step 3; `diagrams.ts` |
 | S6 | Postgres is unreachable when a job finishes | The runner writes its terminal state to disk first and to Postgres second, so the record survives. A failed write leaves the row in `running` for the reconcile pass to fix from disk | D3 |
 | S7 | A session is deleted | It is not, once it did anything. `event.session_id` and `job.session_id` are `ON DELETE RESTRICT`, the same verdict [`0004_event_concept_restrict.sql`](../services/catalog/drizzle/0004_event_concept_restrict.sql) reached, and `SET NULL` is not even available: the referential `UPDATE` it fires is what the per-row trigger from [`0003_append_only_per_row.sql`](../services/catalog/drizzle/0003_append_only_per_row.sql) refuses. `session.log_asset_id` is the one `SET NULL`, the other way round | Migration `0006` |
-| S8 | The same diagram is regenerated | Update in place. The asset id is derived from the path, both files are committed per D8 in the tool's docs, and git holds every version with a diff and an author. What is new each time is one `asset_job` row per file. The history of the bytes stays in git, the history of who made them in the catalog | `assert-output` upsert |
-| S9 | An asset row exists from a scan and a job later claims it | One `asset_job` insert, and nothing else. The id the studio derives from the path is the id the indexer derives from the same path. Assets with no producer need no backfill: the absence of an `asset_job` row is that statement | `assert-output` |
+| S8 | The same diagram is regenerated | Update in place: a new revision of the `diagram` row and a new SVG blob, under the same asset ids, which are derived from the logical name. What is new each time is one `asset_job` row per asset. `content_revision` holds every version with its author and reason (`catalog history diagram <slug>`), and `asset_job` who made it. (First written for files, when git held the bytes' history) | `catalog diagram put --job` |
+| S9 | An asset row exists from an import and a job later claims it | One `asset_job` insert, and nothing else. The id the studio derives from the logical name is the id the import derives from the same name. Assets with no producer need no backfill: the absence of an `asset_job` row is that statement | `catalog diagram put --job` |
 | A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
 | A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again. The job ceiling and a person's Cancel share one mechanism — kill the process group, wait, sweep — and must not share a verdict: only a job somebody stopped is `cancelled`, and "stopped on request" written over a timeout hides the one number that needs raising | Runner timers |
 | A3 | The agent exits zero but wrote nothing, or wrote something that fails `verify` | The gate, in the five steps listed above. Any failure is fed back as a resume prompt carrying the specific finding, three attempts total, then `failed` with the findings and the partials moved to `jobs/<id>/rejected/` | The gate |
@@ -1245,7 +1261,7 @@ raised it: S schema, A API and runner, U interface.
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
 | A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
-| U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
+| U1 | The catalog has no diagrams | One centred card, 420px: `no diagrams yet`, and one muted line saying to start a job and that a diagram needs a topic from the vocabulary before the catalog will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
 | U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.json`; `/api/health` reports `vocabulary.stale`, its `readAt` and the reason (from the last read any route made when it is younger than `STUDIO_VOCABULARY_STATUS_MS`, 30 seconds by default, so a page render does not spawn a `topic ls` each time), and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
 | U4 | tldrawkc is not built | The studio runs `doctor` once on entry and, on failure, replaces the whole content region with one card: the failing checks as doctor reported them, the two commands, and a Recheck button. Nothing else renders, because a grid that half-works is worse than a page that says what is wrong | Studio entry; A8 covers the API side |
@@ -1403,7 +1419,15 @@ writes into the tree, which is now nothing at all: since phase 2 of the
 migration even the candidate is outside it, in the job's workspace, so the
 backstop has no directory to ignore.
 
-**Verdict:** Accept lands both files in `learn/assets/` as working-tree changes
+**Amended by the phase 3 cut-over.** The one case in which Accept still
+named files, a database that had not flipped diagrams (where the put also
+wrote the `.tldr` and `.svg` into the tree they were imported from, D17 of
+the migration, and the panel printed the `git add` line), went with
+`learn/`: every database the studio runs against owns diagrams, so Accept
+names no file and there is no `git add` line to show. The runner's git access
+is unchanged: `git status --porcelain`, read-only, as the A4 backstop.
+
+**Verdict (as first written):** Accept lands both files in `learn/assets/` as working-tree changes
 and stops. The panel shows the two paths and the `git add` line. The runner runs
 `git status --porcelain` read-only as the A4 backstop and no other git command.
 The agent is denied `Bash(git:*)` entirely.
@@ -2146,9 +2170,10 @@ deliberately.
   sessions.** Widening `EVENT_TYPES` is rejected above, so today the session
   log's wikilinks are the only record that a diagram came out of a `/learn`
   session.
-- **`learn/assets/` is the only writable target.** A diagram for a course rather
-  than a concept has nowhere to go, and widening the allowlist is the kind of
-  change that should be deliberate.
+- **`learn/assets/<slug>` is the only name a job can target.** Since the
+  cut-over it is a logical name in the catalog rather than a folder, but a
+  diagram for a course rather than a concept still has no name of its own,
+  and widening that is the kind of change that should be deliberate.
 - **`session.learner_id` assumes the single `local` learner** the rest of the
   state half assumes. A studio job started by nobody in particular still needs a
   value, and `local` is the only one there is.

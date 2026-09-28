@@ -2,8 +2,8 @@
 
 self-learn is two programs and a knowledge base sharing one repository. A
 Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan →
-Teach → Close tutoring loop over concept notes on disk. They used to meet at
-exactly one file and import nothing from each other. They now meet at one
+Teach → Close tutoring loop over concept notes, which are rows in the catalog.
+They used to meet at exactly one file and import nothing from each other. They now meet at one
 database — the learner state half of the catalog — and both reach it through
 the same store, which is the only module that writes it.
 
@@ -14,27 +14,27 @@ Three layers plus two submodules. One layer is not in this repo at all.
 ```
    learning plugin                    this repo
    (installed globally)
-     /learn   /review        ┌────────────┬──────────────┬──────────────┬──────────────────┐
-         │                   │            │              │              │                  │
-         │  npm run learn    │            │              │              │                  │
-         └──────────────► scripts/learn  learn/      apps/web/   tools/manimkc/  tools/tldrawkc/
-                          the CLI     the notes and  the web app    submodule       submodule
-                              │        the sessions      │              │                  │
-                              └──writes───►  ◄───reads───┘              └────writes────────┘
-                                          learn/assets/
-                              │                           │
-                              └────► services/catalog ◄───┘
-                                     the catalog: content indexed from files,
-                                     learner state that lives only here
+     /learn   /review
+         │
+         │  npm run learn
+         └──────────────► scripts/learn      apps/web/      tools/manimkc/     tools/tldrawkc/
+                          the CLI            the web app    submodule          submodule
+                              │                  │                │                  │
+                  reads/writes│      reads/writes│         import │   diagram commit │
+                              ▼                  ▼                ▼                  ▼
+                        ┌──────────────────────────────────────────────────────────────────┐
+                        │ services/catalog: the content (courses, topics, tags, notes,     │
+                        │ session logs, diagrams) and the learner state, all in Postgres   │
+                        └──────────────────────────────────────────────────────────────────┘
 ```
 
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code | `scripts/learn/`, `apps/web/` | The pipeline CLI and the web app |
-| Data | `learn/` | Concept notes, session logs, diagram assets, the event log and its derived caches |
+| Data | Postgres, through `services/catalog/` | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections. The repository holds only `seed/`, a small slice in the export format |
 | Assets | `tools/manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
-| Assets | `tools/tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports SVG into `learn/assets/` |
+| Assets | `tools/tldrawkc/` | A separate repo, wired in as a submodule, that draws teaching diagrams on a tldraw canvas and exports the SVG that `catalog diagram commit` stores |
 
 The instruction layer lives at `~/.quiver/plugins/learning/learning` so the
 skills work from any project, not just this one. Both skills open by running
@@ -56,7 +56,7 @@ another repo.
 | `packages/content/`, `packages/schema/`, `packages/blob/` | The content reader, the table shapes and the blob store | yes |
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
 | `scripts/learn/` | The pipeline's pure maths, and the `npm run learn` entry point | no |
-| `content/`, `learn/` | Authored data and the knowledge base. Files, not code. | no |
+| `seed/` | A small slice of the content in the export format ([README](seed/README.md)): a fresh clone's database and the tests' fixture. Files, not code. | no |
 | `tools/manimkc/`, `tools/tldrawkc/` | Git submodules with their own repos, lockfiles and toolchains | no, deliberately |
 
 `tools/` is outside the workspaces list on purpose: listing it would make
@@ -81,12 +81,11 @@ tsconfigs.
 
 | Directory | Owns |
 | --- | --- |
-| `packages/content/` | The reader for `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
+| `packages/content/` | The reader for an export's `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `services/studio/` | The diagram studio's job runner and loopback API. It reads the topic vocabulary only through `catalog topic ls`, with the last good read cached under `$STUDIO_HOME/cache/topics.json` (D13), and opens no database connection of its own. Each job draws in its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, never in the working tree, and Accept lands the candidate with `catalog diagram put --job`. Its repo root is where its code sits, not a walk up to `content/` ([docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)) |
-| `content/` | Authored data: the topic vocabulary, the theme tags and the course YAML |
 
 `scripts/learn/` is what is left of the pipeline once its state moved into
 Postgres: the maths, and the published entry point.
@@ -116,15 +115,15 @@ removed.
 | Module | Owns |
 | --- | --- |
 | `services/catalog/src/learn/cli.ts` | Dispatch and presentation for all 17 commands (`init`, `status`, `concept`, `check`, `probe`, `observe`, `frontier`, `plan`, `teach`, `review`, `session`, `void`, `model`, `map`, `index`, `doctor`, `help`) |
-| `services/catalog/src/learn/files.ts` | Concept notes and session logs: the scanning rules that make an id a filename |
-| `services/catalog/src/learn/paths.ts` | Every path under `learn/`, and the `LEARN_ROOT` override the tests use |
+| `services/catalog/src/learn/files.ts` | Concept notes and session logs: rows when the database owns them, and otherwise the files of a `LEARN_ROOT` tree, with the scanning rules that make an id a filename. With neither, a refusal naming the fix |
+| `services/catalog/src/learn/paths.ts` | Every path under a `LEARN_ROOT` tree, the only tree of files the CLI touches since the cut-over |
 | `services/catalog/src/learn/replay.ts` | Rebuilding the schedule from the event log |
 
 `packages/` and `services/` are npm workspaces, added for the catalog.
-`apps/web/` imports `packages/content` for the course files and
-`services/catalog/src/state/` for the learner state, the concept graph and the
-assets, and nothing else from either: it is a reader of the content files and a
-client of the store, never of the database directly.
+`apps/web/` imports `packages/content` for the content types and the reader
+seam, and `services/catalog/src/state/` for the learner state, the concept
+graph and the assets, and nothing else from either: it reads content through
+the seam and state through the store, never the database directly.
 
 | Workspace | Owns |
 | --- | --- |
@@ -384,7 +383,8 @@ the rest of the document.
 ## The course data model
 
 Ten courses, `collection` and `curriculum_item` rows since the courses flip,
-exported as one YAML file each under `content/courses/`. A course holds
+exported as one YAML file each by `catalog course export` (the format is
+[seed/COURSES.md](seed/COURSES.md)). A course holds
 modules, a module holds topics, a topic holds subtopics and the module holds
 curated resources. `loadCourses()` in `packages/content` is what `catalog
 import` parses a course file with, and the catalog's courses reader returns
@@ -423,18 +423,19 @@ already holds.
 Each course carries an `inferred` flag. `true` means the syllabus was
 reconstructed from the course announcement and the standard treatment of the
 subject rather than read off an official document. Three of the ten are
-inferred, and `packages/content/test/courses.test.ts` pins exactly which. A
+inferred; `packages/content/test/courses.test.ts` pins the seed's one course,
+which is not. A
 course path with `inferred` says so under its header, and the agent prompt is
 told to flag uncertainty for those courses.
 
-**A course topic's concepts come from the concept notes, not from
-`content/topics.yaml`.** That file's `maps.courses` names modules, so it can
-say which concepts a module is about but not which of the module's topics each
-belongs to. The per-topic link is a note's `topics:` frontmatter, which
-`catalog import` writes to `concept_curriculum_item` and `readKnowledgeBase`
-returns as `KbConcept.topics`. The course path reads that link, orders a
-topic's concepts by the module topic's `maps.concepts`, and falls back to that
-list for a unit's Guidebook. The arithmetic (the bucket, the active node, the
+**A course topic's concepts come from the course's own rows.** A vocabulary
+topic's `maps.courses` names modules, so it can say which concepts a module is
+about but not which of the module's topics each belongs to. The per-topic link
+is the item's `concepts:` list, which `catalog course import` writes to
+`concept_curriculum_item` and `readKnowledgeBase` returns as
+`KbConcept.topics`. The course path draws a row's concepts in the row's own
+order, breaks ties by the module topic's `maps.concepts`, and falls back to
+that list for a unit's Guidebook. The arithmetic (the bucket, the active node, the
 lock rule) is `apps/web/src/lib/course-path.ts`.
 
 Courses also carry an `order:`, which is the order the Courses page renders
@@ -479,16 +480,17 @@ came from a browser.
 
 `services/catalog/src/learn/cli.ts` parses with `node:util`'s `parseArgs` in
 strict mode, dispatches on the first positional, and runs `ensureDirs()` before
-every command. Every command takes `--json`, and the five shapes the `/learn`
-and `/review` skills parse are documented in
-[learn/README.md](learn/README.md#the-json-shapes) and pinned by golden tests.
+every command, which creates folders only in a `LEARN_ROOT` tree. Every command
+takes `--json`, and the five shapes the `/learn` and `/review` skills parse are
+documented in [docs/LEARN.md](docs/LEARN.md#the-json-shapes) and pinned by
+golden tests.
 Anything that carries evidence appends to `event` first and updates the
 projections after.
 
-The connection is lazy. `concept add`, `check add` and `session log` touch only
-files, so they work with the database down; `status` — which both skills open
-with and stop on — does not, which is the intended gate. A session that cannot
-record anything should not start.
+The connection is lazy, and every command that reads or writes a note or a log
+needs it, since those are rows. `status`, which both skills open with and stop
+on, is the intended gate: a session that cannot record anything should not
+start.
 
 `learn observe` is the step that matters: it records one answer, applies the
 Bayesian update, propagates the evidence to prerequisites, schedules the
@@ -496,45 +498,51 @@ concept for review, and (with `--session` and `--question`) writes the whole
 exchange into the session log as Obsidian callouts while the session is still
 running.
 
-## The knowledge base on disk
+## The knowledge base
 
 ```
-learn/
-  concepts/<domain>/<id>.md    atomic concept notes, the durable knowledge
-  sessions/<id>.md             one log per session, appended live
-  assets/<id>.tldr             the editable canvas a diagram was drawn on
-  assets/<id>.svg              that canvas exported, embedded in the session log
-  map.md                       the mermaid knowledge map       (derived)
+concept              atomic concept notes, the durable knowledge
+session_log_entry    one log per session, appended live
+diagram, asset       the editable canvas a diagram was drawn on, and its SVG
+                     (in the blob store), embedded in the session log
+learn map            the mermaid knowledge map, printed          (derived)
 ```
+
+In an export they are `learn/concepts/<domain>/<id>.md`,
+`learn/sessions/<id>.md` and `learn/assets/<id>.tldr` and `.svg`
+([seed/README.md](seed/README.md#the-export-format)), and the vault
+`learn vault pull` writes uses the same layout without the `learn/` prefix.
+The repository itself has held none of them since phase 3.
 
 `learn/state/` was retired in bundle 5. `events.jsonl`, `model.json` and
 `reviews.json` are the `event`, `mastery` and `review` tables; `index.json` is
 a query. The mapping is in
 [services/catalog/LEARN.md](services/catalog/LEARN.md).
 
-Today that holds 32 concepts across four domains (algorithms 21, transformers
-7, agents 2, foundations 2) and three session logs.
+The seed holds 11 concepts across three domains and one session log; the
+owner's own count is whatever `learn status` says.
 
 The folder is presentation only: a concept's id stays the bare slug, because
 ids appear in every `requires:` edge, every wikilink, and the `concept_slug`
 column of `event`, `mastery` and `review`. Moving a note between domains would
 otherwise orphan its whole history — which, now that the history is a foreign
-key, would be a constraint error rather than a silent loss. The domain is read
-back from the path rather than stored in frontmatter, so the two can never
-disagree, and nesting is one level deep.
+key, would be a constraint error rather than a silent loss. The domain is a
+column of the row rather than a frontmatter key, and an export's folder is
+written from it, so the two can never disagree; nesting is one level deep.
 
-`event` is the database. `mastery`, `review` and `map.md` are projections that
+`event` is the database. `mastery`, `review` and the map are projections that
 `learn model --rebuild`, `learn review rebuild` and `learn map` re-derive from
 it, which is what makes changing a BKT parameter safe. The schedule became
 rebuildable in bundle 5; before that, review grades were logged and nothing
 replayed them, so deleting `reviews.json` lost every scheduled review
 permanently.
 
-`assets/` is the one folder the CLI neither writes nor reads. Diagrams have
-always been written there by the `diagram-maker` subagent at a path it chose,
-and `tools/tldrawkc/` keeps that behaviour: it writes the pair and the session log
-embeds the SVG by name. The `.tldr` is committed beside the `.svg` so the next
-session can open the canvas and extend it instead of redrawing. An exported
+Diagrams are `diagram` rows, written by `catalog diagram put|commit` (which
+the `learn diagram` verbs and the studio's Accept call). The `diagram-maker`
+subagent draws with `tools/tldrawkc/` in the file `learn diagram checkout`
+prints, under the gitignored `$STUDIO_HOME/work/`, and commits it; the session log embeds the SVG
+by name. The `.tldr` is stored beside the `.svg` so the next session can check
+the canvas out and extend it instead of redrawing. An exported
 SVG is self-contained, which means the two fonts it uses are inlined as
 base64 and a small diagram lands around 440 kB.
 
@@ -597,8 +605,8 @@ One direction for content, one door for state.
                                           │                    │
                               reads/writes│                    │through
                                           ▼                    ▼
-                            learn/concepts   learn/sessions   services/catalog/src/state/
-                            learn/map.md                              │
+                            concept · session_log_entry       services/catalog/src/state/
+                            (rows, the write seam)                    │
                                                                       ▼
                                                         event · mastery · review
                                                         progress · recap · preference
@@ -666,11 +674,13 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes answer `not-uploaded` instead of `catalog-unreachable` |
 | `services/catalog/test/asset-upload.test.ts` | `catalog asset upload` and `catalog blob audit`: every row pointed at bytes equal to its `content_hash`, a rerun that does nothing, a pending upload finished, a re-render refused, a re-index keeping its keys, and each audit finding with what `--fix` does |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
-| `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
+| `packages/content/test/courses.test.ts` | The seed's curriculum (its one course, unique ids, every module topic and tag resolving) and every refusal the reader makes |
 | `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
 | `services/catalog/test/state.test.ts` | The store: progress, recaps, preferences, the append-only log, replay, the import merge rules |
 | `services/catalog/test/learn-cli.test.ts` | The CLI end to end, with the five `--json` shapes pinned |
 | `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
+| `services/catalog/test/after-cutover.test.ts` | The repository after the cut-over: a database owning every type, no `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a bare import, none of which recreates `content/` or `learn/` |
+| `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `SELF_LEARN_HOME`, an archive inside the checkout) |
 | `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
 | `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
 
@@ -688,33 +698,36 @@ that need a database, so the measured value now moves with the environment.
 
 ## The catalog
 
-`services/catalog/` and `packages/schema/` are a derived index over the content
-trees, in Postgres 17. Full reasoning in
+`services/catalog/` and `packages/schema/` are the database that owns the
+content and the learner state, in Postgres 17. Full reasoning in
 [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md); the shape of it is:
 
 ```
-   content/topics.yaml ────┐
-   content/courses/*.yaml ─┤
-   learn/concepts/*.md ────┼──► catalog import ──► Postgres ──► catalog ls / show / path / search
-   learn/sessions/*.md ────┤       (indexers)      (derived)          (agents read here)
-   tldrawkc list  ─────────┤
-   manimkc topics --json ──┤
-   manimkc mirrors --json ─┘
+   catalog topic · tag · course · item ──┐
+   learn concept · session · observe ────┼──► the write seam ──┐
+   catalog diagram · the studio ─────────┤    (a revision      │
+   catalog import <dir> (export, seed/) ─┘     per change)     ├──► Postgres ──► catalog ls / show / path / search
+   manimkc topics --json ────────────────┬──► the indexers ────┘                  (agents read here)
+   manimkc mirrors --json ───────────────┘
 ```
 
-**Everything in the content half is derived.** `topic`, `concept`,
-`collection`, `curriculum_item`, `asset` and the seven link tables are rebuilt
-from files in git by `npm run catalog -- import`. Drop the database and one index
-run restores it exactly. Nothing is authored in Postgres, which is why the
-indexers may delete: a row the source no longer produces is not history, it is a
-stale row, and the whole point of the catalog is that a rendered video cannot
-outlive its source without anything saying so.
+**The content half is authored here.** Since the phase 3 cut-over `topic`,
+`tag`, `concept`, `collection`, `curriculum_item`, the diagrams and their link
+tables are the truth, written only through the write seam with an author and a
+reason, and `catalog history` shows every revision. `catalog export --out
+<dir>` writes them out as files, and the nightly export
+(`npm run export:nightly`) keeps a dated copy under
+`$SELF_LEARN_HOME/archive/`; importing one into an empty database restores it.
+The rows an indexer still owns are the ones read from outside, manimkc's
+renders and the mirror ledger, and there the indexer may delete: a row the
+source no longer produces is a stale row, and the whole point of the catalog is
+that a rendered video cannot outlive its source without anything saying so.
 
-**Assets are rows about files, never the files.** An `asset` row holds a path,
-a size and a hash; a 13 MB video, a 450 kB SVG and the words of a note stay in
-git and are read from there. What the catalog adds is the joins those files
-cannot carry: which topic an asset is about, which `.tldr` an SVG came out of,
-and, through `mirror`, whether the copy on Google Drive or Seafile is the same
+**Bytes live in the blob store, never in a row.** An `asset` row holds a key, a
+size and a hash; a 13 MB video and a 450 kB SVG are objects under
+`$SELF_LEARN_HOME/blobs`, and a note's words are its `concept.body`. What the
+catalog adds is the joins those files cannot carry: which topic an asset is
+about, which `.tldr` an SVG came out of, and, through `mirror`, whether the copy on Google Drive or Seafile is the same
 file as the one here. A `.tldr` says which topic it is about in its own
 metadata, which `tldrawkc list --json` reads back, so the filename is a
 filename again.
@@ -774,7 +787,7 @@ then a default that needs no configuration.
 | --- | --- | --- |
 | `MANIMKC_ROOT` | The manimkc checkout: where the pinned CLI runs from, and the default for `--manimkc-root`. manimkc's own CLI reads the same variable for the same thing. Not `MANIMKC_HOME`, which is where its renders land and which only ever arrives as a report's `outRoot`. | `tools/manimkc` |
 | `TLDRAWKC_ROOT` | The tldrawkc checkout, whose `dist/` build reads the `.tldr` files. `npm run canvas` reads it too, so the tool and the indexer cannot end up on different builds. | `tools/tldrawkc` |
-| `LEARN_ROOT` | The knowledge base's repo root, for tests. A fixture tree plus a scratch `DATABASE_URL` is what keeps a test run off the real `learn/`. | this repo |
+| `LEARN_ROOT` | A tree of files for the `learn` CLI's file half, for tests and scratch copies. Unset, the CLI works on rows only, refuses a type the database does not own, and never creates `learn/` in the repository. | unset |
 
 A relative value resolves against the repo root rather than the working
 directory, because a variable is set once and read by commands run from
@@ -786,10 +799,9 @@ cwd. All three are in
 
 The command surface is deliberately layered, and no layer returns a whole tree.
 An agent runs `status` to see what exists and how fresh it is, `ls` to get
-titles and counts, `show` for one entity, and then reads the file at the path
-`show` gave it. `show` never returns a body: the database holds paths and
-metadata, git holds the words, and keeping a second copy of every note in
-Postgres would put a staler one in front of the agent.
+titles and counts, `show` for one entity, and then reads the one body it needs
+with the command made for it (`learn concept show`, `catalog course export`).
+`show` never returns a body, so no layer hands an agent a whole tree.
 
 ## Layering rules
 
@@ -804,10 +816,10 @@ Postgres would put a staler one in front of the agent.
    are the maths: data in, data out, no filesystem and no connection. The
    TypeScript CLI imports them; they import nothing back, which is what lets
    the web app compute the frontier with the same `frontier()` the CLI does.
-3. **The CLI is the only writer of `learn/`, except `learn/assets/`.** The
-   carve-out is `assets/`, where the diagram agent has always written the file
-   it names directly and `tools/tldrawkc/` now writes the `.tldr` and `.svg` pair.
-   Nothing in `learn/concepts/` has a second writer.
+3. **The `learn` CLI is the only writer of the notes and logs.** It writes
+   them through the catalog's write seam (`vault push` included, since it is a
+   `learn` verb). Diagrams are the carve-out: `catalog diagram` and the studio
+   write them. Nothing else writes a `concept` or `session_log_entry` row.
 4. **`services/catalog/src/state/` is the only writer of the state tables.**
    The `learn` CLI, the backfill and the web app all go through it. It is where
    "an event first, the projections after" is enforced, and where the clamps
@@ -817,8 +829,8 @@ Postgres would put a staler one in front of the agent.
    the one door out of this package, so the read-only content queries the web
    app needs live behind it too. `knowledge-base.ts` reads `concept` and its
    edges, `assets.ts` reads `asset` and the link tables. Neither writes
-   anything, and the content half still has exactly one writer, which is
-   `catalog import` (rule 11). Anything that would *write* content from here is
+   anything, and the content half is still written only through the write
+   seam (rule 11). Anything that would *write* content from here is
    the violation this rule is about; a query is not.
 5. **A module that reads content or reaches the database says
    `import "server-only"`.** `apps/web/src/data/courses/index.ts`, `apps/web/src/data/content.ts`
@@ -829,10 +841,10 @@ Postgres would put a staler one in front of the agent.
    components get resolved objects as props; pure arithmetic over a course they
    already hold lives in `apps/web/src/lib/curriculum.ts`, and pure reducers over state
    they already hold live in `apps/web/src/lib/storage.ts`.
-6. **Nothing outside `src/learn/paths.ts` builds a path under `learn/`.**
-   `learn/assets/` is outside the rule entirely, for the same reason as rule 3:
-   the diagram agent picks `learn/assets/<concept-id>` and passes it to
-   `tldrawkc`, which is a command run from the repo root.
+6. **Nothing outside `src/learn/paths.ts` builds a path into a `LEARN_ROOT`
+   tree.** Diagrams are outside the rule, for the same reason as rule 3: the
+   diagram agent draws in the path `learn diagram checkout` prints, under
+   `$STUDIO_HOME/work/`, and passes it to `tldrawkc`.
 7. **The skills never edit the knowledge base directly.** They go through
    `npm run learn -- <command>`, which is what keeps the event log complete.
 8. **`src/learn/cli.ts` is the only module in the pipeline that prints.**
@@ -846,17 +858,18 @@ Postgres would put a staler one in front of the agent.
     `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
     migration that has been applied is never edited: drizzle keys them by file
     hash.
-11. **The web app never writes the *content* half.** It reads the course files
-    through `packages/content`, reads `concept`, `mastery` and `review` through
+11. **The web app never writes the *content* half.** It reads the content
+    through the seam, from the database only, reads `concept`, `mastery` and `review` through
     the store, and writes `progress`, `recap` and `preference`. `event`,
     `mastery` and `review` are written only through the store's own evidence
     functions, never assembled by a caller: the CLI's commands, and the two
     page-facing evidence writes, `POST /api/review/grade`, which calls the same
     `gradeReview` that `learn review grade` does, and `POST /api/learner/observe`,
-    which calls the same `recordObservation` that `learn observe` does. The only
-    writer of the content tables is `npm run catalog -- import`, and the only
-    thing it writes from is files in git. A page that could write a derived
-    table would make it a source of truth no index run could reproduce.
+    which calls the same `recordObservation` that `learn observe` does. The
+    content tables are written only through the catalog's write seam, by the
+    `catalog` and `learn` commands and the studio's runner, each write with an
+    author, a reason and a revision. A page that wrote one would be a writer
+    with none of the three.
 12. **An indexer reads files and returns rows; it never touches a connection.**
     `services/catalog/src/index/*.ts` export a pure `read(context)`, and
     `writer.ts` is the only module that issues SQL for them. That seam is why

@@ -32,6 +32,7 @@ import { ContentWriteError, writeContent, writeContents, type WriteContentInput 
 import { connect, connectionOptions } from "../src/db";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
+import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
 import { applyMigrations, migrateHolding, migrationStatus } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
 import {
@@ -245,7 +246,11 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         // Holding the contract migration (0013) back while the owner's
         // videos are not uploaded: its guard would otherwise roll the whole
         // run back. Everything before it applies either way.
-        const held = await migrateHolding(copy.db);
+        // Registered here as it was until the cut-over, so a copy of a
+        // database that has not applied it yet still migrates.
+        const held = await migrateHolding(copy.db, {
+          contracts: { [BLOB_CONTRACT_MIGRATION]: async (db) => describeDistance(await blobContractDistance(db)) },
+        });
         const status = await migrationStatus(copy.db);
         expect(status.pending).toEqual(held.map((h) => h.tag));
         expect(held.map((h) => h.tag)).toEqual(held.length === 0 ? [] : ["0013_asset_blob_contract"]);

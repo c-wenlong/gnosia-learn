@@ -9,14 +9,22 @@ import type { CatalogDatabase } from "../db";
 import { documentBytes } from "./diagram-document";
 import { renderType } from "./export";
 import { ownRoot, resolvedPath, writableRoot, WriteThroughError } from "./import-root";
-import { type ExportFile, exportHash, type ExportType, readTypeFiles, TYPE_LOCATION } from "./layout";
-import { mayRecord, recordExport } from "./ownership";
+import { EXPORT_TYPES, type ExportFile, exportHash, type ExportType, readTypeFiles, TYPE_LOCATION } from "./layout";
+import { mayRecord, readContentSources, recordExport } from "./ownership";
 
 /**
  * A content write that keeps the type's files in step with the rows
- * (D17 of docs/CONTENT-MIGRATION.md).
+ * (D17 of docs/CONTENT-MIGRATION.md), for as long as any type is on files.
  *
- * Until the phase 3 cut-over some reader still parses files: the course
+ * **Once the database owns every type, a write writes rows and nothing
+ * else.** That is the state phase 3's cut-over leaves: no reader parses a
+ * file, the repository has no `content/` or `learn/` to keep in step, and
+ * the export is something a person runs (`catalog export --out`, the nightly
+ * archive). The last type's flip is the switch, read inside each write's
+ * transaction, so a database still part-way through its flips keeps the
+ * files current for the readers that still read them.
+ *
+ * Until then some reader still parses files: the course
  * reader checks every module's topic against `content/topics.yaml`, the
  * concepts importer takes each note's topic from it, and every type that has
  * not flipped is read from its files. So a writer rewrites its type's export
@@ -94,6 +102,16 @@ export interface WriteThroughResult<T> {
 const exportLock = (type: ExportType) => sql`hashtextextended(${`content_export:${type}`}, 0)`;
 
 /**
+ * Whether writers still keep export files in step: while any export type is
+ * not the database's. With all six flipped no reader reads a file, and after
+ * the cut-over there is no tree to write into (see the module comment).
+ */
+export async function exportsFiles(db: CatalogDatabase): Promise<boolean> {
+  const rows = await readContentSources(db);
+  return EXPORT_TYPES.some((type) => rows.get(type)?.source !== "db");
+}
+
+/**
  * The root this database recorded for the type, or null when it never
  * imported it here (a copy's inherited root does not count; see
  * `import-root.ts`).
@@ -151,6 +169,7 @@ export async function assertInStep(
   types: readonly ExportType[],
   options: WriteThroughOptions = {},
 ): Promise<InStep[]> {
+  if (!(await exportsFiles(db))) return [];
   const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolvedPath)));
   const out: InStep[] = [];
   for (const type of types) {
