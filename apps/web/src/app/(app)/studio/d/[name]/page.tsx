@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
+import { commitDiagram, exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
 import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
 import { JobPanel } from "@/components/studio/JobPanel";
@@ -45,16 +45,19 @@ import {
  * adding one would be a change to the submodule.
  *
  * What is on this screen is therefore exactly what the *runner* can know: the
- * file it was asked to serve, the port and URL `serve --json` printed, whether
- * that port answers when the runner polls it server-side, and the two files'
- * modified times. Saving, unsaved edits, a failed save and a reload over
+ * diagram's checkout it was asked to serve, the port and URL `serve --json`
+ * printed, whether that port answers when the runner polls it server-side,
+ * and what the catalog says about the diagram. The canvas saves to the
+ * checkout, and Commit is how that reaches the database (Track D of
+ * docs/CONTENT-MIGRATION.md). Saving, unsaved edits, a failed save and a reload over
  * unsaved work are all things the mirror says in its own overlay (U10), and the
  * studio does not restate any of them.
  *
  * The freshness pill is the one thing the mirror cannot say, because it is not
- * about the document at all: it is whether the committed SVG beside it is
- * older. That is a fact about disk, computed on the server from two `stat`
- * calls, and clicking the pill runs `export --svg` over the same path.
+ * about the document at all: it is whether the stored SVG was exported from
+ * this version of it, from the two hashes the database keeps. Clicking the
+ * pill runs `export --svg` over the checkout and, when the canvas holds no
+ * uncommitted edits, stores the SVG.
  *
  * Note the strip also carries no chrome *inside* the frame. tldraw takes all
  * four corners and both bottom edges, and the mirror page has already claimed
@@ -175,10 +178,14 @@ export default async function CanvasPage({
     timeoutMs: 60_000,
   });
 
-  const [jobList, topics] = await Promise.all([
+  const [jobList, topics, one] = await Promise.all([
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
     getTopics(),
+    // After the mirror start, which brought the checkout up to date: whether
+    // the canvas now holds edits nobody committed.
+    studioApi<Diagram>(`/api/diagrams/${encodeURIComponent(name)}`),
   ]);
+  const checkout = one.ok ? (one.data.checkout ?? null) : null;
   // Only on the render that shows a picture: `GET /api/jobs` carries neither
   // the brief nor the comparison, and the full-width view needs both to say why
   // the other side is not there rather than linking to a 404.
@@ -189,7 +196,7 @@ export default async function CanvasPage({
 
   return (
     <Shell>
-      <Strip diagram={diagram} path={path} />
+      <Strip diagram={diagram} path={path} uncommitted={checkout?.dirty === true} />
       <JobStrip path={path} stream={panel.stream} />
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
       {health.data.stale && (
@@ -270,7 +277,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Strip({ diagram, path }: { diagram: Diagram; path: string }) {
+function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string; uncommitted: boolean }) {
   const pill = freshness(diagram.svgState);
   return (
     <StudioStrip>
@@ -304,7 +311,25 @@ function Strip({ diagram, path }: { diagram: Diagram; path: string }) {
           {pill.label}
         </button>
       </form>
+      {uncommitted && (
+        <Chip tone="warn">Uncommitted edits</Chip>
+      )}
       <Spacer />
+      {/* The canvas saves to a checkout; this is how its edits reach the
+          database, with a reason, the way a commit message used to. */}
+      <form action={commitDiagram} className="flex shrink-0 items-center gap-1.5">
+        <input type="hidden" name="name" value={diagram.name} />
+        <input type="hidden" name="path" value={path} />
+        <input
+          type="text"
+          name="reason"
+          required
+          placeholder="Why this change"
+          aria-label="Why this change"
+          className="h-8 w-44 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+        />
+        <Button type="submit">Commit</Button>
+      </form>
       <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
       <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
       <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />

@@ -35,6 +35,13 @@ export interface Diagram {
   shapes: number;
   created: string | null;
   svgState: SvgState;
+  /** The diagram's latest revision in the database. Optional: an older runner does not send it. */
+  revision?: number | null;
+  /**
+   * Where the diagram's checkout stands, on a single diagram's read: the file
+   * the canvas edits, and whether it holds edits nobody committed.
+   */
+  checkout?: { path: string; revision: number | null; dirty: boolean; behind: boolean } | null;
 }
 
 export interface DiagramProblem {
@@ -48,6 +55,9 @@ export interface DiagramListing {
   diagrams: Diagram[];
   errors: DiagramProblem[];
   counts: { total: number; withTopic: number; unreadable: number };
+  /** True when the catalog could not be read and this is the runner's copy from `readAt` (D13). */
+  stale?: boolean;
+  readAt?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -456,10 +466,10 @@ export interface Freshness {
 /**
  * The freshness pill, in the two words D13 leaves the studio able to say.
  *
- * It is derived from two file times and nothing else. The mirror is
- * cross-origin, so whether the tab has unsaved edits is unknowable from here
- * and is not guessed at; "the SVG is older than the document" is a fact about
- * disk, which is a different and checkable claim.
+ * It is derived from two hashes the database keeps: the document's, and the
+ * one the stored SVG was exported from (Track D of docs/CONTENT-MIGRATION.md).
+ * The mirror is cross-origin, so whether the tab has unsaved edits is
+ * unknowable from here and is not guessed at.
  */
 export function freshness(state: SvgState): Freshness {
   switch (state) {
@@ -467,19 +477,19 @@ export function freshness(state: SvgState): Freshness {
       return {
         label: "No SVG",
         tone: "warn",
-        title: "Nothing has been exported beside this document yet.",
+        title: "No SVG has been exported from this diagram yet.",
       };
     case "stale":
       return {
         label: "SVG stale",
         tone: "warn",
-        title: "The exported SVG is older than the document. Export it again to catch up.",
+        title: "The stored SVG was exported from an earlier version of the document. Export it again to catch up.",
       };
     default:
       return {
         label: "SVG current",
         tone: "ok",
-        title: "The exported SVG is at least as new as the document.",
+        title: "The stored SVG was exported from this version of the document.",
       };
   }
 }

@@ -7,9 +7,20 @@ import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
 import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
-import { isDiagramName, listDiagrams, readDiagram } from "./diagrams";
+import { diagramCommit } from "./catalog";
+import {
+  checkoutOf,
+  ensureCheckout,
+  forgetDiagramList,
+  isDiagramName,
+  listDiagrams,
+  readDiagram,
+  svgKeyOf,
+  type CheckoutView,
+} from "./diagrams";
+import { studioBlobStore } from "./blobs";
 import { MirrorRefused, type Mirrors } from "./mirrors";
-import { absolute, shotPath, targetPath, targetSvgPath } from "./paths";
+import { shotPath, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -198,6 +209,9 @@ function view(record: JobRecord): Record<string, unknown> {
     // more Chromium launches for an answer already on disk.
     comparison: record.comparison ?? null,
     written: record.written,
+    // The files an accept's put also wrote into the tree, while the files
+    // still owned diagrams: the only ones a person has to commit.
+    files: record.files ?? [],
     indexed: record.indexed,
     error: record.error,
     errorKind: record.errorKind,
@@ -254,7 +268,7 @@ async function handle(
 
   /* /api/diagrams — the corpus the browser screen lists. */
   if (segments[1] === "diagrams") {
-    return diagrams(request, response, segments, method);
+    return diagrams(request, response, segments, method, mirrors);
   }
 
   /* /api/mirrors — one `canvas serve` per document, held open while looked at. */
@@ -331,26 +345,24 @@ async function handle(
     }
 
     case "POST accept": {
-      /* A6: an open mirror on the target has to be closed before the rename.
+      /* A6: an open canvas on the diagram has to be closed before it lands.
        *
        * `serve` holds the document as the tab last loaded it, and Cmd+S in that
-       * tab PUTs the whole thing back. A human save landing after the rename
-       * would silently revert the accepted diagram to the version that was on
-       * screen before it — no error anywhere, and the only evidence a `git
-       * diff` nobody is looking at.
+       * tab writes the whole thing back to the checkout, which accept refreshes
+       * to the landed revision. A save after that would put the old drawing
+       * back on the canvas as an edit nobody made.
        *
        * Handed to `accept` as a capability rather than done here, because
        * *when* is the whole question: this route cannot tell a refusal from an
        * acceptance until `accept` has checked the state, the candidate, the
-       * hash, the export and the verify, and closing first meant a stale tab
+       * base, the export and the verify, and closing first meant a stale tab
        * pressing Accept on a job somebody already discarded disconnected the
-       * canvas its owner was drawing on and then got a 409. Caught in review on
-       * this PR. It is still the runner that does it rather than the browser: a
-       * close a page is responsible for is one a curl or a reload can skip, and
-       * this is the one route that replaces a committed file.
+       * canvas its owner was drawing on and then got a 409. It is still the
+       * runner that does it rather than the browser: a close a page is
+       * responsible for is one a curl or a reload can skip.
        *
-       * `accept` also writes the record itself, between the renames and the
-       * catalog call, so the route neither repeats nor reorders that. */
+       * `accept` also writes the record itself, between the put and the job
+       * row, so the route neither repeats nor reorders that. */
       const result = await accept(store, record, {
         closeMirror: () => mirrors.stop(record.targetPath),
       });
@@ -358,9 +370,9 @@ async function handle(
         return fail(response, 409, result.note, {
           reason: result.error ?? null,
           mirrorClosed: result.mirrorClosed ?? false,
-          // The refusal a person most needs to act on. S4: the committed file
-          // moved under the job, and re-running the comparison is the offer —
-          // never a second accept, which would overwrite the edit.
+          // The refusal a person most needs to act on. S4: the diagram was
+          // committed while the job ran, and re-running the comparison is the
+          // offer, never a second accept, which would write over the commit.
           recompare: result.error === "target-moved",
         });
       }
@@ -385,9 +397,9 @@ async function handle(
     }
 
     case "POST reindex": {
-      // The one recovery accept needs and did not have. Its files landed and
-      // its catalog call did not, which leaves a terminal `accepted` record no
-      // second accept can re-enter, so this re-runs the catalog half alone.
+      // The one recovery accept needs. Its diagram landed and its job row did
+      // not record it, which leaves a terminal `accepted` record no second
+      // accept can re-enter, so this re-runs `job accept` alone.
       const result = await reindex(store, record);
       if (!result.ok) return fail(response, 409, result.note, result.error ?? null);
       return send(response, 200, {
@@ -550,7 +562,7 @@ async function revise(
     );
   }
 
-  const targetExists = (await stat(absolute(record.targetPath)).catch(() => null)) !== null;
+  const targetExists = (await runner.startingPoint(record.slug)).exists;
 
   try {
     const { record: next } = await runner.enqueue(
@@ -617,9 +629,9 @@ async function resume(
   }
 
   // The same re-derivation `revise` makes, for the same reason: mode says
-  // whether there is something at the target to build on, and that is a fact
-  // about disk now rather than a property of the brief that was posted.
-  const targetExists = (await stat(absolute(record.targetPath)).catch(() => null)) !== null;
+  // whether there is a diagram to build on, and that is a fact about the
+  // catalog now rather than a property of the brief that was posted.
+  const targetExists = (await runner.startingPoint(record.slug)).exists;
 
   try {
     const { record: next } = await runner.enqueue(
@@ -656,26 +668,25 @@ async function resume(
 }
 
 /**
- * The corpus: `canvas list --json` plus the one fact it does not report.
+ * The corpus: `catalog diagram list`, and the verbs over one diagram.
  *
- * Every read the browser screen makes goes through here rather than through the
- * `asset` table, and that is not an accident. The indexer refuses a `.tldr`
- * with no topic *by name*, so such a file has no asset row at all — and it is
- * exactly the file the studio exists to put in front of a person, because
- * nothing else in the repo will ever mention it. `/library` reads the table;
- * this reads the directory. The two answers differ on purpose.
+ * A diagram lives in the database (Track D of docs/CONTENT-MIGRATION.md), so
+ * the list is its rows, served from the studio's cache with a stale flag when
+ * Postgres is down (D13). Every `canvas` verb takes a file, so each one runs
+ * on the diagram's checkout under `$STUDIO_HOME/work/`, refreshed first unless
+ * it holds edits nobody committed; `commit` is how such edits reach the
+ * database, with the base check (edge case 18).
  *
- * The SVG route is here for the same reason. `/api/assets/{id}/file` is gated
- * on `ASSET_FILES_ENABLED` *and* on the asset being indexed, so borrowing it
- * for thumbnails would leave a blank tile on precisely the untopiced diagram
- * whose tile matters most. One gate — `STUDIO_ENABLED`, which is D11 — and one
- * directory it can read from.
+ * The SVG route streams the blob the row names. `/api/assets/{id}/file` is
+ * gated on `ASSET_FILES_ENABLED` as well, so borrowing it for thumbnails would
+ * tie the studio to a second switch; one gate, `STUDIO_ENABLED`, which is D11.
  */
 async function diagrams(
   request: IncomingMessage,
   response: ServerResponse,
   segments: string[],
   method: string,
+  mirrors: Mirrors,
 ): Promise<void> {
   if (segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams does`);
@@ -685,13 +696,13 @@ async function diagrams(
       note:
         `${listing.counts.total} diagram${listing.counts.total === 1 ? "" : "s"}, ` +
         `${listing.counts.withTopic} with a topic` +
-        (listing.counts.unreadable > 0 ? `, ${listing.counts.unreadable} unreadable` : ""),
+        (listing.stale ? `, read from the copy of ${listing.readAt} because the catalog is unreachable` : ""),
     });
   }
 
   const name = segments[2] ?? "";
   // A name is one path segment and matches a slug pattern, so no request can
-  // name a file outside `learn/assets` however it is spelled or escaped.
+  // name a file outside the checkout directory however it is spelled or escaped.
   if (!isDiagramName(name)) {
     return fail(response, 400, `"${name}" is not a diagram name`, "Names are slugs: letters, digits and hyphens.");
   }
@@ -699,8 +710,8 @@ async function diagrams(
   if (segments.length === 3) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/diagrams/{name} does`);
     const diagram = await readDiagram(name);
-    if (diagram === null) return fail(response, 404, `no diagram ${name} in learn/assets`);
-    return send(response, 200, { ...diagram, note: noteForDiagram(diagram.svgState, diagram.topic) });
+    if (diagram === null) return fail(response, 404, `no diagram ${name} in the catalog`);
+    return send(response, 200, { ...diagram, note: noteForDiagram(diagram.svgState, diagram.checkout ?? null) });
   }
 
   if (segments.length !== 4) return fail(response, 404, `no route ${method} /api/diagrams/${name}`);
@@ -711,18 +722,49 @@ async function diagrams(
   }
 
   if (method !== "POST") {
-    return fail(response, 405, `${segments[3]} is a POST: it changes a file on disk`);
+    return fail(response, 405, `${segments[3]} is a POST: it changes the checkout or the database`);
   }
 
-  const file = absolute(targetPath(name));
-  if ((await stat(file).catch(() => null)) === null) {
-    return fail(response, 404, `no diagram ${name} in learn/assets`);
-  }
+  const checkout = await ensureCheckout(name, { canvasOpen: mirrors.isOpen(targetPath(name)) });
+  if (checkout.failed) return fail(response, 502, checkout.note);
+  if (!checkout.exists) return fail(response, 404, `no diagram ${name} in the catalog`, checkout.note);
+  const file = checkout.path;
+  const svg = workSvgPath(name);
 
   switch (segments[3]) {
     case "export": {
-      const result = await canvas(["export", file, "--svg", absolute(targetSvgPath(name))], VERB_TIMEOUT_MS);
-      return verbResult(response, "export", result.code, result.json, result.stderr || result.stdout);
+      // Asked before the export, since the export itself writes a new SVG
+      // into the checkout, and a checkout whose SVG changed reads as edited.
+      const before = await checkoutOf(name);
+      const edited = before !== null && before.dirty;
+      const result = await canvas(["export", file, "--svg", svg], VERB_TIMEOUT_MS);
+      if (result.code !== 0) {
+        return verbResult(response, "export", result.code, result.json, result.stderr || result.stdout);
+      }
+      // A fresh SVG of a document nobody edited is the stored document's
+      // export, so it goes straight to the database: that is what pressing
+      // the pill asks for. Over edits nobody committed it waits in the
+      // checkout, and the next commit takes the two together.
+      if (edited) {
+        return send(response, 200, {
+          verb: "export",
+          ok: true,
+          exitCode: 0,
+          result: result.json,
+          detail: null,
+          note: "export finished; the canvas holds edits nobody committed, so the SVG waits for the next commit",
+        });
+      }
+      const stored = await diagramCommit(name, workDir(), "Export the SVG again from the stored document");
+      forgetDiagramList();
+      return send(response, stored.ok ? 200 : 502, {
+        verb: "export",
+        ok: stored.ok,
+        exitCode: 0,
+        result: stored.json ?? result.json,
+        detail: stored.ok ? null : (stored.error ?? "").split("\n").slice(-6),
+        note: stored.ok ? "export finished and the SVG is stored" : "export finished and the SVG could not be stored",
+      });
     }
     case "inspect": {
       // Exit 3 is "finished, with lints remaining" and not a failure (D4), so
@@ -731,7 +773,6 @@ async function diagrams(
       return verbResult(response, "inspect", result.code, result.json, result.stderr || result.stdout, [0, 3]);
     }
     case "verify": {
-      const svg = absolute(targetSvgPath(name));
       if ((await stat(svg).catch(() => null)) === null) {
         return fail(response, 409, `${name} has no exported SVG, so there is nothing to verify`, {
           fix: "Export SVG first.",
@@ -740,23 +781,61 @@ async function diagrams(
       const result = await canvas(["verify", svg, "--json"], VERB_TIMEOUT_MS);
       return verbResult(response, "verify", result.code, result.json, result.stderr || result.stdout);
     }
+    case "commit": {
+      let body: { reason?: unknown };
+      try {
+        body = (await readJson(request)) as { reason?: unknown };
+      } catch (error) {
+        return fail(response, 400, "the request body is not JSON", (error as Error).message);
+      }
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (reason === "") {
+        return fail(response, 400, `"reason" is required: it is what the commit message used to say`);
+      }
+      const result = await diagramCommit(name, workDir(), reason.slice(0, 500));
+      forgetDiagramList();
+      const refused = (result.json ?? {}) as { code?: unknown };
+      if (!result.ok) {
+        return fail(
+          response,
+          result.offline ? 503 : refused.code === "stale-base" ? 409 : 502,
+          refused.code === "stale-base"
+            ? `${name} changed in the database since this canvas was checked out, so the commit was refused. ` +
+                `Your drawing is still on the canvas; nothing was merged.`
+            : `the commit did not land: ${result.error ?? "no reason given"}`,
+          { code: refused.code ?? null },
+        );
+      }
+      const landed = result.json as { revision?: number; changed?: boolean };
+      return send(response, 200, {
+        verb: "commit",
+        ok: true,
+        exitCode: 0,
+        result: landed,
+        detail: null,
+        note: landed.changed === false ? "nothing had changed, so nothing was written" : `committed as revision ${landed.revision}`,
+      });
+    }
     default:
       return fail(response, 404, `no verb ${segments[3]}`, {
-        verbs: ["export", "inspect", "verify"],
+        verbs: ["export", "inspect", "verify", "commit"],
       });
   }
 }
 
-function noteForDiagram(svgState: string, topic: string | null): string {
+function noteForDiagram(svgState: string, checkout: CheckoutView | null): string {
   const svg =
     svgState === "missing"
       ? "no SVG has been exported"
       : svgState === "stale"
-        ? "the SVG is older than the document"
+        ? "the SVG was exported from an earlier version of the document"
         : "the SVG is current";
-  return topic === null
-    ? `${svg}, and it carries no topic, so the indexer refuses it by name`
-    : svg;
+  if (checkout === null) return svg;
+  return checkout.dirty
+    ? `${svg}; the canvas holds edits nobody committed`
+    : checkout.behind
+      ? `${svg}; the checkout is behind the database and is refreshed when a verb runs`
+      : svg;
 }
 
 /**
@@ -828,26 +907,35 @@ async function shotBytes(
   createReadStream(file).pipe(response);
 }
 
-/** The committed SVG's bytes, for a thumbnail and for the inspector's preview. */
+/**
+ * The stored SVG's bytes, for a thumbnail and for the inspector's preview:
+ * the blob the diagram's row names, streamed out of the store. The key comes
+ * from the (cached) list, so a thumbnail still draws with Postgres down.
+ */
 async function svgBytes(response: ServerResponse, name: string): Promise<void> {
-  const file = absolute(targetSvgPath(name));
-  const info = await stat(file).catch(() => null);
-  if (info === null || !info.isFile()) {
-    return fail(response, 404, `${name} has no exported SVG`, "Run export --svg over it.");
+  const { key } = await svgKeyOf(name);
+  if (key === null) {
+    return fail(response, 404, `${name} has no exported SVG`, "Export one from its canvas.");
+  }
+  let read;
+  try {
+    read = await studioBlobStore().get(key);
+  } catch (error) {
+    return fail(response, 404, `${name}'s SVG is not in the blob store`, (error as Error).message);
   }
   response.writeHead(200, {
     "content-type": "image/svg+xml; charset=utf-8",
-    "content-length": info.size,
+    "content-length": read.size,
     // An `<img>` never runs script in an SVG, and these two say so out loud for
     // anything that later reaches for the same bytes a different way.
     "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
     "x-content-type-options": "nosniff",
+    // The key is the hash of the bytes, so it is the honest validator, and a
+    // tile for the same key never needs fetching twice.
+    etag: `"${key.slice(key.indexOf("/") + 1, key.lastIndexOf("."))}"`,
     "cache-control": "no-cache",
-    // The mtime is what the freshness pill compares, so it is also the honest
-    // validator for a tile the browser may have cached.
-    "last-modified": info.mtime.toUTCString(),
   });
-  createReadStream(file).pipe(response);
+  read.body.pipe(response);
 }
 
 /**
@@ -908,6 +996,15 @@ async function mirrorRoutes(
     return fail(response, 400, `"${file}" is not a diagram in learn/assets`, {
       shape: "learn/assets/<name>.tldr, or just <name>",
     });
+  }
+
+  // The mirror edits the checkout, so bring it up to date first, unless it
+  // holds edits nobody committed, which are the canvas's own to show, or a
+  // canvas is already open on it and could save while the refresh writes.
+  const checkout = await ensureCheckout(name, { canvasOpen: mirrors.isOpen(targetPath(name)) });
+  if (checkout.failed) return fail(response, 502, checkout.note);
+  if (!checkout.exists) {
+    return fail(response, 404, `no diagram ${name} in the catalog`, checkout.note);
   }
 
   try {

@@ -94,7 +94,29 @@ export interface JobRecord {
   /** What the person asked to be different, verbatim. The revise prompt. */
   changes: string | null;
   idempotencyKey: string;
+  /**
+   * The document the job started from: the diagram's `document_hash` when the
+   * catalog answered at enqueue, else the sha256 of the checkout on disk.
+   * What the comparison's before side is labelled with.
+   */
   targetHashBefore: string | null;
+  /**
+   * The revision the job started from, or null when there was no diagram: the
+   * base `diagram put` checks at Accept, so a commit that landed while the job
+   * ran refuses the Accept (S4, edge case 18). Recorded at enqueue as the
+   * latest revision, then replaced at run start, for an extend job, by the
+   * revision its copy of the checkout was written from. Absent when neither
+   * could be read (the database down and no checkout record, or a job from
+   * before diagrams moved into the database); Accept then compares
+   * `targetHashBefore` with the stored document instead.
+   */
+  targetRevisionBefore?: number | null;
+  /**
+   * Files the accept's put wrote into the working tree because the files still
+   * owned diagrams (D17 of the migration plan). Empty after the flip, and
+   * absent on a job accepted before diagrams moved into the database.
+   */
+  files?: string[];
   /**
    * The candidate's sha256 when the reconcile pass marked this job
    * `interrupted`, or null when there was nothing there.

@@ -14,6 +14,7 @@ import {
   targetSvgPath,
   ASSETS_DIR,
   REPO_ROOT,
+  workDir,
 } from "./paths";
 
 /**
@@ -251,6 +252,11 @@ export function buildSettings(input: SettingsInput): AgentSettings {
     rule("Edit", absolute(`${ASSETS_DIR}/*.tldr`)),
     rule("Read", absolute(`${ASSETS_DIR}/*.svg`)),
     rule("Edit", absolute(`${ASSETS_DIR}/*.svg`)),
+    // The checkouts: every diagram in the database as a file, the mirror's
+    // document among them. The same clean-room rule, now that the committed
+    // corpus is materialised here rather than under learn/assets/.
+    rule("Read", workDir(), "/**"),
+    rule("Edit", workDir(), "/**"),
     // Git's own directory. `Bash(git:*)` is denied above; this is the other way
     // in. The runner runs no mutating git command either, and D6 says why.
     rule("Edit", path.join(REPO_ROOT, ".git"), "/**"),

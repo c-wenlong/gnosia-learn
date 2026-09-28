@@ -115,6 +115,7 @@ describe("every exported server action", () => {
 
   it("finds the actions, so a parser that breaks cannot pass by finding none", () => {
     expect(actions.map((fn) => fn.name).sort()).toEqual([
+      "commitDiagram",
       "exportSvg",
       "inspectDiagram",
       "restartMirror",
