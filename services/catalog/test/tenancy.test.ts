@@ -94,6 +94,9 @@ const B_VIDEO = "fx:b-video";
 const B_COURSE_LINK = "link:b-r1";
 const B_POSTER = "fx:b-poster";
 const LOCAL_VIA_B = "fx:via-b";
+/** B's rows naming the owner's bytes: the mixed state a write before the seam's key check could leave. */
+const B_ON_LOCAL_BYTES = "fx:b-on-local-bytes";
+const B_POSTER_ON_LOCAL_BYTES = "fx:b-poster-on-local-bytes";
 const B_SESSION = "b-session";
 
 const NOW = new Date("2026-09-28T12:00:00Z");
@@ -143,6 +146,9 @@ async function view(db: Scratch["db"], scope: OwnerScope, ids: string[]) {
       (await Promise.all(ids.map(async (id) => [id, await posterBlob(db, id, scope)] as const))).filter(([, blob]) => blob !== null),
     ),
     queue: await reviewQueue(db, { now: NOW, learnerId: scope.owner }),
+    // A focus naming a concept the reader cannot read is dropped like a
+    // missing one, even with a card of the reader's on it.
+    focused: await reviewQueue(db, { now: NOW, learnerId: scope.owner, focus: B_CONCEPT }),
   });
 }
 
@@ -181,7 +187,7 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
 
     // Asked about every asset id there will be, B's included: an id-taking
     // query answers a missing id and an unreadable one the same way.
-    ids = [...Object.values(ASSETS), LOCAL_VIA_B, B_ASSET, B_VIDEO, B_COURSE_LINK, B_POSTER].sort();
+    ids = [...Object.values(ASSETS), LOCAL_VIA_B, B_ASSET, B_VIDEO, B_COURSE_LINK, B_POSTER, B_ON_LOCAL_BYTES, B_POSTER_ON_LOCAL_BYTES].sort();
     before = await view(db, LOCAL, ids);
 
     await ensureLearner(db, B);
@@ -226,6 +232,13 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
       { id: B_POSTER, kind: "poster", sourceRepo: "self-learn", blobKey: bPosterKey, ownerId: B },
     ]);
     await db.insert(assetDerivation).values({ assetId: B_POSTER, sourceAssetId: ASSETS.video });
+    const [localVideo] = await db.select({ key: asset.blobKey }).from(asset).where(eq(asset.id, ASSETS.video));
+    const [localDiagram] = await db.select({ key: asset.blobKey }).from(asset).where(eq(asset.id, ASSETS.diagram));
+    await db.insert(asset).values([
+      { id: B_ON_LOCAL_BYTES, kind: "video", path: "out/tenant/on-local.mp4", sourceRepo: "manimkc", blobKey: localVideo?.key ?? null, ownerId: B },
+      { id: B_POSTER_ON_LOCAL_BYTES, kind: "poster", sourceRepo: "self-learn", blobKey: localDiagram?.key ?? null, ownerId: B },
+    ]);
+    await db.insert(assetDerivation).values({ assetId: B_POSTER_ON_LOCAL_BYTES, sourceAssetId: ASSETS.video });
     await db.insert(assetTopic).values([
       { assetId: B_ASSET, topicSlug: TOPIC_SLUG },
       { assetId: B_VIDEO, topicSlug: TOPIC_SLUG },
@@ -344,7 +357,9 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
     expect(courses[0]?.modules.flatMap((m) => m.topics.map((i) => i.id))).toEqual(["b-item"]);
     expect((tenant["tags"] as { id: string }[]).map((t) => t.id)).toEqual(["b-tag"]);
     expect((tenant["topics"] as { slug: string }[]).map((t) => t.slug)).toEqual([B_TOPIC, SHARED_TOPIC]);
-    expect((tenant["assets"] as { id: string }[]).map((a) => a.id).sort()).toEqual([B_ASSET, B_POSTER, B_COURSE_LINK, B_VIDEO].sort());
+    expect((tenant["assets"] as { id: string }[]).map((a) => a.id).sort()).toEqual([B_ASSET, B_POSTER, B_COURSE_LINK, B_VIDEO, B_ON_LOCAL_BYTES, B_POSTER_ON_LOCAL_BYTES].sort());
+    // Its rows naming the owner's bytes are its own, but the bytes are not: none is served.
+    expect(Object.keys(tenant["blobs"] as object)).not.toContain(B_ON_LOCAL_BYTES);
     expect(Object.keys(tenant["blobs"] as object).sort()).toEqual([B_POSTER, B_VIDEO].sort());
     // B can open its poster, but it is not served as the poster of a video B cannot open.
     expect(tenant["posters"]).toEqual({});

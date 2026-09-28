@@ -2028,10 +2028,14 @@ is its own list.
       the audit lock or the pending count each fails a case).
 - [x] Tests that fail when a filter goes (S10). `test/tenancy.test.ts`
       compares every read whole with another owner's rows grafted into the
-      owner's course, deck and topic; 46 of the 48 `ownedBy`/`andOwnedBy`
-      calls in `services/catalog/src` fail it when disabled one at a time,
-      and the two that do not are equivalent (child rows grouped by a parent
-      id no unreadable parent is ever looked up by). It found four leaks,
+      owner's course, deck and topic. Disabling each `ownedBy`/`andOwnedBy`
+      call in `services/catalog/src` one at a time, 53 of 60 fail it or the
+      other owner suites (`scope-reads`, `diagrams`, `import-tenancy`). Two
+      survivors are equivalent (child rows grouped by a parent id no
+      unreadable parent is ever looked up by, `readers/courses.ts:107,143`);
+      five are slice 1's (`content/diagrams.ts:121,125,955`,
+      `learn/vault.ts:864`, `state/progress.ts:209`) and no suite pins them
+      yet. It found four leaks,
       fixed in `src/state/assets.ts`: `assetsForTopic`, `assetsForConcept`,
       `assetsForCollection` and `derivationSources` answered for a topic,
       concept, collection or derived id the reader cannot read.
