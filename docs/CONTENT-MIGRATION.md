@@ -1771,6 +1771,75 @@ production site and a `/learn` session both work against the cloud database,
 and `catalog doctor` reports every completeness rule armed or waived with a
 reason.
 
+### Cut-over day, as a script
+
+The phase has two halves. The code half (the tree loses `content/` and
+`learn/`) is one PR, held until the owner's database is flipped and has
+applied 0013. The operator half runs against the database before that PR
+merges, from the checkout that still has the files, so it ships first, on its
+own, as `node scripts/flip-rehearsal.mjs --cutover`: `--real` refuses to run
+from any checkout but the one the script sits in, and the cut-over PR's own
+branch has no tree left to import.
+
+`--real --cutover --database <name> --checkout <dir>` has flip day's guards
+(the named database, the checkout the script is in, a terminal to type the
+name on, no `--yes`) and refuses up front unless every type is flipped, the
+tag does not exist here or on `origin`, and no tracked file under `content/`
+or `learn/` differs from `HEAD`. Its steps, each checked before the next:
+
+0. A backup, `~/<name>-precutover-<UTC time>.dump`, checked as flip day's is.
+1. `catalog migrate`, which must hold nothing: the cut-over PR stops treating
+   0013 as a contract, which is only safe on a database that applied it.
+2. Every content type's `content_source` row says `db`.
+3. `catalog import <tree>` into a throwaway copy, then into the database; each
+   must remove nothing, and the second must skip all six types as their own
+   export: a type read from files means the tree is not the last export.
+4. `catalog export --out <temp dir>`, then `catalog parity <tree>`. The
+   parity result and a byte comparison of that export with the tree are
+   saved to `~/<name>-cutover-<UTC time>.parity.json`, the report the PR body
+   quotes. A parity mismatch, or a file the export writes in other bytes than
+   the tree holds, stops the run and says how to catch the tree up: export
+   into it, commit, run again (the database may have moved on since flip day),
+   so the tag holds the export itself.
+5. `catalog doctor`, and a decision per completeness rule: a clean rule is
+   armed by the strict flips; `item-has-concept` with violators is waived
+   with a reason typed on the terminal, an empty one refused; any other rule
+   with a violator stops the run before anything is armed.
+6. `catalog flip <type> --strict` for all six, the waiver passed to courses,
+   so it lands on `content_source` beside the flip.
+7. `catalog doctor`, whose new `unsettled` list (rules neither armed nor
+   waived) must be empty.
+8. `catalog parity <tree>` once more, with `HEAD` still the commit compared
+   in step 4: a write during the strict flips (a session logged) would
+   otherwise leave the tag holding files older than the database.
+9. `git tag content-files-final` on that commit, checked again first (and
+   refused if `HEAD` moved), never pushed.
+
+It ends by printing what the operator does next, in order: push the tag, merge
+the cut-over PR (`gh pr merge p3/cutover --squash --delete-branch`), pull. The
+untracked files under `content/` and `learn/` (the tailscale diagram) are
+listed: the import read them into the database, the tag does not hold them,
+and the pull leaves them on disk until someone removes them.
+
+A rehearsal with `--cutover` runs flip day's steps and then these on one copy,
+tags a throwaway git repository made of the copied tree, and takes the
+waiver's reason from `--waive-reason` when there is no terminal. It refuses a
+template that is flipped already, since flip day's steps store blobs into the
+rehearsal's temp store and a flipped template's are elsewhere: after flip day,
+restore the pre-flip dump into a new database and rehearse from that.
+
+Measured 2026-09-28, a rehearsal of `self_learn` (at 0009) with the main
+checkout's tree, the untracked tailscale diagram included: 40 of 40 steps.
+Flip day's 23 as before; then the cut-over's backup (347 KB, data for 34
+tables), a migrate with nothing to do, the imports skipping all six types and
+removing nothing, parity clean (86 topics, 8 tags, 10 courses, 32 notes, 3
+logs, 6 diagram files) with 53 of 53 exported files byte-identical in the
+tree, `item-has-concept` waived with 134 violators (one more than the 133
+counted when phase 3 was planned), the other two rules armed, doctor with
+nothing unsettled, and the tag made. `services/catalog/test/flip-rehearsal.test.ts`
+runs the same on the seed tree and holds the refusals, and
+`scripts/lib/cutover.test.mjs` the tag's.
+
 ## Phase 4: tenancy
 
 After accounts exist; accounts themselves are out of scope. The plumbing

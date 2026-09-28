@@ -56,6 +56,12 @@ export interface DoctorResult {
   instance: { role: string; primaryHost: string | null } | null;
   rules: RuleReport[];
   /**
+   * The rules neither armed nor waived. Phase 3's cut-over ends only when
+   * this is empty: every rule refuses its next violator, or a written
+   * decision on `content_source` says why it does not (D21).
+   */
+  unsettled: string[];
+  /**
    * The item-has-concept rule per course. A course whose every item lacks a
    * concept is a course the frontier cannot reach at all.
    */
@@ -101,6 +107,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     migrations: { head: migrations.head, pending: migrations.pending },
     instance: null,
     rules: [],
+    unsettled: [],
     courses: [],
     conceptlessCourses: [],
     conceptsWithoutTopic: [],
@@ -211,6 +218,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     migrations: { head: migrations.head, pending: migrations.pending },
     instance: instance === undefined ? null : { role: instance.role, primaryHost: instance.primaryHost },
     rules,
+    unsettled: rules.filter((rule) => rule.state !== "armed" && rule.waived === null).map((rule) => rule.name),
     courses: courseRows,
     conceptlessCourses: courseRows
       .filter((row) => row.items > 0 && row.withoutConcept === row.items)
@@ -248,6 +256,11 @@ export function formatDoctor(result: DoctorResult): string {
     );
     lines.push(`    ${rule.says}`);
   }
+  lines.push(
+    result.unsettled.length === 0
+      ? "  every rule is armed or waived"
+      : `  neither armed nor waived: ${result.unsettled.join(", ")} (catalog flip courses --strict arms them; --waive <rule> --reason "..." records why not)`,
+  );
   if (result.conceptlessCourses.length > 0) {
     lines.push(
       "",
