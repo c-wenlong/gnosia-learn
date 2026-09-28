@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REPO_ROOT } from "../src/env";
 import { applyMigrations, journalTags } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
+import { latestTag } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
@@ -332,7 +333,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // The seed's diagram SVG, the render and its transcript: all three the import's.
       expect(step("blob audit")).toMatchObject({ rows: 3, objects: 3, outstanding: 0 });
       expect(step("doctor again")["blobContract"]).toEqual({ inForce: true, unstored: [], unkeyed: [] });
-      expect(step("migrate the contract")).toMatchObject({ applied: [], head: "0013_asset_blob_contract", held: [] });
+      expect(step("migrate the contract")).toMatchObject({ applied: [], head: latestTag(), held: [] });
 
       // The backup is the copy as it was before step 1, and restores as it.
       expect(report.backup).toMatchObject({ path: expect.stringMatching(new RegExp(`${name}-preflip-\\d{8}T\\d{6}Z\\.dump$`)) });
@@ -508,7 +509,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
 
       // Two backups: before flip day and before the cut-over, each its own file.
       expect(report.steps[23]?.gist).toMatch(new RegExp(`${name}-precutover-\\d{8}T\\d{6}Z\\.dump`));
-      expect(step("cut-over: migrate")).toMatchObject({ head: "0013_asset_blob_contract", held: [] });
+      expect(step("cut-over: migrate")).toMatchObject({ head: latestTag(), held: [] });
       const skipped = (step("cut-over: import the tree")["skipped"] as { source: string }[]).map((s) => s.source).sort();
       expect(skipped).toEqual(["concepts", "courses", "diagrams", "sessions", "tags", "topics"]);
       expect(step("cut-over: import the tree")["totals"]).toMatchObject({ deleted: 0 });

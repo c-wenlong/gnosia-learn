@@ -30,7 +30,7 @@ import {
   migrationStatus,
 } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
+import { BEFORE_BLOB_CONTRACT, partialMigrations, tagsAfter } from "./partial-migrations";
 import { createScratchDatabase, probe, SQLSTATE, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
@@ -107,7 +107,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
 
   it("is reported by doctor before the migration", async () => {
     const report = await doctor(scratch.db, "scratch");
-    expect(report.migrations.pending).toEqual(["0013_asset_blob_contract"]);
+    expect(report.migrations.pending).toEqual(["0013_asset_blob_contract", ...tagsAfter("0013_asset_blob_contract")]);
     expect(report.blobContract).toEqual({
       inForce: false,
       unstored: [{ id: "manimkc:out/a/one.mp4", kind: "video" }],
@@ -123,7 +123,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
     expect(sqlMessage(refused)).toMatch(
       /asset_stored_blob_check cannot be added: these assets have no blob: manimkc:out\/a\/one\.mp4 \(video\)\. Run catalog asset upload/,
     );
-    expect((await migrationStatus(scratch.db)).pending).toEqual(["0013_asset_blob_contract"]);
+    expect((await migrationStatus(scratch.db)).pending).toEqual(["0013_asset_blob_contract", ...tagsAfter("0013_asset_blob_contract")]);
   });
 
   it("is held by catalog migrate, with the reason, and the other commands still run", async () => {
@@ -133,6 +133,11 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
         tag: "0013_asset_blob_contract",
         reason: expect.stringMatching(/^1 asset\(s\) of a stored kind have no blob .*; 1 blob key\(s\) are not keys/),
       },
+      // Every migration after it waits behind it.
+      ...tagsAfter("0013_asset_blob_contract").map((tag) => ({
+        tag,
+        reason: "waits for 0013_asset_blob_contract, which is held",
+      })),
     ]);
     await expect(assertMigrated(scratch.db, HELD)).resolves.toBeUndefined();
     expect(await heldMigrations(scratch.db, HELD)).toEqual(held);
@@ -148,7 +153,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
     try {
       const status = await runStatus();
       expect(status.migrations.held).toEqual([]);
-      expect(status.migrations.pending).toEqual(["0013_asset_blob_contract"]);
+      expect(status.migrations.pending).toEqual(["0013_asset_blob_contract", ...tagsAfter("0013_asset_blob_contract")]);
 
       const learn = (...args: string[]) =>
         execFileAsync(process.execPath, ["--import", "tsx", path.join(SERVICE_ROOT, "src", "learn", "cli.ts"), ...args], {

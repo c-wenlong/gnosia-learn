@@ -18,6 +18,9 @@ import { asset, topic } from "./content";
 import { learner } from "./state";
 import {
   COST_SOURCES,
+  DRAFT_ERROR_KINDS,
+  DRAFT_KINDS,
+  DRAFT_STATES,
   JOB_ACTIVE_STATES,
   JOB_KINDS,
   JOB_STATES,
@@ -116,6 +119,90 @@ export const session = pgTable(
     index("session_started_at_idx").on(t.startedAt),
     index("session_learner_id_idx").on(t.learnerId),
     index("session_log_asset_id_idx").on(t.logAssetId),
+  ],
+);
+
+/**
+ * One conversation with the studio's planner (docs/STUDIO-CHAT-FIRST.md,
+ * D32): the headless session every turn resumes, where its transcript lives,
+ * and the latest brief that passed `validateBrief`.
+ *
+ * **Disk first, like `job`.** The runner writes `drafts/<id>/draft.json` and
+ * appends to `transcript.ndjson` before it mirrors the row here, so a database
+ * that was down during a conversation loses nothing; this row is the query
+ * surface. `transcript_path` is relative to the runner's `STUDIO_HOME` for the
+ * reason `job.candidate_path` is: that directory moves between machines.
+ *
+ * **A draft has many jobs, and the link lives on `job` (D35).** A failed
+ * drawing and a second Draw, or a second diagram in the same conversation, is
+ * the normal case, and a `draft.job_id` would overwrite the first job's link.
+ *
+ * `kind` is what the draft's briefs produce (D42). Only `diagram` exists; the
+ * column is here now so a second kind needs no backfill.
+ *
+ * `turns` counts the person's turns against the turn cap. `cost_usd` sums
+ * every planner turn with the same paired source check as `job`; the daily
+ * cap dates each turn at its own end from the runner's disk record, not from
+ * this sum (D36).
+ */
+export const draft = pgTable(
+  "draft",
+  {
+    id: text("id").primaryKey(),
+    state: text("state").notNull().default("open"),
+    kind: text("kind").notNull().default("diagram"),
+    /** The slug of the diagram an extend draft was opened on. */
+    source: text("source"),
+    /** The latest brief's title, for the drafts list. */
+    title: text("title"),
+    /** The headless session every turn resumes. Minted before the first spawn. */
+    plannerSessionId: text("planner_session_id").notNull(),
+    /** `drafts/<id>/transcript.ndjson`, relative to the runner's `STUDIO_HOME`. */
+    transcriptPath: text("transcript_path").notNull(),
+    /** The latest brief that passed `validateBrief`. */
+    brief: jsonb("brief"),
+    briefAt: instant("brief_at"),
+    /**
+     * The topic entry the planner proposed and the dry run accepted, when the
+     * brief's topic does not exist yet. Cleared when the Draw press creates it.
+     */
+    pendingTopic: jsonb("pending_topic"),
+    turns: integer("turns").notNull().default(0),
+    costUsd: doublePrecision("cost_usd"),
+    costSource: text("cost_source"),
+    errorKind: text("error_kind"),
+    error: text("error"),
+    ownerId: ownerId(() => learner.id),
+    createdAt: createdAt(),
+    /** Moves on every event, and drives pruning. */
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("draft_state_check", inList("state", DRAFT_STATES)),
+    check("draft_kind_check", inList("kind", DRAFT_KINDS)),
+    check("draft_brief_object_check", jsonObject("brief", true)),
+    check("draft_pending_topic_object_check", jsonObject("pending_topic", true)),
+    // A pending topic belongs to a brief that names it, so one with no brief
+    // beside it is a proposal nothing would ever draw.
+    check("draft_pending_topic_brief_check", sql`pending_topic is null or brief is not null`),
+    check("draft_turns_check", sql`turns >= 0`),
+    check("draft_cost_usd_check", sql`cost_usd is null or cost_usd >= 0`),
+    check(
+      "draft_cost_source_check",
+      sql.raw(
+        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+      ),
+    ),
+    check("draft_cost_source_paired_check", sql`cost_source is null or cost_usd is not null`),
+    check(
+      "draft_error_kind_check",
+      sql.raw(
+        `error_kind is null or error_kind in (${DRAFT_ERROR_KINDS.map((v) => `'${v}'`).join(", ")})`,
+      ),
+    ),
+    index("draft_owner_id_idx").on(t.ownerId),
+    index("draft_state_idx").on(t.state),
+    index("draft_updated_at_idx").on(t.updatedAt),
   ],
 );
 
@@ -219,6 +306,15 @@ export const job = pgTable(
     errorKind: text("error_kind"),
     error: text("error"),
     errorDetail: jsonb("error_detail"),
+    /**
+     * The chat that asked for it (D35), or null for a job briefed through the
+     * form or the CLI. Set null rather than blocked when a draft is pruned:
+     * the job is the record of what was drawn and outlives the conversation.
+     */
+    draftId: text("draft_id").references(() => draft.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     /** Whose job it is. Only `session` carried a learner before (D3). */
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
@@ -270,6 +366,7 @@ export const job = pgTable(
     index("job_parent_job_id_idx").on(t.parentJobId),
     index("job_requested_at_idx").on(t.requestedAt),
     index("job_owner_id_idx").on(t.ownerId),
+    index("job_draft_id_idx").on(t.draftId),
   ],
 );
 

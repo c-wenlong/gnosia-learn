@@ -423,6 +423,43 @@ export const JOB_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = 
   interrupted: [],
 };
 
+/**
+ * What a studio draft's briefs produce (D42 of docs/STUDIO-CHAT-FIRST.md).
+ * Only `diagram` exists; a manimkc video is the next kind, through the same
+ * chat, and the column is here so that day needs no backfill.
+ */
+export const DRAFT_KINDS = ["diagram"] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+/**
+ * A draft is one conversation with the studio's planner.
+ *
+ * `open` has no valid brief in force; `briefed` has one and Draw is live;
+ * `drawing` follows its newest job while that job is in flight or waiting for
+ * review; `done` is a drawing accepted or discarded; `abandoned` is closed for
+ * good, by a person or by the turn cap.
+ */
+export const DRAFT_STATES = ["open", "briefed", "drawing", "done", "abandoned"] as const;
+export type DraftState = (typeof DRAFT_STATES)[number];
+
+/** The last failure a draft records: a refused first request, a brief refused twice, a turn cut off. */
+export const DRAFT_ERROR_KINDS = ["agent", "brief-invalid", "timeout", "interrupted"] as const;
+export type DraftErrorKind = (typeof DRAFT_ERROR_KINDS)[number];
+
+/**
+ * The draft's lifecycle (the state diagram in docs/STUDIO-CHAT-FIRST.md), as
+ * data for the reason the job's is. A newer brief on a `briefed` draft, or
+ * another question on an `open` one, is a write to the row and not a
+ * transition, so neither state lists itself.
+ */
+export const DRAFT_TRANSITIONS: Readonly<Record<DraftState, readonly DraftState[]>> = {
+  open: ["briefed", "abandoned"],
+  briefed: ["open", "drawing", "abandoned"],
+  drawing: ["briefed", "done"],
+  done: ["open"],
+  abandoned: [],
+};
+
 /** Is `to` reachable from `from`? The one place either state machine is read. */
 export function canTransition(
   transitions: Readonly<Record<string, readonly string[]>>,
