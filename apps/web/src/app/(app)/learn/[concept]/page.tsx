@@ -165,8 +165,8 @@ function Unreachable() {
     <div data-layout="app">
       <Card title="Knowledge base unavailable" className="max-w-2xl">
         <p className="text-[14px] text-text2">
-          The database could not be reached, so this concept cannot be shown. Nothing is lost: the note is still a file
-          under learn/concepts, and the mastery and the schedule are still in the database.
+          The database could not be reached, so this concept cannot be shown. Nothing is lost: the note, the mastery and
+          the schedule are all in the database, and show again once it answers.
         </p>
         <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
       </Card>

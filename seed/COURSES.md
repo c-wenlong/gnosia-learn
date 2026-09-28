@@ -1,27 +1,31 @@
-# Course data
+# Course files
 
-**These files are the course data until the `courses` type is flipped, and its
-export after.** There is no TypeScript copy: the web app, `catalog import` and
-`catalog course import` all read them with the parser in
-[`packages/content`](../../packages/content/src/courses.ts), so a course file
-means one thing everywhere. Editing a page to change a course title is not a
+**A course file is the database's export of one course, and the way to edit
+it.** The courses are `collection` and `curriculum_item` rows; the file is what
+`catalog course export` writes from them and `catalog course import` reads
+back. There is no TypeScript copy and no copy in the repository: the import
+parses a file with the parser in
+[`packages/content`](../packages/content/src/courses.ts), and the database's
+course reader returns the same `Course` shape that parser does, so a course
+file means one thing everywhere. Editing a page to change a course title is not a
 thing that can work.
 
-**Change a course by importing its file.** Edit the file here, or export it
-first, and import it with a reason:
+**Change a course by exporting it, editing the file and importing it with a
+reason:**
 
 ```bash
 npm run catalog -- course export cs2111 --out /tmp/cs2111.yaml
+$EDITOR /tmp/cs2111.yaml
 npm run catalog -- course import /tmp/cs2111.yaml --reason "why this changed"
 ```
 
-The import writes one revision per module, item or link that changed, and
-rewrites the file here (and `../topics.yaml` when a module's topic changed)
-to match, so the two never disagree. A module or item the file stops listing
-is archived, never deleted, and the learner's progress and recap on it stay.
-[docs/CURRICULUM.md](../../docs/CURRICULUM.md) has the whole loop, the item
-verbs and every refusal. Once the database owns courses, a hand edit here that
-was not imported is refused by the next `catalog import`, by name.
+The import writes one revision per module, item or link that changed. A
+module or item the file stops listing is archived, never deleted, and the
+learner's progress and recap on it stay. The exported file's first line names
+the revision it was read at, and the import refuses it once the course has
+moved past that. [docs/CURRICULUM.md](../docs/CURRICULUM.md) has the whole
+loop, the item verbs and every refusal. A course file inside an export tree
+that someone edited by hand is refused by the next `catalog import`, by name.
 
 One YAML file per course, named `<code>.yaml` in lowercase (e.g. `cs2111.yaml`).
 The reader refuses a file whose name and `code:` disagree.
@@ -37,14 +41,14 @@ prereq: CS1010                   # optional
 track: HCI focus area primary    # optional
 notes: ...                       # optional
 inferred: false                  # required, and must be a real boolean
-tags: [hci]                      # ids from ../tags.yaml
+tags: [hci]                      # tag ids (content/tags.yaml in an export)
 capstone: ...
 modules:
   - id: cs2111-m1                # permanent
     slug: m1-foundations-of-hci  # the URL segment
     title: Foundations of HCI
     order: 1
-    topic: usability-and-interaction-design   # a slug from ../topics.yaml
+    topic: usability-and-interaction-design   # a topic slug (catalog topic ls)
     topics:
       - id: cs2111-m1-t1         # permanent: learner progress keys on it
         title: What HCI is
@@ -61,18 +65,17 @@ modules:
 in the `progress` and `recap` tables, and concept links hang off the same ids.
 An id must never be renamed or renumbered: a renamed item is an archived one
 plus a new, empty one. See
-[docs/CURRICULUM.md](../../docs/CURRICULUM.md) for the full rule, the list of
+[docs/CURRICULUM.md](../docs/CURRICULUM.md) for the full rule, the list of
 refusals, and how to add topics safely.
 
 **`order:` is the reading order,** not a derived one. Sorting ten files by name
 gives a different sequence from the curated shortlist, and nothing would say so,
 so the key is authored and has to be unique.
 
-**`topic:` is a lookup key, not free text.** Add or rename a topic in
-[`../topics.yaml`](../topics.yaml). `course import` lists a new module under
-that topic's `maps.courses` itself; if you edit the files and run
-`catalog import` instead, list it there by hand, since the index refuses to
-run when the two files disagree in either direction.
+**`topic:` is a lookup key, not free text.** Add or rename a topic with
+`catalog topic add` or `catalog topic rename` ([README.md](README.md#writing-the-vocabulary-and-the-tags)),
+never here. `course import` lists a new module under that topic's
+`maps.courses` itself, so the two never disagree.
 
 **`concepts:` on every item.** Each item names the concept notes that teach it,
 filed under the module's topic. `npm run catalog -- doctor` lists every item

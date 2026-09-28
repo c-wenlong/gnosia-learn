@@ -83,16 +83,25 @@ export const CATALOG_UNREACHABLE = 3;
 const OFFLINE =
   /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|could not run the catalog CLI|DATABASE_URL/i;
 
-async function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResult> {
+function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResult> {
+  return npmCli("catalog", args, timeoutMs);
+}
+
+/**
+ * One of the repository's two CLIs, with `--json`: `catalog`, or `learn`
+ * for what only it answers (a concept note's text). The same exit codes, so
+ * the same reading of "offline".
+ */
+async function npmCli(script: "catalog" | "learn", args: string[], timeoutMs: number): Promise<CatalogResult> {
   try {
-    const result = await run(NPM, ["run", "--silent", "catalog", "--", ...args, "--json"], {
+    const result = await run(NPM, ["run", "--silent", script, "--", ...args, "--json"], {
       timeoutMs,
     });
     if (result.code === 0) return { ok: true, json: result.json, error: null, offline: false };
     const detail = (result.stderr.trim() || result.stdout.trim() || "").split("\n").slice(-4).join(" ");
     const error = result.timedOut
-      ? `catalog ${args[0] ?? ""} timed out after ${timeoutMs}ms`
-      : `catalog ${args.join(" ")} exited ${result.code}: ${detail}`;
+      ? `${script} ${args[0] ?? ""} timed out after ${timeoutMs}ms`
+      : `${script} ${args.join(" ")} exited ${result.code}: ${detail}`;
     return {
       ok: false,
       json: result.json,
@@ -106,7 +115,7 @@ async function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResu
     return {
       ok: false,
       json: null,
-      error: `could not run the catalog CLI: ${(error as Error).message}`,
+      error: `could not run the ${script} CLI: ${(error as Error).message}`,
       offline: true,
     };
   }
@@ -304,4 +313,13 @@ export function topicList(): Promise<CatalogResult> {
 /** `catalog status`, used by `/api/health` to say whether Postgres is answering. */
 export function status(): Promise<CatalogResult> {
   return catalog(["status"], 30_000);
+}
+
+/**
+ * One concept note as the database holds it (`learn concept show --json`):
+ * its title and body, among the rest. The studio reads it for a brief whose
+ * source names a note, since the cut-over left no file to read.
+ */
+export function conceptShow(slug: string): Promise<CatalogResult> {
+  return npmCli("learn", ["concept", "show", slug], 60_000);
 }

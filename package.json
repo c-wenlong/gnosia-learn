@@ -28,7 +28,8 @@
     "gitmodules": "scripts/update-gitmodules.sh",
     "catalog": "tsx services/catalog/src/cli.ts",
     "studio": "tsx services/studio/src/index.ts",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "export:nightly": "node scripts/nightly-export.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

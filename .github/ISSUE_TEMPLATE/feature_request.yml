@@ -38,7 +38,7 @@ body:
       options:
         - Roadmap UI (courses, modules, topics, progress)
         - Learning pipeline (the `learn` CLI in scripts/learn)
-        - Knowledge base (learn/ concepts, sessions, state)
+        - Knowledge base (concept notes, session logs, learner state)
         - /learn or /review skill (the learning plugin)
         - manimkc (narrated animation videos)
         - Docs / DX

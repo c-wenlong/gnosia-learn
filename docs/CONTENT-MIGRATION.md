@@ -1,21 +1,27 @@
 # Moving authored content into the database
 
-**Status: built through phase 1, and phase 2 in part, 2026-09-28.** Phase 0
+**Status: built through phase 3, the cut-over, 2026-09-28.** Phase 0
 merged as PRs #126 to #129, and the fixes a read-only review of it asked for
 as #130 and #131. Phase 1's five tracks merged as PRs #132 to #145, and a
 read-only review of them asked for the fixes listed under
 [Phase 1 review fixes](#phase-1-review-fixes). Phase 2's vault, catalog and
-tests slices merged as #150, #151 and #154, and the contract migration and
-flip day's safeguards as #153; the web and studio slice (#152) waits for flip
-day on the owner's database. Each step below says what was
-built under **Built**, and a box is ticked only for what exists. No type is
-flipped on the owner's database yet: every flip so far ran on a scratch copy. Approved 2026-09-27, when
-the owner answered the open questions (see
+tests slices merged as #150, #151 and #154, the contract migration and flip
+day's safeguards as #153, and the web and studio slice as #152. Phase 3 is two
+PRs: #157, the operator half (`scripts/flip-rehearsal.mjs --cutover`), and
+#159, which removes `content/` and `learn/`. The owner chose to merge #159
+before their own flip day, so their database is flipped afterwards from the
+tag `content-files-final` on `a0afd93` (see "After the merge" under
+[Phase 3: cut-over](#phase-3-cut-over)). Each step below says what was built
+under **Built**, and a box is ticked only for what exists; the steps that run
+against the owner's database stay open until they have run. Approved
+2026-09-27, when the owner answered the open questions (see
 [Decided by the owner](#decided-by-the-owner)): everything stays local for
 now, so the cloud database and the cloud blob adapter are deferred to a
-go-live step and phase 0 started at 0.2. The owner's `self_learn` database is
-still at `0009` and unflipped: flip day (`node scripts/flip-rehearsal.mjs
---real`, below) backs it up, migrates it and flips it.
+go-live step and phase 0 started at 0.2. The owner's `self_learn` database
+was still at `0009` and unflipped when the cut-over merged: flip day, run from
+a worktree at `content-files-final` ("After the merge", under
+[Phase 3: cut-over](#phase-3-cut-over)), backs it up, migrates it, flips every
+type and applies 0013, and the strict flips after it arm or waive every rule.
 Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
 working tree, `~/.self-learn/manimkc/out` and the local `self_learn` database;
@@ -38,7 +44,7 @@ git used to give for free.
 `mastery`, `review`, `progress`, `recap`, `preference`) keep their shapes; they
 already live in Postgres, and the only change for them is which database they
 sit in. The `learn` CLI keeps its verb names and the five pinned
-`--json` shapes in [learn/README.md](../learn/README.md#the-json-shapes), so the
+`--json` shapes in [docs/LEARN.md](LEARN.md#the-json-shapes), so the
 external `learning` plugin keeps parsing what it parses today. The render tools
 stay local processes: manimkc renders on a laptop or the homeserver, tldrawkc
 draws in a local headless Chromium, and a Vercel function never renders
@@ -867,7 +873,7 @@ list above, and why:
 concept mappings, 61 module mappings (*measured* today). **Tests:** the verbs'
 refusals by name; a trigram warning; a relation's symmetric storage; the
 planner path from a recorded reply to a created topic and a queued job.
-**Docs:** [content/README.md](../content/README.md) rewritten as the export
+**Docs:** the content folders' README (merged into [seed/README.md](../seed/README.md) at the cut-over) rewritten as the export
 format; STUDIO-CHAT-FIRST.md's D39 marked superseded. **Done when:** a topic
 proposed in the studio chat is created by one press and the job it gates
 reaches `awaiting_review` with no file edit and no manual index. **Tier:**
@@ -982,7 +988,7 @@ flip waits on them; the list of items is in the PR that filled these.
 **Tests:** an import that drops an item archives it and leaves `progress`; a
 purge refused, then allowed with the flag and recoverable from the revision;
 the course order and slug uniqueness rules as constraint errors.
-**Docs:** [content/courses/README.md](../content/courses/README.md) and
+**Docs:** the course format's README (moved to [seed/COURSES.md](../seed/COURSES.md) at the cut-over) and
 [CURRICULUM.md](CURRICULUM.md) rewritten around import and export.
 **Done when:** removing an item from a course file and importing it leaves the
 learner's tick and recap in place and reports the archive. **Tier:** Opus for
@@ -1026,7 +1032,7 @@ the archive rules, Sonnet for the reader. **Size:** 2 to 3 PRs (*guessed*).
 concatenation; 70 prerequisite rows. **Tests:** the five golden `--json`
 shapes unchanged (`services/catalog/test/learn-cli.test.ts:99`); checkout and
 commit with a moved base refused; `observe --session` appends one entry.
-**Docs:** [learn/README.md](../learn/README.md) storage sections.
+**Docs:** the pipeline README's storage sections (moved to [docs/LEARN.md](LEARN.md) at the cut-over).
 **Done when:** a full `/learn` session run against the migrated database closes
 with filled-in notes and a log, and no file under `learn/` changed. **Tier:**
 Opus. **Size:** 4 PRs (*guessed*): writers, readers, plugin, flip.
@@ -1821,26 +1827,168 @@ One PR, one agent, Opus.
       "..."`, which writes the waiver onto `content_source` where doctor
       reports it on every run; a forgotten rule is then impossible, and a
       deferred one is a written decision.
+      Built (#157), and run on cut-over day by `flip-rehearsal.mjs --real
+      --cutover`: it waives `item-has-concept` with a reason typed on the
+      terminal, refuses while any other rule has a violator, runs `flip <type>
+      --strict` for all six, and requires doctor's new `unsettled` list (rules
+      neither armed nor waived) to be empty.
 - [ ] Final `catalog import` of the tree into the cloud database (a no-op if
       the flips held), then `catalog parity` of a fresh export against the
       tree, pasted into the PR body.
+      Built (#157), and run on cut-over day by `flip-rehearsal.mjs --real
+      --cutover`, against the local primary, since the cloud database is
+      deferred to go-live (0.1): an import that must remove nothing and skip
+      all six types, then an export to a temp directory and its parity, saved
+      to `~/<db>-cutover-<UTC time>.parity.json` for the PR body.
 - [ ] `git tag content-files-final` on the commit before deletion and push the
       tag, so every historical version stays reachable (open question 4).
-- [ ] Remove `content/` and `learn/`, keeping `seed/`. `CONTENT_SOURCE`
+      Built (#157), but the owner merged this phase before flip day, so the
+      tag is made by hand on `a0afd93`, the last commit with `content/` and
+      `learn/` (step 1 below), rather than by `--cutover`.
+- [x] Remove `content/` and `learn/`, keeping `seed/`. `CONTENT_SOURCE`
       defaults to `db`, and `files` survives only as a test override.
-- [ ] Docs: AGENTS.md (the pipeline table, the tldrawkc rules about
+- [x] Docs: AGENTS.md (the pipeline table, the tldrawkc rules about
       `learn/assets/`, the gotchas that name these paths), SCHEMA.md ("The two
       halves": content is authored here now), `content/README.md` moved to
       `seed/README.md` as the export format, `learn/README.md` storage
       sections.
-- [ ] Plugin: a version bump removing every remaining path under `learn/` from
+- [x] Plugin: a version bump removing every remaining path under `learn/` from
       the skills and agents.
-- [ ] Take `0013_asset_blob_contract` out of `CONTRACT_MIGRATIONS`
+- [x] Take `0013_asset_blob_contract` out of `CONTRACT_MIGRATIONS`
       (`services/catalog/src/migrations.ts`) once the owner's database has
       applied it, so a migration can follow it again: while it is registered,
       any later migration waits behind it on a database that holds it, and
       `test/blob-contract.test.ts` fails when one is added.
 - [ ] The nightly export to the private archive repository starts.
+      The script is built (`scripts/nightly-export.mjs`, `npm run
+      export:nightly`) with a launchd example in
+      [DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export); scheduling it, and
+      whether its archive becomes a private git repository, are the owner's.
+
+**After the merge**, in this order, all of it the owner's. The owner chose to
+merge this phase before flip day, so the owner's database (at 0009, nothing
+flipped) meets code that has no `content/` or `learn/` and no longer holds
+0013 back; until step 3 the web app refuses every content page, which is the
+consequence accepted. Flip day therefore runs from the last commit that has
+the files, which is also the commit the tag keeps:
+
+1. The tag, on `a0afd93` (#152, the last commit with `content/` and
+   `learn/`):
+   `git tag -a content-files-final a0afd93 -m "last commit with content/ and learn/" && git push origin content-files-final`.
+2. A worktree at the tag, holding the untracked files the owner's checkout
+   still has there (the tailscale diagram), since the import must remove
+   nothing: `git worktree add ~/self-learn-files content-files-final`, copy
+   every untracked file under the main checkout's `content/` and `learn/`
+   into the same place in it, then `npm ci` there.
+3. Flip day from that worktree, whose code still holds 0013 until the
+   upload: `MANIMKC_ROOT=<main checkout>/tools/manimkc
+   TLDRAWKC_ROOT=<main checkout>/tools/tldrawkc node
+   scripts/flip-rehearsal.mjs --real --database self_learn --checkout
+   ~/self-learn-files`. It backs up, migrates to 0012, imports (on a
+   throwaway copy first), flips the six types, uploads, and applies 0013.
+4. Arm the rules, from the same worktree while it is the root the flips
+   recorded: `npm run catalog -- flip <type> --strict` for topics, tags,
+   concepts, sessions and diagrams, and `npm run catalog -- flip courses
+   --strict --waive item-has-concept --reason "<why>"`; `npm run catalog --
+   doctor` must then list no rule as unsettled. `--cutover` is not the tool
+   in this order: its tag step would refuse the tag made in step 1, and flip
+   day's exports leave tracked edits in the worktree that it refuses too.
+5. In the main checkout, on `main`: `git pull`, `npm run catalog -- migrate`
+   (nothing left to apply), and check the app. Then remove the untracked
+   leftovers under `content/` and `learn/` and the worktree
+   (`git worktree remove --force ~/self-learn-files`); the rows, the backup
+   and the tag hold everything they held.
+
+**Built** (branch `p3/cutover`, #159, merged before flip day at the owner's
+call; the operator half is #157):
+
+- **The folders are gone.** `content/` and `learn/` are deleted, reachable at
+  the tag (`git show content-files-final:content/topics.yaml`).
+  `content/README.md` is merged into `seed/README.md`, now the export
+  format's documentation, `content/courses/README.md` moved to
+  `seed/COURSES.md`, and `learn/README.md` to `docs/LEARN.md`. `seed/` keeps
+  the export layout, and it is all the content a fresh clone has.
+- **Readers default to the database.** `resolveOwnership` in
+  `packages/content/src/select.ts` takes the variable, then the row, then
+  `db`, so a type with no `content_source` row reads the database, and
+  `CONTENT_SOURCE=files` is a test's switch. The web app refuses a type the
+  row or the variable sends to files.
+- **The write-through ends (D17, amended).** Once every export type is
+  flipped a write writes rows and no file: `exportsFiles()` in
+  `services/catalog/src/content/write-through.ts`, checked inside each
+  write's transaction, covers the topic, tag and course writers,
+  `course import`, item archive, restore and purge, and `learn concept add`.
+  While any type is still on files the old write-through runs as before.
+- **`catalog import` skips a type with no files in the directory.** Once the
+  database owns every type, a type is skipped when the directory holds none
+  of its files, as well as when they are its own last export (while any type
+  is still on files a tree missing a type's files is refused, as before, since
+  trees are then kept in step). Once topics are flipped
+  the vocabulary comes from the topic rows (`vocabularyOf`). So a bare
+  `catalog import` on a database that owns every type reads nothing for the
+  six and refreshes manimkc and the mirror ledger, and `catalog import seed`
+  still loads the seed into a fresh database.
+- **The `learn` CLI reads rows, and files only under `LEARN_ROOT`.** Notes,
+  logs and courses come from rows; the file half runs only against a tree
+  `LEARN_ROOT` names and never creates `learn/` in the repository. With no
+  `LEARN_ROOT`, a type the database does not own is refused with a message
+  (import a tree and `catalog flip <type>`, or set `LEARN_ROOT`), and so is an
+  unreachable database, where both used to read an empty folder. `learn
+  status` says "Knowledge base: the catalog at <db>", and `learn init` that
+  the notes, logs and diagrams are rows in the catalog.
+  `learn concept add --item` works on rows: when the database owns courses it
+  exports the course, stamped with its base revision, into a temp directory
+  (`services/catalog/src/learn/course-tree.ts`), lists the concept there, and
+  `course import`s it.
+- **The studio reads a source note from the database.** A brief's `source`
+  naming a concept note (`learn/concepts/<domain>/<slug>.md`, `<slug>.md` or
+  a bare slug) that is not on disk is read with `learn concept show --json`
+  into the job's scratch directory, where the agent reads it
+  (`services/studio/src/source-note.ts`). The form's placeholder is a slug.
+- **`npm run e2e` builds its database from `seed/` by default.** `--copy`, or
+  setting `E2E_TEMPLATE_DB`, copies `self_learn` or that database instead;
+  `--seed` is still accepted.
+- **The nightly export.** `node scripts/nightly-export.mjs [--keep N]
+  [--json]` runs `catalog export --out` into
+  `$SELF_LEARN_HOME/archive/<UTC time>/`, writing a `.partial` first and
+  renaming it on success, replaces the `latest` link with a rename so it is
+  never missing, prunes to the newest 30, removes partials more than a day
+  old, refuses an archive inside the checkout, and records nothing on the
+  database. [DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export) has the launchd
+  example.
+- **0013 is unregistered.** `CONTRACT_MIGRATIONS` is empty. On a database
+  without 0013, `catalog migrate` applies it like any migration, and its
+  guard raises with the ids if the data is not ready. The holding machinery
+  stays for the next contract, and its tests register 0013 through a
+  `contracts` option. `flip-rehearsal.mjs` now expects a database that holds
+  0013 or holds nothing its guard would refuse, and its tests template from a
+  database at the head.
+- **Tests.** `services/catalog/test/after-cutover.test.ts` covers the
+  repository after the cut-over: a database owning every type, no
+  `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a
+  bare import, none of which recreates `content/` or `learn/`.
+  `nightly-export.test.ts` covers the export script. `vitest.setup.ts` watches
+  `seed/`, and checks that whatever is at the repository's `content/` and
+  `learn/` (absent after the cut-over) is unchanged by each test file; the
+  studio's test farm links neither.
+- **The operator half (#157).** `flip-rehearsal.mjs --real --cutover`: the
+  backup, a `migrate` that must hold nothing, every type flipped, an import
+  that removes nothing and skips all six, an export to a temp directory with
+  its parity saved to `~/<db>-cutover-<UTC time>.parity.json`, the
+  `item-has-concept` waiver with a reason typed on the terminal (every other
+  rule must be clean), `flip <type> --strict` for all six, doctor's
+  `unsettled` empty, and `git tag content-files-final` on HEAD, not pushed.
+- **The plugin.** `~/.quiver/plugins/learning/learning`, branch
+  `content-migration-p3` (version 0.5.0, stacked on `content-migration-d`,
+  not pushed yet): every `learn/` path is gone from the skills and agents, the
+  tutor reads a note with `learn concept show --json` and the log with
+  `learn vault pull` (there is no `learn session show`), and the docs
+  pointers name `docs/LEARN.md`.
+
+**Where the plan was wrong.** "One PR, one agent" did not hold: the operator
+half had to ship as its own PR (#157) against `main`, because `--real` runs
+only from the checkout the script sits in, and this phase's branch has no tree
+to import.
 
 **Done when:** a fresh clone with only `seed/` passes the local gate, the
 production site and a `/learn` session both work against the cloud database,
@@ -1850,12 +1998,13 @@ reason.
 ### Cut-over day, as a script
 
 The phase has two halves. The code half (the tree loses `content/` and
-`learn/`) is one PR, held until the owner's database is flipped and has
-applied 0013. The operator half runs against the database before that PR
-merges, from the checkout that still has the files, so it ships first, on its
-own, as `node scripts/flip-rehearsal.mjs --cutover`: `--real` refuses to run
-from any checkout but the one the script sits in, and the cut-over PR's own
-branch has no tree left to import.
+`learn/`) is #159. The operator half was meant to run against the database
+before that PR merged, from the checkout that still had the files, so it
+shipped first, on its own, as `node scripts/flip-rehearsal.mjs --cutover`
+(#157): `--real` refuses to run from any checkout but the one the script sits
+in, and the cut-over PR's own branch has no tree left to import. The owner
+then merged #159 first, so the order that applies is "After the merge" above,
+which does the same work by hand from a worktree at the tag.
 
 `--real --cutover --database <name> --checkout <dir>` has flip day's guards
 (the named database, the checkout the script is in, a terminal to type the
@@ -2257,8 +2406,11 @@ The shared files, and how tracks stay off them:
 
 ### D1. The database is the truth; files are an export format
 
-**Verdict:** Postgres holds every piece of authored content; `catalog export`
-writes the old shapes and `catalog import` reads them. **Why:** content made
+**Verdict:** content is authored in Postgres, every piece of it, and files are
+its export format: `catalog export` writes the old shapes (when a person asks,
+and nightly into `$SELF_LEARN_HOME/archive/`), and `catalog import` reads them
+back. Since the phase 3 cut-over the repository holds no content of its own
+beyond `seed/`, which is one such export. **Why:** content made
 through the app has nowhere to go under the files rule, and a tenant cannot
 commit to one person's repository. Keeping the shapes as the export format keeps
 the parsers, the refusal rules and a readable backup. **Rejected:** files as
@@ -2447,7 +2599,13 @@ the D20 append-only table rule out. **Amended** 2026-09-28 after the phase 1
 review (S12), as the coordinator's default pending the owner: it said every
 writer exports until phase 3, which Tracks C and D did not do. The plugin's
 `skills/learn/SKILL.md` still says "the learner has this file open" of the
-session log, and changes in its next version bump.
+session log, and changes in its next version bump. **Amended** 2026-09-28 at
+the phase 3 cut-over: the write-through now ends when every type is flipped.
+`exportsFiles()` in `services/catalog/src/content/write-through.ts`, read
+inside each write's transaction, turns it off once no export type is on
+files, since no reader parses a file then and the repository has no
+`content/` or `learn/` to keep in step; a database part-way through its flips
+keeps it. An export is then something a person or the nightly schedule runs.
 
 ### D18. The database records which types it owns
 

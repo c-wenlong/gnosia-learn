@@ -32,7 +32,7 @@ import {
   revisionRow,
 } from "./revisions";
 import { canonicalJson, readSnapshots, type SnapshotRead } from "./snapshot";
-import { assertInStep, type ExportedType, importRoot, writeThrough } from "./write-through";
+import { assertInStep, type ExportedType, exportsFiles, importRoot, writeThrough } from "./write-through";
 import { writeContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 
 /**
@@ -1451,7 +1451,9 @@ export async function checkConceptTopic(
         `one topic; move it with \`learn concept add --topic ${input.topic} --force\` only once it has left "${row.topicSlug}".`,
     );
   }
-  if (input.root !== undefined) {
+  // Only while writes still rewrite the vocabulary file: once the database
+  // owns every type there is no file, and so no tree to be the wrong one.
+  if (input.root !== undefined && (await exportsFiles(db))) {
     const imported = await importRoot(db, "topics");
     if (imported !== null && (await realpath(imported)) !== (await realpath(input.root))) {
       throw new TopicError(
