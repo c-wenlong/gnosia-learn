@@ -179,6 +179,60 @@ function contentRow(row: Asset): Record<string, unknown> {
   return rest;
 }
 
+/**
+ * Unhook the poster of each video whose bytes an import just replaced, the
+ * way the upload unhooks one when it links new bytes and cannot cut a new
+ * poster (see `detach` below). Under the blob contract (0013) the import, not
+ * the upload, is what links a re-render, so the upload would otherwise find
+ * the video's blob present and the poster derived from it, and keep a picture
+ * of the old render. Unhooked, the poster is not derived from the video, and
+ * the next `catalog asset upload` cuts a new one and hooks it back up.
+ * Returns the posters unhooked.
+ */
+export async function unhookPosters(
+  db: CatalogDatabase,
+  videoIds: readonly string[],
+  options: { author: string; reason: string },
+): Promise<string[]> {
+  if (videoIds.length === 0) return [];
+  const derived = await db
+    .select({ poster: assetDerivation.assetId })
+    .from(assetDerivation)
+    .where(
+      and(
+        inArray(assetDerivation.sourceAssetId, [...videoIds]),
+        inArray(assetDerivation.assetId, videoIds.map(posterId)),
+      ),
+    );
+  if (derived.length === 0) return [];
+  // Each row and the revision it was read at, in one snapshot, as the upload
+  // reads its own: a write that moved a poster since is refused, not undone.
+  const { posters, bases } = await db.transaction(
+    async (tx) => {
+      const ids = derived.map((d) => d.poster);
+      const latest = await latestRevisions(tx, "asset", ids);
+      return {
+        posters: await tx.select().from(asset).where(inArray(asset.id, ids)),
+        bases: new Map(ids.map((id) => [id, latest.get(id)?.id ?? null] as const)),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+  await writeContents(
+    db,
+    posters.map((row) => ({
+      type: "asset" as const,
+      id: row.id,
+      next: { row: contentRow(row), links: { asset_derivation: [] } },
+      base: bases.get(row.id) ?? null,
+      author: options.author,
+      authorKind: "import" as const,
+      reason: options.reason,
+    })),
+  );
+  return posters.map((row) => row.id).sort();
+}
+
 export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOptions): Promise<AssetUploadResult> {
   const dryRun = options.dryRun ?? false;
   const report = options.report ?? (await readTopicsReport(options.repoRoot, options.manimkcRoot));

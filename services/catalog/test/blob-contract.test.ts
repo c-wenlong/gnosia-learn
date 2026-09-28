@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, blobObject } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
+import { posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore } from "../src/content/blob";
+import { REPO_ROOT } from "../src/env";
 import { applyMigrations, assertMigrated, migrateHolding, migrationStatus } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
@@ -132,6 +134,8 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
   let work: string;
   let tree: string;
   let videoFile: string;
+  let manimkc: string;
+  let ffmpeg: string;
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
 
   beforeAll(async () => {
@@ -140,8 +144,12 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     work = await mkdtemp(path.join(tmpdir(), "catalog-blob-contract-"));
     tree = path.join(work, "tree");
     await seedWithManimkc(tree);
-    const manimkc = path.join(work, "manimkc");
+    manimkc = path.join(work, "manimkc");
     ({ videoFile } = await manimkcStandIn(manimkc, Buffer.from("first render")));
+    // Cuts a frame named for the video it was handed, so a re-render's poster differs.
+    ffmpeg = path.join(work, "ffmpeg");
+    await writeFile(ffmpeg, `#!/bin/sh\nfor last; do :; done\nshasum -a 256 "$last" | cut -c1-16\n`);
+    await chmod(ffmpeg, 0o755);
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = manimkc;
   }, 60_000);
@@ -169,15 +177,73 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     expect(transcript?.blobKey).toMatch(/^local\/[0-9a-f]{64}\.json$/);
   });
 
-  it("stores a re-render under its own key, and a second import stores and writes nothing", async () => {
+  const upload = () => uploadAssets(scratch.db, { store: openBlobStore(), repoRoot: REPO_ROOT, manimkcRoot: manimkc, ffmpeg });
+  const derivedFrom = async (id: string) =>
+    (await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, id))).map((d) => d.sourceAssetId);
+
+  it("leaves the upload only the poster to make", async () => {
+    const first = await upload();
+    expect(first.items.map((i) => [i.kind, i.action])).toEqual([
+      ["video", "present"],
+      ["transcript", "present"],
+      ["poster", "made"],
+    ]);
+    expect(await derivedFrom(posterId("manimkc:out/demo/one/one.mp4"))).toEqual(["manimkc:out/demo/one/one.mp4"]);
+  });
+
+  it("stores a re-render under its own key, unhooks the old render's poster, and a second import stores and writes nothing", async () => {
     await writeFile(videoFile, "second render");
     const moved = await runImportCommand({ dir: tree, only: ["manimkc"] });
-    expect(moved.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({ asset: 1 });
+    const manimkcWrite = moved.sources.find((s) => s.source === "manimkc");
+    // The video's revision; the poster's is written through the seam beside it.
+    expect(manimkcWrite?.revisions).toEqual({ asset: 1 });
+    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; the next `catalog asset upload` cuts new ones");
     expect((await video())?.blobKey).toBe(`local/${sha("second render")}.mp4`);
+    const poster = posterId("manimkc:out/demo/one/one.mp4");
+    expect(await derivedFrom(poster)).toEqual([]);
+
+    // The next upload cuts the new render's poster and hooks it back up.
+    const recut = await upload();
+    expect(recut.items.find((i) => i.kind === "poster")?.action).toBe("made");
+    expect(await derivedFrom(poster)).toEqual(["manimkc:out/demo/one/one.mp4"]);
+    expect((await upload()).rowsWritten).toBe(0);
 
     const again = await runImportCommand({ dir: tree, only: ["manimkc"] });
     const manimkc = again.sources.find((s) => s.source === "manimkc");
     expect(manimkc?.revisions).toEqual({});
     expect(manimkc?.notes).toContain("2 file(s) in the blob store, 0 uploaded by this run");
+  });
+});
+
+describe.skipIf(!reachable.ok)("a migration queued behind a held contract", () => {
+  let scratch: Scratch;
+  let folder: string;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    await scratch.db.insert(asset).values({ id: "manimkc:out/a/one.mp4", kind: "video", path: "out/a/one.mp4", sourceRepo: "manimkc" });
+    // The real folder plus one ordinary migration after 0013.
+    folder = await partialMigrations(BEFORE_BLOB_CONTRACT + 1);
+    const journal = path.join(folder, "meta", "_journal.json");
+    type Entry = { idx: number; tag: string; when: number };
+    const parsed = JSON.parse(await readFile(journal, "utf8")) as { entries: Entry[] };
+    const last = parsed.entries.at(-1) as Entry;
+    parsed.entries.push({ ...last, idx: last.idx + 1, tag: "0014_later", when: last.when + 1 });
+    await writeFile(journal, JSON.stringify(parsed));
+    await writeFile(path.join(folder, "0014_later.sql"), "CREATE TABLE later_thing (id text PRIMARY KEY);");
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+    if (folder !== undefined) await rm(folder, { recursive: true, force: true });
+  });
+
+  it("waits with it, and the commands that clear the hold still run", async () => {
+    const held = await migrateHolding(scratch.db, { folder });
+    expect(held.map((h) => h.tag)).toEqual(["0013_asset_blob_contract", "0014_later"]);
+    expect(held[1]?.reason).toBe("waits for 0013_asset_blob_contract, which is held");
+    // assertMigrated reads the real folder, where 0013 is the first outstanding.
+    await expect(assertMigrated(scratch.db)).resolves.toBeUndefined();
   });
 });

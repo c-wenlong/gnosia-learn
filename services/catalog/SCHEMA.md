@@ -1017,10 +1017,13 @@ an edit makes the migration look unapplied everywhere it has already run.
   owner's is flip day. `catalog migrate` knows that: it applies everything
   before 0013 as its own run, asks the same question, and holds 0013 (and
   anything after it) with the reason while the answer is not none, exiting 0
-  with `held` in its output. Every other command runs on a database whose only
-  outstanding migrations are held ones (`assertMigrated`), since 0013 adds no
-  column; that is what lets a database at 0009 migrate to 0012 and then run
-  the upload 0013 waits on. The flip-day script's last two steps are `doctor`
+  with `held` in its output. Every other command runs on a database whose
+  first outstanding migration is a held one (`assertMigrated`), since 0013 adds
+  no column; that is what lets a database at 0009 migrate to 0012 and then run
+  the upload 0013 waits on. drizzle applies in order, so a migration added
+  after 0013 waits behind it on any database still holding it; until every
+  database has applied 0013, such a migration must be one `catalog import` and
+  `catalog asset upload` can run without. The flip-day script's last two steps are `doctor`
   (nothing in the way) and `migrate` (0013 applied).
 
 - **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its

@@ -235,12 +235,18 @@ export class MigrationsOutstanding extends Error {
  * For the commands that query tables or columns a later migration added: run
  * first, so they refuse by name instead of failing on a missing relation.
  *
- * Outstanding contract migrations alone do not count: they add constraints
- * and no column, and the upload they wait on is one of these commands.
+ * Not when the first outstanding migration is a contract migration: it adds
+ * constraints and no column, `catalog migrate` holds it and everything after
+ * it until the data is ready, and the commands that make the data ready (the
+ * import, the upload) are among these. Refusing them there would leave the
+ * database no way forward. A migration queued behind a held one is therefore
+ * one those commands must not need, which is the rule for adding one while a
+ * database anywhere still holds 0013 (SCHEMA.md, "Still open").
  */
 export async function assertMigrated(db: CatalogDatabase): Promise<void> {
   const status = await migrationStatus(db);
-  if (status.pending.length > 0 && !status.pending.every(isContractMigration)) {
+  const first = status.pending[0];
+  if (first !== undefined && !isContractMigration(first)) {
     throw new MigrationsOutstanding(status.pending);
   }
 }
