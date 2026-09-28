@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.22.2"
   },
   "//workspaces": "apps/ is the deployable surfaces (today: the Next app), packages/ the libraries they share, services/ the long-lived processes and CLIs. tools/ is deliberately absent: manimkc and tldrawkc are git submodules with their own repos, lockfiles and toolchains, and listing them here would make npm try to install them as part of this tree.",
   "workspaces": [
@@ -37,7 +37,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^4.1.10",
