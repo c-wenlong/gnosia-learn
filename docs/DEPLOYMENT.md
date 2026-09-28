@@ -471,24 +471,33 @@ drift: `catalog migrate`'s status walks the migration files in the clone it
 runs from, so a database the main checkout has since migrated is not
 refused, and an old clone keeps exporting with old code and says nothing.
 So the job should refresh the clone first. A wrapper the plist runs in place
-of node, at `~/.self-learn/bin/nightly-export.sh`:
+of node: `mkdir -p ~/.self-learn/bin`, save this as
+`~/.self-learn/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
+from `which node` on its `NODE=` line, since launchd hands the script no
+`PATH` worth trusting:
 
 ```zsh
 #!/bin/zsh
 set -u
+NODE=/opt/homebrew/bin/node
 cd "$HOME/.self-learn/checkout" || exit 2
 before=$(git rev-parse HEAD)
 if git pull -q --ff-only; then
-  [ "$before" != "$(git rev-parse HEAD)" ] && npm ci --silent
+  if [ "$before" != "$(git rev-parse HEAD)" ]; then
+    npm ci --silent || { echo "npm ci failed; back to ${before:0:7}"; git reset -q --hard "$before"; }
+  fi
 else
   echo "git pull failed; exporting with $(git rev-parse --short HEAD)"
 fi
-exec node scripts/nightly-export.mjs "$@"
+exec "$NODE" scripts/nightly-export.mjs "$@"
 ```
 
-with `ProgramArguments` as `/bin/zsh` and that path. A pull that fails (no
-network) is logged and the export still runs on the code already there,
-which is the right order: a copy from slightly old code beats no copy.
+Then `ProgramArguments` becomes `/bin/zsh` followed by that path. A pull that
+fails (no network) is logged and the export still runs on the code already
+there: a copy from slightly old code beats no copy. An install that fails
+puts the clone back on the commit it was installed at, so the code and its
+`node_modules` stay a pair and the next run pulls and retries, instead of
+exporting from a half-installed tree every night until someone looks.
 
 Set `SELF_LEARN_HOME` in the plist even when `services/catalog/.env` names
 it: the catalog reads that file, so the export would find the diagram SVGs in
