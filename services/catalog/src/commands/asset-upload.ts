@@ -64,6 +64,7 @@ export function formatAssetUpload(result: AssetUploadCommandResult): string {
     lines.push(`  ${result.uploaded} objects uploaded (${megabytes(result.uploadedBytes)}), ${result.rowsWritten} asset rows written`);
   }
   if (result.postersSkipped !== null) lines.push(`posters skipped: ${result.postersSkipped}`);
+  if (result.bytesCapEstimate !== null) lines.push(`bytes cap: ${result.bytesCapEstimate}`);
   for (const item of result.items) {
     if (item.action === "refused") lines.push(`REFUSED ${item.id}: ${item.detail ?? ""}`);
   }
