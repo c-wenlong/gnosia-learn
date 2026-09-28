@@ -24,9 +24,11 @@ import { fileFacts } from "../index/files";
 import { ASSET_PREFIX } from "../index/source";
 import { metaFromDocument, type DiagramMeta } from "../index/tldr";
 import { readBlob, uploadBlob } from "./blob";
+import { ownRoot } from "./import-root";
 import { DIAGRAM_SLUG, diagramPaths, documentBytes, documentProblem, sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import { writeThrough, WriteThroughError } from "./write-through";
 
 /**
  * Diagrams in the database (docs/CONTENT-MIGRATION.md, Track D; D6, D11).
@@ -389,8 +391,9 @@ export async function putDiagram(
   }
 
   let results: WriteContentResult[];
+  let files: string[];
   try {
-    results = await db.transaction(async (tx) => {
+    ({ value: results, files } = await withFiles(db, store, notes, [input.tldr, input.svg], async (tx) => {
       // The SVG asset's lock even when this put brings no SVG, so an SVG-only
       // put (`putSvgOnly`) and this one never both decide there is no
       // document. The id sorts before the `.tldr` asset's and the asset type
@@ -404,7 +407,7 @@ export async function putDiagram(
         ]);
       }
       return written;
-    });
+    }));
   } catch (error) {
     if ((error as { code?: string }).code === "stale-base") {
       throw new DiagramError("stale-base", (error as Error).message);
@@ -412,7 +415,6 @@ export async function putDiagram(
     throw error;
   }
 
-  const files = await writeThrough(db, slug, input.tldr, input.svg, notes);
   const own = results[0] as WriteContentResult;
   return {
     ok: true,
@@ -496,7 +498,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
     concepts.splice(0, concepts.length, slug);
     // A document on disk that no import has read yet is still the diagram's:
     // the next import would file this SVG under that document's stamp.
-    const root = await filesRoot(db);
+    const root = await ownRoot(db, "diagrams");
     if (root !== null && (await stat(path.join(root, paths.tldr)).catch(() => null)) !== null) {
       throw new DiagramError(
         "unresolved",
@@ -511,7 +513,8 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
   // before diagram), so holding that lock here while asking again means a
   // document either committed before the question, and is seen, or waits for
   // this write and then finds its own base moved.
-  const result = await db.transaction(async (tx) => {
+  const notes: string[] = [];
+  const { value: result, files } = await withFiles(db, store, notes, [input.svg], async (tx) => {
     await lockEntity(tx, "asset", ids.svg);
     if ((await readDiagramDocument(tx, slug)) !== null) throw hasDocument();
     const latest = (await latestRevisions(tx, "asset", [ids.svg])).get(ids.svg);
@@ -547,8 +550,6 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
     ]);
     return written as WriteContentResult;
   });
-  const notes: string[] = [];
-  const files = await writeThrough(db, slug, null, input.svg, notes);
   return {
     ok: true,
     slug,
@@ -566,14 +567,6 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
   };
 }
 
-/** The directory diagrams were last imported from, or null when they never were. */
-async function filesRoot(db: CatalogDatabase): Promise<string | null> {
-  const [run] = await db
-    .execute<{ root: string | null }>(sql`select metadata ->> 'root' as root from index_run where source = 'diagrams'`)
-    .then((r) => r.rows);
-  return run?.root ?? null;
-}
-
 /** Whether `learn/assets/` is still what the import reads diagrams from (D17): true until `catalog flip diagrams`. */
 async function filesOwnDiagrams(db: CatalogDatabase): Promise<boolean> {
   const [owner] = await db
@@ -586,53 +579,55 @@ async function filesOwnDiagrams(db: CatalogDatabase): Promise<boolean> {
 /**
  * D17 of docs/CONTENT-MIGRATION.md: while the files still own diagrams, the
  * write reaches them too, or the next `catalog index` would read the old files
- * back and undo it (a new diagram pruned, an edit reverted). They are written
- * under the directory the diagrams were last imported from, which for the
- * owner is the repository and for a test its own fixture tree, exactly as the
- * writer was given them. Once `catalog flip diagrams` hands the type to the
- * database nothing reads those files, the import skips them, and a put writes
- * none.
+ * back and undo it (a new diagram pruned, an edit reverted). It goes through
+ * the one write-through every other type uses (`write-through.ts`): the
+ * export lock, the check that the files under the root this database imported
+ * diagrams from say what the rows say (so a hand-edited `.tldr` or `.svg` is
+ * refused rather than overwritten), the files rendered from the rows inside
+ * the transaction, and put back if the commit fails. The `.tldr` is written as
+ * the export writes it, its canonical JSON (`diagram-document.ts`).
  *
- * After the commit, and loud when it fails: the rows are written, and a rerun
- * of the same put changes nothing and writes the files again.
+ * Once `catalog flip diagrams` hands the type to the database nothing reads
+ * those files, the import skips them, and a put writes none.
  */
-async function writeThrough(
+async function withFiles<T>(
   db: CatalogDatabase,
-  slug: string,
-  tldr: string | null,
-  svg: string | null,
+  store: BlobStore,
   notes: string[],
-): Promise<string[]> {
-  if (!(await filesOwnDiagrams(db))) return [];
-  const root = await filesRoot(db);
-  if (root === null) {
-    notes.push(
-      "diagrams have never been imported here, so no directory owns their files and none was written",
-    );
-    return [];
-  }
-  const paths = diagramPaths(slug);
-  const written: string[] = [];
+  inputs: readonly (string | null)[],
+  write: (tx: CatalogDatabase) => Promise<T>,
+): Promise<{ value: T; files: string[] }> {
+  if (!(await filesOwnDiagrams(db))) return { value: await db.transaction(write), files: [] };
+  let done;
   try {
-    await mkdir(path.join(root, ASSETS_DIR), { recursive: true });
-    if (tldr !== null) {
-      await writeAtomic(path.join(root, paths.tldr), await readFile(tldr));
-      written.push(paths.tldr);
-    }
-    if (svg !== null) {
-      await writeAtomic(path.join(root, paths.svg), await readFile(svg));
-      written.push(paths.svg);
-    }
+    // The files the put was handed may be the tree's own, edited in place
+    // (`canvas` on learn/assets/<slug>.tldr, then a put of that file): they
+    // are the edit being written, not one the write would lose.
+    done = await writeThrough(db, ["diagrams"], write, {
+      exempt: inputs.filter((file): file is string => file !== null),
+      store,
+    });
   } catch (error) {
-    throw new DiagramError(
-      "write-through",
-      `${slug} is stored, and writing it to ${root} failed (${(error as Error).message}). The files ` +
-        `still own diagrams until the flip, so an index would read the old ones back: run the ` +
-        `same put again, which changes nothing and writes them.`,
-    );
+    if (error instanceof WriteThroughError) throw new DiagramError("write-through", error.message);
+    throw error;
   }
-  notes.push(`the files still own diagrams until \`catalog flip diagrams\`, so ${written.join(" and ")} were written under ${root}`);
-  return written;
+  const files: string[] = [];
+  for (const exported of done.exported) {
+    files.push(...exported.written, ...exported.removed);
+    if (exported.written.length + exported.removed.length > 0) {
+      notes.push(
+        `the files still own diagrams until \`catalog flip diagrams\`, so ${[...exported.written, ...exported.removed.map((p) => `${p} (removed)`)].join(" and ")} ` +
+          `were written under ${exported.root}`,
+      );
+    }
+    for (const conflict of exported.conflicts) {
+      notes.push(
+        `${conflict.path} changed on disk during the put and was left as it is` +
+          (conflict.incoming === null ? "" : `; the stored version is beside it as ${conflict.incoming}`),
+      );
+    }
+  }
+  return { value: done.value, files };
 }
 
 function subjectLinks(subject: Subject, derivedFrom: string | null): Record<string, Record<string, unknown>[]> {

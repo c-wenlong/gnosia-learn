@@ -7,6 +7,7 @@ import {
   contentRevision,
   contentSource,
   JOB_ACTIVE_STATES,
+  manimkcTopic,
   type RevisionEntityType,
   topic,
   TOPIC_RELATION_KINDS,
@@ -825,6 +826,129 @@ export async function relateTopic(db: CatalogDatabase, input: RelateInput, by: B
     exported: done.exported,
     nearMatches: [],
     stored: { from: owner, kind, to: other },
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * map (maps.manimkc)
+ * ------------------------------------------------------------------ */
+
+/**
+ * One manimkc topic folder as `maps.manimkc` names it: manimkc's own
+ * `topics/<domain>/<subdomain>/<topic>` with `topics/` dropped, so
+ * slash-separated segments, none empty, `.` or `..`.
+ */
+const MANIMKC_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function checkManimkcPaths(values: readonly string[]): string[] {
+  if (values.length === 0) throw new TopicError("invalid", "topic map needs at least one --manimkc <path>");
+  const out: string[] = [];
+  for (const raw of values) {
+    const value = raw.trim().replace(/\/+$/, "");
+    if (value.startsWith("topics/")) {
+      throw new TopicError(
+        "invalid",
+        `--manimkc ${raw}: maps.manimkc names the folder with manimkc's "topics/" dropped, so "${value.slice("topics/".length)}"`,
+      );
+    }
+    const segments = value.split("/");
+    if (value === "" || segments.some((segment) => !MANIMKC_SEGMENT.test(segment) || segment === "..")) {
+      throw new TopicError(
+        "invalid",
+        `--manimkc ${raw}: not a manimkc topic folder. It is the path under manimkc's topics/, ` +
+          `such as networking/tailscale/ssh-tunnels.`,
+      );
+    }
+    if (out.includes(value)) throw new TopicError("invalid", `--manimkc ${value} is given twice`);
+    out.push(value);
+  }
+  return out;
+}
+
+export interface MapInput {
+  slug: string;
+  /** Folders to map to the topic, or to unmap with `remove`. */
+  manimkc: readonly string[];
+  remove?: boolean;
+}
+
+export interface MapResult extends TopicWriteResult {
+  /** The topic's `maps.manimkc` after the write, in order. */
+  manimkc: string[];
+}
+
+/**
+ * `catalog topic map <slug> --manimkc <path>... [--remove]`: which manimkc
+ * folders a topic's videos come from (`maps.manimkc`), the one part of a
+ * topic's entry no other verb writes. Once topics are flipped a hand edit of
+ * that list is refused as an edited export, and the manimkc indexer refuses
+ * a folder no topic maps, so without this the first new rendered topic would
+ * block every `catalog index`.
+ *
+ * A folder belongs to one topic (`manimkc_topic.path` is the key), so mapping
+ * one another topic holds is refused, naming that topic: moving it is two
+ * decisions, and each gets its own reason. New folders go at the end of the
+ * list, and the file is rewritten from the rows (D17), which is what the
+ * manimkc indexer reads.
+ */
+export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Promise<MapResult> {
+  const slug = slugOf(input.slug, "the topic");
+  const paths = checkManimkcPaths(input.manimkc);
+  const done = await writeThrough(db, ["topics"], async (tx) => {
+    const row = await liveRow(tx, slug);
+    const current = await tx
+      .select({ path: manimkcTopic.path, topicSlug: manimkcTopic.topicSlug, ownerId: manimkcTopic.ownerId })
+      .from(manimkcTopic)
+      .where(inArray(manimkcTopic.path, [...paths]));
+    const mine = await tx
+      .select({ path: manimkcTopic.path, ownerId: manimkcTopic.ownerId })
+      .from(manimkcTopic)
+      .where(eq(manimkcTopic.topicSlug, slug))
+      .orderBy(asc(manimkcTopic.position), asc(manimkcTopic.path));
+    let list: { path: string; ownerId: string }[];
+    if (input.remove === true) {
+      const missing = paths.filter((p) => !mine.some((m) => m.path === p));
+      if (missing.length > 0) {
+        throw new TopicError("missing", `"${slug}" does not map ${missing.join(", ")}, so there is nothing to remove`);
+      }
+      list = mine.filter((m) => !paths.includes(m.path));
+    } else {
+      const already = paths.filter((p) => mine.some((m) => m.path === p));
+      if (already.length > 0) throw new TopicError("exists", `"${slug}" already maps ${already.join(", ")}`);
+      const elsewhere = current.filter((c) => c.topicSlug !== slug);
+      if (elsewhere.length > 0) {
+        throw new TopicError(
+          "exists",
+          elsewhere
+            .map(
+              (c) =>
+                `${c.path} is already mapped to "${c.topicSlug}"; a folder belongs to one topic, so remove it ` +
+                `there first (\`catalog topic map ${c.topicSlug} --manimkc ${c.path} --remove --reason ...\`)`,
+            )
+            .join("\n"),
+        );
+      }
+      list = [...mine, ...paths.map((p) => ({ path: p, ownerId: row.ownerId }))];
+    }
+    const result = await writeContent(tx, {
+      type: "topic",
+      id: slug,
+      next: {
+        row,
+        links: { manimkc_topic: list.map((m, i) => ({ path: m.path, position: i + 1, ownerId: m.ownerId })) },
+      },
+      base: await latestId(tx, "topic", slug),
+      ...by,
+    });
+    return { result, list: list.map((m) => m.path) };
+  });
+  return {
+    slug,
+    changed: done.value.result.changed,
+    revisions: written([done.value.result]),
+    exported: done.exported,
+    nearMatches: [],
+    manimkc: done.value.list,
   };
 }
 

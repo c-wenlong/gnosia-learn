@@ -184,6 +184,9 @@ Commands:
                                [--restamp-diagrams-later]
                              relate <slug> <kind> <other> [--remove], kind
                                one of broader, related, precedes
+                             map <slug> --manimkc PATH... [--remove]: the
+                               manimkc topic folders (maps.manimkc) whose
+                               videos file under the topic
                              archive <slug>, restore <slug>
                              ls [--domain D]
   tag <verb>               The cross-course themes, the same way:
@@ -456,6 +459,7 @@ export async function main(argv: string[]): Promise<number> {
         relate: { type: "string", multiple: true },
         to: { type: "string" },
         remove: { type: "boolean", default: false },
+        manimkc: { type: "string", multiple: true },
         "restamp-diagrams-later": { type: "boolean", default: false },
         label: { type: "string" },
         description: { type: "string" },

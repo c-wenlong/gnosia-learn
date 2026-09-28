@@ -14,6 +14,7 @@ import { runEnqueue } from "../src/commands/job";
 import { renderType } from "../src/content/export";
 import { exportCourse, importCourse, readStamp } from "../src/content/courses";
 import { flip } from "../src/content/flip";
+import { databaseIdentity } from "../src/content/import-root";
 import { archiveItem, purgeItem } from "../src/content/items";
 import { noteRevision, readNoteRows, writeNoteRow } from "../src/content/note-rows";
 import type { NoteFields } from "../src/content/notes";
@@ -116,9 +117,10 @@ describe.skipIf(!reachable.ok)("a note is written against the revision it was re
     await fixture.write("learn/concepts/fixtures/beta.md", note({ id: "beta", title: "Beta", body: "# Beta\n\nThe body." }));
     await fixture.write("learn/concepts/fixtures/gamma.md", note({ id: "gamma", title: "Gamma", summary: "The third." }));
     const context = await fixture.context({ knownConcepts: async () => new Set(["alpha", "beta", "gamma"]) });
+    const database = await databaseIdentity(scratch.db);
     for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer]) {
       const { rows, logs } = await indexer.read(context);
-      await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root } });
+      await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root, database } });
     }
     for (const file of await renderType(scratch.db, "topics")) await writeFile(path.join(fixture.root, file.path), file.bytes);
     await flip(scratch.db, { type: "concepts", readers: new Set(["concepts"]) });

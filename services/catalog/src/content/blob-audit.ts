@@ -11,7 +11,7 @@ import {
   BlobOwnerError,
   type BlobRootOwner,
   claimRoot,
-  databaseIdentity,
+  ownerIdentity,
   describeOwner,
   OWNER_FILE,
   readOwner,
@@ -113,7 +113,7 @@ export async function auditBlobs(
   // Whose store this is, settled before anything is read or changed.
   let owner: BlobRootOwner | null = null;
   if (options.root !== undefined) {
-    const self = await databaseIdentity(db);
+    const self = await ownerIdentity(db);
     const claimed = fix ? await claimRoot(options.root, self) : null;
     owner = claimed ?? (await readOwner(options.root));
     if (claimed !== null && !sameOwner(claimed, self)) {

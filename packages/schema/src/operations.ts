@@ -80,7 +80,13 @@ export const indexRun = pgTable(
     counts: jsonb("counts").notNull().default(sql`'{}'::jsonb`),
     /**
      * Anything else the source wants remembered about the run that is not a
-     * count. Two sources write here.
+     * count.
+     *
+     * Every content type records `root`, the absolute directory it was read
+     * from, and `database`, which database read it (`current_database()` and
+     * its oid): a seam write rewrites that tree's files (D17), and only on the
+     * database that recorded it, since a `createdb -T` copy inherits the row
+     * (`services/catalog/src/content/import-root.ts`).
      *
      * `mirrors` records which destinations it could reach: a destination it
      * could not reach keeps its old rows, so without this the table would

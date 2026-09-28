@@ -502,8 +502,37 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     expect(owners.topics).toBeUndefined();
   });
 
-  it("refuses an import of the owned type when no export of it is recorded", async () => {
-    await expect(runImportCommand({ dir: fixture.root })).rejects.toThrow(/No export of tags is recorded/);
+  it("records the tree's export hash at the flip, so the next import of that tree skips the type", async () => {
+    // Before this, a flip recorded no hash and every import of the type was
+    // refused ("No export of tags is recorded") until someone exported.
+    const [row] = (
+      await scratch.db.execute<{ export_hash: string | null }>(sql`select export_hash from content_source where type = 'tags'`)
+    ).rows;
+    expect(row?.export_hash).toMatch(/^[0-9a-f]{64}$/);
+    const result = await runImportCommand({ dir: fixture.root });
+    expect(result.skipped).toContainEqual({
+      source: "tags",
+      reason: expect.stringMatching(/the database owns tags .* its own last export/),
+    });
+    expect(revisionCount(result)).toBe(0);
+  }, 60_000);
+
+  it("refuses an import of the owned type when no export is recorded and the files are not the database's", async () => {
+    const file = path.join(fixture.root, "content/tags.yaml");
+    const original = await readFile(file, "utf8");
+    const [saved] = (
+      await scratch.db.execute<{ export_hash: string | null }>(sql`select export_hash from content_source where type = 'tags'`)
+    ).rows;
+    await scratch.db.execute(sql`update content_source set export_hash = null where type = 'tags'`);
+    await writeFile(file, original.replace("label: later", "label: Later, edited by hand"));
+    try {
+      await expect(runImportCommand({ dir: fixture.root })).rejects.toThrow(
+        /No export of tags is recorded, and they are not what the database would export now: content\/tags\.yaml/,
+      );
+    } finally {
+      await writeFile(file, original);
+      await scratch.db.execute(sql`update content_source set export_hash = ${saved?.export_hash ?? null} where type = 'tags'`);
+    }
   });
 
   it("skips the owned type with a named line when its files are the database's own export", async () => {
@@ -511,10 +540,35 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     const result = await runImportCommand({ dir: out });
     expect(result.skipped).toContainEqual({
       source: "tags",
-      reason: expect.stringMatching(/the database owns tags .* its own last export/),
+      reason: expect.stringMatching(/the database owns tags .* its own (last|current) export/),
     });
     expect(result.sources.map((s) => s.source)).not.toContain("tags");
     expect(revisionCount(result)).toBe(0);
+  }, 60_000);
+
+  it("records an export's hash only at the tree the type was imported from, so an export elsewhere breaks no index", async () => {
+    // The last import read `out` (the test above), so `out` is the root now.
+    // An export anywhere else used to overwrite the recorded hash with its
+    // own, and every `catalog index` of the root after it failed with "Edited
+    // since the last export" although nobody had touched the root.
+    const hashOf = async () =>
+      (await scratch.db.execute<{ export_hash: string | null }>(sql`select export_hash from content_source where type = 'tags'`))
+        .rows[0]?.export_hash;
+    await scratch.db.execute(sql`update content_source set export_hash = 'stale' where type = 'tags'`);
+    const elsewhere = await tempDir("export-elsewhere");
+    try {
+      const away = await runExport({ out: elsewhere, only: ["tags"] });
+      expect(away.types[0]?.recorded).toBe(false);
+      expect(await hashOf()).toBe("stale");
+      const home = await runExport({ out, only: ["tags"] });
+      expect(home.types[0]?.recorded).toBe(true);
+      expect(await hashOf()).toBe(home.types[0]?.hash);
+      expect(home.types[0]?.hash).toBe(away.types[0]?.hash);
+      const result = await runImportCommand({ dir: out });
+      expect(result.skipped).toContainEqual({ source: "tags", reason: expect.stringMatching(/its own last export/) });
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it("refuses a hand-edited export of the owned type, naming the file, and writes nothing", async () => {

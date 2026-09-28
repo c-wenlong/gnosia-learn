@@ -1,12 +1,14 @@
-import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-import { indexRun } from "@self-learn/schema";
-import { eq, sql } from "drizzle-orm";
+import type { BlobStore } from "@self-learn/blob";
+import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { documentBytes } from "./diagram-document";
 import { renderType } from "./export";
+import { ownRoot, resolvedPath, writableRoot, WriteThroughError } from "./import-root";
 import { type ExportFile, exportHash, type ExportType, readTypeFiles, TYPE_LOCATION } from "./layout";
 import { mayRecord, recordExport } from "./ownership";
 
@@ -24,15 +26,20 @@ import { mayRecord, recordExport } from "./ownership";
  *    revision lock, so two writers of one type cannot interleave their file
  *    writes and leave the older render on disk.
  * 2. It refuses unless the files under the root the type was last imported
- *    from are exactly what the database would export now. Anything else is an
+ *    from say exactly what the database would export now (a `.tldr` compared
+ *    as its document, every other file byte for byte). Anything else is an
  *    edit the database has not seen (the type is still on files and someone
  *    changed the file, or the type is flipped and someone edited its export),
  *    and rewriting the file from rows would silently throw that edit away.
  * 3. It runs the write, renders the type again inside the same transaction
- *    (so the render sees the write), and replaces each changed file with a
- *    temp file and a rename, then records the export's hash on the type's
- *    `content_source` row, which is what lets an import of a flipped type skip
- *    the file it now matches (edge case 12).
+ *    (so the render sees the write), and replaces each file whose render
+ *    changed with a temp file and a rename, then records the export's hash on
+ *    the type's `content_source` row, which is what lets an import of a
+ *    flipped type skip the file it now matches (edge case 12). Each file is
+ *    read once more just before its rename: one saved since the check is left
+ *    alone and the database's version goes beside it as `<file>.incoming`
+ *    (`.incoming.2` and on while an earlier one waits), which no reader picks
+ *    up, and the result lists it.
  * 4. If anything after the first file write fails, commit included, the files
  *    are put back as they were, so the tree and the rows never disagree. The
  *    transaction's locks are gone by then, so the put-back takes them again,
@@ -42,15 +49,22 @@ import { mayRecord, recordExport } from "./ownership";
  *
  * The root is the one the type's last import read (`index_run.metadata.root`),
  * not the repository, so a write against a scratch database imported from a
- * scratch tree writes that tree. A type never imported has no files to keep in
- * step, and the write is refused with the command that fixes it.
+ * scratch tree writes that tree. It must be a root this database recorded
+ * itself and not one in another checkout of the repository
+ * (`import-root.ts`): a `createdb -T` copy inherits the owner's root, and
+ * would otherwise rewrite the owner's working tree. A type never imported
+ * here has no files to keep in step, and the write is refused with the
+ * command that fixes it.
  */
 
-export class WriteThroughError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "WriteThroughError";
-  }
+export { WriteThroughError } from "./import-root";
+
+/** A changed file left alone because it moved on disk mid-write; the database's version is beside it. */
+export interface WriteThroughConflict {
+  /** Repo-relative: the file that was not overwritten. */
+  path: string;
+  /** Repo-relative: where the database's version went, or null for a removal that was not made. */
+  incoming: string | null;
 }
 
 export interface ExportedType {
@@ -61,7 +75,12 @@ export interface ExportedType {
   written: string[];
   /** Repo-relative paths removed, because the rows no longer produce them. */
   removed: string[];
-  /** The export hash of the type's files after the write. */
+  /**
+   * Files that changed on disk between the in-step check and their rewrite
+   * (an editor saved one mid-write), so were left as they are.
+   */
+  conflicts: WriteThroughConflict[];
+  /** The export hash of the type's files as this write left them (conflicts counted as written). */
   hash: string;
   /** Whether the hash was recorded on `content_source`. False on a copy. */
   recorded: boolean;
@@ -74,30 +93,53 @@ export interface WriteThroughResult<T> {
 
 const exportLock = (type: ExportType) => sql`hashtextextended(${`content_export:${type}`}, 0)`;
 
-/** The root the type's rows were last imported from, or null when it never was. */
+/**
+ * The root this database recorded for the type, or null when it never
+ * imported it here (a copy's inherited root does not count; see
+ * `import-root.ts`).
+ */
 export async function importRoot(db: CatalogDatabase, type: ExportType): Promise<string | null> {
-  const [run] = await db.select({ metadata: indexRun.metadata }).from(indexRun).where(eq(indexRun.source, type));
-  const root = (run?.metadata as { root?: unknown } | undefined)?.root;
-  return typeof root === "string" ? root : null;
+  return ownRoot(db, type);
 }
 
-/** The paths whose bytes differ between two sets of files, sorted. */
-function differing(a: readonly ExportFile[], b: readonly ExportFile[]): string[] {
-  const left = new Map(a.map((f) => [f.path, f.bytes]));
-  const right = new Map(b.map((f) => [f.path, f.bytes]));
+function sameBytes(a: Buffer | null | undefined, b: Buffer | null | undefined): boolean {
+  if (a === null || a === undefined) return b === null || b === undefined;
+  return b !== null && b !== undefined && a.equals(b);
+}
+
+/**
+ * Whether a file on disk holds what the rows render, as content. Bytes for
+ * every type but a diagram's document: a `.tldr` is stored as jsonb and
+ * rendered as its canonical JSON (`diagram-document.ts`), so the file
+ * tldrawkc wrote, with its own key order and spacing, is the same document
+ * in different bytes. Parity compares it the same way.
+ */
+function sameContent(file: string, onDisk: Buffer | undefined, rendered: Buffer | undefined): boolean {
+  if (sameBytes(onDisk, rendered)) return true;
+  if (onDisk === undefined || rendered === undefined || !file.endsWith(".tldr")) return false;
+  try {
+    return documentBytes(JSON.parse(onDisk.toString("utf8"))).equals(rendered);
+  } catch {
+    return false;
+  }
+}
+
+/** The paths in either set whose content differs, sorted. */
+function differing(disk: readonly ExportFile[], rendered: readonly ExportFile[]): string[] {
+  const left = new Map(disk.map((f) => [f.path, f.bytes]));
+  const right = new Map(rendered.map((f) => [f.path, f.bytes]));
   return [...new Set([...left.keys(), ...right.keys()])]
-    .filter((p) => {
-      const x = left.get(p);
-      const y = right.get(p);
-      return x === undefined || y === undefined || !x.equals(y);
-    })
+    .filter((p) => !sameContent(p, left.get(p), right.get(p)))
     .sort();
 }
 
 interface InStep {
   type: ExportType;
   root: string;
-  before: ExportFile[];
+  /** The files on disk when the check ran. */
+  disk: ExportFile[];
+  /** What the rows rendered to when the check ran. */
+  rendered: ExportFile[];
 }
 
 /**
@@ -109,21 +151,15 @@ export async function assertInStep(
   types: readonly ExportType[],
   options: WriteThroughOptions = {},
 ): Promise<InStep[]> {
-  const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolved)));
+  const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolvedPath)));
   const out: InStep[] = [];
   for (const type of types) {
-    const root = await importRoot(db, type);
-    if (root === null) {
-      throw new WriteThroughError(
-        `${type} has never been imported into this database, so there are no files to keep in step ` +
-          `with the write. Run \`catalog index\` (or \`catalog import <dir>\`) first.`,
-      );
-    }
-    const before = await readTypeFiles(root, type);
-    const expected = await renderType(db, type);
+    const root = await writableRoot(db, type);
+    const disk = await readTypeFiles(root, type);
+    const rendered = await renderType(db, type, { store: options.store });
     const changed: string[] = [];
-    for (const relative of differing(before, expected)) {
-      if (!exempt.has(await resolved(path.join(root, relative)))) changed.push(relative);
+    for (const relative of differing(disk, rendered)) {
+      if (!exempt.has(await resolvedPath(path.join(root, relative)))) changed.push(relative);
     }
     if (changed.length > 0) {
       throw new WriteThroughError(
@@ -133,7 +169,7 @@ export async function assertInStep(
           `the file back (\`catalog export --only ${type} --out <dir>\` writes what the database holds).`,
       );
     }
-    out.push({ type, root, before });
+    out.push({ type, root, disk, rendered });
   }
   return out;
 }
@@ -147,15 +183,8 @@ export async function assertInStep(
  */
 export interface WriteThroughOptions {
   exempt?: readonly string[];
-}
-
-/** A path with its symlinks resolved, so two spellings of one file compare equal. */
-async function resolved(file: string): Promise<string> {
-  try {
-    return await realpath(file);
-  } catch {
-    return path.resolve(file);
-  }
+  /** The blob store a diagram's SVG is rendered from: the one the writer uploaded it to. */
+  store?: BlobStore;
 }
 
 let temporaryCounter = 0;
@@ -166,6 +195,23 @@ async function replaceFile(target: string, bytes: Buffer): Promise<void> {
   const temporary = `${target}.${process.pid}.${temporaryCounter}.tmp`;
   await writeFile(temporary, bytes);
   await rename(temporary, target);
+}
+
+async function readOrNull(file: string): Promise<Buffer | null> {
+  try {
+    return await readFile(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** `base`, or `base.2`, `base.3` ..., whichever does not exist yet. */
+async function freeName(base: string): Promise<string> {
+  for (let n = 1; ; n += 1) {
+    const candidate = n === 1 ? base : `${base}.${n}`;
+    if ((await readOrNull(candidate)) === null) return candidate;
+  }
 }
 
 /**
@@ -225,23 +271,54 @@ export async function writeThrough<T>(
     return await db.transaction(async (tx) => {
       for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
       const steps = await assertInStep(tx, sorted, options);
+      const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolvedPath)));
 
       const value = await write(tx);
 
       const record = await mayRecord(tx);
       const exported: ExportedType[] = [];
-      for (const { type, root, before } of steps) {
-        const after = await renderType(tx, type);
-        const changed = differing(before, after);
-        const previous = new Map(before.map((f) => [f.path, f.bytes]));
+      for (const { type, root, disk, rendered } of steps) {
+        const after = await renderType(tx, type, { store: options.store });
+        const onDisk = new Map(disk.map((f) => [f.path, f.bytes]));
+        const was = new Map(rendered.map((f) => [f.path, f.bytes]));
         const next = new Map(after.map((f) => [f.path, f.bytes]));
+        // The files as this write leaves them: what was on disk, with every
+        // file the write changed replaced by its new render.
+        const result = new Map(onDisk);
         const written: string[] = [];
         const removed: string[] = [];
-        for (const relative of changed) {
+        const conflicts: WriteThroughConflict[] = [];
+        for (const relative of [...new Set([...onDisk.keys(), ...next.keys()])].sort()) {
+          const seen = onDisk.get(relative) ?? null;
+          const bytes = next.get(relative) ?? null;
+          if (sameBytes(seen, bytes)) continue;
           const file = path.join(root, relative);
-          const bytes = next.get(relative);
-          touched.push({ file, before: previous.get(relative) ?? null, wrote: bytes ?? null });
-          if (bytes === undefined) {
+          // Only a file whose render this write changed is rewritten, plus the
+          // file the writer was handed. A file that already says what the
+          // rows say in other bytes (a `.tldr` in tldrawkc's key order) is
+          // left in the author's bytes rather than rewritten by an unrelated
+          // write.
+          const moved = !sameBytes(was.get(relative) ?? null, bytes);
+          if (!moved && !exempt.has(await resolvedPath(file))) continue;
+          if (bytes === null) result.delete(relative);
+          else result.set(relative, bytes);
+          // Read once more just before the rename: a file saved since the
+          // check (an editor, another process) is left as it is, and the
+          // database's version goes beside it where no reader picks it up.
+          // The window left is the width of one rename.
+          if (!sameBytes(await readOrNull(file), seen)) {
+            if (bytes === null) {
+              conflicts.push({ path: relative, incoming: null });
+              continue;
+            }
+            const incoming = await freeName(`${file}.incoming`);
+            touched.push({ file: incoming, before: null, wrote: bytes });
+            await replaceFile(incoming, bytes);
+            conflicts.push({ path: relative, incoming: path.relative(root, incoming).split(path.sep).join("/") });
+            continue;
+          }
+          touched.push({ file, before: seen, wrote: bytes });
+          if (bytes === null) {
             await rm(file, { force: true });
             removed.push(relative);
           } else {
@@ -249,9 +326,12 @@ export async function writeThrough<T>(
             written.push(relative);
           }
         }
-        const hash = exportHash(after);
+        // Conflicts are counted as written: the recorded hash is the rows'
+        // export, so the next import of a flipped type names the file a
+        // person saved over it instead of taking their bytes for the rows'.
+        const hash = exportHash([...result].map(([p, bytes]) => ({ path: p, bytes })));
         if (record) await recordExport(tx, type, hash);
-        exported.push({ type, root, written, removed, hash, recorded: record });
+        exported.push({ type, root, written, removed, conflicts, hash, recorded: record });
       }
       return { value, exported };
     });

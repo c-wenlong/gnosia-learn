@@ -102,6 +102,11 @@ function writeThroughLines(summary: WriteThroughSummary): string[] {
   return [
     ...summary.written.map((file) => `  wrote ${file.path}  (under ${file.root})`),
     ...summary.removed.map((file) => `  removed ${file.path}  (under ${file.root})`),
+    ...summary.conflicts.map(
+      (file) =>
+        `  left ${file.path}  (under ${file.root}): it changed on disk during the write` +
+        (file.incoming === null ? "" : `; the database's version is beside it as ${file.incoming}`),
+    ),
   ];
 }
 

@@ -124,15 +124,18 @@ export interface WriteThroughSummary {
   removed: { type: string; path: string; root: string }[];
   /** Types whose export hash was recorded on `content_source`. */
   recorded: string[];
+  /** Files saved on disk during the write, so left alone; the database's version is at `incoming`. */
+  conflicts: { type: string; path: string; incoming: string | null; root: string }[];
 }
 
-const NOTHING_WRITTEN: WriteThroughSummary = { written: [], removed: [], recorded: [] };
+const NOTHING_WRITTEN: WriteThroughSummary = { written: [], removed: [], recorded: [], conflicts: [] };
 
 export function summarise(exported: readonly ExportedType[]): WriteThroughSummary {
   return {
     written: exported.flatMap((e) => e.written.map((file) => ({ type: e.type, path: file, root: e.root }))),
     removed: exported.flatMap((e) => e.removed.map((file) => ({ type: e.type, path: file, root: e.root }))),
     recorded: exported.filter((e) => e.recorded).map((e) => e.type),
+    conflicts: exported.flatMap((e) => e.conflicts.map((c) => ({ type: e.type, ...c, root: e.root }))),
   };
 }
 

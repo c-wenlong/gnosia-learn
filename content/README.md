@@ -72,8 +72,11 @@ entity it touched (edge case 2 of the plan).
 `manimkc_topic` rows; `maps.concepts` is every live concept whose
 `topic_slug` is this topic, in `topic_position` order; `maps.courses` is every
 live module whose topic row names it, in that row's `topic_position` order.
-So a concept joins a topic through `learn concept add --topic`, and a module
-through its course file, never by editing `maps`.
+So a concept joins a topic through `learn concept add --topic`, a module
+through its course file, and a manimkc folder through `catalog topic map
+<slug> --manimkc <path> --reason "..."` (`--remove` to unmap it), never by
+editing `maps`. A folder belongs to one topic, so mapping one another topic
+holds is refused, naming it.
 
 Each id under `maps` appears in exactly one topic. `catalog index` refuses to
 run when a mapping names something that does not exist, or when two topics claim
@@ -134,6 +137,7 @@ npm run catalog -- topic add --slug tcp-congestion-control --title "TCP congesti
   --domain networking --alias AIMD --relate broader:computer-networks --reason "..." [--dry-run]
 npm run catalog -- topic edit tcp-congestion-control --summary "..." --add-alias "slow start" --reason "..."
 npm run catalog -- topic relate tcp-congestion-control precedes quic-transport --reason "..."
+npm run catalog -- topic map tcp-congestion-control --manimkc networking/tcp-congestion --reason "..."
 npm run catalog -- topic rename --from tcp-congestion-control --to tcp-congestion --reason "..."
 npm run catalog -- topic archive <slug> --reason "..."     # once the database owns topics; refused while in use
 npm run catalog -- topic ls --json                        # every topic, its relations and maps, for the planner

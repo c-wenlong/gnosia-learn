@@ -1,6 +1,6 @@
 import { auditBlobs, type BlobAuditResult } from "../content/blob-audit";
 import { openBlobStore } from "../content/blob";
-import { databaseIdentity, describeOwner, sameOwner } from "../content/blob-owner";
+import { ownerIdentity, describeOwner, sameOwner } from "../content/blob-owner";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 
@@ -27,7 +27,7 @@ export async function runBlobAudit(options: { fix: boolean }): Promise<BlobAudit
   const url = databaseUrl();
   return withDatabase(async ({ db }) => {
     const result = await auditBlobs(db, store, { fix: options.fix, root: store.root });
-    const self = await databaseIdentity(db);
+    const self = await ownerIdentity(db);
     return {
       database: redactUrl(url),
       blobRoot: store.root,

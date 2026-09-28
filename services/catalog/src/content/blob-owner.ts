@@ -1,9 +1,8 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { sql } from "drizzle-orm";
-
 import type { CatalogDatabase } from "../db";
+import { databaseIdentity } from "./import-root";
 
 /**
  * Which database a blob root belongs to: `<root>/.owner`.
@@ -16,11 +15,11 @@ import type { CatalogDatabase } from "../db";
  * bytes. So the root names its database, written the first time the catalog
  * writes to it or audits it, and `--fix` refuses a root that names another.
  *
- * A database is named by `current_database()` and the server's port: what
- * tells the primary from a copy on one server, and one server from another on
- * one machine. A copy made with `createdb -T` inherits every row of the
+ * A database is named the way the write-through names the database that
+ * imported a tree (`databaseIdentity` in `import-root.ts`): its name and its
+ * `pg_database` oid. A copy made with `createdb -T` inherits every row of the
  * primary, `catalog_instance` included, so nothing inside the database could
- * tell the two apart.
+ * tell the two apart; the catalog outside it can.
  *
  * The file is a dot name at the root, which the `fs` store never lists: an
  * owner id cannot start with a dot. A writer refuses a root another database
@@ -30,8 +29,8 @@ import type { CatalogDatabase } from "../db";
 export const OWNER_FILE = ".owner";
 
 export interface BlobRootOwner {
+  /** `<name>:<oid>`, as `databaseIdentity` gives it. */
   database: string;
-  port: string;
 }
 
 export class BlobOwnerError extends Error {
@@ -42,21 +41,16 @@ export class BlobOwnerError extends Error {
 }
 
 /** This connection's database, as a root's marker names it. */
-export async function databaseIdentity(db: CatalogDatabase): Promise<BlobRootOwner> {
-  const { rows } = await db.execute<{ database: string; port: string }>(
-    sql`select current_database() as database, current_setting('port') as port`,
-  );
-  const row = rows[0];
-  if (row === undefined) throw new Error("the database did not say its own name");
-  return { database: row.database, port: String(row.port) };
+export async function ownerIdentity(db: CatalogDatabase): Promise<BlobRootOwner> {
+  return { database: await databaseIdentity(db) };
 }
 
 export function sameOwner(a: BlobRootOwner, b: BlobRootOwner): boolean {
-  return a.database === b.database && a.port === b.port;
+  return a.database === b.database;
 }
 
 export function describeOwner(owner: BlobRootOwner): string {
-  return `database "${owner.database}" on port ${owner.port}`;
+  return `database "${owner.database}"`;
 }
 
 /** The root's marker, or null when it has none. A marker that is not one is refused, never overwritten. */
@@ -71,9 +65,7 @@ export async function readOwner(root: string): Promise<BlobRootOwner | null> {
   }
   try {
     const parsed = JSON.parse(text) as Partial<BlobRootOwner>;
-    if (typeof parsed.database === "string" && typeof parsed.port === "string") {
-      return { database: parsed.database, port: parsed.port };
-    }
+    if (typeof parsed.database === "string") return { database: parsed.database };
   } catch {
     // Falls through to the refusal: an unreadable marker names nobody.
   }
@@ -113,8 +105,8 @@ const known = new Map<string, BlobRootOwner>();
  */
 export async function assertWritable(db: CatalogDatabase, root: string): Promise<void> {
   const resolved = path.resolve(root);
-  const self = await databaseIdentity(db);
-  const cacheKey = `${resolved}\n${self.database}\n${self.port}`;
+  const self = await ownerIdentity(db);
+  const cacheKey = `${resolved}\n${self.database}`;
   const owner = known.get(cacheKey) ?? (await claimRoot(resolved, self));
   if (!sameOwner(owner, self)) {
     throw new BlobOwnerError(
