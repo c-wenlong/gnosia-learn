@@ -1137,10 +1137,14 @@ list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
       The studio's own `/api/diagrams/{name}/svg` streams the blob.
 - [x] `job.target_path` keeps its value as a logical name and keeps working
       as the lease key (`job_active_target_key`).
-- [ ] The plugin's `diagram-maker` draws in a checkout path and ends with
+- [x] The plugin's `diagram-maker` draws in a checkout path and ends with
       `learn diagram commit`, a wrapper over `catalog diagram put`; its
       fallback SVG-only path uploads through the same verb. Version bump.
-- [ ] Import the untracked `tailscale-vpn-communication` diagram first.
+- [x] Import the untracked `tailscale-vpn-communication` diagram first. Done
+      on a scratch copy of `self_learn` with the file copied in: 3 diagrams,
+      3 blobs, parity clean. The owner's own `self_learn` is untouched, so
+      the real import is still the owner's, and the file is still untracked
+      in the working tree, where only an import or a `git add` keeps it.
 
 **Built** so far: `services/catalog/src/content/diagrams.ts` and
 `commands/diagram.ts` (`catalog diagram put|checkout|commit|list|show`),
@@ -1188,6 +1192,18 @@ around the list above, and why:
   diagrams` is possible from here on. Until the flip the
   put writes the files through, so an Accept then leaves the two files in the
   working tree, as it did before; after it, nothing.
+- **The plugin (part 3).** `learn diagram <verb>` is `catalog diagram` under
+  the learn CLI's name, the same parser and the same verbs, so the two cannot
+  drift; it writes as `agent:diagram-maker` unless `--author-kind` says
+  otherwise, and exits 3 with the database down as the catalog does. The
+  `diagram-maker` agent (learning plugin 0.4.1, branch `content-migration-d`
+  of the plugin's repository, stacked on Track C's 0.4.0) checks out, draws
+  and exports in that file, and commits. Its hand-written fallback is
+  `put --slug --svg --topic [--concept]` with no `--tldr`: one `diagram_svg`
+  asset and its blob, and no `diagram` row, since there is no document to
+  keep. Until the flip that put is refused unless the slug is the concept the
+  SVG explains and the topic is that concept's, because the import files a
+  bare SVG by its name and would otherwise quietly undo it.
 - **Checkouts keep a record beside the file** (`<slug>.checkout.json`: base
   revision, the hash of what was written), so a commit needs no base passed in
   and an uncommitted edit is visible without the database. A checkout with

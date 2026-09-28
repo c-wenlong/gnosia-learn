@@ -12,6 +12,7 @@ import {
   DiagramError,
   listDiagrams,
   putDiagram,
+  putSvgOnly,
   type CheckoutResult,
   type CommitResult,
   type DiagramSummary,
@@ -34,6 +35,11 @@ export const DIAGRAM_USAGE = `catalog diagram — diagrams in the database
 Usage: npm run --silent catalog -- diagram <verb> [options] [--json]
 
 Verbs:
+  put --slug S --svg FILE --topic T [--concept C]... --reason TEXT
+      An SVG drawn without the canvas (no .tldr): one asset row and its blob,
+      filed under the topic and concepts named. Refused for a slug that has a
+      document. Until the flip, S must be the concept it explains and T that
+      concept's topic, since the import files a bare SVG by its name.
   put --slug S --tldr FILE [--svg FILE] --reason TEXT [--job ID] [--base N|none]
       Store one diagram: the document as the diagram row, the SVG in the blob
       store, and the two asset rows, in one transaction after the SVG upload
@@ -114,6 +120,8 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
       force: { type: "boolean", default: false },
       author: { type: "string", multiple: true },
       "author-kind": { type: "string", multiple: true },
+      topic: { type: "string", multiple: true },
+      concept: { type: "string", multiple: true },
     },
   });
   const verb = positionals[0];
@@ -131,9 +139,37 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
   switch (verb) {
     case "put": {
       const slug = one(values.slug, "--slug", true) as string;
-      const tldr = path.resolve(one(values.tldr, "--tldr", true) as string);
+      const tldrGiven = one(values.tldr, "--tldr", false);
       const svgGiven = one(values.svg, "--svg", false);
       const reason = one(values.reason, "--reason", true) as string;
+      if (tldrGiven === undefined) {
+        // An SVG with no document: the plugin's fallback when the canvas cannot run.
+        if (svgGiven === undefined) throw new DiagramUsage("put needs --tldr, or --svg with --topic for an SVG on its own");
+        const topic = one(values.topic, "--topic", false);
+        if (topic === undefined) throw new DiagramUsage("put --svg without --tldr needs --topic: a bare SVG says nothing about itself");
+        if (values.job !== undefined || values.base !== undefined) {
+          throw new DiagramUsage("--job and --base go with a document; an SVG on its own takes neither");
+        }
+        const concepts = values.concept ?? [];
+        return {
+          verb,
+          json,
+          run: () =>
+            withDatabase(async ({ db }) => {
+              await assertMigrated(db);
+              return putSvgOnly(db, openBlobStore(), {
+                slug,
+                svg: path.resolve(svgGiven),
+                topic,
+                concepts,
+                reason,
+                author,
+                authorKind: kind,
+              });
+            }),
+        };
+      }
+      const tldr = path.resolve(tldrGiven);
       const jobId = one(values.job, "--job", false);
       const rawBase = one(values.base, "--base", false);
       let base: number | null | undefined;

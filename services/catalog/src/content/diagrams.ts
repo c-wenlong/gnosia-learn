@@ -24,7 +24,7 @@ import { ASSET_PREFIX } from "../index/source";
 import { metaFromDocument, type DiagramMeta } from "../index/tldr";
 import { hashFile, readBlob, uploadBlob } from "./blob";
 import { DIAGRAM_SLUG, diagramPaths, documentBytes, documentProblem, sha256 } from "./diagram-document";
-import { latestRevisions } from "./revisions";
+import { latestRevisions, lockEntity } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 
 /**
@@ -388,6 +388,11 @@ export async function putDiagram(
   let results: WriteContentResult[];
   try {
     results = await db.transaction(async (tx) => {
+      // The SVG asset's lock even when this put brings no SVG, so an SVG-only
+      // put (`putSvgOnly`) and this one never both decide there is no
+      // document. The id sorts before the `.tldr` asset's and the asset type
+      // before diagram, so this is the global lock order `writeContents` keeps.
+      await lockEntity(tx, "asset", ids.svg);
       const written = await writeContents(tx, inputs);
       if (input.jobId !== undefined && job !== null) {
         await recordJobOutputs(tx, input.jobId, job.state, [
@@ -423,6 +428,158 @@ export async function putDiagram(
   };
 }
 
+export interface PutSvgInput {
+  slug: string;
+  /** Absolute path to the SVG. */
+  svg: string;
+  /** The topic it is filed under; a bare SVG carries no stamp to read it from. */
+  topic: string;
+  concepts: string[];
+  reason: string;
+  author: string;
+  authorKind: AuthorKind;
+}
+
+/**
+ * `catalog diagram put --slug --svg --topic` with no `.tldr`: an SVG drawn
+ * without the canvas, the plugin's fallback when tldrawkc cannot run (D15).
+ * It has no editable source, so it is no `diagram` row: one `asset` row with
+ * its blob, filed under the topic and concepts the writer names, as the import
+ * files a legacy SVG with no `.tldr` beside it. A slug that already has a
+ * document is refused, since its SVG is exported from that document.
+ *
+ * While the files still own diagrams the SVG is written through, and the next
+ * import files it again the only way it can: by its name, against the concept
+ * of that name and that concept's topic, titled with the slug. A put that
+ * named anything else would be quietly undone by that import, so until the
+ * flip it is refused unless it agrees with what the import will read.
+ */
+export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: PutSvgInput): Promise<PutResult> {
+  const slug = input.slug.trim();
+  assertDiagramSlug(slug);
+  const paths = diagramPaths(slug);
+  const ids = diagramAssetIds(slug);
+  const hasDocument = () =>
+    new DiagramError(
+      "unresolved",
+      `${slug} has a document, and its SVG is exported from it. Put the .tldr with --tldr, or ` +
+        `commit its checkout, rather than an SVG on its own.`,
+    );
+  // Asked here to refuse early; asked again under the lock below, which is the answer that counts.
+  if ((await readDiagramDocument(db, slug)) !== null) throw hasDocument();
+  await readText(input.svg, "an SVG");
+  const { known, vocabulary } = await databaseVocabulary(db);
+  if (!vocabulary.bySlug.has(input.topic)) {
+    throw new DiagramError("unresolved", `${paths.svg}: topic "${input.topic}" is not in the vocabulary.`);
+  }
+  const unknown = input.concepts.filter((c) => !known.has(c));
+  if (unknown.length > 0) {
+    throw new DiagramError("unresolved", `${paths.svg}: no concept note for ${unknown.map((c) => `"${c}"`).join(", ")}.`);
+  }
+  const concepts = [...new Set(input.concepts)];
+  if (await filesOwnDiagrams(db)) {
+    const named = known.has(slug) ? vocabulary.byConcept.get(slug) : undefined;
+    const agrees = named === input.topic && concepts.every((c) => c === slug);
+    if (!agrees) {
+      throw new DiagramError(
+        "write-through",
+        `${paths.svg}: until \`catalog flip diagrams\`, the import files an SVG with no document by its name, ` +
+          (named === undefined
+            ? `and "${slug}" names no concept with a topic, so it would land under no topic. `
+            : `against the concept "${slug}" under the topic "${named}". `) +
+          `Name the SVG after the concept it explains, with that concept's topic.`,
+      );
+    }
+    concepts.splice(0, concepts.length, slug);
+    // A document on disk that no import has read yet is still the diagram's:
+    // the next import would file this SVG under that document's stamp.
+    const root = await filesRoot(db);
+    if (root !== null && (await stat(path.join(root, paths.tldr)).catch(() => null)) !== null) {
+      throw new DiagramError(
+        "unresolved",
+        `${paths.tldr} is in ${root} and not imported yet, so ${slug} has a document. ` +
+          `Run \`catalog import --only diagrams\`, then commit its checkout rather than an SVG on its own.`,
+      );
+    }
+  }
+  const uploaded = await uploadBlob(db, store, { ownerId: DIAGRAM_OWNER, file: input.svg, mime: "image/svg+xml", ext: "svg" });
+  // The no-document answer has to hold until this commits. A document put
+  // writes this same SVG asset and takes its lock first (the asset type sorts
+  // before diagram), so holding that lock here while asking again means a
+  // document either committed before the question, and is seen, or waits for
+  // this write and then finds its own base moved.
+  const result = await db.transaction(async (tx) => {
+    await lockEntity(tx, "asset", ids.svg);
+    if ((await readDiagramDocument(tx, slug)) !== null) throw hasDocument();
+    const latest = (await latestRevisions(tx, "asset", [ids.svg])).get(ids.svg);
+    const [written] = await writeContents(tx, [
+      {
+        type: "asset",
+        id: ids.svg,
+        base: latest?.id ?? null,
+        author: input.author,
+        authorKind: input.authorKind,
+        reason: input.reason,
+        next: {
+          row: {
+            id: ids.svg,
+            kind: "diagram_svg",
+            path: paths.svg,
+            url: null,
+            contentHash: uploaded.sha256,
+            bytes: uploaded.bytes,
+            title: slug,
+            sourceRepo: "self-learn",
+            blobKey: uploaded.key,
+            resourceType: null,
+            ownerId: DIAGRAM_OWNER,
+          },
+          links: {
+            asset_topic: [{ topicSlug: input.topic }],
+            asset_concept: concepts.map((conceptSlug) => ({ conceptSlug })),
+            asset_derivation: [],
+          },
+        },
+      },
+    ]);
+    return written as WriteContentResult;
+  });
+  const notes: string[] = [];
+  const files = await writeThrough(db, slug, null, input.svg, notes);
+  return {
+    ok: true,
+    slug,
+    topic: input.topic,
+    concepts,
+    title: null,
+    documentHash: "",
+    svg: { key: uploaded.key, sha256: uploaded.sha256, bytes: uploaded.bytes, uploaded: uploaded.uploaded, current: true },
+    revision: result.revisionId,
+    changed: result.changed,
+    revisions: [{ type: "asset", id: ids.svg, revision: result.revisionId, changed: result.changed }],
+    job: null,
+    files,
+    notes,
+  };
+}
+
+/** The directory diagrams were last imported from, or null when they never were. */
+async function filesRoot(db: CatalogDatabase): Promise<string | null> {
+  const [run] = await db
+    .execute<{ root: string | null }>(sql`select metadata ->> 'root' as root from index_run where source = 'diagrams'`)
+    .then((r) => r.rows);
+  return run?.root ?? null;
+}
+
+/** Whether `learn/assets/` is still what the import reads diagrams from (D17): true until `catalog flip diagrams`. */
+async function filesOwnDiagrams(db: CatalogDatabase): Promise<boolean> {
+  const [owner] = await db
+    .select({ source: contentSource.source })
+    .from(contentSource)
+    .where(eq(contentSource.type, "diagrams"));
+  return owner?.source !== "db";
+}
+
 /**
  * D17 of docs/CONTENT-MIGRATION.md: while the files still own diagrams, the
  * write reaches them too, or the next `catalog index` would read the old files
@@ -439,19 +596,12 @@ export async function putDiagram(
 async function writeThrough(
   db: CatalogDatabase,
   slug: string,
-  tldr: string,
+  tldr: string | null,
   svg: string | null,
   notes: string[],
 ): Promise<string[]> {
-  const [owner] = await db
-    .select({ source: contentSource.source })
-    .from(contentSource)
-    .where(eq(contentSource.type, "diagrams"));
-  if (owner?.source === "db") return [];
-  const [run] = await db
-    .execute<{ root: string | null }>(sql`select metadata ->> 'root' as root from index_run where source = 'diagrams'`)
-    .then((r) => r.rows);
-  const root = run?.root ?? null;
+  if (!(await filesOwnDiagrams(db))) return [];
+  const root = await filesRoot(db);
   if (root === null) {
     notes.push(
       "diagrams have never been imported here, so no directory owns their files and none was written",
@@ -462,8 +612,10 @@ async function writeThrough(
   const written: string[] = [];
   try {
     await mkdir(path.join(root, ASSETS_DIR), { recursive: true });
-    await writeAtomic(path.join(root, paths.tldr), await readFile(tldr));
-    written.push(paths.tldr);
+    if (tldr !== null) {
+      await writeAtomic(path.join(root, paths.tldr), await readFile(tldr));
+      written.push(paths.tldr);
+    }
     if (svg !== null) {
       await writeAtomic(path.join(root, paths.svg), await readFile(svg));
       written.push(paths.svg);
