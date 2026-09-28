@@ -17,7 +17,7 @@ import { StateError } from "./errors";
 import { appendEvent } from "./events";
 import { domainOf } from "./knowledge-base";
 import { ensureLearner, withLearnerLock } from "./learner";
-import { assertKnownConcepts, ensureEntry, readModel, writeModel } from "./mastery";
+import { assertReadableConcepts, ensureEntry, readModel, writeModel } from "./mastery";
 
 /**
  * `learn/state/reviews.json` as the `review` table.
@@ -342,7 +342,7 @@ export async function gradeReview(
   if (!Number.isFinite(grade) || grade < 0 || grade > 5) {
     throw new StateError(`grade must be between 0 and 5; got ${grade}.`);
   }
-  await assertKnownConcepts(db, [conceptId]);
+  await assertReadableConcepts(db, [conceptId], learnerId);
   const at = now.toISOString();
   const passed = grade >= PASS_GRADE;
 
@@ -468,7 +468,7 @@ export async function reviewQueue(
   for (const entry of cards) {
     const row = bySlug.get(entry.conceptId);
     // A due card whose concept left the catalog cannot be graded either
-    // (`assertKnownConcepts`), so showing it would be a button that 400s.
+    // (`assertReadableConcepts`), so showing it would be a button that 400s.
     if (row === undefined) continue;
     const card = "card" in entry ? null : entry;
     items.push({

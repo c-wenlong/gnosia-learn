@@ -1,9 +1,12 @@
 import {
   asset,
+  assetDerivation,
   assetTopic,
+  blobObject,
   collection,
   COMMONS_OWNER,
   concept,
+  conceptPrerequisite,
   diagram,
   learner,
   LOCAL_LEARNER_ID,
@@ -23,16 +26,22 @@ import { ContentWriteError, writeContent } from "../src/content/write";
 import { applyMigrations } from "../src/migrations";
 import {
   assetCounts,
+  assetDerivations,
   assetsByIds,
   assetsForTopic,
   conceptSummaries,
   conceptsForAsset,
   ensureLearner,
+  gradeReview,
   listAssets,
   notePaths,
+  posterBlob,
   readConceptGraph,
   readKnowledgeBase,
+  recordObservation,
+  StateError,
   topicTitles,
+  videosWithStoredPoster,
 } from "../src/state";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { ASSETS, seedAssets, seedContent, TOPIC_SLUG } from "./state-fixture";
@@ -49,7 +58,10 @@ import { ASSETS, seedAssets, seedContent, TOPIC_SLUG } from "./state-fixture";
  * 1. `local` reads exactly what it read before `tenant-b` existed, plus the
  *    commons: behaviour-preserving for today's single owner.
  * 2. `tenant-b` reads its own rows and the commons, and none of `local`'s.
- * 3. The write seam stamps the owner, refuses to take another owner's row
+ * 3. A link from a readable row to another owner's row does not carry the
+ *    other row through: a prerequisite, a poster, a derivation, and evidence
+ *    recorded against a concept by slug.
+ * 4. The write seam stamps the owner, refuses to take another owner's row
  *    over, and creates the commons learner on its first write.
  */
 
@@ -212,6 +224,86 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
     expect(await conceptsForAsset(scratch.db, ASSETS.diagram, TENANT)).toEqual([]);
     expect(await topicTitles(scratch.db, [B_TOPIC, SHARED_TOPIC], LOCAL)).toEqual({ [SHARED_TOPIC]: "Shared topic" });
     expect(Object.keys(await notePaths(scratch.db, [B_CONCEPT, "alpha"], LOCAL))).toEqual(["alpha"]);
+  });
+});
+
+describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
+  let scratch: Scratch;
+  const VIDEO = "manimkc:out/tenant/b.mp4";
+  const POSTER = "poster:out/tenant/b.jpg";
+  const key = (owner: string, digit: string, ext: string) => `${owner}/${digit.repeat(64)}.${ext}`;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    const db = scratch.db;
+    await applyMigrations(db);
+    await seedContent(db);
+    await ensureLearner(db, B);
+    await db.insert(topic).values({ slug: B_TOPIC, title: "B's topic", domain: "tenant", ownerId: B });
+    await db.insert(concept).values({
+      slug: B_CONCEPT,
+      title: "B's concept",
+      topicSlug: B_TOPIC,
+      path: "learn/concepts/tenant/b-concept.md",
+      ownerId: B,
+    });
+    // The owner's concept names B's as a prerequisite: ids are global, so
+    // nothing in the schema stops it.
+    await db.insert(conceptPrerequisite).values({ conceptSlug: "alpha", prerequisiteSlug: B_CONCEPT, kind: "requires" });
+    // B's video, and a poster of it the owner holds.
+    await db.insert(blobObject).values([
+      { key: key(B, "a", "mp4"), ownerId: B, sha256: "a".repeat(64), bytes: 1, mime: "video/mp4", provider: "fs", state: "present", confirmedAt: new Date() },
+      { key: key("local", "b", "jpg"), sha256: "b".repeat(64), bytes: 1, mime: "image/jpeg", provider: "fs", state: "present", confirmedAt: new Date() },
+    ]);
+    await db.insert(asset).values([
+      { id: VIDEO, kind: "video", path: "out/tenant/b.mp4", sourceRepo: "manimkc", blobKey: key(B, "a", "mp4"), ownerId: B },
+      { id: POSTER, kind: "poster", sourceRepo: "self-learn", blobKey: key("local", "b", "jpg") },
+    ]);
+    await db.insert(assetDerivation).values({ assetId: POSTER, sourceAssetId: VIDEO });
+    // The owner's poster, filed under B's topic as well as nothing else.
+    await db.insert(assetTopic).values({ assetId: POSTER, topicSlug: B_TOPIC });
+  }, 120_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+  });
+
+  it("leaves another owner's concept out of a readable concept's prerequisites", async () => {
+    const mine = await readKnowledgeBase(scratch.db, LOCAL_LEARNER_ID);
+    expect(mine.concepts.find((c) => c.id === "alpha")?.requires).toEqual([]);
+    expect(JSON.stringify(mine)).not.toContain(B_CONCEPT);
+    const theirs = await readKnowledgeBase(scratch.db, B);
+    expect(theirs.concepts.map((c) => c.id)).toEqual([B_CONCEPT]);
+    expect(theirs.edges).toEqual([]);
+  });
+
+  it("serves no poster for a video the reader cannot open, even a poster it owns", async () => {
+    expect(await posterBlob(scratch.db, VIDEO, LOCAL)).toBeNull();
+    expect(await videosWithStoredPoster(scratch.db, [VIDEO], LOCAL)).toEqual(new Set());
+    expect(await assetDerivations(scratch.db, VIDEO, LOCAL)).toEqual({ sources: [], derived: [] });
+    // B can open the video but not the owner's poster of it.
+    expect(await posterBlob(scratch.db, VIDEO, TENANT)).toBeNull();
+    expect((await assetDerivations(scratch.db, VIDEO, TENANT)).derived).toEqual([]);
+  });
+
+  it("shows no chip for another owner's topic on the owner's own asset", async () => {
+    const [poster] = await listAssets(scratch.db, { ids: [POSTER] }, LOCAL);
+    expect(poster?.topics).toEqual([]);
+  });
+
+  it("refuses evidence about another owner's concept as if it did not exist", async () => {
+    const graph = await readConceptGraph(scratch.db, LOCAL);
+    const observe = recordObservation(scratch.db, { conceptId: B_CONCEPT, correct: true, graph, learnerId: LOCAL_LEARNER_ID });
+    await expect(observe).rejects.toBeInstanceOf(StateError);
+    await expect(observe).rejects.toThrow(`no concept in the catalog for "${B_CONCEPT}"`);
+    await expect(
+      gradeReview(scratch.db, { conceptId: B_CONCEPT, grade: 4, learnerId: LOCAL_LEARNER_ID }),
+    ).rejects.toBeInstanceOf(StateError);
+    // The owner of the concept records evidence as before.
+    const theirs = await readConceptGraph(scratch.db, TENANT);
+    await expect(
+      recordObservation(scratch.db, { conceptId: B_CONCEPT, correct: true, graph: theirs, learnerId: B }),
+    ).resolves.toMatchObject({ concept: B_CONCEPT });
   });
 });
 
