@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -299,6 +299,51 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     const pushed = await push(vault);
     expect(pushed.refused.map((file) => file.path)).toEqual([rel, "concepts/fixtures/epsilon.md"]);
     expect(pushed.refused[1]?.reason).toMatch(/learn concept add --topic/);
+  }, 60_000);
+
+  it("keeps a .conflict copy a person merged into, record and all, when the database moves again", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const rel = "concepts/fixtures/alpha.md";
+    await writeFile(path.join(vault, rel), `${await read(vault, rel)}\nmine\n`);
+    expect((await learn("concept", "edit", "alpha", "--summary", "First move.")).code).toBe(0);
+    expect((await push(vault)).refused[0]?.conflict).toBe("concepts/fixtures/alpha.conflict.md");
+    const merging = `${await read(vault, "concepts/fixtures/alpha.conflict.md")}\nmerging here\n`;
+    await writeFile(path.join(vault, "concepts/fixtures/alpha.conflict.md"), merging);
+    expect((await learn("concept", "edit", "alpha", "--summary", "Second move.")).code).toBe(0);
+
+    const pulled = await pull(vault);
+    expect(pulled.modified).toEqual([expect.objectContaining({ path: rel, incoming: null, note: expect.stringMatching(/holds edits of its own/) })]);
+    expect(await read(vault, "concepts/fixtures/alpha.conflict.md")).toBe(merging);
+    expect(await exists(vault, "concepts/fixtures/alpha.incoming.md")).toBe(false);
+    expect((await manifest(vault)).files[rel]?.pending?.path).toBe("concepts/fixtures/alpha.conflict.md");
+  }, 60_000);
+
+  it("refuses a manifest naming a path outside the vault, and touches nothing", async () => {
+    const vault = await newVault();
+    const outside = await newVault();
+    await pull(vault);
+    await writeFile(path.join(outside, "victim.md"), "not the vault's\n");
+    const recorded = await manifest(vault);
+    const hash = recorded.files["concepts/fixtures/alpha.md"]?.hash ?? null;
+    recorded.files[`../${path.basename(outside)}/victim.md`] = { kind: "note", id: "gone", base: 1, hash };
+    await writeFile(path.join(vault, ".vault.json"), JSON.stringify(recorded, null, 2));
+    for (const verb of ["pull", "push"]) {
+      const result = await learn("vault", verb, "--out", vault);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toMatch(/names paths pull never writes/);
+    }
+    expect(await read(outside, "victim.md")).toBe("not the vault's\n");
+  }, 60_000);
+
+  it("refuses to write through a folder linked out of the vault", async () => {
+    const vault = await newVault();
+    const elsewhere = await newVault();
+    await symlink(elsewhere, path.join(vault, "concepts"));
+    const result = await learn("vault", "pull", "--out", vault);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/resolves outside the vault/);
+    expect(await readdir(elsewhere)).toEqual([]);
   }, 60_000);
 
   it("refuses a vault inside the repository", async () => {

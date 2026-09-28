@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { constants as fsConstants, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -159,11 +159,24 @@ export function resolveVaultDir(given: string | undefined): string {
   return dir;
 }
 
+/**
+ * The path with links resolved. For a path that does not exist yet, its
+ * nearest existing ancestor is resolved and the rest joined on, so a folder
+ * about to be created under a linked `concepts/` resolves to where it would
+ * really land.
+ */
 function real(target: string): string {
-  try {
-    return realpathSync(target);
-  } catch {
-    return target;
+  const missing: string[] = [];
+  let at = path.resolve(target);
+  for (;;) {
+    try {
+      return path.join(realpathSync(at), ...missing.reverse());
+    } catch {
+      const parent = path.dirname(at);
+      if (parent === at) return path.resolve(target);
+      missing.push(path.basename(at));
+      at = parent;
+    }
   }
 }
 
@@ -186,24 +199,113 @@ async function readText(file: string): Promise<string | null> {
 }
 
 /**
- * Write `text` to `file` only while the file still reads as expected: absent
- * when `expected` is null, else hashing to it. Checked immediately before
- * the atomic rename, so an edit saved by Obsidian after the command decided
- * what to do is found here and kept. Returns whether it wrote.
+ * Refuse a file whose folder resolves outside the vault: a `concepts/` that
+ * is a link into the repository would otherwise put notes under `learn/`,
+ * where the next import reads them.
  */
-async function replaceIfUnchanged(file: string, expected: string | null, text: string): Promise<boolean> {
-  const current = await readText(file);
-  if (expected === null ? current !== null : current === null || sha256(current) !== expected) return false;
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await writeAtomically(file, text);
+function assertInVault(dir: string, file: string): void {
+  if (!inside(real(path.dirname(file)), real(dir))) {
+    throw new VaultError(`${file} resolves outside the vault ${dir} (a linked folder?), so nothing was written there.`);
+  }
+}
+
+let asideCounter = 0;
+/** A hidden name beside `file` for a moment's use, unique to this process. */
+function asideOf(file: string): string {
+  asideCounter += 1;
+  return path.join(path.dirname(file), `.${path.basename(file)}.vault-${process.pid}-${asideCounter}`);
+}
+
+/**
+ * Put `from` at `file` only if nothing is there, and consume `from`. A hard
+ * link fails rather than replace, so a file saved at `file` in the meantime
+ * is kept; a filesystem without hard links gets an exclusive copy instead.
+ */
+async function placeIfAbsent(from: string, file: string): Promise<boolean> {
+  try {
+    await fs.link(from, file);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") return false;
+    if (code !== "EPERM" && code !== "ENOTSUP" && code !== "EXDEV") throw error;
+    try {
+      await fs.copyFile(from, file, fsConstants.COPYFILE_EXCL);
+    } catch (copyError) {
+      if ((copyError as NodeJS.ErrnoException).code === "EEXIST") return false;
+      throw copyError;
+    }
+  }
+  await fs.rm(from, { force: true });
   return true;
 }
 
-/** Remove `file` only while it still hashes to `expected`. */
-async function removeIfUnchanged(file: string, expected: string): Promise<boolean> {
-  const current = await readText(file);
-  if (current === null || sha256(current) !== expected) return false;
-  await fs.rm(file, { force: true });
+/**
+ * Move whatever is at `file` aside, in one rename, and read it there. What was
+ * moved is exactly what is judged: a save landing before the rename is in the
+ * bytes read, and one landing after it creates a new `file`, which
+ * `placeIfAbsent` will not replace.
+ */
+async function takeAside(file: string): Promise<{ aside: string; text: string } | null> {
+  const aside = asideOf(file);
+  try {
+    await fs.rename(file, aside);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  return { aside, text: await fs.readFile(aside, "utf8") };
+}
+
+/**
+ * Put a file taken aside back. If something new was saved at its name in the
+ * meantime, both are kept: the one taken aside as `<name>.kept-<time>.md`,
+ * which a push lists, so neither edit is lost.
+ */
+async function putBack(aside: string, file: string): Promise<void> {
+  if (await placeIfAbsent(aside, file)) return;
+  await fs.rename(aside, file.replace(/\.md$/, `.kept-${Date.now()}.md`));
+}
+
+/**
+ * Write `text` to `file` only while the file reads as expected: absent when
+ * `expected` is null, else hashing to it. There is no moment where a save
+ * from Obsidian can be replaced unread: the old file is moved aside in one
+ * rename and judged there, put back if it is not what was expected, and the
+ * new text goes in only where nothing is. Returns whether it wrote.
+ */
+async function replaceIfUnchanged(dir: string, file: string, expected: string | null, text: string): Promise<boolean> {
+  assertInVault(dir, file);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const fresh = asideOf(file);
+  await fs.writeFile(fresh, text, "utf8");
+  try {
+    if (expected === null) return await placeIfAbsent(fresh, file);
+    const taken = await takeAside(file);
+    if (taken === null) return false;
+    if (sha256(taken.text) !== expected) {
+      await putBack(taken.aside, file);
+      return false;
+    }
+    const placed = await placeIfAbsent(fresh, file);
+    // Unedited, so nothing of anyone's is in it. If a save took its place
+    // meanwhile, that save stays and this pull wrote nothing.
+    await fs.rm(taken.aside, { force: true });
+    return placed;
+  } finally {
+    await fs.rm(fresh, { force: true });
+  }
+}
+
+/** Remove `file` only while it hashes to `expected`, judged the same way. */
+async function removeIfUnchanged(dir: string, file: string, expected: string): Promise<boolean> {
+  assertInVault(dir, file);
+  const taken = await takeAside(file);
+  if (taken === null) return false;
+  if (sha256(taken.text) !== expected) {
+    await putBack(taken.aside, file);
+    return false;
+  }
+  await fs.rm(taken.aside, { force: true });
   return true;
 }
 
@@ -237,7 +339,29 @@ async function readManifest(dir: string): Promise<Manifest | null> {
   if (manifest.version !== 1 || typeof manifest.files !== "object" || manifest.files === null) {
     throw new VaultError(`${file} is not a vault manifest this version of learn can read (expected version 1).`);
   }
+  // Every path in it is used to read, replace and remove files, so one that
+  // is not a file pull itself would write is refused before any of that.
+  const bad = Object.entries(manifest.files).filter(([rel, entry]) => !validEntry(rel, entry)).map(([rel]) => rel);
+  if (bad.length > 0) {
+    throw new VaultError(
+      `${file} names paths pull never writes (${bad.map((rel) => JSON.stringify(rel)).join(", ")}), ` +
+        `so nothing was read or written. Restore it, or pull into another folder with --out.`,
+    );
+  }
   return manifest as Manifest;
+}
+
+/** A path pull writes: `README.md`, `concepts/[<domain>/]<slug>.md`, `sessions/<id>.md`. */
+const MANAGED = /^(?:README\.md|concepts\/(?:[^/\\\0]+\/)?[^/\\\0]+\.md|sessions\/[^/\\\0]+\.md)$/;
+
+function validEntry(rel: string, entry: Entry): boolean {
+  if (!MANAGED.test(rel) || rel.split("/").some((part) => part.startsWith(".")) || SIDE_COPY.test(rel)) return false;
+  if (typeof entry !== "object" || entry === null) return false;
+  if ((entry.kind === "readme") !== (rel === README)) return false;
+  if (entry.kind === "log" && !rel.startsWith("sessions/")) return false;
+  if (entry.kind === "note" && !rel.startsWith("concepts/")) return false;
+  const pending = entry.pending;
+  return pending === undefined || pending.path === sidePath(rel, "incoming") || pending.path === sidePath(rel, "conflict");
 }
 
 async function writeManifest(dir: string, manifest: Manifest): Promise<void> {
@@ -252,7 +376,7 @@ async function writeManifest(dir: string, manifest: Manifest): Promise<void> {
  */
 async function clearSide(dir: string, entry: Entry): Promise<void> {
   if (entry.pending === undefined) return;
-  await removeIfUnchanged(path.join(dir, entry.pending.path), entry.pending.hash);
+  await removeIfUnchanged(dir, path.join(dir, entry.pending.path), entry.pending.hash);
   delete entry.pending;
 }
 
@@ -293,7 +417,14 @@ async function writeSide(
     }
   }
   const side = sidePath(rel, label);
-  if (entry.pending !== undefined && entry.pending.path !== side) await clearSide(dir, entry);
+  if (entry.pending !== undefined && entry.pending.path !== side) {
+    // The copy under the other name goes only if nobody wrote in it. One
+    // somebody did stays the copy this file is waiting on, record and all:
+    // forgetting it would leave the merge in it untracked.
+    const other = path.join(dir, entry.pending.path);
+    if ((await readText(other)) !== null && !(await removeIfUnchanged(dir, other, entry.pending.hash))) return null;
+    delete entry.pending;
+  }
   const file = path.join(dir, side);
   const existing = await readText(file);
   if (existing !== null && sha256(existing) === hash) {
@@ -305,7 +436,7 @@ async function writeSide(
     if (entry.pending?.path !== side || sha256(existing) !== entry.pending.hash) return null;
     expected = entry.pending.hash;
   }
-  if (!(await replaceIfUnchanged(file, expected, text))) return null;
+  if (!(await replaceIfUnchanged(dir, file, expected, text))) return null;
   entry.pending = { path: side, base, hash };
   return side;
 }
@@ -464,7 +595,7 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
       if (current === null) {
         await clearSide(dir, entry);
         delete manifest.files[rel];
-      } else if (entry.hash !== null && sha256(current) === entry.hash && (await removeIfUnchanged(file, entry.hash))) {
+      } else if (entry.hash !== null && sha256(current) === entry.hash && (await removeIfUnchanged(dir, file, entry.hash))) {
         await clearSide(dir, entry);
         delete manifest.files[rel];
         report.removed.push(rel);
@@ -502,7 +633,7 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
   // Absent, or exactly what pull last wrote: the database's version replaces it.
   const expected = current === null ? null : known?.hash === sha256(current) ? known.hash : undefined;
   if (expected !== undefined) {
-    if (await replaceIfUnchanged(file, expected, item.text)) {
+    if (await replaceIfUnchanged(dir, file, expected, item.text)) {
       if (known !== undefined) await clearSide(dir, known);
       manifest.files[item.rel] = clean;
       report.written.push(item.rel);
@@ -546,7 +677,7 @@ async function pullReadme(dir: string, manifest: Manifest): Promise<void> {
     return;
   }
   const expected = current === null ? null : known?.hash === sha256(current) ? known.hash : undefined;
-  if (expected !== undefined && (await replaceIfUnchanged(file, expected, README_TEXT))) {
+  if (expected !== undefined && (await replaceIfUnchanged(dir, file, expected, README_TEXT))) {
     manifest.files[README] = { kind: "readme", id: "README", base: null, hash: want };
   }
 }
@@ -601,7 +732,13 @@ export async function pushVault(
         continue;
       }
       if (entry.kind === "log") await pushLog(db, rel, entry, current, report);
-      else await pushNote(db, dir, rel, entry, current, options.reason ?? `learn vault push ${rel}`, report);
+      else {
+        const committed = report.pushed.length;
+        await pushNote(db, dir, rel, entry, current, options.reason ?? `learn vault push ${rel}`, report);
+        // Recorded as soon as it is committed: stopped before the end, a push
+        // run again would otherwise take its own commit for a moved base.
+        if (report.pushed.length > committed) await writeManifest(dir, manifest);
+      }
     }
 
     for (const rel of await untracked(dir, manifest)) {

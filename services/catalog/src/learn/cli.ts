@@ -1758,6 +1758,8 @@ commands.vault = async ({ positionals, values }, session) => {
   const sub = positionals[1];
   if (sub === "pull") {
     const report = await pullVault(await session.db(), { dir: resolveVaultDir(values.out) });
+    // A vault missing a note is not a clean pull, in either output.
+    if (report.problems.length > 0) process.exitCode = 1;
     if (values.json) return out(report, true);
     const lines = [
       `Pulled ${report.notes} notes and ${report.logs} logs into ${report.vault}`,
@@ -1771,7 +1773,6 @@ commands.vault = async ({ positionals, values }, session) => {
       }
     }
     for (const problem of report.problems) lines.push(`  ! ${problem}`);
-    if (report.problems.length > 0) process.exitCode = 1;
     return out(lines.join("\n"), false);
   }
   if (sub === "push") {
