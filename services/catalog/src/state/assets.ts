@@ -99,7 +99,7 @@ export function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
  * to the players without the caller sorting anything.
  */
 export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(assetTopic)
@@ -115,7 +115,7 @@ export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: O
  * with none, and the empty array is the normal answer rather than a gap.
  */
 export async function assetsForConcept(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(assetConcept)
@@ -147,7 +147,7 @@ export async function conceptsForAssets(
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ assetId: assetConcept.assetId, conceptSlug: assetConcept.conceptSlug })
       .from(assetConcept)
@@ -204,7 +204,7 @@ export async function conceptsForAsset(db: CatalogDatabase, id: string, scope: O
  * Postgres only accepts output column names.
  */
 export async function assetsForCollection(db: CatalogDatabase, id: string, scope: OwnerScope): Promise<AssetRef[]> {
-  const [viaTopic, viaConcept, direct] = await scopedRead(scope.readable, (owners) => {
+  const [viaTopic, viaConcept, direct] = await scopedRead(db, scope.readable, (owners) => {
     const mine = ownedBy(asset.ownerId, owners);
     return Promise.all([
     db
@@ -257,7 +257,7 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
  */
 export async function assetsByIds(db: CatalogDatabase, ids: string[], scope: OwnerScope): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(asset)
@@ -353,7 +353,7 @@ export async function derivationSources(
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ assetId: assetDerivation.assetId, sourceId: assetDerivation.sourceAssetId })
       .from(assetDerivation)
@@ -506,7 +506,7 @@ export async function listAssets(
   // spells that. Short-circuiting also saves the round trip, the same way
   // `assetsByIds` does.
   if (options.ids !== undefined && options.ids.length === 0) return [];
-  return scopedRead(scope.readable, (owners) => listScoped(db, options, owners));
+  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners));
 }
 
 /** `listAssets` for one set of owners, or every owner on a database from before 0010. */
@@ -577,7 +577,7 @@ export interface AssetKindCount {
  * something the catalog does not have and never lies about one it does.
  */
 export async function assetCounts(db: CatalogDatabase, scope: OwnerScope): Promise<AssetKindCount[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select({ kind: asset.kind, count: count() })
       .from(asset)
