@@ -84,14 +84,20 @@ function entity(value: unknown): Entity {
   return { hash: sha256(canonicalJson(value)), value };
 }
 
+/**
+ * `read`: files already read from `dir`, by type, to compare instead of
+ * reading them again. `catalog flip` passes the bytes it then hashes, so the
+ * hash it records is of exactly what passed.
+ */
 export async function parity(
   db: CatalogDatabase,
   dir: string,
   types: readonly ExportType[],
+  read: Partial<Record<ExportType, ExportFile[]>> = {},
 ): Promise<ParityResult> {
   const results: TypeParity[] = [];
   for (const type of types) {
-    const actualFiles = await readTypeFiles(dir, type);
+    const actualFiles = read[type] ?? (await readTypeFiles(dir, type));
     let expectedFiles: ExportFile[];
     try {
       expectedFiles = await renderType(db, type);

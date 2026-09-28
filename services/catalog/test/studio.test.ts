@@ -39,7 +39,7 @@ import { applyMigrations, migrationStatus } from "../src/migrations";
 import { endSession, ensureSession } from "../src/state/sessions";
 import { makeFixture, topicsYaml, type Fixture } from "./fixture-tree";
 import { partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
+import { createScratchDatabase, markImported, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
 /**
  * The studio schema, the job lifecycle, and accept over what
@@ -614,6 +614,9 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
     await scratch.db
       .insert(concept)
       .values({ slug: "dot-product", title: "The dot product", path: "learn/concepts/dot-product.md", topicSlug: "alpha" });
+    // The files still own diagrams here, so Accept's put writes them through
+    // (D17) under the tree this database imported diagrams from.
+    await markImported(scratch.db, "diagrams", fixture.root);
   }, 60_000);
 
   afterAll(async () => {
@@ -643,12 +646,14 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
   }
 
   async function land(jobId: string, stem: string, meta: Record<string, unknown>, svg?: string) {
-    await fixture.write(`learn/assets/${stem}.tldr`, tldr(meta));
-    if (svg !== undefined) await fixture.write(`learn/assets/${stem}.svg`, svg);
+    // The candidate sits in the job's workspace, as the runner leaves it, not
+    // under learn/assets/: the put is what writes that.
+    await fixture.write(`workspace/${stem}.tldr`, tldr(meta));
+    if (svg !== undefined) await fixture.write(`workspace/${stem}.svg`, svg);
     return putDiagram(scratch.db, store, {
       slug: stem,
-      tldr: path.join(fixture.root, `learn/assets/${stem}.tldr`),
-      svg: svg === undefined ? null : path.join(fixture.root, `learn/assets/${stem}.svg`),
+      tldr: path.join(fixture.root, `workspace/${stem}.tldr`),
+      svg: svg === undefined ? null : path.join(fixture.root, `workspace/${stem}.svg`),
       jobId,
       reason: `accept ${jobId}`,
       author: LOCAL_LEARNER_ID,

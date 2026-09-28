@@ -11,8 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { renderType } from "../src/content/export";
 import { flip } from "../src/content/flip";
-import { exportHash, readTypeFiles } from "../src/content/layout";
-import { recordExport } from "../src/content/ownership";
+import { databaseIdentity } from "../src/content/import-root";
 import { conceptsIndexer } from "../src/index/concepts";
 import { coursesIndexer } from "../src/index/courses";
 import { tagsIndexer } from "../src/index/tags";
@@ -101,9 +100,13 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
 
     // Imported the way `catalog index` would, source by source, then flipped.
     const context = await fixture.context({ knownConcepts: async () => new Set(["alpha", "beta", "gamma"]) });
+    const database = await databaseIdentity(scratch.db);
     for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer, coursesIndexer, sessionsIndexer]) {
       const { rows, logs } = await indexer.read(context);
-      await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root } });
+      await writeSource(scratch.db, indexer, rows, [], indexer.root(context), {
+        logs,
+        metadata: { root: fixture.root, database },
+      });
     }
     // The vocabulary as the database would write it: a new note's topic is
     // written through to content/topics.yaml (D17), which refuses a file
@@ -114,12 +117,9 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     const readers = new Set(["concepts", "sessions"] as const);
     await flip(scratch.db, { type: "concepts", readers });
     await flip(scratch.db, { type: "sessions", readers });
-    // The files under learn/ are the database's export as of the flip, as
-    // the flip day's `catalog export` records; an import of courses then
-    // skips the notes and logs instead of refusing them.
-    for (const type of ["concepts", "sessions"] as const) {
-      await recordExport(scratch.db, type, exportHash(await readTypeFiles(fixture.root, type)));
-    }
+    // The flip records the files under learn/ as the database's export, so
+    // an import of courses then skips the notes and logs instead of refusing
+    // them.
     before = await tree(path.join(fixture.root, "learn"));
   }, 60_000);
 

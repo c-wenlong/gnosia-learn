@@ -1,6 +1,9 @@
+import { indexRun } from "@self-learn/schema";
+import { sql } from "drizzle-orm";
 import pg from "pg";
 
-import { connect, type Connection } from "../src/db";
+import { databaseIdentity } from "../src/content/import-root";
+import { type CatalogDatabase, connect, type Connection } from "../src/db";
 import { databaseUrl } from "../src/env";
 
 /**
@@ -78,6 +81,11 @@ export async function createScratchDatabase(): Promise<Scratch> {
     await admin.end();
   }
 
+  return scratchAt(name);
+}
+
+/** A connection to a scratch database that exists, and the way to drop it. */
+function scratchAt(name: string): Scratch {
   const url = new URL(databaseUrl());
   url.pathname = `/${name}`;
   const connection = connect({ url: url.toString() });
@@ -100,6 +108,47 @@ export async function createScratchDatabase(): Promise<Scratch> {
       }
     },
   };
+}
+
+/**
+ * A copy of a scratch database made the way a person makes one of theirs,
+ * `CREATE DATABASE ... TEMPLATE` (what `createdb -T` runs): every row comes
+ * along, `index_run` and `catalog_instance` included. The template may have
+ * no other session while it is copied, so the source's pooled connections are
+ * ended first; its pool records the error and opens a fresh one on its next
+ * query.
+ */
+export async function copyScratchDatabase(source: Scratch): Promise<Scratch> {
+  const name = `${source.name}_copy_${Math.random().toString(36).slice(2, 6)}`;
+  const admin = new pg.Client({ connectionString: maintenanceUrl() });
+  await admin.connect();
+  try {
+    await admin.query(
+      "select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()",
+      [source.name],
+    );
+    await admin.query(`create database ${quoteIdentifier(name)} template ${quoteIdentifier(source.name)}`);
+  } finally {
+    await admin.end();
+  }
+  return scratchAt(name);
+}
+
+/**
+ * Record `root` as where `source`'s files were imported from, by this
+ * database, the way `catalog index` records it: for a test that seeds rows
+ * directly and then calls a writer that keeps the files in step (D17).
+ */
+export async function markImported(db: CatalogDatabase, source: string, root: string): Promise<void> {
+  const metadata = { root, database: await databaseIdentity(db) };
+  const now = new Date();
+  await db
+    .insert(indexRun)
+    .values({ source, sourceRoot: root, startedAt: now, finishedAt: now, metadata })
+    .onConflictDoUpdate({
+      target: indexRun.source,
+      set: { metadata: sql`${indexRun.metadata} || ${JSON.stringify(metadata)}::jsonb` },
+    });
 }
 
 function quoteIdentifier(value: string): string {
