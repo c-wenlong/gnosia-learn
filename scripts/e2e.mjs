@@ -10,7 +10,8 @@
 //      that anything which grades runs against a copy, never `self_learn`.
 //      The copy is dropped in `finally`, on a failure and on Ctrl-C too.
 //      With --seed it builds that database instead: an empty one, migrated,
-//      `catalog import seed/`, and one `learn observe` so a review card is due.
+//      `catalog import seed/`, all six types flipped (the app reads content
+//      from the database only), and one `learn observe` so a review card is due.
 //      That is what phase 3 of docs/CONTENT-MIGRATION.md makes the default,
 //      once `content/` and `learn/` are gone and `self_learn` is no template.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
@@ -276,8 +277,8 @@ function seedEnv() {
     DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
     SELF_LEARN_HOME: SEED_HOME,
     MANIMKC_ROOT: NO_MANIMKC,
-    // The knowledge base is the seed's: the learn CLI reads the notes from
-    // files until concepts are flipped, and the seed database never is.
+    // The knowledge base is the seed's, for any learn command that still
+    // looks at files; after the flips below it reads the notes from rows.
     LEARN_ROOT: join(ROOT, 'seed'),
   };
 }
@@ -292,15 +293,20 @@ async function seedCommand(script, args) {
 
 /**
  * --seed: the database is built, not copied. Migrated, the seed imported the
- * way `catalog import` reads any tree, and one answer recorded through the
- * learn CLI so the review flow has a card (the seed carries content, not
- * learner state).
+ * way `catalog import` reads any tree, every type flipped in the flip-day
+ * order (the web app refuses a type the database does not own), and one
+ * answer recorded through the learn CLI so the review flow has a card (the
+ * seed carries content, not learner state). A flip checks parity against the
+ * tree and records its hash; it writes nothing under seed/.
  */
+const FLIP_ORDER = ['topics', 'tags', 'courses', 'concepts', 'sessions', 'diagrams'];
+
 async function buildFromSeed() {
   const made = await pg('createdb', [COPY_DB]);
   if (made.status !== 0) throw new Error(`createdb ${COPY_DB} failed: ${made.stderr.trim()} (is Postgres running?)`);
   await seedCommand('catalog', ['migrate']);
   await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
+  for (const type of FLIP_ORDER) await seedCommand('catalog', ['flip', type]);
   await seedCommand('learn', ['observe', '--concept', 'tool-calling', '--correct', 'true']);
 }
 
