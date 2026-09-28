@@ -139,7 +139,7 @@ describe("the diagram view", () => {
     });
     expect(panel(host)?.getAttribute("data-problem")).toBe("not-in-catalog");
     expect(host.textContent).toContain(ASSET_PROBLEMS["not-in-catalog"].reason);
-    expect(host.textContent).toContain("npm run catalog -- index");
+    expect(host.textContent).toContain("npm run catalog -- import");
   });
 
   it("drops an answer about a diagram it is no longer showing", async () => {

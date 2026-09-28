@@ -36,7 +36,8 @@ import type { Vocabulary } from "./vocabulary";
 export interface IndexContext {
   /**
    * Absolute path to the root the content is read from: the repository for
-   * `catalog index`, any directory in the same layout for `catalog import`.
+   * `catalog import` with no directory, else the directory it was given, in
+   * the same layout.
    */
   repoRoot: string;
   /**
@@ -44,7 +45,7 @@ export interface IndexContext {
    * from, when that is not `repoRoot`. `catalog import <dir>` reads content
    * from an export directory that holds no tools, so it points this at the
    * repository. Absent means `repoRoot`, which is what every test and
-   * `catalog index` want.
+   * `catalog import` want.
    */
   toolsRoot?: string;
   /** Absolute path to the manimkc checkout to read. Only the manimkc source uses it. */

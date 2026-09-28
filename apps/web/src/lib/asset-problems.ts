@@ -65,7 +65,7 @@ export interface AssetProblem {
   retry: boolean;
 }
 
-const INDEX = { kind: "command", text: "npm run catalog -- index" } as const;
+const INDEX = { kind: "command", text: "npm run catalog -- import" } as const;
 
 /**
  * The words, once. A `Record` over the union, so a code added above without a

@@ -578,7 +578,7 @@ async function filesOwnDiagrams(db: CatalogDatabase): Promise<boolean> {
 
 /**
  * D17 of docs/CONTENT-MIGRATION.md: while the files still own diagrams, the
- * write reaches them too, or the next `catalog index` would read the old files
+ * write reaches them too, or the next `catalog import` would read the old files
  * back and undo it (a new diagram pruned, an edit reverted). It goes through
  * the one write-through every other type uses (`write-through.ts`): the
  * export lock, the check that the files under the root this database imported

@@ -197,7 +197,7 @@ export default async function LibraryPage({
           they were, and one index run rebuilds every row here from the files in git.
         </Notice>
       ) : facets.total === 0 ? (
-        <Notice title="Nothing indexed yet" command="npm run catalog -- index">
+        <Notice title="Nothing indexed yet" command="npm run catalog -- import">
           The catalog is reachable and holds no assets. Every row on this page is derived from files
           in git (concept notes, session logs, exported diagrams, the videos manimkc rendered), so
           one index run fills it.

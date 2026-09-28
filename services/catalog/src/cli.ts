@@ -18,8 +18,9 @@ import {
 } from "./commands/course";
 import { runDiagramCommand } from "./commands/diagram";
 import { formatExport, runExport } from "./commands/export";
+import type { ExportSubset } from "./content/subset";
 import { formatFlip, runFlip } from "./commands/flip";
-import { formatIndex, runImportCommand, runIndexCommand } from "./commands/index-command";
+import { formatIndex, runImportCommand } from "./commands/index-command";
 import { formatParity, runParity } from "./commands/parity";
 import { EXPORT_TYPES, type ExportType } from "./content/layout";
 import { CONTENT_TYPES, type ContentType } from "@self-learn/schema";
@@ -68,7 +69,7 @@ import {
   failureText,
 } from "./connection-failure";
 import { withDatabase } from "./db";
-import { databaseUrl, redactUrl } from "./env";
+import { databaseUrl, REPO_ROOT, redactUrl } from "./env";
 import { assertMigrated, EXIT_MIGRATIONS_OUTSTANDING, MigrationsOutstanding } from "./migrations";
 import { parseSources } from "./index/run";
 
@@ -76,7 +77,7 @@ import { parseSources } from "./index/run";
  * The catalog CLI. Run it from the repo root:
  *
  *   npm run catalog -- status --json
- *   npm run catalog -- index
+ *   npm run catalog -- import
  *   npm run catalog -- show tomasulo-algorithm --json
  *
  * Every command takes `--json`. Agents read the JSON; people read the tables.
@@ -94,18 +95,24 @@ Commands:
   status                   Row counts, the migration head, when each source
                            was last indexed, and mirror coverage per
                            destination.
-  index                    Read the content trees and rewrite the derived rows.
-                           The same code path as \`import\` of the repository.
-  import <dir>             Read a directory laid out like the repository (an
-                           export, or a checkout) into the database, every
-                           changed entity as an import revision. A type the
-                           database owns is skipped when its files are its own
-                           last export, and refused when they were edited.
+  import [<dir>]           Read a directory laid out like the repository (an
+                           export, a checkout, seed/) into the database, every
+                           changed entity as an import revision. <dir>
+                           defaults to the repository. A type the database
+                           owns is skipped when its files are its own last
+                           export, and refused when they were edited.
+  index                    The old name of \`import\` with no directory. Still
+                           works, and says the new name once on stderr.
   export --out <dir>       Write the database back out as content/ and learn/
                            files: topics.yaml, tags.yaml, courses/<code>.yaml
                            from rows; concept notes and session logs from
                            rows; diagrams from rows and the blob store.
                            Records each type's export hash on content_source.
+                           --subset writes a small tree that imports on its
+                           own instead (how seed/ is made): the --topic
+                           slugs named, --course's modules filed under them,
+                           the notes filed under them, one --session log and
+                           one --diagram. Records nothing.
   parity <dir>             Compare the database with <dir> entity by entity:
                            counts per type, sha256 per entity over a canonical
                            form. Lists every mismatch by id; exits 1 on any.
@@ -219,7 +226,7 @@ Commands:
 
 Options:
   --json                   Machine-readable output. Supported by every command.
-  --only a,b               index, import: run only these sources. Known
+  --only a,b               import, index: run only these sources. Known
                            sources are topics, tags, courses, concepts,
                            manimkc, diagrams, sessions, mirrors; they always
                            run in dependency order, and selecting one selects
@@ -252,7 +259,7 @@ Options:
                            rows too, after copying them into the revision.
   --topic SLUG             renumber concepts, modules: which topic's list.
   --module ID              renumber items: which module.
-  --manimkc-root PATH      index, asset upload: the manimkc checkout to read,
+  --manimkc-root PATH      import, asset upload: the manimkc checkout to read,
                            for both the manimkc source and the mirror ledger
                            beside it. Relative to the working directory.
                            Default: $MANIMKC_ROOT, else <repo>/tools/manimkc.
@@ -297,7 +304,7 @@ Exit codes:
   2  The invocation was wrong.
   3  The database is unreachable: nothing is listening, or the host name
      does not resolve. stderr names which.
-  4  The database is behind this code: index, import, export, parity,
+  4  The database is behind this code: import, index, export, parity,
      flip, ls, show, history, diff, renumber, asset upload and blob
      audit read tables or columns a migration it has not had adds. stderr
      says how many are outstanding and to run migrate.
@@ -441,7 +448,7 @@ export async function main(argv: string[]): Promise<number> {
         strict: { type: "boolean", default: false },
         waive: { type: "string", multiple: true },
         reason: { type: "string", multiple: true },
-        topic: { type: "string" },
+        topic: { type: "string", multiple: true },
         module: { type: "string" },
         source: { type: "string" },
         "dry-run": { type: "boolean", default: false },
@@ -463,6 +470,9 @@ export async function main(argv: string[]): Promise<number> {
         author: { type: "string" },
         "with-learner-data": { type: "boolean", default: false },
         "force-base": { type: "boolean", default: false },
+        subset: { type: "boolean", default: false },
+        course: { type: "string" },
+        diagram: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -499,25 +509,20 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatStatus(result));
         break;
       }
-      case "index": {
-        const root = values["manimkc-root"];
-        const only = values.only === undefined ? undefined : parseSources(values.only);
-        await schemaCurrent();
-        const result = await runIndexCommand({
-          only,
-          manimkcRoot: root === undefined ? undefined : path.resolve(root),
-        });
-        emit(result, formatIndex(result));
-        break;
-      }
+      case "index":
       case "import": {
         const dir = positionals[1];
-        if (dir === undefined) throw new Usage("import needs a directory");
+        if (command === "index") {
+          // The old name, from before phase 2's rename. stderr, once per run, so a --json
+          // reader's stdout is the import's and nothing else.
+          if (dir !== undefined) throw new Usage("index takes no directory: it is `import` of the repository. Use `import <dir>`.");
+          process.stderr.write(INDEX_RENAMED);
+        }
         const root = values["manimkc-root"];
         const only = values.only === undefined ? undefined : parseSources(values.only);
         await schemaCurrent();
         const result = await runImportCommand({
-          dir,
+          dir: dir ?? REPO_ROOT,
           only,
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
         });
@@ -527,8 +532,10 @@ export async function main(argv: string[]): Promise<number> {
       case "export": {
         if (values.out === undefined) throw new Usage("export needs --out <dir>");
         const only = exportTypes(values.only);
+        const subset = exportSubset(values);
+        if (subset !== undefined && only !== undefined) throw new Usage("export --subset writes every type; drop --only");
         await schemaCurrent();
-        const result = await runExport({ out: values.out, only });
+        const result = await runExport({ out: values.out, only, subset });
         emit(result, formatExport(result));
         break;
       }
@@ -598,14 +605,14 @@ export async function main(argv: string[]): Promise<number> {
         }
         const reasons = values.reason ?? [];
         if (reasons.length !== 1) throw new Usage("renumber takes exactly one --reason");
-        if ((list === "concepts" || list === "modules") && values.topic === undefined) {
-          throw new Usage(`renumber ${list} needs --topic <slug>`);
+        if ((list === "concepts" || list === "modules") && values.topic?.length !== 1) {
+          throw new Usage(`renumber ${list} needs one --topic <slug>`);
         }
         if (list === "items" && values.module === undefined) throw new Usage("renumber items needs --module <id>");
         await schemaCurrent();
         const result = await runRenumber({
           list: list as RenumberList,
-          topic: values.topic,
+          topic: values.topic?.[0],
           module: values.module,
           reason: reasons[0] as string,
         });
@@ -758,6 +765,35 @@ export async function main(argv: string[]): Promise<number> {
     }
     return reportFailure(error, command, positionals[1], values.json);
   }
+}
+
+/** What `catalog index` says before it runs `catalog import` of the repository. */
+const INDEX_RENAMED = "catalog index is now catalog import (with no directory, the repository). Running that.\n";
+
+/**
+ * `export --subset`: the named topics, one course, one session, one
+ * diagram. Every flag is required, so a seed never comes out quietly
+ * missing a type.
+ */
+function exportSubset(values: {
+  subset: boolean;
+  topic?: string[];
+  course?: string;
+  session?: string;
+  diagram?: string;
+}): ExportSubset | undefined {
+  if (!values.subset) {
+    const stray = (["course", "session", "diagram"] as const).filter((k) => values[k] !== undefined);
+    if (stray.length > 0 || values.topic !== undefined) {
+      throw new Usage(`export: --${[...(values.topic === undefined ? [] : ["topic"]), ...stray].join(", --")} only go with --subset`);
+    }
+    return undefined;
+  }
+  const topics = values.topic ?? [];
+  if (topics.length === 0 || values.course === undefined || values.session === undefined || values.diagram === undefined) {
+    throw new Usage("export --subset needs --topic SLUG (one or more), --course ID, --session ID and --diagram SLUG");
+  }
+  return { topics, course: values.course, session: values.session, diagram: values.diagram };
 }
 
 /** `--blob-root` was removed; the flag is still parsed so its use gets this sentence rather than "unknown option". */

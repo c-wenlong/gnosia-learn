@@ -10,16 +10,16 @@ import { runParity } from "../src/commands/parity";
 import { DB_READERS } from "../src/content/flip";
 import { contentOwnership } from "../src/content/ownership";
 import { dbSource } from "../src/content/source";
-import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { SEED } from "./seed";
 
 /**
  * Track A's database readers (docs/CONTENT-MIGRATION.md, Track A): `topics`
- * and `tags` from rows, on the real tree imported into a scratch database.
+ * and `tags` from rows, on the seed tree imported into a scratch database.
  *
  * The bar is equality with the file reader, value for value: whatever a page
- * renders from `fileSource(REPO_ROOT).topics()` it must render the same from
+ * renders from `fileSource(SEED).topics()` it must render the same from
  * the rows, maps and relations included. Then the flip, and the same answer
  * through `selectSource` once the `content_source` row says `db`. The tree is
  * only read; manimkc is pointed at nothing, so its sources skip.
@@ -27,7 +27,7 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 const reachable = await probe();
 
-describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", () => {
+describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
   let scratch: Scratch;
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
 
@@ -38,7 +38,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", ()
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
     process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-    await runImportCommand({ dir: REPO_ROOT });
+    await runImportCommand({ dir: SEED });
   }, 120_000);
 
   afterAll(async () => {
@@ -55,17 +55,18 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", ()
   });
 
   it("return what the file reader returns, value for value", async () => {
-    const files = fileSource(REPO_ROOT);
+    const files = fileSource(SEED);
     const rows = dbSource(scratch.db);
     expect(await rows.topics()).toEqual(await files.topics());
     expect(await rows.tags()).toEqual(await files.tags());
   });
 
-  it("hold the vocabulary the plan measured", async () => {
+  it("hold the seed's vocabulary", async () => {
     const topics = await dbSource(scratch.db).topics();
     const count = (pick: (t: (typeof topics)[number]) => readonly unknown[]) => topics.reduce((a, t) => a + pick(t).length, 0);
-    // docs/CONTENT-MIGRATION.md, Track A's parity line. A count that moves
-    // because content was added is expected; update it with the reason.
+    // The seed's vocabulary (seed/README.md). The full tree's, 86 topics and
+    // 294 aliases, is Track A's parity line in docs/CONTENT-MIGRATION.md and
+    // is checked by the flip rehearsal against a copy of the owner's database.
     expect({
       topics: topics.length,
       domains: new Set(topics.map((t) => t.domain)).size,
@@ -74,11 +75,11 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", ()
       concepts: count((t) => t.maps.concepts),
       modules: count((t) => t.maps.courses),
       tags: (await dbSource(scratch.db).tags()).length,
-    }).toEqual({ topics: 86, domains: 23, aliases: 294, manimkc: 35, concepts: 32, modules: 61, tags: 8 });
+    }).toEqual({ topics: 5, domains: 4, aliases: 18, manimkc: 0, concepts: 11, modules: 2, tags: 2 });
   });
 
   it("flip with parity clean, and the seam then reads them from rows", async () => {
-    const parity = await runParity({ dir: REPO_ROOT, only: ["topics", "tags"] });
+    const parity = await runParity({ dir: SEED, only: ["topics", "tags"] });
     expect(parity.clean).toBe(true);
     for (const type of ["topics", "tags"] as const) {
       const flipped = await runFlip({ type });
@@ -88,7 +89,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the real tree", ()
     const owners = await contentOwnership(scratch.db);
     expect(owners).toMatchObject({ topics: "db", tags: "db" });
 
-    const files = fileSource(REPO_ROOT);
+    const files = fileSource(SEED);
     const selected = selectSource({
       files,
       variable: "",

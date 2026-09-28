@@ -165,7 +165,7 @@ Rules of engagement:
   when someone asks for it (Track C of
   [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md)). Only teaching
   diagrams go on the canvas.
-- **Every `.tldr` needs a topic, or `catalog index` refuses it by name.** The
+- **Every `.tldr` needs a topic, or `catalog import` refuses it by name.** The
   topic and concepts live in `meta.tldrawkc` on the document record, written
   by `new --topic ...` or backfilled with
   `npm run --silent canvas -- meta set <file> --topic <slug>`, and the slug
@@ -249,7 +249,7 @@ Rules of engagement:
   landed while the job ran refuses it. Once `catalog flip diagrams` has run
   there is nothing to `git add`; before the flip the put also writes the
   `.tldr` and `.svg` through into the tree diagrams were last imported from
-  (D17), so the next `catalog index` does not undo it, and Accept names those
+  (D17), so the next `catalog import` does not undo it, and Accept names those
   two files with the `git add` line to run. With Postgres down Accept refuses
   and the candidate waits in the job workspace. `indexed: false` after
   an accept means the diagram landed and the job row did not record it;
@@ -475,7 +475,7 @@ not have to be worked out again.
   `services/catalog/src/index/manimkc.ts`. Join the wrong one and every video
   404s at once, since with `MANIMKC_HOME` set the two are different
   directories. A row indexed before that value existed carries no `outRoot`,
-  and the honest answer there is "re-run `npm run catalog -- index --only
+  and the honest answer there is "re-run `npm run catalog -- import --only
   manimkc`", never a 404 that reads as a deleted file.
 - **A catalog indexer must never `continue` past an unresolved slug.** The rule
   is refuse, with the file and the slug named; `IndexErrors` collects them so
@@ -495,7 +495,8 @@ not have to be worked out again.
   it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
   or `getTags()` from `@/data/*`, never a parser from `@self-learn/content`;
   a test that wants real course data mocks `contentSource` with
-  `apps/web/src/test/content-files.ts` rather than opening a database. There
+  `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
+  opening a database. There
   is no `outputFileTracingIncludes` and no repo-root walk any more: the app
   opens no content file, so a deployment needs none in its bundle.
 - **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
@@ -532,7 +533,27 @@ not have to be worked out again.
   `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
   skip themselves with a named reason and `npm test` still passes, so a green
   local run is not proof the schema is sound. CI runs a `postgres:17` service
-  and is where they are a real gate.
+  and is where they are a real gate. The suites never read `self_learn`'s rows:
+  each makes a scratch database, and the end-to-end one imports `seed/`, a
+  small real slice cut with `catalog export --subset` (seed/README.md), not
+  `content/` and `learn/`, which phase 3 removes. A database of your own to
+  look at is `createdb`, `migrate`, then
+  `MANIMKC_ROOT=/nonexistent npm run catalog -- import seed`.
+- **`catalog import` is the name; `catalog import` is the alias.** With no
+  directory `import` reads the repository, which is all `index` did; `index`
+  still runs it and prints the new name once on stderr, so a `--json` reader
+  is unaffected. The web app and the studio still name `catalog import` in a
+  few messages; both work.
+- **Flip day is a script, and rehearsing it is one command.**
+  `node scripts/flip-rehearsal.mjs --tree-from <checkout>` copies `self_learn`
+  with `createdb -T`, imports a temp copy of that checkout's tree, flips the six
+  types in the plan's order with an export after each group, imports and
+  checks parity again, uploads manimkc's renders twice into a temp blob store,
+  audits it, and drops the copy (`--keep` leaves it). Point `MANIMKC_ROOT` and
+  `TLDRAWKC_ROOT` at a checkout with the submodules when the worktree has none.
+  `--real --database <name>` runs the same steps against that database in
+  place; it asks for the name to be typed on a terminal and has no `--yes`, so
+  it is the owner's to run, never an agent's.
 - **Never edit a migration under `services/catalog/drizzle/` once it has been
   applied.** drizzle keys applied migrations by the sha256 of the file, so an
   edit makes it look unapplied on every database that already ran it. Change
@@ -687,8 +708,11 @@ not have to be worked out again.
   failed every time. The studio's paths are all repo-relative by design, so
   `STUDIO_REPO_ROOT` points `services/studio/src/paths.ts` at a symlink farm
   under the OS temp directory and the setup file checks the tracked listing
-  after every test file. A new suite that needs a tree to write into takes a
-  temp one, the way `LEARN_ROOT` and `STUDIO_HOME` already do.
+  after every test file: `learn/assets/`, and every file under `seed/`, which
+  suites import and so record as the root a seam write keeps in step. A new
+  suite that needs a tree to write into takes a temp one, the way `LEARN_ROOT`
+  and `STUDIO_HOME` already do; one that imports the seed and then writes
+  copies it to a temp directory first.
 - **A studio job's `candidate_path` is relative to `STUDIO_HOME`, not to the
   repository.** The catalog stores `jobs/<id>/candidate/<slug>.tldr` and
   refuses any other value, absolute included (`briefCandidate` in

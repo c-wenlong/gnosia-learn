@@ -160,7 +160,7 @@ export async function writableRoot(db: CatalogDatabase, type: ExportType): Promi
   if (recorded === null) {
     throw new WriteThroughError(
       `${type} has never been imported into this database, so there are no files to keep in step ` +
-        `with the write. Run \`catalog index\` (or \`catalog import <dir>\`) first.`,
+        `with the write. Run \`catalog import [<dir>]\` first.`,
     );
   }
   const here = await databaseIdentity(db);
@@ -169,7 +169,7 @@ export async function writableRoot(db: CatalogDatabase, type: ExportType): Promi
       `${type} was last imported from ${recorded.root} by ` +
         (recorded.database === null ? "an import that did not record its database" : `another database (${recorded.database})`) +
         `, not by this one (${here}): this database is a copy, or its import predates the check. Writing ` +
-        `through would rewrite a tree this database never read. Run \`catalog index\` (or \`catalog import <dir>\`) ` +
+        `through would rewrite a tree this database never read. Run \`catalog import [<dir>]\` ` +
         `against this database first, so it records its own root.`,
     );
   }

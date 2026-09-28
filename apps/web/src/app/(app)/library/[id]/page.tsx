@@ -663,7 +663,7 @@ function UnreadableFile({ path, href }: { path: string | null; href: string }) {
   return (
     <Notice
       title={path === null ? "This row names no file." : "This file could not be read."}
-      command={path === null ? "npm run catalog -- index" : "npm run catalog -- blob audit"}
+      command={path === null ? "npm run catalog -- import" : "npm run catalog -- blob audit"}
       className="border-dashed"
     >
       {path === null ? (
@@ -693,7 +693,7 @@ function UnreadableFile({ path, href }: { path: string | null; href: string }) {
 function LinkPanel({ url }: { url: string | null }) {
   if (url === null) {
     return (
-      <Notice title="This link has no URL" command="npm run catalog -- index" className="border-dashed">
+      <Notice title="This link has no URL" command="npm run catalog -- import" className="border-dashed">
         This link row carries no URL, which should not happen: the course indexer writes one for
         every resource it reads. Re-index to correct it.
       </Notice>

@@ -1,7 +1,7 @@
 # Course data
 
 **These files are the course data until the `courses` type is flipped, and its
-export after.** There is no TypeScript copy: the web app, `catalog index` and
+export after.** There is no TypeScript copy: the web app, `catalog import` and
 `catalog course import` all read them with the parser in
 [`packages/content`](../../packages/content/src/courses.ts), so a course file
 means one thing everywhere. Editing a page to change a course title is not a
@@ -21,7 +21,7 @@ to match, so the two never disagree. A module or item the file stops listing
 is archived, never deleted, and the learner's progress and recap on it stay.
 [docs/CURRICULUM.md](../../docs/CURRICULUM.md) has the whole loop, the item
 verbs and every refusal. Once the database owns courses, a hand edit here that
-was not imported is refused by the next `catalog index`, by name.
+was not imported is refused by the next `catalog import`, by name.
 
 One YAML file per course, named `<code>.yaml` in lowercase (e.g. `cs2111.yaml`).
 The reader refuses a file whose name and `code:` disagree.
@@ -71,7 +71,7 @@ so the key is authored and has to be unique.
 **`topic:` is a lookup key, not free text.** Add or rename a topic in
 [`../topics.yaml`](../topics.yaml). `course import` lists a new module under
 that topic's `maps.courses` itself; if you edit the files and run
-`catalog index` instead, list it there by hand, since the index refuses to
+`catalog import` instead, list it there by hand, since the index refuses to
 run when the two files disagree in either direction.
 
 **`concepts:` on every item.** Each item names the concept notes that teach it,

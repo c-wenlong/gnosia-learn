@@ -46,7 +46,7 @@ describe("the problem table", () => {
       kind: "command",
       text: "npm run catalog -- asset upload --source manimkc",
     });
-    expect(ASSET_PROBLEMS["not-in-catalog"].fix?.text).toBe("npm run catalog -- index");
+    expect(ASSET_PROBLEMS["not-in-catalog"].fix?.text).toBe("npm run catalog -- import");
     expect(ASSET_PROBLEMS["not-flipped"].fix?.text).toContain("npm run catalog -- flip");
   });
 

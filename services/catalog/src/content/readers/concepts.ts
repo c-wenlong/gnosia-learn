@@ -23,7 +23,7 @@ export const reader: TypeReader<"concept"> = {
     const [row] = await readNoteRows(db, [slug]);
     if (row === undefined) return null;
     if (row.body === null) {
-      throw new Error(`concept "${slug}" has no body in the database: re-run \`catalog index\` before reading it from rows`);
+      throw new Error(`concept "${slug}" has no body in the database: re-run \`catalog import\` before reading it from rows`);
     }
     return { slug: row.slug, domain: row.domain ?? "", path: row.path, markdown: renderNote({ ...row, body: row.body }) };
   },

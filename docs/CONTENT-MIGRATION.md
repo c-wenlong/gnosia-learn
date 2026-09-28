@@ -1492,8 +1492,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       decide servability per row (the go-live follow-up Track E left), and
       the library grid's notice counts the rows in view with no stored copy
       and names `catalog asset upload`. Suites that want real course data
-      mock the seam with `apps/web/src/test/content-files.ts`, one constant
-      naming the tree for when `seed/` replaces `content/`. Proof on a
+      mock the seam with `apps/web/src/test/content-files.ts`, which reads
+      `seed/`; with `content/` and `learn/` moved out of the worktree, every
+      `apps/web` and `services/studio` suite still passes (93 files). Proof on a
       `createdb -T self_learn` copy, migrated, imported from a throwaway copy
       of the tree (the untracked tailscale diagram included), all six types
       flipped and exported, and `asset upload` into a temporary
@@ -1539,7 +1540,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       `/studio` rendered the banner; a real Sonnet job drew in its workspace
       and Accept landed a revision with `git status` clean. The tracked-tree
       check's retargeting to `seed/` stays with the Tests item.
-- [ ] **Catalog:** `catalog index` becomes `catalog import`, with `index`
+- [x] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
       write-through export of D17 keeps running until phase 3 for topics,
@@ -1573,7 +1574,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       database forgets every base rather than refusing, and a push to one is
       refused. The folder defaults to `$SELF_LEARN_HOME/vault`, and one
       inside the repository is refused.
-- [ ] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
+- [x] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
       imports `seed/` and its `EXPECTED` counts (`:53`) change to the seed's;
@@ -1586,6 +1587,92 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       a lowercase owner of 1 to 64 characters, a required extension of 1 to
       16), which it is looser than today. Every key the package makes already
       passes the current check, which `packages/blob/test/key.test.ts` holds.
+
+**Built** (catalog, seed and tests; branch `p2/import-seed-contract`):
+
+- **`catalog import [<dir>]` is the name.** With no directory it reads the
+  repository. `catalog index` still runs it and prints
+  `catalog index is now catalog import ...` once, on stderr, so a `--json`
+  reader's stdout is untouched; `index <dir>` is refused as a usage error,
+  since it never took one. The catalog's own messages and the docs say
+  `import`. The web app and the studio still name `catalog index` in a few
+  strings, which works through the alias; `learn index` is unchanged (its verb
+  names are the plugin's contract).
+- **`catalog export --subset --topic <slug>... --course <id> --session <id>
+  --diagram <slug> --out <dir>`** (`services/catalog/src/content/subset.ts`,
+  a filter threaded through `renderType`): the named topics, the course's
+  modules filed under them and the course's tags, every note filed under them,
+  one log, one diagram, and no `maps.manimkc`. It refuses by name a reference
+  that would leave the tree (a prerequisite, an item's concept, a diagram's
+  topic or concept, or a topic relation outside it), refuses to write over the
+  repository, any tree the database imported from, or through a symlink out of
+  `--out` (every export checks that now), and records no hash.
+- **`seed/`, measured:** 5 topics in 4 domains, 2 tags, `cp4284` cut to 2
+  modules (5 items, 4 links, 8 concept links), 11 notes (13 prerequisites),
+  the `2026-08-19-react-agents` log, and `vector-as-a-list-of-numbers`; 300 KB,
+  most of it the SVG. The notes are 11 rather than the guessed 4 because a
+  subset has to be closed under prerequisites: `tool-calling` assumes
+  `transformer-block`, which pulls in the whole transformer topic.
+  `seed/README.md` has the recipe. Importing it and exporting it back is byte
+  for byte (`catalog.test.ts`).
+- **Tests on the seed:** `catalog.test.ts` (its `EXPECTED` now 5, 4, 11, 1, 2),
+  `tldr.test.ts`, and every other suite that read the real tree:
+  `courses-reader`, `topic-readers`, `notes-and-logs`, `frontmatter`,
+  `export-import` in the catalog and `courses`, `file-source` in
+  `packages/content`. `vitest.setup.ts` watches every file under `seed/` as
+  well as `learn/assets/`, and its studio farm no longer needs a `learn/`.
+  With `content/` and `learn/` moved out of a worktree, every suite in
+  `services/catalog` and `packages/` passes; the ones that still fail are in
+  `apps/web` and `services/studio`, the web slice's (`p2/readers-db-only`).
+- **`npm run e2e -- --seed`** builds its database instead of copying
+  `self_learn`: migrate, `catalog import seed/`, one `learn observe` for a due
+  card, the SVG in a temp blob store. The Mark watched step prints `SKIP`,
+  since the seed has no videos. The default stays `-T self_learn` until
+  phase 3.
+- **Flip day is `scripts/flip-rehearsal.mjs`** (below).
+
+### Flip day, as a script
+
+`node scripts/flip-rehearsal.mjs` runs flip day against a copy, and `--real
+--database <name>` runs the same list against a database in place, which is
+phase 3's cut-over. The steps, each the catalog CLI with `--json` and each
+checked before the next:
+
+1. `catalog migrate`, then `catalog doctor`.
+2. `catalog import <tree>` (the checkout root on `--real`; a temp copy of
+   `--tree-from`, default this checkout, on a rehearsal, so the owner's working
+   tree is never written), then `catalog parity <tree>`, which must be clean.
+3. `flip topics`, `flip tags`, `export --only topics,tags --out <tree>`.
+4. `flip concepts`, `flip sessions`, `export --only concepts,sessions`.
+5. `flip courses`, not `--strict` (133 items name no concept), `export --only
+   courses`.
+6. `flip diagrams`, `export --only diagrams`.
+7. `import <tree>` again, which must skip all six types as their own export,
+   and `parity` again.
+8. `asset upload --source manimkc`, twice; the second must store nothing and
+   write no row.
+9. `blob audit`, which must find nothing outstanding.
+
+Each flip must record its export hash and each export must record its hash at
+the tree, or the next import would refuse the files as edited; the script
+fails the step otherwise. A rehearsal copies `--from` (default `self_learn`)
+with `createdb -T`, or `pg_dump` into an empty database when the template has
+sessions open, sets `CATALOG_COPY_OK=1` and a temp `SELF_LEARN_HOME`, and drops
+the copy and its temp directories unless `--keep`. `--real` refuses without
+`--database`, refuses a rehearsal's options, drops `CATALOG_COPY_OK`, uses the
+environment's blob store, and asks for the database name to be typed on a
+terminal; there is no `--yes`, so no agent or script can run it.
+
+Measured 2026-09-28, a rehearsal of `self_learn` (at 0009) with the main
+checkout's tree, the untracked `tailscale-vpn-communication` diagram included:
+19 of 19 steps in 21 seconds. Migrate applied 0010 to 0012; the import wrote
+1,461 rows; parity was clean before and after; the concepts flip listed 5
+notes and the diagrams flip 3 files an export rewrites; the uploads stored 159
+objects (36 videos, 87 sidecars, 36 posters) and then none; the audit found
+162 rows and 162 objects (the three diagram SVGs the import stored, and the
+159), with nothing outstanding. `services/catalog/test/flip-rehearsal.test.ts`
+runs the script on a scratch template at 0009 with the seed tree and a stand-in
+manimkc CLI, and holds `--real`'s refusals.
 
 **Done when:** deleting `content/` and `learn/` in a scratch worktree leaves
 `npm run lint && npm run typecheck && npm test && npm run build` green and the

@@ -11,17 +11,19 @@ import { fileSource, selectSource, type SelectedSource } from "@self-learn/conte
  * suite like `progress.test.ts` has no database to ask and no reason to want
  * one: it tests arithmetic over whatever the courses are. So it swaps
  * `contentSource` for this, which reads the export tree through the same
- * parsers the catalog imports with:
+ * parsers the catalog imports with. The tree is `seed/` (seed/README.md), a
+ * fixed slice of the content, so the counts a suite asserts do not move when
+ * the owner edits a course:
  *
  *     vi.mock("@/data/source", async (actual) => ({
  *       ...(await actual<typeof import("@/data/source")>()),
  *       contentSource: fileContentSource,
  *     }));
  *
- * One place names the tree, so the day `content/` goes (phase 3 of
- * docs/CONTENT-MIGRATION.md keeps only `seed/`) is a one-line change here.
+ * Read only: `vitest.setup.ts` fails a test file that changes a byte under
+ * `seed/`, and this reader never writes.
  */
-export const TEST_CONTENT_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..");
+export const TEST_CONTENT_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..", "seed");
 
 const files = fileSource(TEST_CONTENT_ROOT);
 

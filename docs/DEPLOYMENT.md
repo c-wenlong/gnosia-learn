@@ -252,7 +252,7 @@ npm run catalog -- asset upload --source manimkc
 It reads `manimkc topics --json` (so the rendered files are found wherever
 manimkc's `MANIMKC_HOME` puts them), and for every video and sidecar the
 catalog already has a row for: hashes the file, refuses it by name if the
-bytes are no longer the ones the last `catalog index --only manimkc` recorded,
+bytes are no longer the ones the last `catalog import --only manimkc` recorded,
 uploads it (`pending` row, put, `head`, `present`), cuts a poster per video
 with ffmpeg and uploads that too, then points each asset row at its blob with
 one revision each. When a video's bytes changed and no new poster can be cut
@@ -276,7 +276,7 @@ delete the primary's objects as orphans. An upload refuses such a root too,
 since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
 files a crashed upload left, once they are a day old.
 
-A later `catalog index --only manimkc` keeps every key whose bytes it hashes
+A later `catalog import --only manimkc` keeps every key whose bytes it hashes
 again unchanged; a re-rendered video loses its key and answers `not-uploaded`
 until the next upload.
 

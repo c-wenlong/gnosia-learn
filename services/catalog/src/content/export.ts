@@ -79,29 +79,51 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 const text = (lines: readonly string[]) => Buffer.from(`${lines.join("\n")}\n`, "utf8");
 
 /**
+ * Which rows a subset export keeps (`catalog export --subset`, which builds
+ * one in `subset.ts` and checks it is closed). Every set names the entities
+ * to write; a list inside a kept entity (a topic's `maps`, a note's
+ * prerequisites) keeps only what the sets keep, and a topic's
+ * `maps.manimkc` is dropped whole, since a subset carries no videos (D7).
+ */
+export interface RenderFilter {
+  topics: ReadonlySet<string>;
+  tags: ReadonlySet<string>;
+  courses: ReadonlySet<string>;
+  modules: ReadonlySet<string>;
+  concepts: ReadonlySet<string>;
+  sessions: ReadonlySet<string>;
+  diagrams: ReadonlySet<string>;
+}
+
+/** Every row when there is no filter, else only the ones in `set`. */
+const kept = <T>(items: readonly T[], set: ReadonlySet<string> | undefined, key: (item: T) => string): T[] =>
+  set === undefined ? [...items] : items.filter((item) => set.has(key(item)));
+
+/**
  * `store`: where a diagram's SVG is read from. The store the process opens
  * from its environment unless a writer says otherwise: a write-through
  * renders with the store its writer uploaded the SVG to, so the two cannot
- * disagree about where the bytes are.
+ * disagree about where the bytes are. `filter`: a subset export's rows.
  */
 export async function renderType(
   db: CatalogDatabase,
   type: ExportType,
-  options: { store?: BlobStore } = {},
+  options: { store?: BlobStore; filter?: RenderFilter } = {},
 ): Promise<ExportFile[]> {
+  const filter = options.filter;
   switch (type) {
     case "topics":
-      return [await renderTopics(db)];
+      return [await renderTopics(db, filter)];
     case "tags":
-      return [await renderTags(db)];
+      return [await renderTags(db, filter)];
     case "courses":
-      return renderCourses(db);
+      return renderCourses(db, filter);
     case "concepts":
-      return renderConcepts(db);
+      return renderConcepts(db, filter);
     case "sessions":
-      return renderSessions(db);
+      return renderSessions(db, filter);
     case "diagrams":
-      return renderDiagrams(db, options.store);
+      return renderDiagrams(db, options.store, filter);
   }
 }
 
@@ -112,45 +134,63 @@ export async function renderType(
  * `manimkc_topic`, `maps.concepts` from `concept.topic_slug`, `maps.courses`
  * from each live module's topic row.
  */
-async function renderTopics(db: CatalogDatabase): Promise<ExportFile> {
-  const topics = await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
-    db,
-    sql`select slug, title, domain, summary, aliases from topic
-        where archived_at is null order by position, slug`,
+async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile> {
+  const topics = kept(
+    await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
+      db,
+      sql`select slug, title, domain, summary, aliases from topic
+          where archived_at is null order by position, slug`,
+    ),
+    filter?.topics,
+    (t) => t.slug,
   );
   if (topics.length === 0) {
     throw new ExportError(`${TOPICS_FILE}: the database holds no topics. Import them first.`);
   }
   const relations = groupBy(
-    await rows<{ from_slug: string; to_slug: string; kind: string }>(
-      db,
-      sql`select from_slug, to_slug, kind from topic_relation order by from_slug, position, kind, to_slug`,
+    kept(
+      await rows<{ from_slug: string; to_slug: string; kind: string }>(
+        db,
+        sql`select from_slug, to_slug, kind from topic_relation order by from_slug, position, kind, to_slug`,
+      ),
+      filter?.topics,
+      (r) => r.to_slug,
     ),
     (r) => r.from_slug,
   );
   const manimkc = groupBy(
-    await rows<{ topic_slug: string; path: string }>(
-      db,
-      sql`select topic_slug, path from manimkc_topic order by topic_slug, position, path`,
-    ),
+    filter === undefined
+      ? await rows<{ topic_slug: string; path: string }>(
+          db,
+          sql`select topic_slug, path from manimkc_topic order by topic_slug, position, path`,
+        )
+      : [],
     (r) => r.topic_slug,
   );
   const concepts = groupBy(
-    await rows<{ topic_slug: string; slug: string }>(
-      db,
-      sql`select topic_slug, slug from concept
-          where topic_slug is not null and archived_at is null
-          order by topic_slug, topic_position, slug`,
+    kept(
+      await rows<{ topic_slug: string; slug: string }>(
+        db,
+        sql`select topic_slug, slug from concept
+            where topic_slug is not null and archived_at is null
+            order by topic_slug, topic_position, slug`,
+      ),
+      filter?.concepts,
+      (r) => r.slug,
     ),
     (r) => r.topic_slug,
   );
   const modules = groupBy(
-    await rows<{ topic_slug: string; collection_id: string }>(
-      db,
-      sql`select m.topic_slug, m.collection_id from collection_item m
-          join collection c on c.id = m.collection_id
-          where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null
-          order by m.topic_slug, m.topic_position, m.collection_id`,
+    kept(
+      await rows<{ topic_slug: string; collection_id: string }>(
+        db,
+        sql`select m.topic_slug, m.collection_id from collection_item m
+            join collection c on c.id = m.collection_id
+            where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null
+            order by m.topic_slug, m.topic_position, m.collection_id`,
+      ),
+      filter?.modules,
+      (r) => r.collection_id,
     ),
     (r) => r.topic_slug,
   );
@@ -185,10 +225,14 @@ async function renderTopics(db: CatalogDatabase): Promise<ExportFile> {
   return { path: TOPICS_FILE, bytes: text(lines) };
 }
 
-async function renderTags(db: CatalogDatabase): Promise<ExportFile> {
-  const tags = await rows<{ id: string; label: string; description: string | null }>(
-    db,
-    sql`select id, label, description from tag order by position, id`,
+async function renderTags(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile> {
+  const tags = kept(
+    await rows<{ id: string; label: string; description: string | null }>(
+      db,
+      sql`select id, label, description from tag order by position, id`,
+    ),
+    filter?.tags,
+    (t) => t.id,
   );
   if (tags.length === 0) {
     throw new ExportError(`${TAGS_FILE}: the database holds no tags. Import them first.`);
@@ -218,11 +262,15 @@ interface CourseMetadata {
  * files are written in. Archived modules and items are left out: the course
  * file no longer lists them, which is why they were archived (D12).
  */
-async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
-  const courses = await rows<{ id: string; slug: string; title: string; position: number; metadata: CourseMetadata }>(
-    db,
-    sql`select id, slug, title, position, metadata from collection
-        where kind = 'course' and archived_at is null order by position, id`,
+async function renderCourses(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile[]> {
+  const courses = kept(
+    await rows<{ id: string; slug: string; title: string; position: number; metadata: CourseMetadata }>(
+      db,
+      sql`select id, slug, title, position, metadata from collection
+          where kind = 'course' and archived_at is null order by position, id`,
+    ),
+    filter?.courses,
+    (c) => c.id,
   );
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
@@ -232,15 +280,19 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
     (r) => r.collection_id,
   );
   const modules = groupBy(
-    await rows<{ id: string; parent_id: string; slug: string; title: string; position: number; topic: string | null }>(
-      db,
-      sql`select c.id, c.parent_id, c.slug, c.title, c.position,
-                 (select m.topic_slug from collection_item m
-                  where m.collection_id = c.id and m.topic_slug is not null
-                  order by m.position limit 1) as topic
-          from collection c
-          where c.kind = 'module' and c.archived_at is null
-          order by c.parent_id, c.position, c.id`,
+    kept(
+      await rows<{ id: string; parent_id: string; slug: string; title: string; position: number; topic: string | null }>(
+        db,
+        sql`select c.id, c.parent_id, c.slug, c.title, c.position,
+                   (select m.topic_slug from collection_item m
+                    where m.collection_id = c.id and m.topic_slug is not null
+                    order by m.position limit 1) as topic
+            from collection c
+            where c.kind = 'module' and c.archived_at is null
+            order by c.parent_id, c.position, c.id`,
+      ),
+      filter?.modules,
+      (m) => m.id,
     ),
     (r) => r.parent_id,
   );
@@ -355,21 +407,24 @@ async function renderCourses(db: CatalogDatabase): Promise<ExportFile[]> {
  * order. A row with no body was imported before Track C filled the column,
  * and is refused rather than written as an empty note.
  */
-async function renderConcepts(db: CatalogDatabase): Promise<ExportFile[]> {
-  const notes = await readNoteRows(db);
+async function renderConcepts(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile[]> {
+  const notes = await readNoteRows(db, filter === undefined ? undefined : [...filter.concepts]);
   const empty = notes.filter((note) => note.body === null).map((note) => note.path);
   if (empty.length > 0) {
     throw new ExportError(
       `concepts: ${empty.length} note(s) have no body in the database, because they were imported ` +
-        `before the body was stored. Re-run \`catalog index\` (or \`catalog import <dir>\`).\n  - ${empty.join("\n  - ")}`,
+        `before the body was stored. Re-run \`catalog import [<dir>]\`.\n  - ${empty.join("\n  - ")}`,
     );
   }
   return notes.map((note) => ({ path: note.path, bytes: Buffer.from(renderNote({ ...note, body: note.body ?? "" }), "utf8") }));
 }
 
 /** `learn/sessions/<id>.md` for every session with a log: its entries, concatenated. */
-async function renderSessions(db: CatalogDatabase): Promise<ExportFile[]> {
-  return (await readLogs(db)).map((log) => ({ path: logPath(log.id), bytes: Buffer.from(log.markdown, "utf8") }));
+async function renderSessions(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile[]> {
+  return kept(await readLogs(db), filter?.sessions, (log) => log.id).map((log) => ({
+    path: logPath(log.id),
+    bytes: Buffer.from(log.markdown, "utf8"),
+  }));
 }
 
 /**
@@ -379,12 +434,16 @@ async function renderSessions(db: CatalogDatabase): Promise<ExportFile[]> {
  * cannot be exported: it was imported before Track D, and a re-import stores
  * it.
  */
-async function renderDiagrams(db: CatalogDatabase, given?: BlobStore): Promise<ExportFile[]> {
+async function renderDiagrams(db: CatalogDatabase, given?: BlobStore, filter?: RenderFilter): Promise<ExportFile[]> {
   const files: ExportFile[] = [];
   const problems: string[] = [];
-  const documents = await rows<{ slug: string; document: unknown; document_hash: string }>(
-    db,
-    sql`select slug, document, document_hash from diagram where archived_at is null order by slug`,
+  const documents = kept(
+    await rows<{ slug: string; document: unknown; document_hash: string }>(
+      db,
+      sql`select slug, document, document_hash from diagram where archived_at is null order by slug`,
+    ),
+    filter?.diagrams,
+    (d) => d.slug,
   );
   for (const row of documents) {
     const bytes = documentBytes(row.document);
@@ -394,11 +453,16 @@ async function renderDiagrams(db: CatalogDatabase, given?: BlobStore): Promise<E
     }
     files.push({ path: diagramPaths(row.slug).tldr, bytes });
   }
-  const svgs = await rows<{ path: string | null; content_hash: string | null; blob_key: string | null }>(
-    db,
-    sql`select path, content_hash, blob_key from asset
-        where kind = 'diagram_svg' and starts_with(id, ${ASSET_PREFIX.diagrams})
-        order by path`,
+  const svgPaths = filter === undefined ? undefined : new Set([...filter.diagrams].map((slug) => diagramPaths(slug).svg));
+  const svgs = kept(
+    await rows<{ path: string | null; content_hash: string | null; blob_key: string | null }>(
+      db,
+      sql`select path, content_hash, blob_key from asset
+          where kind = 'diagram_svg' and starts_with(id, ${ASSET_PREFIX.diagrams})
+          order by path`,
+    ),
+    svgPaths,
+    (svg) => svg.path ?? "",
   );
   if (svgs.length > 0) {
     const store = given ?? openBlobStore();

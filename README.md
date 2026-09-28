@@ -126,7 +126,7 @@ The app reads its courses, topics, notes and diagrams from Postgres, and nothing
 ```bash
 createdb self_learn                                 # first checkout only; a second checkout reuses it
 npm run catalog -- migrate                          # creates the tables, or brings them up to date
-npm run catalog -- index                            # reads content/, learn/ and manimkc's renders into the catalog
+npm run catalog -- import                           # reads content/, learn/ and manimkc's renders into the catalog
 for t in topics tags courses concepts sessions diagrams; do npm run catalog -- flip $t; done   # the database owns each type
 npm run catalog -- asset upload --source manimkc    # videos, captions and posters into the blob store
 ```
@@ -216,7 +216,7 @@ Three things that bite:
 
 - `npm run canvas` without `--silent` prints npm's own banner ahead of the tool's stdout, which breaks `--json` parsing. Same for `npm run learn`.
 - Exit 3 means the file saved but lints remain: read them and run again, or pass `--allow-lints`. Exit 2 means the snippet threw and nothing was written.
-- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog index` will take it.
+- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog import` will take it.
 
 ## How it works
 
