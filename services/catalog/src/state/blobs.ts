@@ -1,5 +1,6 @@
 import { asset, assetDerivation, blobObject, type OwnerScope } from "@self-learn/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { ownedBy } from "../content/scope";
 import type { CatalogDatabase } from "../db";
@@ -50,6 +51,14 @@ export interface AssetBlob {
   sha256: string;
 }
 
+/**
+ * The video a poster is derived from, joined under its own name: a poster is
+ * served for a video id, so both the poster and the video it stands for must
+ * be readable (phase 4). A readable poster of another owner's video would
+ * otherwise answer for a video the reader cannot open.
+ */
+const video = alias(asset, "video");
+
 const COLUMNS = {
   assetId: asset.id,
   key: blobObject.key,
@@ -96,6 +105,7 @@ export async function videosWithStoredPoster(
         .select({ videoId: assetDerivation.sourceAssetId })
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
+        .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
         .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
         .where(
           and(
@@ -103,6 +113,7 @@ export async function videosWithStoredPoster(
             eq(asset.kind, "poster"),
             eq(blobObject.state, "present"),
             ownedBy(asset.ownerId, scope.readable),
+            ownedBy(video.ownerId, scope.readable),
           ),
         ),
     [],
@@ -123,8 +134,16 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
         .select(COLUMNS)
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
+        .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
         .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
-        .where(and(eq(assetDerivation.sourceAssetId, videoId), eq(asset.kind, "poster"), ownedBy(asset.ownerId, scope.readable)))
+        .where(
+          and(
+            eq(assetDerivation.sourceAssetId, videoId),
+            eq(asset.kind, "poster"),
+            ownedBy(asset.ownerId, scope.readable),
+            ownedBy(video.ownerId, scope.readable),
+          ),
+        )
         .orderBy(asset.id)
         .limit(1),
     [],

@@ -306,6 +306,8 @@ export async function assetDerivations(
   id: string,
   scope: OwnerScope,
 ): Promise<AssetDerivations> {
+  // Nothing about an asset the reader cannot open, not even what hangs off it.
+  if ((await assetsByIds(db, [id], scope)).length === 0) return { sources: [], derived: [] };
   const [sourceIds, derivedIds] = await Promise.all([
     db
       .select({ id: assetDerivation.sourceAssetId })
