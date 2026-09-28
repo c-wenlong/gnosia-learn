@@ -50,6 +50,8 @@ out({
   tmpdir: process.env.TMPDIR ?? null,
   marker: process.env.STUDIO_AGENT_TEST_MARKER ?? null,
   addDirs: process.argv.filter((_, i, argv) => argv[i - 1] === "--add-dir"),
+  strictMcpConfig: process.argv.includes("--strict-mcp-config"),
+  mcpConfig: process.argv.includes("--mcp-config") ? process.argv[process.argv.indexOf("--mcp-config") + 1] : null,
 });
 out({ type: "system", subtype: "init", model: "claude-sonnet-test", apiKeySource: key ? "ANTHROPIC_API_KEY" : "none" });
 if (key) {
@@ -124,6 +126,20 @@ describe("the agent's working directories", () => {
     const { env } = await runFake("job-dirs");
     expect(env.addDirs).toEqual([scratchDir("job-dirs"), candidateDir("job-dirs")]);
     expect(env.addDirs).not.toContain(jobDir("job-dirs"));
+  });
+});
+
+describe("the agent's seal from this machine's own MCP servers", () => {
+  it("carries --strict-mcp-config and an empty --mcp-config on every spawn", async () => {
+    // D34/open question 4 of docs/STUDIO-CHAT-FIRST.md: without this seal, a
+    // spawn on this machine can load its claude.ai connectors (Gmail, Slack,
+    // Drive...) regardless of --permission-prompts none, since that refuses a
+    // call but does not stop the tool definitions riding every request.
+    const { env } = await runFake("job-mcp-seal");
+    expect(env.strictMcpConfig).toBe(true);
+    expect(env.mcpConfig).toBe('{"mcpServers":{}}');
+    expect(() => JSON.parse(env.mcpConfig as string) as unknown).not.toThrow();
+    expect(JSON.parse(env.mcpConfig as string)).toEqual({ mcpServers: {} });
   });
 });
 
