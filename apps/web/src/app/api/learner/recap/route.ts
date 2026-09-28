@@ -30,8 +30,8 @@ export const POST = handler(
     },
     countSession: optionalBoolean(body, "countSession", true),
   }),
-  async (db, { curriculumItemId, input, countSession }) => {
-    const saved = await upsertRecap(db, curriculumItemId, input, { countSession });
+  async (db, { curriculumItemId, input, countSession }, owner) => {
+    const saved = await upsertRecap(db, curriculumItemId, input, { countSession, learnerId: owner });
     return { curriculumItemId, cleared: saved === null, recap: saved };
   },
 );

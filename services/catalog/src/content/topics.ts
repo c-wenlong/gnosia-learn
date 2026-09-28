@@ -21,6 +21,7 @@ import { ASSET_PREFIX } from "../index/source";
 import { diagramPaths } from "./diagram-document";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
+import { andOwnedBy, type Owners, CLI_OWNER } from "./scope";
 import {
   type LatestRevision,
   latestRevisions,
@@ -239,12 +240,18 @@ async function latestId(db: CatalogDatabase, type: RevisionEntityType, id: strin
  * and `maps` rebuilt from the rows that hold them: the same value
  * `fileSource(root).topics()` returns for the file `catalog export` would
  * write, list for list. `topic ls` and the database reader both use it.
+ *
+ * `owners` scopes it (phase 4): a topic, a relation, a manimkc mapping, a
+ * filed concept or a module another owner holds is left out, and so is a
+ * relation whose far end is a topic the reader cannot see, since the entry
+ * would otherwise name a slug the vocabulary does not list. Omitted, every
+ * owner is read, which is what the export and `topic ls` want.
  */
-export async function readTopicEntries(db: CatalogDatabase): Promise<TopicEntry[]> {
+export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Promise<TopicEntry[]> {
   const rows = <T>(query: ReturnType<typeof sql>) => db.execute(query).then((r) => r.rows as T[]);
   const topics = await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
     sql`select slug, title, domain, summary, aliases from topic
-        where archived_at is null order by position, slug`,
+        where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, slug`,
   );
   const group = <R extends Record<string, unknown>>(list: R[], key: keyof R) => {
     const out = new Map<string, R[]>();
@@ -260,20 +267,27 @@ export async function readTopicEntries(db: CatalogDatabase): Promise<TopicEntry[
   // reader and the export can never list one topic's maps differently.
   const relations = group(
     await rows<{ from_slug: string; to_slug: string; kind: string }>(
-      sql`select from_slug, to_slug, kind from topic_relation order by from_slug, position, kind, to_slug`,
+      sql`select r.from_slug, r.to_slug, r.kind from topic_relation r
+          where true${andOwnedBy(sql`r.owner_id`, owners)}${
+            owners === undefined
+              ? sql``
+              : sql` and exists (select 1 from topic t where t.slug = r.to_slug${andOwnedBy(sql`t.owner_id`, owners)})`
+          }
+          order by r.from_slug, r.position, r.kind, r.to_slug`,
     ),
     "from_slug",
   );
   const manimkc = group(
     await rows<{ topic_slug: string; path: string }>(
-      sql`select topic_slug, path from manimkc_topic order by topic_slug, position, path`,
+      sql`select topic_slug, path from manimkc_topic
+          where true${andOwnedBy(sql`owner_id`, owners)} order by topic_slug, position, path`,
     ),
     "topic_slug",
   );
   const concepts = group(
     await rows<{ topic_slug: string; slug: string }>(
       sql`select topic_slug, slug from concept
-          where topic_slug is not null and archived_at is null
+          where topic_slug is not null and archived_at is null${andOwnedBy(sql`owner_id`, owners)}
           order by topic_slug, topic_position, slug`,
     ),
     "topic_slug",
@@ -282,7 +296,7 @@ export async function readTopicEntries(db: CatalogDatabase): Promise<TopicEntry[
     await rows<{ topic_slug: string; collection_id: string }>(
       sql`select m.topic_slug, m.collection_id from collection_item m
           join collection c on c.id = m.collection_id
-          where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null
+          where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
           order by m.topic_slug, m.topic_position, m.collection_id`,
     ),
     "topic_slug",
@@ -603,6 +617,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
   const { position, newDomain } = await placeInDomain(db, slug, domain);
   const inputs: WriteContentInput[] = [
     {
+      owner: CLI_OWNER,
       type: "topic",
       id: slug,
       op: "create",
@@ -619,6 +634,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
     const row = await liveRow(db, owner);
     const current = await relationsOf(db, owner);
     inputs.push({
+      owner: CLI_OWNER,
       type: "topic",
       id: owner,
       next: {
@@ -755,6 +771,7 @@ export async function editTopic(db: CatalogDatabase, input: EditTopicInput, by: 
     }
     const near = await nearMatches(tx, candidates, { exclude: slug });
     const result = await writeContent(tx, {
+      owner: CLI_OWNER,
       type: "topic",
       id: slug,
       next: { row: next },
@@ -812,6 +829,7 @@ export async function relateTopic(db: CatalogDatabase, input: RelateInput, by: B
       list = [...current, { toSlug: other, kind, ownerId: row.ownerId }];
     }
     return writeContent(tx, {
+      owner: CLI_OWNER,
       type: "topic",
       id: owner,
       next: { row, links: { topic_relation: relationLinks(list) } },
@@ -931,6 +949,7 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
       list = [...mine, ...paths.map((p) => ({ path: p, ownerId: row.ownerId }))];
     }
     const result = await writeContent(tx, {
+      owner: CLI_OWNER,
       type: "topic",
       id: slug,
       next: {
@@ -1019,6 +1038,7 @@ export async function archiveTopic(db: CatalogDatabase, slugInput: string, by: B
       );
     }
     return writeContent(tx, {
+      owner: CLI_OWNER,
       type: "topic",
       id: slug,
       next: { row: { ...row, archivedAt: new Date() } },
@@ -1038,6 +1058,7 @@ export async function restoreTopic(db: CatalogDatabase, slugInput: string, by: B
     if (row.archivedAt === null) throw new TopicError("invalid", `topic "${slug}" is not archived`);
     await assertTitleFree(tx, row.title, slug);
     return writeContent(tx, {
+      owner: CLI_OWNER,
       type: "topic",
       id: slug,
       next: { row: { ...row, archivedAt: null } },
@@ -1512,6 +1533,7 @@ export async function fileConceptUnderTopic(
           }
         : { ...existing, topicSlug: input.topic, topicPosition };
     return writeContent(tx, {
+      owner: CLI_OWNER,
       type: "concept",
       id: slug,
       next:

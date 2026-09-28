@@ -37,6 +37,38 @@ export const DEFAULT_P_L = 0.25;
 export const LOCAL_LEARNER_ID = "local";
 
 /**
+ * The reserved owner of shared content (phase 4 of docs/CONTENT-MIGRATION.md,
+ * D23): rows every owner may read and nobody signs in as. A learner id like
+ * any other, so `owner_id` needs no second kind of foreign key; its `learner`
+ * row is created on first write (`ensureLearner`), as `local`'s is.
+ */
+export const COMMONS_OWNER = "commons";
+
+/**
+ * Whose content one owner may read: their own and the commons. The one
+ * definition both the web app (`currentOwner()`) and the catalog's readers use,
+ * so a page and a CLI read cannot disagree about what is visible.
+ */
+export function readableOwners(owner: string): readonly string[] {
+  return owner === COMMONS_OWNER ? [COMMONS_OWNER] : [owner, COMMONS_OWNER];
+}
+
+/**
+ * Who is asking, and whose rows they may see. Every content read takes one
+ * (`dbSource`, the asset and concept queries), and every content write is
+ * stamped with `owner`.
+ */
+export interface OwnerScope {
+  readonly owner: string;
+  readonly readable: readonly string[];
+}
+
+/** The scope an owner reads with today: their own rows and the commons. */
+export function ownerScope(owner: string): OwnerScope {
+  return { owner, readable: readableOwners(owner) };
+}
+
+/**
  * Event types in the log. The `learn` CLI writes the first five; the web app
  * writes `watched`, when the learner marks a library asset watched or read
  * (payload `{ asset, kind }`, no concept).

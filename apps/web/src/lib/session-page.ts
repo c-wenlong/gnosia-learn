@@ -8,6 +8,7 @@ import type { RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
+import { currentOwner, currentScope } from "@/lib/owner";
 import {
   asksNothing,
   buildSessionPlan,
@@ -98,8 +99,9 @@ export function tutorModelConfigured(): boolean {
 
 /** Every concept's summary, for wrong options; none when the catalog cannot be read. */
 async function readSummaries(): Promise<ConceptSummary[]> {
+  const scope = await currentScope();
   try {
-    return await conceptSummaries(await catalogDatabase());
+    return await conceptSummaries(await catalogDatabase(), scope);
   } catch (error) {
     console.warn(`session: concept summaries unavailable, ${error instanceof Error ? error.message : String(error)}`);
     return [];
@@ -129,7 +131,7 @@ export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boole
 export async function loadSessionPage(workspace: ConceptWorkspace, mode: SessionMode): Promise<SessionPageData> {
   const summaries = await readSummaries();
 
-  const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb()]);
+  const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb(await currentOwner())]);
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
   const frontier = kb.frontier.flatMap((id) => {
     const c = byId.get(id);

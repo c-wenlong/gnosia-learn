@@ -2,11 +2,15 @@ import {
   concept,
   conceptCurriculumItem,
   conceptPrerequisite,
+  curriculumItem,
   indexRun,
   LOCAL_LEARNER_ID,
+  type OwnerScope,
+  readableOwners,
 } from "@self-learn/schema";
 import { asc, eq } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { masteryLabel } from "../../../../scripts/learn/lib/bkt.mjs";
 import { buildGraph, frontier, masteryOf, summarize } from "../../../../scripts/learn/lib/graph.mjs";
@@ -102,13 +106,38 @@ export function domainOf(path: string | null): string | null {
  * from a page propagates along the edges the frontier on every page is
  * computed from. The two can differ only between editing a note's `requires:`
  * and the next `learn index`, and a rebuild replays either way.
+ *
+ * Scoped (phase 4): only concepts `scope.readable` owns are nodes, so a page
+ * cannot record evidence against another owner's concept.
  */
-export async function readConceptGraph(db: CatalogDatabase): Promise<{ nodes: Map<string, unknown> }> {
+export async function readConceptGraph(
+  db: CatalogDatabase,
+  scope: OwnerScope,
+): Promise<{ nodes: Map<string, unknown> }> {
   const [concepts, prerequisites] = await Promise.all([
-    db.select({ slug: concept.slug, title: concept.title, summary: concept.summary }).from(concept),
+    scopedRead(scope.readable, (owners) =>
+      db
+        .select({ slug: concept.slug, title: concept.title, summary: concept.summary })
+        .from(concept)
+        .where(ownedBy(concept.ownerId, owners)),
+    ),
     db.select().from(conceptPrerequisite),
   ]);
-  return graphOf(concepts, prerequisites);
+  return graphOf(concepts, readableEdges(concepts, prerequisites));
+}
+
+/**
+ * The prerequisite edges between concepts the reader has, and no others: an
+ * edge to another owner's concept would put a slug the reader cannot open in
+ * a `requires` list (phase 4). Every edge survives on a database that is not
+ * scoped, since every concept is then present.
+ */
+function readableEdges<E extends { conceptSlug: string; prerequisiteSlug: string }>(
+  concepts: readonly { slug: string }[],
+  prerequisites: readonly E[],
+): E[] {
+  const present = new Set(concepts.map((row) => row.slug));
+  return prerequisites.filter((edge) => present.has(edge.conceptSlug) && present.has(edge.prerequisiteSlug));
 }
 
 /** Rows to `buildGraph`'s input, which is the shape `listConcepts()` returns. */
@@ -145,14 +174,32 @@ export async function readKnowledgeBase(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<KnowledgeBase> {
-  const [concepts, prerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
-    db.select().from(concept).orderBy(asc(concept.slug)),
+  // The learner is the owner (`owner_id` references `learner`), so the
+  // concepts they may see are their own and the commons' (phase 4).
+  const readable = readableOwners(learnerId);
+  const [concepts, allPrerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
+    scopedRead(readable, (owners) =>
+      db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(concept.slug)),
+    ),
     db.select().from(conceptPrerequisite),
-    db.select().from(conceptCurriculumItem).orderBy(asc(conceptCurriculumItem.curriculumItemId)),
+    // Links to items the reader may read, so `topics` names no other owner's item.
+    scopedRead(readable, (owners) =>
+      db
+        .select({
+          conceptSlug: conceptCurriculumItem.conceptSlug,
+          curriculumItemId: conceptCurriculumItem.curriculumItemId,
+          position: conceptCurriculumItem.position,
+        })
+        .from(conceptCurriculumItem)
+        .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
+        .where(ownedBy(curriculumItem.ownerId, owners))
+        .orderBy(asc(conceptCurriculumItem.curriculumItemId)),
+    ),
     readModel(db, learnerId),
     readReviews(db, learnerId),
     db.select().from(indexRun).where(eq(indexRun.source, "concepts")).limit(1),
   ]);
+  const prerequisites = readableEdges(concepts, allPrerequisites);
 
   const { requires, assumes } = edgeLists(prerequisites);
 

@@ -13,6 +13,10 @@ import { dbSource } from "../src/content/source";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * Track A's database readers (docs/CONTENT-MIGRATION.md, Track A): `topics`
@@ -56,13 +60,13 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
 
   it("return what the file reader returns, value for value", async () => {
     const files = fileSource(SEED);
-    const rows = dbSource(scratch.db);
+    const rows = dbSource(scratch.db, LOCAL);
     expect(await rows.topics()).toEqual(await files.topics());
     expect(await rows.tags()).toEqual(await files.tags());
   });
 
   it("hold the seed's vocabulary", async () => {
-    const topics = await dbSource(scratch.db).topics();
+    const topics = await dbSource(scratch.db, LOCAL).topics();
     const count = (pick: (t: (typeof topics)[number]) => readonly unknown[]) => topics.reduce((a, t) => a + pick(t).length, 0);
     // The seed's vocabulary (seed/README.md). The full tree's, 86 topics and
     // 294 aliases, is Track A's parity line in docs/CONTENT-MIGRATION.md and
@@ -74,7 +78,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
       manimkc: count((t) => t.maps.manimkc),
       concepts: count((t) => t.maps.concepts),
       modules: count((t) => t.maps.courses),
-      tags: (await dbSource(scratch.db).tags()).length,
+      tags: (await dbSource(scratch.db, LOCAL).tags()).length,
     }).toEqual({ topics: 5, domains: 4, aliases: 18, manimkc: 0, concepts: 11, modules: 2, tags: 2 });
   });
 
@@ -94,7 +98,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
       files,
       variable: "",
       ownership: () => contentOwnership(scratch.db),
-      db: async () => dbSource(scratch.db),
+      db: async () => dbSource(scratch.db, LOCAL),
     });
     expect(await selected.topics()).toEqual(await files.topics());
     expect(await selected.tags()).toEqual(await files.tags());

@@ -17,6 +17,12 @@ import {
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
 
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
+
 /**
  * The redirect path (docs/CONTENT-MIGRATION.md, Track E; edge case 10): a store
  * that can sign URLs is never streamed through the route. The store here is the

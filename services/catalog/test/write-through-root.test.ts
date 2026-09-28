@@ -322,6 +322,7 @@ describe.skipIf(!reachable.ok)("a file saved while a write-through is in flight"
         )
       ).rows[0]?.id;
       await writeContent(tx, {
+        owner: "local",
         type: "topic",
         id: "alpha",
         next: {

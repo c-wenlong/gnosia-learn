@@ -1,5 +1,5 @@
 import { auditBlobs, type BlobAuditResult } from "../content/blob-audit";
-import { openBlobStore } from "../content/blob";
+import { openBlobStore, ownerCaps, type OwnerCaps } from "../content/blob";
 import { ownerIdentity, describeOwner, sameOwner } from "../content/blob-owner";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -20,6 +20,8 @@ export interface BlobAuditCommandResult extends BlobAuditResult {
   blobRoot: string;
   /** Whether the root's `.owner` names the database audited; null when the root has no marker yet. */
   ownRoot: boolean | null;
+  /** The per-owner caps in force, or why they could not be read (every upload is refused until they can). */
+  caps: OwnerCaps | { error: string };
 }
 
 export async function runBlobAudit(options: { fix: boolean }): Promise<BlobAuditCommandResult> {
@@ -28,13 +30,30 @@ export async function runBlobAudit(options: { fix: boolean }): Promise<BlobAudit
   return withDatabase(async ({ db }) => {
     const result = await auditBlobs(db, store, { fix: options.fix, root: store.root });
     const self = await ownerIdentity(db);
+    let caps: BlobAuditCommandResult["caps"];
+    try {
+      caps = ownerCaps();
+    } catch (error) {
+      caps = { error: error instanceof Error ? error.message : String(error) };
+    }
     return {
       database: redactUrl(url),
       blobRoot: store.root,
       ownRoot: result.owner === null ? null : sameOwner(result.owner, self),
       ...result,
+      caps,
     };
   });
+}
+
+function formatCaps(caps: BlobAuditCommandResult["caps"]): string {
+  if ("error" in caps) return `unreadable, so every upload is refused: ${caps.error}`;
+  if (caps.bytes === null && caps.uploadsPerDay === null) return "none per owner";
+  const parts = [
+    caps.bytes === null ? null : `${caps.bytes} bytes stored`,
+    caps.uploadsPerDay === null ? null : `${caps.uploadsPerDay} uploads a day`,
+  ].filter((part) => part !== null);
+  return `${parts.join(", ")} per owner`;
 }
 
 export function formatBlobAudit(result: BlobAuditCommandResult): string {
@@ -47,7 +66,13 @@ export function formatBlobAudit(result: BlobAuditCommandResult): string {
         : `${describeOwner(result.owner)}${result.ownRoot === false ? ", not this database: its objects read as orphans here, and --fix is refused" : ""}`
     }`,
     `${result.rows} rows, ${result.objects} objects, ${result.findings.length} findings, ${result.outstanding} outstanding${result.fix ? "" : " (nothing changed; --fix acts)"}`,
+    `caps       ${formatCaps(result.caps)}`,
   ];
+  for (const usage of result.byOwner) {
+    lines.push(
+      `  ${usage.owner.padEnd(13)} ${usage.objects} objects, ${usage.bytes} bytes, ${usage.uploadsLastDay} uploaded in the last 24 hours`,
+    );
+  }
   for (const finding of result.findings) {
     const fixed = finding.fixed === undefined ? "" : ` [${finding.fixed}]`;
     lines.push(`  ${finding.kind.padEnd(13)} ${finding.key}  ${finding.detail}${fixed}`);

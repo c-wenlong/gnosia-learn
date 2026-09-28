@@ -75,6 +75,11 @@ const rowsSource: ContentSource = {
 };
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 vi.mock("@self-learn/catalog/state", () => ({
   contentOwnership: () => catalog.ownership(),

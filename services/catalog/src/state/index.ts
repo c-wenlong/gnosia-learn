@@ -98,6 +98,7 @@ export {
 } from "./events";
 export {
   assertKnownConcepts,
+  assertReadableConcepts,
   emptyModel,
   ensureEntry,
   propagateCorrect,

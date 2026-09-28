@@ -322,6 +322,7 @@ export async function putDiagram(
   const title = subject.title ?? slug;
   const inputs: WriteContentInput[] = [
     {
+      owner: ownerId,
       ...common,
       type: "diagram",
       id: slug,
@@ -341,6 +342,7 @@ export async function putDiagram(
       },
     },
     {
+      owner: ownerId,
       ...common,
       type: "asset",
       id: ids.tldr,
@@ -365,6 +367,7 @@ export async function putDiagram(
   ];
   if (svg !== null) {
     inputs.push({
+      owner: ownerId,
       ...common,
       type: "asset",
       id: ids.svg,
@@ -520,6 +523,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
     const latest = (await latestRevisions(tx, "asset", [ids.svg])).get(ids.svg);
     const [written] = await writeContents(tx, [
       {
+        owner: DIAGRAM_OWNER,
         type: "asset",
         id: ids.svg,
         base: latest?.id ?? null,

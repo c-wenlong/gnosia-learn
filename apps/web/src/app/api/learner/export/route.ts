@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readEvents, readLearnerSnapshot, readPreferences } from "@self-learn/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
-import { LEARNER_RATE_LIMIT } from "@/lib/learner-api";
+import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -27,14 +27,17 @@ export async function GET(req: Request): Promise<NextResponse> {
   const limited = enforceRateLimit(req, "learner:export", LEARNER_RATE_LIMIT);
   if (limited !== null) return limited;
 
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
+
   const exportedAt = new Date();
   let body: { learner: unknown; preferences: Record<string, unknown>; events: unknown[] };
   try {
     body = await withLearnerStore(async (db) => {
       const [learner, preferences, events] = await Promise.all([
-        readLearnerSnapshot(db),
-        readPreferences(db),
-        readEvents(db),
+        readLearnerSnapshot(db, owner),
+        readPreferences(db, owner),
+        readEvents(db, owner),
       ]);
       return { learner, preferences, events };
     });

@@ -140,6 +140,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       delete rest["createdAt"];
       delete rest["updatedAt"];
       await writeContent(two.db, {
+        owner: "local",
         type: "asset",
         id: VIDEO_ID,
         next: { row: { ...rest, title: "Retitled by an index" } },

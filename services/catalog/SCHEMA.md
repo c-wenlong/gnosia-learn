@@ -717,6 +717,28 @@ the `local` learner before the first `owner_id` column, because a database that
 was indexed and never studied has no learner row and every foreign key default
 would have failed on it.
 
+**Who reads what** (phase 4 of the plan). An owner is a learner id, and one
+owner may read its own rows and the commons', `readableOwners(owner)` in
+`@self-learn/schema`, which is `[owner, 'commons']`. `commons` is a reserved
+learner that owns shared content and never signs in; its `learner` row is
+created by the write seam on its first write, as `local`'s is by
+`ensureLearner`, and no read needs it. The filter is in the application, not in
+row-level security, which waits for a second service to read the database:
+
+| Where | What it does |
+| --- | --- |
+| `dbSource(db, scope)` and the six readers in `src/content/readers/` | Keep rows whose `owner_id` is in `scope.readable`; a link only when its far end is readable too; a session log only when `session.learner_id` is |
+| The queries in `src/state/` the web app reaches (`assets.ts`, `blobs.ts`, `topics.ts`, `notes.ts`, `conceptSummaries`, `readConceptGraph`) | Take an `OwnerScope`, required, and filter the same way. `readKnowledgeBase` and `reviewQueue` derive it from the learner they already take |
+| The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
+| `catalog export`, parity, `topic ls`, the `learn` CLI's own note reads | Read every owner, through an `owners` argument that is optional only on those internal functions |
+| `uploadBlob` (`src/content/blob.ts`) | With `SELF_LEARN_OWNER_BYTES_CAP` or `SELF_LEARN_OWNER_UPLOADS_PER_DAY` set, refuses an upload that would take its owner past either, measured from `blob_object` by the key's `<owner_id>/` prefix under a per-owner advisory lock. `catalog blob audit` prints each owner's totals |
+
+D23 of the plan decides, per type, which ids stay global and which types move
+to the commons. One limit is left on purpose and named there: `catalog import`
+is the single owner's tree and prunes what it does not produce whoever owns
+it, so it has to be restricted to the importing owner before a second owner's
+first row exists.
+
 ### Revisions
 
 `content_revision` is the history git used to give. One row per content write,

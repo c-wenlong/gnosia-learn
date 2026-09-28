@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { asset, assetDerivation, blobObject } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
 import { runImportCommand } from "../../../../../../services/catalog/src/commands/index-command";
 import { documentBytes } from "../../../../../../services/catalog/src/content/diagram-document";
@@ -25,6 +25,12 @@ import {
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
+
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 
 /**
  * The asset routes and the pages' checks once the database owns notes, logs
@@ -214,7 +220,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
 
   it("serves a note as its row renders it, with a line committed after the flip", async () => {
     const base = await noteRevision(scratch.db, "base");
-    const current = (await dbSource(scratch.db).concept("base"))?.markdown ?? "";
+    const current = (await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "";
     await commitNoteText(scratch.db, "base", current.replace(/\n$/, "\n\nA line only the row has.\n"), {
       base,
       reason: "a test commit after the flip",
@@ -225,13 +231,13 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     expect(response.headers.get("content-security-policy")).toContain("sandbox");
     const body = await response.text();
-    expect(body).toBe((await dbSource(scratch.db).concept("base"))?.markdown);
+    expect(body).toBe((await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown);
     expect(body).toContain("A line only the row has.");
     expect(response.headers.get("content-length")).toBe(String(Buffer.byteLength(body, "utf8")));
   });
 
   it("answers a Range request on row text with the slice", async () => {
-    const whole = Buffer.from((await dbSource(scratch.db).concept("base"))?.markdown ?? "", "utf8");
+    const whole = Buffer.from((await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "", "utf8");
     const response = await call(FILE, "file", NOTE_ID, { range: "bytes=0-2" });
     expect(response.status).toBe(206);
     expect(response.headers.get("content-range")).toBe(`bytes 0-2/${whole.length}`);

@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { fsStore, key as blobKey } from "@self-learn/blob";
 import { asset, blobObject, indexRun } from "@self-learn/schema";
@@ -17,6 +17,12 @@ import {
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
+
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 
 /**
  * `GET /api/assets/<id>/file` and its status route, against a scratch database

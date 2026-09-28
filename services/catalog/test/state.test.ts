@@ -53,6 +53,10 @@ import {
   seedContent,
   TOPIC_SLUG,
 } from "./state-fixture";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 const reachable = await probe();
 
@@ -533,7 +537,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("finds everything about a topic, ordered by kind then id", async () => {
-      const rows = await assetsForTopic(scratch.db, TOPIC_SLUG);
+      const rows = await assetsForTopic(scratch.db, TOPIC_SLUG, LOCAL);
       expect(rows.map((r) => r.id)).toEqual([
         ASSETS.diagram,
         ASSETS.link,
@@ -554,11 +558,11 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("finds the narrower set about a concept", async () => {
-      expect((await assetsForConcept(scratch.db, "alpha")).map((r) => r.id)).toEqual([
+      expect((await assetsForConcept(scratch.db, "alpha", LOCAL)).map((r) => r.id)).toEqual([
         ASSETS.diagram,
         ASSETS.video,
       ]);
-      expect((await assetsForConcept(scratch.db, "beta")).map((r) => r.id)).toEqual([
+      expect((await assetsForConcept(scratch.db, "beta", LOCAL)).map((r) => r.id)).toEqual([
         ASSETS.diagram,
       ]);
     });
@@ -570,7 +574,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
      * the catalog until this was fixed.
      */
     it("resolves a module through the topic it contains", async () => {
-      const rows = await assetsForCollection(scratch.db, "fx-m1");
+      const rows = await assetsForCollection(scratch.db, "fx-m1", LOCAL);
       expect(rows.map((r) => r.id)).toEqual([
         ASSETS.diagram,
         ASSETS.link,
@@ -593,7 +597,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
        * against the fixture database returns `fx:Beta` before `fx:alpha`;
        * `localeCompare` returns the reverse.
        */
-      const notes = (await assetsForCollection(scratch.db, DECK_ID))
+      const notes = (await assetsForCollection(scratch.db, DECK_ID, LOCAL))
         .filter((r) => r.kind === "note")
         .map((r) => r.id);
       expect(notes).toEqual([ASSETS.upperCase, ASSETS.lowerCase, ASSETS.pinned]);
@@ -601,7 +605,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("resolves concept members and asset members too, and dedupes", async () => {
-      const rows = await assetsForCollection(scratch.db, DECK_ID);
+      const rows = await assetsForCollection(scratch.db, DECK_ID, LOCAL);
       // `alpha` brings the video and the diagram, `beta` brings the diagram
       // again, and the deck names the pinned note directly. The diagram appears
       // once: two members sharing an asset is one asset, not two.
@@ -616,12 +620,12 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("finds the concepts an asset explains, the reverse of assetsForConcept", async () => {
-      expect(await conceptsForAsset(scratch.db, ASSETS.diagram)).toEqual(["alpha", "beta"]);
-      expect(await conceptsForAsset(scratch.db, ASSETS.video)).toEqual(["alpha"]);
+      expect(await conceptsForAsset(scratch.db, ASSETS.diagram, LOCAL)).toEqual(["alpha", "beta"]);
+      expect(await conceptsForAsset(scratch.db, ASSETS.video, LOCAL)).toEqual(["alpha"]);
       // Filed under a topic and explaining nothing is the normal case for a
       // link, and the answer is an empty list, not a throw.
-      expect(await conceptsForAsset(scratch.db, ASSETS.link)).toEqual([]);
-      expect(await conceptsForAsset(scratch.db, "fx:gone")).toEqual([]);
+      expect(await conceptsForAsset(scratch.db, ASSETS.link, LOCAL)).toEqual([]);
+      expect(await conceptsForAsset(scratch.db, "fx:gone", LOCAL)).toEqual([]);
     });
 
     it("answers for many assets in one call, leaving out the ones with no concept", async () => {
@@ -630,19 +634,19 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         ASSETS.diagram,
         ASSETS.link,
         ASSETS.video,
-      ]);
+      ], LOCAL);
       expect(out).toEqual({ [ASSETS.video]: ["alpha"], [ASSETS.diagram]: ["alpha", "beta"] });
-      expect(await conceptsForAssets(scratch.db, [])).toEqual({});
+      expect(await conceptsForAssets(scratch.db, [], LOCAL)).toEqual({});
     });
 
     it("agrees with assetsForConcept in the other direction", async () => {
-      const all = await listAssets(scratch.db);
+      const all = await listAssets(scratch.db, {}, LOCAL);
       const forward = await conceptsForAssets(
         scratch.db,
         all.map((a) => a.id),
-      );
+       LOCAL,);
       for (const slug of ["alpha", "beta", "gamma"]) {
-        const reverse = (await assetsForConcept(scratch.db, slug)).map((a) => a.id).sort();
+        const reverse = (await assetsForConcept(scratch.db, slug, LOCAL)).map((a) => a.id).sort();
         const derived = Object.entries(forward)
           .filter(([, slugs]) => slugs.includes(slug))
           .map(([id]) => id)
@@ -653,37 +657,37 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
     it("reads derivation upward for many assets at once", async () => {
       expect(
-        await derivationSources(scratch.db, [ASSETS.transcript, ASSETS.video, ASSETS.link]),
+        await derivationSources(scratch.db, [ASSETS.transcript, ASSETS.video, ASSETS.link], LOCAL),
       ).toEqual({ [ASSETS.transcript]: [ASSETS.video] });
-      expect(await derivationSources(scratch.db, [])).toEqual({});
+      expect(await derivationSources(scratch.db, [], LOCAL)).toEqual({});
     });
 
     it("returns an empty list rather than throwing for something with no assets", async () => {
-      expect(await assetsForTopic(scratch.db, "no-such-topic")).toEqual([]);
-      expect(await assetsForConcept(scratch.db, "gamma")).toEqual([]);
+      expect(await assetsForTopic(scratch.db, "no-such-topic", LOCAL)).toEqual([]);
+      expect(await assetsForConcept(scratch.db, "gamma", LOCAL)).toEqual([]);
       // The course holds the module, and membership is not transitive: `fx` has
       // no `collection_item` rows of its own.
-      expect(await assetsForCollection(scratch.db, "fx")).toEqual([]);
+      expect(await assetsForCollection(scratch.db, "fx", LOCAL)).toEqual([]);
     });
 
     it("never reaches an asset nothing points at", async () => {
       const reachable = [
-        ...(await assetsForTopic(scratch.db, TOPIC_SLUG)),
-        ...(await assetsForConcept(scratch.db, "alpha")),
-        ...(await assetsForCollection(scratch.db, "fx-m1")),
-        ...(await assetsForCollection(scratch.db, DECK_ID)),
+        ...(await assetsForTopic(scratch.db, TOPIC_SLUG, LOCAL)),
+        ...(await assetsForConcept(scratch.db, "alpha", LOCAL)),
+        ...(await assetsForCollection(scratch.db, "fx-m1", LOCAL)),
+        ...(await assetsForCollection(scratch.db, DECK_ID, LOCAL)),
       ].map((r) => r.id);
       expect(reachable).not.toContain(ASSETS.orphan);
     });
 
     it("looks assets up by id, and asks nothing for an empty list", async () => {
-      expect((await assetsByIds(scratch.db, [ASSETS.video, ASSETS.link])).map((r) => r.id)).toEqual(
+      expect((await assetsByIds(scratch.db, [ASSETS.video, ASSETS.link], LOCAL)).map((r) => r.id)).toEqual(
         [ASSETS.link, ASSETS.video],
       );
-      expect(await assetsByIds(scratch.db, [])).toEqual([]);
+      expect(await assetsByIds(scratch.db, [], LOCAL)).toEqual([]);
       // An id the catalog does not have is absent, not an error: the caller
       // asked what exists, and the answer is that this one does not.
-      expect(await assetsByIds(scratch.db, ["fx:gone"])).toEqual([]);
+      expect(await assetsByIds(scratch.db, ["fx:gone"], LOCAL)).toEqual([]);
     });
 
     /**
@@ -696,7 +700,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
      */
     describe("listAssets", () => {
       it("returns everything when no option is given, in kind-then-id order", async () => {
-        const rows = await listAssets(scratch.db);
+        const rows = await listAssets(scratch.db, {}, LOCAL);
         expect(rows.map((r) => r.id)).toEqual([
           ASSETS.diagram,
           ASSETS.link,
@@ -710,7 +714,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("attaches topic slugs without a query per row", async () => {
-        const rows = await listAssets(scratch.db);
+        const rows = await listAssets(scratch.db, {}, LOCAL);
         const byId = new Map(rows.map((r) => [r.id, r.topics]));
         // Everything asset_topic names comes back with it.
         expect(byId.get(ASSETS.video)).toEqual([TOPIC_SLUG]);
@@ -726,7 +730,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("says when each row entered the catalog, as an ISO instant", async () => {
-        const rows = await listAssets(scratch.db);
+        const rows = await listAssets(scratch.db, {}, LOCAL);
         for (const row of rows) {
           expect(typeof row.createdAt).toBe("string");
           expect(new Date(row.createdAt).toISOString()).toBe(row.createdAt);
@@ -734,7 +738,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("filters by kind", async () => {
-        const rows = await listAssets(scratch.db, { kind: "note" });
+        const rows = await listAssets(scratch.db, { kind: "note" }, LOCAL);
         expect(rows.map((r) => r.id)).toEqual([
           ASSETS.upperCase,
           ASSETS.lowerCase,
@@ -744,7 +748,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("filters by topic slug, to the asset_topic membership rather than a join that would duplicate rows", async () => {
-        const rows = await listAssets(scratch.db, { topicSlug: TOPIC_SLUG });
+        const rows = await listAssets(scratch.db, { topicSlug: TOPIC_SLUG }, LOCAL);
         expect(rows.map((r) => r.id)).toEqual([
           ASSETS.diagram,
           ASSETS.link,
@@ -756,27 +760,27 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("filters by source repo", async () => {
-        const rows = await listAssets(scratch.db, { sourceRepo: "tldrawkc" });
+        const rows = await listAssets(scratch.db, { sourceRepo: "tldrawkc" }, LOCAL);
         expect(rows.map((r) => r.id)).toEqual([ASSETS.diagram]);
       });
 
       it("combines filters with AND", async () => {
-        const rows = await listAssets(scratch.db, { kind: "link", topicSlug: TOPIC_SLUG });
+        const rows = await listAssets(scratch.db, { kind: "link", topicSlug: TOPIC_SLUG }, LOCAL);
         expect(rows.map((r) => r.id)).toEqual([ASSETS.link]);
-        expect(await listAssets(scratch.db, { kind: "video", topicSlug: "no-such-topic" })).toEqual(
+        expect(await listAssets(scratch.db, { kind: "video", topicSlug: "no-such-topic" }, LOCAL)).toEqual(
           [],
         );
       });
 
       it("pages with limit and offset, over the same order as the unpaged call", async () => {
-        const first = await listAssets(scratch.db, { limit: 2 });
+        const first = await listAssets(scratch.db, { limit: 2 }, LOCAL);
         expect(first.map((r) => r.id)).toEqual([ASSETS.diagram, ASSETS.link]);
-        const second = await listAssets(scratch.db, { limit: 2, offset: 2 });
+        const second = await listAssets(scratch.db, { limit: 2, offset: 2 }, LOCAL);
         expect(second.map((r) => r.id)).toEqual([ASSETS.upperCase, ASSETS.lowerCase]);
       });
 
       it("returns an empty list for a filter that matches nothing, rather than throwing", async () => {
-        expect(await listAssets(scratch.db, { kind: "no-such-kind" })).toEqual([]);
+        expect(await listAssets(scratch.db, { kind: "no-such-kind" }, LOCAL)).toEqual([]);
       });
 
       it("selects exactly the named ids, with their topics attached", async () => {
@@ -784,23 +788,23 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         // without the topics, which is why this option exists: a page needing
         // both had to page through the whole catalog looking for one row, and
         // answered 404 for anything past the end of that page.
-        const rows = await listAssets(scratch.db, { ids: [ASSETS.video, ASSETS.orphan] });
+        const rows = await listAssets(scratch.db, { ids: [ASSETS.video, ASSETS.orphan] }, LOCAL);
         expect(rows.map((r) => r.id).sort()).toEqual([ASSETS.orphan, ASSETS.video].sort());
         expect(rows.find((r) => r.id === ASSETS.video)?.topics).toEqual([TOPIC_SLUG]);
         expect(rows.find((r) => r.id === ASSETS.orphan)?.topics).toEqual([]);
       });
 
       it("asks for nothing when given no ids, rather than widening to everything", async () => {
-        expect(await listAssets(scratch.db, { ids: [] })).toEqual([]);
+        expect(await listAssets(scratch.db, { ids: [] }, LOCAL)).toEqual([]);
       });
 
       it("returns nothing for an id no row has", async () => {
-        expect(await listAssets(scratch.db, { ids: ["nope:not-a-row"] })).toEqual([]);
+        expect(await listAssets(scratch.db, { ids: ["nope:not-a-row"] }, LOCAL)).toEqual([]);
       });
 
       it("ANDs ids with the other filters", async () => {
         expect(
-          await listAssets(scratch.db, { ids: [ASSETS.video], kind: "note" }),
+          await listAssets(scratch.db, { ids: [ASSETS.video], kind: "note" }, LOCAL),
         ).toEqual([]);
       });
     });
@@ -812,7 +816,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
      */
     describe("assetCounts", () => {
       it("counts every kind the fixture has, and nothing it does not", async () => {
-        const counts = new Map((await assetCounts(scratch.db)).map((r) => [r.kind, r.count]));
+        const counts = new Map((await assetCounts(scratch.db, LOCAL)).map((r) => [r.kind, r.count]));
         expect(counts.get("video")).toBe(1);
         expect(counts.get("diagram_svg")).toBe(1);
         expect(counts.get("transcript")).toBe(1);
@@ -824,7 +828,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       });
 
       it("orders by kind, stably", async () => {
-        const kinds = (await assetCounts(scratch.db)).map((r) => r.kind);
+        const kinds = (await assetCounts(scratch.db, LOCAL)).map((r) => r.kind);
         expect(kinds).toEqual([...kinds].sort());
       });
     });
@@ -837,7 +841,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
    */
   describe("topicTitles", () => {
     it("resolves every slug it is given, keyed by slug", async () => {
-      expect(await topicTitles(scratch.db, [TOPIC_SLUG, OTHER_TOPIC_SLUG])).toEqual({
+      expect(await topicTitles(scratch.db, [TOPIC_SLUG, OTHER_TOPIC_SLUG], LOCAL)).toEqual({
         [TOPIC_SLUG]: "Fixture topic",
         [OTHER_TOPIC_SLUG]: "Second fixture topic",
       });
@@ -846,17 +850,17 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     it("omits a slug with no topic row rather than erroring", async () => {
       // A chip falls back to the raw slug with `titles[slug] ?? slug`, so the
       // miss has to be a missing key rather than `null` or a thrown error.
-      const titles = await topicTitles(scratch.db, [TOPIC_SLUG, "no-such-topic"]);
+      const titles = await topicTitles(scratch.db, [TOPIC_SLUG, "no-such-topic"], LOCAL);
       expect(titles).toEqual({ [TOPIC_SLUG]: "Fixture topic" });
       expect(Object.prototype.hasOwnProperty.call(titles, "no-such-topic")).toBe(false);
     });
 
     it("asks for nothing when given no slugs, rather than issuing where slug in ()", async () => {
-      expect(await topicTitles(scratch.db, [])).toEqual({});
+      expect(await topicTitles(scratch.db, [], LOCAL)).toEqual({});
     });
 
     it("returns an empty result when nothing given resolves", async () => {
-      expect(await topicTitles(scratch.db, ["no-such-topic", "also-not-a-topic"])).toEqual({});
+      expect(await topicTitles(scratch.db, ["no-such-topic", "also-not-a-topic"], LOCAL)).toEqual({});
     });
   });
 
