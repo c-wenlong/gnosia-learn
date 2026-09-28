@@ -389,7 +389,11 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
   }, 60_000);
 
   it("renames a topic in one transaction: every reference, the course file, a diagram's stamp, an open job, the alias", async () => {
-    // A diagram row stamped with the topic, as Track D will store one.
+    // A diagram row stamped with the topic, as Track D stores one. The
+    // database owns diagrams first: the diagrams import owns `diagram` rows
+    // since Track D, and while it reads files it would prune a row with no
+    // `.tldr` behind it, which is not what this test is about.
+    await runFlip({ type: "diagrams", readers: new Set(["diagrams"]) });
     const document = {
       records: [{ typeName: "document", id: "document:document", meta: { tldrawkc: { topic: "alpha", concepts: [] } } }],
     };
@@ -397,6 +401,29 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
       type: "diagram",
       id: "alpha-picture",
       next: { row: { slug: "alpha-picture", title: "A picture", topicSlug: "alpha", document, documentHash: "seeded" } },
+      base: null,
+      ...by,
+    });
+    // Its `.tldr` asset, whose hash is the document's by definition.
+    await writeContent(scratch.db, {
+      type: "asset",
+      id: "diagram:learn/assets/alpha-picture.tldr",
+      next: {
+        row: {
+          id: "diagram:learn/assets/alpha-picture.tldr",
+          kind: "diagram_source",
+          path: "learn/assets/alpha-picture.tldr",
+          url: null,
+          contentHash: "seeded",
+          bytes: 1,
+          title: "A picture",
+          sourceRepo: "self-learn",
+          blobKey: null,
+          resourceType: null,
+          ownerId: "local",
+        },
+        links: { asset_topic: [{ topicSlug: "alpha" }], asset_concept: [], asset_derivation: [] },
+      },
       base: null,
       ...by,
     });
@@ -421,6 +448,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
         "asset note:learn/concepts/testing/base.md",
         "asset note:learn/concepts/testing/derived.md",
         "diagram alpha-picture",
+        "asset diagram:learn/assets/alpha-picture.tldr",
       ].sort(),
     );
     expect(result.exported.map((e) => [e.type, e.written])).toEqual([
@@ -441,12 +469,19 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
              (select brief ->> 'topic' from job where id = ${job.job.id}) as brief,
              (select topic_slug from job where id = ${job.job.id}) as job`);
     expect(refs.rows[0]).toEqual({ concept: "zeta", module: "zeta", diagram: "zeta", stamp: "zeta", brief: "zeta", job: "zeta" });
+    const hashes = await scratch.db.execute(sql`
+      select (select document_hash from diagram where slug = 'alpha-picture') as document,
+             (select content_hash from asset where id = 'diagram:learn/assets/alpha-picture.tldr') as asset`);
+    expect(hashes.rows[0]?.asset).toBe(hashes.rows[0]?.document);
     expect(
       (await scratch.db.execute(sql`select from_slug, to_slug from topic_relation where kind = 'related'`)).rows,
     ).toEqual([{ from_slug: "beta", to_slug: "zeta" }]);
     expect(await readFile(path.join(fixture.root, "content/courses/xx1000.yaml"), "utf8")).toContain("topic: zeta");
     await expect(renameTopic(scratch.db, { from: "zeta", to: "beta" }, by)).rejects.toThrow(/topic "beta" already exists/);
     await expect(renameTopic(scratch.db, { from: "alpha", to: "omega" }, by)).rejects.toThrow(/no topic "alpha"/);
+    // Once the database owns diagrams a write reaches no file (D17); the tree
+    // is back in step with it after an export, which is what parity checks.
+    await runExport({ out: fixture.root, only: ["diagrams"] });
     await inStep();
   }, 60_000);
 

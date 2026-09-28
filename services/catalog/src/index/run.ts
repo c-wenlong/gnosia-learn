@@ -3,6 +3,7 @@ import {
   concept,
   type ContentType,
   curriculumItem,
+  diagram,
   indexRun,
   INDEX_SOURCES,
   type IndexSource,
@@ -14,6 +15,9 @@ import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import type { BlobStore } from "@self-learn/blob";
+
+import { openBlobStore, uploadBlob } from "../content/blob";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { renderType } from "../content/export";
@@ -341,6 +345,7 @@ export async function runIndex(
   let conceptCache: Promise<ReadonlySet<string>> | null = null;
   let curriculumCache: Promise<ReadonlySet<string>> | null = null;
   const assetCache = new Map<SourceRepo, Promise<ReadonlyMap<string, string>>>();
+  let diagramCache: ReturnType<IndexContext["knownDiagrams"]> | null = null;
 
   const context: IndexContext = {
     repoRoot,
@@ -369,6 +374,13 @@ export async function runIndex(
     // memory. The only caller runs after `manimkc`, whose transaction has
     // committed by then, so the rows are already there and reading them keeps
     // `--only mirrors` working without re-reading a whole manimkc checkout.
+    knownDiagrams: () => {
+      diagramCache ??= db
+        .select({ slug: diagram.slug, svgBlobKey: diagram.svgBlobKey, svgDocumentHash: diagram.svgDocumentHash })
+        .from(diagram)
+        .then((rows) => new Map(rows.map((r) => [r.slug, { svgBlobKey: r.svgBlobKey, svgDocumentHash: r.svgDocumentHash }])));
+      return diagramCache;
+    },
     knownAssets: (sourceRepo) => {
       let cached = assetCache.get(sourceRepo);
       if (cached === undefined) {
@@ -453,8 +465,21 @@ export async function runIndex(
   }
 
   const sources: SourceWrite[] = [];
+  let store: BlobStore | undefined;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, logs } = preread.get(indexer.source) ?? (await indexer.read(context));
+    const { rows, notes = [], scope, metadata, logs, blobs = [] } =
+      preread.get(indexer.source) ?? (await indexer.read(context));
+    // The bytes before the rows that name them, each upload committed on its
+    // own: a run that fails after this leaves present objects and no row
+    // pointing at them, which the next run finds already there.
+    if (blobs.length > 0) {
+      store ??= openBlobStore();
+      let uploaded = 0;
+      for (const blob of blobs) {
+        if ((await uploadBlob(db, store, blob)).uploaded) uploaded += 1;
+      }
+      notes.push(`${blobs.length} file(s) in the blob store, ${uploaded} uploaded by this run`);
+    }
     const options: Parameters<typeof writeSource>[5] = {
       scope,
       logs,
@@ -463,8 +488,8 @@ export async function runIndex(
       conceptsFollow: indexer.source === "topics" && running.has("concepts"),
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
-      // against, which `catalog export` copies concept notes, session logs
-      // and diagrams from until their tracks move the bytes into rows. The
+      // against: what `catalog flip` runs parity against, and where a diagram
+      // put writes its files through to until diagrams are flipped (D17). The
       // manimkc sources resolve against their report's `outRoot` instead.
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
       author,

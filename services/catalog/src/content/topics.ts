@@ -16,6 +16,8 @@ import {
 import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { ASSET_PREFIX } from "../index/source";
+import { diagramPaths } from "./diagram-document";
 import { sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
 import {
@@ -1095,10 +1097,16 @@ export async function renameTopic(db: CatalogDatabase, input: RenameInput, by: B
     for (const diagram of diagrams.rows) {
       const document = restampDocument(diagram.document, from, to);
       if (document === null) continue;
+      const bytes = canonicalJson(document);
       await tx.execute(sql`
         update diagram set document = ${JSON.stringify(document)}::jsonb,
-          document_hash = ${sha256(canonicalJson(document))}, updated_at = now()
+          document_hash = ${sha256(bytes)}, updated_at = now()
         where slug = ${diagram.slug}`);
+      // The `.tldr` asset's hash is the document's by definition (Track D,
+      // `content/diagram-document.ts`), so it moves with the stamp.
+      await tx.execute(sql`
+        update asset set content_hash = ${sha256(bytes)}, bytes = ${Buffer.byteLength(bytes, "utf8")}, updated_at = now()
+        where id = ${`${ASSET_PREFIX.diagrams}${diagramPaths(diagram.slug).tldr}`}`);
     }
 
     // 5. Open jobs' briefs. `job.topic_slug` followed by cascade; the brief is
