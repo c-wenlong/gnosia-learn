@@ -1,3 +1,6 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { conceptsIndexer } from "../src/index/concepts";
@@ -357,6 +360,12 @@ describe("concepts", () => {
         topicSlug: "alpha",
         topicPosition: 1,
         path: "learn/concepts/testing/base.md",
+        // The note itself, for the database to render it back (Track C).
+        domain: "testing",
+        body: "# Base\n",
+        tags: [],
+        sources: [],
+        authoredAt: null,
       },
       {
         slug: "derived",
@@ -365,6 +374,11 @@ describe("concepts", () => {
         topicSlug: "alpha",
         topicPosition: 2,
         path: "learn/concepts/testing/derived.md",
+        domain: "testing",
+        body: "# Derived\n",
+        tags: [],
+        sources: [],
+        authoredAt: null,
       },
     ]);
     expect(rows.conceptPrerequisite).toEqual([
@@ -383,6 +397,65 @@ describe("concepts", () => {
       assetId: "note:learn/concepts/testing/base.md",
       topicSlug: "alpha",
     });
+  });
+
+  it("refuses a frontmatter key the row has no column for, and a created that is not a date", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base", "late"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      "---\nid: base\ntitle: Base\nrequires: []\naliases: [b]\n---\n\n# Base\n",
+    );
+    await fixture.write("learn/concepts/testing/late.md", "---\nid: late\ncreated: last tuesday\n---\n\nbody\n");
+
+    const refusal = conceptsIndexer.read(await fixture.context());
+    await expect(refusal).rejects.toThrow(/base\.md: frontmatter key "aliases" has no column in the catalog/);
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(/late\.md: created: "last tuesday" is not a date/);
+  });
+
+  it("refuses a value the frontmatter cannot write back as it was read", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      '---\nid: base\nsummary: "said \\"hi\\": twice"\n---\n\nbody\n',
+    );
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(/summary .* does not survive being written as frontmatter/);
+  });
+
+  it("refuses a key written twice, and a value the parser would read as something else", async () => {
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base", "bond"] }]));
+    await fixture.write(
+      "learn/concepts/testing/base.md",
+      "---\nid: base\ntags: [one]\nrequires: []\ntags: [two]\n---\n\nbody\n",
+    );
+    await fixture.write(
+      "learn/concepts/testing/bond.md",
+      "---\nid: bond\ntitle: 007\ntags: [x, 1.50]\nsources: one\n  - two\ncreated: [2026-08-18T01:45:41.367Z]\n  - x\n---\n\nbody\n",
+    );
+
+    const refusal = conceptsIndexer.read(await fixture.context()).catch((error: Error) => error.message);
+    const message = await refusal;
+    expect(message).toMatch(/base\.md: frontmatter "tags" written more than once/);
+    expect(message).toMatch(/bond\.md: title: 007 would be read as "7"/);
+    expect(message).toMatch(/bond\.md: tags \["x","1\.50"\] would be read as \["x","1\.5"\]/);
+    expect(message).toMatch(/bond\.md: sources has a value on its own line and a list under it/);
+    expect(message).toMatch(/bond\.md: created is written as a list, and a note's created is one value/);
+
+    // An inline list with items under it is one list, and is kept whole.
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["base"] }]));
+    await fixture.write("learn/concepts/testing/base.md", "---\nid: base\ntags: [one]\n  - two\n---\n\nbody\n");
+    await rm(path.join(fixture.root, "learn/concepts/testing/bond.md"));
+    const { rows } = await conceptsIndexer.read(await fixture.context());
+    expect(rows.concept?.[0]).toMatchObject({ slug: "base", tags: ["one", "two"] });
+
+    // Quoted, they parse as written, but the writer puts them back bare, so
+    // the round trip refuses them instead.
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["bond"] }]));
+    await rm(path.join(fixture.root, "learn/concepts/testing/base.md"));
+    await fixture.write("learn/concepts/testing/bond.md", '---\nid: bond\ntitle: "007"\n---\n\nbody\n');
+    await expect(conceptsIndexer.read(await fixture.context())).rejects.toThrow(/title "007" does not survive being written as frontmatter/);
   });
 
   it("refuses a note with no topic in the vocabulary", async () => {

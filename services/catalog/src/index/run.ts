@@ -458,7 +458,7 @@ export async function runIndex(
   const sources: SourceWrite[] = [];
   let store: BlobStore | undefined;
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, blobs = [] } = await indexer.read(context);
+    const { rows, notes = [], scope, metadata, logs, blobs = [] } = await indexer.read(context);
     // The bytes before the rows that name them, each upload committed on its
     // own: a run that fails after this leaves present objects and no row
     // pointing at them, which the next run finds already there.
@@ -472,6 +472,7 @@ export async function runIndex(
     }
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
+      logs,
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs

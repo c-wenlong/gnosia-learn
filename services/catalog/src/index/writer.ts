@@ -39,8 +39,9 @@ import { readSnapshots, type SnapshotRead } from "../content/snapshot";
 import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
+import { importLogs, type ImportedLog } from "../content/session-logs";
 import { keepBlobKeys } from "./blob-keys";
-import { IndexError } from "./errors";
+import { IndexError, IndexErrors } from "./errors";
 import type { Indexer, ReplaceScope, SourceRows } from "./source";
 
 /** Postgres SQLSTATE for a foreign key violation. */
@@ -261,6 +262,8 @@ export async function writeSource(
      * it), and then a pruned tag a course still wears is refused.
      */
     tagLinksRewritten?: boolean;
+    /** Session logs to append, for the sessions source (`importLogs`). */
+    logs?: readonly ImportedLog[];
   } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
@@ -387,6 +390,19 @@ export async function writeSource(
       if (batch.length > 0) record(table, written, batch.length);
       const cleared = clearedLinks[name];
       if (cleared !== undefined) record(table, deleted, Math.max(0, cleared - batch.length));
+    }
+
+    // 5b. Session logs: what each file holds beyond the entries stored. The
+    //     table is append-only, so this appends or refuses; it never replaces.
+    if (options.logs !== undefined) {
+      const logs = await importLogs(tx, options.logs);
+      if (logs.problems.length > 0) {
+        const problems = new IndexErrors();
+        for (const problem of logs.problems) problems.add(problem);
+        problems.throwIfAny(root);
+      }
+      if (logs.appended > 0) written["session_log_entry"] = logs.appended;
+      if (logs.sessions > 0) written["session"] = logs.sessions;
     }
 
     // 6. One `import` revision per entity whose snapshot changed: what it

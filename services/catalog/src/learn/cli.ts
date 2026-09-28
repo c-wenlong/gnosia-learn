@@ -30,6 +30,7 @@
  */
 
 import fs from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 
@@ -114,13 +115,13 @@ import {
   sessionPath,
   writeConcept,
 } from "./files";
-import { kbDir, mapFile, rel, repoRoot } from "./paths";
+import { conceptsDir, kbDir, mapFile, rel, repoRoot } from "./paths";
 import { replayReviews } from "./replay";
 import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { FileLockError } from "./file-lock";
 import { checkConceptTopic, fileConceptUnderTopic, TopicError } from "../content/topics";
 import { WriteThroughError } from "../content/write-through";
-import { parseFrontmatter, readList, readText } from "../index/frontmatter";
+import { NoteError, readNote } from "../content/notes";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
 class CliError extends Error {}
@@ -518,19 +519,29 @@ commands.concept = async ({ values, positionals }, session) => {
         // module's topic does not map, so the listing cannot go in ahead of
         // it. `concept.topic_slug` through the seam, and topics.yaml
         // rewritten from the rows, whose `maps.concepts` is that column.
-        const { data } = parseFrontmatter(await fs.readFile(file, "utf8"));
+        // Read back as the concepts indexer reads it, so the row written
+        // here is the row that index would write, body included.
+        const note = readNote(await fs.readFile(file, "utf8"), rel(file), path.basename(file, ".md"));
+        const folder = path.relative(conceptsDir(), path.dirname(file));
         await fileConceptUnderTopic(
           await session.db(),
           {
             concept: id,
             topic: topicSlug,
             row: {
-              title: readText(data, "title") ?? id,
-              summary: readText(data, "summary"),
+              title: note.title,
+              summary: note.summary,
               path: rel(file),
               prerequisites: (["requires", "assumes"] as const).flatMap((kind) =>
-                readList(data, kind).map((slug) => ({ slug, kind })),
+                note[kind].map((slug) => ({ slug, kind })),
               ),
+              note: {
+                domain: folder === "" ? null : folder,
+                body: note.body,
+                tags: note.tags,
+                sources: note.sources,
+                authoredAt: note.created,
+              },
             },
           },
           {
@@ -568,7 +579,8 @@ commands.concept = async ({ values, positionals }, session) => {
           error instanceof FileLockError ||
           error instanceof CourseEditError ||
           error instanceof ContentError ||
-          error instanceof IndexError
+          error instanceof IndexError ||
+          error instanceof NoteError
         ) {
           fail(`${rel(file)} was written, but it is not in the catalog: ${error.message}`);
         }

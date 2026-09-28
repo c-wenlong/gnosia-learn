@@ -62,8 +62,10 @@ describe("dbSource", () => {
       .filter((method) => READERS[method].ready)
       .map((method) => METHOD_TYPES[method]);
     expect([...DB_READERS].sort()).toEqual(ready.sort());
-    // Track A's two, since docs/CONTENT-MIGRATION.md Track A, and Track D's.
+    // Track A's two, since docs/CONTENT-MIGRATION.md Track A.
     expect(DB_READERS.has("topics") && DB_READERS.has("tags")).toBe(true);
+    // Track B's (test/courses-reader.test.ts).
+    expect(DB_READERS.has("courses")).toBe(true);
     expect(READERS.diagram.ready).toBe(true);
   });
 

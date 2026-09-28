@@ -104,9 +104,13 @@ export function note(fields: {
 }): string {
   const lines = ["---", `id: ${fields.id}`, `title: ${fields.title ?? fields.id}`];
   if (fields.summary !== undefined) lines.push(`summary: ${fields.summary}`);
+  // The layout a note's row renders (`renderNote`): `assumes` only when it
+  // lists something, `sources` always. A fixture written this way is its own
+  // export, byte for byte.
   lines.push(`requires: [${(fields.requires ?? []).join(", ")}]`);
-  lines.push(`assumes: [${(fields.assumes ?? []).join(", ")}]`);
+  if ((fields.assumes ?? []).length > 0) lines.push(`assumes: [${(fields.assumes ?? []).join(", ")}]`);
   lines.push(`tags: [${(fields.tags ?? []).join(", ")}]`);
+  lines.push("sources: []");
   // The retired key, written only when a case asks for it, to watch it refused.
   if (fields.topics !== undefined) lines.push(`topics: [${fields.topics.join(", ")}]`);
   lines.push("---", "", fields.body ?? `# ${fields.title ?? fields.id}`, "");
