@@ -1096,6 +1096,20 @@ on the page from rows and not from files. Not moved here: the raw file route
 `/api/assets/{id}/file` still serves a note's or a log's file; it is Track E's
 route, and phase 2 removes the files it would serve.
 
+**Built, the contract migration (PR 4 of the track).** `0012_concept_topic_not_null`:
+`concept.topic_slug` is `NOT NULL`, and its foreign key `RESTRICT` rather than
+`SET NULL` (which could now only fail). A hand-written block ahead of
+drizzle's output counts the concepts with no topic, archived ones included,
+and raises with every slug. `catalog doctor` lists the same rows and says
+whether the constraint is in force, and now reports in full on a database
+behind only on a migration after the expand. The owner's `self_learn` has no
+such row (0 of 32, counted read-only on 2026-09-28), so it will apply. A
+topic dropped in the same edit that moves its concepts or removes their notes
+is held untouched by the topics source, emptied by the concepts source, and
+deleted straight after it in the same `catalog index` (`pruneHeldTopics`);
+with the concepts source not running (the database owns concepts) the drop is
+refused by name before anything is written.
+
 ### Track D: diagrams
 
 **Owns:** `services/catalog/src/content/diagrams.ts`, the studio's Accept,

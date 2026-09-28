@@ -31,7 +31,7 @@ import { tagsIndexer } from "./tags";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
 import { loadVocabulary } from "./vocabulary";
-import { writeSource, type SourceWrite } from "./writer";
+import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
 
 /**
  * Running the indexers: dependency order, one transaction each.
@@ -443,12 +443,24 @@ export async function runIndex(
     asIndexError(() => loadCourses({ root: repoRoot, topics: vocabulary.entries }));
   }
 
+  // The notes are read before anything is written when the topics source
+  // runs ahead of them: a topic that source holds for the concepts source to
+  // empty (see `conceptsFollow`) must not be left waiting on notes that were
+  // going to be refused anyway.
+  const preread = new Map<IndexSource, Awaited<ReturnType<Indexer["read"]>>>();
+  if (running.has("topics") && running.has("concepts")) {
+    preread.set("concepts", await conceptsIndexer.read(context));
+  }
+
   const sources: SourceWrite[] = [];
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata, logs } = await indexer.read(context);
-    const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
+    const { rows, notes = [], scope, metadata, logs } = preread.get(indexer.source) ?? (await indexer.read(context));
+    const options: Parameters<typeof writeSource>[5] = {
       scope,
       logs,
+      // A topic dropped while concepts are filed under it is kept for the
+      // concepts source to empty, when that source runs later in this import.
+      conceptsFollow: indexer.source === "topics" && running.has("concepts"),
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs
@@ -457,8 +469,21 @@ export async function runIndex(
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
       author,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
-    });
+    };
+    const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
+
+    // The concepts source has now moved or pruned what was filed under the
+    // topics the topics source held, so they go, before any later source
+    // runs: a failure further on cannot leave them standing.
+    const topicsWrite = sources.find((s) => s.source === "topics");
+    if (indexer.source === "concepts" && topicsWrite?.deferred !== undefined) {
+      const pruned = await pruneHeldTopics(db, topicsWrite.deferred, {
+        author,
+        reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(topicsIndexer.root(context))} (topics)`,
+      });
+      foldPrune(topicsWrite, pruned);
+    }
 
     if (indexer.source === "courses") {
       for (const row of rows.curriculumItem ?? []) producedCurriculumItems.add(row.id);
@@ -489,6 +514,17 @@ export async function runIndex(
       deleted: sources.reduce((a, s) => a + s.totalDeleted, 0),
     },
   };
+}
+
+/** Count the held topics' prune in the topics source's report, which is where it belongs. */
+function foldPrune(into: SourceWrite, pruned: { deleted: string[]; revisions: number }): void {
+  if (pruned.deleted.length > 0) {
+    into.deleted["topic"] = (into.deleted["topic"] ?? 0) + pruned.deleted.length;
+    into.deletedKeys.push(...pruned.deleted.map((slug) => `topic ${slug}`));
+    into.totalDeleted += pruned.deleted.length;
+  }
+  if (pruned.revisions > 0) into.revisions["topic"] = (into.revisions["topic"] ?? 0) + pruned.revisions;
+  delete into.deferred;
 }
 
 /**
