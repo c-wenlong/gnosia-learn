@@ -474,17 +474,18 @@ So the job should refresh the clone first. A wrapper the plist runs in place
 of node: `mkdir -p ~/.self-learn/bin`, save this as
 `~/.self-learn/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
 from `which node` on its `NODE=` line, since launchd hands the script no
-`PATH` worth trusting:
+`PATH` worth trusting (npm is taken from the same directory):
 
 ```zsh
 #!/bin/zsh
 set -u
 NODE=/opt/homebrew/bin/node
+NPM="$(dirname "$NODE")/npm"
 cd "$HOME/.self-learn/checkout" || exit 2
 before=$(git rev-parse HEAD)
 if git pull -q --ff-only; then
   if [ "$before" != "$(git rev-parse HEAD)" ]; then
-    npm ci --silent || { echo "npm ci failed; back to ${before:0:7}"; git reset -q --hard "$before"; }
+    "$NPM" ci --silent || { echo "npm ci failed; back to ${before:0:7}"; git reset -q --hard "$before"; }
   fi
 else
   echo "git pull failed; exporting with $(git rev-parse --short HEAD)"
