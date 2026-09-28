@@ -253,7 +253,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
   });
 });
 
-describe("a root in another checkout of the repository", () => {
+describe("a root in another checkout", () => {
   let base: string;
 
   beforeAll(async () => {
@@ -265,8 +265,10 @@ describe("a root in another checkout of the repository", () => {
     await git(main, "init", "-q");
     await git(main, "commit", "-q", "--allow-empty", "-m", "first");
     await git(main, "worktree", "add", "-q", path.join(base, "other"));
+    await run("git", ["clone", "-q", main, path.join(base, "clone")]);
     await mkdir(path.join(base, "main", "content"));
     await mkdir(path.join(base, "other", "content"));
+    await mkdir(path.join(base, "clone", "content"));
     await mkdir(path.join(base, "loose"));
   });
 
@@ -278,6 +280,11 @@ describe("a root in another checkout of the repository", () => {
     const found = await otherCheckout(path.join(base, "other", "content"), path.join(base, "main"));
     expect(found).not.toBeNull();
     expect(path.basename(found ?? "")).toBe("other");
+  });
+
+  it("is named when it lies in a separate clone, which shares no git directory with this one", async () => {
+    const found = await otherCheckout(path.join(base, "clone", "content"), path.join(base, "main"));
+    expect(path.basename(found ?? "")).toBe("clone");
   });
 
   it("is allowed in the checkout this code runs from, and outside any checkout", async () => {

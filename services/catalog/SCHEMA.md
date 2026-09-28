@@ -819,8 +819,9 @@ beside `index_run.metadata.root`, which database it ran against
 `catalog_instance` says `primary` like the original's, so the oid is what
 tells them apart. A write-through, `catalog flip`'s parity and `catalog
 export`'s hash all use a root only when this database recorded it, and a
-write-through also refuses a root inside another git worktree of this
-repository (`src/content/import-root.ts`). A copy therefore writes no file
+write-through also refuses a root inside any git checkout other than the
+one running it, another worktree or a separate clone
+(`src/content/import-root.ts`). A copy therefore writes no file
 until an import run against the copy itself names its own tree; an import
 that skips a flipped type because its files are the database's own export
 records that tree as the type's root too.

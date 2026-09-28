@@ -160,7 +160,11 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       );
     }
     const root = recorded.root;
-    const checked = await parity(tx, root, [type]);
+    // Read once: parity compares these bytes and the hash recorded below is
+    // of these bytes, so a save landing after the read cannot be recorded as
+    // an export that passed.
+    const disk = await readTypeFiles(root, type);
+    const checked = await parity(tx, root, [type], { [type]: disk });
     const result = checked.types[0];
     const mismatches = checked.mismatches;
     const report: ParityRecord = {
@@ -220,7 +224,6 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     // export into the tree. They may differ from a fresh export in bytes only
     // (a `.tldr` in tldrawkc's key order, a comment): those are listed, and
     // the next export into the tree rewrites them.
-    const disk = await readTypeFiles(root, type);
     const rendered = new Map((await renderType(tx, type)).map((f) => [f.path, f.bytes]));
     const rewrites = [...new Set([...disk.map((f) => f.path), ...rendered.keys()])]
       .filter((p) => {

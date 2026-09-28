@@ -748,9 +748,9 @@ list above, and why:
   owner's working tree (reproduced). Each import now records which database
   ran it beside the root (`metadata.database`, name and `pg_database` oid,
   which a copy never shares), and `src/content/import-root.ts` refuses a root
-  another database recorded, or one in another git worktree of this
-  repository, naming the command that fixes it: `catalog index` against the
-  copy. An import that skips a flipped type because its files are the
+  another database recorded, or one in any git checkout other than the one
+  running the command (another worktree or a separate clone), naming the
+  command that fixes it: `catalog index` against the copy. An import that skips a flipped type because its files are the
   database's export records that tree as the root too, so a copy imported
   from an export folder writes there. This departs from the review's
   suggested check of `catalog_instance.role` and `primary_host`: neither

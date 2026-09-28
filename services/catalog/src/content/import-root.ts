@@ -26,12 +26,13 @@ import type { ExportType } from "./layout";
  * a copy writes no file until an import run against the copy itself says
  * where its files are.
  *
- * **Nor a root in another checkout of this repository.** A root that sits in
- * a git worktree of this repository other than the one this code runs from
- * is someone else's working tree: an agent in its own worktree, pointed at
- * the owner's database, would otherwise rewrite the owner's checkout. A root
- * outside any checkout of this repository (a temp tree, an export folder) is
- * the owner of that database's business, and is written.
+ * **Nor a root in another checkout.** A root that sits in a git checkout
+ * other than the one this code runs from (another worktree, or a separate
+ * clone) is someone else's working tree: an agent in its own checkout,
+ * pointed at the owner's database, would otherwise rewrite the owner's. A
+ * root outside every git checkout (a temp tree, an export folder) is the
+ * owner of that database's business, and is written; one git cannot place is
+ * refused.
  */
 
 export class WriteThroughError extends Error {
@@ -101,38 +102,43 @@ interface Checkout {
   common: string;
 }
 
-function checkoutOf(directory: string): Checkout | null {
+/**
+ * The git checkout `directory` lies in; `null` when it lies in none; or
+ * `"unknown"` when git could not say (not installed, or failed some other
+ * way), which a caller must not take for "in none".
+ */
+function checkoutOf(directory: string): Checkout | null | "unknown" {
   try {
     const [top, common] = execFileSync("git", ["-C", directory, "rev-parse", "--show-toplevel", "--git-common-dir"], {
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     })
       .trim()
       .split("\n");
-    if (top === undefined || common === undefined) return null;
+    if (top === undefined || common === undefined) return "unknown";
     return { top: path.resolve(top), common: path.resolve(directory, common) };
-  } catch {
-    return null;
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? "");
+    return /not a git repository/i.test(stderr) ? null : "unknown";
   }
 }
 
 /**
- * The top of the other checkout of this repository that `root` lies in, or
- * null when it lies in `from`'s own checkout, in no checkout of this
- * repository, or git cannot say. `from` is the checkout this code runs from.
+ * Why a write may not rewrite files under `root`, or null when it may: the
+ * root lies in no git checkout (a temp tree, an export folder), or in the
+ * checkout this code runs from (`from`). A root in any other checkout, a
+ * worktree of this repository or a separate clone, is someone else's working
+ * tree; so is one git cannot place.
  */
 export async function otherCheckout(root: string, from: string = REPO_ROOT): Promise<string | null> {
-  const here = checkoutOf(from);
   const there = checkoutOf(root);
-  if (here === null || there === null) return null;
-  const [hereCommon, thereCommon, hereTop, thereTop] = await Promise.all([
-    resolvedPath(here.common),
-    resolvedPath(there.common),
-    resolvedPath(here.top),
-    resolvedPath(there.top),
-  ]);
-  if (hereCommon !== thereCommon || hereTop === thereTop) return null;
-  return thereTop;
+  if (there === null) return null;
+  if (there === "unknown") return `a directory git could not inspect (${root})`;
+  const here = checkoutOf(from);
+  if (here !== null && here !== "unknown" && (await resolvedPath(here.top)) === (await resolvedPath(there.top))) {
+    return null;
+  }
+  return there.top;
 }
 
 /**
@@ -170,9 +176,9 @@ export async function writableRoot(db: CatalogDatabase, type: ExportType): Promi
   const other = await otherCheckout(recorded.root);
   if (other !== null) {
     throw new WriteThroughError(
-      `${type} was last imported from ${recorded.root}, which is in another checkout of this repository ` +
-        `(${other}), not in the one running this command (${REPO_ROOT}). Writing through would rewrite ` +
-        `that checkout's files. Run this from ${other}, or import this checkout first.`,
+      `${type} was last imported from ${recorded.root}, which is in ${other}, not in the checkout running ` +
+        `this command (${REPO_ROOT}). Writing through would rewrite someone else's working tree. Run this ` +
+        `from that checkout, or import this one first.`,
     );
   }
   return recorded.root;
