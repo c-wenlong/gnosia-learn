@@ -11,9 +11,11 @@ import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
 const readConceptWorkspace = vi.hoisted(() => vi.fn());
 const completeWithFallback = vi.hoisted(() => vi.fn());
 const readTutorStyle = vi.hoisted(() => vi.fn());
+const getCourses = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
 vi.mock("@/lib/settings", () => ({ readTutorStyle }));
+vi.mock("@/data/courses", () => ({ getCourses }));
 vi.mock("@/lib/agent/providers", () => ({
   completeWithFallback,
   availableProviderSummary: () => [],
@@ -156,5 +158,29 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     const res = await call({ messages: [] });
     expect(res.status).toBe(400);
     expect(String(res.json.error)).toContain("courseSlug, moduleSlug, topicId");
+  });
+
+  it("answers the topic path's refused course read with a 503 body, not a bare 500", async () => {
+    const { ContentUnavailableError } = await import("@/data/source");
+    const topic = { courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1", messages: [{ role: "user", content: "hi" }] };
+
+    getCourses.mockRejectedValueOnce(
+      new ContentUnavailableError("not-flipped", "courses", "The web app reads courses from the database only. Run `npm run catalog -- flip courses`."),
+    );
+    const notFlipped = await call(topic);
+    expect(notFlipped.status).toBe(503);
+    expect(notFlipped.json.code).toBe("CONTENT_NOT_FLIPPED");
+    expect(String(notFlipped.json.error)).toContain("flip courses");
+
+    getCourses.mockRejectedValueOnce(new ContentUnavailableError("unreachable", null, "connect ECONNREFUSED 127.0.0.1:5432"));
+    const down = await call(topic);
+    expect(down.status).toBe(503);
+    expect(down.json.code).toBe("CONTENT_UNAVAILABLE");
+    // The driver's words stay in the server log.
+    expect(String(down.json.error)).not.toContain("ECONNREFUSED");
+
+    getCourses.mockResolvedValueOnce([]);
+    expect((await call(topic)).status).toBe(404);
+    expect(completeWithFallback).not.toHaveBeenCalled();
   });
 });

@@ -12,7 +12,7 @@ import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCard
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
 import { buildConceptSessionContext, tutorStyleLabel } from "@/lib/agent/prompt";
-import { loadFileAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
+import { loadAssetAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
@@ -75,10 +75,9 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
   const nextReview = w.review ? dueLabel(w.review.due, new Date(), timeZone).label : null;
 
   // Pictures: an asset row's thumbnail and the note's `![[embeds]]`, decided
-  // on the server exactly as the library decides them, so neither renders a
-  // broken image when the file route is off or a file is gone. Per row: an
-  // SVG in the blob store shows with the switch off, as the route serves it.
-  const access = await loadFileAccess(w.assets);
+  // on the server exactly as the library decides them, per row, so neither
+  // renders a broken image for something that was never uploaded.
+  const access = await loadAssetAccess(w.assets);
   const assets: StudioAsset[] = w.assets
     .filter((a) => !isCompanionKind(a.kind))
     .map((a) => ({ ...a, thumbnail: thumbnailFor(a, access) }));

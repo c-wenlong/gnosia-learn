@@ -6,10 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  ASSET_FILES_ENV,
-  assetFilesEnabled,
   BYTE_QUEUE,
-  contains,
   contentTypeFor,
   parseRange,
   safeFilename,
@@ -20,8 +17,8 @@ import {
  * The parts of the asset file route that need no database and no filesystem.
  *
  * They are here rather than folded into the route suite because the route
- * suite skips itself without Postgres, and range arithmetic and a containment
- * check are exactly the things that should still be a gate on a laptop with
+ * suite skips itself without Postgres, and range arithmetic and header
+ * hygiene are exactly the things that should still be a gate on a laptop with
  * the database down.
  */
 
@@ -57,25 +54,6 @@ describe("parseRange", () => {
     expect(parseRange("bytes=-0", 100)).toEqual({ kind: "unsatisfiable" });
     // An empty file satisfies nothing, and would otherwise compute 0..-1.
     expect(parseRange("bytes=0-", 0)).toEqual({ kind: "unsatisfiable" });
-  });
-});
-
-describe("contains", () => {
-  const root = path.resolve("/data/out");
-
-  it("accepts a path under the root and rejects the root itself", () => {
-    expect(contains(root, path.join(root, "algorithms", "a.mp4"))).toBe(true);
-    expect(contains(root, root)).toBe(false);
-  });
-
-  it("rejects a sibling whose name merely starts with the root", () => {
-    // The case a `startsWith` test gets wrong, which is why there is not one.
-    expect(contains(root, path.resolve("/data/out-old/a.mp4"))).toBe(false);
-  });
-
-  it("rejects anything that climbs out", () => {
-    expect(contains(root, path.resolve(root, "../secret.mp4"))).toBe(false);
-    expect(contains(root, path.resolve("/etc/passwd"))).toBe(false);
   });
 });
 
@@ -146,16 +124,5 @@ describe("webStreamFrom", () => {
 
   it("measures the queue in bytes", () => {
     expect(BYTE_QUEUE.size(new Uint8Array(4_096))).toBe(4_096);
-  });
-});
-
-describe("assetFilesEnabled", () => {
-  it("is off unless a machine says otherwise", () => {
-    expect(assetFilesEnabled({})).toBe(false);
-    expect(assetFilesEnabled({ [ASSET_FILES_ENV]: "" })).toBe(false);
-    expect(assetFilesEnabled({ [ASSET_FILES_ENV]: "false" })).toBe(false);
-    expect(assetFilesEnabled({ [ASSET_FILES_ENV]: "0" })).toBe(false);
-    expect(assetFilesEnabled({ [ASSET_FILES_ENV]: "1" })).toBe(true);
-    expect(assetFilesEnabled({ [ASSET_FILES_ENV]: "true" })).toBe(true);
   });
 });

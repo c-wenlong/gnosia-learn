@@ -5,7 +5,6 @@ import path from "node:path";
 import {
   asset,
   assetJob,
-  CANDIDATES_DIR,
   canTransition,
   COST_SOURCES,
   job as jobTable,
@@ -212,7 +211,11 @@ export interface BriefDocument {
   topic?: string;
   /** The committed path the job intends to land on, and the lease key. */
   target?: string;
-  /** Optional. Defaults to `learn/assets/.candidates/<stem>.tldr`. */
+  /**
+   * Optional. Defaults to `jobs/<id>/candidate/<name>.tldr`, the job's own
+   * workspace relative to the runner's `STUDIO_HOME`, and when given must be
+   * exactly that.
+   */
   candidate?: string;
   /** Required, and supplied by the caller: this is what makes a retry safe. */
   idempotencyKey?: string;
@@ -256,38 +259,52 @@ export function briefTarget(given: string): string {
   return normalised;
 }
 
-/** Where a job writes before anyone accepts it, derived from its target. */
-export function candidateFor(targetPath: string): string {
-  return `${CANDIDATES_DIR}/${path.posix.basename(targetPath)}`;
+/** A job id: one path segment, since it names the job's workspace. A UUID passes. */
+const JOB_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+
+/**
+ * Where a job writes before anyone accepts it: `jobs/<id>/candidate/<name>`,
+ * relative to the runner's `STUDIO_HOME`.
+ *
+ * Derived from the job's id and its target, because the runner writes nowhere
+ * else: each job draws in its own workspace (phase 2 of
+ * docs/CONTENT-MIGRATION.md), so no two jobs share a candidate and none lives
+ * in the tree. Relative rather than absolute because `STUDIO_HOME` is the
+ * runner's to set and move, and an absolute path would put this machine's home
+ * directory into a database that moves to the cloud at go-live. The same shape
+ * as a manimkc asset's `out/...` path, which is relative to a data root the
+ * catalog does not own either.
+ *
+ * Rows written before the move keep `learn/assets/.candidates/<name>`, as
+ * history: nothing reads this column to find a file.
+ */
+export function candidateFor(jobId: string, targetPath: string): string {
+  return path.posix.join("jobs", jobId, "candidate", path.posix.basename(targetPath));
 }
 
 /**
- * A candidate path the job is allowed to write to.
+ * A candidate path the job is allowed to write to, which is exactly one.
  *
- * Held to the same containment rule as the target, and for a stronger reason:
- * the candidate directory is the *only* place the job's permission file lets it
- * write, so a stored path outside it is either a mistake or a job describing a
- * write it should never have been able to make. An absolute path or one
- * escaping the repo is refused rather than normalised.
+ * Held to equality with {@link candidateFor} rather than to a containment rule,
+ * because the path is fully determined by the job: anything else is either a
+ * mistake or a job describing a write outside its own workspace, which its
+ * permission file should never have let it make. An absolute path is refused
+ * rather than trimmed, since the catalog cannot tell a runner's `STUDIO_HOME`
+ * from any other directory that happens to end the same way.
  */
-export function briefCandidate(given: string, targetPath: string): string {
+export function briefCandidate(given: string, jobId: string, targetPath: string): string {
   const cleaned = given.trim().replaceAll("\\", "/");
   const normalised = path.posix.normalize(cleaned);
-  if (path.isAbsolute(normalised) || normalised.startsWith("..")) {
+  const wanted = candidateFor(jobId, targetPath);
+  if (path.posix.isAbsolute(normalised)) {
     throw new JobError(
-      `"${given}" is not a repo-relative path. A candidate lives in ${CANDIDATES_DIR}/.`,
+      `"${given}" is absolute. A candidate is recorded relative to the runner's STUDIO_HOME: ${wanted}.`,
     );
   }
-  if (path.posix.dirname(normalised) !== CANDIDATES_DIR) {
+  if (normalised !== wanted) {
     throw new JobError(
-      `"${normalised}" is not in ${CANDIDATES_DIR}/, which is the only directory a job may ` +
-        `write to. Nothing under ${ASSETS_DIR}/ changes until a person accepts.`,
-    );
-  }
-  const wanted = path.posix.extname(targetPath);
-  if (path.posix.extname(normalised) !== wanted) {
-    throw new JobError(
-      `"${normalised}" does not end in ${wanted}, so it is not a candidate for ${targetPath}.`,
+      `"${normalised}" is not this job's candidate. Job ${jobId} writes ${wanted}, in its own ` +
+        `workspace, and nowhere else; nothing under ${ASSETS_DIR}/ changes until a person accepts.`,
     );
   }
   return normalised;
@@ -332,10 +349,16 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
   const topicSlug = asString(document.topic, "topic");
   const targetPath = briefTarget(asString(document.target, "target"));
   const idempotencyKey = asString(document.idempotencyKey, "idempotencyKey");
+  const id = document.id?.trim() || randomUUID();
+  // The id is a directory name now, in the candidate path below and in the
+  // runner's workspace, so a slash or a dot-dot in it would move both.
+  if (!JOB_ID.test(id)) {
+    throw new JobError(`"id" ${JSON.stringify(id)} is not a job id: letters, digits and dashes, up to 64.`);
+  }
   const candidatePath =
     document.candidate === undefined
-      ? candidateFor(targetPath)
-      : briefCandidate(document.candidate, targetPath);
+      ? candidateFor(id, targetPath)
+      : briefCandidate(document.candidate, id, targetPath);
   const brief = document.brief ?? {};
   if (typeof brief !== "object" || brief === null || Array.isArray(brief)) {
     throw new JobError(`"brief" must be a JSON object`);
@@ -360,7 +383,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       : (await fileFacts(absolute)).contentHash;
 
   const row: NewJob = {
-    id: document.id?.trim() || randomUUID(),
+    id,
     kind: kind as JobKind,
     sessionId: document.session?.trim() || null,
     parentJobId: document.parentJob?.trim() || null,
@@ -637,7 +660,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
     const candidatePath =
       options.candidatePath === undefined || before === undefined
         ? options.candidatePath
-        : briefCandidate(options.candidatePath, before.targetPath);
+        : briefCandidate(options.candidatePath, before.id, before.targetPath);
     const updated = await db
       .update(jobTable)
       .set({

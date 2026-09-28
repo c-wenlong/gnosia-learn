@@ -3,11 +3,20 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadVocabulary } from "../src/brief";
 import { cachePath, readThrough } from "../src/content-cache";
-import { REPO_ROOT } from "../src/paths";
+import { TOPICS, topicListAnswer, topicListDown } from "./vocabulary";
+
+// The catalog CLI is the vocabulary's only source; faked here so the tests read
+// no database and no file under content/.
+const catalogMock = vi.hoisted(() => ({ topicList: vi.fn() }));
+vi.mock("../src/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/catalog")>()),
+  ...catalogMock,
+}));
+
+const { loadVocabulary } = await import("../src/brief");
 
 /**
  * The studio's last-read cache (D13): a read that throws is answered from the
@@ -98,27 +107,52 @@ describe("readThrough", () => {
   });
 });
 
-describe("loadVocabulary through the seam", () => {
-  it("reads the real vocabulary fresh, and says when", async () => {
+describe("loadVocabulary through the catalog", () => {
+  beforeEach(() => {
+    catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
+  });
+
+  it("reads the topics from catalog topic ls, fresh, and says when", async () => {
     const vocabulary = await loadVocabulary();
+    expect(catalogMock.topicList).toHaveBeenCalledTimes(1);
     expect(vocabulary.stale).toBe(false);
     expect(Number.isNaN(Date.parse(vocabulary.readAt))).toBe(false);
     expect(vocabulary.topics.get("vector-and-linear-algebra-basics")?.concepts).toContain("dot-product");
+    // The entries a screen shows keep title and domain, and drop the planner's edges.
+    expect(vocabulary.entries.map((e) => e.slug)).toEqual(TOPICS.map((t) => t.slug));
+    expect(vocabulary.entries[1]).toMatchObject({ title: "TCP congestion control", domain: "networking" });
+    expect(vocabulary.entries[0]).not.toHaveProperty("incoming");
   });
 
-  it("keeps answering from the cache when the source cannot be read", async () => {
-    const good = await loadVocabulary(REPO_ROOT);
-    // A root with no content/ in it: the read throws, as a database outage will.
-    const empty = mkdtempSync(path.join(tmpdir(), "studio-no-content-"));
-    try {
-      const offline = await loadVocabulary(empty);
-      expect(offline.stale).toBe(true);
-      expect(offline.readAt).toBe(good.readAt);
-      expect(offline.staleReason).toMatch(/content\/topics\.yaml/);
-      expect([...offline.topics.keys()]).toEqual([...good.topics.keys()]);
-    } finally {
-      rmSync(empty, { recursive: true, force: true });
-    }
+  it("keeps answering from the cache, marked stale with its readAt, when the catalog is down", async () => {
+    const good = await loadVocabulary();
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const offline = await loadVocabulary();
+    expect(offline.stale).toBe(true);
+    expect(offline.readAt).toBe(good.readAt);
+    expect(offline.staleReason).toMatch(/exited 3/);
+    expect([...offline.topics.keys()]).toEqual([...good.topics.keys()]);
+  });
+
+  it("falls back on a listing it cannot read, as on an outage", async () => {
+    await loadVocabulary();
+    catalogMock.topicList.mockResolvedValue(topicListAnswer([{ slug: "no-title", maps: { concepts: [] } }]));
+    const read = await loadVocabulary();
+    expect(read.stale).toBe(true);
+    expect(read.staleReason).toMatch(/without a slug, a title or a concepts list/);
+  });
+
+  it("falls back when the CLI itself cannot run", async () => {
+    await loadVocabulary();
+    catalogMock.topicList.mockRejectedValue(new Error("spawn npm ENOENT"));
+    const read = await loadVocabulary();
+    expect(read.stale).toBe(true);
+    expect(read.staleReason).toMatch(/ENOENT/);
+  });
+
+  it("throws the catalog's own reason when there is no copy to fall back on", async () => {
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(loadVocabulary()).rejects.toThrow(/ECONNREFUSED/);
   });
 
   it("will not stand in a cached copy that is not a topic list", async () => {
@@ -127,11 +161,7 @@ describe("loadVocabulary through the seam", () => {
       cachePath("topics"),
       JSON.stringify({ version: 1, type: "topics", readAt: "2026-09-28T01:00:00.000Z", value: [{ slug: 1 }] }),
     );
-    const empty = mkdtempSync(path.join(tmpdir(), "studio-no-content-"));
-    try {
-      await expect(loadVocabulary(empty)).rejects.toThrow(/content\/topics\.yaml/);
-    } finally {
-      rmSync(empty, { recursive: true, force: true });
-    }
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await expect(loadVocabulary()).rejects.toThrow(/ECONNREFUSED/);
   });
 });

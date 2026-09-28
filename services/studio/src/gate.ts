@@ -220,10 +220,10 @@ export async function runGate(input: GateInput): Promise<GateResult> {
     return finish();
   }
   if (!vocabulary.topics.has(stamped)) {
-    record({ name: "topic", ok: false, detail: `"${stamped}" is not in content/topics.yaml` });
+    record({ name: "topic", ok: false, detail: `"${stamped}" is not in the catalog's vocabulary` });
     findings.push(
-      `The document is stamped with topic "${stamped}", which is not in content/topics.yaml. ` +
-        `The indexer refuses a file by name for exactly that, so it has to be "${input.topic}".`,
+      `The document is stamped with topic "${stamped}", which is not in the catalog's vocabulary. ` +
+        `Accept refuses a diagram by name for exactly that, so it has to be "${input.topic}".`,
     );
     return finish();
   }

@@ -10,7 +10,8 @@
 //      that anything which grades runs against a copy, never `self_learn`.
 //      The copy is dropped in `finally`, on a failure and on Ctrl-C too.
 //      With --seed it builds that database instead: an empty one, migrated,
-//      `catalog import seed/`, and one `learn observe` so a review card is due.
+//      `catalog import seed/`, all six types flipped (the app reads content
+//      from the database only), and one `learn observe` so a review card is due.
 //      That is what phase 3 of docs/CONTENT-MIGRATION.md makes the default,
 //      once `content/` and `learn/` are gone and `self_learn` is no template.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
@@ -30,6 +31,7 @@
 //                skipped and says so; its blob store is a temp directory.
 //
 // Environment:
+//   E2E_TEMPLATE_DB=<name>  the database to copy (default self_learn); every content type must be flipped
 //   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
@@ -48,6 +50,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { FLIP_ORDER } from './lib/flip-order.mjs';
 import { copyDatabase, exec as execTool, PG_BIN } from './lib/pg.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -65,7 +68,10 @@ if (flags.size > 0) {
 /** Values the server is started with. Test values only; nothing real is typed anywhere. */
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
-const TEMPLATE_DB = 'self_learn';
+// The database copied. `self_learn` by default; E2E_TEMPLATE_DB names another,
+// such as a scratch copy flipped for a rehearsal, since the app reads content
+// from the database only and an unflipped template fails every content page.
+const TEMPLATE_DB = process.env.E2E_TEMPLATE_DB || 'self_learn';
 // The pid and the start time, so a later run that happens to get the same pid
 // can never collide with (or drop) a copy an earlier run kept with --keep-db.
 const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
@@ -237,8 +243,8 @@ function seedEnv() {
     DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
     SELF_LEARN_HOME: SEED_HOME,
     MANIMKC_ROOT: NO_MANIMKC,
-    // The knowledge base is the seed's: the learn CLI reads the notes from
-    // files until concepts are flipped, and the seed database never is.
+    // The knowledge base is the seed's, for any learn command that still
+    // looks at files; after the flips below it reads the notes from rows.
     LEARN_ROOT: join(ROOT, 'seed'),
   };
 }
@@ -253,15 +259,19 @@ async function seedCommand(script, args) {
 
 /**
  * --seed: the database is built, not copied. Migrated, the seed imported the
- * way `catalog import` reads any tree, and one answer recorded through the
- * learn CLI so the review flow has a card (the seed carries content, not
- * learner state).
+ * way `catalog import` reads any tree, every type flipped in the flip-day
+ * order (the web app refuses a type the database does not own), and one
+ * answer recorded through the learn CLI so the review flow has a card (the
+ * seed carries content, not learner state). A flip checks parity against the
+ * tree and records its hash; it writes nothing under seed/.
  */
+
 async function buildFromSeed() {
   const made = await pg('createdb', [COPY_DB]);
   if (made.status !== 0) throw new Error(`createdb ${COPY_DB} failed: ${made.stderr.trim()} (is Postgres running?)`);
   await seedCommand('catalog', ['migrate']);
   await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
+  for (const type of FLIP_ORDER) await seedCommand('catalog', ['flip', type]);
   await seedCommand('learn', ['observe', '--concept', 'tool-calling', '--correct', 'true']);
 }
 
@@ -331,7 +341,6 @@ async function startServer(port) {
     DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
-    ASSET_FILES_ENABLED: '1',
     // The seed's blob store, where its import put the diagram SVG.
     ...(SEED_HOME === null ? {} : { SELF_LEARN_HOME: SEED_HOME }),
     // The copy is throwaway, and may have been made from a database marked

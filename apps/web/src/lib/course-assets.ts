@@ -4,7 +4,7 @@ import { assetsForTopic, type AssetRef } from "@self-learn/catalog/state";
 import { connection } from "next/server";
 
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
-import { readFileAccess, thumbnailFor, thumbnailStatusFor, withCatalog, type FileAccessMap } from "@/lib/asset-library";
+import { readAssetAccess, thumbnailFor, thumbnailStatusFor, withCatalog, type AssetAccess } from "@/lib/asset-library";
 import { assetHref, compareByKindThenId, isCompanionKind, libraryHref } from "@/lib/library";
 import { currentScope } from "@/lib/owner";
 
@@ -68,9 +68,9 @@ export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<C
   const shown = slugs.map((_, i) =>
     (rows[i] ?? []).filter((row) => !isCompanionKind(row.kind)).sort(compareByKindThenId),
   );
-  // Only the rows a rail draws are asked about, per row: a stored video's
-  // poster shows with the switch off.
-  const access = await readFileAccess(shown.flatMap((list) => list.slice(0, RAIL_ASSET_LIMIT)));
+  // Only the rows a rail draws are asked about, per row: a video shows its
+  // stored poster, a diagram its stored SVG.
+  const access = await readAssetAccess(shown.flatMap((list) => list.slice(0, RAIL_ASSET_LIMIT)));
   const byTopic: Record<string, ModuleAssets> = {};
   for (const [i, slug] of slugs.entries()) {
     const list = shown[i] ?? [];
@@ -83,10 +83,10 @@ export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<C
   return { reachable: true, byTopic };
 }
 
-function toPathAsset(row: AssetRef, access: FileAccessMap): PathAsset {
+function toPathAsset(row: AssetRef, access: AssetAccess): PathAsset {
   const name = assetDisplayTitle(row);
-  // `thumbnailFor` reads the kind, the id and the source repo; the topic list
-  // it also accepts is not consulted.
+  // `thumbnailFor` reads the kind and the id; the topic list it also accepts
+  // is not consulted.
   const withTopics = { ...row, topics: [] };
   return {
     id: row.id,

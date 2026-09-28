@@ -447,7 +447,7 @@ export function BriefForm({
           {busy ? "Starting…" : "Start"}
         </Button>
         <p className="min-w-0 flex-1 text-xs break-all text-[var(--muted)]">
-          writes <Mono>{candidatePathFor(draft.slug.trim())}</Mono>
+          draws in its own workspace, <Mono>{candidatePathFor(draft.slug.trim())}</Mono>
         </p>
       </div>
       {touched && blocked && (

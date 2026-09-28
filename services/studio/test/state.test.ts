@@ -5,9 +5,10 @@ import path from "node:path";
 import { JOB_STATES, JOB_TRANSITIONS, canTransition } from "@self-learn/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadVocabulary, validateBrief, BriefError, type ValidBrief } from "../src/brief";
+import { validateBrief, BriefError, type ValidBrief, type Vocabulary } from "../src/brief";
 import { noteFor, phaseFromLine } from "../src/runner";
 import type { JobRecord } from "../src/store";
+import { testVocabulary } from "./vocabulary";
 
 /**
  * The state machine, the lease, and the refusals a brief earns before anything
@@ -153,7 +154,7 @@ describe("the lease", () => {
   });
 
   it("refuses a second job on a held path, naming the holder", async () => {
-    const vocabulary = await loadVocabulary();
+    const vocabulary = testVocabulary();
     const brief = validateBrief(
       {
         intent: "show how a dot product projects one vector onto another",
@@ -172,7 +173,7 @@ describe("the lease", () => {
   });
 
   it("returns the existing job for a repeated idempotency key rather than queueing twice", async () => {
-    const vocabulary = await loadVocabulary();
+    const vocabulary = testVocabulary();
     const brief = validateBrief(
       {
         intent: "an intent",
@@ -220,7 +221,7 @@ describe("the phase label", () => {
 });
 
 describe("a brief is refused before anything is spent", () => {
-  let vocabulary: Awaited<ReturnType<typeof loadVocabulary>>;
+  let vocabulary: Vocabulary;
   const base = {
     intent: "show the projection",
     topic: "vector-and-linear-algebra-basics",
@@ -232,7 +233,7 @@ describe("a brief is refused before anything is spent", () => {
   };
 
   beforeEach(async () => {
-    vocabulary = await loadVocabulary();
+    vocabulary = testVocabulary();
   });
 
   it("accepts a complete one", () => {

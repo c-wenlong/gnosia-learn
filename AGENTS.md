@@ -198,8 +198,8 @@ Rules of engagement:
 ## Diagram studio: services/studio/
 
 `services/studio/` is a local job runner and loopback API for the diagram
-studio at `/studio`: a screen that browses `learn/assets/`, opens one on a
-live tldraw canvas, and lets a person brief an agent to draw or extend a
+studio at `/studio`: a screen that browses the diagrams in the catalog, opens
+one on a live tldraw canvas, and lets a person brief an agent to draw or extend a
 diagram, review its work, and accept or discard it. It exists so drawing a
 diagram can be delegated to an agent without a candidate ever landing on a
 committed file until a person says so.
@@ -208,11 +208,11 @@ Rules of engagement:
 
 - Run it with `npm run studio` from the repository root; it binds
   `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
-  `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone,
-  not on `ASSET_FILES_ENABLED`: from the browser they are served from
+  `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone:
+  from the browser they are served from
   `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
-  behind the `/studio/api/*` rewrite), deliberately not from
-  `/api/assets/{id}/file`, which a second switch gates. The runner streams the
+  behind the `/studio/api/*` rewrite), deliberately not from the library's
+  `/api/assets/{id}/file`, which serves asset rows. The runner streams the
   blob the diagram's row names, by the key in its (cached) diagram list, so a
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
@@ -242,10 +242,28 @@ Rules of engagement:
   stop a shell redirect, `tee`, or a command substitution from writing
   anywhere in the tree. Read and write rules in
   `services/studio/src/settings.ts` are absolute paths resolved from
-  `REPO_ROOT` at spawn time, not relative ones, because manimkc already
-  shipped the bug where a relative rule stops matching the moment its data
-  root moves.
-- A job writes only to `learn/assets/.candidates/`, and since Track D of
+  `REPO_ROOT` and `STUDIO_HOME` at spawn time, not relative ones, because
+  manimkc already shipped the bug where a relative rule stops matching the
+  moment its data root moves. `REPO_ROOT` in `services/studio/src/paths.ts` is
+  where that code sits (two levels above `services/studio/`, as
+  `services/catalog/src/env.ts` finds its own), because the studio needs a
+  root for code, not content; `STUDIO_REPO_ROOT` overrides it for the tests.
+- The studio reads the topic vocabulary only through
+  `npm run --silent catalog -- topic ls --json`, and opens no database
+  connection of its own. Every good read is cached in
+  `$STUDIO_HOME/cache/topics.json`; with the catalog down a brief is checked
+  against that copy, `/api/health` reports `vocabulary.stale` with its
+  `readAt`, and `/api/vocabulary` serves it, which is where the web studio
+  screens take their topics from so they still work with Postgres down.
+- A job writes only to its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`
+  (`<slug>.tldr` and `.svg`), never into the tree. The permission file allows
+  those two files and denies every other job's workspace and the rest of
+  `STUDIO_HOME`, a job queued after the agent started included (globs over
+  every id but its own, since the file is written once, at spawn). `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
+  relative to `STUDIO_HOME`, and the catalog refuses any other value. A job
+  recorded before the move still names `learn/assets/.candidates/<slug>`, which
+  the runner resolves against the repository, so it can be accepted, discarded
+  or resumed. And since Track D of
   [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md) Accept lands nothing
   in the tree: it is `catalog diagram put --job`, the diagram as rows and its
   SVG as a blob, with the job's starting revision as the base, so a commit that
@@ -254,7 +272,7 @@ Rules of engagement:
   `.tldr` and `.svg` through into the tree diagrams were last imported from
   (D17), so the next `catalog import` does not undo it, and Accept names those
   two files with the `git add` line to run. With Postgres down Accept refuses
-  and the candidate waits. `indexed: false` after
+  and the candidate waits in the job workspace. `indexed: false` after
   an accept means the diagram landed and the job row did not record it;
   Reindex finishes it.
 - Every `canvas` verb and the mirror run on the diagram's checkout,
@@ -485,24 +503,23 @@ not have to be worked out again.
   one run reports all of them. A skipped row is an asset that is silently
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
-- **Course content is read at runtime, not imported, so file tracing needs a
-  hand.** `packages/content` calls `readFileSync(path.join(root, …))`, which
-  Next cannot trace: it follows `import` statements. Every route reads the
-  courses per request now (nothing is prerendered from them), and without
-  `outputFileTracingIncludes` in `apps/web/next.config.ts` a deployment ships
-  without the course files and those routes 500 in production while every
-  build and every static preview looks fine. Since the move, that entry needs `outputFileTracingRoot`
-  beside it: tracing starts at `apps/web/`, so `content/` is outside the world
-  unless the root is widened to the repo.
-- **The app does not run from the repo root, so it cannot default to
-  `process.cwd()`.** `@self-learn/content` does, which was right while the app
-  *was* the root. `apps/web/src/data/repo-root.ts` walks up to the directory
-  holding `content/courses`, and `apps/web/src/data/source.ts` hands it to
-  `fileSource`, the one place the app builds a content reader. A new reader
-  takes `getCourses()`, `getTopics()` or `getTags()` from `@/data/*`, never a
-  parser: one that calls `loadCourses()` directly skips the reader seam the
-  database migration switches on, and with no `root` it also works on a
-  laptop running vitest from the repo root and fails in `next build`.
+- **The web app reads authored content from the database only, and refuses
+  a type nobody flipped.** `apps/web/src/data/source.ts` builds the reader
+  seam with no file reader: a type whose `content_source` row says `files`,
+  or has no row, or that `CONTENT_SOURCE` points at files, throws a
+  `ContentUnavailableError` naming `npm run catalog -- flip <type>`, and a
+  database that does not answer throws too, where both used to fall back to
+  `content/` and `learn/`. The page's error boundary, `app/(app)/error.tsx`,
+  renders inside the shell and the server log says which it was. So a
+  checkout pointed at a database still at `0009`, or one that never ran the
+  six flips, shows that panel on every course page: migrate, import and flip
+  it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
+  or `getTags()` from `@/data/*`, never a parser from `@self-learn/content`;
+  a test that wants real course data mocks `contentSource` with
+  `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
+  opening a database. There
+  is no `outputFileTracingIncludes` and no repo-root walk any more: the app
+  opens no content file, so a deployment needs none in its bundle.
 - **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
@@ -517,9 +534,9 @@ not have to be worked out again.
   points at the package's own `empty.js`, which is the module Next substitutes.
 - **`.env.local` belongs in `apps/web/`, not the repository root.** Next loads
   `.env*` files from the directory it starts in, and since the move that is
-  `apps/web/`. A root copy is silently ignored: the symptom is every video
-  page saying to set `ASSET_FILES_ENABLED=1` while the variable sits in a file
-  nothing reads. `.env.example` stays at the root because it documents the
+  `apps/web/`. A root copy is silently ignored: the symptom is `/sign-in`
+  refusing every password for want of `OWNER_PASSWORD` while the variable
+  sits in a file nothing reads. `.env.example` stays at the root because it documents the
   whole repo; copy it to `apps/web/.env.local`.
 - **`npm run dev` fails in the desktop preview harness** with
   `EPERM: uv_cwd`. To look at the app, build first and serve the production
@@ -702,22 +719,17 @@ not have to be worked out again.
   could open any file", and traces the whole repository, `public/` included,
   into the deployed server bundle. The fix is a `/* turbopackIgnore: true */`
   comment inside the call it names, as on `objectPath` in
-  `packages/blob/src/fs.ts` and the two `realpath`s in
-  `apps/web/src/lib/asset-files.ts`. A build that prints the warning is not
-  done.
+  `packages/blob/src/fs.ts`. A build that prints the warning is not done.
 - **A poster needs `format=yuvj420p` in the filter chain, or ffmpeg writes
-  nothing.** `apps/web/src/lib/asset-posters.ts` extracts a still frame as
-  JPEG, and mjpeg refuses a limited-range YUV source outright: *Non full-range
+  nothing.** `services/catalog/src/poster/extract.ts` extracts a still frame
+  as JPEG for `catalog asset upload`, and mjpeg refuses a limited-range YUV source outright: *Non full-range
   YUV is non-standard*, then *Could not open encoder before EOF*, then a
   zero-byte output and a non-zero exit. It looks exactly like a corrupt video.
   The manim renders happen to be full-range and worked without it; a clip from
-  anywhere else does not. Its cache lives under the system temp root, never in
-  the tree, for the same reason `$MANIMKC_HOME` exists: generated data that a
-  `git clean` or a relayout can delete is generated data that will be deleted.
-  The filter chain lives once, in `services/catalog/src/poster/recipe.ts`, and
-  has two callers: `catalog asset upload`, which cuts each video's poster on
-  the laptop and stores it as a blob, and the route's fallback for a video with
-  no stored poster. Change it there and both follow.
+  anywhere else does not. The filter chain lives once, in
+  `services/catalog/src/poster/recipe.ts`. The web app used to cut a poster
+  per request as a fallback; since phase 2 it serves only the one the upload
+  stored, and a video with none shows its placeholder.
 - **Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
   `scripts/learn` on purpose.** `apps/web/src/app` and
   `apps/web/src/components` are view code and untested by design, and vitest 4 dropped `coverage.all`, so unmatched files do not appear
@@ -763,6 +775,14 @@ not have to be worked out again.
   suite that needs a tree to write into takes a temp one, the way `LEARN_ROOT`
   and `STUDIO_HOME` already do; one that imports the seed and then writes
   copies it to a temp directory first.
+- **A studio job's `candidate_path` is relative to `STUDIO_HOME`, not to the
+  repository.** The catalog stores `jobs/<id>/candidate/<slug>.tldr` and
+  refuses any other value, absolute included (`briefCandidate` in
+  `services/catalog/src/commands/job.ts`), while the runner's own `job.json`
+  holds the absolute path. Resolve a catalog value against `STUDIO_HOME`,
+  never the repo. A record from before phase 2 still names
+  `learn/assets/.candidates/<slug>` repo-relative, and the runner's
+  `absolute()` resolves it, which is why those paths are never rewritten.
 - **Never call a state or content function without an owner.** Ids are
   global and every content row carries `owner_id`, so the owner filter is the
   only thing keeping one owner's notes off another's pages (phase 4 of

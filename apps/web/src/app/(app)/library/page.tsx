@@ -9,11 +9,12 @@ import { SearchField } from "@/components/ui/SearchField";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
 import {
-  loadFileAccess,
+  loadAssetAccess,
   loadLibrary,
   loadSearchText,
   thumbnailFor,
   thumbnailStatusFor,
+  unservedRows,
 } from "@/lib/asset-library";
 import {
   assetHref,
@@ -90,9 +91,9 @@ export default async function LibraryPage({
 
   const [library, { kb }, courses] = await Promise.all([loadLibrary(), loadKnowledgeBase(), getCourses()]);
   const { rows, counts, reachable, truncated, titles, concepts } = library;
-  // Per row on top of the deployment-wide answers: a video in the blob store
-  // or a note the database owns draws whatever the switch says.
-  const access = await loadFileAccess(rows);
+  // Per row: a video in the blob store or a note the database owns draws, and
+  // anything else shows its placeholder.
+  const access = await loadAssetAccess(rows);
 
   const facets = kindFacets(counts);
   const libraryCourses: LibraryCourse[] = courses.map((c) => ({
@@ -113,10 +114,14 @@ export default async function LibraryPage({
   const hits = search === null ? null : searchHits(rows, terms, search.texts, search.sources);
 
   const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits }), sort);
-  // The files-off and manimkc notices are about files on this machine's disk,
-  // so they are said only when some row in this view still depends on one.
-  const needsFiles = (repo: string) =>
-    matching.some((row) => row.sourceRepo === repo && row.path !== null && !access.served.has(row.id));
+  // Said once for the view rather than on every card: how many rows here name
+  // bytes nothing has stored yet, and the one command that stores them.
+  const unserved = unservedRows(matching, access);
+  // The upload command fills the store for manimkc's renders only; a diagram
+  // or a note with nothing behind it gets there another way, so the notice
+  // names the command only for the rows it would fix.
+  const unservedRenders = unserved.filter((row) => row.sourceRepo === "manimkc").length;
+  const unservedOther = unserved.length - unservedRenders;
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -188,14 +193,14 @@ export default async function LibraryPage({
       {!reachable ? (
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
           This page is a view over the <code>asset</code> table, and the database could not be
-          asked. Nothing has been lost: the videos, the diagrams and the notes are all still where
-          they were, and one index run rebuilds every row here from the files in git.
+          asked. Nothing has been lost by that: the rows, and the stored copies of the videos and
+          diagrams, are where they were, and the page comes back when the database answers.
         </Notice>
       ) : facets.total === 0 ? (
-        <Notice title="Nothing indexed yet" command="npm run catalog -- index">
-          The catalog is reachable and holds no assets. Every row on this page is derived from files
-          in git (concept notes, session logs, exported diagrams, the videos manimkc rendered), so
-          one index run fills it.
+        <Notice title="Nothing indexed yet" command="npm run catalog -- import">
+          The catalog is reachable and holds no assets. The rows here are written by the catalog
+          itself: an import of an export tree or the seed, the note, log and diagram writers, and
+          the manimkc indexer for the videos. None of those has run against this database yet.
         </Notice>
       ) : (
         <>
@@ -221,27 +226,37 @@ export default async function LibraryPage({
             </Form>
           </section>
 
-          {!access.selfLearn.ok && needsFiles("self-learn") ? (
-            <Notice role="status" title={access.selfLearn.headline} command={access.selfLearn.fix}>
-              {access.selfLearn.detail}
+          {unserved.length > 0 && (
+            <Notice
+              role="status"
+              title={`${unserved.length} ${plural(unserved.length)} here ${unserved.length === 1 ? "has" : "have"} no stored copy yet.`}
+              command={unservedRenders > 0 ? "npm run catalog -- asset upload --source manimkc" : undefined}
+            >
+              <p>
+                Every title, topic and size below is real. What is missing is the bytes: the app serves a file only
+                from the blob store or the database, so these will not play or draw until they are stored.
+              </p>
+              {unservedOther > 0 && (
+                <p className="mt-2">
+                  {unservedRenders > 0 ? `The command below stores the ${unservedRenders} rendered by manimkc. ` : ""}
+                  {unservedOther === 1 ? "One is" : `${unservedOther} are`} not a render: a diagram is stored by{" "}
+                  <code className="font-mono text-[12px]">catalog diagram put</code>, and a note or a session log by
+                  flipping its type.
+                </p>
+              )}
             </Notice>
-          ) : !access.manimkc.ok && needsFiles("manimkc") ? (
-            <Notice role="status" title={access.manimkc.headline} command={access.manimkc.fix}>
-              {access.manimkc.detail}
-            </Notice>
-          ) : null}
+          )}
 
           {search !== null && !search.searchedText && (
             <p role="status" className="text-[12px] text-text2">
-              Searched titles only: this deployment does not read asset files, so notes and
-              transcripts were matched by name, not by what they say.
+              Searched titles only: no note or transcript here has a stored copy yet, so they were matched by
+              name, not by what they say.
             </p>
           )}
           {search !== null && search.searchedText && search.skipped > 0 && (
             <p role="status" className="text-[12px] text-text2">
               {search.skipped} {search.skipped === 1 ? "note or transcript was" : "notes and transcripts were"}{" "}
-              matched by name only: {search.skipped === 1 ? "its file is" : "their files are"} kept on this
-              machine&rsquo;s disk, which this deployment does not read.
+              matched by name only: {search.skipped === 1 ? "it has" : "they have"} no stored copy yet.
             </p>
           )}
 

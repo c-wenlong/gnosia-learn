@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   findTopic,
   getAllTopicIds,
@@ -11,22 +11,50 @@ import {
   totalTopicCount,
 } from "@/data/courses";
 import { getTags, tagFor, tagsFor } from "@/data/content";
+import type { Course } from "@/lib/types";
+
+// The app reads courses from the database only; this suite tests logic over
+// real course data, so it reads the export tree instead (`@/test/content-files`).
+vi.mock("@/data/source", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/source")>()),
+  contentSource: (await import("@/test/content-files")).fileContentSource,
+}));
 
 /**
- * What is left of this module once the course literals moved to
- * `content/courses/*.yaml`: the lookups the pages call, over whatever the
- * reader returned. The curriculum's own invariants — the shortlist is
- * complete, topic ids are unique, `inferred` is set only where it should be —
- * are `packages/content`'s tests now, because they are facts about the files
- * rather than about this module.
+ * The lookups the pages call, over whatever the reader returned. The
+ * curriculum's own invariants (the shortlist is complete, topic ids are
+ * unique, `inferred` is set only where it should be) are `packages/content`'s
+ * tests, because they are facts about the files rather than about this module.
+ *
+ * The tree is `seed/`, which holds one course, `cp4284`, cut to two modules.
+ * The lookups that compare courses are given a second one, `other`, built here
+ * from the first with its ids renamed and its tags chosen by each test.
  */
 
 const courses = await getCourses();
 
+/** A second course, from the seed's one, with every id renamed so none collides. */
+function otherCourse(tags: string[]): Course {
+  const base = courses[0]!;
+  const rename = (id: string) => id.replace(base.id, "xx9999");
+  return {
+    ...base,
+    id: "xx9999",
+    slug: "xx9999",
+    code: "XX9999",
+    tags,
+    modules: base.modules.map((m) => ({
+      ...m,
+      id: rename(m.id),
+      topics: m.topics.map((t) => ({ ...t, id: rename(t.id) })),
+    })),
+  };
+}
+
 describe("course lookups", () => {
   it("resolves courses and modules by slug", async () => {
-    const course = await getCourse("cs2111");
-    expect(course?.code).toBe("CS2111");
+    const course = await getCourse("cp4284");
+    expect(course?.code).toBe("CP4284");
     const mod = getModule(course!, course!.modules[0].slug);
     expect(mod?.id).toBe(course!.modules[0].id);
   });
@@ -38,14 +66,16 @@ describe("course lookups", () => {
 
   it("counts every topic in the shortlist", () => {
     const ids = getAllTopicIds(courses);
+    expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
     expect(totalTopicCount(courses)).toBe(ids.length);
   });
 
   it("scopes topic ids to one course when given one", async () => {
-    const course = (await getCourse("cs2111"))!;
+    const course = (await getCourse("cp4284"))!;
+    const both = [course, otherCourse([])];
     expect(getCourseTopicIds(course)).toEqual(getAllTopicIds([course]));
-    expect(getCourseTopicIds(course).length).toBeLessThan(getAllTopicIds(courses).length);
+    expect(getCourseTopicIds(course).length).toBeLessThan(getAllTopicIds(both).length);
   });
 
   it("lists a module's topic ids", () => {
@@ -54,31 +84,29 @@ describe("course lookups", () => {
   });
 
   it("finds a topic and the module it belongs to", async () => {
-    const course = (await getCourse("cs4263"))!;
+    const course = (await getCourse("cp4284"))!;
     const wanted = course.modules[1].topics[0];
     const found = findTopic(course, wanted.id);
     expect(found?.module.id).toBe(course.modules[1].id);
     expect(found?.topic.title).toBe(wanted.title);
-    expect(findTopic(course, "cs2111-m1-t1")).toBeUndefined();
+    expect(findTopic(course, otherCourse([]).modules[0].topics[0].id)).toBeUndefined();
   });
 
   it("links related courses via shared tags", async () => {
-    const course = await getCourse("cp4284");
-    expect(course).toBeTruthy();
-    const related = getRelatedCourses(courses, course!);
-    expect(related.some((c) => c.code === "CP4283")).toBe(true);
-    expect(related.some((c) => c.code === "CS3227" || c.code === "CS3216")).toBe(
-      true,
-    );
-    expect(related.some((c) => c.id === course!.id)).toBe(false);
+    const course = (await getCourse("cp4284"))!;
+    const sharing = otherCourse(["transformers"]);
+    const apart = { ...otherCourse(["hci"]), id: "yy9999", code: "YY9999" };
+    const related = getRelatedCourses([course, sharing, apart], course);
+    expect(related.map((c) => c.code)).toEqual(["XX9999"]);
+    expect(getRelatedCourses([course, sharing], { ...course, tags: [] })).toEqual([]);
   });
 });
 
 describe("tag lookups", () => {
   it("reads the cross-course themes", async () => {
     const tags = await getTags();
-    expect(tags.map((t) => t.id)).toContain("hci");
-    expect(tagFor(tags, "hci").label).toBe("HCI");
+    expect(tags.map((t) => t.id)).toEqual(["agentic-ai", "transformers"]);
+    expect(tagFor(tags, "agentic-ai").label).toBe("Agentic AI");
   });
 
   it("falls back to the raw id for a theme nothing defines", async () => {

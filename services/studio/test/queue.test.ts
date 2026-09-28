@@ -1,25 +1,29 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
+import { validateBrief, type ValidBrief } from "../src/brief";
 import type { JobRecord } from "../src/store";
 import {
   absolute,
+  candidatePath,
+  candidateRef,
+  candidateSvgPath,
   jobDir,
+  REPO_ROOT,
   rejectedDir,
   targetPath,
   targetSvgPath,
   workDir,
   workPath,
-  CANDIDATES_DIR,
 } from "../src/paths";
 
 import { fixtureDocument } from "./fixture-document";
 import { allSettled, until } from "./wait";
+import { testVocabulary } from "./vocabulary";
 
 /**
  * What the queue does when something other than the drawing goes wrong: the
@@ -212,8 +216,19 @@ async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
       idempotencyKey: `key-${Math.random()}`,
       ...over,
     },
-    await loadVocabulary(),
+    testVocabulary(),
   );
+}
+
+/** Where candidates lived before they moved into the job workspace, repo-relative. */
+const LEGACY_DIR = "learn/assets/.candidates";
+
+/** Write a parent's candidate where its record says it is. */
+async function writeCandidate(record: JobRecord, body: string): Promise<string> {
+  const file = absolute(record.candidatePath);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, body, "utf8");
+  return file;
 }
 
 /**
@@ -230,6 +245,8 @@ function parentRecord(
   state = "interrupted",
   /** What the reconcile pass hashed at the candidate path, when it wrote `interrupted`. */
   candidateHash: string | null = null,
+  /** A record from before candidates moved: the per-slug path under learn/assets/.candidates/. */
+  legacy = false,
 ): JobRecord {
   const at = new Date(startedAtMs).toISOString();
   return {
@@ -251,8 +268,8 @@ function parentRecord(
     },
     targetPath: targetPath(SLUG),
     targetSvgPath: targetSvgPath(SLUG),
-    candidatePath: `${CANDIDATES_DIR}/${SLUG}.tldr`,
-    candidateSvgPath: `${CANDIDATES_DIR}/${SLUG}.svg`,
+    candidatePath: legacy ? `${LEGACY_DIR}/${SLUG}.tldr` : candidatePath(id, SLUG),
+    candidateSvgPath: legacy ? `${LEGACY_DIR}/${SLUG}.svg` : candidateSvgPath(id, SLUG),
     topic: "vector-and-linear-algebra-basics",
     slug: SLUG,
     attempt: 1,
@@ -305,7 +322,6 @@ beforeEach(async () => {
   stageAgent();
   store = new JobStore();
   runner = new Runner(store);
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
 });
 
 afterEach(async () => {
@@ -319,10 +335,10 @@ afterEach(async () => {
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
   await rm(workPath(SLUG), { force: true });
-  // The candidates directory is shared with the real one, so a fixture left
-  // there is a fixture the next `catalog index` reads.
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.svg`), { force: true });
+  // The legacy per-slug directory is in the test's repository root, which
+  // outlives one test; a record from before the move is written there.
+  await rm(absolute(`${LEGACY_DIR}/${SLUG}.tldr`), { force: true });
+  await rm(absolute(`${LEGACY_DIR}/${SLUG}.svg`), { force: true });
   delete process.env.STUDIO_HOME;
 });
 
@@ -519,13 +535,13 @@ describe("an agent whose first request is refused", () => {
    */
   function refuseFirstRequest(
     over: Record<string, unknown> = {},
-    write?: () => Promise<void>,
+    write?: (options: Record<string, unknown>) => Promise<void>,
   ): void {
     agentMock.startAgent.mockImplementation(async (options: Record<string, unknown>) => {
       started.push({ options } as FakeAgent);
       const onInit = options.onInit as ((init: Record<string, unknown>) => void) | undefined;
       onInit?.({ apiKeySource: "ANTHROPIC_API_KEY", model: "claude-sonnet-5" });
-      await write?.();
+      await write?.(options);
       return {
         done: Promise.resolve(
           outcome({
@@ -592,11 +608,11 @@ describe("an agent whose first request is refused", () => {
     expect(store.get(record.id)?.error).toContain("README.md");
   });
 
-  it("moves a resumed job's preserved drawing out of the shared path rather than leaving it to be overwritten", async () => {
-    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
+  it("moves a resumed job's adopted drawing to its rejected directory, and leaves the parent's own", async () => {
     const partial = fixtureDocument({ title: "half-drawn" });
-    await writeFile(candidate, partial, "utf8");
-    await store.create(parentRecord("parent-refused", Date.now() - 300_000, "interrupted", hash(partial)));
+    const parent = parentRecord("parent-refused", Date.now() - 300_000, "interrupted", hash(partial));
+    const parentFile = await writeCandidate(parent, partial);
+    await store.create(parent);
     refuseFirstRequest();
 
     const { record } = await runner.enqueue(await brief(), {
@@ -607,8 +623,10 @@ describe("an agent whose first request is refused", () => {
     await runner.settled(record.id);
 
     expect(store.get(record.id)?.errorKind).toBe("agent");
-    expect(await stat(candidate).then(() => true, () => false)).toBe(false);
+    expect(await stat(record.candidatePath).then(() => true, () => false)).toBe(false);
     expect(await readFile(path.join(rejectedDir(record.id), `${SLUG}.tldr`), "utf8")).toContain("half-drawn");
+    // The parent's workspace is the parent's: still interrupted, still discardable.
+    expect(await readFile(parentFile, "utf8")).toContain("half-drawn");
   });
 
   it("records STUDIO_AGENT_AUTH=env on the job when that is the setting", async () => {
@@ -648,8 +666,8 @@ describe("an agent whose first request is refused", () => {
   });
 
   it("still asks the gate when the agent erred on its first turn but wrote the candidate", async () => {
-    refuseFirstRequest({}, async () => {
-      await writeFile(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), fixtureDocument(), "utf8");
+    refuseFirstRequest({}, async (options) => {
+      await writeFile(candidatePath(String(options.jobId), SLUG), fixtureDocument(), "utf8");
     });
 
     const { record } = await runner.enqueue(await brief());
@@ -737,8 +755,9 @@ describe("a resume", () => {
   it("measures the candidate's age from the parent, not from itself", async () => {
     const parentStart = Date.now() - 600_000;
     const partial = fixtureDocument({ title: "half-drawn" });
-    await writeFile(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), partial, "utf8");
-    await store.create(parentRecord("parent-job", parentStart, "interrupted", hash(partial)));
+    const parent = parentRecord("parent-job", parentStart, "interrupted", hash(partial));
+    await writeCandidate(parent, partial);
+    await store.create(parent);
 
     await runner.enqueue(await brief(), {
       jobId: "parent-job",
@@ -758,14 +777,14 @@ describe("a resume", () => {
    * partial drawing the reconcile pass had deliberately left on disk. Caught in
    * review on the phase 3 PR.
    */
-  it("leaves the partial candidate alone rather than copying the target over it", async () => {
+  it("carries the partial candidate over rather than copying the target over it", async () => {
     await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
-    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
     const partial = fixtureDocument({ title: "half-drawn" });
-    await writeFile(candidate, partial, "utf8");
-    await store.create(parentRecord("parent-three", Date.now() - 300_000, "interrupted", hash(partial)));
+    const parent = parentRecord("parent-three", Date.now() - 300_000, "interrupted", hash(partial));
+    await writeCandidate(parent, partial);
+    await store.create(parent);
 
-    await runner.enqueue(await brief({ mode: "extend" }), {
+    const { record } = await runner.enqueue(await brief({ mode: "extend" }), {
       jobId: "parent-three",
       agentSessionId: "88888888-8888-4888-8888-888888888888",
       changes: null,
@@ -775,7 +794,9 @@ describe("a resume", () => {
     // call is proof the decision has been made; reading the candidate before
     // that is reading it while the runner may still be about to write it.
     const input = await gateInput<{ unchangedHash?: string | null }>();
-    expect(await readFile(candidate, "utf8")).toContain("half-drawn");
+    // In this job's own workspace, a copy of the parent's.
+    expect(record.candidatePath).toBe(candidatePath(record.id, SLUG));
+    expect(await readFile(record.candidatePath, "utf8")).toContain("half-drawn");
     // And no `unchangedHash`: the candidate is not the runner's copy of
     // anything, so "byte-identical to the copy" is not a question about it.
     expect(input.unchangedHash).toBeNull();
@@ -784,22 +805,21 @@ describe("a resume", () => {
   /**
    * The other half of the same question, which the first fix did not ask.
    *
-   * The candidate path is per slug, and an interrupted job holds no lease on
-   * its target — so a later job for the same slug can write that path and leave
-   * its own file there. Resuming would then adopt somebody else's artifact and
-   * offer it for review under this job's name. The hash the reconcile pass took
-   * is what tells them apart. Caught in review on the phase 3 PR.
+   * A record from before candidates moved names the per-slug path, and an
+   * interrupted job holds no lease on its target, so a later job for the same
+   * slug can have written that path and left its own file there. Resuming
+   * would then adopt somebody else's artifact and offer it for review under
+   * this job's name. The hash the reconcile pass took is what tells them
+   * apart. Caught in review on the phase 3 PR.
    */
-  it("does not adopt a candidate that is not the one it was interrupted with", async () => {
+  it("does not adopt a legacy candidate that is not the one it was interrupted with", async () => {
     await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
-    const candidate = absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`);
-    await writeFile(candidate, fixtureDocument({ title: "somebody else's" }), "utf8");
     // The parent was interrupted holding something *else* at that path.
-    await store.create(
-      parentRecord("parent-five", Date.now() - 300_000, "interrupted", hash("what this job drew")),
-    );
+    const parent = parentRecord("parent-five", Date.now() - 300_000, "interrupted", hash("what this job drew"), true);
+    const legacy = await writeCandidate(parent, fixtureDocument({ title: "somebody else's" }));
+    await store.create(parent);
 
-    await runner.enqueue(await brief({ mode: "extend" }), {
+    const { record } = await runner.enqueue(await brief({ mode: "extend" }), {
       jobId: "parent-five",
       agentSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       changes: null,
@@ -809,14 +829,15 @@ describe("a resume", () => {
     // gate call comes first here for the same reason as above: it is what says
     // the copy-or-not decision is behind us.
     const input = await gateInput<{ unchangedHash?: string | null; startedAtMs: number; }>();
-    expect(await readFile(candidate, "utf8")).toContain("committed");
+    expect(await readFile(record.candidatePath, "utf8")).toContain("committed");
+    // And the file in the tree is nobody's business of this job's: left as it was.
+    expect(await readFile(legacy, "utf8")).toContain("somebody else's");
     expect(typeof input.unchangedHash).toBe("string");
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
   });
 
   it("still copies the target when a revision extends it, because nothing is half-drawn", async () => {
     await writeCheckout(fixtureDocument({ title: "committed" }), "utf8");
-    await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
     await store.create(parentRecord("parent-four", Date.now() - 300_000, "accepted"));
 
     await runner.enqueue(await brief({ mode: "extend" }), {
@@ -838,6 +859,111 @@ describe("a resume", () => {
     });
     const input = await gateInput<{ startedAtMs: number }>();
     expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
+  });
+});
+
+describe("where a job draws", () => {
+  /** Each entry of a directory in the test's repository root, or none when it is absent. */
+  const listing = async (relative: string): Promise<string[]> =>
+    (await readdir(absolute(relative)).catch(() => [] as string[])).sort();
+
+  it("draws in its own workspace, tells the catalog so relatively, and writes nothing in the tree", async () => {
+    const assetsBefore = await listing("learn/assets");
+    const legacyBefore = await listing(LEGACY_DIR);
+    // An agent that does what the prompt says: the two files at the paths the
+    // runner handed it, and nowhere else.
+    agentMock.startAgent.mockImplementation(async (options: Record<string, unknown>) => {
+      started.push({ options } as FakeAgent);
+      const jobId = String(options.jobId);
+      await writeFile(candidatePath(jobId, SLUG), fixtureDocument(), "utf8");
+      await writeFile(candidateSvgPath(jobId, SLUG), "<svg/>", "utf8");
+      return { done: Promise.resolve(outcome()), stop: async () => undefined };
+    });
+
+    const { record } = await runner.enqueue(await brief());
+    await runner.settled(record.id);
+
+    expect(store.get(record.id)?.state).toBe("awaiting_review");
+    expect(record.candidatePath).toBe(path.join(jobDir(record.id), "candidate", `${SLUG}.tldr`));
+    expect(record.candidateSvgPath).toBe(path.join(jobDir(record.id), "candidate", `${SLUG}.svg`));
+    expect(await readFile(record.candidatePath, "utf8")).toBe(fixtureDocument());
+    // The gate judged that file and no other.
+    const input = await gateInput<{ candidatePath: string; candidateSvgPath: string }>();
+    expect(input.candidatePath).toBe(record.candidatePath);
+    expect(input.candidateSvgPath).toBe(record.candidateSvgPath);
+    // The catalog is told the workspace path relative to STUDIO_HOME, the form
+    // it derives and checks, at enqueue and at finish alike.
+    const briefFile = JSON.parse(await readFile(path.join(jobDir(record.id), "brief.json"), "utf8")) as {
+      candidate: string;
+    };
+    expect(briefFile.candidate).toBe(candidateRef(record.id, SLUG));
+    expect(briefFile.candidate).toBe(`jobs/${record.id}/candidate/${SLUG}.tldr`);
+    const finish = catalogMock.jobFinish.mock.calls.at(-1)?.[0] as { candidatePath?: string };
+    expect(finish.candidatePath).toBe(candidateRef(record.id, SLUG));
+    // Nothing under learn/assets/ appeared, and the old per-slug directory
+    // gained nothing.
+    expect(await listing("learn/assets")).toEqual(assetsBefore);
+    expect(await listing(LEGACY_DIR)).toEqual(legacyBefore);
+    expect(record.candidatePath.startsWith(`${REPO_ROOT}${path.sep}learn`)).toBe(false);
+  });
+
+  it("moves a job queued before the move into its own workspace before anything is drawn", async () => {
+    const queued = parentRecord("queued-before", Date.now() - 60_000, "queued", null, true);
+    await store.create({ ...queued, startedAt: null, finishedAt: null, sessionId: null, agentSessionId: null });
+
+    void runner.kick();
+    await agentsStarted(1);
+    await runner.settled("queued-before");
+
+    const after = store.get("queued-before");
+    expect(after?.candidatePath).toBe(candidatePath("queued-before", SLUG));
+    expect(after?.candidateSvgPath).toBe(candidateSvgPath("queued-before", SLUG));
+    expect(String(started[0]?.options.prompt)).toContain(candidatePath("queued-before", SLUG));
+    const finish = catalogMock.jobFinish.mock.calls.at(-1)?.[0] as { candidatePath?: string };
+    expect(finish.candidatePath).toBe(candidateRef("queued-before", SLUG));
+  });
+
+  it("continues a revised `new` drawing from the parent's partial, keeping the partial's age", async () => {
+    const partial = fixtureDocument({ title: "half-drawn" });
+    const parent = parentRecord("parent-timed-out", Date.now() - 600_000, "failed");
+    const parentFile = await writeCandidate(parent, partial);
+    const old = new Date(Date.now() - 600_000);
+    await utimes(parentFile, old, old);
+    await store.create(parent);
+
+    const { record } = await runner.enqueue(await brief(), {
+      jobId: "parent-timed-out",
+      agentSessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      changes: "make the arrows thicker",
+    });
+    const input = await gateInput<{ startedAtMs: number }>();
+    expect(await readFile(record.candidatePath, "utf8")).toContain("half-drawn");
+    // The copy is as old as the drawing, and the gate still wants this job to
+    // have drawn: a revision is not resumed work.
+    expect((await stat(record.candidatePath)).mtimeMs).toBe(old.getTime());
+    expect(input.startedAtMs).toBeGreaterThan(Date.now() - 60_000);
+    expect(String(started[0]?.options.prompt)).toContain(record.candidatePath);
+    expect(String(started[0]?.options.prompt)).toContain("the files have moved");
+  });
+
+  it("adopts a legacy parent's drawing from learn/assets/.candidates when it is the one it left", async () => {
+    const parentStart = Date.now() - 600_000;
+    const partial = fixtureDocument({ title: "half-drawn before the move" });
+    const parent = parentRecord("parent-legacy", parentStart, "interrupted", hash(partial), true);
+    const legacy = await writeCandidate(parent, partial);
+    await store.create(parent);
+
+    const { record } = await runner.enqueue(await brief(), {
+      jobId: "parent-legacy",
+      agentSessionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      changes: null,
+    });
+    const input = await gateInput<{ startedAtMs: number }>();
+    expect(await readFile(record.candidatePath, "utf8")).toContain("half-drawn before the move");
+    expect(input.startedAtMs).toBeLessThanOrEqual(parentStart);
+    // Copied, not moved: the parent record still names its file, and a
+    // Discard of the parent is what removes it.
+    expect(await readFile(legacy, "utf8")).toContain("half-drawn before the move");
   });
 });
 

@@ -1,13 +1,14 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
-import { absolute, sessionLogPath, targetPath, targetSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { validateBrief, type ValidBrief } from "../src/brief";
+import { absolute, sessionLogPath, targetPath, targetSvgPath } from "../src/paths";
 import { allSettled, until } from "./wait";
+import { testVocabulary } from "./vocabulary";
 
 /**
  * The daily spend cap, and the half of it that is not the cap.
@@ -164,7 +165,7 @@ async function brief(over: Record<string, unknown> = {}): Promise<ValidBrief> {
       idempotencyKey: `key-${Math.random()}`,
       ...over,
     },
-    await loadVocabulary(),
+    testVocabulary(),
   );
 }
 
@@ -192,7 +193,6 @@ beforeEach(async () => {
   stageAgent("session-clean", false);
   store = new JobStore();
   runner = new Runner(store);
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
 });
 
 afterEach(async () => {
@@ -204,8 +204,6 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.svg`), { force: true });
   delete process.env.STUDIO_HOME;
   delete process.env.STUDIO_DAILY_USD;
 });

@@ -157,11 +157,13 @@ export function NoteAndSources({
           </details>
         ) : (
           <p className="text-[13px] text-text3">
-            {w.note.code === "file-missing"
-              ? "The note is indexed but its file is not on this machine."
+            {w.note.code === "too-large"
+              ? "The note is larger than this page reads."
               : w.note.code === "no-note"
-                ? "No note file is indexed for this concept."
-                : "The note could not be read right now."}
+                ? "No note is stored for this concept."
+                : w.note.code === "not-flipped"
+                  ? "Concept notes are not in the database yet: run npm run catalog -- flip concepts."
+                  : "The note could not be read right now."}
           </p>
         )}
       </Section>

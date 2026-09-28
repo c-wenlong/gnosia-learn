@@ -40,9 +40,9 @@ moves with it in the same commit.
 a copy at the repository root is never read. Set `OWNER_PASSWORD` and
 `AUTH_SECRET` first (`openssl rand -base64 32` for the secret), or `/sign-in`
 refuses every password and says why: the landing page at `/` is the only
-page that opens without them. Set `ASSET_FILES_ENABLED=1`
-there to serve videos and diagrams locally, and `DATABASE_URL` if yours is
-not the default. A non-default `DATABASE_URL` also goes in
+page that opens without them. Set `DATABASE_URL` there if yours is not the
+default; the app reads every course, note and diagram from that database, so
+it has to be migrated, imported and flipped first (README.md, "Install"). A non-default `DATABASE_URL` also goes in
 `services/catalog/.env` (copy `services/catalog/.env.example`), because the
 catalog CLI reads that file and never `apps/web/.env.local`; set in one place
 only, `migrate` and the app talk to different databases. The file matters for the agent chat too, which needs at least one
@@ -84,10 +84,10 @@ there.
 | `apps/web/` | The Next.js app, and the only workspace with a `next.config.ts`, a `public/` and a `vercel.json` |
 | `apps/web/src/app/` | App Router routes: `/courses`, `/learn`, `/library`, the course and module pages, the `/api/*` handlers |
 | `apps/web/src/components/` | The shell, the redesign's primitives in `ui/` ([IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)), checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `asset-files.ts` (an asset row to its bytes: the blob store first, then a file on disk with the containment checks), `blob-store.ts` (the store the asset routes read), `asset-posters.ts` (a stored poster, or a frame out of a video with ffmpeg, cached outside the repo), `asset-library.ts`, `library.ts` and `transcript.ts` (the `/library` pages' reads, taxonomy and sidecar parsing), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `site-url.ts` (where this deployment lives, for social cards and the OpenRouter referer), `kb/` (the concept graph, from the catalog) |
-| `apps/web/src/data/` | The app's server-only view of `content/`, through the reader seam: `getCourses()` and the course lookups in `courses/index.ts`, `getTags()` in `content.ts`, `getTopics()` in `topics.ts`, the seam's composition root in `source.ts`, the repo root in `repo-root.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`; nothing off the disk), `blob-store.ts` (the store the asset routes read), `asset-library.ts`, `library.ts` and `transcript.ts` (the `/library` pages' reads, taxonomy and sidecar parsing), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `site-url.ts` (where this deployment lives, for social cards and the OpenRouter referer), `kb/` (the concept graph, from the catalog) |
+| `apps/web/src/data/` | The app's server-only view of the authored content, through the reader seam and from the database only: `getCourses()` and the course lookups in `courses/index.ts`, `getTags()` in `content.ts`, `getTopics()` in `topics.ts`, the seam's composition root in `source.ts`, which refuses a type nobody flipped |
 | `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
-| `packages/content/` | The parsers both the app and the catalog read `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) that lets a type move into Postgres |
+| `packages/content/` | The parsers the catalog imports `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.self-learn/blobs` ([README](packages/blob/README.md)) |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
@@ -109,10 +109,12 @@ bug fixes or docs. All welcome.
    none, and the web app's third-party list is `next`, `react`, `react-dom`,
    `@tailwindcss/typography` and `katex` (maths typesetting, pinned exactly;
    see `apps/web/src/lib/math.ts` for why it earned its place).
-2. **`npm run build` has to pass, not just `npm run typecheck`.**
-   `next-env.d.ts` imports `./.next/types/routes.d.ts`, which only `next dev`
-   or `next build` generates, so route types are checked properly only once a
-   build has run.
+2. **`npm run build` has to pass, not just `npm run typecheck`.** The web
+   app's `typecheck` runs `next typegen` first: `next-env.d.ts` (untracked, as
+   Next's docs say) and the route types under `.next/types/` it imports exist
+   only once `next typegen`, `next dev` or `next build` has run, and without
+   them a fresh clone's typecheck fails on every image import. The build is
+   still the gate that compiles the app the way it ships.
 3. **The knowledge base is a real study record, and half of it is not in git.**
    The notes and the session logs under `learn/` are versioned on purpose; the
    event log, the mastery model and the schedule are rows in Postgres and have

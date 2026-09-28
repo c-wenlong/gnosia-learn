@@ -325,7 +325,7 @@ What 1c shipped, and the contract 1d (session focus mode) builds on.
 | Module | What it is |
 | --- | --- |
 | [`@/lib/concept-note-core`](../../apps/web/src/lib/concept-note-core.ts) | Pure. `parseConceptNote(source)` gives the frontmatter fields (`title`, `summary`, `requires`, `assumes`, `tags`, `topics`, `sources`) and the ```` ```check ```` blocks as `ConceptCheck { id, question, answer, why, source }`, the shape `review due --json` prints. A port of the CLI's parser (the web app never imports `scripts/`), pinned by its test |
-| [`@/lib/concept-note`](../../apps/web/src/lib/concept-note.ts) | Server. `readConceptNote(slug)` finds the concept's `note:` asset through `asset_concept` and reads it with `resolveAssetFile`, so the asset route's containment checks apply. Not gated by `ASSET_FILES_ENABLED`: notes are in git. Never throws; a failure is `{ ok: false, code: "no-note" \| "file-missing" \| "unreachable" }`. Phase 1e reads checks through it too |
+| [`@/lib/concept-note`](../../apps/web/src/lib/concept-note.ts) | Server. `readConceptNote(slug)` reads the note from `concept.body` through the content seam, the database only since phase 2 of CONTENT-MIGRATION.md. Never throws; a failure is `{ ok: false, code: "no-note" \| "too-large" \| "not-flipped" \| "unreachable" }`. Phase 1e reads checks through it too |
 | [`@/lib/concept-workspace-core`](../../apps/web/src/lib/concept-workspace-core.ts) | Pure. `buildConceptWorkspace(...)` assembles `ConceptWorkspace`; `toConceptPromptInput(workspace)` is the tutor's view of it; `isConceptSlug` guards every entry point |
 | [`@/lib/concept-workspace`](../../apps/web/src/lib/concept-workspace.ts) | Server. `readConceptWorkspace(slug)` (and `loadConceptWorkspace` for pages) does the reads: the knowledge base, the note, the event log, the review card, the asset links. The page, `GET /api/concepts/[slug]` and the tutor all go through it |
 | [`@/lib/concept-graph`](../../apps/web/src/lib/concept-graph.ts) | Pure. `neighbourhood`, `courseScope` (course, or the note's folder when it is in no course, with the transitive reduction applied), `dependantsOf`, `backlinksOf`, `defaultSelection`, `layoutGraph` |
@@ -594,8 +594,9 @@ in that session.
 
 **Library search** runs on the server over `?q=`: every row's title,
 filename and URL, plus the text of each note and transcript, read per
-request through `readAssetText` (so it is off with `ASSET_FILES_ENABLED`,
-and a file over `TEXT_PREVIEW_BYTES` is searched by name only). Every word
+request through `readAssetText` (a note from its row, a transcript from the
+blob store; one with no stored copy, or over `TEXT_PREVIEW_BYTES`, is searched
+by name only). Every word
 must appear, as a case-insensitive substring: no stemming, no ranking, no
 typo tolerance. A line inside a transcript finds the transcript's video. It
 reads about fifty-five small files per search, with no index and no cache,

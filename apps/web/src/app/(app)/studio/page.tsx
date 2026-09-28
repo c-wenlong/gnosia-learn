@@ -20,8 +20,9 @@ import {
   SortMenu,
   TopicChips,
 } from "@/components/studio/StudioControls";
-import { getTopics, topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
+import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
+import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
   groupDiagrams,
@@ -63,6 +64,8 @@ interface Health {
   stale: boolean;
   checks: DoctorLine[];
   note: string;
+  /** Where the topic list stands (D13). Optional: an older runner does not send it. */
+  vocabulary?: VocabularyState;
 }
 
 export default async function StudioPage({
@@ -113,11 +116,18 @@ export default async function StudioPage({
     );
   }
 
-  const [listed, jobList, topics] = await Promise.all([
+  // The topics come from the runner, not from the app's own content read: that
+  // read is database-only and throws with Postgres down, and U3 says this
+  // screen still browses and draws then. The runner answers from its D13 copy,
+  // and with no copy at all the chips fall back to slugs and the banner below
+  // says why.
+  const [listed, jobList, vocabulary] = await Promise.all([
     studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
-    getTopics(),
+    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
   ]);
+  const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
+  const staleVocabulary = vocabularyBanner(health.data.vocabulary);
   const topicTitles = topicTitleMap(topics);
   const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
@@ -163,6 +173,8 @@ export default async function StudioPage({
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
 
       {/* U5 and U3: both mean everything still works, so both are banners. */}
+      {/* D13: the topic list is the saved copy, or there is none. */}
+      {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
       {health.data.stale && (
         <Notice>
           The tldrawkc page bundle is older than its source. Everything still runs; rebuild with{" "}

@@ -432,13 +432,6 @@ export function canTransition(
   return (transitions[from] ?? []).includes(to);
 }
 
-/**
- * Where a job writes before a person accepts it. Not recursive-visible to the
- * indexer (`filesIn` does not descend), on the same filesystem as the target
- * so the accept rename is atomic, and gitignored.
- */
-export const CANDIDATES_DIR = "learn/assets/.candidates";
-
 /** A value JSON can hold. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 

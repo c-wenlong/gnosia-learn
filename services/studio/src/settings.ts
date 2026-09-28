@@ -1,6 +1,7 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, type Dirent } from "node:fs";
 import path from "node:path";
 
+import { cacheDir } from "./content-cache";
 import {
   absolute,
   candidatePath,
@@ -50,7 +51,8 @@ import {
  *
  * Two limits are named rather than hidden. Deny always beats allow, so a deny
  * on a parent directory would take the candidate with it and every deny here is
- * written to miss the two files the job is allowed to write. And a Bash prefix
+ * written to miss the two files the job is allowed to write, which sit in its
+ * own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`. And a Bash prefix
  * rule is not a sandbox: the CLI's own documentation says so, `canvas run`
  * takes an output path as an argument, and an OS-level filesystem sandbox is
  * the only thing that closes that. It is in the design's known gaps and it is
@@ -180,7 +182,7 @@ export const BASH_DENY = [
 
 export interface SettingsInput {
   jobId: string;
-  /** The diagram slug: the two candidate paths are derived from it. */
+  /** The diagram slug: with the job id, the two candidate paths are derived from it. */
   slug: string;
   /** A concept note the agent may read, repo-relative, from the brief. */
   source?: string;
@@ -190,23 +192,26 @@ export interface SettingsInput {
  * Build the settings for one job.
  *
  * `readdirSync` on `learn/assets/` is deliberate and is the narrowed clean-room
- * rule: every committed diagram is denied by its own absolute path, so the
- * agent cannot lift an existing document and cannot reach the file its own
- * candidate will one day replace. Globs are there too, for a file that appears
- * after the settings are written, but the enumerated paths are what does not
- * depend on how the matcher treats a `*`.
+ * rule: every diagram file still in the tree is denied by its own absolute
+ * path, so the agent cannot lift an existing document. Globs are there too, for
+ * a file that appears after the settings are written, but the enumerated paths
+ * are what does not depend on how the matcher treats a `*`. The same walk over
+ * `$STUDIO_HOME` denies everything the runner keeps there except this job's
+ * own workspace: the checkouts, the cache and every other job. A job queued
+ * after this file is written is not in any walk, so the other jobs are also
+ * denied by globs that match every id but this one (`siblingJobRules`).
  */
 export function buildSettings(input: SettingsInput): AgentSettings {
   const home = process.env.HOME ?? "";
-  const candidate = absolute(candidatePath(input.slug));
-  const candidateSvg = absolute(candidateSvgPath(input.slug));
+  const candidate = candidatePath(input.jobId, input.slug);
+  const candidateSvg = candidateSvgPath(input.jobId, input.slug);
   const scratch = scratchDir(input.jobId);
 
   const allow = [
     ...BASH_ALLOW,
-    // The two files this job exists to write, and nothing else under
-    // learn/assets/. `Edit` and not `Write`: the CLI checks a file write
-    // against Edit rules, and a Write rule would be accepted and ignored.
+    // The two files this job exists to write, named exactly, and not the
+    // directory they sit in. `Edit` and not `Write`: the CLI checks a file
+    // write against Edit rules, and a Write rule would be accepted and ignored.
     rule("Edit", candidate),
     rule("Edit", candidateSvg),
     rule("Read", candidate),
@@ -257,6 +262,14 @@ export function buildSettings(input: SettingsInput): AgentSettings {
     // corpus is materialised here rather than under learn/assets/.
     rule("Read", workDir(), "/**"),
     rule("Edit", workDir(), "/**"),
+    // The cache: the last topic list and diagram list the runner read. Not a
+    // secret, but not the agent's either, and the diagram list names every
+    // diagram's blob.
+    rule("Read", cacheDir(), "/**"),
+    rule("Edit", cacheDir(), "/**"),
+    // Anything else the runner keeps beside `jobs/`, by name, so a directory
+    // added there later is denied without anyone remembering to add it here.
+    ...studioHomeRules(),
     // Git's own directory. `Bash(git:*)` is denied above; this is the other way
     // in. The runner runs no mutating git command either, and D6 says why.
     rule("Edit", path.join(REPO_ROOT, ".git"), "/**"),
@@ -285,38 +298,112 @@ export function buildSettings(input: SettingsInput): AgentSettings {
   };
 }
 
-/** Every committed diagram, denied by name. Missing directory means none yet. */
+/** Every diagram file in the tree, denied by name. Missing directory means none. */
 function committedAssetRules(): string[] {
-  let entries: string[];
+  // Every child, dot entries included: nothing the agent writes lives here any
+  // more, so there is no directory to leave reachable. That takes in a
+  // `.candidates/` still holding a job from before candidates moved.
+  return denyEach(absolute(ASSETS_DIR), () => true);
+}
+
+/** Read and Edit denies on each entry of `directory` that `keep` selects, a directory with its contents. */
+function denyEach(directory: string, keep: (name: string) => boolean): string[] {
+  let entries: Dirent[];
   try {
-    entries = readdirSync(absolute(ASSETS_DIR));
+    entries = readdirSync(directory, { withFileTypes: true });
   } catch {
     return [];
   }
   const rules: string[] = [];
   for (const entry of entries) {
-    // `.candidates` is the one child that is not a committed asset, and it is
-    // the directory the allow rules above point into.
-    if (entry.startsWith(".")) continue;
-    const file = absolute(`${ASSETS_DIR}/${entry}`);
-    rules.push(rule("Read", file), rule("Edit", file));
+    if (!keep(entry.name)) continue;
+    const target = path.join(directory, entry.name);
+    rules.push(rule("Read", target), rule("Edit", target));
+    if (entry.isDirectory()) rules.push(rule("Read", target, "/**"), rule("Edit", target, "/**"));
   }
   return rules;
 }
 
-/** The other jobs' workspaces, by name, so this job's scratch stays reachable. */
+/**
+ * Every entry directly under `$STUDIO_HOME` except `jobs/`, which is walked
+ * job by job below, because this job's own workspace is in there and a deny
+ * on the parent would take its candidate and scratch with it.
+ */
+function studioHomeRules(): string[] {
+  return denyEach(studioHome(), (name) => name !== "jobs");
+}
+
+/**
+ * The alphabet of a job id: `randomUUID()` in the runner, lower-case hex and
+ * dashes. The globs below are built over it, so a character outside it in a
+ * sibling's name is covered only by the walk, never by a glob.
+ */
+const JOB_ID_ALPHABET = "0123456789abcdef-";
+
+/**
+ * Every other job's workspace, including a job enqueued after this one started.
+ *
+ * Two halves. The walk denies each job directory present at spawn by its own
+ * name, whatever that name is. The globs cover the rest: the runner writes this
+ * file once, when the agent starts, and a job queued while it runs creates a
+ * workspace no enumerated rule names. With the default `STUDIO_HOME` inside the
+ * repository that workspace is inside a working directory, so without a glob
+ * the running agent could read the new job's records and candidate.
+ *
+ * A glob cannot say "every job but mine", because deny beats allow and the
+ * matcher has no negated character class (it follows the gitignore rules, where
+ * `[!x]` is a class holding `!` and `x`). So "not my id" is spelled out
+ * position by position: a name that shares the first `i` characters of this id
+ * and differs at character `i` matches `jobs/<prefix>[<every other
+ * character>]*`. One pattern per position covers every id of this length or
+ * longer that is not this one, and a last pattern covers a name that extends
+ * this id. None of them matches this job's own directory, which the test
+ * checks with the same matcher the CLI uses.
+ */
 function siblingJobRules(jobId: string): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(path.join(studioHome(), "jobs"));
-  } catch {
-    return [];
-  }
+  const jobs = path.join(studioHome(), "jobs");
   const rules: string[] = [];
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(jobs);
+  } catch {
+    // No jobs directory yet: nothing to enumerate, and the globs still apply.
+  }
   for (const entry of entries) {
     if (entry === jobId) continue;
-    const directory = path.join(studioHome(), "jobs", entry);
+    const directory = path.join(jobs, entry);
     rules.push(rule("Read", directory, "/**"), rule("Edit", directory, "/**"));
   }
+  for (const pattern of otherJobPatterns(jobId)) {
+    const glob = path.join(jobs, pattern);
+    rules.push(rule("Read", glob, "/**"), rule("Edit", glob, "/**"));
+  }
   return rules;
+}
+
+/**
+ * Directory-name globs matching every job id except `jobId`.
+ *
+ * Exported for the test, which runs them through the gitignore matcher. An id
+ * holding a character that means something to that matcher gets no globs at
+ * all, only the walk: escaping inside a gitignore pattern is too easy to get
+ * subtly wrong for a rule whose failure is silent, and the runner's ids never
+ * hold one.
+ */
+export function otherJobPatterns(jobId: string): string[] {
+  if (!/^[A-Za-z0-9._-]+$/.test(jobId)) return [];
+  const patterns: string[] = [];
+  for (let i = 0; i < jobId.length; i += 1) {
+    const mine = jobId.charAt(i).toLowerCase();
+    const others = [...JOB_ID_ALPHABET].filter((character) => character !== mine);
+    patterns.push(`${jobId.slice(0, i)}[${characterClass(others)}]*`);
+  }
+  patterns.push(`${jobId}?*`);
+  return patterns;
+}
+
+/** A bracket body for these characters, with the dash last so it is literal. */
+function characterClass(characters: string[]): string {
+  const dash = characters.includes("-");
+  return `${characters.filter((character) => character !== "-").join("")}${dash ? "-" : ""}`;
 }

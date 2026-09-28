@@ -70,8 +70,8 @@ async function failAndSettle(element: Element) {
 const panel = (host: HTMLElement) => host.querySelector("[data-problem]");
 
 describe("the video player", () => {
-  it("replaces a dead player with the panel, and says the index is stale", async () => {
-    const asked = statusAnswers({ ok: false, code: "manimkc-stale" }, 503);
+  it("replaces a dead player with the panel, and says the video is not uploaded", async () => {
+    const asked = statusAnswers({ ok: false, code: "not-uploaded" }, 404);
     const host = mount(
       createElement(VideoPlayer, { src: "/api/assets/v/file", statusHref: "/api/assets/v/status" }),
     );
@@ -79,10 +79,10 @@ describe("the video player", () => {
 
     expect(host.querySelector("video")).toBeNull();
     expect(asked).toEqual(["/api/assets/v/status"]);
-    expect(panel(host)?.getAttribute("data-problem")).toBe("manimkc-stale");
+    expect(panel(host)?.getAttribute("data-problem")).toBe("not-uploaded");
     expect(host.textContent).toContain("This video did not load.");
-    expect(host.textContent).toContain(ASSET_PROBLEMS["manimkc-stale"].reason);
-    expect(host.textContent).toContain("npm run catalog -- index --only manimkc");
+    expect(host.textContent).toContain(ASSET_PROBLEMS["not-uploaded"].reason);
+    expect(host.textContent).toContain("npm run catalog -- asset upload --source manimkc");
   });
 
   it("offers Try again when the server can serve the file, and puts the player back", async () => {
@@ -100,7 +100,7 @@ describe("the video player", () => {
   });
 
   it("asks once however many times the element reports the same failure", async () => {
-    const asked = statusAnswers({ ok: false, code: "file-missing" });
+    const asked = statusAnswers({ ok: false, code: "not-in-catalog" });
     const host = mount(
       createElement(VideoPlayer, { src: "/api/assets/v/file", statusHref: "/api/assets/v/status" }),
     );
@@ -118,7 +118,7 @@ describe("the video player", () => {
 
 describe("the diagram view", () => {
   it("shows the panel at once, then the reason when it arrives", async () => {
-    statusAnswers({ ok: false, code: "file-missing" });
+    statusAnswers({ ok: false, code: "not-in-catalog" });
     const host = mount(
       createElement(DiagramView, {
         src: "/api/assets/d/file",
@@ -137,9 +137,9 @@ describe("the diagram view", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(panel(host)?.getAttribute("data-problem")).toBe("file-missing");
-    expect(host.textContent).toContain(ASSET_PROBLEMS["file-missing"].reason);
-    expect(host.textContent).toContain("npm run catalog -- index");
+    expect(panel(host)?.getAttribute("data-problem")).toBe("not-in-catalog");
+    expect(host.textContent).toContain(ASSET_PROBLEMS["not-in-catalog"].reason);
+    expect(host.textContent).toContain("npm run catalog -- import");
   });
 
   it("drops an answer about a diagram it is no longer showing", async () => {
@@ -164,7 +164,7 @@ describe("the diagram view", () => {
     });
     act(() => root.render(view("/two")));
     await act(async () => {
-      release(new Response(JSON.stringify({ ok: false, code: "file-missing" })));
+      release(new Response(JSON.stringify({ ok: false, code: "not-in-catalog" })));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -175,7 +175,7 @@ describe("the diagram view", () => {
 
 describe("a card's thumbnail", () => {
   it("shows the compact panel with the short reason and asks the poster's status", async () => {
-    const asked = statusAnswers({ ok: false, code: "no-ffmpeg" }, 503);
+    const asked = statusAnswers({ ok: false, code: "blob-store-unavailable" }, 503);
     const host = mount(
       createElement(AssetCard, {
         asset: {
@@ -195,9 +195,9 @@ describe("a card's thumbnail", () => {
     await failAndSettle(host.querySelector("img")!);
 
     expect(asked).toEqual(["/api/assets/v/status?for=poster"]);
-    expect(panel(host)?.getAttribute("data-problem")).toBe("no-ffmpeg");
+    expect(panel(host)?.getAttribute("data-problem")).toBe("blob-store-unavailable");
     expect(host.textContent).toContain("Preview unavailable");
-    expect(host.textContent).toContain(ASSET_PROBLEMS["no-ffmpeg"].label);
+    expect(host.textContent).toContain(ASSET_PROBLEMS["blob-store-unavailable"].label);
     // The card is a link, so the compact panel never holds a button.
     expect(host.querySelector("a button")).toBeNull();
   });
@@ -228,7 +228,7 @@ describe("a note's embed", () => {
     // attached `onError`, so a quick refusal fires its event into nothing and
     // leaves a finished image with no width. That state is faked here, with
     // `decode()` rejecting the way a browser's does for a broken image.
-    statusAnswers({ ok: false, code: "file-missing" });
+    statusAnswers({ ok: false, code: "not-in-catalog" });
     const proto = HTMLImageElement.prototype;
     const complete = vi.spyOn(proto, "complete", "get").mockReturnValue(true);
     const width = vi.spyOn(proto, "naturalWidth", "get").mockReturnValue(0);
@@ -247,7 +247,7 @@ describe("a note's embed", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       expect(host.querySelector("img")).toBeNull();
-      expect(panel(host)?.getAttribute("data-problem")).toBe("file-missing");
+      expect(panel(host)?.getAttribute("data-problem")).toBe("not-in-catalog");
     } finally {
       complete.mockRestore();
       width.mockRestore();

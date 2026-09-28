@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getAllTopicIds, getCourses } from "@/data/courses";
 import {
   countsFromIds,
@@ -6,6 +6,13 @@ import {
   formatProgress,
   moduleProgress,
 } from "@/lib/progress";
+
+// The app reads courses from the database only; this suite tests logic over
+// real course data, so it reads the export tree instead (`@/test/content-files`).
+vi.mock("@/data/source", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/source")>()),
+  contentSource: (await import("@/test/content-files")).fileContentSource,
+}));
 
 // Read once for the file: the list is per request in the app, and a test file is one request.
 const courses = await getCourses();

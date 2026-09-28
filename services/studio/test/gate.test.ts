@@ -1,8 +1,11 @@
-import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { absolute, candidatePath, candidateSvgPath, CANDIDATES_DIR } from "../src/paths";
+import { candidatePath, candidateSvgPath } from "../src/paths";
+import { topicListAnswer } from "./vocabulary";
 
 /**
  * The gate against a fixture candidate.
@@ -22,12 +25,23 @@ vi.mock("../src/canvas", async (importOriginal) => {
   return { ...actual, canvas: canvasMock.canvas };
 });
 
+// Step 4 checks the stamp against the vocabulary, which the studio reads only
+// through `catalog topic ls`; faked, so the gate reads no database.
+const catalogMock = vi.hoisted(() => ({ topicList: vi.fn() }));
+vi.mock("../src/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/catalog")>()),
+  ...catalogMock,
+}));
+
 const { runGate } = await import("../src/gate");
 
 const SLUG = "studio-gate-fixture";
 const TOPIC = "vector-and-linear-algebra-basics";
-const candidate = absolute(candidatePath(SLUG));
-const candidateSvg = absolute(candidateSvgPath(SLUG));
+const JOB = "job-gate";
+/** In the job's workspace under this test's STUDIO_HOME, so named once it is set. */
+let candidate = "";
+let candidateSvg = "";
+let home = "";
 
 interface Reply {
   code: number;
@@ -80,8 +94,8 @@ const RELATIONS = [{ from: "vector a", to: "vector b", label: "projects onto" }]
 const gateInput = (over: Partial<Parameters<typeof runGate>[0]> = {}) => ({
   slug: SLUG,
   topic: TOPIC,
-  candidatePath: candidatePath(SLUG),
-  candidateSvgPath: candidateSvgPath(SLUG),
+  candidatePath: candidate,
+  candidateSvgPath: candidateSvg,
   startedAtMs: Date.now() - 60_000,
   elements: ELEMENTS,
   relations: RELATIONS,
@@ -89,13 +103,19 @@ const gateInput = (over: Partial<Parameters<typeof runGate>[0]> = {}) => ({
 });
 
 beforeEach(async () => {
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
+  home = await mkdtemp(path.join(tmpdir(), "studio-gate-"));
+  process.env.STUDIO_HOME = home;
+  candidate = candidatePath(JOB, SLUG);
+  candidateSvg = candidateSvgPath(JOB, SLUG);
+  catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
+  await mkdir(path.dirname(candidate), { recursive: true });
   await writeFile(candidate, "{}", "utf8");
 });
 
 afterEach(async () => {
-  await rm(candidate, { force: true });
-  await rm(candidateSvg, { force: true });
+  delete process.env.STUDIO_HOME;
+  if (home !== "") await rm(home, { recursive: true, force: true });
+  home = "";
 });
 
 describe("step 1: the candidate", () => {
@@ -304,15 +324,16 @@ describe("step 4: the topic stamp", () => {
     expect(gate.findings[0]).toContain("carries no topic");
   });
 
-  it("refuses a topic that is not in content/topics.yaml", async () => {
+  it("refuses a topic that is not in the catalog's vocabulary", async () => {
     replies(inspectOk("not-a-real-topic-slug"));
     const gate = await runGate(gateInput());
     expect(gate.ok).toBe(false);
-    expect(gate.findings[0]).toContain("not in content/topics.yaml");
+    expect(gate.findings[0]).toContain("not in the catalog's vocabulary");
+    expect(catalogMock.topicList).toHaveBeenCalled();
   });
 
   it("refuses a real topic that is not the one the job was enqueued under", async () => {
-    replies(inspectOk("tomasulo-algorithm"));
+    replies(inspectOk("tcp-congestion-control"));
     const gate = await runGate(gateInput());
     expect(gate.ok).toBe(false);
     expect(gate.findings[0]).toContain("enqueued under");
@@ -364,7 +385,7 @@ describe("step 6: verify", () => {
     const gate = await runGate(gateInput());
     expect(gate.ok).toBe(true);
     expect(gate.shapes).toBe(44);
-    expect(gate.svg?.path).toBe(candidateSvgPath(SLUG));
+    expect(gate.svg?.path).toBe(candidateSvg);
     expect(gate.steps.map((step) => step.name)).toEqual([
       "candidate",
       "inspect",

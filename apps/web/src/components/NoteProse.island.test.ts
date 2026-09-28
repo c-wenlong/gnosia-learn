@@ -69,9 +69,9 @@ describe("NoteProse's client island", () => {
 
   it("is not rendered for an embed the server already knows cannot load", () => {
     const html = render("![[gone.svg]]", {
-      resolveEmbed: () => ({ problem: "file-missing" }),
+      resolveEmbed: () => ({ problem: "not-in-catalog" }),
     });
-    expect(html).toContain('data-problem="file-missing"');
+    expect(html).toContain('data-problem="not-in-catalog"');
     expect(renders.count).toBe(0);
   });
 
