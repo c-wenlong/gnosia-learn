@@ -116,7 +116,12 @@ export default async function LibraryPage({
   const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits }), sort);
   // Said once for the view rather than on every card: how many rows here name
   // bytes nothing has stored yet, and the one command that stores them.
-  const unserved = unservedRows(matching, access).length;
+  const unserved = unservedRows(matching, access);
+  // The upload command fills the store for manimkc's renders only; a diagram
+  // or a note with nothing behind it gets there another way, so the notice
+  // names the command only for the rows it would fix.
+  const unservedRenders = unserved.filter((row) => row.sourceRepo === "manimkc").length;
+  const unservedOther = unserved.length - unservedRenders;
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -221,15 +226,24 @@ export default async function LibraryPage({
             </Form>
           </section>
 
-          {unserved > 0 && (
+          {unserved.length > 0 && (
             <Notice
               role="status"
-              title={`${unserved} ${plural(unserved)} here ${unserved === 1 ? "has" : "have"} no stored copy yet.`}
-              command="npm run catalog -- asset upload --source manimkc"
+              title={`${unserved.length} ${plural(unserved.length)} here ${unserved.length === 1 ? "has" : "have"} no stored copy yet.`}
+              command={unservedRenders > 0 ? "npm run catalog -- asset upload --source manimkc" : undefined}
             >
-              Every title, topic and size below is real. What is missing is the bytes: the app serves a file only
-              from the blob store or the database, and these have not been uploaded to either, so they will not play
-              or draw until they are.
+              <p>
+                Every title, topic and size below is real. What is missing is the bytes: the app serves a file only
+                from the blob store or the database, so these will not play or draw until they are stored.
+              </p>
+              {unservedOther > 0 && (
+                <p className="mt-2">
+                  {unservedRenders > 0 ? `The command below stores the ${unservedRenders} rendered by manimkc. ` : ""}
+                  {unservedOther === 1 ? "One is" : `${unservedOther} are`} not a render: a diagram is stored by{" "}
+                  <code className="font-mono text-[12px]">catalog diagram put</code>, and a note or a session log by
+                  flipping its type.
+                </p>
+              )}
             </Notice>
           )}
 
