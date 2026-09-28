@@ -359,7 +359,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4284-m1, cp4283-m6]
-      concepts: [attention-weights, multi-head-attention, positional-encoding, query-key-value-projections, self-attention, softmax, transformer-block]
+      concepts: [attention-weights, multi-head-attention, positional-encoding, query-key-value-projections, self-attention, softmax, transformer-block, causal-attention-mask, llm-training-stages]
 
   - slug: autoregressive-generative-models
     title: Autoregressive generative models
@@ -369,7 +369,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4283-m1]
-      concepts: []
+      concepts: [chain-rule-factorization, pixelcnn-masked-convolution, next-token-prediction]
 
   - slug: variational-autoencoders
     title: Variational autoencoders
@@ -379,7 +379,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4283-m2]
-      concepts: []
+      concepts: [evidence-lower-bound, reparameterization-trick, posterior-collapse]
 
   - slug: generative-adversarial-networks
     title: Generative adversarial networks
@@ -389,7 +389,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4283-m3]
-      concepts: []
+      concepts: [gan-minimax-game, gan-training-stabilization]
 
   - slug: normalizing-flows
     title: Normalizing flows
@@ -399,7 +399,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4283-m4]
-      concepts: []
+      concepts: [change-of-variables-density, affine-coupling-layer]
 
   - slug: diffusion-models
     title: Diffusion models
@@ -409,7 +409,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4283-m5]
-      concepts: []
+      concepts: [denoising-diffusion-process, score-based-generative-modeling]
 
   - slug: distributed-training-and-inference-serving
     title: Distributed training and inference serving
@@ -419,7 +419,7 @@ topics:
     maps:
       manimkc: [machine-learning/pipeline-parallelism]
       courses: [cp4284-m6]
-      concepts: []
+      concepts: [continuous-batching, speculative-decoding, data-vs-model-parallelism]
 
   - slug: chain-of-thought-prompting
     title: Chain-of-thought prompting
@@ -429,7 +429,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4284-m2]
-      concepts: []
+      concepts: [chain-of-thought-prompting, self-consistency, prompt-decomposition]
 
   # ---------------- agentic-ai ----------------
   - slug: agent-tool-use-and-reasoning-loops
@@ -440,7 +440,7 @@ topics:
     maps:
       manimkc: [agentic-ai/loop-and-graph-engineering]
       courses: [cp4284-m3, cs3216-m2]
-      concepts: [react-loop, tool-calling]
+      concepts: [react-loop, tool-calling, structured-llm-outputs, agent-state-graphs, workflows-versus-agents, agent-memory-context-vs-store]
 
   - slug: agent-memory-and-state
     title: Agent memory and state management
@@ -460,7 +460,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4284-m4]
-      concepts: []
+      concepts: [test-time-compute-scaling, self-refinement, process-vs-outcome-reward-models]
 
   - slug: ai-assisted-code-generation-and-review
     title: AI-assisted code generation and review
@@ -470,7 +470,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4284-m5, cs3227-m4]
-      concepts: []
+      concepts: [reviewing-ai-generated-code, automated-checks-as-a-safety-net, execution-guided-code-generation, agentic-coding-loop]
 
   - slug: agentic-software-engineering-landscape
     title: Agentic software engineering, landscape
@@ -480,7 +480,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3227-m1]
-      concepts: []
+      concepts: [assisted-vs-agentic-coding, agent-touchpoints-in-the-sdlc]
 
   - slug: agent-safety-guardrails-and-security
     title: Agent guardrails, sandboxing and security
@@ -490,7 +490,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3227-m2, cs3227-m5]
-      concepts: []
+      concepts: [least-privilege-for-agents, bounding-agent-tasks, prompt-injection, agent-failure-mode-analysis]
 
   - slug: multi-agent-collaboration-patterns
     title: Multi-agent collaboration patterns
@@ -500,7 +500,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3227-m3]
-      concepts: []
+      concepts: [per-phase-agent-roles, specialist-agents-and-handoffs]
 
   - slug: human-ai-collaboration-practices
     title: Human-AI collaboration practices
@@ -510,7 +510,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3227-m6]
-      concepts: []
+      concepts: [calibrated-trust-and-escalation, evaluating-agentic-ai-claims]
 
   - slug: llm-conversational-agents
     title: LLM-based conversational agents
@@ -520,7 +520,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3249-m4]
-      concepts: []
+      concepts: [context-window-management, grounded-responses-and-clarification]
 
   - slug: coding-agent-harness-architectures
     title: Coding-agent harness architectures
@@ -541,7 +541,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3216-m1]
-      concepts: []
+      concepts: [problem-validation, cross-functional-product-teams]
 
   - slug: rapid-iterative-product-development
     title: Rapid iterative product development
@@ -551,7 +551,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3216-m3]
-      concepts: []
+      concepts: [minimum-viable-product, fixed-time-variable-scope, user-feedback-iteration-loop]
 
   - slug: full-stack-shipping-practices
     title: Full-stack shipping practices
@@ -561,7 +561,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3216-m4]
-      concepts: []
+      concepts: [frontend-backend-api-contract, deployment-environments-and-promotion, handling-errors-at-boundaries, logs-metrics-and-traces]
 
   - slug: growth-and-market-positioning
     title: Growth and market positioning
@@ -571,7 +571,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3216-m5]
-      concepts: []
+      concepts: [growth-loops, viral-coefficient, product-positioning]
 
   # ---------------- hci ----------------
   - slug: hci-foundations-and-cognition
@@ -582,7 +582,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m1]
-      concepts: []
+      concepts: [human-centred-design-cycle, mental-models, affordances-and-signifiers, gestalt-principles-of-grouping, recognition-over-recall]
 
   - slug: user-research-methods
     title: User research methods
@@ -592,7 +592,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m2]
-      concepts: []
+      concepts: [contextual-inquiry, personas, user-journey-maps, hierarchical-task-analysis, stakeholder-analysis]
 
   - slug: interaction-design-and-prototyping
     title: Interaction design and prototyping
@@ -602,7 +602,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m3, cs3249-m1]
-      concepts: []
+      concepts: [event-driven-ui, usability-heuristics-in-conversation, direct-manipulation, ui-design-patterns, prototype-fidelity, information-architecture]
 
   - slug: usability-evaluation-methods
     title: Usability evaluation methods
@@ -612,7 +612,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m4, cs3216-m6]
-      concepts: []
+      concepts: [heuristic-evaluation, think-aloud-usability-testing, ab-testing, discount-usability-testing, analytics-driven-iteration]
 
   - slug: accessibility-and-inclusive-design
     title: Accessibility and inclusive design
@@ -622,7 +622,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m5]
-      concepts: []
+      concepts: [wcag-pour-principles, screen-readers-and-semantic-markup, keyboard-accessibility, universal-design]
 
   - slug: design-ethics-and-dark-patterns
     title: Design ethics and dark patterns
@@ -632,7 +632,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs2111-m6]
-      concepts: []
+      concepts: [dark-patterns, privacy-by-design, bias-in-interface-design]
 
   - slug: dialogue-design-and-management
     title: Dialogue design and management
@@ -642,7 +642,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3249-m2, cs3249-m3]
-      concepts: []
+      concepts: [turn-taking-and-grounding, intent-and-slot-model, intent-classification-and-slot-filling, dialogue-state-tracking]
 
   - slug: voice-and-multimodal-interfaces
     title: Voice and multimodal interfaces
@@ -652,7 +652,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3249-m5]
-      concepts: []
+      concepts: [voice-pipeline-latency, multimodal-grounding]
 
   - slug: conversational-system-evaluation
     title: Conversational system evaluation
@@ -662,7 +662,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs3249-m6]
-      concepts: []
+      concepts: [task-success-and-dialogue-metrics, conversational-repair-and-fallback]
 
   # ---------------- classical-ai ----------------
   - slug: search-algorithms
@@ -673,7 +673,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m1]
-      concepts: []
+      concepts: [search-problem-formulation, uninformed-search, a-star-search, admissible-and-consistent-heuristics]
 
   - slug: constraint-satisfaction-problems
     title: Constraint satisfaction problems
@@ -683,7 +683,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m2]
-      concepts: []
+      concepts: [csp-backtracking-search, arc-consistency, local-search-for-csps]
 
   - slug: adversarial-search-and-game-trees
     title: Adversarial search and game trees
@@ -693,7 +693,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m3]
-      concepts: []
+      concepts: [minimax, alpha-beta-pruning, evaluation-functions, monte-carlo-tree-search]
 
   - slug: logic-and-knowledge-representation
     title: Logic and knowledge representation
@@ -703,7 +703,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m4]
-      concepts: []
+      concepts: [propositional-entailment-and-inference, first-order-logic, resolution-with-unification, limits-of-logical-representation]
 
   - slug: automated-planning
     title: Automated planning
@@ -713,7 +713,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m5]
-      concepts: []
+      concepts: [strips-action-schemas, planning-graphs-and-graphplan, pddl-domains-and-problems, partial-order-planning, hierarchical-task-networks]
 
   - slug: sequential-decision-making-mdps
     title: Sequential decision-making and MDPs
@@ -723,7 +723,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m6]
-      concepts: []
+      concepts: [markov-decision-process, value-and-policy-iteration, exploration-vs-exploitation, pomdp-belief-states]
 
   - slug: responsible-ai-design
     title: Responsible AI design
@@ -733,7 +733,7 @@ topics:
     maps:
       manimkc: []
       courses: [cs4263-m7]
-      concepts: []
+      concepts: [behavioral-testing-of-ai-systems, bias-through-problem-framing]
 
   # ---------------- recommenders ----------------
   - slug: collaborative-filtering-and-matrix-factorization
@@ -744,7 +744,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m1]
-      concepts: []
+      concepts: [neighborhood-collaborative-filtering, matrix-factorization-recommender, content-based-filtering]
 
   - slug: recommender-evaluation-methods
     title: Recommender evaluation methods
@@ -754,7 +754,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m2]
-      concepts: []
+      concepts: [offline-ranking-metrics, online-ab-testing, cold-start-problem]
 
   - slug: neural-recommendation-architectures
     title: Neural recommendation architectures
@@ -764,7 +764,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m3]
-      concepts: []
+      concepts: [two-tower-retrieval, session-based-recommendation]
 
   - slug: transformer-and-graph-recommenders
     title: Transformer and graph-based recommenders
@@ -774,7 +774,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m4]
-      concepts: []
+      concepts: [self-attentive-sequential-recommendation, graph-collaborative-filtering]
 
   - slug: recommender-fairness-and-privacy
     title: Recommender fairness and privacy
@@ -784,7 +784,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m5]
-      concepts: []
+      concepts: [recommendation-feedback-loop, data-minimization-in-recommenders, recommendation-explanations]
 
   - slug: recommender-systems-deployment
     title: Recommender systems deployment
@@ -794,7 +794,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4285-m6]
-      concepts: []
+      concepts: [multi-stage-retrieval-ranking, real-time-serving-latency-budget]
 
   # ---------------- graphics ----------------
   - slug: graphics-pipeline-fundamentals
@@ -805,7 +805,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4281-m1]
-      concepts: []
+      concepts: [rasterization-pipeline, blinn-phong-shading, triangle-mesh-representation, uv-texture-mapping]
 
   - slug: neural-scene-representations
     title: Neural scene representations
@@ -815,7 +815,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4281-m2]
-      concepts: []
+      concepts: [volume-rendering-quadrature, neural-signed-distance-field, neural-radiance-field]
 
   - slug: neural-character-animation-and-rigging
     title: Neural character animation and rigging
@@ -825,7 +825,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4281-m3, cp4281-m4]
-      concepts: []
+      concepts: [linear-blend-skinning, latent-shape-space, neural-motion-prediction, motion-diffusion-model]
 
   - slug: physics-informed-and-differentiable-simulation
     title: Physics-informed and differentiable simulation
@@ -835,7 +835,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4281-m5]
-      concepts: []
+      concepts: [physics-informed-neural-network, differentiable-simulation]
 
   - slug: differentiable-and-neural-rendering
     title: Differentiable and neural rendering
@@ -845,7 +845,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4281-m6]
-      concepts: []
+      concepts: [differentiable-rendering, hybrid-neural-rendering]
 
   - slug: 3d-gaussian-splatting-fundamentals
     title: 3D Gaussian splatting fundamentals
@@ -855,7 +855,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4282-m1, cp4282-m2]
-      concepts: []
+      concepts: [anisotropic-3d-gaussian, pinhole-camera-projection, rendering-equation, tile-based-gaussian-rasterization, gaussian-splatting-optimization, adaptive-density-control]
 
   - slug: scaling-and-compressing-gaussian-splats
     title: Scaling and compressing Gaussian splats
@@ -865,7 +865,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4282-m3, cp4282-m4]
-      concepts: []
+      concepts: [splat-depth-sorting, gaussian-splat-compression, scene-partitioning-for-large-splats, splat-level-of-detail]
 
   - slug: gaussian-splatting-variants-4d-and-2d
     title: Gaussian splatting variants, 4D and 2D
@@ -875,7 +875,7 @@ topics:
     maps:
       manimkc: []
       courses: [cp4282-m5, cp4282-m6]
-      concepts: []
+      concepts: [temporal-gaussian-splatting, canonical-space-deformation-field, 2d-gaussian-splatting, surface-vs-volume-splat-tradeoff]
 
   # ---------------- home-server ----------------
   - slug: home-server-app-catalogue

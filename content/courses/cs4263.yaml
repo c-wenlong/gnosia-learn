@@ -17,17 +17,24 @@ modules:
     topics:
       - id: cs4263-m1-t1
         title: Problem formulation and state spaces
+        concepts:
+          - search-problem-formulation
         subtopics:
           - States, actions, goals
           - Formulating search problems
       - id: cs4263-m1-t2
         title: Uninformed search
+        concepts:
+          - uninformed-search
         subtopics:
           - BFS
           - DFS
           - Uniform-cost search
       - id: cs4263-m1-t3
         title: Informed search
+        concepts:
+          - a-star-search
+          - admissible-and-consistent-heuristics
         subtopics:
           - A*
           - Heuristic design
@@ -49,16 +56,22 @@ modules:
     topics:
       - id: cs4263-m2-t1
         title: CSP formulation and backtracking
+        concepts:
+          - csp-backtracking-search
         subtopics:
           - Variables, domains, constraints
           - Backtracking search
       - id: cs4263-m2-t2
         title: Arc consistency and constraint propagation
+        concepts:
+          - arc-consistency
         subtopics:
           - AC-3
           - Forward checking
       - id: cs4263-m2-t3
         title: Local search methods
+        concepts:
+          - local-search-for-csps
         subtopics:
           - Min-conflicts
           - Simulated annealing
@@ -75,16 +88,23 @@ modules:
     topics:
       - id: cs4263-m3-t1
         title: Minimax and alpha-beta pruning
+        concepts:
+          - minimax
+          - alpha-beta-pruning
         subtopics:
           - Game trees
           - Optimal play assumptions
           - Pruning
       - id: cs4263-m3-t2
         title: Evaluation functions
+        concepts:
+          - evaluation-functions
         subtopics:
           - Heuristic scoring of positions
       - id: cs4263-m3-t3
         title: Monte Carlo Tree Search
+        concepts:
+          - monte-carlo-tree-search
         subtopics:
           - Selection, expansion, simulation, backpropagation
     resources:
@@ -100,16 +120,23 @@ modules:
     topics:
       - id: cs4263-m4-t1
         title: Propositional logic and inference
+        concepts:
+          - propositional-entailment-and-inference
         subtopics:
           - Syntax and semantics
           - Inference rules
       - id: cs4263-m4-t2
         title: First-order logic
+        concepts:
+          - first-order-logic
+          - resolution-with-unification
         subtopics:
           - Unification
           - Resolution
       - id: cs4263-m4-t3
         title: Limitations of logical representations
+        concepts:
+          - limits-of-logical-representation
         subtopics:
           - Uncertainty
           - Scale and brittleness
@@ -126,16 +153,24 @@ modules:
     topics:
       - id: cs4263-m5-t1
         title: STRIPS-style planning and planning graphs
+        concepts:
+          - strips-action-schemas
+          - planning-graphs-and-graphplan
         subtopics:
           - Action schemas
           - Graphplan ideas
       - id: cs4263-m5-t2
         title: PDDL basics
+        concepts:
+          - pddl-domains-and-problems
         subtopics:
           - Domains and problems
           - Planner interfaces
       - id: cs4263-m5-t3
         title: Hierarchical / partial-order planning (survey)
+        concepts:
+          - partial-order-planning
+          - hierarchical-task-networks
         subtopics:
           - HTN overview
           - Partial-order plans
@@ -152,16 +187,23 @@ modules:
     topics:
       - id: cs4263-m6-t1
         title: Markov Decision Processes
+        concepts:
+          - markov-decision-process
+          - value-and-policy-iteration
         subtopics:
           - Value iteration
           - Policy iteration
       - id: cs4263-m6-t2
         title: Exploration vs. exploitation basics
+        concepts:
+          - exploration-vs-exploitation
         subtopics:
           - ε-greedy intuition
           - Bandit-style trade-offs
       - id: cs4263-m6-t3
         title: Brief intro to POMDPs
+        concepts:
+          - pomdp-belief-states
         subtopics:
           - Belief states
           - Why partial observability is hard
@@ -178,11 +220,15 @@ modules:
     topics:
       - id: cs4263-m7-t1
         title: Evaluating AI system behavior and failure modes
+        concepts:
+          - behavioral-testing-of-ai-systems
         subtopics:
           - Behavioral testing
           - Common failure patterns
       - id: cs4263-m7-t2
         title: Bias, transparency, and open-ended problem framing
+        concepts:
+          - bias-through-problem-framing
         subtopics:
           - Fairness considerations
           - Specifying open problems carefully

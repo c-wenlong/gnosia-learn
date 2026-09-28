@@ -17,14 +17,20 @@ modules:
     topics:
       - id: cp4283-m1-t1
         title: Chain-rule factorization of joint distributions
+        concepts:
+          - chain-rule-factorization
         subtopics:
           - p(x) as product of conditionals
       - id: cp4283-m1-t2
         title: PixelRNN / PixelCNN-style approaches
+        concepts:
+          - pixelcnn-masked-convolution
         subtopics:
           - Image generation as sequence modeling
       - id: cp4283-m1-t3
         title: Language modeling as generation
+        concepts:
+          - next-token-prediction
         subtopics:
           - Next-token prediction
     resources:
@@ -40,10 +46,15 @@ modules:
     topics:
       - id: cp4283-m2-t1
         title: Latent variable models and ELBO
+        concepts:
+          - evidence-lower-bound
         subtopics:
           - Evidence lower bound derivation
       - id: cp4283-m2-t2
         title: Reparameterization trick and posterior collapse
+        concepts:
+          - reparameterization-trick
+          - posterior-collapse
         subtopics:
           - Stochastic gradients
           - Collapse failure modes
@@ -60,11 +71,15 @@ modules:
     topics:
       - id: cp4283-m3-t1
         title: Adversarial training dynamics
+        concepts:
+          - gan-minimax-game
         subtopics:
           - Minimax game
           - Mode collapse
       - id: cp4283-m3-t2
         title: Key GAN variants and stabilization
+        concepts:
+          - gan-training-stabilization
         subtopics:
           - Training tricks
           - Architectural variants
@@ -81,11 +96,15 @@ modules:
     topics:
       - id: cp4283-m4-t1
         title: Invertible transformations and change-of-variables
+        concepts:
+          - change-of-variables-density
         subtopics:
           - Exact likelihood
           - Jacobian determinants
       - id: cp4283-m4-t2
         title: Coupling layers and trade-offs
+        concepts:
+          - affine-coupling-layer
         subtopics:
           - vs VAEs and GANs
     resources:
@@ -101,11 +120,15 @@ modules:
     topics:
       - id: cp4283-m5-t1
         title: Forward and reverse diffusion process
+        concepts:
+          - denoising-diffusion-process
         subtopics:
           - Noise schedules
           - Denoising reverse steps
       - id: cp4283-m5-t2
         title: Score-based generative modeling
+        concepts:
+          - score-based-generative-modeling
         subtopics:
           - Denoising objectives
           - Link to modern image generators
@@ -136,6 +159,8 @@ modules:
           - Multi-head attention
       - id: cp4283-m6-t2
         title: Autoregressive transformers for text/image
+        concepts:
+          - causal-attention-mask
         subtopics:
           - Where LLMs fit in the generative lineage
     resources:

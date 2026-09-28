@@ -17,16 +17,22 @@ modules:
     topics:
       - id: cp4282-m1-t1
         title: 3D Gaussian representations and covariance
+        concepts:
+          - anisotropic-3d-gaussian
         subtopics:
           - Anisotropic Gaussians
           - Covariance matrices
       - id: cp4282-m1-t2
         title: Projective geometry and camera models
+        concepts:
+          - pinhole-camera-projection
         subtopics:
           - Pinhole camera
           - Projection
       - id: cp4282-m1-t3
         title: Rendering equation basics
+        concepts:
+          - rendering-equation
         subtopics:
           - Rasterization vs ray tracing
     resources:
@@ -42,11 +48,16 @@ modules:
     topics:
       - id: cp4282-m2-t1
         title: Kerbl et al. (2023) 3DGS
+        concepts:
+          - gaussian-splatting-optimization
+          - adaptive-density-control
         subtopics:
           - Optimization loop
           - Adaptive densification
       - id: cp4282-m2-t2
         title: Tile-based differentiable rasterization
+        concepts:
+          - tile-based-gaussian-rasterization
         subtopics:
           - Splat projection
           - Alpha blending
@@ -63,11 +74,15 @@ modules:
     topics:
       - id: cp4282-m3-t1
         title: Acceleration structures for splat rendering
+        concepts:
+          - splat-depth-sorting
         subtopics:
           - Sorting and tiling
           - Realtime viewers
       - id: cp4282-m3-t2
         title: Compression techniques for splat storage
+        concepts:
+          - gaussian-splat-compression
         subtopics:
           - Parameter quantization
           - Compact representations
@@ -84,11 +99,15 @@ modules:
     topics:
       - id: cp4282-m4-t1
         title: Scaling to city / building-scale captures
+        concepts:
+          - scene-partitioning-for-large-splats
         subtopics:
           - Partitioning
           - Streaming
       - id: cp4282-m4-t2
         title: Level-of-detail strategies
+        concepts:
+          - splat-level-of-detail
         subtopics:
           - LOD hierarchies
           - View-dependent detail
@@ -105,10 +124,14 @@ modules:
     topics:
       - id: cp4282-m5-t1
         title: Temporal Gaussian splatting
+        concepts:
+          - temporal-gaussian-splatting
         subtopics:
           - Video / dynamic scenes
       - id: cp4282-m5-t2
         title: Deformation fields over time
+        concepts:
+          - canonical-space-deformation-field
         subtopics:
           - Canonical + deformation models
     resources:
@@ -124,10 +147,14 @@ modules:
     topics:
       - id: cp4282-m6-t1
         title: 2D Gaussian splatting for surface reconstruction
+        concepts:
+          - 2d-gaussian-splatting
         subtopics:
           - Surface-aligned primitives
       - id: cp4282-m6-t2
         title: Trade-offs vs 3D splatting
+        concepts:
+          - surface-vs-volume-splat-tradeoff
         subtopics:
           - Geometry fidelity
           - Rendering cost

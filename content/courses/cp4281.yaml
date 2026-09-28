@@ -17,12 +17,18 @@ modules:
     topics:
       - id: cp4281-m1-t1
         title: Rendering pipeline, transformations, shading
+        concepts:
+          - rasterization-pipeline
+          - blinn-phong-shading
         subtopics:
           - Pipeline stages
           - Transforms
           - Shading models
       - id: cp4281-m1-t2
         title: Mesh representations and texture mapping
+        concepts:
+          - triangle-mesh-representation
+          - uv-texture-mapping
         subtopics:
           - Meshes
           - UVs and texturing
@@ -39,11 +45,16 @@ modules:
     topics:
       - id: cp4281-m2-t1
         title: Implicit functions & signed distance fields
+        concepts:
+          - neural-signed-distance-field
         subtopics:
           - SDFs
           - Neural implicits
       - id: cp4281-m2-t2
         title: Neural radiance fields (NeRF) and follow-ups
+        concepts:
+          - volume-rendering-quadrature
+          - neural-radiance-field
         subtopics:
           - Volume rendering
           - NeRF extensions
@@ -60,11 +71,15 @@ modules:
     topics:
       - id: cp4281-m3-t1
         title: Learned skinning and deformation
+        concepts:
+          - linear-blend-skinning
         subtopics:
           - Skinning models
           - Neural deformation
       - id: cp4281-m3-t2
         title: Neural shape generation basics
+        concepts:
+          - latent-shape-space
         subtopics:
           - Shape priors
           - Generation pipelines
@@ -81,11 +96,15 @@ modules:
     topics:
       - id: cp4281-m4-t1
         title: Motion synthesis with neural nets
+        concepts:
+          - neural-motion-prediction
         subtopics:
           - Motion prediction
           - Style transfer
       - id: cp4281-m4-t2
         title: Generative approaches to animation
+        concepts:
+          - motion-diffusion-model
         subtopics:
           - Diffusion-based motion
     resources:
@@ -101,11 +120,15 @@ modules:
     topics:
       - id: cp4281-m5-t1
         title: Physics-informed neural networks
+        concepts:
+          - physics-informed-neural-network
         subtopics:
           - PINN formulation
           - PDE residuals
       - id: cp4281-m5-t2
         title: Learned / differentiable simulators
+        concepts:
+          - differentiable-simulation
         subtopics:
           - Differentiable physics
           - Hybrid simulators
@@ -122,11 +145,15 @@ modules:
     topics:
       - id: cp4281-m6-t1
         title: Differentiable rendering
+        concepts:
+          - differentiable-rendering
         subtopics:
           - Gradient through rendering
           - Inverse graphics
       - id: cp4281-m6-t2
         title: Neural / hybrid rendering pipelines
+        concepts:
+          - hybrid-neural-rendering
         subtopics:
           - Neural caches
           - Hybrid classical + learned pipelines

@@ -17,11 +17,16 @@ modules:
     topics:
       - id: cp4285-m1-t1
         title: Collaborative filtering
+        concepts:
+          - neighborhood-collaborative-filtering
         subtopics:
           - User-based
           - Item-based
       - id: cp4285-m1-t2
         title: Matrix factorization and content-based filtering
+        concepts:
+          - matrix-factorization-recommender
+          - content-based-filtering
         subtopics:
           - Latent factors
           - Item features
@@ -38,12 +43,17 @@ modules:
     topics:
       - id: cp4285-m2-t1
         title: Offline metrics
+        concepts:
+          - offline-ranking-metrics
         subtopics:
           - Precision@k
           - NDCG
           - Recall
       - id: cp4285-m2-t2
         title: Online evaluation and cold-start
+        concepts:
+          - online-ab-testing
+          - cold-start-problem
         subtopics:
           - A/B testing
           - Cold-start problem
@@ -60,11 +70,15 @@ modules:
     topics:
       - id: cp4285-m3-t1
         title: Embedding-based models and two-tower architectures
+        concepts:
+          - two-tower-retrieval
         subtopics:
           - User/item towers
           - Retrieval
       - id: cp4285-m3-t2
         title: Sequence-aware recommendation
+        concepts:
+          - session-based-recommendation
         subtopics:
           - Session-based models
     resources:
@@ -80,11 +94,15 @@ modules:
     topics:
       - id: cp4285-m4-t1
         title: Transformer-based recommenders
+        concepts:
+          - self-attentive-sequential-recommendation
         subtopics:
           - Sequential transformers
           - Attention over history
       - id: cp4285-m4-t2
         title: Graph-based recommendation
+        concepts:
+          - graph-collaborative-filtering
         subtopics:
           - User-item graphs
           - GNN recommenders
@@ -101,11 +119,16 @@ modules:
     topics:
       - id: cp4285-m5-t1
         title: Bias, fairness, exposure, and filter bubbles
+        concepts:
+          - recommendation-feedback-loop
         subtopics:
           - Exposure inequality
           - Filter-bubble effects
       - id: cp4285-m5-t2
         title: Privacy and transparency
+        concepts:
+          - data-minimization-in-recommenders
+          - recommendation-explanations
         subtopics:
           - User data minimization
           - Explainability
@@ -122,11 +145,15 @@ modules:
     topics:
       - id: cp4285-m6-t1
         title: Real-time serving constraints
+        concepts:
+          - real-time-serving-latency-budget
         subtopics:
           - Latency budgets
           - Caching
       - id: cp4285-m6-t2
         title: Scalability trade-offs
+        concepts:
+          - multi-stage-retrieval-ranking
         subtopics:
           - Retrieval vs ranking stages
     resources:

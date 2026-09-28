@@ -17,10 +17,14 @@ modules:
     topics:
       - id: cs3216-m1-t1
         title: Problem framing and idea validation
+        concepts:
+          - problem-validation
         subtopics:
           - Identifying real market needs
       - id: cs3216-m1-t2
         title: Interdisciplinary team formation
+        concepts:
+          - cross-functional-product-teams
         subtopics:
           - Product / UX / eng / domain roles
     resources:
@@ -36,14 +40,22 @@ modules:
     topics:
       - id: cs3216-m2-t1
         title: Structured outputs with Pydantic
+        concepts:
+          - structured-llm-outputs
+          - tool-calling
         subtopics:
           - Typed schemas for LLM outputs
       - id: cs3216-m2-t2
         title: Agent orchestration with LangGraph
+        concepts:
+          - agent-state-graphs
+          - react-loop
         subtopics:
           - Graphs, state, cycles
       - id: cs3216-m2-t3
         title: Designing with agentic AI components
+        concepts:
+          - workflows-versus-agents
         subtopics:
           - Not just using, but composing agents
     resources:
@@ -63,10 +75,15 @@ modules:
     topics:
       - id: cs3216-m3-t1
         title: MVP scoping and build-measure-learn
+        concepts:
+          - minimum-viable-product
+          - fixed-time-variable-scope
         subtopics:
           - Scope cuts under time pressure
       - id: cs3216-m3-t2
         title: User feedback collection and iteration cadence
+        concepts:
+          - user-feedback-iteration-loop
         subtopics:
           - Feedback loops
           - Weekly iteration rhythm
@@ -83,10 +100,16 @@ modules:
     topics:
       - id: cs3216-m4-t1
         title: Frontend/backend integration and deployment
+        concepts:
+          - frontend-backend-api-contract
+          - deployment-environments-and-promotion
         subtopics:
           - Web/cloud deploy paths
       - id: cs3216-m4-t2
         title: Production-quality practices under time pressure
+        concepts:
+          - handling-errors-at-boundaries
+          - logs-metrics-and-traces
         subtopics:
           - Error handling
           - Observability basics
@@ -103,11 +126,16 @@ modules:
     topics:
       - id: cs3216-m5-t1
         title: User acquisition and virality mechanics
+        concepts:
+          - growth-loops
+          - viral-coefficient
         subtopics:
           - Loops
           - Channels
       - id: cs3216-m5-t2
         title: Positioning within a digital market
+        concepts:
+          - product-positioning
         subtopics:
           - Differentiation
           - Target segment
@@ -124,11 +152,17 @@ modules:
     topics:
       - id: cs3216-m6-t1
         title: Usability testing under a ship-fast cadence
+        concepts:
+          - discount-usability-testing
+          - think-aloud-usability-testing
         subtopics:
           - Lightweight tests
           - Quick findings
       - id: cs3216-m6-t2
         title: Analytics-driven iteration
+        concepts:
+          - analytics-driven-iteration
+          - ab-testing
         subtopics:
           - Event instrumentation
           - Decision rules

@@ -18,11 +18,16 @@ modules:
     topics:
       - id: cs3249-m1-t1
         title: Interaction models and GUI programming basics
+        concepts:
+          - event-driven-ui
+          - direct-manipulation
         subtopics:
           - Layout
           - Event-driven UIs
       - id: cs3249-m1-t2
         title: Usability principles for conversational contexts
+        concepts:
+          - usability-heuristics-in-conversation
         subtopics:
           - Feedback
           - Consistency
@@ -40,11 +45,15 @@ modules:
     topics:
       - id: cs3249-m2-t1
         title: Dialogue design principles
+        concepts:
+          - turn-taking-and-grounding
         subtopics:
           - Turn-taking
           - Conversational grounding
       - id: cs3249-m2-t2
         title: Intent- and slot-based interaction models
+        concepts:
+          - intent-and-slot-model
         subtopics:
           - Classic dialogue systems
     resources:
@@ -60,11 +69,15 @@ modules:
     topics:
       - id: cs3249-m3-t1
         title: Intent recognition and slot filling
+        concepts:
+          - intent-classification-and-slot-filling
         subtopics:
           - Classification
           - Entity extraction
       - id: cs3249-m3-t2
         title: Dialogue state tracking and flow design
+        concepts:
+          - dialogue-state-tracking
         subtopics:
           - State machines
           - Conversation graphs
@@ -81,11 +94,15 @@ modules:
     topics:
       - id: cs3249-m4-t1
         title: Prompting for dialogue and context management
+        concepts:
+          - context-window-management
         subtopics:
           - Window management
           - System prompts
       - id: cs3249-m4-t2
         title: Grounding responses, ambiguity, and repair
+        concepts:
+          - grounded-responses-and-clarification
         subtopics:
           - Hallucination control
           - Clarification strategies
@@ -102,11 +119,15 @@ modules:
     topics:
       - id: cs3249-m5-t1
         title: Speech input/output considerations
+        concepts:
+          - voice-pipeline-latency
         subtopics:
           - ASR/TTS latency
           - Prosody and clarity
       - id: cs3249-m5-t2
         title: Multimodal grounding
+        concepts:
+          - multimodal-grounding
         subtopics:
           - Text + voice + UI elements
     resources:
@@ -122,11 +143,15 @@ modules:
     topics:
       - id: cs3249-m6-t1
         title: Usability testing methods for CUIs
+        concepts:
+          - task-success-and-dialogue-metrics
         subtopics:
           - Task success
           - Conversation quality metrics
       - id: cs3249-m6-t2
         title: Error recovery and breakdown handling
+        concepts:
+          - conversational-repair-and-fallback
         subtopics:
           - Repair strategies
           - Fallback design

@@ -18,16 +18,24 @@ modules:
     topics:
       - id: cs2111-m1-t1
         title: Human-centered design philosophy
+        concepts:
+          - human-centred-design-cycle
         subtopics:
           - Design thinking cycle
           - Human needs as the design center
       - id: cs2111-m1-t2
         title: Cognitive models
+        concepts:
+          - mental-models
+          - affordances-and-signifiers
         subtopics:
           - Mental models
           - Affordances and signifiers (Norman)
       - id: cs2111-m1-t3
         title: Perception & memory basics
+        concepts:
+          - gestalt-principles-of-grouping
+          - recognition-over-recall
         subtopics:
           - Interface design implications of perception and memory
     resources:
@@ -47,17 +55,25 @@ modules:
     topics:
       - id: cs2111-m2-t1
         title: Needfinding & contextual inquiry
+        concepts:
+          - contextual-inquiry
         subtopics:
           - Field methods
           - Interviewing users in context
       - id: cs2111-m2-t2
         title: Personas, user journeys, task analysis
+        concepts:
+          - personas
+          - user-journey-maps
+          - hierarchical-task-analysis
         subtopics:
           - Persona construction
           - Journey mapping
           - Task decomposition
       - id: cs2111-m2-t3
         title: Stakeholder analysis
+        concepts:
+          - stakeholder-analysis
         subtopics:
           - Primary vs secondary stakeholders
           - Conflicting needs
@@ -74,17 +90,24 @@ modules:
     topics:
       - id: cs2111-m3-t1
         title: Interaction design patterns and paradigms
+        concepts:
+          - direct-manipulation
+          - ui-design-patterns
         subtopics:
           - Common UI patterns
           - Direct manipulation and beyond
       - id: cs2111-m3-t2
         title: Prototyping fidelity
+        concepts:
+          - prototype-fidelity
         subtopics:
           - Paper prototypes
           - Wireframes
           - Interactive prototypes
       - id: cs2111-m3-t3
         title: Information architecture basics
+        concepts:
+          - information-architecture
         subtopics:
           - Navigation structure
           - Labeling and organization
@@ -101,16 +124,22 @@ modules:
     topics:
       - id: cs2111-m4-t1
         title: Heuristic evaluation
+        concepts:
+          - heuristic-evaluation
         subtopics:
           - Nielsen's heuristics
           - Expert review process
       - id: cs2111-m4-t2
         title: Usability testing protocols
+        concepts:
+          - think-aloud-usability-testing
         subtopics:
           - Think-aloud studies
           - Task-based testing
       - id: cs2111-m4-t3
         title: Basic A/B testing concepts
+        concepts:
+          - ab-testing
         subtopics:
           - Hypothesis formulation
           - Interpreting simple experiments
@@ -127,15 +156,22 @@ modules:
     topics:
       - id: cs2111-m5-t1
         title: WCAG principles
+        concepts:
+          - wcag-pour-principles
         subtopics:
           - Perceivable, operable, understandable, robust
       - id: cs2111-m5-t2
         title: Assistive technology basics
+        concepts:
+          - screen-readers-and-semantic-markup
+          - keyboard-accessibility
         subtopics:
           - Screen readers
           - Keyboard navigation
       - id: cs2111-m5-t3
         title: Universal design
+        concepts:
+          - universal-design
         subtopics:
           - Designing for diverse abilities
     resources:
@@ -151,11 +187,16 @@ modules:
     topics:
       - id: cs2111-m6-t1
         title: Dark patterns and persuasive design ethics
+        concepts:
+          - dark-patterns
         subtopics:
           - Deceptive UI patterns
           - Ethical persuasion boundaries
       - id: cs2111-m6-t2
         title: Privacy-by-design and bias in interfaces
+        concepts:
+          - privacy-by-design
+          - bias-in-interface-design
         subtopics:
           - Default privacy choices
           - Representational bias in UI

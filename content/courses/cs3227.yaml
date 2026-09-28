@@ -17,10 +17,14 @@ modules:
     topics:
       - id: cs3227-m1-t1
         title: AI-assisted coding vs agentic software engineering
+        concepts:
+          - assisted-vs-agentic-coding
         subtopics:
           - What changes when agents act autonomously
       - id: cs3227-m1-t2
         title: Where agents sit in the SDLC today
+        concepts:
+          - agent-touchpoints-in-the-sdlc
         subtopics:
           - Design, implement, test, maintain touchpoints
     resources:
@@ -36,11 +40,15 @@ modules:
     topics:
       - id: cs3227-m2-t1
         title: Guardrails, permission scoping, sandboxing
+        concepts:
+          - least-privilege-for-agents
         subtopics:
           - Least privilege
           - Isolation
       - id: cs3227-m2-t2
         title: Designing tasks agents can be trusted with
+        concepts:
+          - bounding-agent-tasks
         subtopics:
           - Task boundaries
           - Human checkpoints
@@ -57,10 +65,14 @@ modules:
     topics:
       - id: cs3227-m3-t1
         title: Agent-assisted design, implementation, testing, maintenance
+        concepts:
+          - per-phase-agent-roles
         subtopics:
           - Per-phase agent roles
       - id: cs3227-m3-t2
         title: Multi-agent collaboration patterns
+        concepts:
+          - specialist-agents-and-handoffs
         subtopics:
           - Specialist agents
           - Handoffs
@@ -77,10 +89,14 @@ modules:
     topics:
       - id: cs3227-m4-t1
         title: Code review practices for AI output
+        concepts:
+          - reviewing-ai-generated-code
         subtopics:
           - What to trust, what to re-check
       - id: cs3227-m4-t2
         title: Static/dynamic analysis as a safety net
+        concepts:
+          - automated-checks-as-a-safety-net
         subtopics:
           - Linters
           - Tests
@@ -98,11 +114,15 @@ modules:
     topics:
       - id: cs3227-m5-t1
         title: Prompt injection and tool-use risks
+        concepts:
+          - prompt-injection
         subtopics:
           - Supply-chain risks
           - Indirect injection
       - id: cs3227-m5-t2
         title: Failure mode analysis for autonomous agents
+        concepts:
+          - agent-failure-mode-analysis
         subtopics:
           - Cascading errors
           - Irreversible actions
@@ -119,10 +139,14 @@ modules:
     topics:
       - id: cs3227-m6-t1
         title: Pairing patterns, trust calibration, escalation design
+        concepts:
+          - calibrated-trust-and-escalation
         subtopics:
           - When to escalate to a human
       - id: cs3227-m6-t2
         title: Capabilities vs hype
+        concepts:
+          - evaluating-agentic-ai-claims
         subtopics:
           - Critical evaluation of agentic AI claims
     resources:

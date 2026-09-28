@@ -29,6 +29,8 @@ modules:
           - Tokenization pipelines
       - id: cp4284-m1-t2
         title: Pretraining vs fine-tuning vs RLHF
+        concepts:
+          - llm-training-stages
         subtopics:
           - Contextual refresher on training stages
     resources:
@@ -48,11 +50,16 @@ modules:
     topics:
       - id: cp4284-m2-t1
         title: CoT prompting and few-shot vs zero-shot reasoning
+        concepts:
+          - chain-of-thought-prompting
         subtopics:
           - Prompt formats
           - Reasoning traces
       - id: cp4284-m2-t2
         title: Self-consistency and prompt decomposition
+        concepts:
+          - self-consistency
+          - prompt-decomposition
         subtopics:
           - Sample-and-vote
           - Breaking down hard tasks
@@ -86,6 +93,8 @@ modules:
           - Task graphs
       - id: cp4284-m3-t3
         title: Agent memory and state management
+        concepts:
+          - agent-memory-context-vs-store
         subtopics:
           - Short-term context
           - Long-term memory stores
@@ -106,11 +115,16 @@ modules:
     topics:
       - id: cp4284-m4-t1
         title: Test-time compute scaling and self-reflection
+        concepts:
+          - test-time-compute-scaling
+          - self-refinement
         subtopics:
           - Self-critique loops
           - Search over thoughts
       - id: cp4284-m4-t2
         title: Verifier models and reward modeling for reasoning
+        concepts:
+          - process-vs-outcome-reward-models
         subtopics:
           - Process vs outcome rewards
     resources:
@@ -126,10 +140,14 @@ modules:
     topics:
       - id: cp4284-m5-t1
         title: Code generation architectures
+        concepts:
+          - execution-guided-code-generation
         subtopics:
           - Execution-guided synthesis
       - id: cp4284-m5-t2
         title: Agent-driven coding workflows
+        concepts:
+          - agentic-coding-loop
         subtopics:
           - Diff application
           - Tool orchestration
@@ -146,11 +164,16 @@ modules:
     topics:
       - id: cp4284-m6-t1
         title: Scalable inference strategies
+        concepts:
+          - continuous-batching
+          - speculative-decoding
         subtopics:
           - Batching
           - Speculative decoding
       - id: cp4284-m6-t2
         title: Distributed training basics for large reasoning models
+        concepts:
+          - data-vs-model-parallelism
         subtopics:
           - Data/model parallelism overview
     resources:
