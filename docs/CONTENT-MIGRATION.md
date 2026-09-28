@@ -1828,8 +1828,26 @@ before, so it merged before flip day and does not depend on #152.
       `local` reads exactly what it read before plus the commons, the second
       owner reads its own rows plus the commons, and the seam refuses a
       takeover; with the filter disabled five of its cases fail.
-- [ ] Blob keys already carry the owner; per-owner caps on bytes stored and
+- [x] Blob keys already carry the owner; per-owner caps on bytes stored and
       on uploads per day, checked in `upload()`.
+      **Built:** `uploadBlob` in `services/catalog/src/content/blob.ts` reads
+      `SELF_LEARN_OWNER_BYTES_CAP` and `SELF_LEARN_OWNER_UPLOADS_PER_DAY`
+      (unset, the default, is no cap, and then nothing is measured). With a cap
+      set it measures the owner from `blob_object` by the key's `<owner_id>/`
+      prefix, under an advisory lock per owner in the transaction that writes
+      the pending row, so two uploads at once cannot both fit under a cap only
+      one fits; a refusal (`OwnerCapError`) stores and records nothing. A key
+      that already has a row is not a new upload: its bytes are counted once
+      and a rerun does not count against the day, and an object already
+      stored is never refused. The day is rolling, as the studio's spend cap.
+      A value that is not a whole number refuses every upload with the
+      variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
+      does: an upload is a command a person watches, and a quota that a typo
+      turns off is the failure that matters here. No migration: `blob_object`
+      already holds the key, the size and `created_at`, so a cap table would
+      only duplicate them. `catalog blob audit` prints each owner's objects,
+      bytes and uploads in the last 24 hours, and the caps in force.
+      `services/catalog/test/blob-caps.test.ts`.
 - [ ] `app_web` gains content writes, now that a route can know who is
       writing; the web editor lands here.
       **Not built, on purpose:** the gate exists (`currentOwner()`, and the

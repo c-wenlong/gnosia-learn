@@ -6,7 +6,7 @@ import { blobObject } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { blobRoot } from "../env";
+import { blobRoot, loadEnv } from "../env";
 import { fileFacts } from "../index/files";
 import { assertWritable } from "./blob-owner";
 
@@ -31,6 +31,152 @@ import { assertWritable } from "./blob-owner";
  * `blob_object` carries no revisions (D5): it is a fact about where bytes are,
  * not authored content, and the pending row exists before any revision could.
  */
+
+/**
+ * Per-owner caps (phase 4 of docs/CONTENT-MIGRATION.md): the most bytes one
+ * owner may keep in the store, and the most new objects one owner may upload
+ * in a rolling 24 hours. Both unset by default, which is no cap, and that is
+ * today: one owner, uploading from their own laptop.
+ */
+export const OWNER_BYTES_CAP_ENV = "SELF_LEARN_OWNER_BYTES_CAP";
+export const OWNER_UPLOADS_PER_DAY_ENV = "SELF_LEARN_OWNER_UPLOADS_PER_DAY";
+
+/** The window the uploads cap counts over. Rolling, never a calendar day, as the studio's spend cap. */
+export const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export interface OwnerCaps {
+  /** Most bytes one owner's `blob_object` rows may add up to; null for no cap. */
+  bytes: number | null;
+  /** Most new objects one owner may upload in `UPLOAD_WINDOW_MS`; null for no cap. */
+  uploadsPerDay: number | null;
+}
+
+/** A cap variable that is not a whole number. Thrown before anything is read or stored. */
+export class OwnerCapConfigError extends Error {
+  constructor(variable: string, value: string) {
+    super(
+      `${variable}=${JSON.stringify(value)} is not a whole number. Set it to a count ` +
+        `(${variable === OWNER_BYTES_CAP_ENV ? "bytes, such as 5000000000 for 5 GB" : "uploads, such as 200"}), ` +
+        `or unset it for no cap.`,
+    );
+    this.name = "OwnerCapConfigError";
+  }
+}
+
+function capFrom(env: Record<string, string | undefined>, variable: string): number | null {
+  const raw = env[variable]?.trim();
+  if (raw === undefined || raw === "") return null;
+  // Refused rather than read as unset, unlike STUDIO_DAILY_USD: an upload is a
+  // command a person runs and watches, so a typo is a sentence they can fix at
+  // once, where silently dropping the cap would let an owner past it.
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw new OwnerCapConfigError(variable, raw);
+  return Number(raw);
+}
+
+/**
+ * The caps in force, from the environment, `services/catalog/.env` included,
+ * where `SELF_LEARN_HOME` is set too. Zero is a real cap: nothing more for
+ * that owner.
+ */
+export function ownerCaps(env?: Record<string, string | undefined>): OwnerCaps {
+  if (env === undefined) loadEnv();
+  const from = env ?? process.env;
+  return { bytes: capFrom(from, OWNER_BYTES_CAP_ENV), uploadsPerDay: capFrom(from, OWNER_UPLOADS_PER_DAY_ENV) };
+}
+
+/** An upload an owner's cap refuses. Nothing was stored and no row was written. */
+export class OwnerCapError extends Error {
+  readonly code = "BLOB_CAP";
+  constructor(
+    readonly owner: string,
+    readonly cap: "bytes" | "uploads-per-day",
+    message: string,
+  ) {
+    super(message);
+    this.name = "OwnerCapError";
+  }
+}
+
+/** What one owner holds in `blob_object`, measured by the key prefix every object carries. */
+export interface OwnerUsage {
+  owner: string;
+  /** Rows under `<owner>/`, pending and present. */
+  objects: number;
+  /** Their bytes added up, pending included: an upload in flight is about to be stored. */
+  bytes: number;
+  /** Rows first written in the last `UPLOAD_WINDOW_MS`. */
+  uploadsLastDay: number;
+}
+
+/**
+ * One owner's usage, or every owner's when `owner` is omitted, grouped by the
+ * key's prefix rather than by `owner_id`, since the prefix is what the store
+ * lists and deletes by (D5), and the two agree by construction (`key()`).
+ * `except` leaves one key out, the one an upload is about to write again.
+ */
+export async function ownerUsage(
+  db: CatalogDatabase,
+  options: { owner?: string; except?: string; now?: Date } = {},
+): Promise<OwnerUsage[]> {
+  const since = new Date((options.now ?? new Date()).getTime() - UPLOAD_WINDOW_MS);
+  const prefix = sql`split_part(${blobObject.key}, '/', 1)`;
+  const { rows } = await db.execute<{ owner: string; objects: number; bytes: string; uploads: number }>(sql`
+    select ${prefix} as owner, count(*)::int as objects, coalesce(sum(${blobObject.bytes}), 0)::text as bytes,
+           (count(*) filter (where ${blobObject.createdAt} > ${since.toISOString()}))::int as uploads
+    from ${blobObject}
+    where true
+      ${options.owner === undefined ? sql`` : sql`and starts_with(${blobObject.key}, ${`${options.owner}/`})`}
+      ${options.except === undefined ? sql`` : sql`and ${blobObject.key} <> ${options.except}`}
+    group by 1 order by 1
+  `);
+  return rows.map((row) => ({
+    owner: row.owner,
+    objects: row.objects,
+    bytes: Number(row.bytes),
+    uploadsLastDay: row.uploads,
+  }));
+}
+
+/** The advisory lock one owner's cap checks serialise on, as the text `hashtextextended` keys it by. */
+export function ownerCapLock(owner: string): string {
+  return `blob_owner_cap:${owner}`;
+}
+
+/**
+ * Refuses an upload that would take its owner past a cap. Run under the
+ * owner's advisory lock, in the transaction that writes the pending row, so
+ * two uploads at once cannot both fit under a cap only one of them fits.
+ * A key that already has a row is not a new upload: its bytes are already
+ * counted (and left out here, so a retry is measured once) and it does not
+ * count against the day.
+ */
+async function checkCaps(
+  tx: CatalogDatabase,
+  caps: OwnerCaps,
+  input: { owner: string; key: string; bytes: number; existing: boolean },
+): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(input.owner)}, 0))`);
+  const [usage] = await ownerUsage(tx, { owner: input.owner, except: input.key });
+  const bytes = usage?.bytes ?? 0;
+  const uploads = usage?.uploadsLastDay ?? 0;
+  if (caps.bytes !== null && bytes + input.bytes > caps.bytes) {
+    throw new OwnerCapError(
+      input.owner,
+      "bytes",
+      `${input.key} is ${input.bytes} bytes, and ${input.owner} already stores ${bytes}; together they pass the ` +
+        `${caps.bytes}-byte ${OWNER_BYTES_CAP_ENV} cap. Nothing was stored. Raise the cap, or remove what ` +
+        `${input.owner} no longer needs (\`catalog blob audit\` lists unreferenced objects).`,
+    );
+  }
+  if (!input.existing && caps.uploadsPerDay !== null && uploads + 1 > caps.uploadsPerDay) {
+    throw new OwnerCapError(
+      input.owner,
+      "uploads-per-day",
+      `${input.owner} has uploaded ${uploads} new object(s) in the last 24 hours, and the ` +
+        `${OWNER_UPLOADS_PER_DAY_ENV} cap is ${caps.uploadsPerDay}. ${input.key} was not stored. Wait, or raise the cap.`,
+    );
+  }
+}
 
 /** A store the catalog opened, with the directory it is rooted at. */
 export type CatalogBlobStore = BlobStore & { readonly root: string };
@@ -76,12 +222,18 @@ export interface UploadResult {
  * `db` must be the database, not a transaction: the pending row has to be
  * committed before the bytes move, or an upload that dies takes the evidence
  * of itself down with the rollback.
+ *
+ * With a cap set (`ownerCaps`), an upload that would take its owner past it
+ * is refused with `OwnerCapError` before the pending row is written, so a
+ * refusal stores nothing and records nothing. An object already stored and
+ * present is never refused: it is not an upload.
  */
 export async function uploadBlob(
   db: CatalogDatabase,
   store: BlobStore,
   input: UploadInput,
 ): Promise<UploadResult> {
+  const caps = ownerCaps();
   const facts =
     input.sha256 !== undefined && input.bytes !== undefined
       ? { sha256: input.sha256.toLowerCase(), bytes: input.bytes }
@@ -103,21 +255,30 @@ export async function uploadBlob(
 
   // Pending first, committed on its own. A row that was present and whose
   // object has gone goes back to pending here, which is the audit's own verdict.
-  await db
-    .insert(blobObject)
-    .values({
-      key,
-      ownerId: input.ownerId,
-      sha256: facts.sha256,
-      bytes: facts.bytes,
-      mime: input.mime,
-      provider: store.provider,
-      state: "pending",
-    })
-    .onConflictDoUpdate({
-      target: blobObject.key,
-      set: { state: "pending", mime: input.mime, provider: store.provider, updatedAt: sql`now()` },
+  const pending = (tx: CatalogDatabase) =>
+    tx
+      .insert(blobObject)
+      .values({
+        key,
+        ownerId: input.ownerId,
+        sha256: facts.sha256,
+        bytes: facts.bytes,
+        mime: input.mime,
+        provider: store.provider,
+        state: "pending",
+      })
+      .onConflictDoUpdate({
+        target: blobObject.key,
+        set: { state: "pending", mime: input.mime, provider: store.provider, updatedAt: sql`now()` },
+      });
+  if (caps.bytes === null && caps.uploadsPerDay === null) {
+    await pending(db);
+  } else {
+    await db.transaction(async (tx) => {
+      await checkCaps(tx, caps, { owner: input.ownerId, key, bytes: facts.bytes, existing: row !== undefined });
+      await pending(tx);
     });
+  }
 
   await store.put(key, createReadStream(input.file), {
     sha256: facts.sha256,
