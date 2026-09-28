@@ -72,6 +72,7 @@ import {
 
 import { ContentError, TOPICS_FILE } from "@self-learn/content";
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { sql } from "drizzle-orm";
 
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -622,15 +623,20 @@ commands.concept = async ({ values, positionals }, session) => {
           try {
             await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
           } catch (error) {
-            // The courses source reads every course file, so a problem in
-            // one this command never touched stops it here, after the note
-            // and the listing are in. Both are, so what is missing is only
-            // the link that source writes, and the message says so.
+            // The run reads every course file, and runs the sources that
+            // depend on courses after it, each committing on its own. So a
+            // problem in a file this command never touched can stop it after
+            // the note and the listing are in, with the row's link written or
+            // not depending on which source refused. Which one is asked, not
+            // guessed, so the message says what is actually missing.
             if (error instanceof IndexError) {
+              const linked = await isLinkedToItem(await session.db(), id, itemId);
               fail(
-                `${rel(file)} was written as rows and listed on ${itemId}, but the courses source ` +
-                  `refused, so the row's link to it is not in the catalog yet: ${error.message}\n  ` +
-                  `Fix that, then run: npm run --silent catalog -- index --only courses`,
+                `${rel(file)} was written as rows and listed on ${itemId}` +
+                  (linked
+                    ? `, and the row links to it, but the index run then stopped on another source: `
+                    : `, but the courses source refused, so the row's link to it is not in the catalog yet: `) +
+                  `${error.message}\n  Fix that, then run: npm run --silent catalog -- index --only courses`,
               );
             }
             throw error;
@@ -1858,4 +1864,13 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
+/** Whether the courses source has written the link from `itemId` to `concept`. */
+async function isLinkedToItem(db: CatalogDatabase, concept: string, itemId: string): Promise<boolean> {
+  const { rows } = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from concept_curriculum_item where concept_slug = ${concept} and curriculum_item_id = ${itemId}`,
+  );
+  return (rows[0]?.n ?? 0) > 0;
+}
+
 process.exitCode = await main(process.argv.slice(2));
+
