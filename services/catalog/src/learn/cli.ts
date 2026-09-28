@@ -132,6 +132,7 @@ import { checkConceptTopic, fileConceptUnderTopic, TopicError } from "../content
 import { WriteThroughError } from "../content/write-through";
 import { CourseWriteError, importCourse } from "../content/courses";
 import { NoteError, readNote } from "../content/notes";
+import { pullVault, pushVault, resolveVaultDir, VaultError } from "./vault";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
 class CliError extends Error {}
@@ -1747,6 +1748,47 @@ commands.doctor = async ({ values }, session) => {
   if (errors.length > 0) process.exitCode = 1;
 };
 
+/**
+ * `learn vault pull|push`: the notes and logs as a folder Obsidian opens,
+ * once the database owns them (phase 2 of docs/CONTENT-MIGRATION.md, edge
+ * case 4). `vault.ts` has the rules; the one that matters is that neither
+ * direction overwrites an edit nobody pushed.
+ */
+commands.vault = async ({ positionals, values }, session) => {
+  const sub = positionals[1];
+  if (sub === "pull") {
+    const report = await pullVault(await session.db(), { dir: resolveVaultDir(values.out) });
+    if (values.json) return out(report, true);
+    const lines = [
+      `Pulled ${report.notes} notes and ${report.logs} logs into ${report.vault}`,
+      `  written ${report.written.length} · unchanged ${report.unchanged.length} · removed ${report.removed.length}`,
+    ];
+    if (report.modified.length > 0) {
+      lines.push("", "Edited here and not pushed, left as they are:");
+      for (const file of report.modified) {
+        const beside = file.incoming === null ? "" : `  (the database's version: ${file.incoming})`;
+        lines.push(`  ${file.path}${beside}${file.note === undefined ? "" : `  ${file.note}`}`);
+      }
+    }
+    for (const problem of report.problems) lines.push(`  ! ${problem}`);
+    if (report.problems.length > 0) process.exitCode = 1;
+    return out(lines.join("\n"), false);
+  }
+  if (sub === "push") {
+    if (values.reason !== undefined && values.reason.trim() === "") fail("vault push --reason cannot be empty");
+    const report = await pushVault(await session.db(), { dir: resolveVaultDir(values.out), reason: values.reason });
+    if (report.refused.length > 0) process.exitCode = 1;
+    if (values.json) return out(report, true);
+    const lines = [
+      `Pushed ${report.pushed.length} · refused ${report.refused.length} · unchanged ${report.unchanged.length}  (${report.vault})`,
+    ];
+    for (const file of report.pushed) lines.push(`  ${file.path}  revision ${file.revision}`);
+    for (const file of report.refused) lines.push(`  refused ${file.path}: ${file.reason}`);
+    return out(lines.join("\n"), false);
+  }
+  fail("usage: vault pull|push [--out <dir>]");
+};
+
 commands.help = async () => {
   out(
     `learn — local learning pipeline
@@ -1808,6 +1850,16 @@ commands.help = async () => {
                                    does them, written as the diagram-maker agent
                                    unless --author-kind says otherwise. Draw in
                                    the path checkout prints, then commit --reason.
+  vault pull [--out <dir>]       the notes and session logs as a folder for
+                                   Obsidian (default ~/.self-learn/vault); a
+                                   file edited there is never overwritten, the
+                                   database's version lands beside it as
+                                   <name>.incoming.md
+  vault push [--out <dir>] [--reason R]
+                                 writes edited notes back, one revision each;
+                                   a note that moved since the pull is refused
+                                   and left beside <name>.conflict.md; an
+                                   edited session log is refused
   doctor                         validate the graph and the state store
 
 Notes and session logs are files under learn/ until \`catalog flip concepts\`
@@ -1950,7 +2002,8 @@ export async function main(argv: string[]): Promise<number> {
       error instanceof MovedBaseError ||
       error instanceof ContentWriteError ||
       error instanceof WriteThroughError ||
-      error instanceof TopicError;
+      error instanceof TopicError ||
+      error instanceof VaultError;
     const message = expected
       ? (error as Error).message
       : ((error as Error)?.stack ?? String(error));
