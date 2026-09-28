@@ -5,10 +5,21 @@ document carries the whole studio: the schema, the runner, the gate, accept and
 discard. This one carries only what changes when a person stops filling in a
 form and starts talking.
 
-**Status: proposed, not built.** Nothing below exists yet. Numbers marked
+**Status: accepted, not built.** Nothing below exists yet. Numbers marked
 *measured* were taken on this machine on 2026-09-27 against the installed CLI
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
+
+**Refreshed 2026-09-29**, after the content migration's phase 3 cut-over. The
+owner confirmed three things: the layout stays grid first with the chat in a
+modal (D31, D37); a person approves every drawing by pressing Draw (D29); and
+diagrams come first, with manimkc videos to follow through the same chat
+([Later: other kinds of asset](#later-other-kinds-of-asset), D42). The
+refresh also brought the doc in line with the database: topics are rows
+written by `catalog topic add`, so D39's YAML paste is gone in favour of D16
+of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) (**Create topic and draw**);
+diagrams are rows, so an extend draft names a diagram rather than a path; and
+every studio row carries its owner (D23 there).
 
 **What changes for the person, in one paragraph.** The right-hand form goes.
 The first tile in the grid is a card with a plus on it. Clicking it opens a
@@ -34,7 +45,7 @@ The owner's ten concerns, and the section of this document that answers each.
 | # | Concern | Answered in |
 | --- | --- | --- |
 | 1 | The new-diagram options live in a right sidebar, which is ugly | [The UI: the plus card and the panel](#the-plus-card-and-the-panel); D31 |
-| 2 | Topic only lists existing topics | [The planner's prompt: Topics](#the-planners-prompt); D28 and D39 |
+| 2 | Topic only lists existing topics | [The planner's prompt: Topics](#the-planners-prompt); D28, and D16 of CONTENT-MIGRATION.md |
 | 3 | The AI should fill the other fields; intent alone should be enough | [The planner's prompt](#the-planners-prompt); [The hand-off](#the-hand-off); D29 |
 | 4 | Elements and relations are too fine-grained for a person to write | [What the gate still checks](#what-the-gate-still-checks); D29 |
 | 5 | The tldraw mechanics should be documented verbosely in the agent's system prompt | [The drawing agent's prompt](#the-drawing-agents-prompt); D30 and D38 |
@@ -51,7 +62,7 @@ draft or only when the person has said "just draw it".
 
 ## Why the form had to go
 
-The one real job in this checkout's `.studio/jobs/` was briefed through the
+The one real job in the studio's `jobs/` at the time was briefed through the
 form with the intent "Show how the tailscale vpn tunnels work across devices in
 the tailscale network.", three elements (`Devices`, `Tailscale Communication
 Arrows`, `Nodes and Clusters`) and no relations. The second element describes a
@@ -123,8 +134,8 @@ costs nothing is cheaper than finding out later which one mattered.
 
 Instead of reading files, it finds the vocabulary, the corpus and (on extend)
 a summary of the target in its system prompt, written by the runner. D33 is why
-that replaced D27's Read allowlist; it is one of two places this document
-departs from a decision already taken (D39 is the other).
+that replaced D27's Read allowlist, the one place this document departs from a
+decision already taken.
 
 **The planner's output is untrusted.** Pasted text may talk it into anything,
 and the worst it can then do is propose a strange brief, which meets
@@ -161,21 +172,22 @@ runs it through `validateBrief` from
   and a `brief` event carries it to the panel, which renders the confirm
   message with Draw.
 - **Valid except for the topic**: `validateBrief` refuses on `topic`, and the
-  same reply carries a fenced `yaml` block whose `slug` is that topic. This is
-  the planner saying nothing fits (D39). `validateBrief` throws at its first
+  same reply carries a fenced block tagged `topic` holding a JSON object whose
+  `slug` is that topic: `slug`, `title`, `domain`, `summary`, `aliases`, and
+  `relations` as `{kind, to}` pairs. This is the planner saying nothing fits
+  (D16 of CONTENT-MIGRATION.md). The runner checks the entry with
+  `catalog topic add --dry-run --json`, which writes nothing, refuses a slug
+  that exists, and names near matches. `validateBrief` throws at its first
   failure and checks the topic first, so a refusal on `topic` says nothing
   about the other fields; the runner therefore validates the brief a second
-  time against a vocabulary widened with the proposed entry (its slug and
-  concept ids, in memory only, the file untouched). If that passes, the draft
-  moves to `briefed` with `pending_topic` set to the slug, the brief and the
-  YAML entry are stored, and the card renders with Draw disabled, reason "Add
-  `<slug>` to `content/topics.yaml`" and the entry beside it with Copy. When
-  the panel regains focus, and on every Draw, the runner re-runs
-  `validateBrief` against the file as it is; once the topic exists the reason
-  clears and Draw is live, and nothing else can be wrong with the brief,
-  because everything else was already checked. If the widened validation fails,
-  or the YAML block is missing or names a different slug, it is an ordinary
-  refusal below, with the widened run's field and sentence.
+  time against a vocabulary widened with the proposed slug, in memory only. If
+  both pass, the draft moves to `briefed` with `pending_topic` holding the
+  entry, and the card renders the proposed topic with one button, **Create
+  topic and draw**. If the dry run named near matches, the card lists them
+  under the entry, so the person can say "use that one instead" before
+  pressing. If either check fails, or the `topic` block is missing or names a
+  different slug, it is an ordinary refusal below, with the failing check's
+  field and sentence.
 - **Invalid, the first time**: the person sees no brief. While a reply
   streams, the panel never renders a `brief` block raw; it shows "Checking the
   brief" in its place. On a refusal the runner resumes the planner once with a
@@ -252,12 +264,15 @@ prompt.
 - `topic` is a slug from the VOCABULARY block, copied exactly. Match on the
   title, the aliases and the summary as well as the slug.
 - If two topics fit, pick the narrower one and name the other in one line.
-- If nothing fits, say so plainly. Never invent a slug and never stretch a
-  topic that is about something else. Write the entry the person could add to
-  content/topics.yaml, in a fenced yaml block with slug, title, domain,
-  summary and aliases, and propose the brief with that slug as its topic. You
-  cannot add it and the studio will not: the person does, and the Draw button
-  stays off until the entry exists.
+- If nothing fits, say so plainly. Never stretch a topic that is about
+  something else. Propose a new topic instead: in the same message as the
+  brief, a fenced block tagged `topic` holding one JSON object with `slug`,
+  `title`, `domain` (one of the domains in the VOCABULARY block), `summary`,
+  `aliases`, and `relations` (a list of `{"kind": ..., "to": ...}`, where
+  `to` is an existing slug and `kind` is one of the relation kinds the
+  VOCABULARY block uses). Give the brief that slug as its topic, and say in
+  one line where the new topic sits. You cannot create it: the person's press
+  of the Draw button does.
 - `concepts` holds only ids listed under the chosen topic, or is empty.
 
 # The brief
@@ -308,9 +323,9 @@ brief:
 
 | Block | One line per | Built from |
 | --- | --- | --- |
-| `VOCABULARY` | topic: `slug \| title \| domain \| aliases \| summary`, then its concept ids | `loadVocabulary`, widened to keep `domain`, `aliases` and `summary` |
-| `CORPUS` | diagram: `slug \| title \| topic \| N shapes` | `canvas list --json`, which the runner already calls for `GET /api/diagrams` |
-| `EXTENDING` | only on an extend draft: the title, topic and concepts, each text-bearing shape's label, each binding as `from -> to (label)`, capped at 200 lines | `canvas inspect --json` over the committed target, run by the runner at draft creation |
+| `VOCABULARY` | topic: `slug \| title \| domain \| aliases \| summary`, then its relations as `kind -> slug` and its concept ids | `catalog topic ls --json`, which the runner already reads and caches for `/api/vocabulary` |
+| `CORPUS` | diagram: `slug \| title \| topic \| N shapes` | The owner's diagram list, which the runner already reads through `catalog diagram` for `GET /api/diagrams` |
+| `EXTENDING` | only on an extend draft: the title, topic and concepts, each text-bearing shape's label, each binding as `from -> to (label)`, capped at 200 lines | `canvas inspect --json` over the diagram's checkout (`$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout` when there is none), run by the runner at draft creation |
 
 How the prompt answers three of the concerns. Concern 3: intent alone is
 enough, because "What you must end up knowing" is the planner's checklist, not
@@ -320,8 +335,8 @@ fourth question in a row, one question at a time with options, "just draw it"
 ends questioning) and the ban on asking about mechanics are what keep it a
 conversation rather than a form read aloud. Concern 2: the Topics section
 searches the whole vocabulary by title, alias and summary rather than a list of
-slugs, and when nothing fits it drafts the new entry instead of forcing a match
-(D39).
+slugs, and when nothing fits it proposes a new topic, which the Draw press
+creates, instead of forcing a match (D16 of CONTENT-MIGRATION.md).
 
 The whole system prompt is written to `drafts/<id>/planner-system.md` once and
 passed unchanged on every turn. The CLI records a system prompt on a
@@ -425,9 +440,9 @@ lint-name comparison runs against a fixture of `api.json`.
 ## Schema
 
 One new table and one new column, as the next free migration number when the
-work is done (`0009` today; other sessions add migrations, so check
-`services/catalog/drizzle/` on `origin/main` first). No applied migration is
-edited.
+work is done (`0014` on 2026-09-29; other sessions add migrations, so check
+`services/catalog/drizzle/` on `origin/main` first). Change
+`packages/schema/src/studio.ts` and generate; no applied migration is edited.
 
 ### `draft`
 
@@ -435,19 +450,21 @@ edited.
 | --- | --- | --- |
 | `id` | text PK | A UUID the runner mints |
 | `state` | text, `CHECK` | `open`, `briefed`, `drawing`, `done`, `abandoned` |
-| `source_path` | text, null | The committed `.tldr` an extend draft was opened on, repo-relative |
+| `owner_id` | text, not null | The runner's `STUDIO_OWNER`, a foreign key to `learner`, as on `job` (D23 of CONTENT-MIGRATION.md). Every draft verb filters by it |
+| `kind` | text, not null, default `diagram` | What the draft's briefs produce. Only `diagram` exists; see [Later: other kinds of asset](#later-other-kinds-of-asset) |
+| `source` | text, null | The slug of the diagram an extend draft was opened on. Diagrams are rows since the cut-over, so a slug rather than a path |
 | `title` | text, null | The latest brief's title, for the drafts list |
 | `planner_session_id` | text, not null | The headless session every turn resumes. Minted and persisted before the first spawn |
 | `transcript_path` | text, not null | `drafts/<id>/transcript.ndjson`, relative to `$STUDIO_HOME`, because that directory moves between machines and the repo root does not |
 | `brief` | jsonb, null | The latest brief that passed `validateBrief` |
 | `brief_at` | timestamptz, null | When it did |
-| `pending_topic` | text, null | The slug of a topic the planner proposed and `content/topics.yaml` does not have yet; cleared when it does (D39) |
+| `pending_topic` | jsonb, null | The topic entry the planner proposed and the dry run accepted, when the brief's topic does not exist yet; cleared when the Draw press creates it (D16 of CONTENT-MIGRATION.md) |
 | `turns` | integer, not null | The person's turns so far, against the turn cap |
 | `cost_usd`, `cost_source` | numeric, text, null | Every turn summed; `result` or `stream` as on `job`, with the same paired `CHECK` |
 | `error_kind`, `error` | text, null | The last failure: `agent`, `brief-invalid`, `timeout`, `interrupted` |
 | `created_at`, `updated_at` | timestamptz | `updated_at` moves on every event and drives pruning |
 
-Indexes: `draft(state)`, `draft(updated_at)`.
+Indexes: `draft(owner_id)`, `draft(state)`, `draft(updated_at)`.
 
 ### `job.draft_id`
 
@@ -514,7 +531,7 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<name>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch |
 | `GET` | `/api/drafts` | `?state=&limit=` | `{ drafts: [{ draftId, state, title, source, turns, costUsd, updated, jobId }] }` |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, transcript: [{ seq, role, text, at, brief? }], brief, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }` |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, at most `STUDIO_TEXT_LIMIT` characters | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
@@ -581,17 +598,20 @@ the fenced block is replaced by a card inside the same turn: a kit `Card` with
 | Row | Shown as |
 | --- | --- |
 | Title | Card title |
-| Topic | A `Chip`, the topic's title with the slug as its `title` attribute |
+| Topic | A `Chip`, the topic's title with the slug as its `title` attribute. A proposed topic is marked "New topic", with its domain, summary and relations under it, and any near matches the dry run named |
 | New or extend | "New diagram, saved as `<slug>`" or "Extends `<slug>`" |
 | What will appear | The element labels as a wrapped row of `Chip`s |
 | What connects | One line per relation: `from -> label -> to`, 14px |
 
 and under it one primary `Button`, Draw, with the candidate path beside it in
-the label role. Draw carries a `disabledReason` when the topic is not in
-`content/topics.yaml` yet, the target is held by another job (named), or the
-cap is spent (with when it frees); each is re-checked when the panel regains
-focus, so adding the topic in an editor and coming back is enough. A newer brief
-greys the older card and removes its button: one Draw on screen, ever.
+the label role. With a proposed topic the button reads **Create topic and
+draw**: the press runs `catalog topic add` with the person as author and the
+draft id in the reason, then enqueues, and a refusal from either step lands as
+a STUDIO note (E7) with the draft still `briefed`. Draw carries a
+`disabledReason` when the target is held by another job (named) or the cap is
+spent (with when it frees); each is re-checked when the panel regains focus. A
+newer brief greys the older card and removes its button: one Draw on screen,
+ever.
 
 In phase 3 each row becomes editable in place (labels and title as `Input`s,
 the topic as a `FilterMenu`, relations as three small fields), through
@@ -692,8 +712,8 @@ C for the chat and planner, M for the manual.
 | C1 | The runner dies mid-turn | The reconcile pass finds a turn with a `message` and no `reply`, writes a `reply` marked `interrupted` with whatever text arrived, rebuilds the turn's cost from `session.ndjson` as it does for a job, and leaves the draft `open`. Nothing is resent by itself (D15 of the existing doc) |
 | C2 | Two tabs post to one draft at once | The second gets 409 while a turn is in flight. Both tabs follow the same SSE stream, so both show the reply |
 | C3 | The planner's session cannot be resumed (the CLI's transcript was deleted) | The `--resume` exits without a turn, as the runner already detects for a revise. The runner starts a fresh session, replays the transcript into its first message as a fenced data block, and says so in a STUDIO note |
-| C4 | `content/topics.yaml` changes during a draft | The planner's snapshot is frozen, but Draw validates against the file as it is. A brief naming a topic since removed is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added |
-| C5 | Nothing in the vocabulary fits | The planner says so and writes the YAML entry; the brief is stored with `pending_topic` rather than refused, and Draw is disabled with the entry beside it until it is in the file (see the hand-off). If Postgres is up, the enqueue also needs the topic indexed, and the refusal names `npm run catalog -- index` (D39) |
+| C4 | The topic vocabulary changes during a draft | The planner's snapshot is frozen, but Draw validates against `catalog topic ls` as it is. A brief naming a topic since archived is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added. A proposed topic that someone else created in the meantime makes the Draw press's `topic add` refuse; the runner then re-validates the brief against the new vocabulary and, when it passes, clears `pending_topic` and says so in a STUDIO note, so the next press is a plain Draw |
+| C5 | Nothing in the vocabulary fits | The planner proposes a topic; the dry run checks it, the brief is stored with `pending_topic`, and the card's button is **Create topic and draw** (see the hand-off). With Postgres down the studio cannot create the topic, so that button is refused with the catalog's unreachable message, as Accept is (D16 of the existing doc) |
 | C6 | The planner proposes a slug that already exists, as `new` | `runner.enqueue` refuses it with 409, which reaches the planner as a STUDIO note. The CORPUS block exists so this is rare, and the refusal exists because the block can be a week old |
 | C7 | The target is held by another job | 409 naming the holder; the confirm card's Draw is disabled with the job's name and an Open link |
 | C8 | The person pastes a mermaid flowchart | The runner, not the planner, finds a fenced `mermaid` block in the person's own messages and attaches the latest one to the brief as `mermaid` at Draw, where it is written to scratch and lifted by `from-mermaid` as today. The confirm card says "Flowchart attached" with a way to drop it. The planner sees the text and plans around it, but never carries it |
@@ -743,8 +763,10 @@ vocabulary; the studio never writes a tracked file (D6).
 required in three places. The form's mistake was making the person search for
 it, not the constraint.
 
-**Rejected:** a free-text topic the runner would add to `content/topics.yaml`.
-**Amended by D39** for the case where nothing fits.
+**Rejected:** a free-text topic the runner would add to the vocabulary without
+the person seeing it. **Amended by D39, then by D16 of
+[CONTENT-MIGRATION.md](CONTENT-MIGRATION.md)** for the case where nothing
+fits: the planner proposes a topic and the Draw press creates it.
 
 ### D29. The planner confirms before spending
 
@@ -953,6 +975,43 @@ have proposed a colliding `new` slug and been refused at Draw.
 
 **Rejected:** a per-turn lookup, which would need a tool.
 
+### D42. The draft carries a kind; only `diagram` is built
+
+**Verdict:** `draft.kind`, defaulting to `diagram`, and a planner prompt and
+brief validator chosen by kind. Phase 1 builds `diagram` and nothing else.
+Taken 2026-09-29, when the owner said manimkc videos come through the same
+chat later.
+
+**Why:** the chat, the draft, the turn loop, the cost meter and the Draw press
+are the same whatever the agent makes; the prompt, the brief and the drawing
+agent are not. A kind column now costs nothing and saves a migration that
+would otherwise have to backfill every draft. `job.kind` already exists for
+the same reason.
+
+**Rejected:** a generic `asset` brief that tries to describe a diagram and a
+video at once, which would loosen the gate's contract for diagrams; and
+building the video path now, before one diagram has gone through the chat.
+
+## Later: other kinds of asset
+
+Diagrams first. The owner wants to chat to launch manimkc videos too, through
+the same plus card and the same panel. What the diagram work leaves for that:
+
+| Piece | Shared, or per kind |
+| --- | --- |
+| Plus card, dialog, conversation, composer, STUDIO notes | Shared. The plus card grows a kind choice, or the planner asks, once a second kind exists |
+| `draft` row, transcript, turn loop, turn cap, spend entries | Shared, keyed by `draft.kind` |
+| Planner system prompt | Per kind: this document's prompt is the diagram one |
+| Brief and its validator | Per kind: `validateBrief` in `brief.ts` is the diagram one |
+| Confirm card | Per kind: the rows differ; the one button does not |
+| What Draw enqueues | Per kind: a tldrawkc job today; a manimkc job through its own server (`tools/manimkc/server/`) later |
+| The job view after Draw | Per kind |
+
+A video brief, its planner prompt and whether the manimkc server or this
+runner spawns its agent are a design of their own, written when phase 2 here
+is done. Nothing in phase 1 should assume `diagram` outside the per-kind
+pieces above.
+
 ## Phases
 
 Each with its "done when", in the style of
@@ -962,9 +1021,13 @@ started, `[x]` done.
 
 ### Phase 1. The planner, the draft, the chat panel, the Draw hand-off
 
-- [ ] Migration: `draft`, `job.draft_id`, their indexes and `CHECK`s;
-      `STUDIO_TABLES` gains `draft`; `catalog draft` verbs to upsert and show
-      one, mirroring `catalog job`
+Two PRs: 1a is the runner and the catalog (everything up to the routes), 1b is
+the web app. 1b builds against the API table above and lands after 1a.
+
+- [ ] Migration: `draft` (with `owner_id` and `kind`), `job.draft_id`, their
+      indexes and `CHECK`s; `STUDIO_TABLES` gains `draft`; `catalog draft`
+      verbs to upsert and show one, mirroring `catalog job`, each taking
+      `--owner`
 - [ ] `services/studio/src/planner.ts`: the spawn with every flag in the
       planner table, the system prompt assembly with its three blocks, the turn
       loop, the brief extraction and the one automatic retry
@@ -972,6 +1035,9 @@ started, `[x]` done.
       reconcile pass for an interrupted turn, the turn cap
 - [ ] Per-turn spend entries in `spendWindow`; `/api/health` counts them
 - [ ] The draft routes, and `draftId` on `POST /api/jobs`
+- [ ] A proposed topic: the `topic` block parsed, `catalog topic add
+      --dry-run --json` run on it, stored as `pending_topic`, and created by
+      `catalog topic add` on the Draw press before the enqueue
 - [ ] `Composer` extracted from `TutorChat` into `components/ui/`, and
       `TutorChat` using it
 - [ ] The plus card, the dialog, the conversation, the confirm card (read-only),
@@ -981,9 +1047,11 @@ started, `[x]` done.
       panel, prefilled from the latest brief when there is one
 - [ ] Tests: the planner spawn's argv (no tool name, the four seals), a brief
       extracted and validated from a recorded reply, the retry sent once and
-      only once, a reply refused on `topic` with a matching YAML block
+      only once, a reply refused on `topic` with a matching `topic` block
       re-validated against the widened vocabulary and stored as `briefed` with
-      `pending_topic`, and the same reply with a bad relation refused, the turn
+      `pending_topic`, the same reply with a bad relation refused, the Draw
+      press creating the topic and then enqueuing, the draft verbs refusing
+      another owner's draft, the turn
       cap, a 409 on a second in-flight turn, the cap counting a draft's turns
       at their own times
 
@@ -1034,27 +1102,16 @@ and a draft whose only job was enqueued with Postgres down.
 
 ## Open questions
 
-1. **Auto-draw when the planner is satisfied.** Concern 9 asks for the drawing
-   agent to start as soon as the planner judges the context sufficient. D29
-   puts a Draw press between the two, because a brief is what the gate holds an
-   eighty-cent drawing to, and the two-turn trial shows the planner's first
-   guess can be wrong in a way a glance catches (it wanted to extend the
-   existing diagram). **Recommendation:** keep the press as the default, and
-   treat "just draw it" (or any phrase meaning it) as consent: on that turn the
-   runner fires Draw itself the moment the brief passes `validateBrief`, and
-   the panel goes straight to the job view. A `STUDIO_AUTO_DRAW=1` setting can
-   make every valid brief draw at once for an owner who wants the literal
-   behaviour. Either way the confirm card still renders, so the brief the gate
-   used is on screen.
-2. **"No topic yet".** D39 keeps it refused, amending D28. Allowing it reverses
-   D7 of the existing doc: `job.topic_slug` nullable, the validator and gate
-   step 4 relaxed, `assert-output`'s refusal treated as expected.
-   **Recommendation:** do not; the YAML path answers concern 2 without making
-   the studio a source of diagrams the catalog cannot see.
-3. **Who indexes a topic the person just added.** With Postgres up, enqueue's
-   foreign key needs the topic row, so Draw waits on `npm run catalog -- index`.
-   **Recommendation:** name the command in the refusal and leave running it to
-   the person, as D1 of the existing doc does for every full index.
+1. **Auto-draw when the planner is satisfied.** *Resolved 2026-09-29 by the
+   owner:* no. Every drawing starts with a press, "just draw it" included; the
+   planner stops asking on that phrase and proposes at once (C10), and the
+   press is still the person's. No `STUDIO_AUTO_DRAW`.
+2. **"No topic yet".** *Resolved by D16 of CONTENT-MIGRATION.md:* still
+   refused. The planner proposes a topic and the Draw press creates it, so a
+   diagram never needs to exist without one.
+3. **Who indexes a topic the person just added.** *Resolved by D16 of
+   CONTENT-MIGRATION.md:* nobody has to. A topic is a row written by
+   `catalog topic add`, so it exists the moment the press creates it.
 4. **The drawing agent's own exposure.** Its spawn has no `--strict-mcp-config`,
    and D34's probe loaded 69,509 tokens of claude.ai connectors under the same
    flags. The one real job's init event shows none, so it is intermittent; when
