@@ -1919,10 +1919,12 @@ before, so it merged before flip day and does not depend on #152.
       meanwhile) is already counted, so a rerun or putting back an object the
       store lost is never refused, even under a cap lowered below what the
       owner holds. The day is rolling, as the studio's spend cap.
-      A value that is not a whole number refuses every upload with the
+      A value that is not a whole number refuses every new object with the
       variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
       does: an upload is a command a person watches, and a quota that a typo
-      turns off is the failure that matters here. No migration: `blob_object`
+      turns off is the failure that matters here. (The phase 4 review found it
+      refused a re-store of a key with a row too, so every unchanged import
+      failed; it now reads the caps only for a new object.) No migration: `blob_object`
       already holds the key, the size and `created_at`, so a cap table would
       only duplicate them. `catalog blob audit` prints each owner's objects,
       bytes and uploads in the last 24 hours, and the caps in force.

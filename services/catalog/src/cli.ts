@@ -22,6 +22,7 @@ import type { ExportSubset } from "./content/subset";
 import { formatFlip, runFlip } from "./commands/flip";
 import { formatIndex, runImportCommand } from "./commands/index-command";
 import { formatParity, runParity } from "./commands/parity";
+import { capFailureFields } from "./content/blob";
 import { EXPORT_TYPES, type ExportType } from "./content/layout";
 import { CONTENT_TYPES, type ContentType } from "@self-learn/schema";
 import {
@@ -172,7 +173,8 @@ Commands:
                            wrong, stale pending rows, unreferenced objects,
                            posters whose video is gone. Exits 1 while any
                            disagreement stands or an asset points at a
-                           pending blob. --fix deletes day-old
+                           pending blob, or while a per-owner cap
+                           cannot be read. --fix deletes day-old
                            orphans, marks broken rows pending, deletes
                            day-old pending rows nothing points at, and
                            sweeps day-old .tmp/*.part files. The store is
@@ -599,7 +601,9 @@ export async function main(argv: string[]): Promise<number> {
         await schemaCurrent();
         const result = await runBlobAudit({ fix: values.fix });
         emit(result, formatBlobAudit(result));
-        if (result.outstanding > 0) return 1;
+        // A cap that cannot be read refuses every new upload, so it is a
+        // finding like one the audit makes, not a line to scroll past.
+        if (result.outstanding > 0 || "error" in result.caps) return 1;
         break;
       }
       case "renumber": {
@@ -827,8 +831,11 @@ function reportFailure(error: unknown, command: string, verb: string | undefined
   if (json) {
     // The shape on stdout is unchanged: it is somebody's `--json`. The reason
     // goes to stderr, one line, where a person and the studio both read it.
+    // A refusal that carries a code a script branches on keeps it: a cap
+    // refusal says BLOB_CAP, and which owner and cap, not only a sentence.
+    const coded = capFailureFields(error);
     process.stdout.write(
-      `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message }, null, 2)}\n`,
+      `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, ...coded }, null, 2)}\n`,
     );
     if (reason !== null) {
       const named = command === "job" || command === "session" || command === "diagram" ? verb : undefined;

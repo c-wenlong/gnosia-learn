@@ -1,3 +1,5 @@
+import { formatCaps } from "./blob-audit";
+import { ownerCapsOrError, type OwnerCaps } from "../content/blob";
 import { catalogInstance, contentSource } from "@self-learn/schema";
 import { sql } from "drizzle-orm";
 
@@ -88,6 +90,13 @@ export interface DoctorResult {
   };
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
+  /**
+   * The per-owner blob caps in force, or why they cannot be read (phase 4).
+   * Said, not counted: an unreadable cap refuses new uploads, which is the
+   * environment's problem and not a row that breaks a rule. `blob audit`
+   * exits 1 on it.
+   */
+  caps: OwnerCaps | { error: string };
   violations: number;
   ok: boolean;
 }
@@ -114,6 +123,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
     writeGuards: {},
+    caps: ownerCapsOrError(),
     violations: 0,
     ok: false,
   };
@@ -227,6 +237,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     conceptTopicRequired: topicColumn?.nullable === "NO",
     blobContract,
     writeGuards,
+    caps: ownerCapsOrError(),
     violations,
     ok: !contradicted && !missingGuard,
   };
@@ -305,6 +316,7 @@ export function formatDoctor(result: DoctorResult): string {
   for (const row of contract.unstored.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.kind})`);
   if (contract.unstored.length > SAMPLE) lines.push(`  and ${contract.unstored.length - SAMPLE} more (--json lists all)`);
   for (const key of contract.unkeyed.slice(0, SAMPLE)) lines.push(`  key ${key}`);
+  lines.push(`blob caps: ${formatCaps(result.caps)}`);
   const armed = Object.entries(result.writeGuards).filter(([, on]) => on === true).map(([t]) => t);
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);
   lines.push(`write guards armed: ${armed.length === 0 ? "none" : armed.join(", ")}`);

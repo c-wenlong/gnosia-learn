@@ -59,6 +59,17 @@ export interface AssetBlob {
  */
 const video = alias(asset, "video");
 
+/**
+ * The asset's blob, and only when the blob is the asset's owner's: a key's
+ * prefix is whose store and quota the bytes are in (D5), so a row naming
+ * another owner's key would serve bytes that owner stored. The write seam
+ * refuses such a key; this is the read side of the same rule, and it holds
+ * for a row written before the seam checked. `blob_object`'s own check ties
+ * its `owner_id` to the key's prefix, so comparing the columns compares the
+ * prefix.
+ */
+const keyedByOwner = and(eq(blobObject.key, asset.blobKey), eq(blobObject.ownerId, asset.ownerId));
+
 const COLUMNS = {
   assetId: asset.id,
   key: blobObject.key,
@@ -80,7 +91,7 @@ export async function assetBlobs(
       db
         .select(COLUMNS)
         .from(asset)
-        .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
+        .innerJoin(blobObject, keyedByOwner)
         .where(and(inArray(asset.id, [...ids]), ownedBy(asset.ownerId, scope.readable))),
     [],
   );
@@ -106,7 +117,7 @@ export async function videosWithStoredPoster(
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
         .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
-        .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
+        .innerJoin(blobObject, keyedByOwner)
         .where(
           and(
             inArray(assetDerivation.sourceAssetId, [...videoIds]),
@@ -135,7 +146,7 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
         .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
-        .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
+        .innerJoin(blobObject, keyedByOwner)
         .where(
           and(
             eq(assetDerivation.sourceAssetId, videoId),

@@ -243,6 +243,25 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(objects).toEqual([]);
   });
 
+  it("says on a dry run which files the caps would refuse, counting what it has planned", async () => {
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "2";
+    try {
+      const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
+      const real = await uploadAssets(scratch.db, options());
+      // The same files are refused, by the dry run as by the real one.
+      const refusedIds = (r: typeof dry) => r.items.filter((i) => i.action === "refused").map((i) => i.id).sort();
+      expect(refusedIds(dry)).toEqual(refusedIds(real).filter((id) => !id.startsWith("poster:")));
+      expect(dry.items.filter((i) => i.action === "would-upload")).toHaveLength(2);
+      for (const item of dry.items.filter((i) => i.action === "refused")) {
+        expect(item.detail).toContain("a real run would refuse it");
+      }
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
+  });
+
   it("refuses a file re-rendered since it was indexed, by name, and leaves its row alone", async () => {
     await writeFile(path.join(outRoot, VIDEO_PATH), Buffer.from("a different render"));
     const result = await uploadAssets(scratch.db, options());
