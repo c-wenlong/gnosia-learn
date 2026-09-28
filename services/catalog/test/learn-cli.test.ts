@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { applyMigrations } from "../src/migrations";
 import { readReviews, upsertReview } from "../src/state";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { createScratchDatabase, markImported, probe, type Scratch } from "./scratch-database";
 import { seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -336,6 +336,9 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
 
     beforeAll(async () => {
       studioHome = await mkdtemp(path.join(tmpdir(), "learn-cli-studio-"));
+      // The files still own diagrams here, so a put writes them through
+      // (D17) under the tree this database imported diagrams from.
+      await markImported(scratch.db, "diagrams", root);
     });
 
     afterAll(async () => {

@@ -26,5 +26,17 @@ export function formatFlip(result: FlipCommandResult): string {
     `rules     ${result.rulesArmed.length === 0 ? "none armed" : result.rulesArmed.join(", ")}`,
   ];
   for (const waiver of result.waivers) lines.push(`waived    ${waiver.rule}: ${waiver.reason} (${waiver.at})`);
+  lines.push(
+    result.export.recorded
+      ? `export    ${result.export.hash.slice(0, 12)} recorded: the next import skips these files`
+      : "export    this database is a copy: the export hash was not recorded",
+  );
+  if (result.export.rewrites.length > 0) {
+    lines.push(
+      `          ${result.export.rewrites.length} file(s) hold the same content in other bytes, and the next ` +
+        `\`catalog export --only ${result.type} --out ${result.parity.dir}\` rewrites them: ` +
+        result.export.rewrites.join(", "),
+    );
+  }
   return lines.join("\n");
 }

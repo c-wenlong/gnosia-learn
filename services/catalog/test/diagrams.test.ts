@@ -19,6 +19,7 @@ import {
   checkoutDiagram,
   commitDiagram,
   DiagramError,
+  documentBytes,
   documentHash,
   listDiagrams,
   putDiagram,
@@ -255,8 +256,12 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(result.changed).toBe(true);
     expect(result.svg?.uploaded).toBe(true);
     // D17: until the flip an index reads these files, so they must hold the write.
-    expect(result.files).toEqual(["learn/assets/second-diagram.tldr", "learn/assets/second-diagram.svg"]);
+    expect(result.files).toEqual(["learn/assets/second-diagram.svg", "learn/assets/second-diagram.tldr"]);
     expect(await readFile(path.join(fixture.root, "learn/assets/second-diagram.svg"), "utf8")).toBe(svgOf("second"));
+    // Written as the export writes it: the document's canonical JSON.
+    expect(await readFile(path.join(fixture.root, "learn/assets/second-diagram.tldr"))).toEqual(
+      documentBytes(JSON.parse(documentOf({ title: "Second" }))),
+    );
     const again = await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
     expect(again.sources.find((s) => s.source === "diagrams")?.revisions).toEqual({});
 

@@ -18,6 +18,7 @@ import path from "node:path";
 import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
+import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { renderType } from "../content/export";
@@ -332,6 +333,10 @@ export async function runIndex(
 
   const vocabulary = await loadVocabulary(repoRoot);
   const author = options.author ?? importAuthor(repoRoot);
+  // Which database recorded each root: a `createdb -T` copy inherits the
+  // rows, and a root is only this database's when this database wrote it
+  // (content/import-root.ts).
+  const database = await databaseIdentity(db);
 
   // Sources produced earlier in this run answer the cross-source lookups; a
   // partial run falls back to the database, which holds what the last full run
@@ -488,10 +493,11 @@ export async function runIndex(
       conceptsFollow: indexer.source === "topics" && running.has("concepts"),
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
-      // against: what `catalog flip` runs parity against, and where a diagram
-      // put writes its files through to until diagrams are flipped (D17). The
-      // manimkc sources resolve against their report's `outRoot` instead.
-      metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot },
+      // against: what `catalog flip` runs parity against, and where a seam
+      // write rewrites the type's files (D17), with the database that read
+      // it. The manimkc sources resolve against their report's `outRoot`
+      // instead.
+      metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot, database },
       author,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
     };
@@ -583,16 +589,27 @@ async function ownedSkips(
     }
     const files = await readTypeFiles(root, type);
     const hash = exportHash(files);
-    if (row.exportHash !== null && row.exportHash === hash) {
+    // The database's own export either way: the files its last export or
+    // write-through left (an untouched export the rows have since moved past,
+    // which is a type that does not write through, C's and D's), or the files
+    // it would export now, wherever they were written. Only a file that is
+    // neither is an edit.
+    const recorded = row.exportHash !== null && row.exportHash === hash;
+    const current = recorded ? false : await renderType(db, type).then((f) => exportHash(f) === hash, () => false);
+    if (recorded || current) {
       out.set(indexer.source, {
         source: indexer.source,
         reason:
           `the database owns ${type} (since ${since}), and ${TYPE_LOCATION[type]} is its own ` +
-          `last export, so there is nothing to read`,
+          `${recorded ? "last" : "current"} export, so there is nothing to read`,
       });
+      // This tree is where the type's files are now, for this database: a
+      // copy imported from an export folder writes through to that folder,
+      // not to the tree its template was imported from.
+      await recordRoot(db, type, root);
       continue;
     }
-    throw new IndexError(await editedExport(db, type, files, row.exportHash === null));
+    throw new IndexError(await editedExport(db, type, root, files, row.exportHash === null));
   }
   if (out.has("manimkc") && !out.has("mirrors") && selected.some((i) => i.source === "mirrors")) {
     out.set("mirrors", {
@@ -607,19 +624,13 @@ async function ownedSkips(
 async function editedExport(
   db: CatalogDatabase,
   type: Parameters<typeof renderType>[1],
+  root: string,
   files: readonly { path: string; bytes: Buffer }[],
   neverExported: boolean,
 ): Promise<string> {
   const head =
     `${TYPE_LOCATION[type]}: the database owns ${type}, so these files are an export and ` +
     `are not read. `;
-  if (neverExported) {
-    return (
-      head +
-      `No export of ${type} is recorded, so nothing says these files are the database's. Run ` +
-      `\`catalog export --only ${type} --out <dir>\` to write them from the database.`
-    );
-  }
   let differing: string[];
   try {
     const expected = new Map((await renderType(db, type)).map((f) => [f.path, f.bytes]));
@@ -634,11 +645,19 @@ async function editedExport(
   } catch {
     differing = [];
   }
-  const named = differing.length === 0 ? "" : `Edited since the last export: ${differing.join(", ")}. `;
+  const which = differing.length === 0 ? "" : `: ${differing.join(", ")}`;
+  if (neverExported) {
+    return (
+      head +
+      `No export of ${type} is recorded, and they are not what the database would export now${which}. ` +
+      `Run \`catalog export --only ${type} --out ${root}\` to write them from the database, or ` +
+      `apply the change through the catalog's ${type} command first.`
+    );
+  }
   return (
     head +
-    named +
+    (differing.length === 0 ? "" : `Edited since the last export${which}. `) +
     `Apply the change through the catalog's ${type} command, which records who made it and why, ` +
-    `then \`catalog export --only ${type}\` rewrites these files; or discard the edit.`
+    `then \`catalog export --only ${type} --out ${root}\` rewrites these files; or discard the edit.`
   );
 }
