@@ -159,8 +159,11 @@ Rules of engagement:
   session log embeds as `![[<concept-id>.svg]]`. Iteration PNGs go to the
   scratchpad and are never committed.
 - **`learn/map.md` stays mermaid, and is not a job for this tool.** It is a
-  derived cache that `learn map` rebuilds from the event log, and the web app
-  reads its string out of the index without rendering it. Only teaching
+  document `learn map` renders from the graph and the mastery model on demand:
+  to stdout by default, into a file only with `--out <file>`, so the committed
+  `learn/map.md` is no longer rewritten by a session and is regenerated only
+  when someone asks for it (Track C of
+  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md)). Only teaching
   diagrams go on the canvas.
 - **Every `.tldr` needs a topic, or `catalog index` refuses it by name.** The
   topic and concepts live in `meta.tldrawkc` on the document record, written
@@ -226,8 +229,12 @@ Rules of engagement:
   [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md) Accept lands nothing
   in the tree: it is `catalog diagram put --job`, the diagram as rows and its
   SVG as a blob, with the job's starting revision as the base, so a commit that
-  landed while the job ran refuses it. There is nothing to `git add`. With
-  Postgres down Accept refuses and the candidate waits. `indexed: false` after
+  landed while the job ran refuses it. Once `catalog flip diagrams` has run
+  there is nothing to `git add`; before the flip the put also writes the
+  `.tldr` and `.svg` through into the tree diagrams were last imported from
+  (D17), so the next `catalog index` does not undo it, and Accept names those
+  two files with the `git add` line to run. With Postgres down Accept refuses
+  and the candidate waits. `indexed: false` after
   an accept means the diagram landed and the job row did not record it;
   Reindex finishes it.
 - Every `canvas` verb and the mirror run on the diagram's checkout,
@@ -544,9 +551,13 @@ not have to be worked out again.
   included. `learn index` refuses in turn if the note is in no topic's
   `maps.concepts` in `content/topics.yaml`. `learn concept add --topic <slug>`
   does all of it in one call: it files the concept under the topic through the
-  catalog (a revision, and `topics.yaml` rewritten from the rows), then
-  indexes. Without the flag, `concept add` prints the reminder at the point the
-  note is written. Do not hand-edit `maps.concepts`: the catalog writes that
+  catalog (a revision, and `topics.yaml` rewritten from the rows), then, while
+  notes are files, indexes them. Once the database owns concepts the note is
+  its row, written in the same transaction as the topic mapping, and there is
+  nothing to index. With `--item`, the listing on the course row goes in
+  through `catalog course import` whenever the database owns concepts or
+  courses. Without `--topic`, `concept add` prints the reminder at the point
+  the note is written. Do not hand-edit `maps.concepts`: the catalog writes that
   list now, and refuses to write over an edit it has not imported.
 - **The `--json` shapes are a contract with a plugin outside this repo.**
   `status`, `frontier`, `plan`, `observe` and `review due` are parsed by

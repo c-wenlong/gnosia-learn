@@ -74,7 +74,7 @@ async function ownedTypes(db: CatalogDatabase): Promise<ReadonlySet<string>> {
  * `write` says what an unreachable database means: a writer refuses, a
  * reader reads the files.
  */
-async function rowsFor(type: "concepts" | "sessions", write: boolean): Promise<CatalogDatabase | null> {
+async function rowsFor(type: "concepts" | "sessions" | "courses", write: boolean): Promise<CatalogDatabase | null> {
   if (catalog === null) return null;
   try {
     const db = await catalog();
@@ -85,8 +85,12 @@ async function rowsFor(type: "concepts" | "sessions", write: boolean): Promise<C
   }
 }
 
-/** Whether the database owns `type`, for a command that says so in its output. */
-export async function ownedByDatabase(type: "concepts" | "sessions"): Promise<boolean> {
+/**
+ * Whether the database owns `type`, for a command that says so in its output
+ * or picks its path by it. `courses` is asked by `concept add --item`, whose
+ * listing goes through the course writer once the database owns courses.
+ */
+export async function ownedByDatabase(type: "concepts" | "sessions" | "courses"): Promise<boolean> {
   return (await rowsFor(type, true)) !== null;
 }
 
