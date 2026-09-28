@@ -126,6 +126,11 @@ modules:
     topics:
       - id: cp4283-m6-t1
         title: Self-attention mechanics
+        concepts:
+          - query-key-value-projections
+          - attention-weights
+          - self-attention
+          - multi-head-attention
         subtopics:
           - Q/K/V
           - Multi-head attention
