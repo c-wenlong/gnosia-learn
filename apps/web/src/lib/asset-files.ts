@@ -9,13 +9,18 @@ import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@se
 import {
   assetBlobs,
   assetsByIds,
+  conceptsForAsset,
+  documentBytes,
   indexedRoot,
+  videosWithStoredPoster,
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
+import type { ContentType } from "@self-learn/content";
 
 import { REPO_ROOT } from "@/data/repo-root";
+import { contentSource } from "@/data/source";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { assetBlobStore } from "@/lib/blob-store";
 
@@ -351,8 +356,23 @@ export interface AssetStored {
   filename: string;
 }
 
+/**
+ * An asset whose bytes are a row, once the database owns its type: a concept
+ * note (rendered as its row renders it), a session log (its entries
+ * concatenated) or a diagram's `.tldr` (its document as canonical JSON). The
+ * text is small, so it is held whole rather than streamed.
+ */
+export interface AssetRowText {
+  ok: true;
+  source: "row";
+  body: Buffer;
+  bytes: number;
+  contentType: string;
+  filename: string;
+}
+
 /** Wherever an asset's bytes are served from. */
-export type AssetSource = AssetFile | AssetStored;
+export type AssetSource = AssetFile | AssetStored | AssetRowText;
 export type AssetSourceResult = AssetSource | AssetFileProblem;
 
 /**
@@ -432,11 +452,93 @@ export async function resolveBlob(blob: AssetBlob, name: string): Promise<AssetS
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Rows                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The asset kinds whose bytes become a row when the database owns their type
+ * (Tracks C and D of docs/CONTENT-MIGRATION.md). After that type's flip the
+ * file under `learn/` is the export as of the flip at best: a note committed
+ * since is not in it, a log started since has no file at all, and phase 2
+ * deletes the tree. So the row is served, not the file.
+ */
+const ROW_KINDS: Readonly<Record<string, ContentType>> = {
+  note: "concepts",
+  session: "sessions",
+  diagram_source: "diagrams",
+};
+
+/**
+ * What a row's text is served as. A second, smaller list than `CONTENT_TYPES`
+ * on purpose: a `.tldr` is served only as the canonical document the database
+ * holds, never read off disk, so the legacy branch keeps refusing it.
+ */
+const ROW_CONTENT_TYPES: Readonly<Record<ContentType, string | undefined>> = {
+  topics: undefined,
+  tags: undefined,
+  courses: undefined,
+  concepts: "text/markdown; charset=utf-8",
+  sessions: "text/markdown; charset=utf-8",
+  diagrams: "application/json",
+};
+
+/** The kinds `ROW_KINDS` covers, for a caller deciding servability without the text. */
+export function rowTypeFor(kind: string): ContentType | null {
+  return ROW_KINDS[kind] ?? null;
+}
+
+/**
+ * The asset's bytes from its row, or `undefined` when its type is still read
+ * from files (or it is not such a kind), and the caller goes on to the file.
+ *
+ * Not gated by `ASSET_FILES_ENABLED`, for the reason a blob is not: the switch
+ * says whether this server reads files off a laptop's disk, and a row is not a
+ * file. Every name here comes from the row the id found, never from the URL.
+ */
+export async function resolveRowText(
+  db: CatalogDatabase,
+  row: AssetRef,
+): Promise<AssetRowText | AssetFileProblem | undefined> {
+  const type = rowTypeFor(row.kind);
+  if (type === null) return undefined;
+  const seam = contentSource();
+  if ((await seam.resolution())[type].kind !== "db") return undefined;
+
+  const name = path.basename(row.path ?? row.id);
+  let body: Buffer | null = null;
+  if (type === "concepts") {
+    // A note asset is linked to exactly one concept, its own: the concepts
+    // indexer and the row writer both link it so.
+    const [slug] = await conceptsForAsset(db, row.id);
+    const note = slug === undefined ? null : await seam.concept(slug);
+    body = note === null ? null : Buffer.from(note.markdown, "utf8");
+  } else if (type === "sessions") {
+    const log = await seam.sessionLog(name.replace(/\.md$/, ""));
+    body = log === null ? null : Buffer.from(log.markdown, "utf8");
+  } else {
+    const diagram = await seam.diagram(name.replace(/\.tldr$/, ""));
+    body = diagram === null ? null : documentBytes(diagram.document);
+  }
+  if (body === null) {
+    return missing(
+      "not-in-catalog",
+      `The database owns ${type} and holds no text for asset ${row.id}; it was archived, or never written.`,
+    );
+  }
+  const contentType = ROW_CONTENT_TYPES[type];
+  if (contentType === undefined) {
+    return missing("unsupported-type", `Asset ${row.id} is a ${row.kind}, which this route will not serve.`);
+  }
+  return { ok: true, source: "row", body, bytes: body.length, contentType, filename: safeFilename(name) };
+}
+
 /**
  * An asset id to where its bytes are served from, or the reason there is
- * nowhere: the blob store when the row names a key, else the legacy file,
- * which the switch gates. Every route and every page check goes through this,
- * so the page and the route cannot give one asset two answers.
+ * nowhere: the blob store when the row names a key, then the row itself when
+ * the database owns the asset's type, else the legacy file, which the switch
+ * gates. Every route and every page check goes through this, so the page and
+ * the route cannot give one asset two answers.
  */
 export async function resolveAsset(
   db: CatalogDatabase,
@@ -447,8 +549,51 @@ export async function resolveAsset(
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
   const blob = (await assetBlobs(db, [row.id])).get(row.id);
   if (blob !== undefined) return resolveBlob(blob, row.path ?? row.id);
+  const text = await resolveRowText(db, row);
+  if (text !== undefined) return text;
   if (!assetFilesEnabled(env)) return FILES_OFF;
   return resolveRowFile(db, row);
+}
+
+/**
+ * Which of these assets are served without reading a file off this server's
+ * disk: a blob the catalog records as `present`, or a row the database owns.
+ * For the pages' thumbnails and their files-off notice, which decide per row
+ * whether to draw a picture before the browser asks. One query and one
+ * ownership read for the whole page, where `resolveAsset` per card would stat
+ * the store and read every text; a card whose picture then fails asks the
+ * status route why, as it already does for a legacy file that went missing.
+ */
+export async function servedWithoutFiles(
+  db: CatalogDatabase,
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (rows.length === 0) return out;
+  const blobs = await assetBlobs(db, rows.map((row) => row.id));
+  for (const [id, blob] of blobs) if (blob.state === "present") out.add(id);
+  const needsRow = rows.filter((row) => !out.has(row.id) && rowTypeFor(row.kind) !== null);
+  if (needsRow.length > 0) {
+    const owned = await contentSource().resolution();
+    for (const row of needsRow) {
+      const type = rowTypeFor(row.kind);
+      if (type !== null && owned[type].kind === "db") out.add(row.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * The videos among these whose card can show a stored poster, which the
+ * poster route serves whatever the switch says. A stored video with no stored
+ * poster is not among them: its poster would have to be cut from the file,
+ * which is the legacy branch the switch gates.
+ */
+export async function storedPosters(
+  db: CatalogDatabase,
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<Set<string>> {
+  return videosWithStoredPoster(db, rows.filter((row) => row.kind === "video").map((row) => row.id));
 }
 
 /** The object, or a range of it, from the store. Rejects as `BlobStore.get` does. */

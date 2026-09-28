@@ -1122,9 +1122,9 @@ library pages of a note and a log differs only in the `asOf` timestamp;
 the rows render it. A scratch session run then (start, observe with
 `--session`, checkout and commit, check add, close, map) left rows and
 revisions and no file under `learn/` changed, and the committed line showed
-on the page from rows and not from files. Not moved here: the raw file route
-`/api/assets/{id}/file` still serves a note's or a log's file; it is Track E's
-route, and phase 2 removes the files it would serve.
+on the page from rows and not from files. Not moved here, and fixed after the
+phase 1 review (Track E's review fixes): the raw file route
+`/api/assets/{id}/file` served a note's or a log's file.
 
 **Built, the contract migration (PR 4 of the track).** `0012_concept_topic_not_null`:
 `concept.topic_slug` is `NOT NULL`, and its foreign key `RESTRICT` rather than
@@ -1285,6 +1285,13 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
       object with no row, a `present` row whose object is gone or no longer
       hashes to its key, a stale `pending` row, an object nothing points at, a
       poster whose video is gone.
+- [x] Servability per row, added by the phase 1 review (S5): a page decides
+      whether it can show an asset from that row through `resolveAsset`, the
+      route's own resolver (a `present` blob, a row the database owns, or a
+      legacy file with `ASSET_FILES_ENABLED` on), never from the switch alone.
+- [x] The file route serves row text for a type the database owns (S4): a
+      note as its row renders it, a session log as its entries concatenated,
+      a `.tldr` as its canonical document, before the legacy file branch.
 
 **Built** (branch `p1/e-videos`). The upload is `services/catalog/src/content/asset-upload.ts`
 behind `commands/asset-upload.ts`, on Track D's `uploadBlob`. Three things the
@@ -1313,10 +1320,33 @@ which the status route and the pages' pre-render check (`readFileProblems`,
 `readAssetText`) share, so a blob that serves is `ok` everywhere. With the
 switch off and no catalog the routes still answer `files-off`, exactly as
 before. Not built: edge case 15's one retry in the player for an expired URL,
-since the `fs` store signs nothing and it belongs with the cloud adapter; and
-per-row servability on the pages, which still read the switch deployment-wide
-(`readFileAccess`), so with it off a page shows the "files off" state even for
-an asset the route would serve from the store. Both are go-live work.
+since the `fs` store signs nothing and it belongs with the cloud adapter.
+
+**Built, review fixes (S4 and S5 of the phase 1 review).** `resolveAsset`
+asks three places in order: the blob store when the row names a key, then the
+row itself when the database owns the asset's type (`resolveRowText`: a
+`note`, a `session` or a `diagram_source` whose type resolves to `db`), then
+the legacy file, which the switch gates. Before this, after the concepts and
+sessions flips the route served the tree file as of the flip (a line
+committed since was missing), a log started since answered 404
+`file-missing`, and a `.tldr` answered `unsupported-type`. A row's `.tldr`
+is served as `application/json`; the legacy branch still refuses a `.tldr`
+file, since the only `.tldr` worth serving is the document the database
+holds. The pages stopped
+reading the switch deployment-wide: the library's asset page, the concept
+workspace's note embeds and thumbnails, the session page's teaching picture
+and embeds, the course rails and the library grid all decide per row, the
+detail pages through `readFileProblems` (which is `resolveAsset`) and the
+thumbnails through one batched `servedWithoutFiles` read (a `present` blob or
+an owned row type); a video's card draws only when a poster is stored for it
+or its file may be read, since a stored video with no stored poster would
+need the file to cut one. The grid's files-off notice shows only while some
+row in the current view still needs a file on disk, and search reads a row's
+text with the switch off and says how many notes and transcripts it matched
+by name only. `apps/web/src/app/api/assets/asset-rows.test.ts` imports a fixture, flips
+`concepts`, `sessions` and `diagrams` on a scratch database, and holds the
+route, the status route and the page checks to it with `ASSET_FILES_ENABLED`
+unset.
 
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
 `content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
