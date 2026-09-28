@@ -5,6 +5,7 @@ import {
   type SessionState,
 } from "@self-learn/schema";
 
+import { CLI_OWNER } from "../content/scope";
 import { withDatabase } from "../db";
 import { endSession, ensureSession, readSession } from "../state/sessions";
 
@@ -36,6 +37,8 @@ export interface SessionStartOptions {
   title?: string;
   goal?: string;
   agentSessionId?: string;
+  /** Whose session. Default: the CLI's owner; the studio passes the owner it serves. */
+  owner?: string;
 }
 
 export interface SessionStartResult {
@@ -60,16 +63,21 @@ export async function runSessionStart(
   const id = options.id.trim();
   if (id === "") throw new SessionCommandError("session start needs --id");
 
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
-    const before = await readSession(db, id);
-    await ensureSession(db, {
-      id,
-      kind: kind as SessionKind,
-      title: options.title ?? null,
-      goal: options.goal ?? null,
-      agentSessionId: options.agentSessionId ?? null,
-    });
-    const after = await readSession(db, id);
+    const before = await readSession(db, id, owner);
+    await ensureSession(
+      db,
+      {
+        id,
+        kind: kind as SessionKind,
+        title: options.title ?? null,
+        goal: options.goal ?? null,
+        agentSessionId: options.agentSessionId ?? null,
+      },
+      owner,
+    );
+    const after = await readSession(db, id, owner);
     return {
       ok: true as const,
       command: "session start" as const,
@@ -86,6 +94,8 @@ export interface SessionEndOptions {
   state: string;
   errorKind?: string;
   error?: string;
+  /** Whose session. Default: the CLI's owner. */
+  owner?: string;
 }
 
 export interface SessionEndResult {
@@ -113,10 +123,13 @@ export async function runSessionEnd(options: SessionEndOptions): Promise<Session
   }
 
   return withDatabase(async ({ db }) => {
-    const result = await endSession(db, options.id.trim(), state as SessionState, {
-      errorKind: options.errorKind ?? null,
-      error: options.error ?? null,
-    });
+    const result = await endSession(
+      db,
+      options.id.trim(),
+      state as SessionState,
+      { errorKind: options.errorKind ?? null, error: options.error ?? null },
+      options.owner ?? CLI_OWNER,
+    );
     return {
       ok: true as const,
       command: "session end" as const,

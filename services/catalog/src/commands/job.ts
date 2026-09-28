@@ -16,10 +16,14 @@ import {
   type JobKind,
   type JobState,
   type NewJob,
+  readableOwners,
+  diagram as diagramTable,
   session as sessionTable,
+  topic as topicTable,
 } from "@self-learn/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
+import { CLI_OWNER, ownersExist } from "../content/scope";
 import { withDatabase, type CatalogDatabase } from "../db";
 import { REPO_ROOT } from "../env";
 import { ASSETS_DIR } from "../index/diagrams";
@@ -45,6 +49,18 @@ import { constraintName, SQLSTATE, sqlstate } from "../state/errors";
  * path someone else is holding is a refusal, not a reuse, and it names the
  * holder.
  */
+
+/**
+ * Whose jobs a verb acts on (phase 4 of docs/CONTENT-MIGRATION.md): the
+ * owner's own, `--owner` or the CLI's. A job is one owner's, never the
+ * commons', so this is an equality, not the readable list. Another owner's
+ * job is "no job" to every verb, as a missing one is. On a database from
+ * before 0010 `job` has no `owner_id` and holds one owner's jobs, so there is
+ * no clause.
+ */
+async function ownedJobs(db: CatalogDatabase, owner: string): Promise<SQL | undefined> {
+  return (await ownersExist(db)) ? eq(jobTable.ownerId, owner) : undefined;
+}
 
 /** A refusal the caller can fix: a bad brief, a transition that is not allowed. */
 export class JobError extends Error {
@@ -336,6 +352,8 @@ export async function readBrief(file: string): Promise<BriefDocument> {
 export interface EnqueueOptions {
   brief: BriefDocument;
   repoRoot?: string;
+  /** Whose job this is. Default: the CLI's owner. */
+  owner?: string;
 }
 
 export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult> {
@@ -396,13 +414,26 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     idempotencyKey,
   };
 
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
+    const scoped = await ownersExist(db);
+    // A key is global, so another owner's job under it is a refusal that
+    // names nothing of theirs, rather than that job handed back.
+    const theirs = (found: Job | undefined): found is Job => scoped && found !== undefined && found.ownerId !== owner;
+    const keyTaken = () =>
+      new JobError(`idempotency key "${idempotencyKey}" is already taken by another job. Submit under a new key.`);
     const existing = await byIdempotencyKey(db, idempotencyKey);
+    if (theirs(existing)) throw keyTaken();
     if (existing !== undefined) {
       return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(existing) };
     }
+    await assertOwnReferences(db, { sessionId: row.sessionId ?? null, parentJobId: row.parentJobId ?? null }, owner, scoped);
+    if (scoped) await assertDrawable(db, row, owner);
     try {
-      const [inserted] = await db.insert(jobTable).values(row).returning();
+      const [inserted] = await db
+        .insert(jobTable)
+        .values(scoped ? { ...row, ownerId: owner } : row)
+        .returning();
       return {
         ok: true as const,
         command: "enqueue" as const,
@@ -420,6 +451,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
         constraintName(error) === "job_idempotency_key_key"
       ) {
         const winner = await byIdempotencyKey(db, idempotencyKey);
+        if (theirs(winner)) throw keyTaken();
         if (winner !== undefined) {
           return {
             ok: true as const,
@@ -429,9 +461,77 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
           };
         }
       }
-      throw await explainEnqueue(db, error, row);
+      throw await explainEnqueue(db, error, row, scoped ? owner : undefined);
     }
   });
+}
+
+/**
+ * What a job points at has to be the owner's to draw (phase 4): a topic they
+ * may read, and a target that is not another owner's diagram. Another owner's
+ * topic is refused with the sentence a missing one gets; a slug another owner
+ * holds says only that it is taken, since ids are global (D23) and the put at
+ * Accept would refuse it anyway, after the agent had been paid to draw.
+ */
+async function assertDrawable(db: CatalogDatabase, row: NewJob, owner: string): Promise<void> {
+  const [filed] = await db
+    .select({ ownerId: topicTable.ownerId })
+    .from(topicTable)
+    .where(eq(topicTable.slug, row.topicSlug))
+    .limit(1);
+  if (filed !== undefined && !readableOwners(owner).includes(filed.ownerId)) throw noTopic(row.topicSlug);
+  const slug = path.posix.basename(row.targetPath, ".tldr");
+  const [held] = await db
+    .select({ ownerId: diagramTable.ownerId })
+    .from(diagramTable)
+    .where(eq(diagramTable.slug, slug))
+    .limit(1);
+  if (held !== undefined && held.ownerId !== owner) {
+    throw new JobError(
+      `${row.targetPath} names a diagram this owner cannot draw on: slugs are shared across owners ` +
+        `(D23 of docs/CONTENT-MIGRATION.md), so choose another name.`,
+    );
+  }
+}
+
+/**
+ * The session a job hangs off and the job it revises have to be the owner's
+ * too (phase 4): another learner's session reads as a missing one, and so
+ * does another owner's job, with the sentences their foreign keys would give.
+ * Otherwise `job show` would print that session's kind, state and start, and
+ * the parent's `job show` would list the child.
+ */
+async function assertOwnReferences(
+  db: CatalogDatabase,
+  refs: { sessionId: string | null; parentJobId: string | null },
+  owner: string,
+  scoped: boolean,
+): Promise<void> {
+  if (refs.sessionId !== null) {
+    const [held] = await db
+      .select({ learnerId: sessionTable.learnerId })
+      .from(sessionTable)
+      .where(eq(sessionTable.id, refs.sessionId))
+      .limit(1);
+    if (held !== undefined && held.learnerId !== owner) {
+      throw new JobError(`no session "${refs.sessionId}". Start one before pointing a job at it.`);
+    }
+  }
+  if (refs.parentJobId !== null && scoped) {
+    const [parent] = await db
+      .select({ ownerId: jobTable.ownerId })
+      .from(jobTable)
+      .where(eq(jobTable.id, refs.parentJobId))
+      .limit(1);
+    if (parent !== undefined && parent.ownerId !== owner) throw new JobError(`no job "${refs.parentJobId}" to revise.`);
+  }
+}
+
+function noTopic(slug: string): JobError {
+  return new JobError(
+    `no topic "${slug}" in the catalog. Add it to content/topics.yaml and run ` +
+      `\`npm run catalog -- import --only topics\`, or enqueue under a slug that exists.`,
+  );
 }
 
 async function byIdempotencyKey(db: CatalogDatabase, key: string): Promise<Job | undefined> {
@@ -457,12 +557,13 @@ async function explainEnqueue(
   db: CatalogDatabase,
   error: unknown,
   row: NewJob,
+  owner?: string,
 ): Promise<Error> {
   const code = sqlstate(error);
   const constraint = constraintName(error);
   if (code === "23505" && constraint === "job_active_target_key") {
     const holder = await db
-      .select({ id: jobTable.id, state: jobTable.state })
+      .select({ id: jobTable.id, state: jobTable.state, ownerId: jobTable.ownerId })
       .from(jobTable)
       .where(
         and(
@@ -472,6 +573,9 @@ async function explainEnqueue(
       )
       .limit(1);
     const held = holder[0];
+    if (owner !== undefined && held !== undefined && held.ownerId !== owner) {
+      return new JobError(`${row.targetPath} is already held by another job, which is not this owner's to accept or discard.`);
+    }
     return new JobError(
       `${row.targetPath} is already held by job ${held?.id ?? "(unknown)"} ` +
         `(${held?.state ?? "active"}). One job per committed path: accept or discard that one ` +
@@ -486,10 +590,7 @@ async function explainEnqueue(
     );
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_topic_slug_topic_slug_fk") {
-    return new JobError(
-      `no topic "${row.topicSlug}" in the catalog. Add it to content/topics.yaml and run ` +
-        `\`npm run catalog -- import --only topics\`, or enqueue under a slug that exists.`,
-    );
+    return noTopic(row.topicSlug);
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_session_id_session_id_fk") {
     return new JobError(`no session "${row.sessionId}". Start one before pointing a job at it.`);
@@ -510,10 +611,15 @@ export interface ClaimOptions {
   kind?: string;
   runner?: string;
   sessionId?: string;
+  /** Whose jobs to claim from. Default: the CLI's owner. */
+  owner?: string;
 }
 
 export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
+    const mine = await ownedJobs(db, owner);
+    await assertOwnReferences(db, { sessionId: options.sessionId ?? null, parentJobId: null }, owner, mine !== undefined);
     const assignments = {
       state: "running" as const,
       startedAt: sql`now()`,
@@ -529,9 +635,9 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
       const claimed = await db
         .update(jobTable)
         .set(assignments)
-        .where(and(eq(jobTable.id, options.jobId), eq(jobTable.state, "queued")))
+        .where(and(eq(jobTable.id, options.jobId), eq(jobTable.state, "queued"), mine))
         .returning();
-      if (claimed.length === 0) throw await explainRefusal(db, options.jobId, "running");
+      if (claimed.length === 0) throw await explainRefusal(db, options.jobId, "running", owner);
       return { ok: true as const, command: "claim" as const, claimed: true, job: summarise(claimed[0]!) };
     }
 
@@ -541,9 +647,11 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
       .select({ id: jobTable.id })
       .from(jobTable)
       .where(
-        options.kind === undefined
-          ? eq(jobTable.state, "queued")
-          : and(eq(jobTable.state, "queued"), eq(jobTable.kind, options.kind)),
+        and(
+          eq(jobTable.state, "queued"),
+          options.kind === undefined ? undefined : eq(jobTable.kind, options.kind),
+          mine,
+        ),
       )
       .orderBy(asc(jobTable.requestedAt))
       .limit(1)
@@ -582,8 +690,13 @@ async function explainRefusal(
   db: CatalogDatabase,
   jobId: string,
   to: JobState,
+  owner: string,
 ): Promise<Error> {
-  const rows = await db.select().from(jobTable).where(eq(jobTable.id, jobId)).limit(1);
+  const rows = await db
+    .select()
+    .from(jobTable)
+    .where(and(eq(jobTable.id, jobId), await ownedJobs(db, owner)))
+    .limit(1);
   const row = rows[0];
   if (row === undefined) {
     return new JobError(`no job "${jobId}". \`catalog job ls\` lists them.`);
@@ -618,6 +731,8 @@ export interface FinishOptions {
   errorKind?: string;
   error?: string;
   errorDetail?: Record<string, unknown>;
+  /** Whose job. Default: the CLI's owner. */
+  owner?: string;
 }
 
 /**
@@ -654,8 +769,10 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
     throw new JobError(`nothing can transition to ${to}.`);
   }
 
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
-    const rows = await db.select().from(jobTable).where(eq(jobTable.id, options.jobId)).limit(1);
+    const mine = await ownedJobs(db, owner);
+    const rows = await db.select().from(jobTable).where(and(eq(jobTable.id, options.jobId), mine)).limit(1);
     const before = rows[0];
     const candidatePath =
       options.candidatePath === undefined || before === undefined
@@ -679,9 +796,9 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
         errorDetail: options.errorDetail ?? null,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, from)))
+      .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, from), mine))
       .returning();
-    if (updated.length === 0) throw await explainRefusal(db, options.jobId, to);
+    if (updated.length === 0) throw await explainRefusal(db, options.jobId, to, owner);
     return {
       ok: true as const,
       command: "finish" as const,
@@ -695,6 +812,8 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
 
 export interface VerdictOptions {
   jobId: string;
+  /** Whose job. Default: the CLI's owner. */
+  owner?: string;
 }
 
 /**
@@ -709,21 +828,23 @@ export interface VerdictOptions {
  * and an accept that did not is a retry of this alone (the studio's Reindex).
  */
 export async function runAccept(options: VerdictOptions): Promise<TransitionResult> {
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(({ db }) =>
     db.transaction(async (tx) => {
+      const mine = await ownedJobs(tx, owner);
       const rows = await tx
         .select()
         .from(jobTable)
-        .where(eq(jobTable.id, options.jobId))
+        .where(and(eq(jobTable.id, options.jobId), mine))
         .limit(1);
       const before = rows[0];
-      if (before === undefined) throw await explainRefusal(tx, options.jobId, "accepted");
+      if (before === undefined) throw await explainRefusal(tx, options.jobId, "accepted", owner);
       // Checked before anything is written, so a job in the wrong state gets
       // the transition refusal rather than a complaint about its outputs. The
       // conditional update at the end still guards the row itself: this is the
       // message, that is the lock.
       if (!canTransition(JOB_TRANSITIONS, before.state, "accepted")) {
-        throw await explainRefusal(tx, options.jobId, "accepted");
+        throw await explainRefusal(tx, options.jobId, "accepted", owner);
       }
 
       // An accepted job says what it landed, so one with nothing to point at is
@@ -744,9 +865,9 @@ export async function runAccept(options: VerdictOptions): Promise<TransitionResu
           reviewedAt: sql`now()`,
           updatedAt: sql`now()`,
         })
-        .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("accepted"))))
+        .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("accepted")), mine))
         .returning();
-      if (updated.length === 0) throw await explainRefusal(tx, options.jobId, "accepted");
+      if (updated.length === 0) throw await explainRefusal(tx, options.jobId, "accepted", owner);
 
       return {
         ok: true as const,
@@ -762,18 +883,20 @@ export async function runAccept(options: VerdictOptions): Promise<TransitionResu
 
 /** Discard: the candidate is gone and the lease is released. */
 export async function runDiscard(options: VerdictOptions): Promise<TransitionResult> {
+  const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
+    const mine = await ownedJobs(db, owner);
     const before = await db
       .select({ state: jobTable.state })
       .from(jobTable)
-      .where(eq(jobTable.id, options.jobId))
+      .where(and(eq(jobTable.id, options.jobId), mine))
       .limit(1);
     const updated = await db
       .update(jobTable)
       .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
-      .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("discarded"))))
+      .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("discarded")), mine))
       .returning();
-    if (updated.length === 0) throw await explainRefusal(db, options.jobId, "discarded");
+    if (updated.length === 0) throw await explainRefusal(db, options.jobId, "discarded", owner);
     return {
       ok: true as const,
       command: "discard" as const,
@@ -796,6 +919,8 @@ export interface ListOptions {
   state?: string;
   kind?: string;
   limit?: number;
+  /** Whose jobs. Default: the CLI's owner. */
+  owner?: string;
 }
 
 export async function runList(options: ListOptions = {}): Promise<ListResult> {
@@ -808,6 +933,7 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
     const filters = [
       options.state === undefined ? undefined : eq(jobTable.state, options.state),
       options.kind === undefined ? undefined : eq(jobTable.kind, options.kind),
+      await ownedJobs(db, options.owner ?? CLI_OWNER),
     ].filter((f) => f !== undefined);
     const where = filters.length === 0 ? undefined : and(...filters);
 
@@ -830,9 +956,13 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
   });
 }
 
-export async function runShow(jobId: string): Promise<ShowResult> {
+export async function runShow(jobId: string, owner: string = CLI_OWNER): Promise<ShowResult> {
   return withDatabase(async ({ db }) => {
-    const rows = await db.select().from(jobTable).where(eq(jobTable.id, jobId)).limit(1);
+    const rows = await db
+      .select()
+      .from(jobTable)
+      .where(and(eq(jobTable.id, jobId), await ownedJobs(db, owner)))
+      .limit(1);
     const row = rows[0];
     if (row === undefined) {
       throw new JobError(`no job "${jobId}". \`catalog job ls\` lists them.`);
@@ -844,15 +974,17 @@ export async function runShow(jobId: string): Promise<ShowResult> {
         : await db
             .select()
             .from(sessionTable)
-            .where(eq(sessionTable.id, row.sessionId))
+            .where(and(eq(sessionTable.id, row.sessionId), eq(sessionTable.learnerId, owner)))
             .limit(1);
 
     const outputs = await jobOutputs(db, jobId);
 
+    // The owner's own revisions only: another owner's job naming this one as
+    // its parent is theirs to list.
     const children = await db
       .select({ id: jobTable.id })
       .from(jobTable)
-      .where(eq(jobTable.parentJobId, jobId))
+      .where(and(eq(jobTable.parentJobId, jobId), await ownedJobs(db, owner)))
       .orderBy(asc(jobTable.requestedAt));
 
     const session = sessionRows[0];
