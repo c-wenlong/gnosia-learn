@@ -703,18 +703,32 @@ export async function readAssetText(
   id: string,
   limit = TEXT_PREVIEW_BYTES,
 ): Promise<string | null> {
+  return (await readAssetTextFor(db, id, limit)).text;
+}
+
+/**
+ * `readAssetText`, saying whether a null was the switch: a legacy file this
+ * deployment does not read. Search counts only those as matched by name for
+ * that reason; a file over the cap or gone is not the switch's doing.
+ */
+async function readAssetTextFor(
+  db: CatalogDatabase,
+  id: string,
+  limit: number,
+): Promise<{ text: string | null; filesOff: boolean }> {
   try {
     const resolved = await resolveAsset(db, id);
-    if (resolved.ok === false || resolved.bytes > limit) return null;
-    if (resolved.source === "row") return resolved.body.toString("utf8");
-    if (resolved.source === "file") return await readFile(resolved.file, "utf8");
+    if (resolved.ok === false) return { text: null, filesOff: resolved.code === "files-off" };
+    if (resolved.bytes > limit) return { text: null, filesOff: false };
+    if (resolved.source === "row") return { text: resolved.body.toString("utf8"), filesOff: false };
+    if (resolved.source === "file") return { text: await readFile(resolved.file, "utf8"), filesOff: false };
     const read = await openBlob(resolved.key);
     const chunks: Buffer[] = [];
     for await (const chunk of read.body) chunks.push(chunk as Buffer);
-    return Buffer.concat(chunks).toString("utf8");
+    return { text: Buffer.concat(chunks).toString("utf8"), filesOff: false };
   } catch (error) {
     warn(`asset text ${id}`, error);
-    return null;
+    return { text: null, filesOff: false };
   }
 }
 
@@ -777,8 +791,8 @@ export async function readSearchText(
     const [bodies, sources] = await Promise.all([
       Promise.all(
         candidates.map(async (row) => {
-          const raw = await readAssetText(db, row.id);
-          return [row.id, raw === null ? null : searchableText(row.kind, raw)] as const;
+          const { text: raw, filesOff } = await readAssetTextFor(db, row.id, TEXT_PREVIEW_BYTES);
+          return [row.id, raw === null ? null : searchableText(row.kind, raw), filesOff] as const;
         }),
       ),
       derivationSources(
@@ -790,11 +804,10 @@ export async function readSearchText(
     for (const [id, text] of bodies) if (text !== null) texts.set(id, text);
     // With the switch off a note the database owns is still read, so text was
     // searched when any came back; none at all is "titles only", and some is
-    // a partial search the page names. With the switch on a null is a file
-    // that is gone or over the cap, which search has always passed over.
-    const filesOff = !assetFilesEnabled();
-    const skipped = filesOff ? bodies.filter(([, text]) => text === null).length : 0;
-    return { texts, sources, skipped, searchedText: !filesOff || texts.size > 0 };
+    // a partial search the page names. Only a null the switch caused counts:
+    // a file gone or over the cap is passed over, as search always has.
+    const skipped = bodies.filter(([, , filesOff]) => filesOff).length;
+    return { texts, sources, skipped, searchedText: assetFilesEnabled() || texts.size > 0 };
   } catch (error) {
     warn("search text", error);
     return NO_TEXT;

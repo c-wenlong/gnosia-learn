@@ -322,6 +322,8 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       [
         at(NOTE_ID, "note", "learn/concepts/testing/base.md"),
         at(LEGACY_TRANSCRIPT_ID, "transcript", "out/testing/legacy/legacy.transcript.json"),
+        // Unreadable for a reason that is not the switch: not counted.
+        at("manimkc:out/testing/gone.transcript.json", "transcript", "out/testing/gone.transcript.json"),
       ],
       ["line"],
     );
