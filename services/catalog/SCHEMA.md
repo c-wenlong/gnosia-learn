@@ -536,6 +536,38 @@ The one thing still filed by its stem is an SVG with no `.tldr` beside it. It
 has no editable source, so there is nothing to stamp and refusing it would
 refuse work that cannot be fixed; each one is reported as a warning instead.
 
+### Diagrams: a row and a blob
+
+Since Track D a `.tldr` is a `diagram` row and its SVG is a blob. The import
+parses each document into `diagram.document` and hands each SVG to the runner,
+which stores it through `uploadBlob` (`src/content/blob.ts`: a `pending`
+`blob_object` row committed first, the bytes streamed, `head` asked, then
+`present`) before the rows that name its key are written. The asset ids and
+paths stay what they were, as logical names (D11), and the SVG asset gains
+`blob_key`.
+
+A document's bytes are its canonical JSON: keys sorted at every depth, no
+whitespace (`src/content/diagram-document.ts`). jsonb keeps no key order, so
+the file an import read cannot be given back byte for byte, and one form has
+to be the definition. `diagram.document_hash` and the `.tldr` asset's
+`content_hash` are the sha256 of those bytes, the export writes them, and a
+checkout writes them; tldraw reads a document in any key order, and parity
+compares `.tldr` files parsed. The first export after the import therefore
+rewrites each tracked `.tldr`'s key order once.
+
+`svg_document_hash` is the `document_hash` the SVG was exported from, as the
+writer vouches: `catalog diagram put` with an SVG records the pair as current,
+and a put without one keeps the stored SVG, stale once the document moved. An
+import keeps that record for an SVG whose bytes the database already stores,
+so a stale SVG stays stale through the next import, and records any other SVG
+as exported from the document beside it, since nothing on disk says
+otherwise. `catalog diagram put|checkout|commit|list|show`
+(`src/content/diagrams.ts`) is the write path the studio's Accept and the
+plugin use; `commit` carries the revision its checkout started from and is
+refused when the diagram moved past it. Until `catalog flip diagrams`, a put
+also writes its files under the directory diagrams were last imported from
+(D17), so the next import reads back what was written rather than undoing it.
+
 ### The mirror ledger
 
 `mirror` holds what one audit saw, not what is true now. `manimkc mirrors
@@ -792,11 +824,13 @@ reading any directory laid out like the repository, with the pinned tools
 
 `catalog export --out <dir>` writes the same layout back. Topics, tags and
 courses are written from rows, in the house style they are authored in, so an
-export of an unchanged database into the working tree changes no byte. Concept
-notes, session logs and diagrams are copied from the directory their import
-read, recorded as `index_run.metadata.root`, and each copy is checked against
-the `content_hash` its asset row recorded; the export refuses what it cannot
-vouch for. That copy step goes when Tracks C and D move the text into rows.
+export of an unchanged database into the working tree changes no byte.
+Diagrams are written from their rows and the blob store (see "Diagrams: a row
+and a blob" for the one byte-level difference). Concept notes and session logs
+are copied from the directory their import read, recorded as
+`index_run.metadata.root`, and each copy is checked against the
+`content_hash` its asset row recorded; the export refuses what it cannot vouch
+for. That copy step goes when Track C moves the text into rows.
 
 `catalog parity <dir>` renders the export in memory and compares it with
 `<dir>` entity by entity: a topic, a tag, a course file, a note, a log, a

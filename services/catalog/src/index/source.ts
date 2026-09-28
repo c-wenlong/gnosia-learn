@@ -12,6 +12,7 @@ import type {
   NewConceptPrerequisite,
   NewCurriculumItem,
   NewCurriculumItemTopic,
+  NewDiagram,
   NewManimkcTopic,
   NewMirror,
   NewTag,
@@ -70,6 +71,15 @@ export interface IndexContext {
    * runner alongside the other two.
    */
   knownAssets: (sourceRepo: SourceRepo) => Promise<ReadonlyMap<string, string>>;
+  /**
+   * Each stored diagram's SVG key and the document hash that SVG was exported
+   * from, by slug. The diagrams source reads it because a file cannot say
+   * which document an SVG came from and the database can: an SVG on disk whose
+   * bytes are the stored one keeps the export record it has, so an SVG left
+   * stale by a put stays stale through the next import. Empty for a database
+   * that has none.
+   */
+  knownDiagrams: () => Promise<ReadonlyMap<string, { svgBlobKey: string | null; svgDocumentHash: string | null }>>;
 }
 
 /** Rows produced by one source, keyed by the table they belong in. */
@@ -80,6 +90,7 @@ export interface SourceRows {
   collection?: NewCollection[];
   curriculumItem?: NewCurriculumItem[];
   asset?: NewAsset[];
+  diagram?: NewDiagram[];
   assetTopic?: NewAssetTopic[];
   assetConcept?: NewAssetConcept[];
   conceptPrerequisite?: NewConceptPrerequisite[];
@@ -116,8 +127,27 @@ export interface ReplaceScope {
   mirrorDestinations?: readonly string[];
 }
 
+/**
+ * A file the run must put in the blob store before its rows are written,
+ * because a row it produced names the key (`asset.blob_key`,
+ * `diagram.svg_blob_key`) and the foreign key needs the `blob_object` row
+ * first. The runner uploads each one through `uploadBlob`, which skips a key
+ * already present, so an unchanged tree uploads nothing.
+ */
+export interface SourceBlob {
+  /** Absolute path to the bytes. */
+  file: string;
+  ownerId: string;
+  mime: string;
+  ext: string;
+  sha256: string;
+  bytes: number;
+}
+
 export interface SourceResult extends SourceNotes {
   rows: SourceRows;
+  /** Files to store before the rows are written; see `SourceBlob`. */
+  blobs?: SourceBlob[];
   scope?: ReplaceScope;
   /**
    * Anything about the run worth keeping that is not a row or a count. Stored
@@ -166,7 +196,8 @@ export type OwnedTable =
   | "conceptCurriculumItem"
   | "topicRelation"
   | "manimkcTopic"
-  | "collectionTag";
+  | "collectionTag"
+  | "diagram";
 
 export interface Indexer {
   source: IndexSource;

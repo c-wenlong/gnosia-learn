@@ -500,10 +500,11 @@ refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
       overrun stopped early, a body that fails midway, an object invisible
       until its put finishes, malformed keys, delete, and listing by owner
       prefix.
-- [ ] `upload(file)` in the catalog: write the `pending` row, stream to the
-      store, `head` it, then mark it `present`. D5. Left for Track E: 0.5
-      was already at review size without it, and its only caller is Track E's
-      `catalog asset upload`.
+- [x] `upload(file)` in the catalog: write the `pending` row, stream to the
+      store, `head` it, then mark it `present`. D5. Built by Track D as
+      `uploadBlob` in `services/catalog/src/content/blob.ts` (with
+      `openBlobStore` and `markBlobPending`), which diagrams needed first;
+      Track E's `catalog asset upload` calls the same function.
 
 ### 0.5 Export, import and parity
 
@@ -566,7 +567,8 @@ around the list above, and why:
 - **Concept notes, session logs and diagrams are copied through** from the
   directory their import read (`index_run.metadata.root`), each checked
   against its row's `content_hash`, until Tracks C and D move the text into
-  rows. The export refuses a file it cannot vouch for.
+  rows. The export refuses a file it cannot vouch for. (Both have since: all
+  three are rendered from rows, and the copy-through is gone.)
 - **`catalog flip` runs parity itself**, against the files the type was last
   imported from and under the type's revision locks, and records it on
   `content_source.parity_report`: the plan's "parity clean, then flip" as a
@@ -1116,7 +1118,7 @@ refused by name before anything is written.
 list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
 `api.ts:674-850`), the plugin's `diagram-maker`.
 
-- [ ] `catalog diagram put --slug --tldr <file> --svg <file> [--job] --reason`
+- [x] `catalog diagram put --slug --tldr <file> --svg <file> [--job] --reason`
       writes the `diagram` row, uploads the SVG blob, upserts the two `asset`
       rows with their existing `diagram:` ids and the derivation, and appends
       the revision, in one transaction after the upload is `present`.
@@ -1139,6 +1141,42 @@ list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
       `learn diagram commit`, a wrapper over `catalog diagram put`; its
       fallback SVG-only path uploads through the same verb. Version bump.
 - [ ] Import the untracked `tailscale-vpn-communication` diagram first.
+
+**Built** so far: `services/catalog/src/content/diagrams.ts` and
+`commands/diagram.ts` (`catalog diagram put|checkout|commit|list|show`),
+`content/blob.ts` (the 0.4 upload helper), and the import and export moved onto
+rows: the diagrams indexer writes a `diagram` row per `.tldr` and hands each
+SVG to the runner, which uploads it before the rows that name its key, and the
+export renders both back from the row and the blob. Where it goes past or
+around the list above, and why:
+
+- **A document's bytes are its canonical JSON.** jsonb keeps no key order, so
+  the export cannot give back an imported `.tldr` byte for byte. The sorted-key
+  form is the definition (`content/diagram-document.ts`): `document_hash`, the
+  `.tldr` asset's `content_hash`, the export and every checkout use it. Parity
+  compares `.tldr` files parsed, so it is clean; the first `catalog export`
+  into the working tree after the diagrams flip rewrites the two tracked
+  files' key order once, and that export is also what records the export hash
+  a later `catalog index` checks the tree against (edge case 12).
+- **Write-through until the flip, then no file (D17).** While the files own
+  diagrams, `put` also writes the `.tldr` and `.svg` it was given under the
+  directory diagrams were last imported from, or the next `catalog index`
+  would read the old files back and undo it (caught in review). Once
+  `catalog flip diagrams` hands the type to the database nothing validates
+  against a diagram file (the embed resolves through the asset row and
+  `/api/assets/{id}/file`, which reads the blob first), the import skips them,
+  and a put writes none: the done-when's "a row and a blob and no file".
+- **`put` without `--base` writes over whatever is latest**, for a person at a
+  terminal. `commit` always passes the checkout's base, and the studio passes
+  the revision its job started from. A retried `put --job` whose own earlier
+  write is the latest and holds the same bytes is that write again and
+  changes nothing; different bytes are judged as a new write, and an accepted
+  job's output is never rewritten under its name.
+- **Checkouts keep a record beside the file** (`<slug>.checkout.json`: base
+  revision, the hash of what was written), so a commit needs no base passed in
+  and an uncommitted edit is visible without the database. A checkout with
+  edits nobody committed is never overwritten without `--force`. A checkout of
+  a slug with no diagram is how a new drawing starts: a record with no base.
 
 **Parity:** 3 diagrams (2 tracked, 1 untracked), document hashes, SVG bytes.
 **Tests:** Accept writes a row and a blob and no file; an interrupted upload

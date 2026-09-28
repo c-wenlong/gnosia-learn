@@ -17,10 +17,11 @@ import { databaseUrl, redactUrl } from "../env";
  * `catalog export [--only <type>] --out <dir>`: the database written back out
  * as the files it was imported from (docs/CONTENT-MIGRATION.md 0.5).
  *
- * Topics, tags and courses are written from rows. Concept notes, session logs
- * and diagrams are copied from the directory their import read, checked
- * against the sha256 each row recorded, until Tracks C and D move their text
- * into the database; the export refuses a file it cannot vouch for. Every type
+ * Topics, tags and courses are written from rows, and diagrams from their
+ * rows and the blob store. Concept notes and session logs are copied from the
+ * directory their import read, checked against the sha256 each row recorded,
+ * until Track C moves their text into the database; the export refuses a file
+ * it cannot vouch for. Every type
  * is rendered before any file is written, so a refusal writes nothing.
  *
  * The hash of what was written is recorded on the type's `content_source`
