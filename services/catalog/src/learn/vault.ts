@@ -198,8 +198,11 @@ function notPlain(error: unknown): NotPlainFile {
 
 /** A path in the vault that is not a plain file: a link, a folder, a pipe. */
 class NotPlainFile extends VaultError {
-  constructor(readonly file: string) {
-    super(`${file} is not a plain file (a link, a folder or a pipe?). The vault holds plain files only; replace it with one.`);
+  constructor(
+    readonly file: string,
+    why = "is not a plain file (a link, a folder or a pipe?)",
+  ) {
+    super(`${file} ${why}. The vault holds plain files only, in folders of its own; replace it with one.`);
     this.name = "NotPlainFile";
   }
 }
@@ -217,7 +220,10 @@ const READ_PLAIN = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsCon
  * push would otherwise commit whatever file outside the vault a link in it
  * names, as a note, and pull would judge an edit by bytes that are not in it.
  */
-async function readText(file: string): Promise<string | null> {
+async function readText(dir: string, file: string): Promise<string | null> {
+  // `O_NOFOLLOW` covers the last part of the path only: a `concepts/<domain>`
+  // linked elsewhere would still be followed to a file outside the vault.
+  if (!inside(real(path.dirname(file)), real(dir))) throw new NotPlainFile(file, "is in a folder that resolves outside the vault");
   let handle: fs.FileHandle;
   try {
     handle = await fs.open(file, READ_PLAIN);
@@ -283,7 +289,7 @@ async function placeIfAbsent(from: string, file: string): Promise<boolean> {
  * bytes read, and one landing after it creates a new `file`, which
  * `placeIfAbsent` will not replace.
  */
-async function takeAside(file: string): Promise<{ aside: string; text: string } | null> {
+async function takeAside(dir: string, file: string): Promise<{ aside: string; text: string } | null> {
   const aside = asideOf(file);
   try {
     await fs.rename(file, aside);
@@ -292,7 +298,7 @@ async function takeAside(file: string): Promise<{ aside: string; text: string } 
     throw error;
   }
   try {
-    const text = await readText(aside);
+    const text = await readText(dir, aside);
     if (text !== null) return { aside, text };
   } catch (error) {
     // Not ours to judge: it goes back where it was, and the refusal names it.
@@ -326,7 +332,7 @@ async function replaceIfUnchanged(dir: string, file: string, expected: string | 
   await fs.writeFile(fresh, text, "utf8");
   try {
     if (expected === null) return await placeIfAbsent(fresh, file);
-    const taken = await takeAside(file);
+    const taken = await takeAside(dir, file);
     if (taken === null) return false;
     if (sha256(taken.text) !== expected) {
       await putBack(taken.aside, file);
@@ -345,7 +351,7 @@ async function replaceIfUnchanged(dir: string, file: string, expected: string | 
 /** Remove `file` only while it hashes to `expected`, judged the same way. */
 async function removeIfUnchanged(dir: string, file: string, expected: string): Promise<boolean> {
   assertInVault(dir, file);
-  const taken = await takeAside(file);
+  const taken = await takeAside(dir, file);
   if (taken === null) return false;
   if (sha256(taken.text) !== expected) {
     await putBack(taken.aside, file);
@@ -370,7 +376,7 @@ const sidePath = (rel: string, label: "incoming" | "conflict") => rel.replace(/\
 
 async function readManifest(dir: string): Promise<Manifest | null> {
   const file = path.join(dir, MANIFEST);
-  const raw = await readText(file);
+  const raw = await readText(dir, file);
   if (raw === null) return null;
   let parsed: unknown;
   try {
@@ -434,7 +440,7 @@ async function clearSide(dir: string, entry: Entry): Promise<void> {
  */
 async function settleDeletedSide(dir: string, entry: Entry, current: string | null): Promise<void> {
   if (entry.pending === undefined) return;
-  if ((await readText(path.join(dir, entry.pending.path))) !== null) return;
+  if ((await readText(dir, path.join(dir, entry.pending.path))) !== null) return;
   if (current !== null && sha256(current) !== entry.hash) entry.base = entry.pending.base;
   delete entry.pending;
 }
@@ -456,7 +462,7 @@ async function writeSide(
   // A copy already beside it with this very version (a push's `.conflict`
   // that a pull finds again, say) is left under the name the person was told.
   if (entry.pending !== undefined && entry.pending.hash === hash) {
-    const there = await readText(path.join(dir, entry.pending.path));
+    const there = await readText(dir, path.join(dir, entry.pending.path));
     if (there !== null && sha256(there) === hash) {
       entry.pending.base = base;
       return entry.pending.path;
@@ -468,11 +474,11 @@ async function writeSide(
     // somebody did stays the copy this file is waiting on, record and all:
     // forgetting it would leave the merge in it untracked.
     const other = path.join(dir, entry.pending.path);
-    if ((await readText(other)) !== null && !(await removeIfUnchanged(dir, other, entry.pending.hash))) return null;
+    if ((await readText(dir, other)) !== null && !(await removeIfUnchanged(dir, other, entry.pending.hash))) return null;
     delete entry.pending;
   }
   const file = path.join(dir, side);
-  const existing = await readText(file);
+  const existing = await readText(dir, file);
   if (existing !== null && sha256(existing) === hash) {
     entry.pending = { path: side, base, hash };
     return side;
@@ -637,15 +643,18 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
 
     // A file the database no longer has goes, if unedited. Not when some rows
     // could not be read: the file of a note left out above is not gone.
+    // Every stale file is read before any is removed, so one that cannot be
+    // read stops the removals rather than arriving halfway through them.
     const live = new Set(items.map((item) => item.rel));
+    const stale: { rel: string; entry: Entry; file: string; current: string | null }[] = [];
     for (const [rel, entry] of problems.length > 0 ? [] : Object.entries(manifest.files)) {
       if (entry.kind === "readme" || live.has(rel)) continue;
       const file = path.join(dir, rel);
-      const current = await readText(file).catch(notPlain);
-      if (current instanceof NotPlainFile) {
-        report.problems.push(current.message);
-        continue;
-      }
+      const current = await readText(dir, file).catch(notPlain);
+      if (current instanceof NotPlainFile) problems.push(current.message);
+      else stale.push({ rel, entry, file, current });
+    }
+    for (const { rel, entry, file, current } of problems.length > 0 ? [] : stale) {
       if (current === null) {
         await clearSide(dir, entry);
         delete manifest.files[rel];
@@ -662,7 +671,7 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
       }
     }
 
-    await pullReadme(dir, manifest);
+    await pullReadme(dir, manifest, report.problems);
     manifest.pulledAt = new Date().toISOString();
     await writeManifest(dir, manifest);
     return report;
@@ -673,7 +682,7 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
   const file = path.join(dir, item.rel);
   const want = sha256(item.text);
   const known = manifest.files[item.rel];
-  const current = await readText(file).catch(notPlain);
+  const current = await readText(dir, file).catch(notPlain);
   if (current instanceof NotPlainFile) {
     report.problems.push(current.message);
     return;
@@ -725,11 +734,14 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
 }
 
 /** The README, written like any other file: never over an edit. */
-async function pullReadme(dir: string, manifest: Manifest): Promise<void> {
+async function pullReadme(dir: string, manifest: Manifest, problems: string[]): Promise<void> {
   const file = path.join(dir, README);
   const want = sha256(README_TEXT);
-  const current = await readText(file).catch(notPlain);
-  if (current instanceof NotPlainFile) return;
+  const current = await readText(dir, file).catch(notPlain);
+  if (current instanceof NotPlainFile) {
+    problems.push(current.message);
+    return;
+  }
   const known = manifest.files[README];
   if (current !== null && sha256(current) === want) {
     manifest.files[README] = { kind: "readme", id: "README", base: null, hash: want };
@@ -777,7 +789,7 @@ export async function pushVault(
 
     for (const [rel, entry] of Object.entries(manifest.files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (entry.kind === "readme") continue;
-      const current = await readText(path.join(dir, rel)).catch(notPlain);
+      const current = await readText(dir, path.join(dir, rel)).catch(notPlain);
       if (current instanceof NotPlainFile) {
         report.refused.push({ path: rel, reason: current.message });
         continue;
@@ -914,8 +926,9 @@ async function untracked(dir: string, manifest: Manifest): Promise<string[]> {
       throw error;
     }
     for (const entry of entries) {
-      // A link is listed too, so one named like a note is refused by name.
-      if (!(entry.isFile() || entry.isSymbolicLink()) || !entry.name.endsWith(".md") || SIDE_COPY.test(entry.name)) continue;
+      // Anything named like a note is listed, a link, folder or pipe too, so
+      // it is refused by name rather than passed over.
+      if (!entry.name.endsWith(".md") || SIDE_COPY.test(entry.name)) continue;
       const rel = path.relative(dir, path.join(entry.parentPath, entry.name)).split(path.sep).join("/");
       if (rel.split("/").some((part) => part.startsWith("."))) continue;
       if (manifest.files[rel] === undefined) found.push(rel);
