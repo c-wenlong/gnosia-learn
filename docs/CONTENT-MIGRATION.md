@@ -1373,11 +1373,16 @@ keeps for an adapter with no signed URLs; the redirect path is exercised by a
 test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
-<<<<<<< HEAD
 ## Phase 1 review fixes
 
-A read-only review of the merged phase 1 found these; two slices fixed them
-at once. The web slice (routes, `concept add --item`, tests, docs):
+A read-only review of the merged phase 1 found these; three branches fixed
+them at once. B2 to B4, S7 and S11 (`p1/fixes-seam`, #147) carry **Built**
+notes in the tracks they touch; the other two are below.
+
+### Phase 1 review fixes, the web slice
+
+Routes, `concept add --item`, tests that could not fail, output and docs
+(#146 and `p1/fixes-web-2`):
 
 - [x] S4: `/api/assets/{id}/file` serves row text for a type the database
       owns (see Track E's review-fix note).
@@ -1405,9 +1410,6 @@ at once. The web slice (routes, `concept add --item`, tests, docs):
       `concept add --topic` on rows and `learn map`; CURRICULUM.md's concept
       links; Track D's candidates and edge case 11.
 
-The seam slice's items (B2 to B4, S2, S3, S6 to S11) carry their own
-**Built** notes in the tracks they touch.
-=======
 ### Phase 1 review fixes, slice 1b
 
 A read-only review of the merged phase 1 found writers that could undo each
@@ -1462,7 +1464,6 @@ read and its write, and fails without the fix:
   checkout-sidecar implementations (notes and diagrams) and pruning the
   posters of removed videos are each a refactor or a new sweep with no bug
   behind it, left for phase 2.
->>>>>>> origin/main
 
 ## Phase 2: readers go database-only
 
