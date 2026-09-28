@@ -156,7 +156,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `/learn/[concept]` | `learn/[concept]/page.tsx` | The concept workspace: the note and its sources, the concept tutor, mastery with its history, checks, assets and the neighbourhood graph. `?ask=` prefills the tutor's input |
 | `/learn/[concept]/session` | `learn/[concept]/session/page.tsx` | Session focus mode: probe, teach (the note's prose and its diagram or video), check, close. Every graded answer is evidence through `POST /api/learner/observe`; the close screen shows what moved and what got scheduled. `?mode=check` asks the note's checks only |
 | `/library` | `library/page.tsx` | Every indexed asset as a card grid: text search (`?q=`), kind and course chips, a newest or title sort, the concept each card explains |
-| `/library/[id]` | `library/[id]/page.tsx` | One asset (a player with chapters and transcript, a diagram, a file's words, or a link) with Mark watched, the concepts it explains, related assets and its derivations |
+| `/library/[id]` | `library/[id]/page.tsx` | One asset (a video that resumes where it stopped, with chapters on its scrub bar, subtitles, and its transcript and details in one tabbed card; a diagram; a file's words; or a link) with Mark read for anything not a video, the concepts it explains, related assets and its derivations |
 | `/courses/[slug]` | `courses/[slug]/page.tsx` | The course path: one unit card per module with a node per topic, coloured by the mastery of the concepts whose notes name it (or by the tick when none does), one active node with Continue, and a rail with the course header, the module list and the current module's assets. Each node opens its note, recap, tick and tutor chat; each unit its resources |
 | `/courses/[slug]/[module]` | `courses/[slug]/[module]/page.tsx` | A 307 to `/courses/[slug]#<module-slug>`: the module page folded into the path as a unit |
 | `/courses/[slug]/[module]/session` | `.../session/page.tsx` | The agent chat for one topic, hosted by `AgentSession` |
@@ -173,6 +173,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
 | `POST /api/learner/watched` | `api/learner/watched/route.ts` | Append a `watched` event for one asset: study for the streak, never evidence |
+| `POST /api/learner/playback` | `api/learner/playback/route.ts` | Save a video's position and the stretches that played (a `playback:<asset id>` preference), and append the `watched` event once 90% has played |
 | `POST /api/learner/observe` | `api/learner/observe/route.ts` | One graded session answer recorded as `learn observe` records it (`recordObservation`): the event, the mastery with propagation, the card. The first answer opens the session |
 | `POST /api/learner/session/close` | `api/learner/session/close/route.ts` | Close a session: one `session-close` event and the row to `closed`, once |
 
@@ -257,9 +258,15 @@ transcript finds the transcript's video through `derivationSources`. The limits
 are in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md). The
 concept chip on a card and the asset page's Explains card come from
 `conceptsForAssets`, the reverse of `assetsForConcept`, joined to the knowledge
-base for the mastery dot. Mark watched appends a `watched` event through
-`POST /api/learner/watched`: it counts as a study day for the streak and is
-never evidence, since both replays read only `observation` and `review`.
+base for the mastery dot. A `watched` event counts as a study day for the
+streak and is never evidence, since both replays read only `observation` and
+`review`. Mark read appends one through `POST /api/learner/watched` for
+anything that is not a video. A video has no button: the player posts its
+position and the stretches that actually played to `POST
+/api/learner/playback`, which merges them into a `playback:<asset id>`
+preference, and the save that takes coverage past 90% appends the event
+(`apps/web/src/lib/playback.ts` holds the rule). Scrubbing to the end is not
+watching, since coverage counts only what played.
 
 **Both pages treat unserved bytes as a state, per row.** An asset whose bytes
 are a `present` blob or a row the database owns draws; one with nothing stored
