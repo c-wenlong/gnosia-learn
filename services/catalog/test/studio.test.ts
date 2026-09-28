@@ -135,10 +135,11 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       expect(status.rows).toHaveProperty("session");
       expect(status.rows).toHaveProperty("job");
       expect(status.rows).toHaveProperty("asset_job");
-      // The three studio tables are not in the state total. A render failure is
+      expect(status.rows).toHaveProperty("draft");
+      // The four studio tables are not in the state total. A render failure is
       // not something a learner did.
       expect(status.totals.studio).toBe(
-        status.rows["session"]! + status.rows["job"]! + status.rows["asset_job"]!,
+        status.rows["session"]! + status.rows["draft"]! + status.rows["job"]! + status.rows["asset_job"]!,
       );
       expect(status.totals.state).toBe(
         status.rows["learner"]! +

@@ -99,6 +99,13 @@
       "when": 1790572083554,
       "tag": "0013_asset_blob_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790618136842,
+      "tag": "0014_studio_drafts",
+      "breakpoints": true
     }
   ]
 }
