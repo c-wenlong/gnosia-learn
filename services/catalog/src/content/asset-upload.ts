@@ -149,6 +149,13 @@ export interface AssetUploadResult {
   refused: number;
   /** Why posters were not made at all this run, when that is the case. */
   postersSkipped: string | null;
+  /**
+   * On a dry run under a bytes cap that plans posters: why its bytes-cap
+   * answers are an estimate. A poster's size is known only once ffmpeg cuts
+   * it, so the planned posters are not counted against the cap, and a file
+   * the dry run passed may still be refused by the real run. Null otherwise.
+   */
+  bytesCapEstimate: string | null;
   items: UploadItem[];
 }
 
@@ -363,6 +370,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     rowsWritten: 0,
     refused: 0,
     postersSkipped: options.ffmpeg === null ? "ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH" : null,
+    bytesCapEstimate: null,
     items,
   };
 
@@ -578,6 +586,13 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         counted.add(item.id);
       }
     }
+  }
+
+  const plannedPosters = items.filter((i) => i.kind === "poster" && i.action === "would-make").length;
+  if (plannedPosters > 0 && caps !== null && !("error" in caps) && caps.bytes !== null) {
+    result.bytesCapEstimate =
+      `the ${OWNER_BYTES_CAP_ENV} answers are an estimate: the ${plannedPosters} poster(s) this run would cut are not counted, ` +
+      `since a poster's size is known only once ffmpeg cuts it, so a real run may refuse a file this one passed`;
   }
 
   return result;

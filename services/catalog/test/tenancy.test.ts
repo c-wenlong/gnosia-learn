@@ -26,7 +26,7 @@ import {
   topic,
   topicRelation,
 } from "@self-learn/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { dbSource } from "../src/content/source";
