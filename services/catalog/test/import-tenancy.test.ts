@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import {
   asset,
@@ -18,6 +19,8 @@ import {
   LOCAL_LEARNER_ID,
   manimkcTopic,
   mastery,
+  assetJob,
+  job,
   session,
   sessionLogEntry,
   tag,
@@ -35,9 +38,11 @@ import type { SourceRows } from "../src/index/source";
 import { sessionsIndexer } from "../src/index/sessions";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
+import { runIndex } from "../src/index/run";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
+import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -398,6 +403,31 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
       expect(row?.blobKey?.startsWith(`${OTHER}/`)).toBe(true);
     });
 
+    it("refuses to prune the owner's video while another owner's job record of it exists", async () => {
+      await insert([video("gone")]);
+      await db().insert(job).values({
+        id: "zq-job",
+        kind: "diagram",
+        state: "accepted",
+        topicSlug: "theirs",
+        targetPath: "learn/assets/zq.tldr",
+        idempotencyKey: "zq-job",
+        ownerId: OTHER,
+      });
+      await db().insert(assetJob).values({
+        assetId: video("gone").id,
+        jobId: "zq-job",
+        contentHash: "0".repeat(64),
+        bytes: 1,
+        ownerId: OTHER,
+      });
+      const error = await refusal(writeSource(db(), manimkcIndexer, { asset: [] }, [], "manimkc"));
+      expect(String((error as Error).message)).toContain("asset_job of manimkc:out/gone.mp4 (job zq-job, other's)");
+      expect(await db().select().from(assetJob)).toHaveLength(1);
+      await db().delete(assetJob);
+      await db().delete(job).where(eq(job.id, "zq-job"));
+    });
+
     it("refuses a row an indexer stamped with a blob key under another owner's prefix", async () => {
       const row = { ...produced(video("kept")), blobKey: `${OTHER}/${"a".repeat(64)}.mp4` };
       const error = await refusal(writeSource(db(), manimkcIndexer, { asset: [row] }, [], "manimkc"));
@@ -487,5 +517,64 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
       expect(await db().select().from(topic).where(eq(topic.slug, "old"))).toHaveLength(1);
       expect(await db().select().from(assetTopic)).toHaveLength(1);
     });
+  });
+});
+
+describe.skipIf(!reachable.ok)("a whole import, through runIndex", () => {
+  let scratch: Scratch;
+  let fixture: Fixture;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    await ensureLearner(scratch.db, LOCAL_LEARNER_ID);
+    await ensureLearner(scratch.db, OTHER);
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    fixture = await makeFixture();
+  }, 60_000);
+
+  afterAll(async () => {
+    await fixture?.cleanup();
+    await scratch?.drop();
+  });
+
+  it("resolves a log's link to a commons concept after the concepts source ran, and not one another owner holds", async () => {
+    // The commons' topic and concept, and another owner's, already in the
+    // database; the owner's tree has its own topic, note and a session log
+    // linking all three. Once the concepts source has run, the lookup is what
+    // it produced plus the rest of what the owner may read.
+    await scratch.db.insert(topic).values([
+      { slug: "shared", title: "Shared", domain: "commons", ownerId: COMMONS_OWNER },
+      { slug: "theirs", title: "Theirs", domain: "tenant", ownerId: OTHER },
+    ]);
+    await scratch.db.insert(concept).values([
+      { slug: "everyone", title: "Everyone", topicSlug: "shared", path: "learn/concepts/c/everyone.md", body: "x\n", ownerId: COMMONS_OWNER },
+      { slug: "theirs-note", title: "Theirs", topicSlug: "theirs", path: "learn/concepts/t/theirs-note.md", body: "x\n", ownerId: OTHER },
+    ]);
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha"], courses: ["xx1000-m1"] }]));
+    await fixture.write("content/tags.yaml", tagsYaml(["testing"]));
+    await fixture.write(
+      "content/courses/xx1000.yaml",
+      [
+        "id: xx1000", "slug: xx1000", "code: XX1000", "title: A test course", "credits: 4", "order: 1",
+        "inferred: false", "tags: [testing]", "modules:", "  - id: xx1000-m1", "    slug: m1",
+        "    title: Module one", "    order: 1", "    topic: alpha", "    topics:", "      - id: xx1000-m1-t1",
+        "        title: First item", "        concepts: [alpha]", "        subtopics: []", "    resources: []",
+        "capstone: Build something", "",
+      ].join("\n"),
+    );
+    await fixture.write("learn/concepts/fixtures/alpha.md", note({ id: "alpha", title: "Alpha", summary: "The first one." }));
+    await fixture.write(
+      "learn/sessions/2026-01-01-links.md",
+      "---\ntitle: Links\ndate: 2026-01-01T00:00:00.000Z\ngoal: alpha\ntype: learning-session\n---\n\n# Links\n\n[[everyone]] and [[theirs-note]].\n",
+    );
+    await runIndex(scratch.db, { repoRoot: fixture.root, only: ["topics"], manimkcRoot: path.join(fixture.root, "none") });
+    const linked = await scratch.db
+      .select({ slug: assetConcept.conceptSlug })
+      .from(assetConcept)
+      .where(eq(assetConcept.assetId, "session:learn/sessions/2026-01-01-links.md"));
+    expect(linked.map((l) => l.slug).sort()).toEqual(["alpha", "everyone"]);
+    const [theirs] = await scratch.db.select().from(concept).where(eq(concept.slug, "theirs-note"));
+    expect(theirs?.ownerId).toBe(OTHER);
   });
 });

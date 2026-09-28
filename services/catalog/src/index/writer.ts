@@ -1,6 +1,7 @@
 import {
   asset,
   assetConcept,
+  assetJob,
   event,
   assetDerivation,
   mastery,
@@ -1112,7 +1113,8 @@ async function assertNoKeptCollisions(tx: CatalogDatabase, rows: SourceRows): Pr
  * with it by cascade, naming each: a link under another owner's parent that
  * points at one of them, a link row stamped with another owner under one of
  * them (the mixed state D24 repairs), another owner's diagram filed under a
- * topic, and another learner's mastery or review of a concept. The concept
+ * topic, another owner's `asset_job` record of an asset, and another
+ * learner's mastery or review of a concept. The concept
  * rule for events is `assertNoEvidence`'s, which covers every learner.
  */
 async function assertNoForeignDependents(
@@ -1155,6 +1157,15 @@ async function assertNoForeignDependents(
       .from(diagram)
       .where(and(inArray(diagram.topicSlug, [...keys]), sql`${diagram.ownerId} <> ${owner}`));
     for (const row of found) problems.push(`diagram ${row.slug} under ${row.topic}`);
+  }
+  if (name === "asset") {
+    // `asset_job` cascades with its asset and carries its own owner: the
+    // record of which job made the file is the job owner's.
+    const found = await tx
+      .select({ asset: assetJob.assetId, job: assetJob.jobId, owner: assetJob.ownerId })
+      .from(assetJob)
+      .where(and(inArray(assetJob.assetId, [...keys]), sql`${assetJob.ownerId} <> ${owner}`));
+    for (const row of found) problems.push(`asset_job of ${row.asset} (job ${row.job}, ${row.owner}'s)`);
   }
   if (name === "concept") {
     for (const table of [mastery, review]) {

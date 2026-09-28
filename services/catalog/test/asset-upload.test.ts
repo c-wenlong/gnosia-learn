@@ -241,6 +241,23 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(new Set(authors.map((a) => a.owner))).toEqual(new Set([COMMONS_OWNER]));
   });
 
+  it("refuses a poster left with another owner than its video, before cutting or storing it (phase 4)", async () => {
+    await uploadAssets(scratch.db, options());
+    // D23's move done for the video and its sidecars but not its poster.
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER }).where(sql`${asset.id} like 'manimkc:%'`);
+    const before = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    const result = await uploadAssets(scratch.db, options());
+    const poster = result.items.find((i) => i.id === posterId(VIDEO_ID));
+    expect(poster?.action).toBe("refused");
+    expect(poster?.detail).toContain("belongs to local and its video to commons");
+    // The video and its sidecars moved to the commons' prefix; no poster
+    // bytes were cut for either owner.
+    expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey(COMMONS_OWNER, sha256(VIDEO), "mp4"));
+    const after = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    expect(after.filter((k) => !before.includes(k)).every((k) => !k.endsWith(".jpg"))).toBe(true);
+  });
+
   it("refuses another owner's video before storing a byte, and goes on with the rest (phase 4)", async () => {
     await ensureLearner(scratch.db, "other");
     await scratch.db.update(asset).set({ ownerId: "other" }).where(eq(asset.id, VIDEO_ID));

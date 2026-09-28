@@ -523,6 +523,20 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       refuse(id, "poster", theirs);
       return null;
     }
+    // A poster is its video's owner's, and its bytes are keyed by that owner.
+    // One left behind when its video moved (D23's move, done by hand for one
+    // table and not the other) cannot be recut under either owner without
+    // one of the two writes being refused, so it is refused here, before a
+    // byte is cut or stored.
+    if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
+      refuse(
+        id,
+        "poster",
+        `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the poster with its ` +
+          `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`,
+      );
+      return null;
+    }
     const current =
       existing !== undefined && existing.blobKey !== null && existing.contentHash !== null
         ? await alreadyStored(existing, POSTER_EXTENSION.slice(1))

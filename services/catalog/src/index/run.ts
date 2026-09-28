@@ -347,6 +347,7 @@ export async function runIndex(
   // owner's: the lookups below answer only for those, so a slug another
   // owner holds reads as one that does not exist.
   const readable = [...readableOwners(owner)];
+  const others = readable.filter((id) => id !== owner);
   // Which database recorded each root: a `createdb -T` copy inherits the
   // rows, and a root is only this database's when this database wrote it
   // (content/import-root.ts).
@@ -373,24 +374,24 @@ export async function runIndex(
     vocabulary,
     owner,
     blobsRequired: await blobContractInForce(db),
+    // Once the source that produces them has run, the owner's own are what
+    // it produced (a note just deleted is gone, whatever the table says), and
+    // the rest of what the owner may read, the commons', comes from the
+    // database, which no tree of this owner's writes.
     knownConcepts: () => {
-      conceptCache ??= ranConcepts
-        ? Promise.resolve(producedConcepts)
-        : db
-            .select({ slug: concept.slug })
-            .from(concept)
-            .where(inArray(concept.ownerId, readable))
-            .then((rows) => new Set(rows.map((r) => r.slug)));
+      conceptCache ??= db
+        .select({ slug: concept.slug })
+        .from(concept)
+        .where(inArray(concept.ownerId, ranConcepts ? others : readable))
+        .then((rows) => new Set([...(ranConcepts ? producedConcepts : []), ...rows.map((r) => r.slug)]));
       return conceptCache;
     },
     knownCurriculumItems: () => {
-      curriculumCache ??= ranCourses
-        ? Promise.resolve(producedCurriculumItems)
-        : db
-            .select({ id: curriculumItem.id })
-            .from(curriculumItem)
-            .where(inArray(curriculumItem.ownerId, readable))
-            .then((rows) => new Set(rows.map((r) => r.id)));
+      curriculumCache ??= db
+        .select({ id: curriculumItem.id })
+        .from(curriculumItem)
+        .where(inArray(curriculumItem.ownerId, ranCourses ? others : readable))
+        .then((rows) => new Set([...(ranCourses ? producedCurriculumItems : []), ...rows.map((r) => r.id)]));
       return curriculumCache;
     },
     // Straight from the database rather than from what a source produced in
@@ -532,6 +533,7 @@ export async function runIndex(
     if (indexer.source === "manimkc" && context.blobsRequired === true) {
       const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
       const { unhooked, moved } = await unhookPosters(db, videos, {
+        owner,
         author,
         reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the poster was cut from`,
       });
