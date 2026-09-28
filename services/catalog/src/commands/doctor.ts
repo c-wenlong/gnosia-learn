@@ -62,10 +62,13 @@ export interface DoctorResult {
   /** Courses where no live item names a concept. */
   conceptlessCourses: string[];
   /**
-   * Concepts with no topic. Not a trigger: it becomes `NOT NULL` in Track C's
-   * contract migration, which refuses to run while this is not empty.
+   * Concepts with no topic, archived ones included. Not a trigger: the
+   * column is `NOT NULL` from Track C's contract migration (0012), which
+   * refuses to run while this is not empty and makes it empty for good.
    */
   conceptsWithoutTopic: string[];
+  /** Whether `concept.topic_slug` is `NOT NULL` here yet, which 0012 makes it. */
+  conceptTopicRequired: boolean;
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
   violations: number;
@@ -77,6 +80,9 @@ export async function runDoctor(): Promise<DoctorResult> {
   return withDatabase(({ db }) => doctor(db, redactUrl(url)));
 }
 
+/** The last migration of phase 0's expand, which every table this report reads needs. */
+const LAST_EXPAND = 11;
+
 export async function doctor(db: CatalogDatabase, database: string): Promise<DoctorResult> {
   const migrations = await migrationStatus(db);
   const empty: DoctorResult = {
@@ -87,13 +93,18 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     courses: [],
     conceptlessCourses: [],
     conceptsWithoutTopic: [],
+    conceptTopicRequired: false,
     writeGuards: {},
     violations: 0,
     ok: false,
   };
-  // The tables and triggers below arrive in 0010; on an older database the
-  // honest report is "migrate first", not a relation-does-not-exist error.
-  if (migrations.head === null || migrations.pending.length > 0) return empty;
+  // The tables and triggers below arrive in 0010 and 0011; on an older
+  // database the honest report is "migrate first", not a relation-does-not-
+  // exist error. A database behind only on a later migration is reported in
+  // full, since a contract migration such as 0012 is exactly what this report
+  // says whether it can apply.
+  const expandPending = migrations.pending.some((tag) => Number(tag.slice(0, 4)) <= LAST_EXPAND);
+  if (migrations.head === null || expandPending) return empty;
 
   const [instance] = await db.select().from(catalogInstance).limit(1);
   const sources = await db.select().from(contentSource);
@@ -154,9 +165,17 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     withoutConcept: row.without,
   }));
 
+  // Archived concepts too: the column's `NOT NULL` binds every row, and
+  // migration 0012 refuses while any row, archived or not, has a null.
   const orphans = await db.execute<{ slug: string }>(
-    sql`select slug from concept where topic_slug is null and archived_at is null order by slug`,
+    sql`select slug from concept where topic_slug is null order by slug`,
   );
+  const [topicColumn] = (
+    await db.execute<{ nullable: string }>(sql`
+      select is_nullable as nullable from information_schema.columns
+      where table_schema = 'public' and table_name = 'concept' and column_name = 'topic_slug'
+    `)
+  ).rows;
 
   const writeGuards: Record<string, boolean | null> = {};
   for (const table of WRITE_GUARDED_TABLES) {
@@ -179,6 +198,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
       .filter((row) => row.items > 0 && row.withoutConcept === row.items)
       .map((row) => row.course),
     conceptsWithoutTopic: orphans.rows.map((row) => row.slug),
+    conceptTopicRequired: topicColumn?.nullable === "NO",
     writeGuards,
     violations,
     ok: !contradicted && !missingGuard,
@@ -192,7 +212,9 @@ export function formatDoctor(result: DoctorResult): string {
       `migrations are outstanding (${result.migrations.pending.join(", ") || "none applied"}). ` +
         `Run: npm run catalog -- migrate`,
     );
-    return lines.join("\n");
+    // Behind the expand itself there is nothing more to read; behind only a
+    // later migration, the rest of the report says whether it can apply.
+    if (result.rules.length === 0) return lines.join("\n");
   }
   lines.push(
     `instance  ${result.instance === null ? "no catalog_instance row" : result.instance.role}` +
@@ -229,7 +251,12 @@ export function formatDoctor(result: DoctorResult): string {
   }
   lines.push(
     "",
-    `concepts with no topic: ${result.conceptsWithoutTopic.length === 0 ? "none" : result.conceptsWithoutTopic.join(", ")}`,
+    `concepts with no topic: ${result.conceptsWithoutTopic.length === 0 ? "none" : result.conceptsWithoutTopic.join(", ")}` +
+      (result.conceptTopicRequired
+        ? " (concept.topic_slug is NOT NULL)"
+        : result.conceptsWithoutTopic.length === 0
+          ? " (migration 0012 makes concept.topic_slug NOT NULL; nothing stands in its way)"
+          : " (migration 0012, which makes concept.topic_slug NOT NULL, refuses until this is none)"),
   );
   const armed = Object.entries(result.writeGuards).filter(([, on]) => on === true).map(([t]) => t);
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);

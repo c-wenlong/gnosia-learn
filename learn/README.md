@@ -5,15 +5,18 @@ what you know, plans a path from there, teaches one step at a time, and
 schedules what you will forget.
 
 Nothing important is trapped in a chat transcript. What it knows is split in
-two, along one line: what somebody *wrote* is a file in git, and what the loop
-*observed* is a row in Postgres.
+two, along one line: what somebody *wrote* is authored content, and what the
+loop *observed* is a row in Postgres. The authored half is moving from files
+in git into Postgres too ([docs/CONTENT-MIGRATION.md](../docs/CONTENT-MIGRATION.md));
+where the notes and logs are today is under [Where the notes and logs
+live](#where-the-notes-and-logs-live).
 
 ```
 learn/
   concepts/<domain>/<id>.md   atomic concept notes — the durable knowledge
   sessions/<id>.md            one log per session, appended live
   assets/<id>.svg             diagrams generated during teaching
-  map.md                      mermaid knowledge map        (derived)
+  map.md                      mermaid knowledge map        (derived, not rewritten)
 
 postgres  (DATABASE_URL, default postgres://localhost:5432/self_learn)
   event      every observation, appended     (SOURCE OF TRUTH, append-only)
@@ -29,9 +32,37 @@ Everything marked derived can be rebuilt:
 ```bash
 npm run learn -- model --rebuild   # mastery, from the event log
 npm run learn -- review rebuild    # the schedule, from the same log
-npm run learn -- map               # map.md, from the notes and the mastery
-npm run learn -- index             # the notes back into the catalog
+npm run learn -- map --out learn/map.md   # the map, from the notes and the mastery
+npm run learn -- index             # the notes back into the catalog, while they are files
 ```
+
+### Where the notes and logs live
+
+Two rows in `content_source` decide it, one for `concepts` and one for
+`sessions`, written by `catalog flip`. Until a type is flipped its files under
+`learn/` are the truth, as they always were, and `catalog index` copies them
+into the catalog. From the flip on, the rows are: a note is its `concept` row
+(the frontmatter as columns, the markdown after it as `concept.body`), a log
+is its `session_log_entry` rows (each one exactly what was appended), every
+write goes through the catalog's write seam with a reason and leaves a
+revision, and nothing under `learn/` changes. `catalog export --only
+concepts,sessions --out <dir>` writes the files back out at any moment.
+
+Every command below works the same on either side, and every one that writes
+a note or a log reads the `content_source` row first, so it needs the database
+running. A whole note is edited through a checkout, not in `learn/concepts/`:
+
+```bash
+npm run learn -- concept checkout attention-weights --json   # {id, path, revision}
+# edit the file at `path` (outside the repository)
+npm run learn -- concept commit attention-weights --reason "close: what the session showed"
+```
+
+The commit is refused, with both revisions named, when the note changed after
+the checkout; check it out again and reapply. `concept edit <id> --body-file F
+--reason R` replaces the body in one step. The rules a note's row keeps are in
+[services/catalog/SCHEMA.md](../services/catalog/SCHEMA.md): values, not
+frontmatter layout, and no frontmatter key beyond the eight a note uses.
 
 `learn/state/` used to hold `model.json`, `reviews.json`, `events.jsonl` and
 `index.json`. It was retired in bundle 5; the mapping, and why each file became
@@ -165,9 +196,9 @@ document and its SVG as one revision.
 
 ### Phase 4 — Close
 
-Write the durable artefacts: fill in the concept notes, record open
-questions, add at least one **check** per concept taught, close the session,
-regenerate the map and index.
+Write the durable artefacts: fill in the concept notes (check each out, edit
+the copy, commit it with a reason), record open questions, add at least one
+**check** per concept taught, close the session, and print the map.
 
 Then self-assess honestly on three axes — *coverage* (did we reach the
 planned concepts), *restraint* (did the tutor avoid simply answering), and
@@ -184,7 +215,8 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | --- | --- |
 | `init` | Create the `learn/` tree on a fresh checkout |
 | `status` | Where you are: counts, due reviews, frontier |
-| `concept add\|edit\|list\|show` | Define and inspect concepts; `add --topic <slug>` files the new note under a vocabulary topic and indexes it; `edit` changes edges without touching the note body |
+| `concept add\|edit\|list\|show` | Define and inspect concepts; `add --topic <slug>` files the new note under a vocabulary topic and indexes it; `edit` changes edges without touching the note body, or replaces the body with `--body-file F --reason R` |
+| `concept checkout\|commit` | Edit a whole note: a copy outside the repository, written back with `--reason`, refused if the note moved |
 | `check add\|list` | Verification questions stored in the note |
 | `probe [--goal]` | What to ask next, by information gain |
 | `observe --concept --correct` | **The RL step.** Record one answer |
@@ -196,7 +228,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `void --session S --reason R` | Retract a session's evidence as unreliable |
 | `model [--rebuild]` | Mastery table; rebuild replays the event log |
 | `review rebuild` | Replay the log into the schedule |
-| `map` / `index` | Regenerate `map.md` / re-read the notes into the catalog |
+| `map [--out F]` / `index` | The map, to stdout or a file / re-read the notes into the catalog while they are files |
 | `diagram checkout\|commit\|put\|list\|show` | Diagrams in the catalog, as `catalog diagram` does them, attributed to the `diagram-maker` agent unless `--author-kind` says otherwise. `put --svg --topic` stores an SVG drawn without the canvas |
 | `doctor` | Validate the graph — cycles, dangling edges, orphans |
 
@@ -230,8 +262,14 @@ course file, like `cp4284-m1-t1`; the flag lists the new id under that row's
 because the row's module names the topic the note must be mapped to. Passing
 both with a topic that is not the module's is refused before anything is
 written, since the course reader would refuse the file that resulted. The edit
-is textual, locked, and read back through the real reader before it is kept,
-until courses move into the database.
+is textual, locked, and read back through the real reader before it is kept.
+Once the database owns the notes, the edited file then goes in through
+`catalog course import`, which writes the row's link as a revision with the
+command's reason and rewrites the file as the database exports it. A dry run of
+that import comes first, before the note is written, and refuses when any
+course file or `topics.yaml` is not what the database holds, or when the row's
+own file holds an edit nobody imported, since the import would take that edit
+in under this command's reason.
 
 ```bash
 npm run learn -- concept add --title "Tokenization pipelines" --domain transformers \
@@ -576,10 +614,11 @@ npm run learn -- init                  # create learn/, check the store
 ```
 
 `DATABASE_URL` defaults to `postgres://localhost:5432/self_learn`; see
-[services/catalog/.env.example](../services/catalog/.env.example). Notes,
-checks, sessions and `map.md` are still plain files, so `concept add`,
-`check add` and `session log` work with the database down. Anything that
-touches mastery or the schedule does not, and says so.
+[services/catalog/.env.example](../services/catalog/.env.example). Nothing
+works with the database down any more: mastery and the schedule are tables,
+and `concept add`, `check add` and `session log` read the `content_source` row
+to know whether they write a file or a row. `status`, which both skills run
+first, has always needed it.
 
 Then in Claude Code:
 
@@ -635,7 +674,10 @@ diagrams. This is a real constraint of the harness, not a style choice.
 
 Point a vault at `learn/`. Wikilinks, embeds, tags and the mermaid map all
 render natively. The session log is worth keeping open while a session runs —
-it is written live.
+it is written live. Once a type is flipped the vault shows the last export, not
+what the database holds: `catalog export --out <dir>` refreshes a read-only
+copy, and `learn vault pull|push` (phase 2 of the migration) will make it
+two-way again.
 
 ---
 
