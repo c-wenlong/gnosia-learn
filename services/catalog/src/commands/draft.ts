@@ -288,7 +288,10 @@ export async function runDraftUpsert(document: DraftDocument, owner: string = CL
     // unlike `job` there is no unowned database to allow for.
     const [before] = await db.select({ ownerId: draftTable.ownerId }).from(draftTable).where(eq(draftTable.id, row.id)).limit(1);
     if (before !== undefined && before.ownerId !== owner) throw taken(row.id);
-    const { id: _id, createdAt: _created, ...changes } = row;
+    // Everything but the key and the creation instant, which an update keeps.
+    const changes: Partial<NewDraft> = { ...row };
+    delete changes.id;
+    delete changes.createdAt;
     const [written] = await db
       .insert(draftTable)
       .values({ ...row, ownerId: owner })
