@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -6,9 +6,11 @@ import {
   type CourseImportResult,
   exportCourse,
   importCourse,
+  stampCourse,
   type WriteThroughSummary,
 } from "../content/courses";
 import { archiveItem, type ItemResult, purgeItem, restoreItem } from "../content/items";
+import { importRoot } from "../content/write-through";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 
@@ -29,21 +31,46 @@ export async function runCourseImport(options: {
   file: string;
   reason: string;
   dryRun?: boolean;
+  forceBase?: boolean;
 }): Promise<CourseImportCommandResult> {
   const url = databaseUrl();
   return withDatabase(async ({ db }) => ({ database: redactUrl(url), ...(await importCourse(db, options)) }));
 }
 
+/**
+ * The file goes out stamped with the revision it was read at (`stampCourse`),
+ * so an import of it after the course moved on is refused rather than undoing
+ * the move. The one exception is `--out` naming the course's own file in the
+ * tree courses were imported from: that file is the database's export, kept
+ * in step by the write-through, which compares it byte for byte and would
+ * read a stamp as an edit.
+ */
 export async function runCourseExport(options: { id: string; out?: string }): Promise<CourseExportCommandResult> {
   const url = databaseUrl();
-  const result = await withDatabase(({ db }) => exportCourse(db, options.id));
+  const { result, root } = await withDatabase(async ({ db }) => ({
+    result: await exportCourse(db, options.id),
+    root: await importRoot(db, "courses"),
+  }));
+  const stamped = stampCourse(result.yaml, result.base);
   let out: string | null = null;
+  let yaml = stamped;
   if (options.out !== undefined) {
     out = path.resolve(options.out);
+    const own = root !== null && (await sameFile(out, path.join(root, result.path)));
+    yaml = own ? result.yaml : stamped;
     await mkdir(path.dirname(out), { recursive: true });
-    await writeFile(out, result.yaml, "utf8");
+    await writeFile(out, yaml, "utf8");
   }
-  return { database: redactUrl(url), out, ...result };
+  return { database: redactUrl(url), out, ...result, yaml };
+}
+
+/** Whether two paths name one file, links resolved; a file not there yet compares by its resolved directory. */
+async function sameFile(a: string, b: string): Promise<boolean> {
+  const real = async (file: string) => {
+    const dir = await realpath(path.dirname(file)).catch(() => path.resolve(path.dirname(file)));
+    return path.join(dir, path.basename(file));
+  };
+  return (await real(a)) === (await real(b));
 }
 
 export async function runItem(options: {

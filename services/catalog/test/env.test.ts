@@ -15,7 +15,7 @@ import {
 } from "../src/env";
 import { canvasCliPath } from "../src/index/tldr";
 import { manimkcCliPath } from "../src/index/manimkc";
-import { repoRoot as learnRepoRoot } from "../src/learn/paths";
+import { repoRoot as learnRepoRoot, workDir } from "../src/learn/paths";
 
 /**
  * Where the two submodules are, and what says so.
@@ -174,5 +174,24 @@ describe("LEARN_ROOT", () => {
   it("overrides the repo root, which is how the fixtures get a knowledge base", () => {
     process.env.LEARN_ROOT = "/tmp/learn-fixture";
     expect(learnRepoRoot()).toBe("/tmp/learn-fixture");
+  });
+
+  it("puts checkouts under $LEARN_ROOT/work, and refuses a LEARN_ROOT that would put them in the repository", () => {
+    const saved = process.env["LEARN_WORK_DIR"];
+    delete process.env["LEARN_WORK_DIR"];
+    try {
+      process.env.LEARN_ROOT = "/tmp/learn-fixture";
+      expect(workDir()).toBe(path.join("/tmp/learn-fixture", "work"));
+      process.env.LEARN_ROOT = REPO_ROOT;
+      expect(() => workDir()).toThrow(/LEARN_ROOT=.* is this repository \(or inside it\)/);
+      process.env.LEARN_ROOT = path.join(REPO_ROOT, "learn");
+      expect(() => workDir()).toThrow(/would land in the tree/);
+      // Unset, the default is a folder under the OS temp directory, never the tree.
+      delete process.env.LEARN_ROOT;
+      expect(path.relative(REPO_ROOT, workDir()).startsWith("..")).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env["LEARN_WORK_DIR"];
+      else process.env["LEARN_WORK_DIR"] = saved;
+    }
   });
 });

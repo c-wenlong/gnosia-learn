@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { canonicalJson } from "@self-learn/schema/shared";
+
 import { diagramCheckout, diagramList, diagramShow } from "./catalog";
 import { readThrough } from "./content-cache";
 import { ASSETS_DIR, workDir, workPath } from "./paths";
@@ -247,17 +249,6 @@ export interface Checkout {
   failed: boolean;
 }
 
-/** Keys sorted at every depth, which is the catalog's canonical JSON (`content/snapshot.ts`) for anything `JSON.parse` returns. */
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value !== null && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) out[key] = canonical((value as Record<string, unknown>)[key]);
-    return out;
-  }
-  return value;
-}
-
 /**
  * A document file's hash as the catalog defines `document_hash`: the sha256
  * of its canonical JSON, so a file whose keys are in another order still
@@ -269,7 +260,7 @@ export async function documentHashOf(file: string): Promise<string | null> {
   if (bytes === null) return null;
   let text: string;
   try {
-    text = JSON.stringify(canonical(JSON.parse(bytes.toString("utf8"))));
+    text = canonicalJson(JSON.parse(bytes.toString("utf8")));
   } catch {
     return createHash("sha256").update(bytes).digest("hex");
   }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -58,11 +59,37 @@ export function workDir(): string {
   const explicit = process.env["LEARN_WORK_DIR"]?.trim();
   if (explicit !== undefined && explicit !== "") return path.resolve(explicit);
   const root = process.env[LEARN_ROOT_ENV]?.trim();
-  if (root !== undefined && root !== "") return path.join(path.resolve(root), "work");
+  if (root !== undefined && root !== "") {
+    // `$LEARN_ROOT/work` is outside the repository only while LEARN_ROOT is.
+    // Pointed at the repository (it is the default anyway), every checkout
+    // would be an untracked folder in the owner's `git status`.
+    if (inside(real(path.resolve(root)), real(REPO_ROOT))) {
+      throw new Error(
+        `${LEARN_ROOT_ENV}=${root} is this repository (or inside it), so checkouts under ${LEARN_ROOT_ENV}/work ` +
+          `would land in the tree. Unset ${LEARN_ROOT_ENV} (the repository is its default), or set LEARN_WORK_DIR ` +
+          `to a folder outside it.`,
+      );
+    }
+    return path.join(path.resolve(root), "work");
+  }
   // One folder per checkout and database, so two worktrees, or one checkout
   // pointed at a scratch copy, never share a copy named only by concept id.
   const key = createHash("sha256").update(`${repoRoot()}\n${databaseUrl()}`).digest("hex").slice(0, 12);
   return path.join(tmpdir(), "self-learn", "work", key);
+}
+
+/** The path with links resolved, or as given when it does not exist yet. */
+function real(target: string): string {
+  try {
+    return realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
+function inside(child: string, parent: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 /**

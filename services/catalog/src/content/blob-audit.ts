@@ -1,10 +1,24 @@
+import path from "node:path";
+
 import type { BlobStore } from "@self-learn/blob";
 import { asset, assetDerivation, blobObject, diagram } from "@self-learn/schema";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { POSTER_PREFIX } from "./asset-upload";
 import { markBlobPending } from "./blob";
+import {
+  BlobOwnerError,
+  type BlobRootOwner,
+  claimRoot,
+  databaseIdentity,
+  describeOwner,
+  OWNER_FILE,
+  readOwner,
+  removePartial,
+  sameOwner,
+  stalePartials,
+} from "./blob-owner";
 
 /**
  * `catalog blob audit`: the store and the `blob_object` table, compared both
@@ -18,6 +32,13 @@ import { markBlobPending } from "./blob";
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
  * | `unreferenced` | A `present` row no asset or diagram points at: the old bytes of something re-rendered | none; listed so it can be seen |
  * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
+ * | `partial` | A staged write under `<root>/.tmp` a day old: an upload a crash stopped before its rename | deleted |
+ *
+ * **`--fix` acts only on a root that names this database** (`<root>/.owner`,
+ * `blob-owner.ts`). "No row here" means "orphan" only when this database is
+ * the one writing the store; a root another database claimed is audited and
+ * reported, and `--fix` refuses before changing anything. A root nobody has
+ * claimed is claimed by the audit.
  *
  * Keys are content addressed, so none of these can point a row at the wrong
  * bytes; they are all a row and an object disagreeing about whether the bytes
@@ -44,7 +65,8 @@ export type AuditKind =
   | "stale-pending"
   | "pending"
   | "unreferenced"
-  | "orphan-poster";
+  | "orphan-poster"
+  | "partial";
 
 export interface AuditFinding {
   kind: AuditKind;
@@ -56,6 +78,8 @@ export interface AuditFinding {
 
 export interface BlobAuditResult {
   provider: string;
+  /** The database the root names in its `.owner`, when the audit was given the root; null when it could not be read. */
+  owner: BlobRootOwner | null;
   rows: number;
   objects: number;
   fix: boolean;
@@ -69,16 +93,38 @@ export interface BlobAuditResult {
 }
 
 /** The kinds that are something wrong, rather than something worth seeing. */
-const PROBLEMS: ReadonlySet<AuditKind> = new Set(["orphan", "missing", "corrupt", "stale-pending"]);
+const PROBLEMS: ReadonlySet<AuditKind> = new Set(["orphan", "missing", "corrupt", "stale-pending", "partial"]);
 
 export async function auditBlobs(
   db: CatalogDatabase,
   store: BlobStore,
-  options: { fix?: boolean; now?: Date } = {},
+  options: {
+    fix?: boolean;
+    now?: Date;
+    /** The `fs` store's directory: its `.owner` is checked and its `.tmp` swept. */
+    root?: string;
+  } = {},
 ): Promise<BlobAuditResult> {
   const fix = options.fix ?? false;
   const now = (options.now ?? new Date()).getTime();
+  const cutoff = new Date(now - AUDIT_GRACE_MS);
   const findings: AuditFinding[] = [];
+
+  // Whose store this is, settled before anything is read or changed.
+  let owner: BlobRootOwner | null = null;
+  if (options.root !== undefined) {
+    const self = await databaseIdentity(db);
+    const claimed = fix ? await claimRoot(options.root, self) : null;
+    owner = claimed ?? (await readOwner(options.root));
+    if (claimed !== null && !sameOwner(claimed, self)) {
+      throw new BlobOwnerError(
+        `${options.root} belongs to ${describeOwner(claimed)} (its ${OWNER_FILE}), and this is ` +
+          `${describeOwner(self)}. Every object that database wrote has no row here, so --fix would delete ` +
+          `them as orphans; nothing was changed. Audit it from that database, or give this one its own store ` +
+          `with SELF_LEARN_HOME. If the marker is wrong, delete ${OWNER_FILE} and run --fix again.`,
+      );
+    }
+  }
 
   const rows = await db.select().from(blobObject);
   const byKey = new Map(rows.map((row) => [row.key, row] as const));
@@ -148,13 +194,19 @@ export async function auditBlobs(
         detail: `pending since ${row.updatedAt.toISOString()}, with no object and nothing pointing at it`,
       };
       if (fix) {
-        // Guarded twice: the row must still be pending and unreferenced at the
-        // moment of the delete, and the foreign key from `asset.blob_key` is
-        // RESTRICT, so a row something points at cannot go whatever this says.
-        await db
+        // Guarded three times: the row must still be pending and still as old
+        // at the moment of the delete, and the foreign key from
+        // `asset.blob_key` is RESTRICT, so a row something points at cannot
+        // go whatever this says. The age is checked again because an upload
+        // of the same key starting now writes the row back to pending with a
+        // fresh `updated_at` before it moves a byte; deleting that row would
+        // leave the upload confirming a row that is gone.
+        const deleted = await db
           .delete(blobObject)
-          .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending")));
-        finding.fixed = "row-deleted";
+          .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending"), lt(blobObject.updatedAt, cutoff)))
+          .returning({ key: blobObject.key });
+        if (deleted.length > 0) finding.fixed = "row-deleted";
+        else finding.detail += "; an upload took it up again while the audit ran, so it was kept";
       }
       findings.push(finding);
       continue;
@@ -194,10 +246,26 @@ export async function auditBlobs(
     });
   }
 
+  // 4. Staged writes a crash left behind.
+  if (options.root !== undefined) {
+    for (const staged of await stalePartials(options.root, cutoff)) {
+      const finding: AuditFinding = {
+        kind: "partial",
+        key: path.relative(options.root, staged.file),
+        detail: `${staged.bytes} bytes of an upload that never finished, last written ${staged.modified.toISOString()}`,
+      };
+      if (fix) {
+        await removePartial(staged.file);
+        finding.fixed = "deleted";
+      }
+      findings.push(finding);
+    }
+  }
+
   const outstanding = findings.filter(
     (f) =>
       (PROBLEMS.has(f.kind) && f.fixed === undefined) ||
       (referenced.has(f.key) && (f.kind === "pending" || f.fixed === "marked-pending")),
   ).length;
-  return { provider: store.provider, rows: rows.length, objects, fix, findings, outstanding };
+  return { provider: store.provider, owner, rows: rows.length, objects, fix, findings, outstanding };
 }

@@ -14,15 +14,16 @@ import {
   topic,
   type AuthorKind,
 } from "@self-learn/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { REPO_ROOT } from "../env";
 import { ASSETS_DIR, resolveSubject, type Subject } from "../index/diagrams";
 import { IndexErrors } from "../index/errors";
+import { fileFacts } from "../index/files";
 import { ASSET_PREFIX } from "../index/source";
 import { metaFromDocument, type DiagramMeta } from "../index/tldr";
-import { hashFile, readBlob, uploadBlob } from "./blob";
+import { readBlob, uploadBlob } from "./blob";
 import { DIAGRAM_SLUG, diagramPaths, documentBytes, documentProblem, sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
@@ -105,7 +106,9 @@ export function parseDocument(text: string, where: string): Record<string, unkno
  * import refuses, with the same sentences.
  */
 async function databaseVocabulary(db: CatalogDatabase) {
-  const topics = await db.select({ slug: topic.slug }).from(topic);
+  // Live topics only: an archived topic is out of the vocabulary the export
+  // writes and the import checks against, so a put may not file under it.
+  const topics = await db.select({ slug: topic.slug }).from(topic).where(isNull(topic.archivedAt));
   const concepts = await db.select({ slug: concept.slug, topicSlug: concept.topicSlug }).from(concept);
   return {
     known: new Set(concepts.map((c) => c.slug)),
@@ -243,8 +246,8 @@ export async function putDiagram(
   let svgFacts: { sha256: string; bytes: number; key: string } | null = null;
   if (input.svg !== null) {
     await readText(input.svg, "an SVG");
-    const facts = await hashFile(input.svg);
-    svgFacts = { ...facts, key: blobKey(ownerId, facts.sha256, "svg") };
+    const facts = await fileFacts(input.svg);
+    svgFacts = { sha256: facts.contentHash, bytes: facts.bytes, key: blobKey(ownerId, facts.contentHash, "svg") };
   }
 
   const [existing] = await db.select().from(diagram).where(eq(diagram.slug, slug)).limit(1);

@@ -378,7 +378,13 @@ function learnerSnapshot(table: PgTable, row: Row): Record<string, JsonValue> {
 export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Promise<ItemResult> {
   const reason = needReason("purge", options.reason);
   const { value, writeThrough } = await withWriteThrough(db, lockItem(options.id), async (tx) => {
-    const row = await itemRow(tx, options.id);
+    // The item row itself, locked before the learner rows are read. A tick or
+    // a recap written now inserts a row whose foreign key takes a share lock
+    // on this row, so it either committed before this lock was granted (and
+    // the reads below see it) or waits until the purge is over and then fails
+    // on the missing item. Without it, a row committed between the reads and
+    // the deletes would be deleted with the item and be in no revision.
+    const [row] = await tx.select().from(curriculumItem).where(eq(curriculumItem.id, options.id)).for("update");
     if (row === undefined) throw new CourseWriteError(`no curriculum item "${options.id}" in the catalog`);
     if (row.archivedAt === null) {
       throw new CourseWriteError(
@@ -386,7 +392,6 @@ export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Pro
           `a purge deletes, and only something already off the course path is deleted.`,
       );
     }
-    // Locked so a tick landing now either commits first and is counted, or waits.
     const ticks = await tx.select().from(progress).where(eq(progress.curriculumItemId, options.id)).for("update");
     const recaps = await tx.select().from(recap).where(eq(recap.curriculumItemId, options.id)).for("update");
     if ((ticks.length > 0 || recaps.length > 0) && options.withLearnerData !== true) {

@@ -106,3 +106,26 @@ export function describeConnectionFailure(failure: ConnectionFailure): string {
   const lead = failure.unreachable ? "database unreachable" : "database connection failed";
   return `${lead}: ${failure.reason} (${failure.code})`;
 }
+
+/**
+ * The message the CLI prints for any failure: the error's own, and under it
+ * the deepest message down its `cause` chain when that says something the top
+ * one does not. drizzle's wrapper reads "Failed query: <sql>" and hangs the
+ * server's words on `cause`, so the top message alone hides exactly the
+ * sentence a migration's RAISE was written to show (0012 names the concepts
+ * with no topic there).
+ */
+export function failureText(error: unknown): string {
+  const top = error instanceof Error ? error.message : String(error);
+  let deepest: string | null = null;
+  const seen: unknown[] = [];
+  let node: unknown = error;
+  while (typeof node === "object" && node !== null && !seen.includes(node) && seen.length < MAX_DEPTH) {
+    seen.push(node);
+    const message = (node as { message?: unknown }).message;
+    if (node !== error && typeof message === "string" && message.trim() !== "") deepest = message.trim();
+    node = (node as { cause?: unknown }).cause;
+  }
+  if (deepest === null || top.includes(deepest)) return top;
+  return `${top}\n  caused by: ${deepest}`;
+}
