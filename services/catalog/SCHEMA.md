@@ -1123,9 +1123,12 @@ forever everywhere it has already run, and one drizzle will not apply again.
   the data is not ready; `catalog status`, `learn init` and `learn doctor`
   report it as outstanding and say "run migrate". Such a database cannot
   clear it from this code, since `import` and `asset upload` refuse while a
-  migration is outstanding: it goes through flip day from
+  migration is outstanding: it goes through flip day from a worktree at
   `content-files-final` (the tag on `a0afd93`), where 0013 is still held,
-  and comes back (docs/CONTENT-MIGRATION.md, "After the merge"). Only a
+  then through the cut-over (`flip-rehearsal.mjs --real --cutover`) from the
+  main checkout's script pointed at that worktree, which arms or waives the
+  completeness rules, and comes back (docs/CONTENT-MIGRATION.md, "After the
+  merge"). Only a
   database never taken through flip day can be there, and the owner's is,
   since the cut-over merged before their flip day. The holding machinery
   (`migrateHolding`, `heldMigrations`, `assertMigrated`) stays for the next
