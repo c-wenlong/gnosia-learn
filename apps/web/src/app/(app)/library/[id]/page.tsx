@@ -19,16 +19,13 @@ import { cx } from "@/components/ui/classes";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import {
-  accessFor,
   loadAssetDetail,
-  loadFileAccess,
   loadLastWatched,
   readAssetText,
-  readRowText,
   readFileProblems,
   withCatalog,
 } from "@/lib/asset-library";
-import { problemForAccess, type RouteProblemCode } from "@/lib/asset-problems";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 import { habitTimeZone } from "@/lib/habit";
 import { dayKey } from "@/lib/habit-core";
 import { loadKnowledgeBase } from "@/lib/learner-store";
@@ -68,7 +65,7 @@ import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/tra
  * whose file the route serves, so the browser could ask for it, and then the
  * panel would need a loading state, a failure state and a second round trip
  * for text the server already had a request in which to read.
- * `readAssetText` reads it through `resolveAssetFile`, which is the module
+ * `readAssetText` reads it through `resolveAsset`, which is the module
  * holding every containment check the asset route makes, and
  * `parseTranscript` validates what comes back. A sidecar that is truncated,
  * half-written or simply not JSON costs the transcript and nothing else.
@@ -145,9 +142,8 @@ async function videoSidecars(derived: AssetRef[]): Promise<Sidecars> {
 
 export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
   const id = decodeAssetId((await params).id);
-  const [detail, access, { kb }, lastWatched] = await Promise.all([
+  const [detail, { kb }, lastWatched] = await Promise.all([
     loadAssetDetail(id),
-    loadFileAccess(),
     loadKnowledgeBase(),
     loadLastWatched(id),
   ]);
@@ -177,7 +173,6 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   const name = assetDisplayTitle(asset);
   const label = assetKindLabel(asset.kind);
   const size = formatBytes(asset.bytes);
-  const fileAccess = accessFor(access, asset.sourceRepo);
   const fileHref = assetFileHref(asset.id);
   const statusHref = assetStatusHref(asset.id);
   const zone = habitTimeZone();
@@ -189,15 +184,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   const neighbours = related.filter((row) => !isCompanionKind(row.kind)).slice(0, RELATED_SHOWN);
 
   // Everything about this file the server can know before render, so the page
-  // sends a failure panel rather than a player that is certain to fail. The
-  // switch and the manimkc index are page-wide answers; a file that is gone is
-  // this row's own, and one `resolveAssetFile` finds it.
-  const fileProblem: RouteProblemCode | null = !fileAccess.ok
-    ? problemForAccess(fileAccess.reason)
-    : asset.path === null
-      ? null
-      : ((await readFileProblems([asset.id])).get(asset.id) ?? null);
-  const servable = fileAccess.ok && asset.path !== null && fileProblem === null;
+  // sends a failure panel rather than a player that is certain to fail. Asked
+  // of this row through the route's own `resolveAsset`, so the page and the
+  // route give one answer: a blob in the store, or a note, log or `.tldr` the
+  // database owns, is servable whatever `ASSET_FILES_ENABLED` says, and only a
+  // legacy file waits on the switch and on manimkc's index.
+  const fileProblem: RouteProblemCode | null =
+    asset.kind === "link" ? null : ((await readFileProblems([asset.id])).get(asset.id) ?? null);
+  const servable = asset.kind !== "link" && fileProblem === null;
 
   const sidecars =
     asset.kind === "video" && servable ? await videoSidecars(derivations.derived) : null;
@@ -205,17 +199,14 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // Anything that is neither a player nor a picture nor a bare URL has words,
   // so it is read on the server and the page arrives with them. Attempted for
   // any kind rather than a fixed list, so a kind a future indexer adds shows
-  // its contents instead of nothing; `resolveAssetFile`'s closed extension list
-  // is what refuses a binary, and `readAssetText` refuses anything over the
-  // preview cap. A null lands on `UnreadableFile`, which says so.
+  // its contents instead of nothing; `resolveAsset`'s closed extension list is
+  // what refuses a binary, and `readAssetText` refuses anything over the
+  // preview cap. A null lands on `UnreadableFile`, which says so. A note or a
+  // log the database owns is read from its row, never from the file, which is
+  // at best the export as of the flip.
   const rendered = ["video", "diagram_svg", "link"];
-  // A note or a log the database owns is a row, so its text does not wait on
-  // the file being servable: the file is the export as of the flip, if it is
-  // there at all.
-  const rowText = rendered.includes(asset.kind) ? null : await withCatalog((db) => readRowText(db, asset.id));
   const text =
-    rowText ??
-    (servable && !rendered.includes(asset.kind) ? await withCatalog((db) => readAssetText(db, asset.id)) : null);
+    servable && !rendered.includes(asset.kind) ? await withCatalog((db) => readAssetText(db, asset.id)) : null;
 
   // The pictures a note embeds are `learn/assets/<name>`, the same files the
   // diagram rows point at, so they resolve through the file route. Each one is
@@ -330,7 +321,6 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                   // the server, anything else is an `<img>` with somewhere to
                   // ask why if it fails anyway.
                   resolveEmbed={(embed) => {
-                    if (!fileAccess.ok) return { problem: problemForAccess(fileAccess.reason) };
                     const embedAsset = embedId(embed);
                     const problem = embedProblems.get(embedAsset) ?? null;
                     if (problem !== null) return { problem };
