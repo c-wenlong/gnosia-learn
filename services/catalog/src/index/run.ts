@@ -6,11 +6,12 @@ import {
   diagram,
   indexRun,
   INDEX_SOURCES,
+  readableOwners,
   type IndexSource,
   type SourceRepo,
 } from "@self-learn/schema";
 import { loadCourses } from "@self-learn/content";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -24,6 +25,7 @@ import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { renderType } from "../content/export";
+import { CLI_OWNER } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
@@ -173,6 +175,11 @@ export interface RunOptions {
   only?: readonly IndexSource[];
   /** The author the run's `import` revisions carry. Defaults to `import:<git sha>` of the tree. */
   author?: string;
+  /**
+   * Whose rows the import writes, and the only owner whose rows it may
+   * prune, archive or unlink (phase 4, D23). Defaults to the CLIs' owner.
+   */
+  owner?: string;
 }
 
 /** The folders an import reads under its root, as git pathspecs. */
@@ -335,6 +342,11 @@ export async function runIndex(
 
   const vocabulary = await loadVocabulary(repoRoot);
   const author = options.author ?? importAuthor(repoRoot);
+  const owner = options.owner ?? CLI_OWNER;
+  // A tree may point at its own rows and the commons', never another
+  // owner's: the lookups below answer only for those, so a slug another
+  // owner holds reads as one that does not exist.
+  const readable = [...readableOwners(owner)];
   // Which database recorded each root: a `createdb -T` copy inherits the
   // rows, and a root is only this database's when this database wrote it
   // (content/import-root.ts).
@@ -359,6 +371,7 @@ export async function runIndex(
     toolsRoot,
     manimkcRoot,
     vocabulary,
+    owner,
     blobsRequired: await blobContractInForce(db),
     knownConcepts: () => {
       conceptCache ??= ranConcepts
@@ -366,6 +379,7 @@ export async function runIndex(
         : db
             .select({ slug: concept.slug })
             .from(concept)
+            .where(inArray(concept.ownerId, readable))
             .then((rows) => new Set(rows.map((r) => r.slug)));
       return conceptCache;
     },
@@ -375,6 +389,7 @@ export async function runIndex(
         : db
             .select({ id: curriculumItem.id })
             .from(curriculumItem)
+            .where(inArray(curriculumItem.ownerId, readable))
             .then((rows) => new Set(rows.map((r) => r.id)));
       return curriculumCache;
     },
@@ -386,6 +401,7 @@ export async function runIndex(
       diagramCache ??= db
         .select({ slug: diagram.slug, svgBlobKey: diagram.svgBlobKey, svgDocumentHash: diagram.svgDocumentHash })
         .from(diagram)
+        .where(eq(diagram.ownerId, owner))
         .then((rows) => new Map(rows.map((r) => [r.slug, { svgBlobKey: r.svgBlobKey, svgDocumentHash: r.svgDocumentHash }])));
       return diagramCache;
     },
@@ -395,7 +411,9 @@ export async function runIndex(
         cached = db
           .select({ id: asset.id, path: asset.path })
           .from(asset)
-          .where(eq(asset.sourceRepo, sourceRepo))
+          // The owner's own: a mirror row hangs off its asset and is that
+          // asset's owner's (D24), so another owner's video is not matched.
+          .where(and(eq(asset.sourceRepo, sourceRepo), eq(asset.ownerId, owner)))
           .then(
             (rows) =>
               new Map(
@@ -502,6 +520,7 @@ export async function runIndex(
       // instead.
       metadata: NEEDS_MANIMKC_CLI.has(indexer.source) ? metadata : { ...metadata, root: repoRoot, database },
       author,
+      owner,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
     };
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
@@ -533,10 +552,15 @@ export async function runIndex(
     // runs: a failure further on cannot leave them standing.
     const topicsWrite = sources.find((s) => s.source === "topics");
     if (indexer.source === "concepts" && topicsWrite?.deferred !== undefined) {
-      const pruned = await pruneHeldTopics(db, topicsWrite.deferred, {
-        author,
-        reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(topicsIndexer.root(context))} (topics)`,
-      });
+      const pruned = await pruneHeldTopics(
+        db,
+        topicsWrite.deferred,
+        {
+          author,
+          reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(topicsIndexer.root(context))} (topics)`,
+        },
+        owner,
+      );
       foldPrune(topicsWrite, pruned);
     }
 

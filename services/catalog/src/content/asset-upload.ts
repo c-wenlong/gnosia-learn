@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, type Asset } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@self-learn/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -56,6 +56,14 @@ import { CLI_OWNER } from "./scope";
  * `manimkc:` row it did not produce, and it never produces a poster. A poster
  * is made again only when it is missing or its video's blob changed, since a
  * re-cut of the same video would at best reproduce the same bytes.
+ *
+ * **Each row is written as its own owner** (phase 4, D23). A blob's key is
+ * prefixed by its row's owner (D5), so the bytes of a row the commons holds
+ * land under `commons/`, and the row write that points at them is the
+ * commons' too; writing it as the CLI's owner would be the seam's
+ * `foreign-owner` refusal, after the bytes were already stored. A row neither
+ * the CLI's owner nor the commons holds is another tenant's, and is refused
+ * by name before anything is read or stored.
  */
 
 /** The namespace a poster asset id lives in: `poster:` + its video's id. */
@@ -84,6 +92,12 @@ export interface AssetUploadOptions {
   reason?: string;
   /** A captured report, for tests; otherwise the CLI is run. */
   report?: TopicsReport;
+  /**
+   * Whose upload this is: rows this owner or the commons holds are uploaded,
+   * each written as its own owner; any other owner's are refused. Defaults to
+   * the CLIs' owner.
+   */
+  owner?: string;
 }
 
 /**
@@ -210,8 +224,9 @@ function contentRow(row: Asset): Record<string, unknown> {
 export async function unhookPosters(
   db: CatalogDatabase,
   videoIds: readonly string[],
-  options: { author: string; reason: string },
+  options: { author: string; reason: string; owner?: string },
 ): Promise<{ unhooked: string[]; moved: string[] }> {
+  const readable = readableOwners(options.owner ?? CLI_OWNER);
   if (videoIds.length === 0) return { unhooked: [], moved: [] };
   const ids = sql.join(
     videoIds.map((id) => sql`${id}`),
@@ -266,10 +281,12 @@ export async function unhookPosters(
   // One write per poster, since a composite write refused on one stale base
   // would roll back the others with it.
   for (const row of [...posters].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    // Another tenant's poster of this owner's video is theirs to settle.
+    if (!readable.includes(row.ownerId)) continue;
     try {
       await writeContents(db, [
         {
-          owner: CLI_OWNER,
+          owner: row.ownerId,
           type: "asset" as const,
           id: row.id,
           next: { row: contentRow(row), links: { asset_derivation: [] } },
@@ -294,6 +311,12 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   const outRoot = str(report.outRoot) ?? options.manimkcRoot;
   const { store } = options;
   const author = options.author ?? LOCAL_LEARNER_ID;
+  const readable = readableOwners(options.owner ?? CLI_OWNER);
+  /** Why a row is not this upload's to write, or null when it is. */
+  const foreign = (row: Asset): string | null =>
+    readable.includes(row.ownerId)
+      ? null
+      : `${row.id} belongs to ${row.ownerId}, and this upload writes only ${readable.join(" and ")}'s rows; nothing was stored`;
   const reason = options.reason ?? "catalog asset upload --source manimkc: bytes into the blob store";
 
   const found = deliverables(report);
@@ -356,6 +379,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
    */
   const settle = async (planned: Planned): Promise<{ key: string; changed: boolean } | null> => {
     const { row, file, ext } = planned;
+    const theirs = foreign(row);
+    if (theirs !== null) {
+      refuse(row.id, row.kind, theirs);
+      return null;
+    }
     const kept = await alreadyStored(row, ext);
     if (kept !== null) {
       items.push({ id: row.id, kind: row.kind, action: "present", key: kept, bytes: row.bytes });
@@ -437,7 +465,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const groupStart = items.length;
     const linkTo = (row: Asset, key: string) =>
       writes.push({
-        owner: CLI_OWNER,
+        owner: row.ownerId,
         type: "asset",
         id: row.id,
         next: { row: { ...contentRow(row), blobKey: key } },
@@ -490,6 +518,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   async function settlePoster(video: Planned, videoChanged: boolean): Promise<WriteContentInput | null> {
     const id = posterId(video.row.id);
     const existing = rows.get(id);
+    const theirs = existing === undefined ? null : foreign(existing);
+    if (theirs !== null) {
+      refuse(id, "poster", theirs);
+      return null;
+    }
     const current =
       existing !== undefined && existing.blobKey !== null && existing.contentHash !== null
         ? await alreadyStored(existing, POSTER_EXTENSION.slice(1))
@@ -526,7 +559,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       if (!videoChanged || existing === undefined || !derived) return null;
       items.push({ id, kind: "poster", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
       return {
-        owner: CLI_OWNER,
+        owner: existing.ownerId,
         type: "asset",
         id,
         next: { row: contentRow(existing), links: { asset_derivation: [] } },
@@ -569,7 +602,8 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "made", key: done.key, bytes: done.bytes });
       return {
-        owner: CLI_OWNER,
+        // The poster is its video's owner's, as its key's prefix already says.
+        owner: video.row.ownerId,
         type: "asset",
         id,
         next: {

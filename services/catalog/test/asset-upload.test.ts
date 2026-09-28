@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, contentRevision, type NewAsset } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, COMMONS_OWNER, contentRevision, type NewAsset } from "@self-learn/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -14,6 +14,7 @@ import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
+import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -214,6 +215,47 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     }
   });
 
+  it("uploads a video the commons holds under the commons' prefix, and writes each row as the commons (phase 4)", async () => {
+    // D23's move of the manimkc library to the commons is an update of
+    // owner_id; the next upload keys the bytes and writes the rows as that
+    // owner. Written as the CLI's owner, the seam refused every row with
+    // foreign-owner after the bytes were stored, and the run aborted.
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER });
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.refused).toBe(0);
+    expect(result.rowsWritten).toBe(4);
+    for (const [id, bytes, ext] of [
+      [VIDEO_ID, VIDEO, "mp4"],
+      [TRANSCRIPT_ID, TRANSCRIPT, "json"],
+      [VTT_ID, VTT, "vtt"],
+      [posterId(VIDEO_ID), JPEG, "jpg"],
+    ] as const) {
+      const stored = await assetRow(id);
+      expect(stored?.ownerId, id).toBe(COMMONS_OWNER);
+      expect(stored?.blobKey, id).toBe(blobKey(COMMONS_OWNER, sha256(bytes), ext));
+    }
+    const owners = await scratch.db.select({ owner: blobObject.ownerId }).from(blobObject);
+    expect(new Set(owners.map((o) => o.owner))).toEqual(new Set([COMMONS_OWNER]));
+    const authors = await scratch.db.select({ owner: contentRevision.ownerId }).from(contentRevision);
+    expect(new Set(authors.map((a) => a.owner))).toEqual(new Set([COMMONS_OWNER]));
+  });
+
+  it("refuses another owner's video before storing a byte, and goes on with the rest (phase 4)", async () => {
+    await ensureLearner(scratch.db, "other");
+    await scratch.db.update(asset).set({ ownerId: "other" }).where(eq(asset.id, VIDEO_ID));
+    const result = await uploadAssets(scratch.db, options());
+    const refused = result.items.filter((i) => i.action === "refused");
+    expect(refused.map((i) => i.id)).toEqual([VIDEO_ID]);
+    expect(refused[0]?.detail).toContain("belongs to other");
+    expect((await assetRow(VIDEO_ID))?.blobKey).toBeNull();
+    const keys = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    expect(keys.some((k) => k.startsWith("other/"))).toBe(false);
+    expect(keys.some((k) => k.endsWith(`${sha256(VIDEO)}.mp4`))).toBe(false);
+    // Its sidecars are the owner's and went up.
+    expect((await assetRow(TRANSCRIPT_ID))?.blobKey).not.toBeNull();
+  });
+
   it("finishes an upload an earlier run left pending (edge case 5)", async () => {
     const key = blobKey("local", sha256(VIDEO), "mp4");
     await scratch.db.insert(blobObject).values({
@@ -314,7 +356,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
             row(TRANSCRIPT_ID, "transcript", TRANSCRIPT_PATH, Buffer.from("re-rendered")),
             { ...row(VTT_ID, "captions", VTT_PATH, VTT), blobKey: null },
           ],
-        }),
+        }, "local"),
       );
       const [kept, dropped, explicit] = rows.asset ?? [];
       expect(kept?.blobKey).toBe(video?.blobKey);
