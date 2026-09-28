@@ -426,7 +426,7 @@ describe.skipIf(!reachable.ok)("catalog topic map, once topics are flipped", () 
     const original = await readFile(file, "utf8");
     await writeFile(file, original.replace("manimkc: [one/first]", "manimkc: [one/first, one/new]"));
     try {
-      await expect(index()).rejects.toThrow(/the database owns topics.*Edited since the last export/s);
+      await expect(index()).rejects.toThrow(/the database owns topics.*Changed since the last export: content\/topics\.yaml \(edited\)/s);
     } finally {
       await writeFile(file, original);
     }

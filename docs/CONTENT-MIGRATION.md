@@ -1,17 +1,21 @@
 # Moving authored content into the database
 
-**Status: built through phase 1, 2026-09-28; phase 2 not started.** Phase 0
+**Status: built through phase 1, and phase 2 in part, 2026-09-28.** Phase 0
 merged as PRs #126 to #129, and the fixes a read-only review of it asked for
 as #130 and #131. Phase 1's five tracks merged as PRs #132 to #145, and a
 read-only review of them asked for the fixes listed under
-[Phase 1 review fixes](#phase-1-review-fixes). Each step below says what was
+[Phase 1 review fixes](#phase-1-review-fixes). Phase 2's vault, catalog and
+tests slices merged as #150, #151 and #154, and the contract migration and
+flip day's safeguards as #153; the web and studio slice (#152) waits for flip
+day on the owner's database. Each step below says what was
 built under **Built**, and a box is ticked only for what exists. No type is
 flipped on the owner's database yet: every flip so far ran on a scratch copy. Approved 2026-09-27, when
 the owner answered the open questions (see
 [Decided by the owner](#decided-by-the-owner)): everything stays local for
 now, so the cloud database and the cloud blob adapter are deferred to a
 go-live step and phase 0 started at 0.2. The owner's `self_learn` database is
-still at `0009` and needs `npm run catalog -- migrate` before any phase 1 flip.
+still at `0009` and unflipped: flip day (`node scripts/flip-rehearsal.mjs
+--real`, below) backs it up, migrates it and flips it.
 Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
 working tree, `~/.self-learn/manimkc/out` and the local `self_learn` database;
@@ -1536,7 +1540,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       `tldr.test.ts` reads the seed's diagram; `scripts/e2e.mjs` templates from
       a local database built by `catalog import seed/`; `vitest.setup.ts`'s
       tracked-tree check watches `seed/`.
-- [ ] **Contract migration:** the `asset` location check narrows so a video,
+- [x] **Contract migration:** the `asset` location check narrows so a video,
       sidecar, poster or SVG must have a `blob_key`; and `blob_object_key_check`
       tightens to the blob package's own key rule (`packages/blob/src/key.ts`:
       a lowercase owner of 1 to 64 characters, a required extension of 1 to
@@ -1586,17 +1590,62 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
   phase 3.
 - **Flip day is `scripts/flip-rehearsal.mjs`** (below).
 
+**Built** (the contract migration; branch `p2/contract-migration`):
+`0013_asset_blob_contract` adds `asset_stored_blob_check` (a video, sidecar,
+poster or diagram SVG names its `blob_key`) beside the location check, and
+tightens `blob_object_key_check` to the package's key rule. A hand-written
+block ahead of drizzle's output lists every stored-kind asset with no blob and
+every bad key and raises with them, so on a database whose videos were never
+uploaded it refuses by id rather than failing on the constraint. Where it
+departs from the plan:
+
+- **`catalog migrate` holds it back rather than failing.** drizzle applies a
+  run in one transaction, so on the owner's database (at 0009, nothing
+  uploaded) the raise would have rolled 0010 to 0012 back with it, and the
+  upload needs 0010's columns: flip day could not have started. `migrate` now
+  applies everything before 0013 as its own run, asks the question the guard
+  asks, and holds 0013 and anything after it with the reason, exiting 0 with
+  `held`; the other commands accept a database whose first outstanding
+  migration is a held one. `catalog doctor` lists the same assets and keys.
+- **After 0013 the manimkc import stores the bytes itself.** A row can no
+  longer go in before its blob, so under the contract the manimkc source hands
+  each file to the runner to store first, as the diagrams source does, and a
+  re-render lands under its own key in the same import. `catalog asset upload`
+  then only makes posters. Before 0013 nothing changes: rows first, then the
+  upload, which is flip day's order.
+- **The suites that test the upload itself** (`asset-upload`, `blob-owner`)
+  run on a scratch database stopped at 0012, since that flow only exists
+  before the contract; fixtures elsewhere that wrote a stored-kind row with a
+  path alone now name a `present` blob (`test/stored-blob.ts`).
+
+Measured on a copy of `self_learn` (0009): the rehearsal's first `migrate`
+applied 0010 to 0012 and held 0013 with 123 manimkc assets and 3 diagram SVGs
+without a blob; after the import and the uploads `doctor` listed none, and the
+last `migrate` applied 0013.
+
 ### Flip day, as a script
 
 `node scripts/flip-rehearsal.mjs` runs flip day against a copy, and `--real
---database <name>` runs the same list against a database in place, which is
-phase 3's cut-over. The steps, each the catalog CLI with `--json` and each
-checked before the next:
+--database <name> --checkout <dir>` runs the same list against a database in
+place: the flip the readers need before they can go database-only (#152).
+Phase 3's cut-over comes after it. The steps, each checked before the next:
 
+0. A backup: `pg_dump -Fc` to `~/<name>-preflip-<UTC time>.dump` on `--real`
+   (into the temp directory on a rehearsal), then `pg_restore --list` of the
+   file, which must list data for `event`, `mastery` and `review`. Nothing
+   else runs without it, because everything after it is forward-only and the
+   learner state lives in this database alone; the summary prints the file and
+   the commands that restore it, naming the server and user it was taken from
+   (the client tools do not read `DATABASE_URL`).
 1. `catalog migrate`, then `catalog doctor`.
-2. `catalog import <tree>` (the checkout root on `--real`; a temp copy of
-   `--tree-from`, default this checkout, on a rehearsal, so the owner's working
-   tree is never written), then `catalog parity <tree>`, which must be clean.
+2. `catalog import <tree>` into a throwaway `createdb -T` copy of the
+   database, which must remove no row, then the same import into the database
+   itself, which must remove none either (the checkout root on `--real`; a
+   temp copy of `--tree-from`, default this checkout, on a rehearsal, so the
+   owner's working tree is never written), then `catalog parity <tree>`, which
+   must be clean. A removal cascades: a tree without the owner's untracked
+   files (a worktree, a clone) would prune their rows, and the copy finds it
+   before the database is touched.
 3. `flip topics`, `flip tags`, `export --only topics,tags --out <tree>`.
 4. `flip concepts`, `flip sessions`, `export --only concepts,sessions`.
 5. `flip courses`, not `--strict` (133 items name no concept), `export --only
@@ -1604,9 +1653,13 @@ checked before the next:
 6. `flip diagrams`, `export --only diagrams`.
 7. `import <tree>` again, which must skip all six types as their own export,
    and `parity` again.
-8. `asset upload --source manimkc`, twice; the second must store nothing and
-   write no row.
+8. `asset upload --source manimkc`, twice; neither may refuse a file (a
+   refused render has no blob, and 0013 stays held), and the second must store
+   nothing and write no row. Posters skipped for want of ffmpeg is a warning.
 9. `blob audit`, which must find nothing outstanding.
+10. `doctor` again, which must list no stored asset without a blob and no bad
+    key, then `migrate` again, which applies the contract migration (0013) that
+    step 1 held back, and must hold nothing.
 
 Each flip must record its export hash and each export must record its hash at
 the tree, or the next import would refuse the files as edited; the script
@@ -1614,9 +1667,17 @@ fails the step otherwise. A rehearsal copies `--from` (default `self_learn`)
 with `createdb -T`, or `pg_dump` into an empty database when the template has
 sessions open, sets `CATALOG_COPY_OK=1` and a temp `SELF_LEARN_HOME`, and drops
 the copy and its temp directories unless `--keep`. `--real` refuses without
-`--database`, refuses a rehearsal's options, drops `CATALOG_COPY_OK`, uses the
-environment's blob store, and asks for the database name to be typed on a
-terminal; there is no `--yes`, so no agent or script can run it.
+`--database`, and without a `--checkout` that is the checkout the script sits
+in (so a copy of the script elsewhere cannot import a tree missing the owner's
+files); it refuses a rehearsal's options, drops `CATALOG_COPY_OK`, uses the
+blob store the environment names (asked of `@self-learn/blob`, not guessed),
+shows `git status` of `content/` and `learn/` and refuses while a tracked file
+there has an edit (the exports rewrite those files, and undoing a failed run
+restores them from `HEAD`), and asks for the database name to be typed on a
+terminal; there is no `--yes`, so no agent or script can run
+it. Every child runs in its own process group, and a signal to the script is
+forwarded to the catalog command in flight, which a `kill` of the script used
+to leave running.
 
 Measured 2026-09-28, a rehearsal of `self_learn` (at 0009) with the main
 checkout's tree, the untracked `tailscale-vpn-communication` diagram included:
@@ -1625,9 +1686,42 @@ checkout's tree, the untracked `tailscale-vpn-communication` diagram included:
 notes and the diagrams flip 3 files an export rewrites; the uploads stored 159
 objects (36 videos, 87 sidecars, 36 posters) and then none; the audit found
 162 rows and 162 objects (the three diagram SVGs the import stored, and the
-159), with nothing outstanding. `services/catalog/test/flip-rehearsal.test.ts`
-runs the script on a scratch template at 0009 with the seed tree and a stand-in
-manimkc CLI, and holds `--real`'s refusals.
+159), with nothing outstanding. Since the contract migration, the same run
+ends with `doctor` and `migrate` applying 0013 (21 of 21 steps), and with the
+backup and the copy's import it is 23 of 23 (the dump 128 KB, data for 24
+tables; the copy's import 1,461 rows, none removed). Rehearsed from a worktree
+without the untracked diagram, it stops at the copy's import, naming the two
+`tailscale-vpn-communication` assets the import would have removed.
+`services/catalog/test/flip-rehearsal.test.ts` runs the script on a scratch
+template at 0009 with the seed tree and a stand-in manimkc CLI, restores the
+backup into a fresh database and reads it back, runs a tree that would remove
+a row and sees it stop at the copy, and holds `--real`'s refusals.
+
+### Phase 2 review fixes, the cut-over script
+
+A read-only review of phase 2 found these in #153 before the owner's flip day;
+each is fixed there.
+
+- [x] `--real` backs the database up first and refuses to go on without a
+      readable, non-empty archive (step 0 above).
+- [x] `--real` imports only from the checkout the script is in (`--checkout`),
+      shows `git status` of `content/` and `learn/`, and every import fails on a
+      removal, the first one on a throwaway copy.
+- [x] The upload fails on a refused file and warns on skipped posters.
+- [x] `catalog migrate` refuses a migration drizzle skips (an applied file
+      edited, or one older than the last applied) instead of looping on it.
+- [x] `catalog status`, `learn init` and `learn doctor` say what is held and
+      why while 0013 is held, and run their checks, instead of "run migrate".
+- [x] A test fails when a journal entry follows a registered contract
+      migration; phase 3 unregisters 0013 (checklist below).
+- [x] `assertMigrated` takes a folder, so the test of a migration queued
+      behind 0013 exercises it; `packages/blob/test/key.test.ts` holds `key()`
+      and `isKey()` against `BLOB_KEY_PATTERN` itself.
+- [x] Signals are forwarded to the command in flight; the copy helper is
+      shared with `scripts/e2e.mjs` (`scripts/lib/pg.mjs`) and the flip order
+      lives in `scripts/lib/flip-order.mjs`; an import refused on a later type
+      records no tree for an earlier one; a deleted or added export file is
+      called that rather than "edited".
 
 **Done when:** deleting `content/` and `learn/` in a scratch worktree leaves
 `npm run lint && npm run typecheck && npm test && npm run build` green and the
@@ -1665,6 +1759,11 @@ One PR, one agent, Opus.
       sections.
 - [ ] Plugin: a version bump removing every remaining path under `learn/` from
       the skills and agents.
+- [ ] Take `0013_asset_blob_contract` out of `CONTRACT_MIGRATIONS`
+      (`services/catalog/src/migrations.ts`) once the owner's database has
+      applied it, so a migration can follow it again: while it is registered,
+      any later migration waits behind it on a database that holds it, and
+      `test/blob-contract.test.ts` fails when one is added.
 - [ ] The nightly export to the private archive repository starts.
 
 **Done when:** a fresh clone with only `seed/` passes the local gate, the

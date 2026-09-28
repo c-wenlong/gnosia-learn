@@ -48,6 +48,8 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { copyDatabase, exec as execTool, PG_BIN } from './lib/pg.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB = join(ROOT, 'apps/web');
 
@@ -80,7 +82,6 @@ if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
   missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
 }
 
-const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
 for (const tool of ['createdb', 'dropdb', 'psql', 'pg_dump']) {
   if (!existsSync(join(PG_BIN, tool))) {
     missing(`${tool} not found in ${PG_BIN}. Install Postgres 17 (brew install postgresql@17) or set PG_BIN to its bin directory.`);
@@ -183,50 +184,14 @@ function stopIfInterrupted() {
 }
 
 /**
- * Run a command and collect its output. `detached` puts it in a process group
- * of its own, so a Ctrl-C meant for this script does not kill createdb halfway
- * through; the handler above decides what stops, and in what order.
+ * Run a command from the repository root and collect its output, in a process
+ * group of its own (scripts/lib/pg.mjs), so a Ctrl-C meant for this script
+ * does not kill createdb halfway through; the handler above decides what
+ * stops, and in what order.
  */
-function exec(command, args, env = process.env) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env, cwd: ROOT });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => (stdout += chunk));
-    child.stderr.on('data', (chunk) => (stderr += chunk));
-    child.once('error', (error) => resolve({ status: null, stdout, stderr: `${stderr}${error.message}` }));
-    child.once('close', (status) => resolve({ status, stdout, stderr }));
-  });
-}
+const exec = (command, args, env = process.env) => execTool(command, args, { env, cwd: ROOT });
 
 const pg = (tool, args) => exec(join(PG_BIN, tool), args);
-
-/**
- * `pg_dump from | psql into`, piped here rather than in a shell so both exit
- * codes are checked: a shell pipeline reports only psql's, and a dump that died
- * halfway would load as a quietly incomplete copy.
- */
-function dumpInto(from, into) {
-  return new Promise((resolve) => {
-    const dump = spawn(join(PG_BIN, 'pg_dump'), ['--no-owner', from], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    const load = spawn(join(PG_BIN, 'psql'), ['-q', '-v', 'ON_ERROR_STOP=1', '-d', into], {
-      detached: true,
-      stdio: ['pipe', 'ignore', 'pipe'],
-    });
-    let stderr = '';
-    for (const child of [dump, load]) {
-      child.stderr.on('data', (chunk) => (stderr += chunk));
-      child.once('error', (error) => (stderr += `${error.message}\n`));
-    }
-    // psql exiting early closes the pipe under pg_dump; that exit code says why.
-    load.stdin.on('error', () => {});
-    dump.stdout.pipe(load.stdin);
-    const exited = (child) => new Promise((done) => child.once('close', (code) => done(code)));
-    void Promise.all([exited(dump), exited(load)]).then(([dumped, loaded]) =>
-      resolve({ ok: dumped === 0 && loaded === 0, stderr: `${stderr}pg_dump exited ${dumped}, psql exited ${loaded}` }),
-    );
-  });
-}
 
 /**
  * Signal the server's whole process group and wait until nothing in it answers.
@@ -307,21 +272,14 @@ async function createCopy() {
   }
   // No `catalog migrate` afterwards: a template copy carries the schema and the
   // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
-  let made = await pg('createdb', ['-T', TEMPLATE_DB, COPY_DB]);
-  if (made.status !== 0 && /being accessed by other users/.test(made.stderr)) {
-    // `createdb -T` needs the template to have no other connections, and a dev
-    // server or another session holding `self_learn` open is ordinary. A dump
-    // into an empty database is slower and does not care.
-    console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`);
-    made = await pg('createdb', [COPY_DB]);
-    if (made.status === 0) {
-      const dump = await dumpInto(TEMPLATE_DB, COPY_DB);
-      if (!dump.ok) throw new Error(`copying ${TEMPLATE_DB} with pg_dump failed: ${dump.stderr.trim()}`);
-    }
-  }
-  if (made.status !== 0) {
-    throw new Error(`createdb ${COPY_DB} from ${TEMPLATE_DB} failed: ${made.stderr.trim()} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
-  }
+  // `createdb -T` needs the template to have no other connections, and a dev
+  // server or another session holding `self_learn` open is ordinary, so the
+  // copy falls back to a dump into an empty database, which does not care.
+  await copyDatabase(TEMPLATE_DB, COPY_DB, {
+    onFallback: () => console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`),
+  }).catch((error) => {
+    throw new Error(`${error.message} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
+  });
   await markReviewDue();
 }
 

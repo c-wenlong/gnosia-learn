@@ -5,11 +5,11 @@ import path from "node:path";
 
 import { key as blobKey, type BlobStore } from "@self-learn/blob";
 import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, type Asset } from "@self-learn/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
-import { readTopicsReport, type TopicsReport } from "../index/manimkc";
+import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/manimkc";
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
@@ -64,13 +64,8 @@ export function posterId(videoId: string): string {
   return `${POSTER_PREFIX}${videoId}`;
 }
 
-/** Media types for what this command uploads, by extension. */
-const MIME: Readonly<Record<string, string>> = {
-  mp4: "video/mp4",
-  json: "application/json",
-  vtt: "text/vtt",
-  jpg: POSTER_CONTENT_TYPE,
-};
+/** Media types for what this command uploads, by extension: manimkc's own, and the poster. */
+const MIME: Readonly<Record<string, string>> = { ...MANIMKC_MIME, jpg: POSTER_CONTENT_TYPE };
 
 export type UploadSource = "manimkc";
 export const UPLOAD_SOURCES: readonly UploadSource[] = ["manimkc"];
@@ -182,6 +177,96 @@ function contentRow(row: Asset): Record<string, unknown> {
   delete rest.createdAt;
   delete rest.updatedAt;
   return rest;
+}
+
+/**
+ * Unhook the poster of each of `videoIds` that was cut from other bytes than
+ * the video's now, the way the upload unhooks one when it links new bytes and
+ * cannot cut a new poster (see `detach` below). Under the blob contract (0013)
+ * the import, not the upload, is what links a re-render, so the upload would
+ * otherwise find the video's blob present and the poster derived from it, and
+ * keep a picture of the old render. Unhooked, the poster is not derived from
+ * the video, and the next `catalog asset upload` cuts a new one and hooks it
+ * back up.
+ *
+ * "Cut from other bytes" is read from the revisions, not from what this run
+ * changed: the video's `blob_key` as of the poster revision that last cut or
+ * hooked it (a revision that derives the poster from the video where the one
+ * before did not, or that changed the poster's own bytes), against its key
+ * now. Any other poster revision, a title edit say, is not a cut. So an
+ * import that linked the new bytes and then failed before this ran is caught
+ * by the next one, whose own write changes nothing.
+ * Returns the posters unhooked.
+ */
+export async function unhookPosters(
+  db: CatalogDatabase,
+  videoIds: readonly string[],
+  options: { author: string; reason: string },
+): Promise<string[]> {
+  if (videoIds.length === 0) return [];
+  const ids = sql.join(
+    videoIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const { rows: derived } = await db.execute<{ poster: string }>(sql`
+    select d.asset_id as poster
+    from asset_derivation d
+    join asset v on v.id = d.source_asset_id
+    cross join lateral (
+      select max(p.id) as id
+      from (
+        select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
+        from content_revision r
+        where r.entity_type = 'asset' and r.entity_id = d.asset_id
+      ) p
+      where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
+        and (
+          p.prev is null
+          or not coalesce(
+            p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
+            false
+          )
+          or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
+        )
+    ) cut
+    where d.source_asset_id in (${ids})
+      and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
+      and (
+        select r.snapshot -> 'entity' ->> 'blob_key'
+        from content_revision r
+        where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
+        order by r.id desc
+        limit 1
+      ) is distinct from v.blob_key
+    order by d.asset_id
+  `);
+  if (derived.length === 0) return [];
+  // Each row and the revision it was read at, in one snapshot, as the upload
+  // reads its own: a write that moved a poster since is refused, not undone.
+  const { posters, bases } = await db.transaction(
+    async (tx) => {
+      const ids = derived.map((d) => d.poster);
+      const latest = await latestRevisions(tx, "asset", ids);
+      return {
+        posters: await tx.select().from(asset).where(inArray(asset.id, ids)),
+        bases: new Map(ids.map((id) => [id, latest.get(id)?.id ?? null] as const)),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+  await writeContents(
+    db,
+    posters.map((row) => ({
+      type: "asset" as const,
+      id: row.id,
+      next: { row: contentRow(row), links: { asset_derivation: [] } },
+      base: bases.get(row.id) ?? null,
+      author: options.author,
+      authorKind: "import" as const,
+      reason: options.reason,
+    })),
+  );
+  return posters.map((row) => row.id).sort();
 }
 
 export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOptions): Promise<AssetUploadResult> {

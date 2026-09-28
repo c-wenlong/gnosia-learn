@@ -14,6 +14,7 @@ import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
+import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -120,7 +121,10 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    // Flip day's upload runs before the contract (0013): rows first, bytes
+    // after. Once 0013 is in, a stored-kind row cannot exist without its blob
+    // and the import stores the bytes itself (blob-contract.test.ts).
+    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     base = await mkdtemp(path.join(tmpdir(), "asset-upload-"));
     outRoot = path.join(base, "manimkc-home");
     ffmpeg = path.join(base, "ffmpeg");
