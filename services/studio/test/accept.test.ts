@@ -47,7 +47,7 @@ vi.mock("../src/catalog", async (importOriginal) => {
   return { ...actual, ...catalogMock };
 });
 
-const { accept, discard } = await import("../src/review");
+const { accept, discard, reindex } = await import("../src/review");
 const { JobStore } = await import("../src/store");
 
 const SLUG = "studio-accept-fixture";
@@ -233,7 +233,10 @@ describe("a clean accept", () => {
 
     expect(result.ok).toBe(true);
     expect(result.revision).toBe(6);
-    expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
+    // What landed, by its logical names; and what was written into the tree,
+    // which with the put naming no files is nothing.
+    expect(result.landed).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
+    expect(result.written).toEqual([]);
     expect(catalogMock.diagramPut).toHaveBeenCalledWith(
       expect.objectContaining({
         slug: SLUG,
@@ -278,6 +281,7 @@ describe("a clean accept", () => {
     });
     const result = await accept(store, await place());
     expect(result.ok).toBe(true);
+    expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
     expect(result.note).toContain(`git add ${targetPath(SLUG)} ${targetSvgPath(SLUG)}`);
   });
 
@@ -432,6 +436,24 @@ describe("the state guard", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("wrong-state");
     expect(catalogMock.diagramPut).not.toHaveBeenCalled();
+  });
+});
+
+describe("reindex", () => {
+  it("names the files an accept from before Track D wrote, and none for one after the flip", async () => {
+    const landed = [targetPath(SLUG), targetSvgPath(SLUG)];
+    // Recorded before `files` existed: the accept renamed both into the tree.
+    const old = await reindex(store, await place({ state: "accepted", written: landed, indexed: false }));
+    expect(old.ok).toBe(true);
+    expect(old.written).toEqual(landed);
+    expect(old.landed).toEqual(landed);
+
+    const flipped = await reindex(
+      store,
+      await place({ id: "job-accept-2", state: "accepted", written: landed, files: [], indexed: false }),
+    );
+    expect(flipped.written).toEqual([]);
+    expect(flipped.landed).toEqual(landed);
   });
 });
 

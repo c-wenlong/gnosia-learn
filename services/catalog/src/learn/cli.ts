@@ -284,6 +284,10 @@ interface Check {
  */
 const bktParams = (params: BktParams) => params as unknown as typeof DEFAULT_PARAMS;
 
+/** Where a log is, in words, once the database owns sessions and there is no file. */
+const ROWS_LOG_NOTE =
+  "the log is rows in the database, with no file; `npm run --silent catalog -- export --only sessions --out <dir>` writes it out";
+
 /**
  * `frontier`'s options default to `{ goal = null }`, so TypeScript reads the
  * parameter as `{ goal?: null }` and refuses a goal. One wrapper, typed the
@@ -488,18 +492,24 @@ commands.concept = async ({ values, positionals }, session) => {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);
     }
 
-    // On rows, the listing on a course row goes in through the course
-    // writer, `course import` of the edited file, which writes the row's
-    // link and keeps the course files in step (D17). Everything that could
-    // refuse that import is asked now, by a dry run of the file as it is,
-    // so the refusal comes while nothing has moved: every course file and
-    // topics.yaml must be what the database holds, and this one must hold no
-    // edit the database has not imported, since the import would take it in
-    // under this command's reason.
+    // The listing on a course row goes in through the course writer, `course
+    // import` of the edited file, which writes the row's link and keeps the
+    // course files in step (D17), whenever either side is rows. Once the
+    // database owns courses that is the only way in: an index would refuse
+    // the edited file as a hand-edited export, whatever owns concepts (S1 of
+    // the phase 1 review). And once it owns concepts the index reads no note,
+    // so the import is what writes the link. Only with both on files does
+    // the concepts index, courses behind it, take the listing in.
+    // Everything that could refuse the import is asked now, by a dry run of
+    // the file as it is, so the refusal comes while nothing has moved: every
+    // course file and topics.yaml must be what the database holds, and this
+    // one must hold no edit the database has not imported, since the import
+    // would take it in under this command's reason.
     const rowsMode = await ownedByDatabase("concepts");
     const courseFile = itemFile === undefined ? undefined : path.join(repoRoot(), itemFile);
     const courseReason = values.reason?.trim() || `learn concept add ${id} --item ${itemId ?? ""}`;
-    if (rowsMode && courseFile !== undefined) {
+    const listByImport = courseFile !== undefined && (rowsMode || (await ownedByDatabase("courses")));
+    if (listByImport) {
       try {
         const dry = await importCourse(await session.db(), { file: courseFile, reason: courseReason, dryRun: true });
         if (dry.revisions > 0) {
@@ -633,23 +643,23 @@ commands.concept = async ({ values, positionals }, session) => {
             throw error;
           }
         }
-        // Concepts, and courses behind it, which is what writes the row's link.
-        // On rows the note needs no reading (its write was the row), but a
-        // listing on a course row is still a course file the courses source
-        // turns into the link, so that source runs. It skips the notes when
-        // they are the database's last export, and refuses when they are not,
-        // saying how to record one.
-        if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
-        else if (courseFile !== undefined) {
+        // The listing first, through the course writer when it is the way
+        // in (above): it writes the row's link, rewrites the course file from
+        // the rows and records the export, so the concepts index that follows
+        // on files finds the course file to be the database's own export and
+        // skips it rather than refusing it.
+        if (listByImport && courseFile !== undefined) {
           try {
             await importCourse(await session.db(), { file: courseFile, reason: courseReason });
           } catch (error) {
             // The dry run above passed, so this is a write that landed in
             // between. The note and the listing are in; the import is what
-            // is missing, and running it again is the whole recovery.
+            // is missing, and running it again is the whole recovery. Not
+            // `catalog export --only courses`, which would write the file
+            // back from the rows and drop the listing.
             if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
               fail(
-                `${rel(file)} was written as rows and listed on ${itemId}, but the course import that ` +
+                `${rel(file)} was written and listed on ${itemId}, but the course import that ` +
                   `links them refused: ${error.message}\n  Fix that, then run: npm run --silent catalog -- ` +
                   `course import ${itemFile} --reason "${courseReason}"`,
               );
@@ -657,6 +667,11 @@ commands.concept = async ({ values, positionals }, session) => {
             throw error;
           }
         }
+        // Concepts on files: the note is read back as the concepts indexer
+        // reads it. With both types on files, courses run behind it and that
+        // is what writes the row's link. On rows the note needs no reading
+        // (its write was the row).
+        if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
       } catch (error) {
         if (
           error instanceof TopicError ||
@@ -667,7 +682,14 @@ commands.concept = async ({ values, positionals }, session) => {
           error instanceof IndexError ||
           error instanceof NoteError
         ) {
-          fail(`${rel(file)} was written, but it is not in the catalog: ${error.message}`);
+          fail(
+            `${rel(file)} was written, but it is not in the catalog: ${error.message}` +
+              (listByImport && itemFile !== undefined
+                ? `\n  If ${itemFile} lists "${id}" on ${itemId} by now, the database owns that file: ` +
+                  `\`npm run --silent catalog -- course import ${itemFile} --reason "${courseReason}"\` takes ` +
+                  `the listing in; \`catalog export --only courses\` would write the file back without it.`
+                : ""),
+          );
         }
         throw error;
       }
@@ -1324,8 +1346,12 @@ commands.session = async ({ values, positionals }, session) => {
       goal: values.goal ?? null,
     });
 
-    if (values.json) return out({ id, path: rel(sessionPath(id)) }, true);
-    return out(`Session ${id}\n  ${rel(sessionPath(id))}`, false);
+    // Once the database owns sessions the log is rows and there is no file
+    // to name: `path` stays in the shape and is null, rather than a path
+    // nothing wrote. The plugin keeps only the id.
+    const logFile = (await ownedByDatabase("sessions")) ? null : rel(sessionPath(id));
+    if (values.json) return out({ id, path: logFile }, true);
+    return out(`Session ${id}\n  ${logFile ?? ROWS_LOG_NOTE}`, false);
   }
 
   if (sub === "log") {
@@ -1334,8 +1360,9 @@ commands.session = async ({ values, positionals }, session) => {
     const text = values.text ?? "";
     if (!text.trim()) fail("session log requires --text");
     const file = await appendSession(id, text, { reason: values.reason ?? `learn session log ${id}` });
-    if (values.json) return out({ path: rel(file) }, true);
-    return out(`Appended to ${rel(file)}`, false);
+    const logFile = (await ownedByDatabase("sessions")) ? null : rel(file);
+    if (values.json) return out({ path: logFile }, true);
+    return out(logFile === null ? `Appended to the log of ${id}; ${ROWS_LOG_NOTE}` : `Appended to ${logFile}`, false);
   }
 
   if (sub === "close") {
