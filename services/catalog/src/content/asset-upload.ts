@@ -13,7 +13,7 @@ import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/mani
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
-import { uploadBlob } from "./blob";
+import { OwnerCapError, uploadBlob } from "./blob";
 import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
 import { CLI_OWNER } from "./scope";
@@ -388,14 +388,23 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       items.push({ id: row.id, kind: row.kind, action: there ? "would-link" : "would-upload", key, bytes: facts.bytes });
       return { key, changed: true };
     }
-    const done = await uploadBlob(db, store, {
-      ownerId: row.ownerId,
-      file,
-      mime: MIME[ext] as string,
-      ext,
-      sha256: facts.contentHash,
-      bytes: facts.bytes,
-    });
+    let done;
+    try {
+      done = await uploadBlob(db, store, {
+        ownerId: row.ownerId,
+        file,
+        mime: MIME[ext] as string,
+        ext,
+        sha256: facts.contentHash,
+        bytes: facts.bytes,
+      });
+    } catch (error) {
+      // Its owner's cap (phase 4): this file is refused and the run goes on,
+      // since the next file may be another owner's, or one already stored.
+      if (!(error instanceof OwnerCapError)) throw error;
+      refuse(row.id, row.kind, error.message);
+      return null;
+    }
     if (done.uploaded) {
       result.uploaded += 1;
       result.uploadedBytes += done.bytes;
@@ -534,14 +543,21 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
-      const done = await uploadBlob(db, store, {
-        ownerId: video.row.ownerId,
-        file,
-        mime: POSTER_CONTENT_TYPE,
-        ext: POSTER_EXTENSION.slice(1),
-        sha256,
-        bytes: frame.body.length,
-      });
+      let done;
+      try {
+        done = await uploadBlob(db, store, {
+          ownerId: video.row.ownerId,
+          file,
+          mime: POSTER_CONTENT_TYPE,
+          ext: POSTER_EXTENSION.slice(1),
+          sha256,
+          bytes: frame.body.length,
+        });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        refuse(id, "poster", error.message);
+        return detach(`its owner's cap refused the new poster: ${error.message}`);
+      }
       if (done.uploaded) {
         result.uploaded += 1;
         result.uploadedBytes += done.bytes;

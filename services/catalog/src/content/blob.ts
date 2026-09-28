@@ -112,11 +112,10 @@ export interface OwnerUsage {
  * One owner's usage, or every owner's when `owner` is omitted, grouped by the
  * key's prefix rather than by `owner_id`, since the prefix is what the store
  * lists and deletes by (D5), and the two agree by construction (`key()`).
- * `except` leaves one key out, the one an upload is about to write again.
  */
 export async function ownerUsage(
   db: CatalogDatabase,
-  options: { owner?: string; except?: string; now?: Date } = {},
+  options: { owner?: string; now?: Date } = {},
 ): Promise<OwnerUsage[]> {
   const since = new Date((options.now ?? new Date()).getTime() - UPLOAD_WINDOW_MS);
   const prefix = sql`split_part(${blobObject.key}, '/', 1)`;
@@ -126,7 +125,6 @@ export async function ownerUsage(
     from ${blobObject}
     where true
       ${options.owner === undefined ? sql`` : sql`and starts_with(${blobObject.key}, ${`${options.owner}/`})`}
-      ${options.except === undefined ? sql`` : sql`and ${blobObject.key} <> ${options.except}`}
     group by 1 order by 1
   `);
   return rows.map((row) => ({
@@ -146,17 +144,23 @@ export function ownerCapLock(owner: string): string {
  * Refuses an upload that would take its owner past a cap. Run under the
  * owner's advisory lock, in the transaction that writes the pending row, so
  * two uploads at once cannot both fit under a cap only one of them fits.
- * A key that already has a row is not a new upload: its bytes are already
- * counted (and left out here, so a retry is measured once) and it does not
- * count against the day.
+ *
+ * Only a new object is measured. A key that already has a row is already
+ * counted, bytes and day both, and writing it again (a rerun, or putting back
+ * an object the store lost) adds nothing, so it is never refused, even by a
+ * cap lowered below what the owner already holds. Whether the row exists is
+ * asked here, under the lock, not before it: an audit's `--fix` may have
+ * deleted a stale pending row in between, and then this is a new object.
  */
 async function checkCaps(
   tx: CatalogDatabase,
   caps: OwnerCaps,
-  input: { owner: string; key: string; bytes: number; existing: boolean },
+  input: { owner: string; key: string; bytes: number },
 ): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(input.owner)}, 0))`);
-  const [usage] = await ownerUsage(tx, { owner: input.owner, except: input.key });
+  const [existing] = await tx.select({ key: blobObject.key }).from(blobObject).where(eq(blobObject.key, input.key));
+  if (existing !== undefined) return;
+  const [usage] = await ownerUsage(tx, { owner: input.owner });
   const bytes = usage?.bytes ?? 0;
   const uploads = usage?.uploadsLastDay ?? 0;
   if (caps.bytes !== null && bytes + input.bytes > caps.bytes) {
@@ -168,7 +172,7 @@ async function checkCaps(
         `${input.owner} no longer needs (\`catalog blob audit\` lists unreferenced objects).`,
     );
   }
-  if (!input.existing && caps.uploadsPerDay !== null && uploads + 1 > caps.uploadsPerDay) {
+  if (caps.uploadsPerDay !== null && uploads + 1 > caps.uploadsPerDay) {
     throw new OwnerCapError(
       input.owner,
       "uploads-per-day",
@@ -223,10 +227,10 @@ export interface UploadResult {
  * committed before the bytes move, or an upload that dies takes the evidence
  * of itself down with the rollback.
  *
- * With a cap set (`ownerCaps`), an upload that would take its owner past it
- * is refused with `OwnerCapError` before the pending row is written, so a
- * refusal stores nothing and records nothing. An object already stored and
- * present is never refused: it is not an upload.
+ * With a cap set (`ownerCaps`), a new object that would take its owner past
+ * it is refused with `OwnerCapError` before the pending row is written, so a
+ * refusal stores nothing and records nothing. A key that already has a row
+ * is never refused (`checkCaps`).
  */
 export async function uploadBlob(
   db: CatalogDatabase,
@@ -275,7 +279,7 @@ export async function uploadBlob(
     await pending(db);
   } else {
     await db.transaction(async (tx) => {
-      await checkCaps(tx, caps, { owner: input.ownerId, key, bytes: facts.bytes, existing: row !== undefined });
+      await checkCaps(tx, caps, { owner: input.ownerId, key, bytes: facts.bytes });
       await pending(tx);
     });
   }

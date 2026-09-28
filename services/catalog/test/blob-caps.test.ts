@@ -8,6 +8,7 @@ import { blobObject } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { formatBlobAudit, runBlobAudit, type BlobAuditCommandResult } from "../src/commands/blob-audit";
 import { auditBlobs } from "../src/content/blob-audit";
 import {
   OWNER_BYTES_CAP_ENV,
@@ -127,16 +128,60 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     await expect(upload(B, "k")).rejects.toBeInstanceOf(OwnerCapError);
   });
 
-  it("counts a retried key once, and never refuses one already stored", async () => {
+  it("never refuses a key that already has a row, even under a cap lowered below what the owner holds", async () => {
     process.env[OWNER_BYTES_CAP_ENV] = "10";
     process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
     await upload("local", "1234567890");
     // Already present: not an upload, whatever the caps say.
     expect((await upload("local", "1234567890")).uploaded).toBe(false);
-    // Its object lost: the rerun writes the same key again, measured once and
-    // not a new upload for the day.
+    // The caps come down below what the owner already holds, and the store
+    // loses the object: putting it back adds nothing, so it is not refused.
+    process.env[OWNER_BYTES_CAP_ENV] = "5";
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "0";
     await store.delete(keyOf("local", "1234567890"));
     expect((await upload("local", "1234567890")).uploaded).toBe(true);
+    // A new object is still refused.
+    await expect(upload("local", "x")).rejects.toBeInstanceOf(OwnerCapError);
+  });
+
+  it("counts a row an audit deleted while the upload waited as a new object", async () => {
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
+    await upload("local", "today");
+    // A stale pending row from two days ago, for the bytes about to be uploaded.
+    await scratch.db.insert(blobObject).values({
+      key: keyOf("local", "stale"),
+      ownerId: "local",
+      sha256: sha256("stale"),
+      bytes: 5,
+      mime: "application/octet-stream",
+      provider: "fs",
+      state: "pending",
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    });
+    const other = connect({ url: scratch.url, max: 1 });
+    try {
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let locked: () => void = () => {};
+      const isLocked = new Promise<void>((resolve) => (locked = resolve));
+      // `blob audit --fix` deleting the stale row, holding the owner's lock
+      // while the upload has already read the row and is waiting for it.
+      const audit = other.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        locked();
+        await held;
+        await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
+      });
+      await isLocked;
+      const retry = upload("local", "stale");
+      retry.catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      release();
+      await audit;
+      await expect(retry).rejects.toMatchObject({ cap: "uploads-per-day" });
+    } finally {
+      await other.close();
+    }
   });
 
   it("refuses the upload past the day's count, and lets it through once the oldest leaves the window", async () => {
@@ -214,5 +259,82 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       { owner: "local", objects: 2, bytes: 6, uploadsLastDay: 2 },
       { owner: B, objects: 1, bytes: 8, uploadsLastDay: 1 },
     ]);
+  });
+});
+
+describe("the audit's caps and per-owner lines", () => {
+  const result = (caps: BlobAuditCommandResult["caps"]): BlobAuditCommandResult => ({
+    database: "postgres://localhost:5432/scratch",
+    blobRoot: "/tmp/blobs",
+    ownRoot: true,
+    provider: "fs",
+    owner: null,
+    rows: 3,
+    objects: 3,
+    fix: false,
+    findings: [],
+    outstanding: 0,
+    byOwner: [
+      { owner: "local", objects: 2, bytes: 6, uploadsLastDay: 2 },
+      { owner: B, objects: 1, bytes: 8, uploadsLastDay: 0 },
+    ],
+    caps,
+  });
+
+  it("prints the caps in force and a line per owner", () => {
+    const none = formatBlobAudit(result({ bytes: null, uploadsPerDay: null })).split("\n");
+    expect(none).toContain("caps       none per owner");
+    expect(none).toContain("  local         2 objects, 6 bytes, 2 uploaded in the last 24 hours");
+    expect(none).toContain(`  ${B.padEnd(13)} 1 objects, 8 bytes, 0 uploaded in the last 24 hours`);
+    expect(formatBlobAudit(result({ bytes: 100, uploadsPerDay: 5 }))).toContain(
+      "caps       100 bytes stored, 5 uploads a day per owner",
+    );
+    expect(formatBlobAudit(result({ bytes: null, uploadsPerDay: 0 }))).toContain("caps       0 uploads a day per owner");
+  });
+
+  it("says a malformed cap refuses every upload, rather than hiding it", () => {
+    expect(formatBlobAudit(result({ error: "SELF_LEARN_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
+      'caps       unreadable, so every upload is refused: SELF_LEARN_OWNER_BYTES_CAP="5GB" is not a whole number.',
+    );
+  });
+
+  describe.skipIf(!reachable.ok)("from the command", () => {
+    let scratch: Scratch;
+    let home: string;
+    const saved = {
+      url: process.env["DATABASE_URL"],
+      home: process.env["SELF_LEARN_HOME"],
+      bytes: process.env[OWNER_BYTES_CAP_ENV],
+    };
+
+    beforeAll(async () => {
+      scratch = await createScratchDatabase();
+      await applyMigrations(scratch.db);
+      home = await mkdtemp(path.join(tmpdir(), "blob-caps-home-"));
+      process.env["DATABASE_URL"] = scratch.url;
+      process.env["SELF_LEARN_HOME"] = home;
+    }, 60_000);
+
+    afterAll(async () => {
+      for (const [variable, value] of [
+        ["DATABASE_URL", saved.url],
+        ["SELF_LEARN_HOME", saved.home],
+        [OWNER_BYTES_CAP_ENV, saved.bytes],
+      ] as const) {
+        if (value === undefined) delete process.env[variable];
+        else process.env[variable] = value;
+      }
+      await scratch?.drop();
+      await rm(home, { recursive: true, force: true });
+    });
+
+    it("carries the caps and each owner's totals in its result, the --json shape", async () => {
+      process.env[OWNER_BYTES_CAP_ENV] = "5GB";
+      const bad = await runBlobAudit({ fix: false });
+      expect(bad.caps).toEqual({ error: expect.stringContaining(OWNER_BYTES_CAP_ENV) });
+      expect(bad.byOwner).toEqual([]);
+      process.env[OWNER_BYTES_CAP_ENV] = "1000";
+      expect((await runBlobAudit({ fix: false })).caps).toEqual({ bytes: 1000, uploadsPerDay: null });
+    });
   });
 });

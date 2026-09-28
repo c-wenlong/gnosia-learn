@@ -1843,10 +1843,13 @@ before, so it merged before flip day and does not depend on #152.
       set it measures the owner from `blob_object` by the key's `<owner_id>/`
       prefix, under an advisory lock per owner in the transaction that writes
       the pending row, so two uploads at once cannot both fit under a cap only
-      one fits; a refusal (`OwnerCapError`) stores and records nothing. A key
-      that already has a row is not a new upload: its bytes are counted once
-      and a rerun does not count against the day, and an object already
-      stored is never refused. The day is rolling, as the studio's spend cap.
+      one fits; a refusal (`OwnerCapError`) stores and records nothing, and
+      `catalog asset upload` records it as that file's refusal and goes on
+      with the rest. Only a new object is measured: a key that already has a
+      row (asked under the lock, since an audit may have deleted a stale one
+      meanwhile) is already counted, so a rerun or putting back an object the
+      store lost is never refused, even under a cap lowered below what the
+      owner holds. The day is rolling, as the studio's spend cap.
       A value that is not a whole number refuses every upload with the
       variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
       does: an upload is a command a person watches, and a quota that a typo
