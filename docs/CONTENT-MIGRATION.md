@@ -1489,7 +1489,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       tags and courses, so `CONTENT_SOURCE=files` never reads a vocabulary or
       course export older than the last write; for notes, logs and diagrams
       it reads the export as of the last `catalog export`.
-- [ ] **Vault:** `learn vault pull [--out <dir>]` (default
+- [x] **Vault:** `learn vault pull [--out <dir>]` (default
       `~/.self-learn/vault/`) writes every note and session log as markdown
       with a `.vault.json` recording each file's base revision and hash;
       `learn vault push` reads changed notes back through the write seam, one
@@ -1500,6 +1500,22 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       a record of what happened, and a correction belongs in the note it
       touched. Pull never overwrites a locally modified file. Decided by the
       owner on 2026-09-27.
+      **Built** in `services/catalog/src/learn/vault.ts` on the row pair
+      `noteText` and `commitNoteText`, proved by
+      `services/catalog/test/learn-vault.test.ts` (the done-when's four vault
+      cases, plus a copy merged into and never replaced, a file there before
+      any pull, a new note refused, a vault from another database) and on a
+      flipped `createdb -T self_learn` copy: 32 notes and 3 logs pulled,
+      byte-identical to `catalog export --only concepts,sessions`, a push with
+      no edits wrote zero revisions, one edited note wrote one concept
+      revision (and its `note:` asset's). Where it departs from the words
+      above: `.incoming` is written only when the database moved past the
+      file's base, since otherwise it would be the text the edit started
+      from; deleting an `.incoming` or `.conflict` copy is how it is settled,
+      and the note is then based on that copy's version; a pull from another
+      database forgets every base rather than refusing, and a push to one is
+      refused. The folder defaults to `$SELF_LEARN_HOME/vault`, and one
+      inside the repository is refused.
 - [x] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`
@@ -1572,8 +1588,8 @@ departs from the plan:
   upload needs 0010's columns: flip day could not have started. `migrate` now
   applies everything before 0013 as its own run, asks the question the guard
   asks, and holds 0013 and anything after it with the reason, exiting 0 with
-  `held`; the other commands accept a database whose only outstanding
-  migrations are held ones. `catalog doctor` lists the same assets and keys.
+  `held`; the other commands accept a database whose first outstanding
+  migration is a held one. `catalog doctor` lists the same assets and keys.
 - **After 0013 the manimkc import stores the bytes itself.** A row can no
   longer go in before its blob, so under the contract the manimkc source hands
   each file to the runner to store first, as the diagrams source does, and a
