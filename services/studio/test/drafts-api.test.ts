@@ -291,7 +291,69 @@ describe("resume and revise carry the draft", () => {
     expect(drafts.get(draftId)).toMatchObject({ state: "drawing", jobIds: [jobId, next] });
     await until(() => agentMock.startAgent.mock.calls.length > 0, "the resumed job never reached its agent");
   });
+
+  it("queues a Resume of an older job standalone, and the draft keeps following its newest", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await drafts.settled(draftId);
+    await store.create(interruptedJob("job-older", draftId, "other-slug", "older-key"));
+    await drafts.markDrawing(draftId, "job-older");
+    await store.create(interruptedJob("job-newer", draftId, good.slug, "newer-key"));
+    await drafts.markDrawing(draftId, "job-newer");
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)?.jobIds).toEqual(["job-older", "job-newer"]);
+
+    const resumed = await post(`/api/jobs/job-older/resume`, {});
+    expect(resumed.status).toBe(201);
+    const next = ((await resumed.json()) as { jobId: string }).jobId;
+    expect(store.get(next)?.draftId).toBeNull();
+    expect(drafts.get(draftId)).toMatchObject({ state: "briefed", jobIds: ["job-older", "job-newer"] });
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the resumed job never reached its agent");
+  });
 });
+
+/** An interrupted job of a draft's, as the runner's reconcile leaves one. */
+function interruptedJob(id: string, draftId: string, slug: string, key: string): JobRecord {
+  const at = new Date().toISOString();
+  return {
+    id,
+    kind: "diagram",
+    state: "interrupted",
+    phase: "drawing",
+    brief: { ...good, slug, concepts: [], model: "sonnet", idempotencyKey: key },
+    targetPath: targetPath(slug),
+    targetSvgPath: targetSvgPath(slug),
+    candidatePath: candidatePath(id, slug),
+    candidateSvgPath: candidateSvgPath(id, slug),
+    topic: good.topic,
+    slug,
+    attempt: 1,
+    sessionId: `studio-${id}`,
+    agentSessionId: "77777777-7777-4777-8777-777777777777",
+    parentJobId: null,
+    draftId,
+    changes: null,
+    idempotencyKey: key,
+    targetHashBefore: null,
+    requestedAt: at,
+    startedAt: at,
+    finishedAt: at,
+    reviewedAt: null,
+    heartbeatAt: null,
+    cancelRequestedAt: null,
+    exitCode: null,
+    turns: null,
+    costUsd: null,
+    costSource: null,
+    gate: null,
+    errorKind: "interrupted",
+    error: "the runner died while this job was running",
+    written: [],
+    indexed: false,
+    catalogErrors: [],
+  } as JobRecord;
+}
 
 describe("the event stream", () => {
   it("drops the subscription of a client that left while the replay was being read", async () => {

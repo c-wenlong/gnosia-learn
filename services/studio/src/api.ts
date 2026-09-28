@@ -623,15 +623,21 @@ async function enqueueChecked(
 }
 
 /**
- * The draft a Revise or a Resume carries: the parent job's, while that
- * conversation is still there and open to it. The new job is then the draft's
- * newest, and the draft follows it.
+ * The draft a Revise or a Resume carries: the parent job's, only while that
+ * job is still the draft's newest and the draft is not drawing another. The
+ * new job is then the draft's newest, and the draft follows it.
+ *
+ * Anything else queues the job standalone, with no draft, rather than
+ * refusing it: a Resume or Revise of an older job is still a job a person
+ * asked for, and carrying the draft would make it the one the conversation
+ * follows while another drawing is in flight.
  */
 function carriedDraft(record: JobRecord, drafts: Drafts | undefined): string | null {
   const id = record.draftId ?? null;
   if (id === null || drafts === undefined) return null;
   const draft = drafts.get(id);
-  return draft === undefined || draft.state === "abandoned" ? null : id;
+  if (draft === undefined || draft.state === "abandoned" || draft.state === "drawing") return null;
+  return draft.jobIds.at(-1) === record.id ? id : null;
 }
 
 async function followedBy(drafts: Drafts | undefined, job: JobRecord): Promise<void> {
