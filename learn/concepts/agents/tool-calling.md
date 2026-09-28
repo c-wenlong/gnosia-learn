@@ -3,10 +3,10 @@ id: tool-calling
 title: Tool calling
 summary: A model emits a structured call against a declared schema; the harness executes it and returns the result into context.
 requires: []
+assumes: [transformer-block]
 tags: [agentic-ai]
 sources: []
 created: 2026-08-18T01:45:41.367Z
-assumes: [transformer-block]
 ---
 
 # Tool calling
