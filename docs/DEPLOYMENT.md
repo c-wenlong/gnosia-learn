@@ -463,12 +463,32 @@ it. The first run from such a checkout fails before the script loads, with
 the log and `last exit code = 1` in `launchctl print`. Granting the node
 binary Full Disk Access would work, and is a security setting only the owner
 should change. The route that needs no grant is a second clone outside those
-folders, made for this job alone (`git clone <repo> ~/.self-learn/checkout &&
-cd ~/.self-learn/checkout && npm ci`, no submodules needed), with both paths
-in the plist pointing at it. That clone reads the same database and the same
-blob store, so the export is the same; it only has to be pulled and
-reinstalled when a migration or the export format changes, since the CLI
-refuses to run against a database ahead of its own migrations.
+folders, made for this job alone (`mkdir -p ~/.self-learn && git clone <repo>
+~/.self-learn/checkout && cd ~/.self-learn/checkout && npm ci`, no submodules
+needed), with both paths in the plist pointing at it. That clone reads the
+same database and the same blob store, so the export is the same. It does
+drift: `catalog migrate`'s status walks the migration files in the clone it
+runs from, so a database the main checkout has since migrated is not
+refused, and an old clone keeps exporting with old code and says nothing.
+So the job should refresh the clone first. A wrapper the plist runs in place
+of node, at `~/.self-learn/bin/nightly-export.sh`:
+
+```zsh
+#!/bin/zsh
+set -u
+cd "$HOME/.self-learn/checkout" || exit 2
+before=$(git rev-parse HEAD)
+if git pull -q --ff-only; then
+  [ "$before" != "$(git rev-parse HEAD)" ] && npm ci --silent
+else
+  echo "git pull failed; exporting with $(git rev-parse --short HEAD)"
+fi
+exec node scripts/nightly-export.mjs "$@"
+```
+
+with `ProgramArguments` as `/bin/zsh` and that path. A pull that fails (no
+network) is logged and the export still runs on the code already there,
+which is the right order: a copy from slightly old code beats no copy.
 
 Set `SELF_LEARN_HOME` in the plist even when `services/catalog/.env` names
 it: the catalog reads that file, so the export would find the diagram SVGs in
