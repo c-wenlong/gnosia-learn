@@ -1,11 +1,13 @@
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { fileSource } from "@self-learn/content";
 import { session, sessionLogEntry } from "@self-learn/schema";
 import { asc, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-
 import { renderType } from "../src/content/export";
+import { DB_READERS } from "../src/content/flip";
+import { dbSource } from "../src/content/source";
 import { compare } from "../src/content/parity";
 import { readTypeFiles } from "../src/content/layout";
 import { noteParityForm, readNote, renderNote } from "../src/content/notes";
@@ -126,6 +128,29 @@ describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch
     const { rows } = await scratch.db.execute<{ n: number }>("select count(*)::int as n from concept_prerequisite");
     const files = compare("concepts", [], await readTypeFiles(REPO_ROOT, "concepts"));
     expect(rows[0]?.n).toBe(files.counts.actual["prerequisites"]);
+  });
+
+  it("reads every note and log back through the database reader as the file reader does", async () => {
+    const rows = dbSource(scratch.db);
+    const files = fileSource(REPO_ROOT);
+    let identical = 0;
+    const notes = await realNotes();
+    for (const { file } of notes) {
+      const slug = path.basename(file, ".md");
+      const [fromRows, fromFiles] = await Promise.all([rows.concept(slug), files.concept(slug)]);
+      expect(fromRows, slug).toMatchObject({ slug, path: fromFiles?.path, domain: fromFiles?.domain });
+      expect(noteParityForm(fromRows?.markdown ?? "", file), slug).toEqual(noteParityForm(fromFiles?.markdown ?? "", file));
+      if (fromRows?.markdown === fromFiles?.markdown) identical += 1;
+    }
+    expect(notes.length - identical).toBeLessThanOrEqual(5);
+    for (const log of await readTypeFiles(REPO_ROOT, "sessions")) {
+      const id = path.basename(log.path, ".md");
+      expect(await rows.sessionLog(id)).toEqual(await files.sessionLog(id));
+    }
+    expect(await rows.concept("no-such-note")).toBeNull();
+    expect(await rows.sessionLog("no-such-log")).toBeNull();
+    // Both readers say so, which is what lets `catalog flip` take the types.
+    expect(DB_READERS.has("concepts") && DB_READERS.has("sessions")).toBe(true);
   });
 
   it("imports each existing log as one entry, and a second import appends nothing", async () => {
