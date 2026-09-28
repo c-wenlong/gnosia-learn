@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type Ref } from "react";
+import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
 import { Button } from "./Button";
 import { cx } from "./classes";
@@ -59,13 +59,15 @@ export function Composer({
    */
   disabledReason?: string;
   autoFocus?: boolean;
-  inputRef?: Ref<HTMLTextAreaElement>;
+  /** The textarea, for a caller that focuses it (a suggestion chip). */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   onModEnter?: () => void;
   maxRows?: number;
   sendLabel?: string;
   className?: string;
 }) {
-  const own = useRef<HTMLTextAreaElement | null>(null);
+  const fallback = useRef<HTMLTextAreaElement | null>(null);
+  const own = inputRef ?? fallback;
   const reasonId = useId();
   const reason = (disabled || sendDisabled) && disabledReason ? disabledReason : null;
   const empty = value.trim() === "";
@@ -77,7 +79,7 @@ export function Composer({
     // Collapse first, so a deleted line gives its height back.
     box.style.height = "auto";
     box.style.height = `${composerHeight(box.scrollHeight, maxRows)}px`;
-  }, [value, maxRows]);
+  }, [value, maxRows, own]);
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -110,11 +112,7 @@ export function Composer({
       <label className="min-w-0 flex-1">
         <span className="sr-only">{label}</span>
         <textarea
-          ref={(node) => {
-            own.current = node;
-            if (typeof inputRef === "function") inputRef(node);
-            else if (inputRef) inputRef.current = node;
-          }}
+          ref={own}
           rows={1}
           autoFocus={autoFocus}
           value={value}
