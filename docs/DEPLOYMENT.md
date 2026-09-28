@@ -454,6 +454,22 @@ launchctl kickstart gui/$(id -u)/com.self-learn.nightly-export    # one run now,
 launchctl bootout gui/$(id -u)/com.self-learn.nightly-export      # to stop it
 ```
 
+**A checkout under `~/Desktop`, `~/Documents` or `~/Downloads` cannot be
+the one the job runs.** macOS folder protection lets a process read those
+folders only once the user has granted it access, and a launchd agent is its
+own process: it inherits nothing from the terminal, and no prompt appears for
+it. The first run from such a checkout fails before the script loads, with
+`EPERM: operation not permitted, open '.../scripts/nightly-export.mjs'` in
+the log and `last exit code = 1` in `launchctl print`. Granting the node
+binary Full Disk Access would work, and is a security setting only the owner
+should change. The route that needs no grant is a second clone outside those
+folders, made for this job alone (`git clone <repo> ~/.self-learn/checkout &&
+cd ~/.self-learn/checkout && npm ci`, no submodules needed), with both paths
+in the plist pointing at it. That clone reads the same database and the same
+blob store, so the export is the same; it only has to be pulled and
+reinstalled when a migration or the export format changes, since the CLI
+refuses to run against a database ahead of its own migrations.
+
 Set `SELF_LEARN_HOME` in the plist even when `services/catalog/.env` names
 it: the catalog reads that file, so the export would find the diagram SVGs in
 the right blob store, but the script itself takes the archive's location from
