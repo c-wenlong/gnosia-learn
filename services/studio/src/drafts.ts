@@ -353,7 +353,11 @@ export class Drafts {
         (event) => event.type === "brief" && replies.some((reply) => reply.seq === event.replySeq),
       );
       // A spawn whose spend was already written finished before the runner
-      // died; only what came after it is unaccounted for.
+      // died; only what came after it is unaccounted for. Asked of the spend
+      // alone, never of whether a reply exists: `speak` saves the spend before
+      // it appends the reply, but this pass appends its cut-off reply first,
+      // so a crash between the two leaves an answered turn whose cost is still
+      // to be counted, from the same stream lines, exactly once.
       const counted = record.spend.some((entry) => entry.startedAt === startedAt);
       const cost = costFromLog(lines.join("\n"), plannerModel());
       const spend: TurnSpend = {
@@ -375,7 +379,7 @@ export class Drafts {
           });
         }
         const current = this.require(record.id);
-        const nextSpend = counted || answered ? current.spend : [...current.spend, spend];
+        const nextSpend = counted || lines.length === 0 ? current.spend : [...current.spend, spend];
         await this.save(record.id, {
           inFlight: null,
           spend: nextSpend,

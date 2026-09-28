@@ -580,6 +580,40 @@ describe("a crash between two writes", () => {
     drafts = restarted;
   });
 
+  it("counts a recovered turn's cost once, even when the runner died again between the cut-off reply and its cost", async () => {
+    const { record } = await drafts.create({});
+    const at = new Date().toISOString();
+    // What this pass itself leaves when it dies midway: the cut-off reply, and no spend.
+    await leave(record.id, [
+      { seq: 2, type: "message", text: "hi" },
+      { seq: 3, type: "reply", turn: 2, text: "Is this a new", interrupted: true, costUsd: 0.0186, costSource: "stream" },
+    ], { seq: 3, turns: 1, spend: [], inFlight: { turn: 2, startedAt: at } });
+    const usage = { input_tokens: 10, cache_creation_input_tokens: 9000, cache_read_input_tokens: 0, output_tokens: 20 };
+    await writeFile(
+      draftSessionLogPath(record.id),
+      [
+        { type: "studio-turn", turn: 2, at },
+        { type: "assistant", message: { id: "m1", model: "claude-sonnet-5", content: [], usage } },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join("\n"),
+    );
+    const restarted = build();
+    await restarted.load();
+    await restarted.reconcile();
+    const once = restarted.get(record.id)!;
+    expect(once.spend).toHaveLength(1);
+    expect(once.costUsd).toBeGreaterThan(0);
+    expect((await restarted.view(record.id)).transcript.filter((entry) => entry.role === "planner")).toHaveLength(1);
+    // A third start finds nothing left to count.
+    const again = build();
+    await again.load();
+    await again.reconcile();
+    expect(again.get(record.id)!.spend).toHaveLength(1);
+    expect(again.get(record.id)!.costUsd).toBe(once.costUsd);
+    drafts = again;
+  });
+
   it("keeps a brief that passed on the turn the runner died in", async () => {
     const { record } = await drafts.create({});
     const brief = { ...good, concepts: [], model: "sonnet" };
