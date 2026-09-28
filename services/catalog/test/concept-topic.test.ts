@@ -510,7 +510,6 @@ describe.skipIf(!reachable.ok)("learn concept add --topic", () => {
     );
     expect(stdout).toContain("--topic <slug>");
     expect(stdout).toContain("maps.concepts");
-    expect(stdout).toContain("content/topics.yaml");
     expect(stdout).toContain("catalog -- search");
     expect(await topics()).not.toContain("sprockets");
 

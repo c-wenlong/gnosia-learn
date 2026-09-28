@@ -80,7 +80,7 @@ export async function assertKnownItems(
   if (unknown.length > 0) {
     throw new StateError(
       `no curriculum item in the catalog for ${unknown.map((id) => `"${id}"`).join(", ")}. ` +
-        `Course data is indexed from content/courses/: run \`npm run catalog -- import\`.`,
+        `Courses are rows in the catalog: \`npm run catalog -- ls\` lists them, and \`catalog course import\` writes one.`,
     );
   }
   if (archived.length > 0 && options.allowArchived !== true) {

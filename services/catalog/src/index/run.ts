@@ -24,6 +24,7 @@ import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { renderType } from "../content/export";
+import { readTopicEntries } from "../content/topics";
 import type { CatalogDatabase } from "../db";
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, REPO_ROOT, resolveManimkcRoot } from "../env";
 import { conceptsIndexer } from "./concepts";
@@ -37,7 +38,7 @@ import { sessionsIndexer } from "./sessions";
 import { tagsIndexer } from "./tags";
 import type { IndexContext, Indexer } from "./source";
 import { topicsIndexer } from "./topics";
-import { loadVocabulary } from "./vocabulary";
+import { loadVocabulary, vocabularyOf } from "./vocabulary";
 import { pruneHeldTopics, writeSource, type SourceWrite } from "./writer";
 
 /**
@@ -333,7 +334,11 @@ export async function runIndex(
   // every source as it was.
   const owned = await ownedSkips(db, repoRoot, selected);
 
-  const vocabulary = await loadVocabulary(repoRoot);
+  // From the rows once the database owns topics: the file is then its export
+  // at best, and after the cut-over there is none, while manimkc and the
+  // mirror ledger still import from their own CLI and need the vocabulary.
+  const topicsOwned = (await readContentSources(db)).get("topics")?.source === "db";
+  const vocabulary = topicsOwned ? vocabularyOf(await readTopicEntries(db)) : await loadVocabulary(repoRoot);
   const author = options.author ?? importAuthor(repoRoot);
   // Which database recorded each root: a `createdb -T` copy inherits the
   // rows, and a root is only this database's when this database wrote it
@@ -610,6 +615,17 @@ async function ownedSkips(
       continue;
     }
     const files = await readTypeFiles(root, type);
+    // A tree with none of the type's files has nothing to import for it: an
+    // export of other types, or a checkout after the cut-over removed
+    // content/ and learn/. Skipped, and its root left as it was, since this
+    // tree is not where the type's files are.
+    if (files.length === 0) {
+      out.set(indexer.source, {
+        source: indexer.source,
+        reason: `the database owns ${type} (since ${since}), and ${root} holds no ${TYPE_LOCATION[type]} to read`,
+      });
+      continue;
+    }
     const hash = exportHash(files);
     // The database's own export either way: the files its last export or
     // write-through left (an untouched export the rows have since moved past,

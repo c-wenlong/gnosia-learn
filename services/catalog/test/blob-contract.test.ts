@@ -14,6 +14,7 @@ import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
 import { posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
+import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
 import { writeContents } from "../src/content/write";
 import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
 import {
@@ -48,11 +49,25 @@ const reachable = await probe();
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const execFileAsync = promisify(execFile);
 
-describe("a registered contract migration", () => {
-  it("is the journal's last entry, since anything after it waits while a database holds it", async () => {
+/**
+ * 0013 as it was registered until phase 3's cut-over, which took it out of
+ * `CONTRACT_MIGRATIONS` once the owner's database had applied it. The tests of
+ * the holding machinery register it again through the `contracts` option, so
+ * the machinery stays tested for the next contract migration.
+ */
+const HELD = {
+  contracts: { [BLOB_CONTRACT_MIGRATION]: async (db: Scratch["db"]) => describeDistance(await blobContractDistance(db)) },
+};
+
+describe("the registered contract migrations", () => {
+  it("are none since the cut-over, which unregistered 0013", async () => {
+    expect((await journalTags()).filter((tag) => isContractMigration(tag))).toEqual([]);
+    expect(isContractMigration(BLOB_CONTRACT_MIGRATION, HELD.contracts)).toBe(true);
+  });
+
+  it("each is the journal's last entry, since anything after it waits while a database holds it", async () => {
     const tags = await journalTags();
-    const contracts = tags.filter(isContractMigration);
-    expect(contracts.length).toBeGreaterThan(0);
+    const contracts = tags.filter((tag) => isContractMigration(tag));
     for (const tag of contracts) {
       // A migration generated after a registered contract is held behind it on
       // every database that has not applied the contract yet, including ones
@@ -110,43 +125,41 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
   });
 
   it("is held by catalog migrate, with the reason, and the other commands still run", async () => {
-    const held = await migrateHolding(scratch.db);
+    const held = await migrateHolding(scratch.db, HELD);
     expect(held).toEqual([
       {
         tag: "0013_asset_blob_contract",
         reason: expect.stringMatching(/^1 asset\(s\) of a stored kind have no blob .*; 1 blob key\(s\) are not keys/),
       },
     ]);
-    await expect(assertMigrated(scratch.db)).resolves.toBeUndefined();
-    expect(await heldMigrations(scratch.db)).toEqual(held);
+    await expect(assertMigrated(scratch.db, HELD)).resolves.toBeUndefined();
+    expect(await heldMigrations(scratch.db, HELD)).toEqual(held);
   });
 
-  it("is reported as held, with the reason, by catalog status, learn init and learn doctor", async () => {
+  it("is no longer held by catalog status, learn init or learn doctor, which say run migrate", async () => {
+    // Since the cut-over nothing registers 0013, so an outstanding 0013 is an
+    // ordinary outstanding migration: the database is behind, and migrate
+    // either applies it or raises naming what stands in its way.
     const saved = process.env["DATABASE_URL"];
     process.env["DATABASE_URL"] = scratch.url;
     const root = await mkdtemp(path.join(tmpdir(), "catalog-held-learn-"));
     try {
       const status = await runStatus();
-      expect(status.migrations.held.map((h) => h.tag)).toEqual(["0013_asset_blob_contract"]);
-      // 0013 adds no table, so the counts are read rather than "run migrate".
-      expect(status.rows["asset"]).toBe(1);
+      expect(status.migrations.held).toEqual([]);
+      expect(status.migrations.pending).toEqual(["0013_asset_blob_contract"]);
 
       const learn = (...args: string[]) =>
         execFileAsync(process.execPath, ["--import", "tsx", path.join(SERVICE_ROOT, "src", "learn", "cli.ts"), ...args], {
           env: { ...process.env, LEARN_ROOT: root, DATABASE_URL: scratch.url },
         }).catch((error: { stdout: string }) => error);
       const init = await learn("init");
-      expect(init.stdout).toMatch(/0013_asset_blob_contract: 1 asset\(s\) of a stored kind have no blob/);
-      expect(init.stdout).not.toContain("run: npm run catalog -- migrate");
+      expect(init.stdout).toContain("run: npm run catalog -- migrate");
 
       const report = JSON.parse((await learn("doctor", "--json")).stdout) as {
         problems: { severity: string; kind: string; message: string }[];
       };
-      expect(report.problems.map((p) => p.kind)).not.toContain("database-behind");
-      expect(report.problems.find((p) => p.kind === "migration-held")).toMatchObject({
-        severity: "warn",
-        message: expect.stringContaining("0013_asset_blob_contract is held until the data is ready"),
-      });
+      expect(report.problems.map((p) => p.kind)).toContain("database-behind");
+      expect(report.problems.map((p) => p.kind)).not.toContain("migration-held");
     } finally {
       if (saved === undefined) delete process.env["DATABASE_URL"];
       else process.env["DATABASE_URL"] = saved;
@@ -166,7 +179,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
 
   it("applies once nothing stands in its way, and the constraints then hold", async () => {
     await scratch.db.delete(blobObject).where(eq(blobObject.key, badKey));
-    expect(await migrateHolding(scratch.db)).toEqual([]);
+    expect(await migrateHolding(scratch.db, HELD)).toEqual([]);
     expect((await migrationStatus(scratch.db)).pending).toEqual([]);
     expect((await doctor(scratch.db, "scratch")).blobContract).toEqual({ inForce: true, unstored: [], unkeyed: [] });
 
@@ -368,11 +381,11 @@ describe.skipIf(!reachable.ok)("a migration queued behind a held contract", () =
   });
 
   it("waits with it, and the commands that clear the hold still run", async () => {
-    const held = await migrateHolding(scratch.db, { folder });
+    const held = await migrateHolding(scratch.db, { folder, ...HELD });
     expect(held.map((h) => h.tag)).toEqual(["0013_asset_blob_contract", "0014_later"]);
     expect(held[1]?.reason).toBe("waits for 0013_asset_blob_contract, which is held");
-    expect(await heldMigrations(scratch.db, { folder })).toEqual(held);
-    await expect(assertMigrated(scratch.db, { folder })).resolves.toBeUndefined();
+    expect(await heldMigrations(scratch.db, { folder, ...HELD })).toEqual(held);
+    await expect(assertMigrated(scratch.db, { folder, ...HELD })).resolves.toBeUndefined();
   });
 });
 
@@ -397,7 +410,7 @@ describe.skipIf(!reachable.ok)("a contract migration edited after it was applied
 
   it("is refused by name instead of looping", async () => {
     expect((await migrationStatus(scratch.db, { folder })).pending).toEqual(["0013_asset_blob_contract"]);
-    const refused = await migrateHolding(scratch.db, { folder }).then(
+    const refused = await migrateHolding(scratch.db, { folder, ...HELD }).then(
       () => null,
       (error: unknown) => error,
     );

@@ -27,6 +27,19 @@ import { databaseUrl, loadEnv, redactUrl, REPO_ROOT } from "../env";
 
 export const LEARN_ROOT_ENV = "LEARN_ROOT";
 
+/**
+ * The tree `LEARN_ROOT` names, or null when it is unset. Since phase 3's
+ * cut-over the repository has no `learn/` or `content/`: notes, logs and
+ * courses are rows, and a knowledge base of files is only ever one a test or
+ * a scratch copy names. So the file half of this CLI runs against this tree
+ * alone, and never recreates the folders in the repository.
+ */
+export function namedTree(): string | null {
+  loadEnv();
+  const override = process.env[LEARN_ROOT_ENV]?.trim();
+  return override !== undefined && override !== "" ? path.resolve(override) : null;
+}
+
 export function repoRoot(): string {
   loadEnv();
   const override = process.env[LEARN_ROOT_ENV]?.trim();
@@ -40,7 +53,7 @@ export const assetsDir = () => path.join(kbDir(), "assets");
 export const mapFile = () => path.join(kbDir(), "map.md");
 
 /**
- * Directories `ensureDirs` creates. `state/` is gone: it held `model.json`,
+ * Directories `ensureDirs` creates, under a named tree only. `state/` is gone: it held `model.json`,
  * `reviews.json`, `events.jsonl` and `index.json`, all four of which are now
  * tables, and recreating an empty directory on every run would leave a
  * confusing husk in every checkout.

@@ -20,13 +20,14 @@ import { catalogDatabase } from "@/lib/learner-store";
  *
  * Every content reader in the app (`getCourses`, `getTopics`, `getTags`, the
  * note, log and diagram reads behind the asset routes) asks `contentSource()`
- * and gets rows. There is no file reader here any more: the app does not know
- * where `content/` or `learn/` are, and phase 3 deletes both.
+ * and gets rows. There is no file reader here: phase 3 removed `content/` and
+ * `learn/` from the repository, and a type with no `content_source` row reads
+ * the database too, which is `selectSource`'s default since then.
  *
- * **A type the database does not own is refused, loudly.** `selectSource`
- * still decides per type, from the `content_source` row and `CONTENT_SOURCE`,
- * and a type that resolves to `files` (no row, a row that still says files,
- * or the variable pointing it there) reaches `refusingFiles` below, which
+ * **A type sent to files is refused, loudly.** `selectSource` still decides
+ * per type, from the `content_source` row and `CONTENT_SOURCE`, and a type
+ * that resolves to `files` (a row that still says files, or the variable
+ * pointing it there) reaches `refusingFiles` below, which
  * throws a `ContentUnavailableError` naming `catalog flip <type>`. The failure
  * this replaces was silent: a missing file reader would have rendered an empty
  * page, and an empty course list looks like a catalog with no courses.

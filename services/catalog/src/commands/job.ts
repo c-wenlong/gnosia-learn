@@ -487,8 +487,8 @@ async function explainEnqueue(
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_topic_slug_topic_slug_fk") {
     return new JobError(
-      `no topic "${row.topicSlug}" in the catalog. Add it to content/topics.yaml and run ` +
-        `\`npm run catalog -- import --only topics\`, or enqueue under a slug that exists.`,
+      `no topic "${row.topicSlug}" in the catalog. Add it with \`npm run catalog -- topic add\`, ` +
+        `or enqueue under a slug that exists.`,
     );
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_session_id_session_id_fk") {

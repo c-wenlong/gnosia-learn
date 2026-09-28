@@ -14,8 +14,8 @@ import {
  * `selectSource`: which implementation answers each type, and why.
  *
  * The precedence for a reader is the variable, then the `content_source` row,
- * then files (D18: the row is the authority, `CONTENT_SOURCE` overrides readers
- * only). These tests hand it two fake sources that answer with their own name,
+ * then the database (D18: the row is the authority, `CONTENT_SOURCE` overrides
+ * readers only; the default was files until phase 3's cut-over removed them). These tests hand it two fake sources that answer with their own name,
  * so every assertion is about the routing and nothing else.
  */
 
@@ -74,13 +74,13 @@ describe("parseContentSource", () => {
 });
 
 describe("resolveOwnership", () => {
-  it("is files, from the default, with nothing set", () => {
+  it("is the database, from the default, with nothing set", () => {
     const resolved = resolveOwnership({ variable: {}, rows: {} });
-    for (const type of CONTENT_TYPES) expect(resolved[type]).toEqual({ kind: "files", from: "default" });
+    for (const type of CONTENT_TYPES) expect(resolved[type]).toEqual({ kind: "db", from: "default" });
   });
 
   it("follows the row over the default", () => {
-    expect(resolveOwnership({ variable: {}, rows: { topics: "db" } }).topics).toEqual({ kind: "db", from: "row" });
+    expect(resolveOwnership({ variable: {}, rows: { topics: "files" } }).topics).toEqual({ kind: "files", from: "row" });
   });
 
   it("follows the variable over the row, in both directions", () => {
@@ -96,21 +96,28 @@ describe("resolveOwnership", () => {
     const resolved = resolveOwnership({ variable: { courses: "files" }, rows: { topics: "db" } });
     expect(resolved.topics).toEqual({ kind: "db", from: "row" });
     expect(resolved.courses).toEqual({ kind: "files", from: "variable" });
-    expect(resolved.tags).toEqual({ kind: "files", from: "default" });
+    expect(resolved.tags).toEqual({ kind: "db", from: "default" });
   });
 });
 
 describe("selectSource", () => {
-  it("reads files for everything by default, and never builds the database", async () => {
+  it("reads the database for everything by default, and builds it once", async () => {
     const build = vi.fn(() => db);
     const source = selectSource({ files, db: build, variable: undefined });
     expect(await answer(source)).toEqual({
-      topics: "files",
-      tags: "files",
-      concepts: "files",
-      sessions: "files",
-      diagrams: "files",
+      topics: "db",
+      tags: "db",
+      concepts: "db",
+      sessions: "db",
+      diagrams: "db",
     });
+    expect(build).toHaveBeenCalledTimes(1);
+  });
+
+  it("never builds the database when every type is sent to files", async () => {
+    const build = vi.fn(() => db);
+    const source = selectSource({ files, db: build, variable: "files" });
+    expect((await answer(source)).topics).toBe("files");
     expect(build).not.toHaveBeenCalled();
   });
 
@@ -118,15 +125,15 @@ describe("selectSource", () => {
     const source = selectSource({
       files,
       db: () => db,
-      ownership: async () => ({ topics: "db", tags: "db", concepts: "db" }),
-      variable: "tags=files,diagrams=db",
+      ownership: async () => ({ topics: "db", tags: "db", concepts: "files" }),
+      variable: "tags=files,diagrams=files",
     });
     expect(await answer(source)).toEqual({
       topics: "db", // the row
       tags: "files", // the variable over the row
-      concepts: "db", // the row
-      sessions: "files", // the default
-      diagrams: "db", // the variable
+      concepts: "files", // the row
+      sessions: "db", // the default
+      diagrams: "files", // the variable
     });
     const resolution = await source.resolution();
     expect(resolution.topics.from).toBe("row");
@@ -154,7 +161,7 @@ describe("selectSource", () => {
     expect((await source.topics())[0]?.slug).toBe("db");
   });
 
-  it("falls back to files when the rows cannot be read, and says why once", async () => {
+  it("reads the database when the rows cannot be read, and says why once", async () => {
     const onOwnershipError = vi.fn();
     const source = selectSource({
       files,
@@ -165,7 +172,7 @@ describe("selectSource", () => {
       onOwnershipError,
       variable: undefined,
     });
-    expect((await source.topics())[0]?.slug).toBe("files");
+    expect((await source.topics())[0]?.slug).toBe("db");
     await source.tags();
     expect(onOwnershipError).toHaveBeenCalledTimes(1);
     expect(String(onOwnershipError.mock.calls[0]?.[0])).toContain("ECONNREFUSED");
@@ -195,13 +202,13 @@ describe("selectSource", () => {
         throw new Error("down");
       },
       onOwnershipError: () => {},
-      variable: "topics=db",
+      variable: "topics=files",
     });
-    expect((await source.topics())[0]?.slug).toBe("db");
+    expect((await source.topics())[0]?.slug).toBe("files");
   });
 
   it("refuses a db type when no database source was given, naming the type", async () => {
-    const source = selectSource({ files, variable: "courses=db" });
+    const source = selectSource({ files, variable: "courses=db,topics=files" });
     await expect(source.courses()).rejects.toThrow(/^courses is to be read from the database \(CONTENT_SOURCE\)/);
     expect((await source.topics())[0]?.slug).toBe("files");
   });
@@ -211,11 +218,11 @@ describe("selectSource", () => {
   });
 
   it("reads CONTENT_SOURCE from the environment when no value is passed", async () => {
-    vi.stubEnv("CONTENT_SOURCE", "tags=db");
+    vi.stubEnv("CONTENT_SOURCE", "tags=files");
     try {
       const source = selectSource({ files, db: () => db });
-      expect((await source.tags())[0]?.id).toBe("db");
-      expect((await source.topics())[0]?.slug).toBe("files");
+      expect((await source.tags())[0]?.id).toBe("files");
+      expect((await source.topics())[0]?.slug).toBe("db");
     } finally {
       vi.unstubAllEnvs();
     }

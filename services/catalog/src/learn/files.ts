@@ -22,7 +22,7 @@ import { NOTE_KEYS, type NoteFields } from "../content/notes";
 import { appendLog, listLogIds, logPath } from "../content/session-logs";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
-import { allDirs, conceptsDir, rel, repoRoot, sessionsDir } from "./paths";
+import { allDirs, conceptsDir, LEARN_ROOT_ENV, namedTree, rel, repoRoot, sessionsDir } from "./paths";
 
 /**
  * Concept notes and session logs, for the `learn` CLI: the file half of the
@@ -71,18 +71,53 @@ async function ownedTypes(db: CatalogDatabase): Promise<ReadonlySet<string>> {
 }
 
 /**
- * The connection to write `type` through, or null when the type is on files.
+ * The connection that owns `type`, or null when the type is on files.
  * `write` says what an unreachable database means: a writer refuses, a
  * reader reads the files.
  */
-async function rowsFor(type: "concepts" | "sessions" | "courses", write: boolean): Promise<CatalogDatabase | null> {
-  if (catalog === null) return null;
+async function ownerOf(
+  type: "concepts" | "sessions" | "courses",
+  write: boolean,
+): Promise<{ db: CatalogDatabase | null; unreachable: unknown }> {
+  if (catalog === null) return { db: null, unreachable: null };
   try {
     const db = await catalog();
-    return (await ownedTypes(db)).has(type) ? db : null;
+    return { db: (await ownedTypes(db)).has(type) ? db : null, unreachable: null };
   } catch (error) {
     if (write) throw error;
-    return null;
+    return { db: null, unreachable: error };
+  }
+}
+
+/**
+ * The connection to read or write `type` through, or null for the files of
+ * the tree `LEARN_ROOT` names. With no tree named there are no files: the
+ * repository has held none since the cut-over, and reading an absent folder
+ * would answer "no notes" when the truth is a database that is down or has
+ * not flipped the type. That is refused, saying which.
+ */
+async function rowsFor(type: "concepts" | "sessions" | "courses", write: boolean): Promise<CatalogDatabase | null> {
+  const { db, unreachable } = await ownerOf(type, write);
+  if (db !== null || namedTree() !== null) return db;
+  if (unreachable !== null) {
+    const message = unreachable instanceof Error ? unreachable.message : String(unreachable);
+    throw new FilesGoneError(
+      `the catalog database could not be read (${message}), and ${type} are rows in it: the repository has had ` +
+        `no files for them since the cut-over. Start Postgres, or point DATABASE_URL at the catalog.`,
+    );
+  }
+  throw new FilesGoneError(
+    `this database does not own ${type} (no content_source row says db), and the repository has had no ` +
+      `files for them since the cut-over. Import a tree and flip the type (\`npm run catalog -- import <dir>\`, ` +
+      `then \`npm run catalog -- flip ${type}\`), or set ${LEARN_ROOT_ENV} to a tree to work on its files.`,
+  );
+}
+
+/** A files read or write with no tree of files to go to. */
+export class FilesGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FilesGoneError";
   }
 }
 
@@ -92,7 +127,7 @@ async function rowsFor(type: "concepts" | "sessions" | "courses", write: boolean
  * listing goes through the course writer once the database owns courses.
  */
 export async function ownedByDatabase(type: "concepts" | "sessions" | "courses"): Promise<boolean> {
-  return (await rowsFor(type, true)) !== null;
+  return (await ownerOf(type, true)).db !== null;
 }
 
 export interface ConceptNote {
@@ -129,7 +164,9 @@ function noteFromRow(row: NoteRow): ConceptNote {
   };
 }
 
+/** The folders of a named tree (`LEARN_ROOT`); never the repository's, which the cut-over removed. */
 export async function ensureDirs(): Promise<void> {
+  if (namedTree() === null) return;
   for (const dir of allDirs()) await fs.mkdir(dir, { recursive: true });
 }
 

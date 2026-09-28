@@ -18,13 +18,13 @@ import { afterAll, expect } from "vitest";
  * Nothing a test runs may write into the tracked tree.
  *
  * vitest runs test files in parallel workers against one checkout, so a file a
- * suite drops into `learn/assets/` is visible to every other suite for as long
- * as it is there. `services/catalog/test/catalog.test.ts` indexes that
- * directory three times and asserts the second pass deletes nothing, so a
- * fixture that exists for one pass and is gone by the next made that suite fail
- * on a deletion it had nothing to do with. It failed about once in eight full
- * runs, passed every time it ran alone, and failed every one of twelve runs
- * that overlapped a second `npm test`.
+ * suite drops into the tree is visible to every other suite for as long as it
+ * is there. It began with `learn/assets/`: `services/catalog/test/catalog.test.ts`
+ * indexed that directory three times and asserted the second pass deleted
+ * nothing, so a fixture that existed for one pass and was gone by the next made
+ * that suite fail on a deletion it had nothing to do with. It failed about once
+ * in eight full runs, passed every time it ran alone, and failed every one of
+ * twelve runs that overlapped a second `npm test`.
  *
  * Two halves, and the second is what keeps the first honest:
  *
@@ -37,21 +37,26 @@ import { afterAll, expect } from "vitest";
  *    import, so this imports it and compares. That is what catches the
  *    regression this file exists to prevent, and it catches it whether or not a
  *    fixture happens to still be on disk when anybody looks.
- * 3. Every test file, studio or not, has the tracked `learn/assets/` listing
- *    and the whole `seed/` tree taken before it runs and checked after it,
- *    names with sizes and modification times, so an edit in place counts as
- *    well as a new file. This one is a backstop and samples at two points: a
- *    suite that writes a file and deletes it again inside one test is
- *    invisible to it, which is exactly why the check above it is not a sample.
- *    `seed/` is watched because suites import it (edge case 11 of
+ * 3. Every test file, studio or not, has the whole `seed/` tree, and whatever
+ *    is at the repository's `content/` and `learn/`, taken before it runs and
+ *    checked after it, names with sizes and modification times, so an edit in
+ *    place counts as well as a new file. This one is a backstop and samples at
+ *    two points: a suite that writes a file and deletes it again inside one
+ *    test is invisible to it, which is exactly why the check above it is not a
+ *    sample. `seed/` is watched because suites import it (edge case 11 of
  *    docs/CONTENT-MIGRATION.md), and an import records it as the root a seam
  *    write keeps in step, so a suite that imports it and then writes a topic
- *    would rewrite the seed. `learn/assets/` stays until phase 3 removes it.
+ *    would rewrite the seed. `content/` and `learn/` are watched because phase
+ *    3's cut-over removed them, and the one way they come back is code that
+ *    still reads or writes the repository as its knowledge base (an
+ *    `ensureDirs`, a write-through to a root recorded before the cut-over):
+ *    absent before a test file, they must be absent after it.
  */
 
 const REPO_ROOT = path.dirname(fileURLToPath(import.meta.url));
-const TRACKED_ASSETS = path.join(REPO_ROOT, "learn", "assets");
 const SEED = path.join(REPO_ROOT, "seed");
+/** Gone from the tree since the cut-over; a checkout may still hold untracked leftovers, which must not change. */
+const REMOVED = ["content", "learn"].map((folder) => path.join(REPO_ROOT, folder));
 
 /**
  * Mirrors `from` into `into` as symlinks, one per entry, minus the entries the
@@ -62,9 +67,6 @@ const SEED = path.join(REPO_ROOT, "seed");
  */
 function farm(from: string, into: string, rebuilt: readonly string[] = []): void {
   mkdirSync(into, { recursive: true });
-  // A tree with no `learn/` (phase 3 removes it, and the phase 2 done-when
-  // deletes it on purpose) still gets the directories the studio writes into.
-  if (!existsSync(from)) return;
   for (const entry of readdirSync(from)) {
     if (rebuilt.includes(entry)) continue;
     symlinkSync(path.join(from, entry), path.join(into, entry));
@@ -75,29 +77,17 @@ function studioRepoRoot(): string {
   const root = mkdtempSync(path.join(realpathSync(tmpdir()), "self-learn-studio-"));
   // `.studio` is rebuilt as nothing at all: it is the runner's real state
   // (job workspaces, the content cache), and a suite that does not set
-  // STUDIO_HOME would otherwise write through the link into it.
-  farm(REPO_ROOT, root, ["learn", ".studio"]);
-  farm(path.join(REPO_ROOT, "learn"), path.join(root, "learn"), ["assets"]);
-  farm(TRACKED_ASSETS, path.join(root, "learn", "assets"), [".candidates"]);
-  // The studio writes candidates here and the catalog never indexes a dot
-  // directory, but a link would still put a job's scratch output in the
-  // checkout, so it is a real directory like the two above it.
+  // STUDIO_HOME would otherwise write through the link into it. `learn` and
+  // `content` are not linked either: the cut-over removed both, and a
+  // checkout's untracked leftovers are nothing a test should reach. The
+  // studio's old candidates directory is a real, empty directory, for the
+  // suites that resolve a record from before the job workspaces.
+  farm(REPO_ROOT, root, ["learn", "content", ".studio"]);
   mkdirSync(path.join(root, "learn", "assets", ".candidates"), { recursive: true });
   return root;
 }
 
-/** Each entry with what would change if a test wrote to it, or over it. */
-function listing(directory: string): string[] {
-  if (!existsSync(directory)) return [];
-  return readdirSync(directory)
-    .map((entry) => {
-      const facts = statSync(path.join(directory, entry));
-      return `${entry} ${facts.size} ${facts.mtimeMs}`;
-    })
-    .sort();
-}
-
-/** The same, for every file under `directory` at any depth, by path relative to it. */
+/** Each file under `directory` at any depth, by path relative to it, with what would change if a test wrote to it. */
 function deepListing(directory: string, prefix = ""): string[] {
   if (!existsSync(directory)) return [];
   const out: string[] = [];
@@ -122,7 +112,7 @@ process.env.STUDIO_REPO_ROOT = root;
 
 // The variable being set proves nothing on its own, so ask the module that
 // reads it. A `paths.ts` that had stopped honouring the override would send
-// every fixture back into `learn/assets/` and the only symptom would be another
+// every fixture back into the checkout and the only symptom would be another
 // suite failing on counts it does not own.
 const studio = await import("./services/studio/src/paths");
 if (studio.REPO_ROOT !== root) {
@@ -145,15 +135,17 @@ if (!process.env.SELF_LEARN_HOME?.trim()) {
   process.env.SELF_LEARN_HOME = blobHome;
 }
 
-const before = listing(TRACKED_ASSETS);
+const removedBefore = REMOVED.map((folder) => [existsSync(folder), deepListing(folder)] as const);
 const seedBefore = deepListing(SEED);
 
 afterAll(() => {
   try {
-    expect(
-      listing(TRACKED_ASSETS),
-      `this test file wrote into the tracked ${path.relative(REPO_ROOT, TRACKED_ASSETS)}`,
-    ).toEqual(before);
+    REMOVED.forEach((folder, i) => {
+      expect(
+        [existsSync(folder), deepListing(folder)],
+        `this test file wrote into ${path.relative(REPO_ROOT, folder)}/, which the cut-over removed`,
+      ).toEqual(removedBefore[i]);
+    });
     expect(deepListing(SEED), "this test file wrote into the tracked seed/").toEqual(seedBefore);
   } finally {
     if (root.startsWith(`${temp}${path.sep}`)) rmSync(root, { recursive: true, force: true });

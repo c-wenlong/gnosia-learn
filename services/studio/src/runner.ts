@@ -51,6 +51,7 @@ import {
   type CandidateFiles,
 } from "./prompt";
 import { dirtyFiles } from "./review";
+import { resolveSource } from "./source-note";
 import type { GateResult, JobRecord, JobStore } from "./store";
 
 /**
@@ -776,6 +777,10 @@ export class Runner {
       // asked of the state rather than of the attempt number: a fresh session
       // after a failed resume is attempt two and still needs the whole prompt.
       const started = startedSession;
+      // A note named as the source is a row since the cut-over, written into
+      // scratch for the agent to read (source-note.ts); a file stays a file.
+      const source =
+        record.brief.source === undefined ? undefined : (await resolveSource(id, record.brief.source)).path;
       const prompt =
         findings.length > 0
           ? buildRetryPrompt(findings, files)
@@ -787,7 +792,11 @@ export class Runner {
                 // nothing different to ask for and the whole brief is already
                 // in the transcript being resumed.
                 buildResumePrompt(files)
-            : buildPrompt({ jobId: id, brief: record.brief, hasMermaid });
+            : buildPrompt({
+                jobId: id,
+                brief: source === undefined ? record.brief : { ...record.brief, source },
+                hasMermaid,
+              });
       startedSession = true;
 
       // What is at the candidate path before this attempt touches it, so that
@@ -804,7 +813,7 @@ export class Runner {
       const agent = await startAgent({
         jobId: id,
         slug: record.slug,
-        ...(record.brief.source === undefined ? {} : { source: record.brief.source }),
+        ...(source === undefined ? {} : { source }),
         prompt,
         model: record.brief.model,
         sessionId: agentSessionId,

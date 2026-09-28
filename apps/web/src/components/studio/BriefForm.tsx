@@ -165,7 +165,7 @@ export function BriefForm({
         label="Topic"
         required
         error={touched ? errors.topic : undefined}
-        hint="It has to exist in content/topics.yaml: the indexer refuses a diagram with no topic by name."
+        hint="It has to be a topic in the catalog: a diagram with no topic is refused by name."
       >
         <input
           list="studio-topic-list"
@@ -181,8 +181,8 @@ export function BriefForm({
         </datalist>
         {topicUnknown && (
           <p className="mt-1 text-xs text-[var(--danger)]">
-            No topic <Mono>{draft.topic}</Mono> in content/topics.yaml. Add it there first if this is
-            a new subject.
+            No topic <Mono>{draft.topic}</Mono> in the catalog. Add it first (<Mono>catalog topic add</Mono>)
+            if this is a new subject.
           </p>
         )}
       </Field>
@@ -340,7 +340,7 @@ export function BriefForm({
           <p className="text-xs text-[var(--muted)]">Pick a topic first.</p>
         ) : concepts.length === 0 ? (
           <p className="text-xs text-[var(--muted)]">
-            No concepts are filed under this topic in content/topics.yaml.
+            No concepts are filed under this topic in the catalog.
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -407,11 +407,11 @@ export function BriefForm({
           />
         </Field>
 
-        <Field label="Source note" hint="The concept note or session this came out of.">
+        <Field label="Source note" hint="The concept this came out of, by slug; the agent reads its note from the catalog. A file in the repository works too.">
           <input
             value={draft.source}
             onChange={(event) => set({ source: event.target.value })}
-            placeholder="learn/concepts/maths/dot-product.md"
+            placeholder="dot-product"
             className={`${input} font-mono`}
           />
         </Field>
