@@ -144,7 +144,8 @@ Commands:
                            titles. Top 20.
   job <verb>               The generation jobs behind the diagram studio:
                            enqueue --brief FILE, claim, finish --state S,
-                           accept, discard, ls, show ID.
+                           accept, discard, ls, show ID. --owner ID acts on
+                           that owner's jobs only (default: local).
   diagram <verb>           Diagrams in the database: put, checkout, commit,
                            list, show. \`catalog diagram --help\` has the
                            flags.
@@ -160,8 +161,9 @@ Commands:
                            rows, and a line diff for markdown.
   doctor                   The completeness rules the database can enforce:
                            which are armed, and every row that breaks one.
-                           Also the write guards and whether this database is
-                           the primary.
+                           Also the write guards, whether this database is
+                           the primary, and links whose owner is not their
+                           parent's (D24); --fix restamps those.
   asset upload             Copy rendered files into the blob store and point
                            their asset rows at them: --source manimkc reads
                            manimkc topics --json, uploads every indexed video
@@ -479,6 +481,7 @@ export async function main(argv: string[]): Promise<number> {
         subset: { type: "boolean", default: false },
         course: { type: "string" },
         diagram: { type: "string" },
+        owner: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -755,7 +758,7 @@ export async function main(argv: string[]): Promise<number> {
         break;
       }
       case "doctor": {
-        const result = await runDoctor();
+        const result = await runDoctor({ fix: values.fix });
         emit(result, formatDoctor(result));
         // Exit 1 when the checks could not run (migrations outstanding) or the
         // database contradicts itself: an armed rule with a violator, or a
@@ -920,6 +923,7 @@ type Values = {
   title?: string;
   goal?: string;
   "agent-session"?: string;
+  owner?: string;
 };
 
 /**
@@ -945,6 +949,7 @@ async function sessionCommand(
         title: values.title,
         goal: values.goal,
         agentSessionId: values["agent-session"],
+        owner: values.owner,
       });
     case "end": {
       if (values.state === undefined) throw new Usage("session end needs --state <state>");
@@ -953,6 +958,7 @@ async function sessionCommand(
         state: values.state,
         errorKind: values["error-kind"],
         error: values.error,
+        owner: values.owner,
       });
     }
     default:
@@ -973,7 +979,7 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
   switch (verb) {
     case "enqueue": {
       if (values.brief === undefined) throw new Usage("job enqueue needs --brief <file.json>");
-      return runEnqueue({ brief: await readBrief(values.brief) });
+      return runEnqueue({ brief: await readBrief(values.brief), owner: values.owner });
     }
     case "claim":
       return runClaim({
@@ -981,6 +987,7 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
         kind: values.kind,
         runner: values.runner,
         sessionId: values.session,
+        owner: values.owner,
       });
     case "finish": {
       if (values.state === undefined) throw new Usage("job finish needs --state <state>");
@@ -996,6 +1003,7 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
         gate: await jsonFile(values.gate, "--gate"),
         errorKind: values["error-kind"],
         error: values.error,
+        owner: values.owner,
       });
     }
     case "accept":
@@ -1005,17 +1013,18 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
             "and accept records what that wrote",
         );
       }
-      return runAccept({ jobId: needsJob() });
+      return runAccept({ jobId: needsJob(), owner: values.owner });
     case "discard":
-      return runDiscard({ jobId: needsJob() });
+      return runDiscard({ jobId: needsJob(), owner: values.owner });
     case "ls":
       return runList({
         state: values.state,
         kind: values.kind,
         limit: number(values.limit, "--limit"),
+        owner: values.owner,
       });
     case "show":
-      return runJobShow(needsJob());
+      return runJobShow(needsJob(), values.owner);
     default:
       throw new Usage(
         "usage: job enqueue|claim|finish|accept|discard|ls|show",

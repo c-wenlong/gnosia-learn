@@ -211,8 +211,15 @@ async function checkJob(
   jobId: string,
   slug: string,
   topicSlug: string,
+  ownerId: string,
 ): Promise<{ state: string }> {
-  const [row] = await db.select().from(jobTable).where(eq(jobTable.id, jobId)).limit(1);
+  // Only the writer's own job (phase 4): another owner's is "no job", as a
+  // missing one is, so a put cannot land output under somebody else's job.
+  const [row] = await db
+    .select()
+    .from(jobTable)
+    .where(and(eq(jobTable.id, jobId), eq(jobTable.ownerId, ownerId)))
+    .limit(1);
   if (row === undefined) throw new DiagramError("job", `no job "${jobId}". \`catalog job ls\` lists them.`);
   if (!(PUTTABLE_STATES as readonly string[]).includes(row.state)) {
     throw new DiagramError(
@@ -255,7 +262,7 @@ export async function putDiagram(
   const docHash = sha256(bytes);
   const { subject, notes } = await resolveDocument(db, document, paths.tldr, ownerId);
 
-  const job = input.jobId === undefined ? null : await checkJob(db, input.jobId, slug, subject.topicSlug);
+  const job = input.jobId === undefined ? null : await checkJob(db, input.jobId, slug, subject.topicSlug, ownerId);
 
   let svgFacts: { sha256: string; bytes: number; key: string } | null = null;
   if (input.svg !== null) {
