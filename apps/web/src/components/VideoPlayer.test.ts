@@ -52,18 +52,28 @@ function video(host: HTMLElement) {
   return host.querySelector("video") as HTMLVideoElement;
 }
 
-function chapterButtons(host: HTMLElement) {
-  return [...(host.querySelector("nav")?.querySelectorAll("button") ?? [])];
+function slider(host: HTMLElement) {
+  return host.querySelector('[role="slider"]') as HTMLElement;
+}
+
+function press(target: HTMLElement, key: string) {
+  act(() => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+}
+
+/** Chapters are on the scrub bar now: Page Down from the top reaches chapter `index`. */
+function goToChapter(host: HTMLElement, index: number) {
+  press(slider(host), "Home");
+  for (let i = 0; i < index; i += 1) press(slider(host), "PageDown");
 }
 
 function currentChapter(host: HTMLElement) {
-  return host.querySelector('nav [aria-current="true"]')?.textContent ?? null;
+  return host.querySelector("[data-chapter-label]")?.textContent ?? null;
 }
 
 describe("VideoPlayer", () => {
   it("seeks the video when a chapter is clicked", () => {
     const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
-    act(() => chapterButtons(host)[2].click());
+    goToChapter(host, 2);
     expect(video(host).currentTime).toBe(20);
     expect(currentChapter(host)).toContain("Close");
   });
@@ -85,7 +95,7 @@ describe("VideoPlayer", () => {
     expect(host.querySelector('ol[aria-label="Transcript"] [aria-current="true"]')?.textContent)
       .toContain("First line.");
 
-    act(() => chapterButtons(host)[2].click());
+    goToChapter(host, 2);
     expect(host.querySelector('ol[aria-label="Transcript"] [aria-current="true"]')?.textContent)
       .toContain("Last line.");
   });
@@ -108,19 +118,22 @@ describe("VideoPlayer", () => {
     expect(video(without).getAttribute("preload")).toBe("metadata");
   });
 
-  it("renders the video alone when it is given nothing else", () => {
+  it("renders the video and its controls alone when it is given nothing else", () => {
     const host = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
-    expect(host.querySelector("nav")).toBeNull();
     expect(host.querySelector('ol[aria-label="Transcript"]')).toBeNull();
-    expect(host.querySelectorAll("button")).toHaveLength(0);
+    expect(currentChapter(host)).toBeNull();
+    expect(host.querySelector('[aria-label^="Subtitles"]')).toBeNull();
+    expect(slider(host)).not.toBeNull();
+    // Native controls cannot draw chapters, so the element has none.
+    expect(video(host).hasAttribute("controls")).toBe(false);
   });
 
-  it("says so when the sidecars are there but empty", () => {
+  it("says so when the transcript is there but empty, and offers no subtitles", () => {
     const host = mount(
       createElement(VideoPlayer, { src: "/v.mp4", chapters: [], transcript: [] }),
     );
-    expect(host.textContent).toContain("No chapters for this video.");
     expect(host.textContent).toContain("No transcript beside this video.");
+    expect(host.querySelector('[aria-label^="Subtitles"]')).toBeNull();
   });
 
   it("names itself for assistive technology when given a title", () => {
@@ -128,9 +141,75 @@ describe("VideoPlayer", () => {
       createElement(VideoPlayer, { src: "/v.mp4", title: "Inverse kinematics", chapters }),
     );
     expect(video(host).getAttribute("aria-label")).toBe("Inverse kinematics");
-    expect(host.querySelector("nav")?.getAttribute("aria-label")).toBe(
-      "Chapters of Inverse kinematics",
+    expect(slider(host).getAttribute("aria-label")).toBe("Seek in Inverse kinematics");
+    expect(slider(host).getAttribute("aria-valuetext")).toContain("Intro");
+  });
+
+  it("shows the line being spoken over the picture when subtitles are on", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", transcript }));
+    const subtitle = () => host.querySelector("[data-subtitle]")?.textContent ?? null;
+    expect(subtitle()).toBeNull();
+
+    const button = host.querySelector('[aria-label^="Subtitles"]') as HTMLButtonElement;
+    act(() => button.click());
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(subtitle()).toBe("First line.");
+
+    const el = video(host);
+    el.currentTime = 10;
+    act(() => el.dispatchEvent(new Event("timeupdate")));
+    // Between two lines nothing is spoken, so nothing is shown.
+    expect(subtitle()).toBeNull();
+
+    press(slider(host), "End");
+    press(button, "c");
+    expect(subtitle()).toBeNull();
+  });
+
+  it("starts at a resume point once the metadata arrives", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters, startAt: 21 }));
+    const el = video(host);
+    expect(currentChapter(host)).toContain("Close");
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect(el.currentTime).toBe(21);
+  });
+
+  it("puts the transcript and the caller's sections in one tabbed card", () => {
+    const host = mount(
+      createElement(VideoPlayer, {
+        src: "/v.mp4",
+        transcript,
+        header: createElement("h1", null, "Title"),
+        tabs: [{ id: "details", label: "Details", content: createElement("p", null, "The row.") }],
+      }),
     );
+    const tabs = [...host.querySelectorAll('[role="tab"]')] as HTMLButtonElement[];
+    expect(tabs.map((t) => t.textContent)).toEqual(["Transcript", "Details"]);
+    const panels = [...host.querySelectorAll('[role="tabpanel"]')] as HTMLElement[];
+    expect(panels.map((p) => p.hidden)).toEqual([false, true]);
+    // Inside the tab the transcript has no heading of its own.
+    expect(host.querySelector("h3")).toBeNull();
+
+    press(tabs[0], "ArrowRight");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(panels.map((p) => p.hidden)).toEqual([true, false]);
+    // Hidden, not unmounted: the transcript keeps following playback.
+    expect(host.querySelector('ol[aria-label="Transcript"]')).not.toBeNull();
+  });
+
+  it("reports playback to a caller that records it", () => {
+    const signals: string[] = [];
+    const host = mount(
+      createElement(VideoPlayer, {
+        src: "/v.mp4",
+        onPlayback: (signal) => signals.push(`${signal.type}@${signal.time}`),
+      }),
+    );
+    const el = video(host);
+    el.currentTime = 4;
+    act(() => el.dispatchEvent(new Event("timeupdate")));
+    act(() => el.dispatchEvent(new Event("pause")));
+    expect(signals).toEqual(["time@4", "pause@4"]);
   });
 
   it("survives a seek the element refuses", () => {
@@ -143,7 +222,7 @@ describe("VideoPlayer", () => {
       },
       configurable: true,
     });
-    act(() => chapterButtons(host)[1].click());
+    goToChapter(host, 1);
     // The click still lands: the chapter the reader asked for is the one shown.
     expect(currentChapter(host)).toContain("The body");
   });
@@ -163,7 +242,7 @@ describe("VideoPlayer", () => {
       configurable: true,
     });
 
-    act(() => chapterButtons(host)[1].click());
+    goToChapter(host, 1);
     expect(stored).toBe(0);
 
     ready = true;
@@ -187,7 +266,7 @@ describe("VideoPlayer", () => {
       configurable: true,
     });
 
-    act(() => chapterButtons(host)[2].click());
+    goToChapter(host, 2);
     rerender(host, createElement(VideoPlayer, { src: "/b.mp4", chapters }));
 
     ready = true;
@@ -210,7 +289,7 @@ describe("VideoPlayer", () => {
       configurable: true,
     });
 
-    act(() => chapterButtons(host)[2].click());
+    goToChapter(host, 2);
     // Away and back before the first load ever reported itself. The URL is the
     // same string again; the load is not.
     rerender(host, createElement(VideoPlayer, { src: "/b.mp4", chapters }));

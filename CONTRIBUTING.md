@@ -193,8 +193,8 @@ By default it builds that database from the seed, exactly as README.md,
 "Install", builds a fresh clone's: an empty database, migrated, `catalog
 import seed/`, all six types flipped, and one `learn observe` so a review card
 is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
-the Mark watched step prints `SKIP` with the reason and counts as neither a
-pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `self_learn`,
+the video step (play, pause, see the place saved) prints `SKIP` with the reason
+and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `self_learn`,
 or the database named, instead (`createdb -T`, or `pg_dump` when another
 connection holds the template open); every content type must be flipped there.
 `--seed` is still accepted and means the default.

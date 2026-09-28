@@ -39,6 +39,7 @@ export function TranscriptPanel({
   currentTime,
   onSeek,
   scrollerClassName = "max-h-[22rem]",
+  bare = false,
 }: {
   cues: TranscriptCue[];
   currentTime: number;
@@ -46,6 +47,8 @@ export function TranscriptPanel({
   onSeek?: (seconds: number) => void;
   /** The height budget for the scrolling list, so a parent can fit it to its column. */
   scrollerClassName?: string;
+  /** Inside a tab of a card that already says "Transcript": no frame, no heading. */
+  bare?: boolean;
 }) {
   const scrollerRef = useRef<HTMLOListElement>(null);
   const activeRef = useRef<HTMLLIElement>(null);
@@ -93,9 +96,15 @@ export function TranscriptPanel({
   }
 
   return (
-    <section className="flex min-w-0 flex-col gap-1.5 rounded-[20px] border-2 border-border bg-surface px-3 pt-4 pb-3 sm:px-4">
-      <div className="flex items-center justify-between gap-3 px-2">
-        <h3 className="text-[16px] font-bold text-text">Transcript</h3>
+    <section
+      className={
+        bare
+          ? "flex min-w-0 flex-col gap-1.5"
+          : "flex min-w-0 flex-col gap-1.5 rounded-[20px] border-2 border-border bg-surface px-3 pt-4 pb-3 sm:px-4"
+      }
+    >
+      <div className={bare ? "flex items-center justify-end gap-3 px-2 empty:hidden" : "flex items-center justify-between gap-3 px-2"}>
+        {!bare && <h3 className="text-[16px] font-bold text-text">Transcript</h3>}
         {cues.length > 0 &&
           (following ? (
             <span className="text-[12px] tabular-nums text-text3">
@@ -134,7 +143,8 @@ export function TranscriptPanel({
                 <span className="pt-px text-[12px] tabular-nums text-text3">
                   {formatTimecode(cue.start)}
                 </span>
-                <span>{cue.text}</span>
+                {/* A spoken line across a full-width card is a line nobody reads. */}
+                <span className="max-w-[80ch]">{cue.text}</span>
               </>
             );
             const tone = isActive
