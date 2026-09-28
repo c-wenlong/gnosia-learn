@@ -19,7 +19,7 @@ import {
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
-import { assetFilesEnabled, openBlob, resolveAsset, servedWithoutFiles } from "@/lib/asset-files";
+import { assetFilesEnabled, openBlob, resolveAsset, servedWithoutFiles, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -388,6 +388,13 @@ export interface FileAccessMap {
   selfLearn: FileAccess;
   manimkc: FileAccess;
   served: ReadonlySet<string>;
+  /**
+   * The videos with a stored poster. Kept apart from `served`: a video whose
+   * bytes are in the store plays with the switch off, and its card still has
+   * no picture unless a poster was stored too, since cutting one reads the
+   * file.
+   */
+  posters: ReadonlySet<string>;
 }
 
 /**
@@ -408,8 +415,8 @@ export interface FileAccessMap {
 export async function readFileAccess(
   rows: readonly Pick<AssetRef, "id" | "kind">[] = [],
 ): Promise<FileAccessMap> {
-  const served = await readServed(rows);
-  return { ...(await readRepoAccess()), served };
+  const { served, posters } = await readServed(rows);
+  return { ...(await readRepoAccess()), served, posters };
 }
 
 /**
@@ -418,13 +425,17 @@ export async function readFileAccess(
  * existed: placeholders where the switch is off, never a picture that cannot
  * load.
  */
-async function readServed(rows: readonly Pick<AssetRef, "id" | "kind">[]): Promise<ReadonlySet<string>> {
-  if (rows.length === 0) return new Set();
+async function readServed(
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<{ served: ReadonlySet<string>; posters: ReadonlySet<string> }> {
+  if (rows.length === 0) return { served: new Set(), posters: new Set() };
   try {
-    return await servedWithoutFiles(await catalogDatabase(), rows);
+    const db = await catalogDatabase();
+    const [served, posters] = await Promise.all([servedWithoutFiles(db, rows), storedPosters(db, rows)]);
+    return { served, posters };
   } catch (error) {
     warn("stored assets", error);
-    return new Set();
+    return { served: new Set(), posters: new Set() };
   }
 }
 
@@ -598,9 +609,14 @@ export function thumbnailFor(
   row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
   access: FileAccessMap,
 ): string | null {
+  // A video's picture is its poster, which is stored or cut from the file:
+  // the video's own bytes being stored says nothing about either.
+  if (row.kind === "video") {
+    return access.posters.has(row.id) || accessFor(access, row.sourceRepo).ok ? assetPosterHref(row.id) : null;
+  }
   if (!servable(row, access)) return null;
   if (row.kind === "diagram_svg" || row.kind === "poster") return assetFileHref(row.id);
-  return row.kind === "video" ? assetPosterHref(row.id) : null;
+  return null;
 }
 
 /**
@@ -715,6 +731,12 @@ export const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcri
 export interface SearchText {
   /** Lowercased body per asset id, for the rows whose words could be read. */
   texts: Map<string, string>;
+  /**
+   * How many notes and transcripts were searched by name only because this
+   * deployment does not read their files (the switch is off and they are
+   * neither stored nor rows). The page says so when it is more than none.
+   */
+  skipped: number;
   /** `asset_derivation` upward for the companion rows among them. */
   sources: Record<string, string[]>;
   /**
@@ -724,7 +746,7 @@ export interface SearchText {
   searchedText: boolean;
 }
 
-const NO_TEXT: SearchText = { texts: new Map(), sources: {}, searchedText: false };
+const NO_TEXT: SearchText = { texts: new Map(), sources: {}, skipped: 0, searchedText: false };
 
 /**
  * The words of every note and transcript, for one search.
@@ -767,8 +789,12 @@ export async function readSearchText(
     const texts = new Map<string, string>();
     for (const [id, text] of bodies) if (text !== null) texts.set(id, text);
     // With the switch off a note the database owns is still read, so text was
-    // searched when any came back; none at all is "titles only".
-    return { texts, sources, searchedText: assetFilesEnabled() || texts.size > 0 };
+    // searched when any came back; none at all is "titles only", and some is
+    // a partial search the page names. With the switch on a null is a file
+    // that is gone or over the cap, which search has always passed over.
+    const filesOff = !assetFilesEnabled();
+    const skipped = filesOff ? bodies.filter(([, text]) => text === null).length : 0;
+    return { texts, sources, skipped, searchedText: !filesOff || texts.size > 0 };
   } catch (error) {
     warn("search text", error);
     return NO_TEXT;

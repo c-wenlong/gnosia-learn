@@ -1298,9 +1298,12 @@ workspace's note embeds and thumbnails, the session page's teaching picture
 and embeds, the course rails and the library grid all decide per row, the
 detail pages through `readFileProblems` (which is `resolveAsset`) and the
 thumbnails through one batched `servedWithoutFiles` read (a `present` blob or
-an owned row type). The grid's files-off notice shows only while some row on
-it still needs a file on disk, and search reads a row's text with the switch
-off. `apps/web/src/app/api/assets/asset-rows.test.ts` imports a fixture, flips
+an owned row type); a video's card draws only when a poster is stored for it
+or its file may be read, since a stored video with no stored poster would
+need the file to cut one. The grid's files-off notice shows only while some
+row in the current view still needs a file on disk, and search reads a row's
+text with the switch off and says how many notes and transcripts it matched
+by name only. `apps/web/src/app/api/assets/asset-rows.test.ts` imports a fixture, flips
 `concepts`, `sessions` and `diagrams` on a scratch database, and holds the
 route, the status route and the page checks to it with `ASSET_FILES_ENABLED`
 unset.

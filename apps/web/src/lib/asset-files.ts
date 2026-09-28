@@ -12,6 +12,7 @@ import {
   conceptsForAsset,
   documentBytes,
   indexedRoot,
+  videosWithStoredPoster,
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
@@ -580,6 +581,19 @@ export async function servedWithoutFiles(
     }
   }
   return out;
+}
+
+/**
+ * The videos among these whose card can show a stored poster, which the
+ * poster route serves whatever the switch says. A stored video with no stored
+ * poster is not among them: its poster would have to be cut from the file,
+ * which is the legacy branch the switch gates.
+ */
+export async function storedPosters(
+  db: CatalogDatabase,
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<Set<string>> {
+  return videosWithStoredPoster(db, rows.filter((row) => row.kind === "video").map((row) => row.id));
 }
 
 /** The object, or a range of it, from the store. Rejects as `BlobStore.get` does. */

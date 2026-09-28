@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { asset } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 
 import { runImportCommand } from "../../../../../../services/catalog/src/commands/index-command";
 import { documentBytes } from "../../../../../../services/catalog/src/content/diagram-document";
@@ -55,6 +55,9 @@ const TLDR_ID = "diagram:learn/assets/first-diagram.tldr";
 const SVG_ID = "diagram:learn/assets/first-diagram.svg";
 const OLD_LOG_ID = "session:learn/sessions/2026-01-01-old.md";
 const LEGACY_ID = "manimkc:out/testing/legacy/legacy.mp4";
+const STORED_ID = "manimkc:out/testing/stored/stored.mp4";
+const BARE_ID = "manimkc:out/testing/bare/bare.mp4";
+const LEGACY_TRANSCRIPT_ID = "manimkc:out/testing/legacy/legacy.transcript.json";
 
 const OLD_LOG =
   "---\ntitle: Old\ndate: 2026-01-01T00:00:00.000Z\ngoal: base\ntype: learning-session\n---\n\n# Old\n\n> Live log.\n- [[base]] once\n\n";
@@ -145,17 +148,38 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     await runImportCommand({ dir: fixture.root });
     // A render the store never took: the one row here that needs the disk.
     // Written before the flips, which arm the guard against direct writes.
-    await scratch.db.insert(asset).values({
-      id: LEGACY_ID,
-      kind: "video",
-      path: "out/testing/legacy/legacy.mp4",
+    // Two videos in the store, only one with a stored poster, as an upload
+    // that ran without ffmpeg leaves them. Rows only: the thumbnail decision
+    // reads the table, and the card asks the route for the bytes.
+    const present = (n: string) => ({
+      key: `local/${n.repeat(64)}.${n === "c" ? "jpg" : "mp4"}`,
+      sha256: n.repeat(64),
+      bytes: 1,
+      mime: "video/mp4",
+      provider: "fs",
+      state: "present",
+      confirmedAt: new Date(),
+    });
+    await scratch.db.insert(blobObject).values([present("a"), present("b"), present("c")]);
+    const video = (id: string, file: string, blobKey: string | null, kind = "video") => ({
+      id,
+      kind,
+      path: file,
       url: null,
       contentHash: "0".repeat(64),
       bytes: 10,
-      title: "Legacy",
-      sourceRepo: "manimkc",
-      blobKey: null,
+      title: id,
+      sourceRepo: kind === "poster" ? "self-learn" : "manimkc",
+      blobKey,
     });
+    await scratch.db.insert(asset).values([
+      video(LEGACY_ID, "out/testing/legacy/legacy.mp4", null),
+      video(LEGACY_TRANSCRIPT_ID, "out/testing/legacy/legacy.transcript.json", null, "transcript"),
+      video(STORED_ID, "out/testing/stored/stored.mp4", `local/${"a".repeat(64)}.mp4`),
+      video(BARE_ID, "out/testing/bare/bare.mp4", `local/${"b".repeat(64)}.mp4`),
+      { ...video(`poster:${STORED_ID}`, "", `local/${"c".repeat(64)}.jpg`, "poster"), path: null },
+    ]);
+    await scratch.db.insert(assetDerivation).values({ assetId: `poster:${STORED_ID}`, sourceAssetId: STORED_ID });
     for (const type of ["concepts", "sessions", "diagrams"] as const) await flip(scratch.db, { type });
 
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
@@ -267,6 +291,43 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect([...access.served].sort()).toEqual([NOTE_ID, SVG_ID].sort());
     expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
     expect(library.thumbnailFor(rows[2]!, access)).toBeNull();
+  });
+
+  it("draws a stored video's card from its stored poster, and none for one stored without a poster", async () => {
+    const rows = [
+      { id: STORED_ID, kind: "video", sourceRepo: "manimkc" },
+      { id: BARE_ID, kind: "video", sourceRepo: "manimkc" },
+    ];
+    const access = await library.readFileAccess(rows);
+    // Both play: their bytes are in the store.
+    expect([...access.served].sort()).toEqual([BARE_ID, STORED_ID].sort());
+    expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
+    // No stored poster, and cutting one reads the file the switch keeps off.
+    expect(library.thumbnailFor(rows[1]!, access)).toBeNull();
+  });
+
+  it("searches a row-backed note's words with the switch off, and counts the transcript it could not read", async () => {
+    const at = (id: string, kind: string, file: string) => ({
+      id,
+      kind,
+      path: file,
+      url: null,
+      bytes: 1,
+      title: null,
+      sourceRepo: kind === "note" ? "self-learn" : "manimkc",
+      topics: [],
+      createdAt: "",
+    });
+    const out = await library.readSearchText(
+      [
+        at(NOTE_ID, "note", "learn/concepts/testing/base.md"),
+        at(LEGACY_TRANSCRIPT_ID, "transcript", "out/testing/legacy/legacy.transcript.json"),
+      ],
+      ["line"],
+    );
+    expect(out.searchedText).toBe(true);
+    expect(out.texts.get(NOTE_ID)).toContain("a line only the row has.");
+    expect(out.skipped).toBe(1);
   });
 
   it("reads a row-backed note's text for the library page with the switch off", async () => {

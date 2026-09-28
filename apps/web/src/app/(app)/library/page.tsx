@@ -93,10 +93,6 @@ export default async function LibraryPage({
   // Per row on top of the deployment-wide answers: a video in the blob store
   // or a note the database owns draws whatever the switch says.
   const access = await loadFileAccess(rows);
-  // The files-off and manimkc notices are about files on this machine's disk,
-  // so they are said only when some row here still depends on one.
-  const needsFiles = (repo: string) =>
-    rows.some((row) => row.sourceRepo === repo && row.path !== null && !access.served.has(row.id));
 
   const facets = kindFacets(counts);
   const libraryCourses: LibraryCourse[] = courses.map((c) => ({
@@ -117,6 +113,10 @@ export default async function LibraryPage({
   const hits = search === null ? null : searchHits(rows, terms, search.texts, search.sources);
 
   const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits }), sort);
+  // The files-off and manimkc notices are about files on this machine's disk,
+  // so they are said only when some row in this view still depends on one.
+  const needsFiles = (repo: string) =>
+    matching.some((row) => row.sourceRepo === repo && row.path !== null && !access.served.has(row.id));
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -235,6 +235,13 @@ export default async function LibraryPage({
             <p role="status" className="text-[12px] text-text2">
               Searched titles only: this deployment does not read asset files, so notes and
               transcripts were matched by name, not by what they say.
+            </p>
+          )}
+          {search !== null && search.searchedText && search.skipped > 0 && (
+            <p role="status" className="text-[12px] text-text2">
+              {search.skipped} {search.skipped === 1 ? "note or transcript was" : "notes and transcripts were"}{" "}
+              matched by name only: {search.skipped === 1 ? "its file is" : "their files are"} kept on this
+              machine&rsquo;s disk, which this deployment does not read.
             </p>
           )}
 
