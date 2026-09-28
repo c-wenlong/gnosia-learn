@@ -21,6 +21,7 @@ import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { storedBlob } from "./stored-blob";
 
 /**
  * The writer on its own: rows in, database changed, no files.
@@ -307,7 +308,7 @@ describe.skipIf(!reachable.ok)("writer", () => {
     });
 
     beforeEach(async () => {
-      await scratch.db.insert(asset).values(video);
+      await scratch.db.insert(asset).values({ ...video, blobKey: await storedBlob(scratch.db, video.id, "mp4") });
     });
 
     const audit = (destinations: string[], rows: ReturnType<typeof row>[]) =>
@@ -335,7 +336,7 @@ describe.skipIf(!reachable.ok)("writer", () => {
 
     it("drops a file the audited destination stopped reporting", async () => {
       const other = { ...video, id: "manimkc:out/a/two.mp4", path: "out/a/two.mp4" };
-      await scratch.db.insert(asset).values(other);
+      await scratch.db.insert(asset).values({ ...other, blobKey: await storedBlob(scratch.db, other.id, "mp4") });
       await audit(
         ["drive"],
         [

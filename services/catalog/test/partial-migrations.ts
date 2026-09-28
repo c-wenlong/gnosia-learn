@@ -14,6 +14,9 @@ import { MIGRATIONS_FOLDER } from "../src/migrations";
  * put rows in `event` the way a real database already has them, and then watch
  * 0006's backfill turn them into sessions.
  */
+/** 0000 to 0012: everything before phase 2's contract migration, 0013. */
+export const BEFORE_BLOB_CONTRACT = 13;
+
 export async function partialMigrations(count = 2): Promise<string> {
   const folder = await mkdtemp(path.join(tmpdir(), "catalog-partial-"));
   await mkdir(path.join(folder, "meta"), { recursive: true });

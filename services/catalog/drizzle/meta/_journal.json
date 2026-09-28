@@ -92,6 +92,13 @@
       "when": 1790547051196,
       "tag": "0012_concept_topic_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790572083554,
+      "tag": "0013_asset_blob_contract",
+      "breakpoints": true
     }
   ]
 }

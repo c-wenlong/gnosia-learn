@@ -18,7 +18,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
-import { migrationStatus } from "../migrations";
+import { type HeldMigration, heldMigrations, isContractMigration, migrationStatus } from "../migrations";
 
 /** One row per source, whether or not it has ever been indexed. */
 export interface SourceStatus {
@@ -68,6 +68,12 @@ export interface StatusResult {
     head: string | null;
     latest: string | null;
     pending: string[];
+    /**
+     * What `catalog migrate` holds, and why (`heldMigrations`). Empty unless
+     * every pending migration is a contract migration whose data is not ready,
+     * which adds no table, so the counts below are still read.
+     */
+    held: HeldMigration[];
   };
   /** Row count keyed by SQL table name, in dependency order. */
   rows: Record<string, number>;
@@ -131,8 +137,12 @@ export async function runStatus(): Promise<StatusResult> {
     const migrations = await migrationStatus(db);
     const rows: Record<string, number> = {};
     const totals = { content: 0, state: 0, operational: 0, studio: 0 };
+    // A held contract migration adds constraints and no table, so the tables
+    // are the ones this code knows; one queued behind it might add some.
+    const held = (await heldMigrations(db, { status: migrations })) ?? [];
+    const onlyHeld = held.length > 0 && held.every((h) => isContractMigration(h.tag));
 
-    if (migrations.head === null || migrations.pending.length > 0) {
+    if (migrations.head === null || (migrations.pending.length > 0 && !onlyHeld)) {
       // Two cases, one answer: nothing applied, so no table exists; or some
       // applied and some not, so the tables that exist are not the tables this
       // code knows about. `index_run` arrives in 0002, so a database stopped at
@@ -145,6 +155,7 @@ export async function runStatus(): Promise<StatusResult> {
           head: migrations.head,
           latest: migrations.latest,
           pending: migrations.pending,
+          held,
         },
         rows,
         totals,
@@ -180,6 +191,7 @@ export async function runStatus(): Promise<StatusResult> {
         head: migrations.head,
         latest: migrations.latest,
         pending: migrations.pending,
+        held,
       },
       rows,
       totals,
@@ -299,6 +311,7 @@ export function formatStatus(result: StatusResult): string {
     `head       ${result.migrations.head ?? "(none applied)"}`,
     `latest     ${result.migrations.latest ?? "(none on disk)"}`,
     `pending    ${result.migrations.pending.length === 0 ? "none" : result.migrations.pending.join(", ")}`,
+    ...result.migrations.held.map((h) => `held       ${h.tag}: ${h.reason}`),
     "",
   ];
   const names = Object.keys(result.rows);
