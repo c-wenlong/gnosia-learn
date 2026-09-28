@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,9 +17,9 @@ import { fixtureDocument } from "./fixture-document";
 
 /**
  * The three things accept could not survive, each one a window rather than a
- * bug in a line: an edit that lands while the export is running, a second
- * request arriving while the first is halfway through, and a catalog call that
- * fails after the files have already moved.
+ * bug in a line: a commit that lands while the export is running, a second
+ * request arriving while the first is halfway through, and a job row that
+ * fails to record an accept whose diagram already landed.
  *
  * All three are timing, so all three are tested by controlling when the two
  * subprocess calls return rather than by asserting on an ordering in the code.
@@ -32,11 +31,20 @@ vi.mock("../src/canvas", async (importOriginal) => {
   return { ...actual, canvas: canvasMock.canvas };
 });
 
-const catalogMock = vi.hoisted(() => ({ jobAccept: vi.fn(), jobDiscard: vi.fn() }));
+const catalogMock = vi.hoisted(() => ({
+  jobAccept: vi.fn(),
+  jobDiscard: vi.fn(),
+  diagramShow: vi.fn(),
+  diagramPut: vi.fn(),
+  diagramCheckout: vi.fn(),
+}));
 vi.mock("../src/catalog", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/catalog")>();
-  return { ...actual, jobAccept: catalogMock.jobAccept, jobDiscard: catalogMock.jobDiscard };
+  return { ...actual, ...catalogMock };
 });
+
+/** The diagram as the fake catalog holds it. */
+const diagram = { revision: 3, revisionJob: null as string | null };
 
 const { accept, discard, reindex } = await import("../src/review");
 const { JobStore } = await import("../src/store");
@@ -52,7 +60,6 @@ const files = {
 const exists = async (file: string): Promise<boolean> =>
   (await stat(file).catch(() => null)) !== null;
 
-const sha = (body: string): string => createHash("sha256").update(body).digest("hex");
 
 function reply(code: number, json: unknown = null) {
   return Promise.resolve({ code, signal: null, stdout: "", stderr: "", json, timedOut: false });
@@ -89,6 +96,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     changes: null,
     idempotencyKey: "k",
     targetHashBefore: null,
+    targetRevisionBefore: 3,
     requestedAt: new Date().toISOString(),
     startedAt: new Date().toISOString(),
     finishedAt: new Date().toISOString(),
@@ -129,6 +137,26 @@ beforeEach(async () => {
   catalogMock.jobAccept.mockReset();
   catalogMock.jobAccept.mockResolvedValue({ ok: true, json: {}, error: null, reachable: true });
   catalogMock.jobDiscard.mockResolvedValue({ ok: true, json: {}, error: null, reachable: true });
+  diagram.revision = 3;
+  diagram.revisionJob = null;
+  catalogMock.diagramShow.mockReset();
+  catalogMock.diagramShow.mockImplementation(async () => ({
+    ok: true,
+    json: { diagram: { revision: diagram.revision, revisionJob: diagram.revisionJob }, checkout: null },
+    error: null,
+    offline: false,
+  }));
+  catalogMock.diagramPut.mockReset();
+  catalogMock.diagramPut.mockImplementation(async (input: { jobId: string; base?: number | null }) => {
+    // The catalog's own base check, which is what the late look races.
+    if (input.base !== undefined && input.base !== diagram.revision && diagram.revisionJob !== input.jobId) {
+      return { ok: false, json: { ok: false, code: "stale-base" }, error: "moved on", offline: false };
+    }
+    diagram.revision += 1;
+    diagram.revisionJob = input.jobId;
+    return { ok: true, json: { revision: diagram.revision, changed: true }, error: null, offline: false };
+  });
+  catalogMock.diagramCheckout.mockResolvedValue({ ok: true, json: { exists: true, revision: 4, note: "checked out" }, error: null, offline: false });
   await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
   await writeFile(files.candidate, fixtureDocument(), "utf8");
   await writeFile(files.candidateSvg, "<svg/>", "utf8");
@@ -140,28 +168,24 @@ afterEach(async () => {
   delete process.env.STUDIO_HOME;
 });
 
-describe("a human edit that lands while accept is exporting", () => {
-  it("is not overwritten, because the hash is asked again with nothing left to await", async () => {
-    // The job started against this version of the committed file.
-    await writeFile(files.target, "the version the job saw", "utf8");
-    const before = sha("the version the job saw");
-
-    // The verify is the last subprocess before the rename, and it is where a
-    // person saving in the mirror lands: an export and a verify are a Chromium
-    // launch each, so the check at the top of accept is minutes old by now.
+describe("a commit that lands while accept is exporting", () => {
+  it("is not written over, because the base is asked again with nothing left to await", async () => {
+    // The verify is the last subprocess before the put, and it is where a
+    // person committing from the canvas lands: an export and a verify are a
+    // Chromium launch each, so the check at the top of accept is minutes old.
     canvasMock.canvas.mockImplementationOnce(async () => {
-      await writeFile(files.target, "someone's edit, mid-accept", "utf8");
+      diagram.revision = 4;
+      diagram.revisionJob = null;
       return reply(0, { checks: [] });
     });
 
-    const result = await accept(store, await place({ targetHashBefore: before }));
-
+    const result = await accept(store, await place());
     expect(result.ok).toBe(false);
     expect(result.error).toBe("target-moved");
     expect(await exists(files.candidate)).toBe(true);
-    // The whole point: their edit is still on disk.
-    const { readFile } = await import("node:fs/promises");
-    expect(await readFile(files.target, "utf8")).toBe("someone's edit, mid-accept");
+    expect(catalogMock.diagramPut).not.toHaveBeenCalled();
+    // The whole point: their commit is still the latest revision.
+    expect(diagram.revision).toBe(4);
   });
 });
 
@@ -177,10 +201,9 @@ describe("two review actions arriving at once", () => {
     const outcomes = [first, second];
     expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
     const refused = outcomes.find((result) => !result.ok);
-    // A refusal a caller can act on, not an ENOENT from a rename that had
-    // already happened.
+    // A refusal a caller can act on, not a second put.
     expect(refused?.error).toBe("wrong-state");
-    expect(await exists(files.target)).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledTimes(1);
     expect(catalogMock.jobAccept).toHaveBeenCalledTimes(1);
   });
 
@@ -192,14 +215,14 @@ describe("two review actions arriving at once", () => {
 
     expect(accepted.ok).toBe(true);
     expect(discarded.ok).toBe(false);
-    // The record says what happened to the files, rather than "discarded" over
-    // two files that are in learn/assets/.
+    // The record says what happened, rather than "discarded" over a diagram
+    // that landed.
     expect(store.get("job-recovery")?.state).toBe("accepted");
-    expect(await exists(files.target)).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("an accept whose files landed and whose catalog call did not", () => {
+describe("an accept whose diagram landed and whose job row did not record it", () => {
   it("is finished by reindex, which is the one recovery the record allows", async () => {
     canvasMock.canvas.mockImplementation(() => reply(0, { checks: [] }));
     catalogMock.jobAccept.mockResolvedValueOnce({
@@ -224,11 +247,9 @@ describe("an accept whose files landed and whose catalog call did not", () => {
     expect(repaired.ok).toBe(true);
     expect(repaired.indexed).toBe(true);
     expect(store.get("job-recovery")?.indexed).toBe(true);
-    // The same two paths, so `assert-output` upserts the rows it already has.
-    expect(catalogMock.jobAccept).toHaveBeenLastCalledWith("job-recovery", [
-      targetPath(SLUG),
-      targetSvgPath(SLUG),
-    ]);
+    // Only the job row: the diagram landed the first time and is not put again.
+    expect(catalogMock.jobAccept).toHaveBeenLastCalledWith("job-recovery");
+    expect(catalogMock.diagramPut).toHaveBeenCalledTimes(1);
   });
 
   it("says so rather than pretending, when the database is still down", async () => {

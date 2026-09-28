@@ -38,6 +38,7 @@ async function main(): Promise<void> {
   }
 
   const mirrors = new Mirrors();
+  runner.canvasOpen = (target) => mirrors.isOpen(target);
   const server = createApi({ store, runner, mirrors });
   server.listen(PORT, HOST, () => {
     process.stdout.write(

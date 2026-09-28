@@ -1,11 +1,12 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { fsStore, type BlobStore } from "@self-learn/blob";
 
 import {
   asset,
-  assetConcept,
   assetJob,
-  assetTopic,
   concept,
   event,
   job,
@@ -20,12 +21,6 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  ASSERTABLE_STATES,
-  assertOutputPath,
-  claimablePaths,
-  runAssertOutput,
-} from "../src/commands/assert-output";
-import {
   briefCandidate,
   briefTarget,
   candidateFor,
@@ -39,6 +34,7 @@ import {
   type BriefDocument,
 } from "../src/commands/job";
 import { runStatus } from "../src/commands/status";
+import { putDiagram } from "../src/content/diagrams";
 import { applyMigrations, migrationStatus } from "../src/migrations";
 import { endSession, ensureSession } from "../src/state/sessions";
 import { makeFixture, topicsYaml, type Fixture } from "./fixture-tree";
@@ -46,7 +42,8 @@ import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
 /**
- * The studio schema, the job lifecycle and the single-file write path.
+ * The studio schema, the job lifecycle, and accept over what
+ * `catalog diagram put --job` landed.
  *
  * Everything here needs a real Postgres, because everything here is a
  * constraint: a partial unique index, four `RESTRICT`s, and a set of
@@ -352,324 +349,6 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
     });
   });
 
-  describe("assert-output", () => {
-    /** A job in `awaiting_review` whose target is `learn/assets/<stem>.tldr`. */
-    async function readyJob(stem: string, overrides: Partial<BriefDocument> = {}) {
-      const queued = await enqueue({ target: `learn/assets/${stem}.tldr`, ...overrides });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      return queued.job.id;
-    }
-
-    it("writes the asset, its links and the provenance row in one go", async () => {
-      await fixture.write(
-        "learn/assets/good.tldr",
-        tldr({ topic: "alpha", concepts: ["dot-product"], title: "Good" }),
-      );
-      const jobId = await readyJob("good");
-      const result = await runAssertOutput({
-        jobId,
-        path: "learn/assets/good.tldr",
-        repoRoot: fixture.root,
-      });
-
-      expect(result).toMatchObject({
-        assetId: "diagram:learn/assets/good.tldr",
-        kind: "diagram_source",
-        topic: "alpha",
-        concepts: ["dot-product"],
-        title: "Good",
-        firstAssert: true,
-      });
-      const rows = await scratch.db
-        .select()
-        .from(assetJob)
-        .where(eq(assetJob.jobId, jobId));
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.contentHash).toBe(result.contentHash);
-    });
-
-    it("is idempotent: a second assert adds no rows", async () => {
-      await fixture.write(
-        "learn/assets/twice.tldr",
-        tldr({ topic: "alpha", concepts: ["dot-product"] }),
-      );
-      const jobId = await readyJob("twice");
-      const options = { jobId, path: "learn/assets/twice.tldr", repoRoot: fixture.root };
-      const first = await runAssertOutput(options);
-      const second = await runAssertOutput(options);
-      expect(first.firstAssert).toBe(true);
-      expect(second.firstAssert).toBe(false);
-
-      const id = "diagram:learn/assets/twice.tldr";
-      expect(await scratch.db.select().from(assetJob).where(eq(assetJob.assetId, id))).toHaveLength(1);
-      expect(
-        await scratch.db.select().from(assetTopic).where(eq(assetTopic.assetId, id)),
-      ).toHaveLength(1);
-      expect(
-        await scratch.db.select().from(assetConcept).where(eq(assetConcept.assetId, id)),
-      ).toHaveLength(1);
-    });
-
-    it("refuses a .tldr with no topic, by name", async () => {
-      await fixture.write("learn/assets/bare.tldr", tldr({ title: "Untitled" }));
-      const jobId = await readyJob("bare");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/bare.tldr", repoRoot: fixture.root }),
-      ).rejects.toThrow(/learn\/assets\/bare\.tldr names no topic/);
-    });
-
-    it("refuses a topic that is not in the vocabulary, by name", async () => {
-      await fixture.write("learn/assets/stray.tldr", tldr({ topic: "not-in-the-file" }));
-      const jobId = await readyJob("stray");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/stray.tldr", repoRoot: fixture.root }),
-      ).rejects.toThrow(/names topic "not-in-the-file"/);
-    });
-
-    it("refuses a file stamped with a topic other than the job's", async () => {
-      await fixture.write("learn/assets/drifted.tldr", tldr({ topic: "beta" }));
-      const jobId = await readyJob("drifted");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/drifted.tldr", repoRoot: fixture.root }),
-      ).rejects.toThrow(/was enqueued under "alpha"/);
-    });
-
-    it("refuses a job whose state landed nothing", async () => {
-      await fixture.write("learn/assets/too-early.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/too-early.tldr" });
-      await expect(
-        runAssertOutput({
-          jobId: queued.job.id,
-          path: "learn/assets/too-early.tldr",
-          repoRoot: fixture.root,
-        }),
-      ).rejects.toThrow(/is queued, so it landed nothing to assert/);
-
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "failed", errorKind: "gate" });
-      await expect(
-        runAssertOutput({
-          jobId: queued.job.id,
-          path: "learn/assets/too-early.tldr",
-          repoRoot: fixture.root,
-        }),
-      ).rejects.toThrow(/is failed, so it landed nothing to assert/);
-      expect([...ASSERTABLE_STATES]).toEqual(["awaiting_review", "accepted"]);
-    });
-
-    it("refuses a file the job does not target", async () => {
-      await fixture.write("learn/assets/mine.tldr", tldr({ topic: "alpha" }));
-      await fixture.write("learn/assets/theirs.tldr", tldr({ topic: "alpha" }));
-      const jobId = await readyJob("mine");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/theirs.tldr", repoRoot: fixture.root }),
-      ).rejects.toThrow(/cannot claim learn\/assets\/theirs\.tldr/);
-    });
-
-    it("refuses an SVG whose .tldr is not in the catalog yet", async () => {
-      await fixture.write("learn/assets/pair.tldr", tldr({ topic: "alpha" }));
-      await fixture.write("learn/assets/pair.svg", "<svg></svg>");
-      const jobId = await readyJob("pair");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/pair.svg", repoRoot: fixture.root }),
-      ).rejects.toThrow(/Assert the \.tldr first/);
-    });
-
-    it("links an SVG to the .tldr it came from, and shares its subject", async () => {
-      await fixture.write(
-        "learn/assets/exported.tldr",
-        tldr({ topic: "alpha", concepts: ["dot-product"] }),
-      );
-      await fixture.write("learn/assets/exported.svg", "<svg></svg>");
-      const jobId = await readyJob("exported");
-      await runAssertOutput({
-        jobId,
-        path: "learn/assets/exported.tldr",
-        repoRoot: fixture.root,
-      });
-      const svg = await runAssertOutput({
-        jobId,
-        path: "learn/assets/exported.svg",
-        repoRoot: fixture.root,
-      });
-      expect(svg).toMatchObject({
-        kind: "diagram_svg",
-        topic: "alpha",
-        concepts: ["dot-product"],
-        derivedFrom: "diagram:learn/assets/exported.tldr",
-      });
-    });
-
-    it("refuses a missing file, an absolute path and a path outside learn/assets", async () => {
-      const jobId = await readyJob("absent");
-      await expect(
-        runAssertOutput({ jobId, path: "learn/assets/absent.tldr", repoRoot: fixture.root }),
-      ).rejects.toThrow(/does not exist/);
-      expect(() => assertOutputPath("/etc/passwd")).toThrow(/absolute/);
-      expect(() => assertOutputPath("learn/notes/x.tldr")).toThrow(/directly inside/);
-      expect(() => assertOutputPath("learn/assets/x.png")).toThrow(/neither a \.tldr nor a \.svg/);
-      expect(claimablePaths("learn/assets/x.tldr")).toEqual([
-        "learn/assets/x.tldr",
-        "learn/assets/x.svg",
-      ]);
-    });
-  });
-
-  describe("accept", () => {
-    it("records what landed and moves the job in one transaction", async () => {
-      await fixture.write(
-        "learn/assets/accepted.tldr",
-        tldr({ topic: "alpha", concepts: ["dot-product"] }),
-      );
-      await fixture.write("learn/assets/accepted.svg", "<svg></svg>");
-      const queued = await enqueue({ target: "learn/assets/accepted.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-
-      const accepted = await runAccept({
-        jobId: queued.job.id,
-        paths: ["learn/assets/accepted.tldr", "learn/assets/accepted.svg"],
-        repoRoot: fixture.root,
-      });
-      expect(accepted.to).toBe("accepted");
-      expect(accepted.outputs).toHaveLength(2);
-      expect(accepted.job.reviewedAt).not.toBeNull();
-
-      const shown = await runShow(queued.job.id, fixture.root);
-      expect(shown.outputs.map((o) => o.path)).toEqual([
-        "learn/assets/accepted.svg",
-        "learn/assets/accepted.tldr",
-      ]);
-      expect(shown.outputs.every((o) => o.current === true)).toBe(true);
-      expect(shown.next).toEqual([]);
-    });
-
-    it("refuses to accept a job with nothing to point at", async () => {
-      const queued = await enqueue({ target: "learn/assets/empty-accept.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      await expect(runAccept({ jobId: queued.job.id, repoRoot: fixture.root })).rejects.toThrow(
-        /has no output to accept/,
-      );
-      const rows = await scratch.db.select().from(job).where(eq(job.id, queued.job.id));
-      expect(rows[0]!.state).toBe("awaiting_review");
-    });
-
-    it("accepts with no --path when an earlier assert already landed the rows", async () => {
-      await fixture.write("learn/assets/retried-accept.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/retried-accept.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      await runAssertOutput({
-        jobId: queued.job.id,
-        path: "learn/assets/retried-accept.tldr",
-        repoRoot: fixture.root,
-      });
-      const accepted = await runAccept({ jobId: queued.job.id, repoRoot: fixture.root });
-      expect(accepted.to).toBe("accepted");
-      expect(accepted.outputs).toHaveLength(0);
-    });
-
-    it("leaves the job in awaiting_review when an output will not resolve", async () => {
-      await fixture.write("learn/assets/rollback.tldr", tldr({ title: "no topic here" }));
-      const queued = await enqueue({ target: "learn/assets/rollback.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-
-      await expect(
-        runAccept({
-          jobId: queued.job.id,
-          paths: ["learn/assets/rollback.tldr"],
-          repoRoot: fixture.root,
-        }),
-      ).rejects.toThrow(/names no topic/);
-
-      const rows = await scratch.db.select().from(job).where(eq(job.id, queued.job.id));
-      expect(rows[0]!.state).toBe("awaiting_review");
-      expect(
-        await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, queued.job.id)),
-      ).toHaveLength(0);
-    });
-
-    it("never rewrites an accepted job's provenance, even on a repair assert", async () => {
-      await fixture.write("learn/assets/snapshot.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/snapshot.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      const accepted = await runAccept({
-        jobId: queued.job.id,
-        paths: ["learn/assets/snapshot.tldr"],
-        repoRoot: fixture.root,
-      });
-      const landed = accepted.outputs[0]!.contentHash;
-
-      // Somebody edits the committed file, then a repair assert runs over it.
-      await fixture.write(
-        "learn/assets/snapshot.tldr",
-        tldr({ topic: "alpha", title: "edited afterwards" }),
-      );
-      const repaired = await runAssertOutput({
-        jobId: queued.job.id,
-        path: "learn/assets/snapshot.tldr",
-        repoRoot: fixture.root,
-      });
-
-      // The asset row follows the file; the job's claim does not.
-      expect(repaired.contentHash).not.toBe(landed);
-      expect(repaired.recordedHash).toBe(landed);
-      const [row] = await scratch.db
-        .select()
-        .from(assetJob)
-        .where(eq(assetJob.jobId, queued.job.id));
-      expect(row!.contentHash).toBe(landed);
-      const shown = await runShow(queued.job.id, fixture.root);
-      expect(shown.outputs[0]!.current).toBe(false);
-    });
-
-    it("updates the claim while the job is still awaiting review", async () => {
-      await fixture.write("learn/assets/provisional.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/provisional.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      const first = await runAssertOutput({
-        jobId: queued.job.id,
-        path: "learn/assets/provisional.tldr",
-        repoRoot: fixture.root,
-      });
-      await fixture.write(
-        "learn/assets/provisional.tldr",
-        tldr({ topic: "alpha", title: "re-rendered before the verdict" }),
-      );
-      const second = await runAssertOutput({
-        jobId: queued.job.id,
-        path: "learn/assets/provisional.tldr",
-        repoRoot: fixture.root,
-      });
-      expect(second.recordedHash).toBe(second.contentHash);
-      expect(second.recordedHash).not.toBe(first.contentHash);
-    });
-
-    it("notices when the bytes on disk stopped matching what the job wrote", async () => {
-      await fixture.write("learn/assets/edited.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/edited.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      await runAccept({
-        jobId: queued.job.id,
-        paths: ["learn/assets/edited.tldr"],
-        repoRoot: fixture.root,
-      });
-
-      await fixture.write(
-        "learn/assets/edited.tldr",
-        tldr({ topic: "alpha", title: "someone opened the mirror" }),
-      );
-      const shown = await runShow(queued.job.id, fixture.root);
-      expect(shown.outputs[0]!.current).toBe(false);
-    });
-  });
-
   describe("ls", () => {
     it("filters by state and bounds what it returns", async () => {
       const a = await enqueue({ target: "learn/assets/a.tldr" });
@@ -717,39 +396,6 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       expect(sqlMessage(error)).toContain("job_session_id_session_id_fk");
     });
 
-    it("refuses to delete a job that produced something", async () => {
-      await fixture.write("learn/assets/attributed.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/attributed.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      await runAccept({
-        jobId: queued.job.id,
-        paths: ["learn/assets/attributed.tldr"],
-        repoRoot: fixture.root,
-      });
-      const error = await scratch.db
-        .delete(job)
-        .where(eq(job.id, queued.job.id))
-        .catch((e: unknown) => e);
-      expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("asset_job_job_id_job_id_fk");
-    });
-
-    it("takes the provenance with the asset, because that row is derived", async () => {
-      await fixture.write("learn/assets/pruned.tldr", tldr({ topic: "alpha" }));
-      const queued = await enqueue({ target: "learn/assets/pruned.tldr" });
-      await runClaim({ jobId: queued.job.id });
-      await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
-      await runAccept({
-        jobId: queued.job.id,
-        paths: ["learn/assets/pruned.tldr"],
-        repoRoot: fixture.root,
-      });
-      await scratch.db.delete(asset).where(eq(asset.id, "diagram:learn/assets/pruned.tldr"));
-      expect(
-        await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, queued.job.id)),
-      ).toHaveLength(0);
-    });
   });
 
   describe("the session lifecycle", () => {
@@ -935,4 +581,176 @@ describe.skipIf(!reachable.ok)("migration 0006 on an empty log", () => {
 
 describe.runIf(!reachable.ok)("the studio schema (skipped)", () => {
   it.skip(`needs Postgres — ${reachable.reason}`, () => {});
+});
+
+/**
+ * Accept over what `catalog diagram put --job` landed, on a database of its
+ * own: every put leaves `content_revision` rows naming the job, and that table
+ * is append-only with a restricting foreign key to `job`, so these jobs cannot
+ * be cleared between tests the way the suite above clears its own.
+ */
+describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
+  let scratch: Scratch;
+  let previousUrl: string | undefined;
+  let fixture: Fixture;
+  let blobs: string;
+  let store: BlobStore;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    previousUrl = process.env["DATABASE_URL"];
+    process.env["DATABASE_URL"] = scratch.url;
+    blobs = await mkdtemp(path.join(tmpdir(), "catalog-studio-blobs-"));
+    store = fsStore(blobs);
+    fixture = await makeFixture();
+    await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["dot-product"] }, { slug: "beta" }]));
+    await mkdir(path.join(fixture.root, "learn", "assets"), { recursive: true });
+    await scratch.db.insert(learner).values({ id: LOCAL_LEARNER_ID }).onConflictDoNothing();
+    await scratch.db.insert(topic).values([
+      { slug: "alpha", title: "Alpha", domain: "foundations" },
+      { slug: "beta", title: "Beta", domain: "foundations" },
+    ]);
+    await scratch.db
+      .insert(concept)
+      .values({ slug: "dot-product", title: "The dot product", path: "learn/concepts/dot-product.md", topicSlug: "alpha" });
+  }, 60_000);
+
+  afterAll(async () => {
+    if (previousUrl === undefined) delete process.env["DATABASE_URL"];
+    else process.env["DATABASE_URL"] = previousUrl;
+    await fixture?.cleanup();
+    await scratch?.drop();
+    if (blobs !== undefined) await rm(blobs, { recursive: true, force: true });
+  });
+
+  const enqueue = (target: string) =>
+    runEnqueue({
+      brief: { kind: "diagram", topic: "alpha", target, idempotencyKey: `key-${Math.random().toString(36).slice(2)}` },
+      repoRoot: fixture.root,
+    });
+
+  /**
+   * A job in `awaiting_review` whose target is `learn/assets/<stem>.tldr`,
+   * and the landing an accept makes for it: `catalog diagram put --job`,
+   * which writes the diagram, its asset rows and the job's `asset_job` rows.
+   */
+  async function readyJob(stem: string) {
+    const queued = await enqueue(`learn/assets/${stem}.tldr`);
+    await runClaim({ jobId: queued.job.id });
+    await runFinish({ jobId: queued.job.id, state: "awaiting_review" });
+    return queued.job.id;
+  }
+
+  async function land(jobId: string, stem: string, meta: Record<string, unknown>, svg?: string) {
+    await fixture.write(`learn/assets/${stem}.tldr`, tldr(meta));
+    if (svg !== undefined) await fixture.write(`learn/assets/${stem}.svg`, svg);
+    return putDiagram(scratch.db, store, {
+      slug: stem,
+      tldr: path.join(fixture.root, `learn/assets/${stem}.tldr`),
+      svg: svg === undefined ? null : path.join(fixture.root, `learn/assets/${stem}.svg`),
+      jobId,
+      reason: `accept ${jobId}`,
+      author: LOCAL_LEARNER_ID,
+      authorKind: "person",
+    });
+  }
+
+  describe("accept", () => {
+    it("moves the job once its outputs landed, and lists them", async () => {
+      const jobId = await readyJob("accepted");
+      await land(jobId, "accepted", { topic: "alpha", concepts: ["dot-product"] }, "<svg></svg>");
+
+      const accepted = await runAccept({ jobId });
+      expect(accepted.to).toBe("accepted");
+      expect(accepted.outputs.map((o) => o.path)).toEqual([
+        "learn/assets/accepted.svg",
+        "learn/assets/accepted.tldr",
+      ]);
+      expect(accepted.job.reviewedAt).not.toBeNull();
+
+      const shown = await runShow(jobId);
+      expect(shown.outputs.every((o) => o.current === true)).toBe(true);
+      expect(shown.next).toEqual([]);
+    });
+
+    it("refuses to accept a job with nothing to point at, and says how to land it", async () => {
+      const jobId = await readyJob("empty-accept");
+      await expect(runAccept({ jobId })).rejects.toThrow(/has no output to accept.*diagram put --slug empty-accept/s);
+      const rows = await scratch.db.select().from(job).where(eq(job.id, jobId));
+      expect(rows[0]!.state).toBe("awaiting_review");
+    });
+
+    it("lands nothing and leaves the job in awaiting_review when the output will not resolve", async () => {
+      const jobId = await readyJob("rollback");
+      await expect(land(jobId, "rollback", { title: "no topic here" })).rejects.toThrow(/names no topic/);
+      await expect(land(jobId, "rollback", { topic: "beta" })).rejects.toThrow(/enqueued under "alpha"/);
+      const rows = await scratch.db.select().from(job).where(eq(job.id, jobId));
+      expect(rows[0]!.state).toBe("awaiting_review");
+      expect(await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId))).toHaveLength(0);
+    });
+
+    it("never rewrites an accepted job's provenance: a changed put under its name is refused", async () => {
+      const jobId = await readyJob("snapshot");
+      await land(jobId, "snapshot", { topic: "alpha" });
+      const accepted = await runAccept({ jobId });
+      const landed = accepted.outputs[0]!.contentHash;
+
+      await expect(land(jobId, "snapshot", { topic: "alpha", title: "edited afterwards" })).rejects.toThrow(
+        /is accepted/,
+      );
+      const [row] = await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId));
+      expect(row!.contentHash).toBe(landed);
+      expect((await runShow(jobId)).outputs[0]!.current).toBe(true);
+    });
+
+    it("updates the claim while the job is still awaiting review", async () => {
+      const jobId = await readyJob("provisional");
+      await land(jobId, "provisional", { topic: "alpha" });
+      const [first] = await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId));
+      await land(jobId, "provisional", { topic: "alpha", title: "re-rendered before the verdict" });
+      const [second] = await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId));
+      expect(second!.contentHash).not.toBe(first!.contentHash);
+    });
+
+    it("notices when the diagram stopped holding what the job wrote", async () => {
+      const jobId = await readyJob("edited");
+      await land(jobId, "edited", { topic: "alpha" });
+      await runAccept({ jobId });
+
+      await fixture.write("learn/assets/edited.tldr", tldr({ topic: "alpha", title: "someone committed from the mirror" }));
+      await putDiagram(scratch.db, store, {
+        slug: "edited",
+        tldr: path.join(fixture.root, "learn/assets/edited.tldr"),
+        svg: null,
+        reason: "an edit on the canvas",
+        author: LOCAL_LEARNER_ID,
+        authorKind: "person",
+      });
+      const shown = await runShow(jobId);
+      expect(shown.outputs[0]!.current).toBe(false);
+    });
+  });
+
+  describe("what cannot be deleted", () => {
+    it("refuses to delete a job that produced something", async () => {
+      const jobId = await readyJob("attributed");
+      await land(jobId, "attributed", { topic: "alpha" });
+      await runAccept({ jobId });
+      const error = await scratch.db
+        .delete(job)
+        .where(eq(job.id, jobId))
+        .catch((e: unknown) => e);
+      expect(sqlstate(error)).toBe("23503");
+      expect(sqlMessage(error)).toContain("asset_job_job_id_job_id_fk");
+    });
+
+    it("takes the provenance with the asset, because that row is derived", async () => {
+      const jobId = await readyJob("pruned");
+      await land(jobId, "pruned", { topic: "alpha" });
+      await runAccept({ jobId });
+      await scratch.db.delete(asset).where(eq(asset.id, "diagram:learn/assets/pruned.tldr"));
+      expect(await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, jobId))).toHaveLength(0);
+    });
+  });
 });

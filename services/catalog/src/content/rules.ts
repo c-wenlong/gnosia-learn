@@ -18,8 +18,8 @@ import type { CatalogDatabase } from "../db";
  *
  * `asset` and its links are written by five sources, so they are listed under
  * the two types whose flips remove the last writers outside the seam: the
- * studio's `assert-output` (diagrams) and the upload command (manimkc). Arming
- * them earlier refuses those writers.
+ * studio's Accept, which went through `assert-output` until Track D made it
+ * `catalog diagram put` (diagrams), and the upload command (manimkc).
  */
 export const WRITE_GUARDS: Readonly<Record<ContentType, readonly string[]>> = {
   topics: ["topic", "topic_relation", "manimkc_topic"],

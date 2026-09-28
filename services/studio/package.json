@@ -5,12 +5,13 @@
   "license": "MIT",
   "type": "module",
   "//": "The diagram studio's job runner and its loopback HTTP API. A separate process rather than a route inside the Next app, because a queue inside a dev server dies on every hot reload and loopback-only binding is a stronger boundary than any same-origin guard. See docs/TLDRAWKC-INTEGRATION.md, D10.",
-  "//dependencies": "The schema package, only for the two state machines and the shared path constants: a second copy of JOB_TRANSITIONS would be a second state machine. The content package, for the reader seam the topic vocabulary comes through (docs/CONTENT-MIGRATION.md 0.6), which replaced this service's own YAML parser. Postgres is reached through the catalog CLI, never through a pool of this service's own, so neither drizzle nor pg is a dependency here.",
+  "//dependencies": "The schema package, only for the two state machines and the shared path constants: a second copy of JOB_TRANSITIONS would be a second state machine. The content package, for the reader seam the topic vocabulary comes through (docs/CONTENT-MIGRATION.md 0.6), which replaced this service's own YAML parser. Postgres is reached through the catalog CLI, never through a pool of this service's own, so neither drizzle nor pg is a dependency here. The blob package, to stream a diagram's SVG out of the store the catalog wrote it to (Track D), by the key the catalog lists.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "studio": "tsx src/index.ts"
   },
   "dependencies": {
+    "@self-learn/blob": "*",
     "@self-learn/content": "*",
     "@self-learn/schema": "*"
   },

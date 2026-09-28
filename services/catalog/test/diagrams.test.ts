@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { fsStore, type BlobStore } from "@self-learn/blob";
+import { fileSource } from "@self-learn/content";
 import { assetJob, blobObject, diagram, job } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runExport } from "../src/commands/export";
 import { runImportCommand } from "../src/commands/index-command";
 import { runParity } from "../src/commands/parity";
+import { dbSource } from "../src/content/source";
 import { flip } from "../src/content/flip";
 import {
   checkoutDiagram,
@@ -209,6 +211,13 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
       path: "learn/assets/first-diagram.tldr",
       svgPath: "learn/assets/first-diagram.svg",
     });
+  });
+
+  it("reads a diagram back through the seam exactly as the file source reads it", async () => {
+    const fromRows = await dbSource(scratch.db).diagram("first-diagram");
+    const fromFiles = await fileSource(fixture.root).diagram("first-diagram");
+    expect(fromRows).toEqual(fromFiles);
+    expect(await dbSource(scratch.db).diagram("no-such-diagram")).toBeNull();
   });
 
   it("writes zero revisions and uploads nothing on a second import", async () => {

@@ -186,7 +186,7 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
         <div className="mb-3 rounded-md border border-[var(--border)] bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
           <p className="font-medium">The candidate is gone.</p>
           <p className="mt-1">
-            Nothing under <Mono>learn/assets/</Mono> ever changed, so there is nothing to undo.
+            The diagram in the catalog never changed, so there is nothing to undo.
           </p>
         </div>
       )}

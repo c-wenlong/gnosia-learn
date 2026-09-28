@@ -90,8 +90,8 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
         <div className="mb-3 rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs text-[var(--muted-strong)]">
           <p className="font-medium text-[var(--ok-text)]">{finishedHeadline(job)}</p>
           <p className="mt-1">
-            Nothing under <Mono>learn/assets/</Mono> has changed yet. The candidate is at{" "}
-            <Mono>{job.candidate}</Mono>, and Accept is the rename.
+            Nothing in the catalog has changed yet. The candidate is at{" "}
+            <Mono>{job.candidate}</Mono>, and Accept stores it as the diagram.
           </p>
         </div>
       )}
@@ -158,9 +158,9 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
 
       {reviewable && (
         <p className="mt-3 text-xs text-[var(--muted)]">
-          Neither button is undoable inside the studio. Accept moves two files into{" "}
-          <Mono>learn/assets/</Mono> and Discard deletes the candidate; git is the undo for the
-          first and there is nothing to undo for the second.
+          Neither button is undoable inside the studio. Accept stores the drawing as a new
+          revision of the diagram, which <Mono>catalog history</Mono> keeps, and Discard deletes
+          the candidate, which leaves nothing to undo.
         </p>
       )}
     </>
@@ -168,13 +168,13 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
 }
 
 /**
- * What the panel says once the files have landed.
+ * What the panel says once the diagram has landed.
  *
- * Three things, and the third is the one the design insists on. The files that
- * moved. Whether the catalog recorded them, which is a banner and not a failure
- * when it did not — the files are the output and the index is derived. And the
- * `git add` line naming exactly those files, because D6 says the person commits
- * and nothing in the studio ever runs `git add`.
+ * What landed (the diagram's logical names, stored in the database since
+ * Track D of docs/CONTENT-MIGRATION.md). Whether the job row recorded it,
+ * which is a banner with Reindex when it did not. And a `git add` line only
+ * for the files the put also wrote into the tree while the files still owned
+ * diagrams; after the flip there are none and nothing to commit.
  */
 function Accepted({
   job,
@@ -185,14 +185,13 @@ function Accepted({
   busy: boolean;
   onReindex: () => void;
 }) {
-  const line = gitAddLine(job.written);
+  const line = gitAddLine(job.files ?? []);
   const lastCatalogError = catalogErrorLine(job.catalogErrors);
   return (
     <div className="mb-3 space-y-2">
       <div className="rounded-md border border-[var(--ok)]/40 bg-[var(--chip-bg)] p-2 text-xs">
         <p className="font-medium text-[var(--ok-text)]">
-          {job.written.length === 1 ? "One file landed" : `${job.written.length} files landed`} in
-          learn/assets/
+          Landed in the catalog
         </p>
         <ul className="mt-1 space-y-0.5">
           {job.written.map((file) => (
@@ -209,9 +208,8 @@ function Accepted({
             <Mono>indexed: false</Mono>
           </p>
           <p className="mt-1">
-            The files are in place; the catalog did not record them. That is a Postgres that was
-            not answering, not a failed accept — the files are the output and the index is
-            derived.
+            The diagram is stored; the job row did not record the accept. Reindex finishes it,
+            and changes nothing about the diagram.
           </p>
           {lastCatalogError !== null && (
             <p
@@ -232,8 +230,8 @@ function Accepted({
       {line !== null && (
         <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
           <p className="text-[var(--muted)]">
-            Committing is yours: the studio has no mutating git access and never runs{" "}
-            <Mono>git add</Mono>.
+            The files still own diagrams until the flip, so the accept wrote these too.
+            Committing them is yours: the studio never runs <Mono>git add</Mono>.
           </p>
           {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
               column, and a line that runs off the edge is one a person copies

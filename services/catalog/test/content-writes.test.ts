@@ -29,13 +29,7 @@ const SEAM = ["services/catalog/src/content/", "services/catalog/src/index/"];
  * allowed and the change that removes it. An entry here is a debt, not a
  * permission.
  */
-const ALLOWED: Record<string, string> = {
-  // The studio's Accept indexes the one file a job landed, through the
-  // diagrams source's own rules. Track D replaces it with `catalog diagram
-  // put` through the seam, which is also why the asset write guard stays
-  // disarmed until that type flips.
-  "services/catalog/src/commands/assert-output.ts": "studio Accept, until Track D",
-};
+const ALLOWED: Record<string, string> = {};
 
 /**
  * `blob_object` and `session_log_entry` are content but carry no revisions

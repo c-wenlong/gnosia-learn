@@ -7,15 +7,17 @@ import { NPM, run } from "./proc";
  * with three consequences worth stating.
  *
  * **There is one implementation of every rule.** `job enqueue` is where the
- * lease, the idempotency key and the topic foreign key live; `assert-output` is
- * where "what a diagram asset row looks like" lives, through the same reader
- * the full index calls. Phase 1 drives those verbs. A second copy here would be
+ * lease, the idempotency key and the topic foreign key live; `diagram put` is
+ * where "what a diagram's rows look like" lives, through the same reader the
+ * full import calls. Phase 1 drives those verbs. A second copy here would be
  * a second set of rules that agrees with the first until it does not.
  *
  * **A database that is down is one failed subprocess, not a crash.** Every call
  * returns a result rather than throwing, so the caller decides. D16 is the
- * policy: no tldrawkc build refuses the job outright, no database does not —
- * the artifacts are files and the index is derived from them.
+ * policy: no tldrawkc build refuses the job outright, no database does not,
+ * since drawing needs only files. Landing a diagram does need it now: a
+ * diagram lives in the database (Track D of docs/CONTENT-MIGRATION.md), so
+ * with Postgres down Accept refuses and the candidate waits (edge case 1).
  *
  * **The disk record is written first.** Rule 7: `job.json` and `session.ndjson`
  * are the write-ahead log and Postgres is the query surface, so every function
@@ -194,16 +196,71 @@ export function jobFinish(input: JobFinishInput): Promise<CatalogResult> {
 }
 
 /**
- * `job accept --path <p> --path <p>`: the asserts and the transition, in one
- * transaction the catalog owns.
+ * `job accept --job <id>`: the transition to `accepted`, which the catalog
+ * allows once the job's outputs are recorded (`asset_job` rows, written by
+ * `diagram put --job` in the transaction that landed the diagram).
  *
- * This is the only step of accept that needs Postgres, and it is deliberately
- * last. Everything that can fail has already happened by the time it runs, and
- * if it fails anyway the files are still on disk where a person put them: the
- * job reports `indexed: false` with the reason and a Reindex re-runs it.
+ * Its own call, after the put, so a failure here leaves the diagram landed and
+ * the job answering Reindex, which runs this again.
  */
-export function jobAccept(jobId: string, paths: string[]): Promise<CatalogResult> {
-  return catalog(["job", "accept", "--job", jobId, ...paths.flatMap((p) => ["--path", p])]);
+export function jobAccept(jobId: string): Promise<CatalogResult> {
+  return catalog(["job", "accept", "--job", jobId]);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Diagrams (Track D of docs/CONTENT-MIGRATION.md)                            */
+/* -------------------------------------------------------------------------- */
+
+/** `catalog diagram list`: every live diagram, as the database holds it. */
+export function diagramList(): Promise<CatalogResult> {
+  return catalog(["diagram", "list"], 60_000);
+}
+
+/** `catalog diagram show <slug> --dir <work>`: one diagram and where its checkout stands. */
+export function diagramShow(slug: string, dir: string): Promise<CatalogResult> {
+  return catalog(["diagram", "show", slug, "--dir", dir], 60_000);
+}
+
+/** `catalog diagram checkout <slug> --dir <work>`: refresh the file every verb runs on. */
+export function diagramCheckout(slug: string, dir: string): Promise<CatalogResult> {
+  return catalog(["diagram", "checkout", slug, "--dir", dir], 60_000);
+}
+
+/** `catalog diagram commit <slug>`: the checkout into the database, refused when its base moved. */
+export function diagramCommit(slug: string, dir: string, reason: string): Promise<CatalogResult> {
+  return catalog(["diagram", "commit", slug, "--dir", dir, "--reason", reason]);
+}
+
+export interface DiagramPutInput {
+  slug: string;
+  /** Absolute paths: the job's candidates. */
+  tldr: string;
+  svg: string | null;
+  jobId: string;
+  /** The revision the job started from, null for a new diagram, undefined for a record older than the base check. */
+  base: number | null | undefined;
+  reason: string;
+}
+
+/**
+ * `catalog diagram put --job`: the whole of an accept's write, one transaction
+ * the catalog owns, after the SVG is safely in the blob store.
+ */
+export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
+  return catalog([
+    "diagram",
+    "put",
+    "--slug",
+    input.slug,
+    "--tldr",
+    input.tldr,
+    ...(input.svg === null ? [] : ["--svg", input.svg]),
+    "--job",
+    input.jobId,
+    ...(input.base === undefined ? [] : ["--base", input.base === null ? "none" : String(input.base)]),
+    "--reason",
+    input.reason,
+  ]);
 }
 
 export function jobDiscard(jobId: string): Promise<CatalogResult> {

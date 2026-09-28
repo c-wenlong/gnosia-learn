@@ -1,12 +1,31 @@
-import { notMigrated, type TypeReader } from "./reader";
+import { diagram } from "@self-learn/schema";
+import { and, eq, isNull } from "drizzle-orm";
+
+import { diagramPaths } from "../diagram-document";
+import type { TypeReader } from "./reader";
 
 /**
  * The database reader for `diagrams`: one diagram by its slug, as
  * `DiagramSource` with the document from `diagram.document`, or null.
  *
- * Track D's file (docs/CONTENT-MIGRATION.md, phase 1). It implements
- * `read` from rows, returning exactly what `fileSource` returns for the same
- * content, and sets `ready: true` in the same change; nothing outside this
- * file needs to change for `catalog flip diagrams` to accept the type.
+ * Track D's file (docs/CONTENT-MIGRATION.md, phase 1). It answers what
+ * `fileSource` answers for the same content: the logical `.tldr` path, the
+ * parsed document (the same value, whatever key order the file had, since
+ * jsonb keeps none), and the SVG's logical path when the diagram has one,
+ * which after Track D names a blob rather than a file (D11). An archived
+ * diagram is not there, as a deleted file is not.
  */
-export const reader: TypeReader<"diagram"> = { ready: false, read: notMigrated("diagrams") };
+export const reader: TypeReader<"diagram"> = {
+  ready: true,
+  read: (db) => async (slug) => {
+    if (slug.trim() === "") return null;
+    const [row] = await db
+      .select({ slug: diagram.slug, document: diagram.document, svgBlobKey: diagram.svgBlobKey })
+      .from(diagram)
+      .where(and(eq(diagram.slug, slug), isNull(diagram.archivedAt)))
+      .limit(1);
+    if (row === undefined) return null;
+    const paths = diagramPaths(row.slug);
+    return { slug: row.slug, path: paths.tldr, document: row.document, svgPath: row.svgBlobKey === null ? null : paths.svg };
+  },
+};

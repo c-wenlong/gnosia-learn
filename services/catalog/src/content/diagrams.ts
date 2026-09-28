@@ -490,7 +490,7 @@ function subjectLinks(subject: Subject, derivedFrom: string | null): Record<stri
 
 /**
  * `asset_job`: which job made which bytes. Once a job is accepted its claim is
- * a snapshot and is never rewritten, the rule `assert-output` kept; before
+ * a snapshot and is never rewritten, the rule the retired `assert-output` kept; before
  * that, a re-render that lands before the verdict does update it.
  */
 async function recordJobOutputs(

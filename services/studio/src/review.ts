@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
-import { readFile, rename, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 
 import { canvas, EXIT, explainExit, type VerifyReport } from "./canvas";
-import { jobAccept, jobDiscard } from "./catalog";
-import { absolute, CANDIDATES_DIR } from "./paths";
+import { diagramPut, diagramShow, jobAccept, jobDiscard } from "./catalog";
+import { ensureCheckout, forgetDiagramList } from "./diagrams";
+import { absolute, CANDIDATES_DIR, workDir } from "./paths";
 import { run } from "./proc";
 import type { JobRecord, JobStore } from "./store";
 
@@ -11,27 +11,33 @@ import type { JobRecord, JobStore } from "./store";
  * Accept and discard: the only writes outside the candidates directory, and the
  * only ones a person asked for.
  *
- * **Everything that can fail happens before anything lands.** That ordering is
- * the whole design of this file. The alternative — rename first, export onto
- * the committed path — leaves the target replaced and the candidate gone when
- * the export fails, with the job still `awaiting_review`: a retry cannot repeat
- * a rename that already happened, and Discard cannot delete a candidate that
- * has moved. So the export and the verify run against the candidate, and only
- * then do the two renames.
+ * **A diagram lives in the database** (Track D of docs/CONTENT-MIGRATION.md),
+ * so Accept is one `catalog diagram put --job`: the document as the diagram
+ * row, the SVG into the blob store, the two asset rows and the job's
+ * provenance, in one transaction the catalog owns. No file under `learn/`
+ * changes, and there is nothing for a person to commit to git.
  *
- * Two failure windows are left and both are recoverable by construction. A
- * failure in the export or the verify changes nothing under `learn/assets/`, so
- * Accept, Discard and a follow-up job are all still available. A failure
- * between the two renames lands a new `.tldr` beside the old `.svg`, which is
- * the SVG-stale state the UI already models: one click on Export SVG fixes it.
+ * **Everything that can fail happens before anything lands.** The export and
+ * the verify run against the candidate first, and the put is the last thing
+ * that can refuse. A refusal before it changes nothing, so Accept, Discard and
+ * a follow-up job are all still available. The put itself is all or nothing:
+ * an SVG upload that dies leaves a pending blob row and no diagram change.
+ *
+ * **The base check replaces the file hash.** The job records the diagram's
+ * revision when it was enqueued, and the put carries it as its base, so a
+ * commit from the canvas that landed while the job ran refuses the Accept
+ * rather than being written over (S4, edge case 18). With the database down
+ * nothing can land, and the candidate waits for it (edge case 1).
  */
 
 export interface AcceptResult {
   ok: boolean;
-  /** Repo-relative paths now in `learn/assets/`. */
+  /** The logical names that landed in the database (`learn/assets/<slug>.tldr` and `.svg`). */
   written: string[];
-  /** False when Postgres was unreachable. The files are the output; this is derived. */
+  /** False when the job row did not record the accept yet; Reindex finishes it. */
   indexed: boolean;
+  /** The diagram's revision the accept wrote, when it landed. */
+  revision?: number;
   note: string;
   error?: string;
   /** True when a mirror on the target was closed on the way past. */
@@ -53,14 +59,6 @@ export interface AcceptHooks {
    * `gone: false` is a refusal and not a warning: see step 3.
    */
   closeMirror?: () => Promise<{ found: boolean; gone: boolean }>;
-}
-
-async function sha256(file: string): Promise<string | null> {
-  try {
-    return createHash("sha256").update(await readFile(file)).digest("hex");
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -132,11 +130,11 @@ async function acceptLocked(
     };
   }
 
-  // S4: a human edit that landed while the job ran. The three hashes make the
-  // loss visible, and this is the only moment the question can still be asked —
-  // after the rename, the file cannot answer it.
-  const moved = await targetMoved(record);
-  if (moved !== null) return moved;
+  // S4: a commit that landed while the job ran. Asked now so a job that is
+  // already stale costs no Chromium, and again with nothing left to await
+  // before the put, which carries the same base and is the answer that holds.
+  const early = await targetMoved(record);
+  if (early.refusal !== null) return early.refusal;
 
   /* 1. The export the gate may not have got to. This is the exit-4 case. */
   if (record.gate?.svg === null || record.gate?.exportFailed === true) {
@@ -146,7 +144,7 @@ async function acceptLocked(
         ok: false,
         written: [],
         indexed: false,
-        note: `the SVG still will not export (${explainExit(exported.code)}), so nothing was moved`,
+        note: `the SVG still will not export (${explainExit(exported.code)}), so nothing landed`,
         error: "export-failed",
       };
     }
@@ -165,39 +163,23 @@ async function acceptLocked(
         indexed: false,
         note:
           `the exported SVG did not verify (${failed.map((c) => c.rule).join(", ") || explainExit(verified.code)}), ` +
-          `so nothing was moved`,
+          `so nothing landed`,
         error: "verify-failed",
       };
     }
   }
 
-  /* 3. The writer goes, and then the question is asked for the last time.
+  /* 3. The canvas on this diagram goes before it is refreshed to what lands.
    *
-   *    A6: `serve` holds the document as its tab last loaded it, and Cmd+S in
-   *    that tab PUTs the whole thing back — so a human save landing after the
-   *    rename would silently revert the accepted diagram. The mirror is closed
-   *    here rather than at the top of the route, because everything above this
-   *    line can still refuse and a refusal must not disconnect an editor: a
-   *    stale tab pressing Accept on a job somebody already discarded would
-   *    otherwise close the canvas its owner is drawing on and then answer 409.
-   *    Caught in review on this PR.
-   *
-   *    The hash comes after the close and not before it, which is the order
-   *    that makes both of them mean something: the close stops any further
-   *    save, and the check then catches one that had already landed. The export
-   *    and the verify above are each a Chromium launch, so the answer from the
-   *    top of this function can be minutes old by now — and the window that
-   *    leaves open is the exact one S4 is about. */
+   *    A6: `serve` holds the document as its tab last loaded it and Cmd+S
+   *    writes the whole thing back. It writes to the checkout now, not to
+   *    anything the put reads, but the checkout is refreshed to the accepted
+   *    revision below, and a save landing after that would put the old
+   *    drawing back on the canvas as an uncommitted edit. Closed here rather
+   *    than at the top, because a refusal above must not disconnect an
+   *    editor; and a writer that will not die is still a refusal. */
   const closed = (await hooks.closeMirror?.()) ?? { found: false, gone: true };
   const mirrorClosed = closed.found;
-
-  /*    And a writer that will not die is a refusal, not a warning. `stopChild`
-   *    only answers `gone: false` after a `SIGTERM`, a grace window, a `SIGKILL`
-   *    and a second one, so this is a machine in trouble — but renaming anyway
-   *    would make the whole of that waiting decorative in the one case it
-   *    exists for. Nothing has moved at this point, so Discard, a retry and a
-   *    follow-up job are all still available, which is why refusing costs a
-   *    person a click and not their work. */
   if (!closed.gone) {
     return {
       ok: false,
@@ -205,41 +187,84 @@ async function acceptLocked(
       indexed: false,
       mirrorClosed,
       note:
-        `the canvas open on ${record.targetPath} would not shut down, so nothing was moved: ` +
-        `renaming behind a writer that is still running is the save-after-rename loss this ` +
-        `close exists to prevent. Close the tab, check for a stuck process, and press Accept again.`,
+        `the canvas open on ${record.targetPath} would not shut down, so nothing landed: its ` +
+        `next save would write over the checkout this accept refreshes. Close the tab, check for ` +
+        `a stuck process, and press Accept again.`,
       error: "mirror-stuck",
     };
   }
 
-  const movedLate = await targetMoved(record);
-  if (movedLate !== null) return { ...movedLate, mirrorClosed };
+  const late = await targetMoved(record);
+  if (late.refusal !== null) return { ...late.refusal, mirrorClosed };
 
-  /* 4. The renames. Atomic, because the candidates directory is a sibling of
-   *    the target and not the OS temp directory: each file is either the old
-   *    one or the new one, never a half-written mix of both. */
-  const written: string[] = [];
-  await rename(candidate, absolute(record.targetPath));
-  written.push(record.targetPath);
-  if (hasSvg) {
-    await rename(absolute(record.candidateSvgPath), absolute(record.targetSvgPath));
-    written.push(record.targetSvgPath);
+  /* 4. The put: the one write, all of it in one transaction the catalog owns,
+   *    after the SVG is confirmed in the blob store. Its base is the revision
+   *    the job started from, so the catalog refuses it if the answer above
+   *    went stale in the moments since; a retry after a put that landed and
+   *    was never recorded finds its own write and changes nothing. */
+  const written = [record.targetPath, ...(hasSvg ? [record.targetSvgPath] : [])];
+  const put = await diagramPut({
+    slug: record.slug,
+    tldr: candidate,
+    svg: hasSvg ? absolute(record.candidateSvgPath) : null,
+    jobId: record.id,
+    base: late.base,
+    reason: acceptReason(record),
+  });
+  if (!put.ok) {
+    const refusal = (put.json ?? {}) as { code?: unknown };
+    return {
+      ok: false,
+      written: [],
+      indexed: false,
+      mirrorClosed,
+      note: put.offline
+        ? `the catalog is unreachable, and a diagram lives in the database, so nothing landed. ` +
+          `The candidate stays in ${CANDIDATES_DIR}/; press Accept again once Postgres answers.`
+        : refusal.code === "stale-base"
+          ? `${record.targetPath} was committed while this job ran, so accepting would write over ` +
+            `a change nobody reviewed. Discard this and run the brief again over the current diagram.`
+          : `the catalog refused the diagram, so nothing landed: ${put.error ?? "no reason given"}`,
+      error: put.offline ? "catalog-offline" : refusal.code === "stale-base" ? "target-moved" : "put-refused",
+    };
   }
+  forgetDiagramList();
+  const landedJson = (put.json ?? {}) as { revision?: unknown; files?: unknown };
+  const revision = landedJson.revision;
+  // Until `catalog flip diagrams` the files still own diagrams, and the put
+  // wrote them through (D17 of the migration plan); after it, none.
+  const files = Array.isArray(landedJson.files) ? landedJson.files.filter((f): f is string => typeof f === "string") : [];
 
-  /* 5. The disk record, before the database row: rule 7, and the reason it is
-   *    not simply tidiness. The files have moved by now, so a crash between
-   *    here and the catalog call would otherwise leave a record saying the job
-   *    is still awaiting review of a candidate that is no longer there, and a
-   *    retry could neither accept nor discard it. */
+  /* 5. The disk record, before the job row: rule 7. The diagram has landed, so
+   *    a crash from here on must leave a record that says so; Reindex then
+   *    finishes the job row. */
   await store.update(record.id, {
     state: "accepted",
     reviewedAt: new Date().toISOString(),
     written,
+    files,
     indexed: false,
   });
 
-  /* 6. The only step that needs Postgres, and therefore the last one. */
-  const indexed = await jobAccept(record.id, written);
+  // The candidates have landed; the directory is scratch, and a later job for
+  // the same slug must not find these and take them for its own.
+  await rm(candidate, { force: true });
+  await rm(absolute(record.candidateSvgPath), { force: true });
+  // The canvas opens the accepted drawing next time, unless the checkout
+  // holds edits nobody committed, which are left exactly where they are.
+  const checkout = await ensureCheckout(record.slug);
+
+  /* 6. The job row. */
+  const indexed = await jobAccept(record.id);
+  const landed =
+    `${record.targetPath} landed in the database` +
+    (typeof revision === "number" ? ` as revision ${revision}` : "") +
+    (hasSvg ? ", with its SVG in the blob store" : "") +
+    (files.length === 0
+      ? `. Nothing under learn/ changed, so there is nothing to commit.`
+      : `. The files still own diagrams until the flip, so ${files.join(" and ")} were written ` +
+        `too; commit them yourself: git add ${files.join(" ")}`) +
+    (checkout.note.includes("never committed") ? ` ${checkout.note}.` : "");
   if (!indexed.ok) {
     await store.noteCatalogError(record.id, indexed.error ?? "accept could not be recorded");
     return {
@@ -247,11 +272,10 @@ async function acceptLocked(
       written,
       indexed: false,
       mirrorClosed,
+      ...(typeof revision === "number" ? { revision } : {}),
       note:
-        `${written.join(" and ")} landed in learn/assets/, and the catalog did not record it: ` +
-        `${indexed.error}. The files are the output and the index is derived, so this is ` +
-        `finished by POST /api/jobs/${record.id}/reindex once the database is back. Commit them ` +
-        `yourself: git add ${written.join(" ")}`,
+        `${landed} The job row did not record the accept: ${indexed.error}. ` +
+        `POST /api/jobs/${record.id}/reindex finishes it.`,
     };
   }
 
@@ -261,47 +285,98 @@ async function acceptLocked(
     written,
     indexed: true,
     mirrorClosed,
-    note:
-      `${written.join(" and ")} landed in learn/assets/ and the catalog recorded ${written.length} ` +
-      `output${written.length === 1 ? "" : "s"}. Committing is still yours: git add ${written.join(" ")}`,
+    ...(typeof revision === "number" ? { revision } : {}),
+    note: landed,
   };
 }
 
+/** The revision's reason: what the commit message used to say. */
+function acceptReason(record: JobRecord): string {
+  const brief = record.brief as { title?: unknown; mode?: unknown };
+  const title = typeof brief.title === "string" && brief.title.trim() !== "" ? `: ${brief.title.trim()}` : "";
+  return `Accepted studio job ${record.id} (${record.brief.mode ?? "new"})${title}`.slice(0, 500);
+}
+
+interface Moved {
+  /** The refusal to return, or null when the diagram is where the job left it. */
+  refusal: AcceptResult | null;
+  /** The diagram's latest revision is this job's own earlier put, which is a retry. */
+  alreadyLanded: boolean;
+  latest: number | null;
+  /** The revision the put is checked against: where the job started, or its own earlier put. */
+  base: number | null;
+}
+
 /**
- * Has the committed file changed since the job started? The refusal, or null.
+ * Has the diagram moved since the job started? Asked of the catalog, since
+ * the diagram is its rows: the latest revision against the one the job
+ * started from. A latest revision written by this same job is an earlier
+ * accept that landed and was never recorded, not a move.
  *
- * Asked twice by `accept`, which is the point of it being a function: once
- * early, so a job that was already stale costs no Chromium, and once with
- * nothing left to await before the rename, which is the answer that actually
- * protects the file.
+ * A job with no starting revision (enqueued with the database down and never
+ * given a checkout record, or recorded before diagrams moved into the
+ * database) is judged by the document it started from instead: the hash
+ * taken at enqueue against the stored document's. Equal, and the latest
+ * revision is its base; different, and it is refused like any other move,
+ * since nothing says the difference was reviewed.
  */
-async function targetMoved(record: JobRecord): Promise<AcceptResult | null> {
-  const now = await sha256(absolute(record.targetPath));
-  if (now === null || now === record.targetHashBefore) return null;
+async function targetMoved(record: JobRecord): Promise<Moved> {
+  const shown = await diagramShow(record.slug, workDir());
+  if (!shown.ok) {
+    return {
+      refusal: {
+        ok: false,
+        written: [],
+        indexed: false,
+        note: shown.offline
+          ? `the catalog is unreachable, and a diagram lives in the database, so nothing can land ` +
+            `yet. The candidate stays in ${CANDIDATES_DIR}/; press Accept again once Postgres answers.`
+          : `the catalog could not say where ${record.targetPath} stands: ${shown.error ?? "no reason given"}`,
+        error: shown.offline ? "catalog-offline" : "catalog-failed",
+      },
+      alreadyLanded: false,
+      latest: null,
+      base: null,
+    };
+  }
+  const diagram = (
+    shown.json as { diagram?: { revision: number | null; revisionJob: string | null; documentHash: string } | null }
+  ).diagram;
+  const latest = diagram?.revision ?? null;
+  if (diagram?.revisionJob === record.id) return { refusal: null, alreadyLanded: true, latest, base: latest };
+  const started = record.targetRevisionBefore;
+  if (started !== undefined ? latest === started : (diagram?.documentHash ?? null) === record.targetHashBefore) {
+    return { refusal: null, alreadyLanded: false, latest, base: latest };
+  }
   return {
-    ok: false,
-    written: [],
-    indexed: false,
-    note:
-      `${record.targetPath} has changed since this job started, so accepting would overwrite ` +
-      `an edit nobody reviewed. Compare the two and re-run the job against the current file.`,
-    error: "target-moved",
+    refusal: {
+      ok: false,
+      written: [],
+      indexed: false,
+      note:
+        `${record.targetPath} has changed since this job started (` +
+        (started !== undefined
+          ? `revision ${started ?? "none"} then, ${latest ?? "none"} now`
+          : `its starting revision was never recorded, and the stored document is not the one it started from`) +
+        `), so accepting would write over a change nobody reviewed. Compare the two and re-run the job ` +
+        `against the current diagram.`,
+      error: "target-moved",
+    },
+    alreadyLanded: false,
+    latest,
+    base: null,
   };
 }
 
 /**
- * Re-run the catalog half of an accept whose files already landed.
+ * Finish an accept whose diagram landed and whose job row did not record it.
  *
- * This is the Reindex the accept note and U3 both name, and without it the one
- * failure accept is designed to survive was the one it could not recover from:
- * the files are in `learn/assets/`, the disk record says `accepted`, and a
- * second `POST accept` is refused because `accepted` is terminal. The catalog's
- * own row is still `awaiting_review` in that case — `job accept` is what moves
- * it — so re-running the same call is a retry and not a second transition.
- *
- * Idempotent on the catalog side too: `assert-output` upserts, and a retried
- * accept whose asserts already went through is the case `runAccept` counts
- * `asset_job` rows for rather than requiring `--path`.
+ * This is the Reindex the accept note and U3 both name. The put is the
+ * landing, and it is done; what is left is `job accept`, which moves the job
+ * row to `accepted` once it finds the `asset_job` rows the put wrote. `accepted`
+ * is terminal on disk, so a second `POST accept` is refused, and without this
+ * the job row would stay `awaiting_review` until somebody opened psql.
+ * Re-running it is a retry, not a second transition.
  */
 export function reindex(store: JobStore, record: JobRecord): Promise<AcceptResult> {
   return withJobLock(record.id, () => reindexLocked(store, store.get(record.id) ?? record));
@@ -315,7 +390,7 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
       indexed: record.indexed,
       note:
         `job ${record.id} is ${record.state}, and there is nothing to reindex: reindex finishes ` +
-        `an accept whose files landed and whose catalog call did not.`,
+        `an accept whose diagram landed and whose job row did not record it.`,
       error: "wrong-state",
     };
   }
@@ -332,19 +407,19 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
       ok: false,
       written: [],
       indexed: false,
-      note: `job ${record.id} is accepted but names no file it landed, so there is nothing to record`,
+      note: `job ${record.id} is accepted but names nothing it landed, so there is nothing to record`,
       error: "nothing-written",
     };
   }
 
-  const indexed = await jobAccept(record.id, record.written);
+  const indexed = await jobAccept(record.id);
   if (!indexed.ok) {
     await store.noteCatalogError(record.id, indexed.error ?? "reindex could not be recorded");
     return {
       ok: false,
       written: record.written,
       indexed: false,
-      note: `the catalog still will not record it: ${indexed.error}. The files are in learn/assets/ either way.`,
+      note: `the catalog still will not record it: ${indexed.error}. The diagram is in the database either way.`,
       error: "catalog-failed",
     };
   }
@@ -357,7 +432,7 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
   };
 }
 
-/** Discard: both candidates go, the lease is released, and git is the undo. */
+/** Discard: both candidates go and the lease is released. Nothing in the database changed. */
 export function discard(store: JobStore, record: JobRecord): Promise<AcceptResult> {
   return withJobLock(record.id, () => discardLocked(store, store.get(record.id) ?? record));
 }
@@ -381,7 +456,7 @@ async function discardLocked(store: JobStore, record: JobRecord): Promise<Accept
     ok: true,
     written: [],
     indexed: recorded.ok,
-    note: `the candidate is deleted. Nothing under learn/assets/ ever changed, so there is nothing to undo.`,
+    note: `the candidate is deleted. The diagram in the database never changed, so there is nothing to undo.`,
   };
 }
 

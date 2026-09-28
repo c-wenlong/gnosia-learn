@@ -70,6 +70,33 @@ export async function inspectDiagram(formData: FormData): Promise<void> {
 }
 
 /**
+ * Store what the canvas holds: `catalog diagram commit`, through the runner.
+ *
+ * The canvas edits a checkout of the diagram (Track D of
+ * docs/CONTENT-MIGRATION.md), and nothing it saves reaches the database until
+ * this. The reason is required, because it is what the commit message used to
+ * say; a commit refused because the diagram moved since the checkout leaves
+ * the drawing on the canvas and says so.
+ */
+export async function commitDiagram(formData: FormData): Promise<void> {
+  requireStudio();
+  const diagram = String(formData.get("name") ?? "");
+  const path = String(formData.get("path") ?? "/studio");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const result = await studioApi<{ ok: boolean; note?: string }>(
+    `/api/diagrams/${encodeURIComponent(diagram)}/commit`,
+    { method: "POST", body: JSON.stringify({ reason }), timeoutMs: 120_000 },
+  );
+  redirect(
+    withOutcome(path, "commit", {
+      ok: result.ok && result.data.ok,
+      headline: result.ok ? (result.data.note ?? "committed") : result.headline,
+      detail: result.ok ? null : result.detail,
+    }),
+  );
+}
+
+/**
  * Close a mirror and let the next render start a fresh one.
  *
  * U10's one addition to what the mirror says about itself: when the runner's
