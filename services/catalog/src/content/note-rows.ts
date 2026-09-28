@@ -330,11 +330,23 @@ export function assertFrontmatter(text: string, where: string): void {
     );
   }
   const stray = strayFrontmatterLines(text);
-  if (stray.length > 0) {
+  const prose = stray.filter((line) => !line.trim().startsWith("#"));
+  if (prose.length > 0) {
     throw new NoteWriteError(
-      `${where} has a frontmatter block holding ${JSON.stringify(stray[0])}, which is not a key: line: its closing --- ` +
+      `${where} has a frontmatter block holding ${JSON.stringify(prose[0])}, which is not a key: line: its closing --- ` +
         `is probably damaged, and the block runs on to a later --- in the body, which would be dropped. Nothing was ` +
         `written; repair the closing --- and commit again.`,
+    );
+  }
+  // A `#` line the parser skips as a comment. Named for what it is rather
+  // than as a damaged fence, and still refused: the row has no place for a
+  // comment, so the database would drop it, the same reason an unknown key is
+  // refused. And a run-on block of nothing but headings would look the same.
+  if (stray.length > 0) {
+    throw new NoteWriteError(
+      `${where} has ${JSON.stringify(stray[0])} in its frontmatter. A comment there has no column in the database and ` +
+        `would be dropped (and a # heading there means the closing --- is damaged). Nothing was written; move it ` +
+        `into the body and commit again.`,
     );
   }
   const id = data["id"];

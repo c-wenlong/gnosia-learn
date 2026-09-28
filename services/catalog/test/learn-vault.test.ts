@@ -673,6 +673,10 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     await writeFile(path.join(vault, rel), runOn);
     expect((await push(vault)).refused[0]?.reason).toMatch(/is not a key: line: its closing --- is probably damaged/);
     expect(await revisions("gamma")).toBe(before);
+    // A comment line is named as one, and refused, since no column keeps it.
+    await writeFile(path.join(vault, rel), `---\nid: gamma\n# a note to myself\ntitle: Gamma\n---\n\n# Gamma\n`);
+    expect((await push(vault)).refused[0]?.reason).toMatch(/"# a note to myself" in its frontmatter\. A comment there has no column/);
+    expect(await revisions("gamma")).toBe(before);
     await writeFile(path.join(vault, rel), damaged);
 
     // Frontmatter with no id: is refused the same way.
