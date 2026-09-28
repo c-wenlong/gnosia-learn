@@ -1469,11 +1469,45 @@ read and its write, and fails without the fix:
 
 Parallel by area once every type has flipped. Four PRs (*guessed*).
 
-- [ ] **Web app:** `fileSource` is removed from the app's composition root;
+- [x] **Web app:** `fileSource` is removed from the app's composition root;
       `apps/web/src/data/repo-root.ts` and its five callers go;
       `outputFileTracingIncludes` and its comment go from
       `apps/web/next.config.ts:46-47`, keeping `outputFileTracingRoot` for the
       workspace packages; the legacy file branch of `asset-files.ts` goes.
+
+      **Built** (branch `p2/readers-db-only`, held until the owner's
+      database is flipped). `contentSource()` hands `selectSource` a file
+      reader that only refuses: a type whose row says `files`, that has no
+      row, or that `CONTENT_SOURCE` sends to files throws
+      `ContentUnavailableError` naming `npm run catalog -- flip <type>`, and
+      an ownership read that fails throws too, where it used to fall back to
+      the files (edge case 20). `app/(app)/error.tsx` renders either inside
+      the shell; Next keeps the message out of the browser, so the panel names
+      both causes and the digest, and the server log names the one it was.
+      The legacy file branch goes with `ASSET_FILES_ENABLED`, and with it the
+      request-time ffmpeg poster (`asset-posters.ts`), which read the video's
+      file: the routes serve a blob or a row, a poster only when the upload
+      stored one, and anything else is `not-uploaded`; a note, log or
+      `.tldr` whose type is not flipped is a 503 `not-flipped`. The pages
+      decide servability per row (the go-live follow-up Track E left), and
+      the library grid's notice counts the rows in view with no stored copy
+      and names `catalog asset upload`. Suites that want real course data
+      mock the seam with `apps/web/src/test/content-files.ts`, one constant
+      naming the tree for when `seed/` replaces `content/`. Proof on a
+      `createdb -T self_learn` copy, migrated, imported from a throwaway copy
+      of the tree (the untracked tailscale diagram included), all six types
+      flipped and exported, and `asset upload` into a temporary
+      `SELF_LEARN_HOME` (159 objects, 433.6 MB): 71 routes served by this
+      branch from rows gave the same server HTML, scripts and hashed asset
+      names set aside, as `origin/main` with `CONTENT_SOURCE=files` and
+      `ASSET_FILES_ENABLED=1` on an identical copy; 34 full-page screenshots
+      at 1440, light and dark, of 17 of those routes: 20 matched pixel for
+      pixel and 14 differed only in about 190 pixels of the wordmark's
+      resampling; `scripts/e2e.mjs` passed 12 of 12
+      against the flipped copy (`E2E_TEMPLATE_DB` names it); with the
+      courses row set back to `files`, `/courses` rendered the panel and the
+      log named `catalog flip courses`, and with `DATABASE_URL` at a dead
+      port it rendered the panel beside the store banner.
 - [ ] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
