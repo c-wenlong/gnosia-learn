@@ -352,6 +352,18 @@ process behind it; D25 is why. The rewrite, rather than a cross-port fetch from
 the browser, is so the page sees one origin and SSE needs no CORS. D11 covers
 why the UI still lives in `apps/web` and how it stays out of production.
 
+**One owner per runner** (phase 4 of `docs/CONTENT-MIGRATION.md`). The runner
+serves `STUDIO_OWNER`, `local` unless set, and passes it as `--owner` to every
+`catalog diagram` verb, so the catalog lists, shows, checks out and writes only
+what that owner may (their diagrams and the commons'). The app's server names
+the signed-in owner in `x-self-learn-owner` on every call, the proxy dropping
+any value a page sent first, and the runner answers 403 to a request naming
+anyone else. It refuses rather than scopes because nothing the runner holds is
+per owner: one queue, one checkout directory, one cached list, one agent
+account and one daily cap. A second owner's studio is a second runner, the way
+D25 gives each generator its own. The review of phase 4 found the runner
+listing and serving another owner's diagrams in both directions before this.
+
 ### The job API
 
 Route conventions follow [`apps/web/src/app/api/`](../apps/web/src/app/api):

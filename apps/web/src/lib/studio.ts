@@ -1,7 +1,9 @@
 import "server-only";
 
+import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
 import { notFound } from "next/navigation";
 
+import { currentOwner } from "@/lib/owner";
 import type { Comparison } from "@/lib/studio-compare";
 
 /**
@@ -86,6 +88,10 @@ export type StudioResult<T> =
  * machine. Node's `fetch` sends neither header, and the `Host` it sends is the
  * runner's own authority, so these calls pass the guard by being what the guard
  * is looking for: a program, not a page.
+ *
+ * Every call names the signed-in owner (`STUDIO_OWNER_HEADER`), which the
+ * runner checks against the owner it serves (phase 4), so a second account's
+ * render is refused rather than shown this owner's diagrams and jobs.
  */
 export async function studioApi<T>(
   path: string,
@@ -93,6 +99,7 @@ export async function studioApi<T>(
 ): Promise<StudioResult<T>> {
   const { timeoutMs = 30_000, ...rest } = init;
   const url = `${studioOrigin()}${path}`;
+  const owner = await currentOwner();
   let response: Response;
   try {
     response = await fetch(url, {
@@ -102,6 +109,7 @@ export async function studioApi<T>(
       headers: {
         ...(rest.body === undefined ? {} : { "content-type": "application/json" }),
         ...rest.headers,
+        [STUDIO_OWNER_HEADER]: owner,
       },
     });
   } catch (error) {

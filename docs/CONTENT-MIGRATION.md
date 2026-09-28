@@ -1847,6 +1847,75 @@ production site and a `/learn` session both work against the cloud database,
 and `catalog doctor` reports every completeness rule armed or waived with a
 reason.
 
+### Cut-over day, as a script
+
+The phase has two halves. The code half (the tree loses `content/` and
+`learn/`) is one PR, held until the owner's database is flipped and has
+applied 0013. The operator half runs against the database before that PR
+merges, from the checkout that still has the files, so it ships first, on its
+own, as `node scripts/flip-rehearsal.mjs --cutover`: `--real` refuses to run
+from any checkout but the one the script sits in, and the cut-over PR's own
+branch has no tree left to import.
+
+`--real --cutover --database <name> --checkout <dir>` has flip day's guards
+(the named database, the checkout the script is in, a terminal to type the
+name on, no `--yes`) and refuses up front unless every type is flipped, the
+tag does not exist here or on `origin`, and no tracked file under `content/`
+or `learn/` differs from `HEAD`. Its steps, each checked before the next:
+
+0. A backup, `~/<name>-precutover-<UTC time>.dump`, checked as flip day's is.
+1. `catalog migrate`, which must hold nothing: the cut-over PR stops treating
+   0013 as a contract, which is only safe on a database that applied it.
+2. Every content type's `content_source` row says `db`.
+3. `catalog import <tree>` into a throwaway copy, then into the database; each
+   must remove nothing, and the second must skip all six types as their own
+   export: a type read from files means the tree is not the last export.
+4. `catalog export --out <temp dir>`, then `catalog parity <tree>`. The
+   parity result and a byte comparison of that export with the tree are
+   saved to `~/<name>-cutover-<UTC time>.parity.json`, the report the PR body
+   quotes. A parity mismatch, or a file the export writes in other bytes than
+   the tree holds, stops the run and says how to catch the tree up: export
+   into it, commit, run again (the database may have moved on since flip day),
+   so the tag holds the export itself.
+5. `catalog doctor`, and a decision per completeness rule: a clean rule is
+   armed by the strict flips; `item-has-concept` with violators is waived
+   with a reason typed on the terminal, an empty one refused; any other rule
+   with a violator stops the run before anything is armed.
+6. `catalog flip <type> --strict` for all six, the waiver passed to courses,
+   so it lands on `content_source` beside the flip.
+7. `catalog doctor`, whose new `unsettled` list (rules neither armed nor
+   waived) must be empty.
+8. `catalog parity <tree>` once more, with `HEAD` still the commit compared
+   in step 4: a write during the strict flips (a session logged) would
+   otherwise leave the tag holding files older than the database.
+9. `git tag content-files-final` on that commit, checked again first (and
+   refused if `HEAD` moved), never pushed.
+
+It ends by printing what the operator does next, in order: push the tag, merge
+the cut-over PR (`gh pr merge p3/cutover --squash --delete-branch`), pull. The
+untracked files under `content/` and `learn/` (the tailscale diagram) are
+listed: the import read them into the database, the tag does not hold them,
+and the pull leaves them on disk until someone removes them.
+
+A rehearsal with `--cutover` runs flip day's steps and then these on one copy,
+tags a throwaway git repository made of the copied tree, and takes the
+waiver's reason from `--waive-reason` when there is no terminal. It refuses a
+template that is flipped already, since flip day's steps store blobs into the
+rehearsal's temp store and a flipped template's are elsewhere: after flip day,
+restore the pre-flip dump into a new database and rehearse from that.
+
+Measured 2026-09-28, a rehearsal of `self_learn` (at 0009) with the main
+checkout's tree, the untracked tailscale diagram included: 40 of 40 steps.
+Flip day's 23 as before; then the cut-over's backup (347 KB, data for 34
+tables), a migrate with nothing to do, the imports skipping all six types and
+removing nothing, parity clean (86 topics, 8 tags, 10 courses, 32 notes, 3
+logs, 6 diagram files) with 53 of 53 exported files byte-identical in the
+tree, `item-has-concept` waived with 134 violators (one more than the 133
+counted when phase 3 was planned), the other two rules armed, doctor with
+nothing unsettled, and the tag made. `services/catalog/test/flip-rehearsal.test.ts`
+runs the same on the seed tree and holds the refusals, and
+`scripts/lib/cutover.test.mjs` the tag's.
+
 ## Phase 4: tenancy
 
 After accounts exist; accounts themselves are out of scope. The plumbing
@@ -1926,10 +1995,12 @@ before, so it merged before flip day and does not depend on #152.
       meanwhile) is already counted, so a rerun or putting back an object the
       store lost is never refused, even under a cap lowered below what the
       owner holds. The day is rolling, as the studio's spend cap.
-      A value that is not a whole number refuses every upload with the
+      A value that is not a whole number refuses every new object with the
       variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
       does: an upload is a command a person watches, and a quota that a typo
-      turns off is the failure that matters here. No migration: `blob_object`
+      turns off is the failure that matters here. (The phase 4 review found it
+      refused a re-store of a key with a row too, so every unchanged import
+      failed; it now reads the caps only for a new object.) No migration: `blob_object`
       already holds the key, the size and `created_at`, so a cap table would
       only duplicate them. `catalog blob audit` prints each owner's objects,
       bytes and uploads in the last 24 hours, and the caps in force.
@@ -1940,6 +2011,123 @@ before, so it merged before flip day and does not depend on #152.
       seam's `owner`), the role and the editor do not. DEPLOYMENT.md says what
       a content-writing route will have to do.
 - [x] Decide per type whether ids stay global (D3). **Decided:** D23.
+
+### Phase 4 review fixes, slice 1: read leaks and unscoped write verbs
+
+A read-only review of #158 and #160, on a flipped copy seeded with a second
+owner `other` and the commons, found reads that crossed owners at the edge
+rather than at the row, and write verbs that went around the seam's owner
+check. Every fix below changes nothing the one owner there is today sees:
+with every row `local` each filter keeps every row, and on a database from
+before 0010 each read still answers unscoped.
+
+- [x] The studio lists, opens and serves only its owner's diagrams (BLOCKER).
+      **Built:** `listDiagrams`, `readDiagramDocument`, `checkoutState` and
+      `checkoutDiagram` take the owner's scope, so another owner's slug is a
+      slug with no diagram (no file, no revision number); `catalog diagram`
+      takes `--owner`. The runner serves one owner, `STUDIO_OWNER` (default
+      `local`), passes it on every diagram verb, and refuses a request the web
+      app names as another owner's (`x-self-learn-owner`, set by the app's
+      server from the session, a page's value dropped first).
+      **Departed from the brief**, which asked the runner to pass each
+      request's owner through: nothing the runner holds is per owner (one
+      queue, one checkout directory, one cached list, one agent account and
+      daily cap), so serving a second owner would put their briefs on this
+      owner's bill and their jobs in this owner's list. A second owner's studio
+      is a second runner. `services/studio/test/owner.test.ts` fails a diagram
+      verb that leaves `--owner` out; `apps/web/src/lib/studio-owner.test.ts`
+      pins the header.
+- [x] A note names no prerequisite its reader cannot open (BLOCKER).
+      **Built:** `readNoteRows` keeps a `requires:` or `assumes:` edge only
+      when its far end is readable, as `readableEdges` does for the graph.
+- [x] Learner writes name only readable curriculum items (S5).
+      **Built:** `assertReadableItems` beside `assertReadableConcepts`, used by
+      a tick, a note, a recap and the legacy import, with the sentence a
+      missing item gets; a reset clears only rows on readable items.
+- [x] The `learn` CLI's learner view reads as `cliScope()` (S6).
+      **Built:** the graph (`status`, `frontier`, `plan`), the note reads and
+      checkouts, `vault pull` and the session list; the five pinned `--json`
+      shapes did not change.
+- [x] `scopedRead` no longer fails open (S7).
+      **Built:** an `undefined_column` error reads unscoped only after
+      `ownersExist` says `asset.owner_id` is absent, and a yes is kept per
+      pool; writes ask first with `readableFor`.
+- [x] Due cards and a refused session say nothing about another owner (nits).
+      **Built:** `dueReviews` lists no card on an unreadable concept, which
+      covers `/today` and the streak; `openTutorSession`'s refusal of an id
+      another learner holds no longer says whose it is.
+- [x] The whole-database readers are listed (S11, this slice's half).
+      **Built:** `services/catalog/SCHEMA.md` "Owners", and the gotcha in
+      `AGENTS.md`: which CLI verbs read every owner on purpose, and that a
+      type still on files has no owner, so accounts need every type flipped.
+
+### Phase 4 review fixes, slice 2: the import, the upload, the caps
+
+A read-only review of #158 and #160 on a flipped scratch copy seeded with a
+second owner, `other`, and the commons. Slice 1 (read leaks and write verbs)
+is its own list.
+
+- [x] `catalog import` is tenant-safe (S3). It writes as one owner, stamps it
+      on every row, and prunes, archives and clears links only among that
+      owner's rows; a tree row on another owner's id, under another owner's
+      entity or pointing at one the owner cannot read, and a prune whose
+      cascade reaches another owner's rows, are refused by id. Another
+      learner's session log is neither called gone nor appended to.
+      **Built:** `src/index/writer.ts` (`stampOwner`, `assertNoForeignRows`,
+      `assertNoKeptCollisions`, `assertNoForeignDependents`, `linkOwned`),
+      `owner_id` in `NEVER_UPDATED`, the lookups in `src/index/run.ts`
+      scoped to readable rows, `importLogs` per learner.
+      `services/catalog/test/import-tenancy.test.ts` pins the three measured
+      cases (16 of its 17 cases fail on the writer before the fix). On seeded
+      copies: before the flip, the old import re-stamped `other`'s note
+      `local`, replaced its body, and deleted `other`'s and the commons'
+      notes, note assets, tag and link rows and `other`'s mastery, where the
+      new one refuses the clashing note by name and, without the clash,
+      imports with 0 removed and every one of `other`'s and the commons' rows
+      byte-identical; after the flip, the old import deleted `other`'s video,
+      the new one removes nothing. D23's limit is rewritten.
+- [x] `catalog asset upload` writes each row as its own owner (S4): a commons
+      video's bytes go under `commons/` and its rows are written as the
+      commons; another owner's row is refused by name before a byte is read.
+      D23's "one update per table" step now says the upload is its second
+      half. `test/asset-upload.test.ts`.
+- [x] The caps hold under an audit and a typo (S9). A cap check locks the
+      row it asks about and the audit's stale-pending delete takes the
+      owner's cap lock, so a delete between the check and the pending write
+      cannot let a new object past both caps; the caps are read only for a
+      new object, so a malformed value refuses no re-store (an unchanged
+      post-contract import went from failing to `456 rows written, 0
+      removed`), and `doctor`, `status` and `blob audit` (exit 1) say it.
+      **Built:** `src/content/blob.ts`, `src/content/blob-audit.ts`,
+      `test/blob-caps.test.ts` (the widened window, the audit waiting, the
+      day cap under the lock, pending rows counting; removing the row lock,
+      the audit lock or the pending count each fails a case).
+- [x] Tests that fail when a filter goes (S10). `test/tenancy.test.ts`
+      compares every read whole with another owner's rows grafted into the
+      owner's course, deck and topic. Disabling each `ownedBy`/`andOwnedBy`
+      call in `services/catalog/src` one at a time, 53 of 60 fail it or the
+      other owner suites (`scope-reads`, `diagrams`, `import-tenancy`). Two
+      survivors are equivalent (child rows grouped by a parent id no
+      unreadable parent is ever looked up by, `readers/courses.ts:107,143`);
+      five are slice 1's (`content/diagrams.ts:121,125,955`,
+      `learn/vault.ts:864`, `state/progress.ts:209`) and no suite pins them
+      yet. It found four leaks,
+      fixed in `src/state/assets.ts`: `assetsForTopic`, `assetsForConcept`,
+      `assetsForCollection` and `derivationSources` answered for a topic,
+      concept, collection or derived id the reader cannot read.
+      `apps/web/src/lib/owner-calls.test.ts` also refuses literal owners,
+      hand-built scopes, namespace and unbound dynamic imports, re-exports of
+      owner-bearing functions, other catalog entry points, `drizzle-orm` and
+      `.execute(`.
+- [x] The nits. Usage by `owner_id` on the database's clock; an overflowing
+      cap says it is too large; `asset upload --dry-run` asks the caps (a key
+      once, a poster against the day's count); `--json` keeps
+      `code: "BLOB_CAP"`; flip day runs with the caps off; a row may name
+      only a blob under its own owner's prefix (the seam refuses a new one,
+      the blob reads serve a blob only to a reader of its owner).
+- [x] Docs (S11, this slice's half): DEPLOYMENT.md "Per-owner caps",
+      SCHEMA.md "Owners" rows for the import, the upload, `uploadBlob` and
+      blob keys, and D23's limit.
 
 ## Dependencies and parallel work
 
@@ -2310,23 +2498,43 @@ effect).
 refuses a write naming an id another owner holds (`foreign-owner`), so a
 collision on a global slug is an error the second tenant sees rather than a
 silent takeover of the first owner's row. Nothing is re-keyed and nothing is
-moved to the commons: every row is `local` today, and moving the shared types
-is one `update ... set owner_id = 'commons'` per table on the day a second
-owner is created, which changes nothing `local` reads, since `local`
-reads the commons. **Why:** re-keying every table to `(owner_id, slug)` changes
+moved to the commons: every row is `local` today. Moving the shared types, on
+the day a second owner is created, is two steps, and changes nothing `local`
+reads, since `local` reads the commons: one `update ... set owner_id =
+'commons'` per table, then `catalog asset upload --source manimkc` for the
+rows that have bytes. A blob's key carries its row's owner (D5), so a moved
+asset still names a `local/` key; the upload writes each row as its own owner,
+stores the bytes again under `commons/` and points the row there. (An upload
+that wrote every row as the CLI's owner, as the first cut of phase 4 did, was
+refused by the seam for every moved row after its bytes were stored.) **Why:** re-keying every table to `(owner_id, slug)` changes
 every foreign key and query before a second tenant exists (D3's reason, which
 still holds), and the collision it would prevent can now only surface as a
 refusal. **Rejected:** composite keys now; a vocabulary per owner; moving the
 shared types to the commons today, which would make every CLI write of a topic
 a `foreign-owner` refusal until the CLI learned to write as the commons.
 
-**A limit this leaves, named so the accounts PR starts from it:** `catalog
-import`, `export`, `flip` and parity are the operator's whole-database tools
-and assume one owner. An import prunes or archives rows its tree no longer
-produces whoever owns them, and its upsert would stamp a colliding row
-`local`. Before a second owner's first row exists, the import has to be
-restricted to the importing owner's rows (its stale keys, its link clearing and
-its conflicts), or refuse while any row belongs to another owner.
+**The import is one owner's** (fixed in the phase 4 review). The first cut
+left `catalog import` pruning, archiving and unlinking whatever its tree did
+not produce, whoever owned it, and its upsert re-stamping a colliding row
+`local`; on a scratch copy seeded with a second owner that measured as three
+kinds of damage (a re-stamped note and pruned notes before the flip, an
+archived course and cleared links with courses on files, a deleted video after
+the flip). Now the import writes as one owner (`CLI_OWNER`): it stamps that
+owner on every row, prunes, archives and clears links only among that owner's
+rows (a link is its parent's, D24; one whose far end the owner cannot read is
+left for `catalog doctor`), and refuses by id, before the source writes
+anything, a tree row on an id another owner holds, a link under another
+owner's entity or to an entity the owner cannot read, and a prune whose
+cascade would take another owner's rows. `owner_id` is never changed by an
+upsert (`NEVER_UPDATED` in `content/upsert.ts`).
+
+**A limit this still leaves, named so the accounts PR starts from it:**
+`export`, `flip` and parity are the operator's whole-database tools and read
+every owner. And an import writes as one owner, so once a shared type moves to
+the commons, a tree holding it is refused as another owner's rows until the
+import can be told to write as the commons. Each source still commits on its
+own, so a refusal in a later source leaves the earlier ones written; every row
+they wrote is the importing owner's.
 
 ## Decided by the owner
 

@@ -58,8 +58,6 @@ import { VOCABULARY_FILE } from "./vocabulary";
 
 export const ASSETS_DIR = "learn/assets";
 
-/** Whose diagrams these are, until phase 4 knows who is importing. */
-const DIAGRAM_OWNER = LOCAL_LEARNER_ID;
 
 export const KINDS = {
   ".svg": "diagram_svg",
@@ -110,7 +108,7 @@ export const diagramsIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.diagrams,
   root: () => ASSETS_DIR,
 
-  read: async ({ repoRoot, toolsRoot, knownConcepts, knownDiagrams, vocabulary }) => {
+  read: async ({ repoRoot, toolsRoot, knownConcepts, knownDiagrams, vocabulary, owner = LOCAL_LEARNER_ID }) => {
     const directory = path.join(repoRoot, ASSETS_DIR);
     // A tree with no `learn/assets/` has no diagrams. `tldrawkc list` calls a
     // missing directory an error, so it is not asked; the parser says empty.
@@ -195,10 +193,10 @@ export const diagramsIndexer: Indexer = {
         stamped += 1;
       } else {
         const facts = await fileFacts(file);
-        const key = blobKey(DIAGRAM_OWNER, facts.contentHash, "svg");
+        const key = blobKey(owner, facts.contentHash, "svg");
         blobs.push({
           file,
-          ownerId: DIAGRAM_OWNER,
+          ownerId: owner,
           mime: "image/svg+xml",
           ext: "svg",
           sha256: facts.contentHash,
@@ -252,7 +250,7 @@ export const diagramsIndexer: Indexer = {
           : stored.hash;
       diagrams.push({
         slug: stem,
-        ownerId: DIAGRAM_OWNER,
+        ownerId: owner,
         title: subject.title,
         topicSlug: subject.topicSlug,
         document: stored.document,

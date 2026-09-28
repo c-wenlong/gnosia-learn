@@ -216,6 +216,15 @@ Rules of engagement:
   blob the diagram's row names, by the key in its (cached) diagram list, so a
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
+- The runner serves one owner, `STUDIO_OWNER` (default `local`). Every
+  `catalog diagram` verb it spawns passes `--owner` with it, so the grid,
+  the inspector, the SVG route and a checkout see that owner's diagrams and
+  the commons' and nothing else; `services/studio/test/owner.test.ts` fails a
+  diagram verb that leaves it out. The web app names the signed-in owner in
+  `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
+  session after dropping any value a page sent, and the runner refuses a
+  request naming anyone else: its queue, checkouts, cached list and agent
+  account are that one owner's, so there is no view of them to scope.
 - The spawned agent does not inherit the runner's Anthropic credentials.
   `agentEnv` in `services/studio/src/agent.ts` strips the auth variables
   (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and the rest, listed there) so
@@ -572,6 +581,12 @@ not have to be worked out again.
   `content/` or `learn/`, with the backup at
   `~/<name>-preflip-<time>.dump`; it asks for the name to be typed on a
   terminal and has no `--yes`, so it is the owner's to run, never an agent's.
+  `--cutover` is the day after: with `--real` it backs up again, checks the
+  tree is still the database's export (parity, saved as
+  `~/<name>-cutover-<time>.parity.json`), arms every completeness rule with
+  `flip --strict` or waives `item-has-concept` with a reason typed on the
+  terminal, and tags `content-files-final` without pushing it. A rehearsal
+  with `--cutover` runs flip day and then the cut-over on one copy.
 - **`catalog migrate` can exit 0 without reaching the head, on purpose.**
   Migration `0013` requires a blob behind every video, sidecar, poster and
   diagram SVG, and on a database whose renders were never uploaded its guard
@@ -635,6 +650,18 @@ not have to be worked out again.
   [learn/README.md](learn/README.md#the-json-shapes), and pinned by golden
   tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
   breaking change to the plugin, not a refactor.
+- **A read that forgets its owner reads every owner.** Ids are global (D23),
+  so a query with no `owner_id` filter serves another owner's rows by slug
+  and nothing fails. Anything the web app, the studio or the `learn` CLI's
+  learner view reaches takes an `OwnerScope` (`cliScope()` in a CLI) and
+  filters links by their far end too: the phase 4 review found a note's
+  `requires:` naming another owner's concept, and the studio listing another
+  owner's diagrams, both through reads that were scoped at the row and not
+  at the edge. The operator's whole-database tools are listed in
+  `services/catalog/SCHEMA.md` under "Owners", and a type still on files has
+  no owner at all, so accounts need every type flipped first. Do not answer
+  a scoped read's error by reading unscoped: `scopedRead` does that only
+  after the catalog says `owner_id` is absent.
 - **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
   `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
   load-bearing: the

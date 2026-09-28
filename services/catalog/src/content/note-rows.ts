@@ -36,8 +36,8 @@ function strings(value: unknown): string[] {
  * Live notes (archived ones are left out, as a reader hides them), all of
  * them or the slugs named, sorted by path, the order an export writes them in.
  * `owners` scopes it (phase 4): another owner's note is absent, as a slug
- * nobody holds is. Omitted, every owner's notes are read (the export, the
- * `learn` CLI).
+ * nobody holds is, and so is a `requires:` or `assumes:` entry naming one.
+ * Omitted, every owner's notes are read, with every edge (the export).
  */
 export async function readNoteRows(
   db: CatalogDatabase,
@@ -51,10 +51,21 @@ export async function readNoteRows(
     .from(concept)
     .where(slugs === undefined ? live : and(live, inArray(concept.slug, [...new Set(slugs)])));
   if (rows.length === 0) return [];
+  // Scoped, an edge is kept only when its far end is readable too, as
+  // `readableEdges` keeps the graph's: a note's `requires:` naming another
+  // owner's concept would put that slug on the page, in the tutor's prompt
+  // and behind `/api/concepts/<slug>`. Unscoped (the export), every edge.
+  const readableFarEnd =
+    owners === undefined
+      ? undefined
+      : inArray(
+          conceptPrerequisite.prerequisiteSlug,
+          db.select({ slug: concept.slug }).from(concept).where(ownedBy(concept.ownerId, owners)),
+        );
   const edges = await db
     .select()
     .from(conceptPrerequisite)
-    .where(inArray(conceptPrerequisite.conceptSlug, rows.map((row) => row.slug)))
+    .where(and(inArray(conceptPrerequisite.conceptSlug, rows.map((row) => row.slug)), readableFarEnd))
     .orderBy(asc(conceptPrerequisite.position), asc(conceptPrerequisite.prerequisiteSlug));
   const lists = new Map<string, { requires: string[]; assumes: string[] }>();
   for (const edge of edges) {
@@ -281,13 +292,14 @@ async function prerequisiteRows(db: CatalogDatabase, fields: NoteFields): Promis
 export async function noteText(
   db: CatalogDatabase,
   slug: string,
+  owners?: Owners,
 ): Promise<{ text: string; revision: number | null; path: string } | null> {
   // One snapshot for the note and its revision: read apart, a write landing
   // between them would pair old text with the new revision, and a commit of
   // that copy would pass the base check and overwrite the write.
   return db.transaction(
     async (tx) => {
-      const [row] = await readNoteRows(tx, [slug]);
+      const [row] = await readNoteRows(tx, [slug], owners);
       if (row === undefined) return null;
       if (row.body === null) {
         throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog import\` before the flip`);

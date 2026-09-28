@@ -69,6 +69,15 @@ export function ownerScope(owner: string): OwnerScope {
 }
 
 /**
+ * The header the web app names the signed-in owner in when it calls the
+ * studio runner (`services/studio`). Only the app's server sets it, from
+ * `currentOwner()`: the proxy route strips any a page sent before setting its
+ * own. The runner serves the one owner it was started for (`STUDIO_OWNER`)
+ * and refuses a request naming another.
+ */
+export const STUDIO_OWNER_HEADER = "x-self-learn-owner";
+
+/**
  * Event types in the log. The `learn` CLI writes the first five; the web app
  * writes `watched`, when the learner marks a library asset watched or read
  * (payload `{ asset, kind }`, no concept).

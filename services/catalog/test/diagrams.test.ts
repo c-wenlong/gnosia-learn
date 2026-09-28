@@ -30,6 +30,7 @@ import { connect } from "../src/db";
 import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
 import { lockEntity } from "../src/content/revisions";
+import { cliScope } from "../src/content/scope";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
@@ -208,7 +209,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(blob?.state).toBe("present");
     expect(await readFile(path.join(blobHome, "blobs", blob?.key ?? ""), "utf8")).toBe(svgOf("first"));
 
-    const [listed] = await listDiagrams(scratch.db);
+    const [listed] = await listDiagrams(scratch.db, cliScope());
     expect(listed).toMatchObject({
       slug: "first-diagram",
       title: "First",
@@ -291,7 +292,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
       tldr: await file("second-b.tldr", documentOf({ title: "Second, again", shapes: 3 })),
     });
     expect(result.svg?.current).toBe(false);
-    const [listed] = await listDiagrams(scratch.db, "second-diagram");
+    const [listed] = await listDiagrams(scratch.db, cliScope(), "second-diagram");
     expect(listed?.svgState).toBe("stale");
     expect(listed?.shapes).toBe(3);
   });
@@ -300,7 +301,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     // The put above changed the document and kept the SVG, and wrote only the
     // .tldr through; the SVG on disk is still the old bytes.
     await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
-    const [listed] = await listDiagrams(scratch.db, "second-diagram");
+    const [listed] = await listDiagrams(scratch.db, cliScope(), "second-diagram");
     expect(listed?.svgState).toBe("stale");
   });
 
@@ -349,7 +350,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
 
   it("checks out, refuses a commit whose base moved, and keeps the checkout", async () => {
     const dir = path.join(work, "checkouts");
-    const out = await checkoutDiagram(scratch.db, store, "first-diagram", dir);
+    const out = await checkoutDiagram(scratch.db, store, "first-diagram", dir, cliScope());
     expect(out.revision).not.toBeNull();
     expect(JSON.parse(await readFile(out.path, "utf8"))).toEqual(JSON.parse(documentOf({ title: "First" })));
     expect(await readFile(path.join(dir, "first-diagram.svg"), "utf8")).toBe(svgOf("first"));
@@ -365,8 +366,8 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(await readFile(out.path, "utf8")).toBe(mine);
 
     // A checkout with edits nobody committed is not overwritten.
-    await expect(checkoutDiagram(scratch.db, store, "first-diagram", dir)).rejects.toBeInstanceOf(DiagramError);
-    const fresh = await checkoutDiagram(scratch.db, store, "first-diagram", dir, { force: true });
+    await expect(checkoutDiagram(scratch.db, store, "first-diagram", dir, cliScope())).rejects.toBeInstanceOf(DiagramError);
+    const fresh = await checkoutDiagram(scratch.db, store, "first-diagram", dir, cliScope(), { force: true });
     expect(JSON.parse(await readFile(fresh.path, "utf8"))).toEqual(JSON.parse(documentOf({ title: "First, theirs" })));
 
     // From the latest base, the same edit goes through.
@@ -385,7 +386,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
 
   it("starts a new diagram from a checkout of a slug that does not exist", async () => {
     const dir = path.join(work, "checkouts");
-    const out = await checkoutDiagram(scratch.db, store, "brand-new", dir);
+    const out = await checkoutDiagram(scratch.db, store, "brand-new", dir, cliScope());
     expect(out).toMatchObject({ exists: false, revision: null });
     await expect(stat(out.path)).rejects.toThrow();
     await writeFile(out.path, documentOf({ title: "Brand new" }));
@@ -398,7 +399,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
       authorKind: "agent",
     });
     expect(committed.svg?.current).toBe(true);
-    const [listed] = await listDiagrams(scratch.db, "brand-new");
+    const [listed] = await listDiagrams(scratch.db, cliScope(), "brand-new");
     expect(listed?.svgState).toBe("current");
   });
 
@@ -451,10 +452,10 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
 
   it("counts an exported SVG as an edit a refresh must not throw away", async () => {
     const dir = path.join(work, "svg-checkouts");
-    await checkoutDiagram(scratch.db, store, "second-diagram", dir);
+    await checkoutDiagram(scratch.db, store, "second-diagram", dir, cliScope());
     await writeFile(path.join(dir, "second-diagram.svg"), svgOf("exported, not committed"));
     await put({ slug: "second-diagram", tldr: await file("second-c.tldr", documentOf({ title: "Moved on" })) });
-    await expect(checkoutDiagram(scratch.db, store, "second-diagram", dir)).rejects.toMatchObject({
+    await expect(checkoutDiagram(scratch.db, store, "second-diagram", dir, cliScope())).rejects.toMatchObject({
       code: "dirty-checkout",
     });
     expect(await readFile(path.join(dir, "second-diagram.svg"), "utf8")).toBe(svgOf("exported, not committed"));
@@ -512,7 +513,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(result.changed).toBe(true);
     expect(result.files).toEqual([]);
     expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
-    const [listed] = await listDiagrams(scratch.db, "after-the-flip");
+    const [listed] = await listDiagrams(scratch.db, cliScope(), "after-the-flip");
     expect(listed?.svgState).toBe("current");
     // An SVG on its own is filed as named once no import reads files back.
     const bare = await putSvg("hand-drawn", "beta", [], svgOf("after, by hand"));
@@ -572,7 +573,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     const { stdout } = await run("node", [canvasCliPath(REPO_ROOT), "list", path.join(fixture.root, "learn/assets"), "--json"]);
     const tool = (JSON.parse(stdout) as { diagrams: { name: string; shapes: number; meta: Record<string, unknown> }[] })
       .diagrams.find((d) => d.name === "first-diagram");
-    const [ours] = await listDiagrams(scratch.db, "first-diagram");
+    const [ours] = await listDiagrams(scratch.db, cliScope(), "first-diagram");
     expect(ours).toMatchObject({
       shapes: tool?.shapes,
       title: tool?.meta.title,

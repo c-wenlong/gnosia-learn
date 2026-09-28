@@ -6,12 +6,29 @@
  * than inline so the first ten real jobs can move them without a code read.
  */
 
+import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
+
 function integer(name: string, fallback: number, min: number, max: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(Math.max(parsed, min), max);
+}
+
+/**
+ * Whose studio this is: the owner every catalog call is made as, and the only
+ * owner whose requests the API answers (`ownerRefusal` in `api.ts`).
+ *
+ * One owner per runner, on purpose. The runner spends this machine's agent
+ * account (`agentAuth`) and its own daily cap, keeps one checkout directory,
+ * one job queue and one cached diagram list, and none of those is per owner.
+ * Serving a second owner would put their briefs on this owner's bill and their
+ * diagrams in this owner's grid, so a request from anyone else is refused
+ * rather than scoped. `local`, the one owner there is today, unless set.
+ */
+export function studioOwner(env: Record<string, string | undefined> = process.env): string {
+  return env.STUDIO_OWNER?.trim() || LOCAL_LEARNER_ID;
 }
 
 /** Loopback only. Not a default that can be widened: see `bindHost`. */
