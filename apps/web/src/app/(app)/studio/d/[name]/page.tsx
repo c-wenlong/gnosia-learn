@@ -19,8 +19,9 @@ import {
   StudioStrip,
   VerbNotice,
 } from "@/components/studio/StudioChrome";
-import { getTopics, topicOptionsOf } from "@/data/topics";
+import { topicOptionsOf } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
+import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   canvasHref,
   displayTitle,
@@ -91,6 +92,8 @@ interface Health {
   postgres: boolean;
   stale: boolean;
   checks: DoctorLine[];
+  /** Where the topic list stands (D13). Optional: an older runner does not send it. */
+  vocabulary?: VocabularyState;
 }
 
 export default async function CanvasPage({
@@ -178,13 +181,17 @@ export default async function CanvasPage({
     timeoutMs: 60_000,
   });
 
-  const [jobList, topics, one] = await Promise.all([
+  // The topics come from the runner's D13 copy, as on `/studio`: the app's own
+  // content read is database-only and this screen has to work without it.
+  const [jobList, vocabulary, one] = await Promise.all([
     studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
-    getTopics(),
+    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
     // After the mirror start, which brought the checkout up to date: whether
     // the canvas now holds edits nobody committed.
     studioApi<Diagram>(`/api/diagrams/${encodeURIComponent(name)}`),
   ]);
+  const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
+  const staleVocabulary = vocabularyBanner(health.data.vocabulary);
   const checkout = one.ok ? (one.data.checkout ?? null) : null;
   // Only on the render that shows a picture: `GET /api/jobs` carries neither
   // the brief nor the comparison, and the full-width view needs both to say why
@@ -199,6 +206,7 @@ export default async function CanvasPage({
       <Strip diagram={diagram} path={path} uncommitted={checkout?.dirty === true} />
       <JobStrip path={path} stream={panel.stream} />
       {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
+      {staleVocabulary !== null && <Notice tone={staleVocabulary.tone}>{staleVocabulary.text}</Notice>}
       {health.data.stale && (
         <Notice>
           The tldrawkc page bundle is older than its source, so this canvas is the previous build.

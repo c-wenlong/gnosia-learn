@@ -271,7 +271,7 @@ Options:
                            awaiting_review, failed, cancelled, interrupted.
                            job ls: filter by state.
   --phase P                job finish: the progress label to leave on the row.
-  --candidate P            job finish: where the candidate was written.
+  --candidate P            job finish: the candidate, jobs/<id>/candidate/<name> under STUDIO_HOME.
   --runner NAME            job claim: which runner is taking it.
   --session ID             job claim: the session it runs under.
   --exit-code N            job finish: the generator's exit code.

@@ -271,6 +271,19 @@ export function jobShow(jobId: string): Promise<CatalogResult> {
   return catalog(["job", "show", "--job", jobId]);
 }
 
+/* -------------------------------------------------------------------------- */
+/* The vocabulary (D13 of docs/CONTENT-MIGRATION.md)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `catalog topic ls`: every live topic, with its title, domain and the concepts
+ * filed under it. The only way the studio reads the vocabulary, so a brief is
+ * checked against the rows the enqueue's foreign key checks it against again.
+ */
+export function topicList(): Promise<CatalogResult> {
+  return catalog(["topic", "ls"], 60_000);
+}
+
 /** `catalog status`, used by `/api/health` to say whether Postgres is answering. */
 export function status(): Promise<CatalogResult> {
   return catalog(["status"], 30_000);

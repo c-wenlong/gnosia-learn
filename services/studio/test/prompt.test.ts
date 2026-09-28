@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { ValidBrief } from "../src/brief";
-import { candidatePath, mermaidPath } from "../src/paths";
-import { buildPrompt, buildRetryPrompt, DATA_FENCE, DATA_FENCE_END } from "../src/prompt";
+import { candidatePath, candidateSvgPath, jobDir, mermaidPath } from "../src/paths";
+import {
+  buildPrompt,
+  buildResumePrompt,
+  buildRetryPrompt,
+  buildRevisePrompt,
+  DATA_FENCE,
+  DATA_FENCE_END,
+} from "../src/prompt";
 
 /**
  * Prompt assembly against a brief that is trying to take the session over.
@@ -65,9 +72,10 @@ describe("an injected brief", () => {
     expect(instructions).toMatch(/data.*not.*instruction|not.*instruction.*data/is);
   });
 
-  it("names the candidate path and no other writable path", () => {
-    expect(prompt).toContain(candidatePath(brief.slug));
-    expect(instructions).not.toContain("learn/assets/dot-product-two.tldr\n");
+  it("names the candidate path in the job's own workspace, and no other writable path", () => {
+    expect(prompt).toContain(candidatePath("job-1", brief.slug));
+    expect(candidatePath("job-1", brief.slug).startsWith(jobDir("job-1"))).toBe(true);
+    expect(instructions).not.toContain("learn/assets/");
   });
 });
 
@@ -87,9 +95,27 @@ describe("a pasted flowchart", () => {
 
 describe("a retry", () => {
   it("carries the specific finding rather than asking for another attempt", () => {
-    const prompt = buildRetryPrompt(["the document carries no topic"], "dot-product-two");
+    const files = { tldr: candidatePath("job-1", "dot-product-two"), svg: candidateSvgPath("job-1", "dot-product-two") };
+    const prompt = buildRetryPrompt(["the document carries no topic"], files);
     expect(prompt).toContain("the document carries no topic");
-    expect(prompt).toContain(candidatePath("dot-product-two"));
+    expect(prompt).toContain(files.tldr);
+    expect(prompt).toContain(files.svg);
     expect(prompt).toContain("Change nothing else");
+  });
+});
+
+describe("a continued session", () => {
+  // A revision or a resume is a new job, so its files are not the ones its
+  // transcript remembers; the prompt says where they are now before anything else.
+  const files = { tldr: candidatePath("job-2", "dot-product-two"), svg: candidateSvgPath("job-2", "dot-product-two") };
+
+  it.each([
+    ["revise", buildRevisePrompt("bigger labels", files)],
+    ["resume", buildResumePrompt(files)],
+  ])("names the new job's files when it is a %s", (_kind, prompt) => {
+    expect(prompt).toContain("the files have moved");
+    expect(prompt).toContain(files.tldr);
+    expect(prompt).toContain(files.svg);
+    expect(prompt.indexOf("the files have moved")).toBeLessThan(prompt.indexOf("inspect"));
   });
 });

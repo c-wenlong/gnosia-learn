@@ -122,10 +122,11 @@ export const session = pgTable(
 /**
  * One request to generate one file, and everything that happened to it.
  *
- * **`target_path` and `candidate_path` are different files.** The job writes
- * only the candidate, under `learn/assets/.candidates/`; nothing under
- * `learn/assets/` changes until a person accepts. So `target_path` names a file
- * the job has never opened, and it is also the lease key: the partial unique
+ * **`target_path` and `candidate_path` are different things.** The job writes
+ * only the candidate, in its own workspace (`jobs/<id>/candidate/<name>`,
+ * relative to the runner's `STUDIO_HOME`); nothing lands until a person
+ * accepts. `target_path` is the diagram's logical name, which the job never
+ * opens, and it is also the lease key: the partial unique
  * index below stops a second job claiming a path an unaccepted candidate is
  * still holding.
  *
@@ -168,7 +169,11 @@ export const job = pgTable(
       .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
     /** The committed path the job intends to land on, and the lease key. */
     targetPath: text("target_path").notNull(),
-    /** Where it actually writes, under `learn/assets/.candidates/`. */
+    /**
+     * Where it actually writes: `jobs/<id>/candidate/<name>`, relative to the
+     * runner's `STUDIO_HOME`. Rows from before phase 2 of the content migration
+     * keep `learn/assets/.candidates/<name>`, as history.
+     */
     candidatePath: text("candidate_path"),
     /**
      * The target's content hash when the job was enqueued, or null when there

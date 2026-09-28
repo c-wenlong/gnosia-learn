@@ -20,6 +20,7 @@ import {
 import type { JobRecord } from "../src/store";
 import type { Runner } from "../src/runner";
 import { fixtureDocument } from "./fixture-document";
+import { topicListAnswer, topicListDown } from "./vocabulary";
 
 /**
  * The routes, over a real socket on an ephemeral port.
@@ -52,6 +53,8 @@ const catalogMock = vi.hoisted(() => ({
   diagramCommit: vi.fn(),
   jobAccept: vi.fn(),
   jobDiscard: vi.fn(),
+  topicList: vi.fn(),
+  status: vi.fn(),
 }));
 vi.mock("../src/catalog", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/catalog")>();
@@ -87,8 +90,8 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     },
     targetPath: targetPath(SLUG),
     targetSvgPath: targetSvgPath(SLUG),
-    candidatePath: candidatePath(SLUG),
-    candidateSvgPath: candidateSvgPath(SLUG),
+    candidatePath: candidatePath("job-api", SLUG),
+    candidateSvgPath: candidateSvgPath("job-api", SLUG),
     topic: "vector-and-linear-algebra-basics",
     slug: SLUG,
     attempt: 1,
@@ -141,6 +144,8 @@ beforeEach(async () => {
   catalogMock.diagramPut.mockResolvedValue(answer({ ok: true, revision: 6, changed: true }));
   catalogMock.jobAccept.mockResolvedValue(answer({}));
   catalogMock.jobDiscard.mockResolvedValue(answer({}));
+  catalogMock.topicList.mockReset().mockResolvedValue(topicListAnswer());
+  catalogMock.status.mockResolvedValue(answer({}));
 
   const runner = {
     enqueue: (brief: Record<string, unknown>, parent?: Record<string, unknown>) => {
@@ -152,6 +157,8 @@ beforeEach(async () => {
       });
     },
     busy: 0,
+    // What `/api/health` reads about spend; nothing has been spent here.
+    capStatus: () => ({ capUsd: null, exceeded: false, totalUsd: 0, jobs: 0, oldestCountedAt: null, oldestAgesOutAt: null }),
     // Whether there is a diagram to extend: the checkout on disk stands in for
     // the catalog's answer here, as it does in the runner with Postgres down.
     startingPoint: async (slug: string) => ({
@@ -171,8 +178,6 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(absolute(targetPath(SLUG)), { force: true });
-  await rm(absolute(candidatePath(SLUG)), { force: true });
-  await rm(absolute(candidateSvgPath(SLUG)), { force: true });
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   delete process.env.STUDIO_HOME;
 });
@@ -430,8 +435,8 @@ describe("accepting", () => {
    * because a close the browser is responsible for is one a curl can skip.
    */
   it("closes an open mirror on the target when the accept is going to happen", async () => {
-    await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
-    await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(path.dirname(candidatePath("job-api", SLUG)), { recursive: true });
+    await writeFile(candidatePath("job-api", SLUG), fixtureDocument(), "utf8");
     await store.create(record({ state: "awaiting_review", targetHashBefore: null }));
     const stop = vi.spyOn(mirrors, "stop").mockResolvedValue({ found: true, gone: true });
 
@@ -485,8 +490,8 @@ describe("accepting", () => {
 
   it("flags a moved diagram as one the UI should offer to re-compare, not retry", async () => {
     // The candidate is there and the diagram was committed under it, which is S4.
-    await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
-    await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(path.dirname(candidatePath("job-api", SLUG)), { recursive: true });
+    await writeFile(candidatePath("job-api", SLUG), fixtureDocument(), "utf8");
     latestRevision = 9;
     await store.create(record({ state: "awaiting_review", targetRevisionBefore: 5 }));
 
@@ -525,6 +530,90 @@ describe("comparing again", () => {
   );
 });
 
+describe("the vocabulary", () => {
+  const get = async (route: string) => {
+    const response = await fetch(`${base}${route}`);
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  };
+
+  it("is the catalog's topic list, titles and domains included, and fresh", async () => {
+    const { status, body } = await get("/api/vocabulary");
+    expect(status).toBe(200);
+    expect(catalogMock.topicList).toHaveBeenCalled();
+    expect(body.stale).toBe(false);
+    expect(typeof body.readAt).toBe("string");
+    expect(body.topics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: "tcp-congestion-control", title: "TCP congestion control", domain: "networking" }),
+      ]),
+    );
+  });
+
+  it("answers from the cached copy, stale since it was read, when the catalog is down", async () => {
+    const fresh = await get("/api/vocabulary");
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const { status, body } = await get("/api/vocabulary");
+    expect(status).toBe(200);
+    expect(body.stale).toBe(true);
+    expect(body.readAt).toBe(fresh.body.readAt);
+    expect(String(body.error)).toContain("exited 3");
+    expect((body.topics as unknown[]).length).toBe(2);
+  });
+
+  it("is a 503 with readAt null when there is no copy either", async () => {
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const { status, body } = await get("/api/vocabulary");
+    expect(status).toBe(503);
+    expect(body.detail).toEqual({ readAt: null, stale: true });
+  });
+
+  it("is what /api/health reports on: fresh, then stale with the copy's readAt, then no copy", async () => {
+    const fresh = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string };
+    expect(fresh.stale).toBe(false);
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const stale = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string; error: string };
+    expect(stale).toMatchObject({ stale: true, readAt: fresh.readAt });
+    expect(stale.error).toContain("ECONNREFUSED");
+    await rm(path.join(process.env.STUDIO_HOME ?? "", "cache"), { recursive: true, force: true });
+    const none = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string | null };
+    expect(none).toMatchObject({ stale: true, readAt: null });
+  }, 60_000);
+
+  it("checks a brief against the catalog's topics, and refuses one it does not list", async () => {
+    const post = (topic: string) =>
+      fetch(`${base}/api/jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intent: "show the window halving",
+          topic,
+          slug: SLUG,
+          title: "Congestion window",
+          mode: "new",
+          elements: [{ label: "window" }],
+          relations: [],
+        }),
+      });
+    const refused = await post("not-in-the-catalog");
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toContain("catalog's vocabulary");
+    const queued = await post("tcp-congestion-control");
+    expect(queued.status).toBe(201);
+    expect(enqueued.at(-1)?.brief.topic).toBe("tcp-congestion-control");
+  });
+
+  it("refuses a brief with a 503 when the topics cannot be read at all", async () => {
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    const response = await fetch(`${base}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ intent: "x", topic: "tcp-congestion-control" }),
+    });
+    expect(response.status).toBe(503);
+    expect(enqueued).toHaveLength(0);
+  });
+});
+
 describe("the route table", () => {
   it("names reindex, so a caller looking at a 404 can find the recovery", async () => {
     const response = await fetch(`${base}/api/nothing`);
@@ -538,6 +627,7 @@ describe("the route table", () => {
     const body = (await response.json()) as { detail: { routes: string[] } };
     expect(body.detail.routes.join(" ")).toContain("/api/diagrams");
     expect(body.detail.routes.join(" ")).toContain("/api/mirrors");
+    expect(body.detail.routes.join(" ")).toContain("/api/vocabulary");
   });
 });
 

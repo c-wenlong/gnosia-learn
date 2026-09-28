@@ -859,9 +859,14 @@ export function draftToBrief(draft: BriefDraft, idempotencyKey: string): Brief &
   };
 }
 
-/** `learn/assets/.candidates/<slug>.tldr`, the line under the Start button. */
+/**
+ * The line under the Start button: where the job will draw,
+ * `$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr`. Each job draws in its own
+ * workspace and nothing lands until Accept, so the job's id is not known yet
+ * and the line says so rather than naming a path in the repository.
+ */
 export function candidatePathFor(slug: string): string {
-  return `learn/assets/.candidates/${slug === "" ? "<slug>" : slug}.tldr`;
+  return `$STUDIO_HOME/jobs/<job>/candidate/${slug === "" ? "<slug>" : slug}.tldr`;
 }
 
 /** A slug suggested from a title, which is what a person would have typed anyway. */

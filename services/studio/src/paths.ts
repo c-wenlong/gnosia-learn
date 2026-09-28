@@ -1,8 +1,5 @@
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { CANDIDATES_DIR } from "@self-learn/schema";
 
 /**
  * Every path the studio builds, built here.
@@ -11,30 +8,19 @@ import { CANDIDATES_DIR } from "@self-learn/schema";
  * is a rule is the bug manimkc shipped and then fixed: permission rules written
  * as relative paths stopped matching the moment its data root moved, and the
  * agent could read a real `.env` beside the one the rules named. Every rule the
- * runner writes is absolute and derived at runtime from `REPO_ROOT`, and this
- * module is the only place that resolution happens.
+ * runner writes is absolute and derived at runtime from `REPO_ROOT` or
+ * `studioHome()`, and this module is the only place that resolution happens.
  *
- * The repo root is found the way `apps/web/src/data/repo-root.ts` finds it:
- * walk up until a directory holds `content/courses`. The studio does not run
- * from the repo root either — `npm run studio` starts it from wherever the
- * shell is — so `process.cwd()` is not the answer, and neither is a fixed
- * number of `..` segments, which breaks the day the service moves.
+ * The repo root is where this code sits, two levels above `services/studio/`,
+ * the way `services/catalog/src/env.ts` finds it. It used to be found by
+ * walking up for `content/courses`, but what the studio needs a root for is
+ * code: the directory `npm run canvas` and `npm run catalog` run from, the
+ * agent's working directory, the `.git` it may not edit and
+ * `services/catalog/.env`. Content lives in the database, and phase 3 of
+ * docs/CONTENT-MIGRATION.md deletes the folder the walk looked for.
+ * `process.cwd()` is still not the answer: `npm run studio` starts it from
+ * wherever the shell is.
  */
-
-function findRepoRoot(start: string): string {
-  let directory = start;
-  for (;;) {
-    if (existsSync(path.join(directory, "content", "courses"))) return directory;
-    const parent = path.dirname(directory);
-    if (parent === directory) {
-      throw new Error(
-        `no repository root above ${start}: walked up to the filesystem root without finding ` +
-          `a directory holding content/courses.`,
-      );
-    }
-    directory = parent;
-  }
-}
 
 /** services/studio/ */
 export const SERVICE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,23 +28,24 @@ export const SERVICE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 /**
  * The repository root. Absolute, and the base of every other path here.
  *
- * `STUDIO_REPO_ROOT` overrides the walk and is read once, here, at import. It
- * is for the tests and nothing else: no request, brief or settings file can
- * reach it, and with the variable unset this resolves exactly as it did before
- * it existed. Every path below is repo-relative, so without an override the
- * suite writes its fixture diagrams into the checked-out `learn/assets/`, which
- * `services/catalog`'s end-to-end test indexes from a parallel vitest worker. A
- * fixture that exists for one index pass and is gone by the next is pruned by
- * the second, and that suite fails on a deletion it has nothing to do with.
- * `vitest.setup.ts` points this at a symlink farm under the OS temp directory.
+ * `STUDIO_REPO_ROOT` overrides it and is read once, here, at import. It is
+ * for the tests and nothing else: no request, brief or settings file can reach
+ * it, and with the variable unset this is the checkout this file sits in. The
+ * tests need it because anything resolved against the root (the default
+ * `STUDIO_HOME`, a repo-relative path a legacy record names) would otherwise
+ * land in the checkout, which `services/catalog`'s end-to-end test reads from
+ * a parallel vitest worker. `vitest.setup.ts` points this at a symlink farm
+ * under the OS temp directory and checks that it was honoured.
  */
 const configuredRoot = process.env.STUDIO_REPO_ROOT?.trim();
-export const REPO_ROOT = configuredRoot ? path.resolve(configuredRoot) : findRepoRoot(SERVICE_ROOT);
+export const REPO_ROOT = configuredRoot ? path.resolve(configuredRoot) : path.resolve(SERVICE_ROOT, "..", "..");
 
-/** Where committed diagrams live. Repo-relative, because the catalog speaks that. */
+/**
+ * The directory in a diagram's logical name, `learn/assets/<slug>.tldr`
+ * (D11 of docs/CONTENT-MIGRATION.md). The catalog's asset ids and the job
+ * lease are keyed on it; a diagram itself is rows.
+ */
 export const ASSETS_DIR = "learn/assets";
-
-export { CANDIDATES_DIR };
 
 /**
  * The runner's own state: job workspaces, write-ahead logs, settings files.
@@ -83,7 +70,8 @@ export function studioHome(): string {
 /**
  * An absolute path for a repo-relative one. The only join that crosses that
  * line. A path that is already absolute (a checkout under `$STUDIO_HOME`, see
- * `workPath`) comes back as it is, rather than glued onto the repo root.
+ * `workPath`, or a job's candidate, see `candidatePath`) comes back as it is,
+ * rather than glued onto the repo root.
  */
 export function absolute(relative: string): string {
   return path.resolve(REPO_ROOT, relative);
@@ -130,18 +118,63 @@ export function slugOf(target: string): string | null {
   return match?.[1] ?? null;
 }
 
-/** `learn/assets/.candidates/<slug>.tldr`: where the job actually writes. */
-export function candidatePath(slug: string): string {
-  return `${CANDIDATES_DIR}/${slug}.tldr`;
-}
-
-export function candidateSvgPath(slug: string): string {
-  return `${CANDIDATES_DIR}/${slug}.svg`;
-}
-
 /** One job's workspace: the write-ahead log, the settings file, the scratch. */
 export function jobDir(jobId: string): string {
   return path.join(studioHome(), "jobs", jobId);
+}
+
+/**
+ * Where a job draws: `$STUDIO_HOME/jobs/<id>/candidate/`, absolute.
+ *
+ * Inside the job's own workspace, so no two jobs ever share a path. The
+ * candidates used to sit at `learn/assets/.candidates/<slug>`, one per slug,
+ * and a resume had to hash the file to tell its own half-drawn work from a
+ * later job's leftovers at the same path; here the path names the job.
+ *
+ * A directory of its own rather than the workspace root, because the root
+ * holds the runner's records (`job.json`, the transcript, this job's permission
+ * file) and the agent is given this directory as a working directory. Keeping
+ * the two apart means the agent can be handed its two files without being
+ * handed the records beside them.
+ */
+export function candidateDir(jobId: string): string {
+  return path.join(jobDir(jobId), "candidate");
+}
+
+/** `$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr`: the document the agent draws. */
+export function candidatePath(jobId: string, slug: string): string {
+  return path.join(candidateDir(jobId), `${slug}.tldr`);
+}
+
+/** The SVG it exports beside the document. */
+export function candidateSvgPath(jobId: string, slug: string): string {
+  return path.join(candidateDir(jobId), `${slug}.svg`);
+}
+
+/**
+ * The candidate as the catalog records it: `jobs/<id>/candidate/<slug>.tldr`,
+ * relative to `$STUDIO_HOME`.
+ *
+ * Not the absolute path. `job.candidate_path` would then carry this machine's
+ * home directory into a database that moves to the cloud at go-live, and would
+ * stop naming the file the day `STUDIO_HOME` moves. The catalog derives the
+ * same string from the job id and the target, which is how it checks it.
+ */
+export function candidateRef(jobId: string, slug: string): string {
+  return path.posix.join("jobs", jobId, "candidate", `${slug}.tldr`);
+}
+
+/**
+ * True for a record written before candidates moved into the job workspace,
+ * whose paths are repo-relative under `learn/assets/.candidates/`.
+ *
+ * Such a record still works everywhere a path is only resolved, since
+ * `absolute` resolves a relative path against the repository, so an accept, a
+ * discard or a resume of one reads the file where it was written. Only a job
+ * that has not started yet is moved, by the runner, before anything is drawn.
+ */
+export function isLegacyCandidate(candidate: string): boolean {
+  return !path.isAbsolute(candidate);
 }
 
 export function jobJsonPath(jobId: string): string {
@@ -157,7 +190,7 @@ export function settingsPath(jobId: string): string {
 }
 
 /**
- * The one directory besides the two candidate files the agent may write to:
+ * The one directory besides its two candidate files the agent may write to:
  * its snippets, its screenshots, a mermaid source it was handed.
  */
 export function scratchDir(jobId: string): string {

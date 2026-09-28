@@ -11,7 +11,6 @@ import {
   candidateSvgPath,
   targetPath,
   targetSvgPath,
-  CANDIDATES_DIR,
 } from "../src/paths";
 import { stopChild } from "../src/proc";
 import type { JobRecord } from "../src/store";
@@ -51,12 +50,19 @@ const { accept, discard, reindex } = await import("../src/review");
 const { JobStore } = await import("../src/store");
 
 const SLUG = "studio-accept-fixture";
-const files = {
-  candidate: absolute(candidatePath(SLUG)),
-  candidateSvg: absolute(candidateSvgPath(SLUG)),
-  target: absolute(targetPath(SLUG)),
-  targetSvg: absolute(targetSvgPath(SLUG)),
-};
+/**
+ * The four files a test looks at. The candidates are in the job's workspace
+ * under this test's `STUDIO_HOME`, so they are named once it is set.
+ */
+function filesNow() {
+  return {
+    candidate: candidatePath("job-accept", SLUG),
+    candidateSvg: candidateSvgPath("job-accept", SLUG),
+    target: absolute(targetPath(SLUG)),
+    targetSvg: absolute(targetSvgPath(SLUG)),
+  };
+}
+let files = filesNow();
 
 const exists = async (file: string): Promise<boolean> =>
   (await stat(file).catch(() => null)) !== null;
@@ -85,8 +91,8 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     },
     targetPath: targetPath(SLUG),
     targetSvgPath: targetSvgPath(SLUG),
-    candidatePath: candidatePath(SLUG),
-    candidateSvgPath: candidateSvgPath(SLUG),
+    candidatePath: candidatePath("job-accept", SLUG),
+    candidateSvgPath: candidateSvgPath("job-accept", SLUG),
     topic: "vector-and-linear-algebra-basics",
     slug: SLUG,
     attempt: 1,
@@ -113,7 +119,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
       findings: [],
       shapes: 12,
       lints: 0,
-      svg: { path: candidateSvgPath(SLUG), bytes: 2048 },
+      svg: { path: candidateSvgPath("job-accept", SLUG), bytes: 2048 },
       exportFailed: false,
       checkedAt: new Date().toISOString(),
     },
@@ -180,7 +186,8 @@ beforeEach(async () => {
   });
   catalogMock.diagramCheckout.mockReset();
   catalogMock.diagramCheckout.mockResolvedValue({ ok: true, json: { exists: true, revision: 6, note: "checked out" }, error: null, offline: false });
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
+  files = filesNow();
+  await mkdir(path.dirname(files.candidate), { recursive: true });
   await writeFile(files.candidate, fixtureDocument(), "utf8");
   await writeFile(files.candidateSvg, "<svg/>", "utf8");
 });
@@ -465,5 +472,46 @@ describe("discard", () => {
     expect(await exists(files.candidateSvg)).toBe(false);
     expect(catalogMock.diagramPut).not.toHaveBeenCalled();
     expect(store.get("job-accept")?.state).toBe("discarded");
+  });
+});
+
+/**
+ * A job recorded before candidates moved into the job workspace names
+ * `learn/assets/.candidates/<slug>`, repo-relative. Nothing converts it: its
+ * paths resolve against the repository where they are used, so the file is
+ * found where it was written and a person can still land it or throw it away.
+ */
+describe("a record from before candidates moved", () => {
+  const legacy = {
+    candidatePath: `learn/assets/.candidates/${SLUG}.tldr`,
+    candidateSvgPath: `learn/assets/.candidates/${SLUG}.svg`,
+  };
+  const legacyFiles = () => [absolute(legacy.candidatePath), absolute(legacy.candidateSvgPath)];
+
+  beforeEach(async () => {
+    const [tldr, svg] = legacyFiles();
+    await mkdir(path.dirname(tldr ?? ""), { recursive: true });
+    await writeFile(tldr ?? "", fixtureDocument(), "utf8");
+    await writeFile(svg ?? "", "<svg/>", "utf8");
+  });
+  afterEach(async () => {
+    for (const file of legacyFiles()) await rm(file, { force: true });
+  });
+
+  it("is discarded where it was written", async () => {
+    const result = await discard(store, await place(legacy));
+    expect(result.ok).toBe(true);
+    for (const file of legacyFiles()) expect(await exists(file)).toBe(false);
+    expect(store.get("job-accept")?.state).toBe("discarded");
+  });
+
+  it("is accepted from where it was written", async () => {
+    canvasMock.canvas.mockImplementationOnce(() => reply(0, { checks: [] }));
+    const result = await accept(store, await place(legacy));
+    expect(result.ok).toBe(true);
+    expect(catalogMock.diagramPut).toHaveBeenCalledWith(
+      expect.objectContaining({ tldr: legacyFiles()[0], svg: legacyFiles()[1] }),
+    );
+    for (const file of legacyFiles()) expect(await exists(file)).toBe(false);
   });
 });
