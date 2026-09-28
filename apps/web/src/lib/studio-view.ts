@@ -128,6 +128,13 @@ export interface StudioView {
    * without a job, and `shotHref` drops it when the job panel closes.
    */
   shot: "before" | "after" | null;
+  /**
+   * The conversation open in the panel, by draft id (docs/STUDIO-CHAT-FIRST.md).
+   *
+   * In the URL so a reload returns to it. With `job` beside it the panel shows
+   * that job with a bar back to the conversation, which is where Draw leads.
+   */
+  draft: string | null;
 }
 
 export const DEFAULT_VIEW: StudioView = {
@@ -144,6 +151,7 @@ export const DEFAULT_VIEW: StudioView = {
   brief: null,
   stream: true,
   shot: null,
+  draft: null,
 };
 
 /** Next hands a repeated parameter as an array and a single one as a string. */
@@ -202,7 +210,7 @@ export function parseView(params: RawParams): StudioView {
  */
 export function parsePanel(
   params: RawParams,
-): Pick<StudioView, "job" | "brief" | "stream" | "shot"> {
+): Pick<StudioView, "job" | "brief" | "stream" | "shot" | "draft"> {
   const brief = params.new;
   const first = Array.isArray(brief) ? brief[0] : brief;
   const shot = one(params.shot);
@@ -215,6 +223,7 @@ export function parsePanel(
     // is read as nothing rather than as a main area that cannot say whose
     // screenshot it is showing.
     shot: job !== null && (shot === "before" || shot === "after") ? shot : null,
+    draft: one(params.draft),
   };
 }
 
@@ -238,6 +247,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.panel !== DEFAULT_VIEW.panel) params.set("panel", next.panel ? "1" : "0");
   if (next.job !== null) params.set("job", next.job);
   if (next.brief !== null) params.set("new", next.brief);
+  if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
   const query = params.toString();
@@ -254,10 +264,24 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
  */
 export function panelHref(
   path: string,
-  patch: { job?: string | null; brief?: string | null; shot?: "before" | "after" | null },
+  patch: {
+    job?: string | null;
+    brief?: string | null;
+    shot?: "before" | "after" | null;
+    draft?: string | null;
+    selected?: string | null;
+  },
 ): string {
   const [base, existing] = path.split("?");
   const params = new URLSearchParams(existing ?? "");
+  if (patch.draft !== undefined) {
+    if (patch.draft === null) params.delete("draft");
+    else params.set("draft", patch.draft);
+  }
+  if (patch.selected !== undefined) {
+    if (patch.selected === null) params.delete("sel");
+    else params.set("sel", patch.selected);
+  }
   if (patch.job !== undefined) {
     if (patch.job === null) params.delete("job");
     else params.set("job", patch.job);
