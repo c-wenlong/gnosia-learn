@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -344,6 +344,30 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toMatch(/resolves outside the vault/);
     expect(await readdir(elsewhere)).toEqual([]);
+  }, 60_000);
+
+  it("never reads a note through a link, so nothing outside the vault is pushed", async () => {
+    const vault = await newVault();
+    const outside = await newVault();
+    await pull(vault);
+    const rel = "concepts/fixtures/beta.md";
+    const target = path.join(outside, "beta.md");
+    await writeFile(target, (await read(vault, rel)).replace("See [[alpha]].", "Bytes from outside the vault."));
+    await rm(path.join(vault, rel));
+    await symlink(target, path.join(vault, rel));
+    const before = await revisions();
+
+    const pushed = await push(vault);
+    expect(pushed.code).toBe(1);
+    expect(pushed.refused).toEqual([{ path: rel, reason: expect.stringMatching(/is not a plain file/) }]);
+    expect(await revisions()).toBe(before);
+    expect(await body("beta")).not.toContain("Bytes from outside");
+
+    const pulled = await learn("vault", "pull", "--out", vault, "--json");
+    expect(pulled.code).toBe(1);
+    expect((JSON.parse(pulled.stdout) as PullReport).problems).toEqual([expect.stringMatching(/beta\.md is not a plain file/)]);
+    expect((await lstat(path.join(vault, rel))).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, "utf8")).toContain("Bytes from outside the vault.");
   }, 60_000);
 
   it("refuses a vault inside the repository", async () => {

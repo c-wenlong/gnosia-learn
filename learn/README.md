@@ -90,7 +90,9 @@ nobody pushed:
 Settling an `.incoming` or `.conflict` copy is deleting it: merge what you
 want of it into the note first, and the note is based on that newer version
 from then on, so the next push commits it. A copy you wrote in yourself is
-never replaced. An edited log goes back to the database's by deleting it and
+never replaced. The vault holds plain files only: a link (or a folder or a
+pipe) where a note should be is never read, so push refuses it by name and
+pull reports it and leaves it alone. An edited log goes back to the database's by deleting it and
 pulling. Neither command runs without `catalog flip concepts` and `catalog flip
 sessions` (pull needs both, push needs concepts); before them `learn/` is the
 vault. A vault pulled from another database (a `createdb -T` copy counts)

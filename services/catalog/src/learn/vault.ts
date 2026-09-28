@@ -190,12 +190,49 @@ function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
+/** For a `.catch`: a file that is not plain becomes a value to report, anything else is thrown on. */
+function notPlain(error: unknown): NotPlainFile {
+  if (error instanceof NotPlainFile) return error;
+  throw error;
+}
+
+/** A path in the vault that is not a plain file: a link, a folder, a pipe. */
+class NotPlainFile extends VaultError {
+  constructor(readonly file: string) {
+    super(`${file} is not a plain file (a link, a folder or a pipe?). The vault holds plain files only; replace it with one.`);
+    this.name = "NotPlainFile";
+  }
+}
+
+/**
+ * `O_NOFOLLOW` refuses a link as the last part of the path, and `O_NONBLOCK`
+ * keeps the open of a pipe from waiting forever; the `fstat` after it
+ * refuses anything that is not a regular file before a byte is read. The same
+ * guard the blob store's reads use.
+ */
+const READ_PLAIN = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
+
+/**
+ * A vault file's text, or null when there is none. Never through a link:
+ * push would otherwise commit whatever file outside the vault a link in it
+ * names, as a note, and pull would judge an edit by bytes that are not in it.
+ */
 async function readText(file: string): Promise<string | null> {
+  let handle: fs.FileHandle;
   try {
-    return await fs.readFile(file, "utf8");
+    handle = await fs.open(file, READ_PLAIN);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    // ELOOP on Linux, EMLINK on some BSDs: the last part is a link.
+    if (code === "ELOOP" || code === "EMLINK" || code === "EISDIR") throw new NotPlainFile(file);
     throw error;
+  }
+  try {
+    if (!(await handle.stat()).isFile()) throw new NotPlainFile(file);
+    return await handle.readFile("utf8");
+  } finally {
+    await handle.close();
   }
 }
 
@@ -254,7 +291,15 @@ async function takeAside(file: string): Promise<{ aside: string; text: string } 
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  return { aside, text: await fs.readFile(aside, "utf8") };
+  try {
+    const text = await readText(aside);
+    if (text !== null) return { aside, text };
+  } catch (error) {
+    // Not ours to judge: it goes back where it was, and the refusal names it.
+    await putBack(aside, file);
+    throw error instanceof NotPlainFile ? new NotPlainFile(file) : error;
+  }
+  return null;
 }
 
 /**
@@ -584,7 +629,11 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
       problems,
     };
 
-    for (const item of items) await pullItem(dir, manifest, item, report);
+    for (const item of items) {
+      await pullItem(dir, manifest, item, report).catch((error: unknown) => {
+        report.problems.push(notPlain(error).message);
+      });
+    }
 
     // A file the database no longer has goes, if unedited. Not when some rows
     // could not be read: the file of a note left out above is not gone.
@@ -592,7 +641,11 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
     for (const [rel, entry] of problems.length > 0 ? [] : Object.entries(manifest.files)) {
       if (entry.kind === "readme" || live.has(rel)) continue;
       const file = path.join(dir, rel);
-      const current = await readText(file);
+      const current = await readText(file).catch(notPlain);
+      if (current instanceof NotPlainFile) {
+        report.problems.push(current.message);
+        continue;
+      }
       if (current === null) {
         await clearSide(dir, entry);
         delete manifest.files[rel];
@@ -620,7 +673,11 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
   const file = path.join(dir, item.rel);
   const want = sha256(item.text);
   const known = manifest.files[item.rel];
-  const current = await readText(file);
+  const current = await readText(file).catch(notPlain);
+  if (current instanceof NotPlainFile) {
+    report.problems.push(current.message);
+    return;
+  }
   if (known !== undefined) await settleDeletedSide(dir, known, current);
   const clean: Entry = { kind: item.kind, id: item.id, base: item.base, hash: want };
 
@@ -671,7 +728,8 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
 async function pullReadme(dir: string, manifest: Manifest): Promise<void> {
   const file = path.join(dir, README);
   const want = sha256(README_TEXT);
-  const current = await readText(file);
+  const current = await readText(file).catch(notPlain);
+  if (current instanceof NotPlainFile) return;
   const known = manifest.files[README];
   if (current !== null && sha256(current) === want) {
     manifest.files[README] = { kind: "readme", id: "README", base: null, hash: want };
@@ -719,7 +777,11 @@ export async function pushVault(
 
     for (const [rel, entry] of Object.entries(manifest.files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (entry.kind === "readme") continue;
-      const current = await readText(path.join(dir, rel));
+      const current = await readText(path.join(dir, rel)).catch(notPlain);
+      if (current instanceof NotPlainFile) {
+        report.refused.push({ path: rel, reason: current.message });
+        continue;
+      }
       if (current === null) {
         report.refused.push({
           path: rel,
@@ -727,18 +789,23 @@ export async function pushVault(
         });
         continue;
       }
-      await settleDeletedSide(dir, entry, current);
-      if (entry.hash !== null && sha256(current) === entry.hash) {
-        report.unchanged.push(rel);
-        continue;
-      }
-      if (entry.kind === "log") await pushLog(db, rel, entry, current, report);
-      else {
-        const committed = report.pushed.length;
-        await pushNote(db, dir, rel, entry, current, options.reason ?? `learn vault push ${rel}`, report);
-        // Recorded as soon as it is committed: stopped before the end, a push
-        // run again would otherwise take its own commit for a moved base.
-        if (report.pushed.length > committed) await writeManifest(dir, manifest);
+      try {
+        await settleDeletedSide(dir, entry, current);
+        if (entry.hash !== null && sha256(current) === entry.hash) {
+          report.unchanged.push(rel);
+          continue;
+        }
+        if (entry.kind === "log") await pushLog(db, rel, entry, current, report);
+        else {
+          const committed = report.pushed.length;
+          await pushNote(db, dir, rel, entry, current, options.reason ?? `learn vault push ${rel}`, report);
+          // Recorded as soon as it is committed: stopped before the end, a push
+          // run again would otherwise take its own commit for a moved base.
+          if (report.pushed.length > committed) await writeManifest(dir, manifest);
+        }
+      } catch (error) {
+        // A side copy that is a link: this file is refused, the rest go on.
+        report.refused.push({ path: rel, reason: notPlain(error).message });
       }
     }
 
@@ -847,7 +914,8 @@ async function untracked(dir: string, manifest: Manifest): Promise<string[]> {
       throw error;
     }
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".md") || SIDE_COPY.test(entry.name)) continue;
+      // A link is listed too, so one named like a note is refused by name.
+      if (!(entry.isFile() || entry.isSymbolicLink()) || !entry.name.endsWith(".md") || SIDE_COPY.test(entry.name)) continue;
       const rel = path.relative(dir, path.join(entry.parentPath, entry.name)).split(path.sep).join("/");
       if (rel.split("/").some((part) => part.startsWith("."))) continue;
       if (manifest.files[rel] === undefined) found.push(rel);
