@@ -190,9 +190,12 @@ function contentRow(row: Asset): Record<string, unknown> {
  * back up.
  *
  * "Cut from other bytes" is read from the revisions, not from what this run
- * changed: the video's `blob_key` as of the poster's latest revision, against
- * its key now. So an import that linked the new bytes and then failed before
- * this ran is caught by the next one, whose own write changes nothing.
+ * changed: the video's `blob_key` as of the poster revision that last cut or
+ * hooked it (a revision that derives the poster from the video where the one
+ * before did not, or that changed the poster's own bytes), against its key
+ * now. Any other poster revision, a title edit say, is not a cut. So an
+ * import that linked the new bytes and then failed before this ran is caught
+ * by the next one, whose own write changes nothing.
  * Returns the posters unhooked.
  */
 export async function unhookPosters(
@@ -209,16 +212,29 @@ export async function unhookPosters(
     select d.asset_id as poster
     from asset_derivation d
     join asset v on v.id = d.source_asset_id
+    cross join lateral (
+      select max(p.id) as id
+      from (
+        select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
+        from content_revision r
+        where r.entity_type = 'asset' and r.entity_id = d.asset_id
+      ) p
+      where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
+        and (
+          p.prev is null
+          or not coalesce(
+            p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
+            false
+          )
+          or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
+        )
+    ) cut
     where d.source_asset_id in (${ids})
       and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
       and (
         select r.snapshot -> 'entity' ->> 'blob_key'
         from content_revision r
-        where r.entity_type = 'asset' and r.entity_id = v.id
-          and r.id < (
-            select max(p.id) from content_revision p
-            where p.entity_type = 'asset' and p.entity_id = d.asset_id
-          )
+        where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
         order by r.id desc
         limit 1
       ) is distinct from v.blob_key

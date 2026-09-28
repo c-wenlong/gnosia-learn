@@ -251,6 +251,25 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
       },
     ]);
     expect(await derivedFrom(poster)).toEqual([id]);
+    // And an edit to the poster that is not a cut: its title, through the seam.
+    const [posterRow] = await scratch.db.select().from(asset).where(eq(asset.id, poster));
+    const posterRest: Record<string, unknown> = { ...posterRow };
+    delete posterRest["createdAt"];
+    delete posterRest["updatedAt"];
+    const [posterLatest] = await scratch.db.execute<{ id: number }>(
+      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${poster}`,
+    ).then((r) => r.rows);
+    await writeContents(scratch.db, [
+      {
+        type: "asset",
+        id: poster,
+        next: { row: { ...posterRest, title: "A retitled poster" }, links: { asset_derivation: [{ sourceAssetId: id }] } },
+        base: posterLatest?.id ?? null,
+        author: "test",
+        authorKind: "person",
+        reason: "a title edit, not a new cut",
+      },
+    ]);
     // The next import changes no row, and still finds the poster was cut from other bytes.
     const retry = await runImportCommand({ dir: tree, only: ["manimkc"] });
     expect(retry.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({});
