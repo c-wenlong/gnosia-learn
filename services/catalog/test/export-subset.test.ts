@@ -130,6 +130,16 @@ describe.skipIf(!reachable.ok)("catalog export --subset", () => {
     expect(await readdir(path.join(elsewhere, "content"))).toEqual([]);
   });
 
+  it("writes to a new directory under a symlinked ancestor", async () => {
+    // The ancestor is a link; the output directory does not exist yet.
+    const real = await mkdtemp(path.join(out, "real-"));
+    const link = path.join(out, `link-${path.basename(real)}`);
+    await symlink(real, link);
+    const result = await runExport({ out: path.join(link, "new", "seed"), subset: RECIPE });
+    expect(result.types.reduce((n, t) => n + t.files, 0)).toBe(17);
+    expect(await readdir(path.join(real, "new", "seed"))).toEqual(["content", "learn"]);
+  });
+
   it("refuses names that are not there", async () => {
     await refused({ topics: [...RECIPE.topics, "no-such-topic"] }, /topic "no-such-topic" does not exist/);
     await refused({ course: "cp4284-m1" }, /"cp4284-m1" is not a course/);

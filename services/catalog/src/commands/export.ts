@@ -99,6 +99,10 @@ export async function runExport(options: {
     // under `out` that is a symlink would carry a write into whatever tree it
     // points at, which is how a subset could still replace an imported tree's
     // vocabulary after the refusal above passed `out` itself.
+    // `out` made first: a path that does not exist yet resolves to itself,
+    // while its children, once made, resolve through any symlinked ancestor
+    // (macOS's /tmp is one), and every write would look like it left `out`.
+    await mkdir(out, { recursive: true });
     const realOut = await resolvedPath(out);
     for (const file of [...rendered.values()].flat()) {
       const directory = path.dirname(path.join(out, file.path));
