@@ -623,20 +623,20 @@ commands.concept = async ({ values, positionals }, session) => {
           try {
             await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
           } catch (error) {
-            // The run reads every course file, and runs the sources that
-            // depend on courses after it, each committing on its own. So a
-            // problem in a file this command never touched can stop it after
-            // the note and the listing are in, with the row's link written or
-            // not depending on which source refused. Which one is asked, not
-            // guessed, so the message says what is actually missing.
+            // The run reads every course file, and runs other sources after
+            // courses, each committing on its own. So a problem in a file this
+            // command never touched can stop it after the note and the
+            // listing are in, with the row's link written or not. Whether it
+            // is there is asked, not guessed; which file stopped the run is
+            // the index error's to say, since it names it, and a link from
+            // an earlier run means this message cannot know which source it was.
             if (error instanceof IndexError) {
               const linked = await isLinkedToItem(await session.db(), id, itemId);
               fail(
-                `${rel(file)} was written as rows and listed on ${itemId}` +
-                  (linked
-                    ? `, and the row links to it, but the index run then stopped on another source: `
-                    : `, but the courses source refused, so the row's link to it is not in the catalog yet: `) +
-                  `${error.message}\n  Fix that, then run: npm run --silent catalog -- index --only courses`,
+                `${rel(file)} was written as rows and listed on ${itemId}, ` +
+                  (linked ? `and the row links to it, ` : `but the row's link to it is not in the catalog yet, `) +
+                  `and the index run stopped: ${error.message}\n  ` +
+                  `Fix that, then run: npm run --silent catalog -- index --only courses`,
               );
             }
             throw error;
