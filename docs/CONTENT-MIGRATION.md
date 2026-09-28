@@ -1827,7 +1827,14 @@ before, so it merged before flip day and does not depend on #152.
       of everything and the commons with a topic and a concept, and shows
       `local` reads exactly what it read before plus the commons, the second
       owner reads its own rows plus the commons, and the seam refuses a
-      takeover; with the filter disabled five of its cases fail.
+      takeover; with the filter disabled five of its cases fail. Greptile's
+      review of #158 added the boundaries a link crosses: evidence
+      (`recordObservation`, `gradeReview`) is refused for a concept the
+      learner cannot read (`assertReadableConcepts`), with the sentence a
+      missing concept gets; the knowledge base drops a prerequisite, a
+      curriculum item and a topic chip another owner holds; a stored poster
+      answers only when the video it stands for is readable; and the seam
+      stamps its owner on `topic_relation` and `manimkc_topic` rows too.
 - [x] Blob keys already carry the owner; per-owner caps on bytes stored and
       on uploads per day, checked in `upload()`.
       **Built:** `uploadBlob` in `services/catalog/src/content/blob.ts` reads
