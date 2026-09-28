@@ -445,9 +445,10 @@ export async function runIndex(
 
   const sources: SourceWrite[] = [];
   for (const indexer of runnable) {
-    const { rows, notes = [], scope, metadata } = await indexer.read(context);
+    const { rows, notes = [], scope, metadata, logs } = await indexer.read(context);
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), {
       scope,
+      logs,
       tagLinksRewritten: running.has("courses"),
       // The absolute root the repo-relative paths in these rows resolve
       // against, which `catalog export` copies concept notes, session logs

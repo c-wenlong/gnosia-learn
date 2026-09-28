@@ -3,8 +3,9 @@ import path from "node:path";
 
 import type { NewAsset, NewAssetConcept, NewAssetTopic } from "@self-learn/schema";
 
-import { fileFacts, filesIn, relativeTo } from "./files";
-import { extractWikilinks, parseFrontmatter, readText } from "./frontmatter";
+import { type ImportedLog, logAsset } from "../content/session-logs";
+import { filesIn, relativeTo } from "./files";
+import { parseFrontmatter, readText } from "./frontmatter";
 import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
 
 /**
@@ -43,45 +44,33 @@ export const sessionsIndexer: Indexer = {
     const assets: NewAsset[] = [];
     const assetConcepts: NewAssetConcept[] = [];
     const assetTopics: NewAssetTopic[] = [];
+    const logs: ImportedLog[] = [];
     let covered = 0;
     let unmatched = 0;
 
     for (const file of files) {
       const where = relativeTo(repoRoot, file);
       const text = await readFile(file, "utf8");
-      const { data, body } = parseFrontmatter(text);
-      const id = `${ASSET_PREFIX.sessions}${where}`;
-      const { contentHash, bytes } = await fileFacts(file);
+      const found = logAsset(where, text, concepts, (slug) => vocabulary.byConcept.get(slug));
+      assets.push(found.asset);
+      assetConcepts.push(...found.assetConcepts);
+      assetTopics.push(...found.assetTopics);
+      covered += found.covered;
+      unmatched += found.unmatched;
 
-      assets.push({
-        id,
-        kind: "session",
+      // The log itself, for its entries (Track C): the writer appends what
+      // the file holds beyond what the database already has.
+      const { data } = parseFrontmatter(text);
+      const date = readText(data, "date");
+      const parsed = date === null ? null : new Date(date);
+      logs.push({
+        id: path.basename(file, ".md"),
         path: where,
-        url: null,
-        contentHash,
-        bytes,
-        title: readText(data, "title") ?? path.basename(file, ".md"),
-        sourceRepo: "self-learn",
+        markdown: text,
+        title: readText(data, "title"),
+        goal: readText(data, "goal"),
+        date: parsed !== null && !Number.isNaN(parsed.getTime()) ? parsed : null,
       });
-
-      // The goal is stated in the frontmatter and is a concept slug, so it
-      // counts as coverage even when the body never links it.
-      const named = new Set(extractWikilinks(body));
-      const goal = readText(data, "goal");
-      if (goal !== null) named.add(goal);
-
-      const topics = new Set<string>();
-      for (const target of named) {
-        if (!concepts.has(target)) {
-          unmatched += 1;
-          continue;
-        }
-        assetConcepts.push({ assetId: id, conceptSlug: target });
-        covered += 1;
-        const topicSlug = vocabulary.byConcept.get(target);
-        if (topicSlug !== undefined) topics.add(topicSlug);
-      }
-      for (const topicSlug of topics) assetTopics.push({ assetId: id, topicSlug });
     }
 
     const rows: SourceRows = {
@@ -91,6 +80,7 @@ export const sessionsIndexer: Indexer = {
     };
     return {
       rows,
+      logs,
       notes: [
         `${assets.length} sessions covering ${covered} concept mentions ` +
           `(${unmatched} wikilink(s) named no concept)`,

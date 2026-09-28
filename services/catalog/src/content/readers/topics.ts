@@ -1,13 +1,21 @@
-import { notMigrated, type TypeReader } from "./reader";
+import { readTopicEntries } from "../topics";
+import type { TypeReader } from "./reader";
 
 /**
  * The database reader for `topics`: the shared topic vocabulary, as
  * `TopicEntry[]` in authored order, with `maps` and `relations` rebuilt from
  * rows.
  *
- * Track A's file (docs/CONTENT-MIGRATION.md, phase 1). It implements
- * `read` from rows, returning exactly what `fileSource` returns for the same
- * content, and sets `ready: true` in the same change; nothing outside this
- * file needs to change for `catalog flip topics` to accept the type.
+ * Track A's file (docs/CONTENT-MIGRATION.md, phase 1). `readTopicEntries`
+ * runs the same queries, in the same order, as the export that writes
+ * `content/topics.yaml`, so for any database this returns what
+ * `fileSource(root).topics()` returns for that database's own export: live
+ * topics by position, `relations` from `topic_relation`, `maps.manimkc` from
+ * `manimkc_topic`, `maps.concepts` from live concepts' `topic_slug` and
+ * `maps.courses` from live modules' topic rows. `test/topic-readers.test.ts`
+ * holds the two equal.
  */
-export const reader: TypeReader<"topics"> = { ready: false, read: notMigrated("topics") };
+export const reader: TypeReader<"topics"> = {
+  ready: true,
+  read: (db) => () => readTopicEntries(db),
+};

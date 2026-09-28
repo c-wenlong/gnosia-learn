@@ -59,7 +59,10 @@ describe("the asset routes with no catalog", () => {
     expect([...problems.values()]).toEqual(["catalog-unreachable", "catalog-unreachable"]);
   });
 
-  it("says files-off before it ever asks the catalog, when the switch is off", async () => {
+  // With the switch off there is no file branch, and with no catalog there is
+  // no blob to find, so the answer is the one a deployment with neither gave
+  // before the blob store existed.
+  it("says files-off when the switch is off and the catalog cannot be asked", async () => {
     delete process.env.ASSET_FILES_ENABLED;
     const problems = await library.readFileProblems([ID]);
     expect(problems.get(ID)).toBe("files-off");

@@ -63,7 +63,7 @@ goes is the record of which brief produced them.
 | Table | Purpose |
 | --- | --- |
 | `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
-| `concept` | One authored note under `learn/concepts/`. Carries prerequisites and mastery. Optional enrichment under a topic. |
+| `concept` | One authored note under `learn/concepts/`. Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. |
@@ -80,7 +80,7 @@ goes is the record of which brief produced them.
 | `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
 | `diagram` | A `.tldr` document in jsonb, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
 | `blob_object` | One object in the blob store: `<owner_id>/<sha256>.<ext>`, its size, type, provider and whether the upload is confirmed. |
-| `session_log_entry` | One appended piece of a session log. Append-only; its own history, so no revisions. |
+| `session_log_entry` | One appended piece of a session log: the exact text that went onto the end of the file, so the log is its entries concatenated, byte for byte. The first entry is what `learn session start` wrote, frontmatter included. Append-only; its own history, so no revisions. An import appends what a file grew by and refuses one edited above its end. |
 | `content_revision` | One row per content write: the whole entity after it, its hash, who wrote it and why. Append-only. |
 
 ### State
@@ -593,6 +593,19 @@ writes `mirror` rows against ids the `manimkc` source already wrote, and the
 writer refuses a `mirror` row for a destination the run did not declare it
 audited, because such a row would never be cleared again.
 
+`poster:` is the one asset namespace no indexer owns. `catalog asset upload`
+writes it, one `poster:<video id>` row per video, derived from the video
+through `asset_derivation`, with no `path` and a `blob_key`
+([CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md), Track E). It sits
+outside `manimkc:` because the manimkc prune deletes every row in that
+namespace it did not produce, and it never produces a poster.
+
+**An index keeps a blob it did not name.** An indexer hands over asset rows
+with no `blob_key`, and the upsert sets every column, so the writer carries the
+stored key forward whenever the stored blob's sha256 is the `content_hash` just
+read (`services/catalog/src/index/blob-keys.ts`). A re-render changes the hash
+and drops the key, so the asset falls back to its file until the next upload.
+
 Because deletions cascade, `index` prints the keys it removed rather than a
 count.
 
@@ -612,6 +625,18 @@ or recap written to an archived item is refused by name (`assertKnownItems` in
 `src/state/progress.ts`), while what was recorded on it before stays, and the
 Settings export still carries it; importing that export back
 (`src/state/import.ts`) restores it, since it is the learner's own record.
+
+The course writers (`catalog course import`, `catalog item archive|restore`,
+`src/content/courses.ts` and `src/content/items.ts`) archive through the seam
+and keep the archived row's links, so a restore brings its concept links
+back; the courses indexer replaces its link tables wholesale and so drops
+them, and a restore of such an item takes them from the last revision that
+recorded it live. The one way an item leaves the table is `catalog item
+purge`, which refuses a live item, refuses while a `progress` or `recap` row
+names it, and with `--with-learner-data` copies those rows into its `delete`
+revision's snapshot (under `links.progress` and `links.recap`, by column name)
+before deleting them, so `catalog item restore` of a purged item rebuilds the
+row, its links and the learner rows from that revision alone.
 
 **Every entity a run touched gets an `import` revision when its snapshot
 changed.** The run's author is `import:<git sha>` of the commit the files it
