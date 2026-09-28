@@ -586,8 +586,8 @@ async function assertOwned(db: CatalogDatabase, types: readonly ("concepts" | "s
   if (missing.length === 0) return;
   throw new VaultError(
     `the vault is the database's notes and logs, and the database does not own ${missing.join(" or ")} yet ` +
-      `(catalog flip ${missing.join(", catalog flip ")}). Until then the files under learn/ are the notes: ` +
-      `open that folder in Obsidian as before.`,
+      `(catalog flip ${missing.join(", catalog flip ")}). Import a tree and flip them first: since the cut-over ` +
+      `the repository holds no notes of its own.`,
   );
 }
 

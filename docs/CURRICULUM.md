@@ -1,38 +1,42 @@
 # Editing the curriculum
 
-Course content is data, not code. One YAML file per course under
-`content/courses/`, read by `loadCourses()` in
-[packages/content](../packages/content/src/courses.ts), the same parser the web
-app, `catalog import` and `catalog course import` all go through, so a course
-file means one thing everywhere. The courses are moving into Postgres
-([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), Track B); until the
-`courses` type is flipped the files are the truth, and after it they are the
-database's export, written back by every course write.
+Course content is data, not code. The courses are `collection` and
+`curriculum_item` rows in Postgres, and the database is their truth
+([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), Track B and the phase 3
+cut-over). A course is edited as a file all the same: one YAML file per course,
+the database's export of it, parsed by `parseCourse()` in
+[packages/content](../packages/content/src/courses.ts), the same parser
+`catalog import` and `catalog course import` go through, so a course file means
+one thing everywhere. Its format is [seed/COURSES.md](../seed/COURSES.md).
 
 ## Where the course data lives
 
-| File | Holds |
-| --- | --- |
-| `content/courses/<code>.yaml` | One course: modules, curriculum items, subtopics, curated resources |
-| `content/topics.yaml` | The shared topic vocabulary each module's `topic:` names |
-| `content/tags.yaml` | The cross-course themes each course's `tags:` names |
+In the database. The repository holds no course files: [`seed/`](../seed/README.md)
+has one small course for the tests and a fresh clone, and the last tree the
+repository held is at the tag `content-files-final`. In an export
+(`catalog export --out <dir>`) the course data is three paths:
+
+| Path in an export | Holds | Written by |
+| --- | --- | --- |
+| `content/courses/<code>.yaml` | One course: modules, curriculum items, subtopics, curated resources | `catalog course import`, `catalog item ...` |
+| `content/topics.yaml` | The shared topic vocabulary each module's `topic:` names | `catalog topic ...` |
+| `content/tags.yaml` | The cross-course themes each course's `tags:` names | `catalog tag ...` |
 
 There is no TypeScript copy. `apps/web/src/data/courses/index.ts` is a thin
 server-only module over the reader, holding `getCourses()` and the lookups pages
 call (`getCourse`, `getModule`, `findTopic`, `getCourseTopicIds`,
 `getRelatedCourses`, `totalTopicCount`) and nothing else. It reads through the
-content seam once per request, so an edit to a course file shows on the next
-page load of a running server, with no restart.
+content seam once per request, from the database, so an import shows on the
+next page load of a running server, with no restart.
 
 ## Adding or changing a course
 
-A course moves through the database one file at a time
-(docs/CONTENT-MIGRATION.md, Track B). The loop is export, edit, import, and
+A course changes one file at a time. The loop is export, edit, import, and
 every import is a revision with a reason, which is what the commit message
 used to say:
 
 ```bash
-npm run catalog -- course export cs2111 --out /tmp/cs2111.yaml   # or edit content/courses/cs2111.yaml in place
+npm run catalog -- course export cs2111 --out /tmp/cs2111.yaml
 $EDITOR /tmp/cs2111.yaml
 npm run catalog -- course import /tmp/cs2111.yaml --reason "cs2111-m2-t1 teaches self-attention" --dry-run
 npm run catalog -- course import /tmp/cs2111.yaml --reason "cs2111-m2-t1 teaches self-attention"
@@ -45,9 +49,9 @@ refuses the file once the course has moved past N (an item archived, a
 concept linked, a link deleted since), naming what moved, because importing
 it would undo that; export again and reapply the edit, or pass `--force-base`
 to import it as it stands. After an import the stamp in the file moves on
-with it, so editing the same file and importing again is not stale. The
-course's own file in the tree carries no stamp, since the write-through
-compares it byte for byte with the database's export and keeps it in step.
+with it, so editing the same file and importing again is not stale. A new
+course has nothing to export: write its file from the shape in
+[seed/COURSES.md](../seed/COURSES.md) and import it the same way.
 
 `course import` reads the file with the same parser the web app uses, then
 checks what it points at against the database rather than against other
@@ -60,48 +64,40 @@ anything already as the file says, so importing an unchanged file writes
 nothing. `--dry-run` does the whole write and rolls it back, to see what would
 change.
 
-In the same transaction, the course's file, and `content/topics.yaml` when a
-module was added, dropped or moved to another topic, are rewritten in the tree
-the courses were imported from (D17), so the files and the database never
-disagree. A course file or `topics.yaml` there that holds edits the database
-has not imported is never overwritten: the import refuses and names it. The
-file being imported is the exception, since it is the edit. The check compares
-bytes, so a file whose content matches but whose formatting does not (quoting,
-spacing, a comment) is refused too. The files in this repository are
-byte-for-byte the export's own. A tree written by hand is brought to that form
-once, in this order so no edit is lost: `npm run catalog -- import` reads
-every edit in, in the course files and `topics.yaml` alike (a type the
-database already owns refuses an edited file by name instead), then
-`npm run catalog -- export --only courses,topics --out <the tree>` rewrites
-the same content in the export's form. Exporting first would overwrite an
-edit the database had not read yet.
+The import writes rows and no file. Once the database owns every type, as it
+does after the phase 3 cut-over, there is no tree to keep in step: a module
+added, dropped or moved to another topic changes that topic's `maps.courses`
+in the rows, and the next `catalog export` shows it. (On a database still
+part-way through its flips, the import also rewrote the course's file and
+`topics.yaml` in the tree the courses were imported from, D17, and refused
+when one there held an edit it had not imported.)
 
 When writing the file itself:
 
-1. Name it after the course code in lowercase (`content/courses/<code>.yaml`).
-   The directory reader refuses a file whose name and `code:` disagree.
+1. Name it after the course code in lowercase (`<code>.yaml`). The reader
+   refuses a file whose name and `code:` disagree.
 2. Give it an `order:`. That is the order the Courses page renders them in,
    and it has to be unique across the live courses. Sorting by filename is not
    the reading order, which is why the key is authored rather than derived.
-3. Point each module's `topic:` at a slug from `content/topics.yaml`. It is a
-   lookup key, not free text: add or rename a topic there, never here. An
-   import writes the module into that topic's `maps.courses` itself; while
-   courses are still read from files, `catalog import` refuses to run when the
-   two files disagree in either direction.
-4. Use an existing entry from `content/tags.yaml` before inventing a theme;
-   tags are how related courses find each other.
+3. Point each module's `topic:` at a slug from the vocabulary
+   (`npm run --silent catalog -- topic ls --json`). It is a lookup key, not
+   free text: add or rename a topic with `catalog topic add` or `catalog topic
+   rename`, never here. An import writes the module into that topic's
+   `maps.courses` itself.
+4. Use an existing tag before inventing a theme (`catalog tag add` makes a
+   new one); tags are how related courses find each other.
 5. List each item's concept notes under `concepts:`, in teaching order. Every
    item needs at least one before `catalog flip courses --strict` can arm the
    rule that says so; `npm run catalog -- doctor` lists every item still
    without one.
-6. Run `npm test`. `packages/content/test/courses.test.ts` checks the
-   curriculum integrity: the shortlist is complete, topic ids are unique across
-   every file, `inferred` is set only on the courses that are genuinely
-   inferred, every module names a real topic, every tag resolves.
+6. Run the import with `--dry-run` first. It applies every rule the reader and
+   the database have (unique ids across every course, every module topic and
+   tag resolving, every item concept filed under its module's topic) and lists
+   every refusal at once. `npm test` checks the reader and the seed's course,
+   not yours.
 
-`catalog import --only courses` still reads every course file into the database
-while the courses type is on files. Once it is flipped, `catalog import` skips
-the course files while they are the database's own export and refuses them,
+Once the courses type is flipped, `catalog import <dir>` skips an export's
+course files while they are the database's own last export and refuses them,
 naming the file, when someone edited one by hand: use `course import` instead.
 
 ## Dropping an item or a module
@@ -132,16 +128,16 @@ rendering something wrong:
 | --- | --- |
 | A duplicated course, module, topic or resource id | Ids are permanent keys; two things sharing one silently merge whatever they had recorded |
 | Two modules of one course sharing a slug | They are the same URL, so the second module is unreachable and its link renders the first |
-| A module whose `topic:` is missing or not in `content/topics.yaml` | A course row nothing else can join to |
+| A module whose `topic:` is missing or not in the vocabulary | A course row nothing else can join to |
 | A missing `id`, `slug`, `code`, `title`, `credits`, `order`, `capstone` | A route that 404s, or a page with a hole in it |
 | `inferred` absent, or written as a string | A reconstructed syllabus presented as an official one |
 | Two courses claiming one `order` | An ambiguous order on the Courses page |
 | A resource `type` outside paper/docs/video/book/other | A chip the UI has no styling for |
-| A tag that is not in `content/tags.yaml` | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
+| A tag that is not a known tag | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
 | A module with no `topics:` | A page with an empty section and nothing to tick |
 | An item's `concepts:` left empty, or written as anything but a list of strings | The tempting `Array.isArray(x) ? x : []` would index the item as if the author had meant to remove its concepts |
 | A concept id listed twice on one item | The list is the teaching order and each entry gets a position; one concept cannot hold two |
-| A concept listed on an item whose module topic does not name it in `maps.concepts` | Two files disagreeing about which topic a concept belongs to, with neither knowably right |
+| A concept listed on an item whose module topic does not name it in `maps.concepts` | The course and the vocabulary disagreeing about which topic a concept belongs to, with neither knowably right |
 | `modules:`, `topics:` or `resources:` written as anything but a list of mappings | The tempting `Array.isArray(x) ? x : []` would render and index the module as if the author had meant to delete its content |
 
 Unresolved topics are collected and reported together, so one run names all of

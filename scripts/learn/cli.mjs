@@ -11,7 +11,7 @@
  *
  * This file stays because it is the published entry point. `npm run learn`
  * runs it, the `/learn` and `/review` skills run `npm run learn -- status`
- * and parse the JSON, and `learn/README.md` documents the path. Moving the
+ * and parse the JSON, and `docs/LEARN.md` documents the path. Moving the
  * implementation is ours to do; moving the entry point would break a contract
  * with a plugin installed outside this repo.
  *

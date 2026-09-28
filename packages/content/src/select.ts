@@ -14,24 +14,24 @@ import {
  * Three inputs, in this order of precedence for a reader:
  *
  * 1. **`CONTENT_SOURCE`**, when it names the type. `files` or `db` sets every
- *    type; `topics=db,courses=files` sets the ones it lists. It is the read
- *    rollback lever and the tests' switch, and it overrides readers only.
+ *    type; `topics=db,courses=files` sets the ones it lists. Since phase 3's
+ *    cut-over it is a test's switch only (a suite pointing a type at a tree
+ *    of files), and it overrides readers only.
  * 2. **The `content_source` row**, through the `ownership` callback, when the
  *    database answers. The row is the authority: `catalog flip` writes it, and
  *    importers and writers obey it whatever the variable says (D18). A reader
  *    follows it unless the variable says otherwise.
- * 3. **`files`**, the default for every type until its track flips it.
+ * 3. **`db`**, the default for every type. Until the cut-over it was `files`;
+ *    the cut-over removed the repository's `content/` and `learn/`, so there
+ *    are no files for a type to fall back to, and the database is where the
+ *    content is authored.
  *
  * Why the variable does not decide for writers: a variable set differently in
- * two processes is two truths, and a row is one. For a reader the worst a
- * stale variable can do is show an older copy, and D17's write-through
- * export keeps the files current while any reader can still be pointed at
- * them.
+ * two processes is two truths, and a row is one.
  *
  * An `ownership` callback that throws (the database is down) resolves as if
- * no row existed, so every type falls back to files and a page still renders.
- * That is the degradation the files were always going to give; the reason is
- * reported once through `onOwnershipError`.
+ * no row existed, so every type goes to the database, whose read then fails
+ * and says why; the reason is also reported once through `onOwnershipError`.
  */
 
 export const CONTENT_SOURCE_VAR = "CONTENT_SOURCE";
@@ -102,7 +102,7 @@ export function parseContentSource(value: string | undefined): Ownership {
   return out;
 }
 
-/** The precedence above, as a pure function: variable, then row, then files. */
+/** The precedence above, as a pure function: variable, then row, then the database. */
 export function resolveOwnership(input: { variable: Ownership; rows: Ownership }): Resolutions {
   const out = {} as Resolutions;
   for (const type of CONTENT_TYPES) {
@@ -113,13 +113,17 @@ export function resolveOwnership(input: { variable: Ownership; rows: Ownership }
         ? { kind: fromVariable, from: "variable" }
         : fromRow !== undefined && isKind(fromRow)
           ? { kind: fromRow, from: "row" }
-          : { kind: "files", from: "default" };
+          : { kind: "db", from: "default" };
   }
   return out;
 }
 
 export interface SelectSourceOptions {
-  /** The file implementation, always present: it is the default and the fallback. */
+  /**
+   * The file implementation, for a type the variable or its row sends to
+   * files: a test's tree since the cut-over, or a reader that refuses (the
+   * web app's), since nothing is read from the repository any more.
+   */
   files: ContentSource;
   /**
    * Builds the database implementation. Called at most once, and only when

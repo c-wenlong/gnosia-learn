@@ -9,6 +9,31 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Changed
 
+- **The database is the only home of the content; `content/` and `learn/`
+  are gone from the repository.** Phase 3 of
+  [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) is the cut-over. The
+  topics, tags, courses, concept notes, session logs and diagrams are rows,
+  and once a database owns all six types a write changes rows and no file.
+  `catalog export --out <dir>` writes them out when someone wants files, and
+  `npm run export:nightly` keeps a dated archive under
+  `$SELF_LEARN_HOME/archive/`, pruned to the newest 30. The last tree the
+  repository held is at the tag `content-files-final`.
+
+  `CONTENT_SOURCE` defaults to the database, and `files` survives only as a
+  test override. The `learn` CLI's file half runs only against a tree
+  `LEARN_ROOT` names, never creates `learn/` in the repository, and refuses a
+  type the database does not own (or an unreachable database) with a message
+  where it used to read an empty folder. A bare `catalog import` on a database
+  that owns every type refreshes manimkc and the mirror ledger and reads
+  nothing else.
+
+  A fresh clone builds its database from `seed/` (README.md, "Install"), and
+  `npm run e2e` does the same by default; `--copy` copies `self_learn`
+  instead. The documents moved with the files: `content/README.md` is now the
+  export format's section of [seed/README.md](seed/README.md), the course file
+  format is [seed/COURSES.md](seed/COURSES.md), and the pipeline's
+  documentation is [docs/LEARN.md](docs/LEARN.md).
+
 - **Configuration that was hard-coded in source now has an environment
   variable, and every one of them has a default that needs no configuration.**
   An audit found four; none held a secret, so this is purely about being able

@@ -208,6 +208,8 @@ export function addConceptToItem(text: string, itemId: string, conceptId: string
 }
 
 export interface ItemCheck {
+  /** The course the row is in. */
+  course: string;
   /** Repo-relative path of the course file the row is in. */
   file: string;
   /** The vocabulary topic of the row's module, which the concept must be mapped to. */
@@ -227,6 +229,7 @@ export function checkItem(repoRoot: string, itemId: string, conceptId: string): 
       const row = mod.topics.find((t) => t.id === itemId);
       if (row === undefined) continue;
       return {
+        course: course.id,
         file: path.posix.join(COURSES_DIR, `${course.code.toLowerCase()}.yaml`),
         moduleTopic: mod.topic,
         already: row.concepts.includes(conceptId),

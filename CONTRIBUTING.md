@@ -1,8 +1,9 @@
 # Contributing to self-learn
 
 Thanks for your interest in contributing! self-learn is a Next.js study hub
-with a file-backed tutoring pipeline beside it. Both halves are meant to stay
-readable: plain files, no hidden state.
+with a tutoring pipeline beside it, both over one Postgres database. Both
+halves are meant to stay readable: every write is a revision with a reason,
+and `catalog export` turns the content back into plain files at any time.
 
 ## Getting started
 
@@ -15,24 +16,31 @@ npm run dev
 npm test
 ```
 
-The catalog is optional for the web app and required for its own tests:
+The web app reads everything from the catalog, and a fresh clone's catalog is
+built from [`seed/`](seed/README.md), the only content the repository holds:
 
 ```bash
 createdb self_learn            # Homebrew Postgres 17, already running
 npm run catalog -- migrate
+MANIMKC_ROOT=/nonexistent npm run catalog -- import seed
+for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 npm run catalog -- status
 ```
+
+README.md, "Install", says why each step is there. The tests do not use this
+database.
 
 Without a reachable Postgres the catalog tests skip themselves with a reason
 and `npm test` still passes. With one, they never read your `self_learn`: each
 suite creates and drops its own scratch database, and the end-to-end suite
 imports [`seed/`](seed/README.md), a small real slice of the content in the
-export format, rather than `content/` and `learn/`. Those two go in phase 3 of
-[docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md), and the suites already
-pass without them. No test may write into `seed/` or `learn/assets/`:
-`vitest.setup.ts` lists both before each test file and fails the one that
-changed a file. `seed/` is regenerated only with `catalog export --subset`,
-as its README says, and `EXPECTED` in `services/catalog/test/catalog.test.ts`
+export format. The repository's `content/` and `learn/` went in phase 3 of
+[docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md). A suite that needs a
+tree of files takes a temp one (`LEARN_ROOT` for the `learn` CLI's file half),
+never the repository. No test may write into `seed/`, or bring back a
+`content/` or `learn/` at the root: `vitest.setup.ts` lists all three before
+each test file and fails the one that changed them. `seed/` is regenerated
+only with `catalog export --subset`, as its README says, and `EXPECTED` in `services/catalog/test/catalog.test.ts`
 moves with it in the same commit.
 
 `apps/web/.env.local` is where Next reads variables from: the app lives in
@@ -86,20 +94,20 @@ there.
 | `apps/web/src/components/` | The shell, the redesign's primitives in `ui/` ([IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md)), checklists, recaps, the concept graph |
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool), `learner-api.ts` (the route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`; nothing off the disk), `blob-store.ts` (the store the asset routes read), `asset-library.ts`, `library.ts` and `transcript.ts` (the `/library` pages' reads, taxonomy and sidecar parsing), `storage.ts` (pure reducers), `progress.ts`, `agent/` (prompts and providers), `site-url.ts` (where this deployment lives, for social cards and the OpenRouter referer), `kb/` (the concept graph, from the catalog) |
 | `apps/web/src/data/` | The app's server-only view of the authored content, through the reader seam and from the database only: `getCourses()` and the course lookups in `courses/index.ts`, `getTags()` in `content.ts`, `getTopics()` in `topics.ts`, the seam's composition root in `source.ts`, which refuses a type nobody flipped |
-| `content/` | The curriculum itself: one YAML file per course, the topic vocabulary, the cross-course tags ([CURRICULUM.md](docs/CURRICULUM.md)) |
-| `packages/content/` | The parsers the catalog imports `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
+| `seed/` | A small slice of the content in the export format: a fresh clone's database and the tests' fixture. The format is in its [README](seed/README.md), the course file in [COURSES.md](seed/COURSES.md) |
+| `packages/content/` | The parsers the catalog imports an export's `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.self-learn/blobs` ([README](packages/blob/README.md)) |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
-| `learn/` | The knowledge base's files: `concepts/<domain>/`, `sessions/`, `assets/`, `map.md`. The state is in Postgres |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
 | `tools/tldrawkc/` | Submodule for the tldraw diagram CLI behind `npm run canvas`, with its own repo, `AGENTS.md` and design docs in [`docs/`](tools/tldrawkc/docs/README.md). Needs `npm ci && npm run build` inside it before the script runs |
-| `docs/`, `apps/web/public/` | Long-form notes, and static assets including the social card |
+| `docs/`, `apps/web/public/` | Long-form notes (the pipeline's is [LEARN.md](docs/LEARN.md)), and static assets including the social card |
 
 ## What to contribute
 
-Course data under `content/courses/`, new verbs or flags in
+Course data (through `catalog course export` and `course import`, see
+[CURRICULUM.md](docs/CURRICULUM.md)), new verbs or flags in
 `scripts/learn/cli.mjs`, UI that makes progress and recaps easier to read, and
 bug fixes or docs. All welcome.
 
@@ -115,13 +123,13 @@ bug fixes or docs. All welcome.
    only once `next typegen`, `next dev` or `next build` has run, and without
    them a fresh clone's typecheck fails on every image import. The build is
    still the gate that compiles the app the way it ships.
-3. **The knowledge base is a real study record, and half of it is not in git.**
-   The notes and the session logs under `learn/` are versioned on purpose; the
-   event log, the mastery model and the schedule are rows in Postgres and have
-   no second copy anywhere. A code PR should not carry changes to
-   `learn/concepts/` or `learn/sessions/` unless the knowledge base is what the
-   PR is about, and nothing in a PR should run `learn observe` against the real
-   database to try something out — the tests create and drop their own.
+3. **The knowledge base is a real study record, and none of it is in git.**
+   The notes, the session logs and the diagrams are rows in Postgres with a
+   revision per write, and the nightly export (`npm run export:nightly`) is
+   their copy; the event log, the mastery model and the schedule are rows with
+   no second copy anywhere. A PR carries no study data, and nothing in a PR
+   should run `learn observe` or a content write against the real database to
+   try something out: the tests create and drop their own.
 4. **Never commit an `.env` file.** `.gitignore` covers `.env*` except
    `.env.example`. Provider keys are server-side only.
 5. **Never commit a dirty `tools/manimkc/` or `tools/tldrawkc/` pointer.** Both submodules
@@ -157,8 +165,7 @@ bug fixes or docs. All welcome.
 
 ## End-to-end smoke
 
-`npm run e2e` starts the built app against a throwaway copy of your database
-and walks it in headless Chromium: the landing page to sign-in, a wrong and a
+`npm run e2e` starts the built app against a throwaway database and walks it in headless Chromium: the landing page to sign-in, a wrong and a
 right password, one review card rated Good, `/learn`, a concept workspace and
 its tutor with no provider key, a session walked to its close screen, Mark
 watched on a video, a settings change, the dark theme, and sign-out. It is
@@ -168,8 +175,9 @@ Prerequisites:
 
 - A current production build: `npm run build`. The script never builds, and
   runs whatever `apps/web/.next` holds, so rebuild after changing the app.
-- Homebrew Postgres 17 running, with a `self_learn` database. Set `PG_BIN` if
-  the binaries are not in `/opt/homebrew/opt/postgresql@17/bin`.
+- Homebrew Postgres 17 running. Set `PG_BIN` if the binaries are not in
+  `/opt/homebrew/opt/postgresql@17/bin`. A `self_learn` database is needed only
+  with `--copy`.
 - playwright-core from the tldrawkc submodule (`npm ci` inside
   `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
   Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the
@@ -177,18 +185,19 @@ Prerequisites:
 
 **It never touches `self_learn`.** A review rating, a session answer and Mark
 watched all write real evidence, and the event log is append-only, so the run
-copies the database to `self_learn_e2e_<pid>_<time>` (`createdb -T`, or `pg_dump` when
-another connection holds the template open) and drops the copy afterwards,
-on a failure and on Ctrl-C too. `--keep-db` leaves it behind to inspect, and
-prints the `dropdb` line; `--headed` shows the browser.
+works on a database of its own, `self_learn_e2e_<pid>_<time>`, and drops it
+afterwards, on a failure and on Ctrl-C too. `--keep-db` leaves it behind to
+inspect, and prints the `dropdb` line; `--headed` shows the browser.
 
-`--seed` builds the database instead of copying one: an empty database,
-migrated, `catalog import seed/`, and one `learn observe` so a review card is
-due, with the diagram's SVG in a temp blob store. It is what the run will do by
-default once phase 3 removes `content/` and `learn/` and `self_learn` stops
-being a template anyone should copy. The seed has no videos, so the Mark
-watched step prints `SKIP` with the reason and counts as neither a pass nor a
-failure.
+By default it builds that database from the seed, exactly as README.md,
+"Install", builds a fresh clone's: an empty database, migrated, `catalog
+import seed/`, all six types flipped, and one `learn observe` so a review card
+is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
+the Mark watched step prints `SKIP` with the reason and counts as neither a
+pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `self_learn`,
+or the database named, instead (`createdb -T`, or `pg_dump` when another
+connection holds the template open); every content type must be flipped there.
+`--seed` is still accepted and means the default.
 
 Reading a failure: the run prints one line per step and a final `PASS` or
 `FAIL`, and exits 1 on any failure (2 when a prerequisite is missing). A
@@ -210,6 +219,6 @@ steps to reproduce.
 ## Questions?
 
 Read [README.md](README.md) for the tour, [ARCHITECTURE.md](ARCHITECTURE.md)
-for how the layers fit together, and [learn/README.md](learn/README.md) for the
+for how the layers fit together, and [docs/LEARN.md](docs/LEARN.md) for the
 tutoring loop. Discussions are not enabled on this repo, so an
 [issue](https://github.com/c-wenlong/self-learn/issues) is the only channel.

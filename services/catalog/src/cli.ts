@@ -100,12 +100,15 @@ Commands:
   status                   Row counts, the migration head, when each source
                            was last indexed, and mirror coverage per
                            destination.
-  import [<dir>]           Read a directory laid out like the repository (an
-                           export, a checkout, seed/) into the database, every
-                           changed entity as an import revision. <dir>
-                           defaults to the repository. A type the database
-                           owns is skipped when its files are its own last
-                           export, and refused when they were edited.
+  import [<dir>]           Read a directory in the export layout (an export,
+                           seed/) into the database, every changed entity as
+                           an import revision. A type the database owns is
+                           skipped when its files are its own last export or
+                           the directory holds none, and refused when they
+                           were edited. <dir> defaults to the repository,
+                           which has held no content since the cut-over: on a
+                           database that owns every type, a bare \`import\`
+                           refreshes manimkc and the mirror ledger.
   index                    The old name of \`import\` with no directory. Still
                            works, and says the new name once on stderr.
   export --out <dir>       Write the database back out as content/ and learn/
@@ -183,8 +186,8 @@ Commands:
                            $SELF_LEARN_HOME/blobs (else ~/.self-learn/blobs)
                            for both commands, as for the web app.
   topic <verb>             The topic vocabulary, written through the catalog
-                           with a --reason, and content/topics.yaml rewritten
-                           from the rows after each write:
+                           with a --reason (content/topics.yaml is rewritten
+                           from the rows only while a type is still on files):
                              add --slug S --title T --domain D [--summary X]
                                [--alias A]... [--relate kind:slug]...
                                [--dry-run]: --dry-run validates and lists
@@ -208,9 +211,10 @@ Commands:
                            write seam, one revision per entity it changes.
                            Needs --reason. Modules and items the file stops
                            listing are archived, never deleted, so learner
-                           rows on them stay. Rewrites the course file (and
-                           topics.yaml when a module's topic moved) in the
-                           tree courses were imported from. --dry-run says
+                           rows on them stay. While a type is still on
+                           files, rewrites the course file (and topics.yaml
+                           when a module's topic moved) in the tree courses
+                           were imported from. --dry-run says
                            what would change and commits nothing. A file
                            course export stamped is refused once the course
                            has moved past its stamp, unless --force-base.

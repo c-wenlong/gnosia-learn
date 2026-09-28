@@ -108,8 +108,8 @@ function EmptyState() {
       </p>
       <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px] leading-relaxed">
         {`npm run learn -- concept add --title "Softmax" \\
-  --summary "Normalises scores into a distribution."
-npm run learn -- index`}
+  --topic <topic-slug> --domain <folder> \\
+  --summary "Normalises scores into a distribution."`}
       </pre>
     </Card>
   );
