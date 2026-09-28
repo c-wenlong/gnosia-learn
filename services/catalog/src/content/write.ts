@@ -2,15 +2,16 @@ import {
   AUTHOR_KINDS,
   type AuthorKind,
   COMMONS_OWNER,
+  readableOwners,
   REVISION_OPS,
   type RevisionEntityType,
   type RevisionOp,
 } from "@self-learn/schema";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "../state/learner";
-import { column, ENTITIES, isEntityType } from "./entities";
+import { column, ENTITIES, isEntityType, LINK_FAR_ENDS, ROW_FAR_ENDS } from "./entities";
 import {
   appendRevisions,
   deriveOp,
@@ -133,6 +134,7 @@ export async function writeContent(
     // (there is no row yet for FOR UPDATE to lock), and wait for an import of
     // this type. Transaction-scoped, so it cannot outlive a failure.
     await lockEntity(tx, input.type, input.id);
+    await assertReadableFarEnds(tx, input);
     return writeLocked(tx, input);
   });
 }
@@ -173,7 +175,10 @@ export async function writeContents(
   return db.transaction(async (tx) => {
     for (const input of [...inputs].sort(byLockOrder)) await lockEntity(tx, input.type, input.id);
     const results: WriteContentResult[] = [];
-    for (const input of inputs) results.push(await writeLocked(tx, input));
+    for (const input of inputs) {
+      await assertReadableFarEnds(tx, input);
+      results.push(await writeLocked(tx, input));
+    }
     return results;
   });
 }
@@ -379,5 +384,150 @@ function validate(input: WriteContentInput): void {
       `the row's ${spec.key} is ${JSON.stringify(key)}, but the write is for "${input.id}". ` +
         `A rename is its own operation.`,
     );
+  }
+}
+
+export interface DeleteContentInput {
+  type: RevisionEntityType;
+  id: string;
+  /** Whose content the caller means to delete; a row another owner holds is refused. */
+  owner: string;
+  /** The revision the caller planned the delete against, or null for "none yet". */
+  base: number | null;
+  author: string;
+  authorKind: AuthorKind;
+  reason: string;
+}
+
+/**
+ * Delete one entity through the seam: a `delete` revision holding its last
+ * state, then the row. The caller holds the entity's lock (`lockEntity`) and
+ * runs this in its own transaction, the way `course import` deletes the link
+ * assets a file stopped naming.
+ *
+ * The same two refusals a write gets, before anything is deleted: `stale-base`
+ * when the entity moved past `base`, and `foreign-owner` when another owner
+ * holds it (phase 4), since ids are global and a delete by id would otherwise
+ * remove somebody else's row. Null when there is no such entity.
+ */
+export async function deleteContent(
+  tx: CatalogDatabase,
+  input: DeleteContentInput,
+): Promise<{ revisionId: number } | null> {
+  validate({ ...input, next: { row: { [ENTITIES[input.type].key]: input.id } } });
+  const read = (await readSnapshots(tx, input.type, [input.id])).get(input.id);
+  if (read === undefined) return null;
+  const latest = (await latestRevisions(tx, input.type, [input.id])).get(input.id);
+  if ((latest?.id ?? null) !== input.base) {
+    throw new ContentWriteError(
+      "stale-base",
+      `${input.type} "${input.id}" has moved on: this delete was planned against ` +
+        `${input.base === null ? "no revision" : `revision ${input.base}`}, and the latest is ` +
+        `${latest === undefined ? "no revision" : `revision ${latest.id}`}. Nothing was deleted.`,
+    );
+  }
+  if (read.ownerId !== input.owner) {
+    throw new ContentWriteError(
+      "foreign-owner",
+      `${input.type} "${input.id}" belongs to ${read.ownerId}, and this delete is for ${input.owner}. ` +
+        `Ids are shared across owners (D23 of docs/CONTENT-MIGRATION.md); nothing was deleted.`,
+    );
+  }
+  const [revisionId] = await reserveRevisionIds(tx, 1);
+  if (revisionId === undefined) throw new Error("could not reserve a revision id");
+  await markSeam(tx, String(revisionId));
+  const spec = ENTITIES[input.type];
+  await tx.delete(spec.table).where(eq(column(spec.table, spec.key), input.id));
+  await appendRevisions(tx, [
+    {
+      id: revisionId,
+      type: input.type,
+      entityId: input.id,
+      read,
+      latest,
+      op: "delete",
+      authorKind: input.authorKind,
+      author: input.author,
+      reason: input.reason.trim(),
+    },
+  ]);
+  return { revisionId };
+}
+
+/**
+ * Refuse a write that points at a row its owner may not read (phase 4): a
+ * relation to another owner's topic, a concept filed under one, a module
+ * listing another owner's link. Ids are global, so nothing in the schema stops
+ * such a link, and its own reader could never follow it. The commons is
+ * readable to everyone, so a link to it is fine.
+ *
+ * Only what the write adds is judged. A link the entity already has, the
+ * same link and not merely one to the same row (a relation of another kind
+ * to that topic is a new link), is carried over, as is a reference its row
+ * already makes, so a link a mixed state left behind (the phase 4 review
+ * seeded several) neither locks the owner out of their own entity nor is
+ * dropped behind their back; `catalog doctor` reports it. A far end that
+ * names nothing is left to the foreign key, which says so in its own words.
+ */
+/** Columns of a link row that say where it sits or who stamped it, not what it is. */
+const LINK_PLACE = new Set(["position", "topicPosition", "ownerId", "createdAt", "updatedAt", "id"]);
+
+async function assertReadableFarEnds(tx: CatalogDatabase, input: WriteContentInput): Promise<void> {
+  const spec = ENTITIES[input.type];
+  const wanted = new Map<RevisionEntityType, Set<string>>();
+  const want = (target: RevisionEntityType, value: unknown) => {
+    if (typeof value !== "string" || value === "") return;
+    const set = wanted.get(target) ?? new Set<string>();
+    set.add(value);
+    wanted.set(target, set);
+  };
+
+  const rowEnds = ROW_FAR_ENDS[input.type] ?? [];
+  if (rowEnds.length > 0) {
+    const [current] = (await tx
+      .select()
+      .from(spec.table)
+      .where(eq(column(spec.table, spec.key), input.id))) as Record<string, unknown>[];
+    for (const end of rowEnds) {
+      const value = input.next.row[end.column];
+      if (value !== current?.[end.column]) want(end.target, value);
+    }
+  }
+  for (const [name, rows] of Object.entries(input.next.links ?? {})) {
+    const ends = LINK_FAR_ENDS[name] ?? [];
+    const linkSpec = spec.links.find((l) => l.name === name);
+    if (ends.length === 0 || linkSpec === undefined || rows.length === 0) continue;
+    const current = (await tx
+      .select()
+      .from(linkSpec.table)
+      .where(eq(column(linkSpec.table, linkSpec.parent), input.id))) as Record<string, unknown>[];
+    // A link's identity is its content without its place in the list or
+    // its stamps: the keys the writer gave, less position and owner.
+    const identity = (row: Record<string, unknown>, keys: readonly string[]) =>
+      JSON.stringify(keys.map((key) => row[key] ?? null));
+    for (const row of rows) {
+      const keys = Object.keys(row).filter((key) => !LINK_PLACE.has(key)).sort();
+      const had = current.some((existing) => identity(existing, keys) === identity(row, keys));
+      if (had) continue;
+      for (const end of ends) want(end.target, row[end.column]);
+    }
+  }
+
+  const readable = readableOwners(input.owner);
+  for (const [target, ids] of wanted) {
+    const targetSpec = ENTITIES[target];
+    const found = (await tx
+      .select({ id: column(targetSpec.table, targetSpec.key), ownerId: column(targetSpec.table, "ownerId") })
+      .from(targetSpec.table)
+      .where(inArray(column(targetSpec.table, targetSpec.key), [...ids]))) as { id: string; ownerId: string }[];
+    const foreign = found.filter((row) => !readable.includes(row.ownerId)).map((row) => row.id).sort();
+    if (foreign.length > 0) {
+      throw new ContentWriteError(
+        "foreign-owner",
+        `${input.type} "${input.id}" would point at ${target} ${foreign.map((id) => `"${id}"`).join(", ")}, which ` +
+          `${input.owner} cannot read: a link may name only its owner's rows or the commons' ` +
+          `(phase 4 of docs/CONTENT-MIGRATION.md). Nothing was written.`,
+      );
+    }
   }
 }

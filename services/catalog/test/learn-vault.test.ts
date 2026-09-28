@@ -806,6 +806,45 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     expect(await exists(vault, "sessions/z.incoming.md")).toBe(false);
     expect((await manifest(vault)).files["sessions/z.incoming.md"]).toBeUndefined();
   }, 60_000);
+
+  it("pulls none of another owner's notes, logs or diagrams (phase 4)", async () => {
+    const other = "other";
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>theirs</title></svg>';
+    const sha = createHash("sha256").update(svg).digest("hex");
+    const key = `${other}/${sha}.svg`;
+    await mkdir(path.join(process.env["SELF_LEARN_HOME"] as string, "blobs", other), { recursive: true });
+    await writeFile(path.join(process.env["SELF_LEARN_HOME"] as string, "blobs", key), svg);
+    // Another owner's rows, written around the seam as the review's seed was:
+    // the write guards of the flipped types let a named repair through.
+    const guarded = (write: (tx: typeof scratch.db) => Promise<void>) =>
+      scratch.db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('self_learn.revision_id', 'test-seed', true)`);
+        await write(tx);
+      });
+    await guarded(async (tx) => {
+      await tx.execute(sql`insert into learner (id) values (${other}) on conflict do nothing`);
+      await tx.execute(sql`
+        insert into concept (slug, title, topic_slug, path, body, owner_id)
+        values ('theirs', 'Theirs', 'alpha', 'learn/concepts/fixtures/theirs.md', ${"# Theirs\n"}, ${other})`);
+      await tx.insert(session).values({ id: "their-log", kind: "tutor", learnerId: other, state: "closed" });
+      await tx.insert(sessionLogEntry).values({ sessionId: "their-log", seq: 1, markdown: "# theirs\n" });
+      await tx.execute(sql`
+        insert into blob_object (key, owner_id, sha256, bytes, mime, provider, state, confirmed_at)
+        values (${key}, ${other}, ${sha}, ${Buffer.byteLength(svg)}, 'image/svg+xml', 'fs', 'present', now())`);
+      await tx.execute(sql`
+        insert into diagram (slug, owner_id, topic_slug, document, document_hash, svg_blob_key, svg_document_hash)
+        values ('their-diagram', ${other}, 'alpha', '{"records":[]}', ${"d".repeat(64)}, ${key}, ${"d".repeat(64)})`);
+    });
+    // Left in place: a session log is append-only, and this is the suite's last case.
+    const vault = await newVault();
+    const pulled = await pull(vault);
+    // An earlier case left a log the vault declines; nothing of theirs is named.
+    expect(pulled.problems.filter((problem) => /theirs|their-/.test(problem))).toEqual([]);
+    expect(pulled.written.filter((rel) => /theirs|their-log|their-diagram/.test(rel))).toEqual([]);
+    expect(await exists(vault, "concepts/fixtures/theirs.md")).toBe(false);
+    expect(await exists(vault, "sessions/their-log.md")).toBe(false);
+    expect(await exists(vault, "assets/their-diagram.svg")).toBe(false);
+  }, 60_000);
 });
 
 describe.skipIf(!reachable.ok)("learn vault before the flip", () => {

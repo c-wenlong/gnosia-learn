@@ -10,6 +10,8 @@ import {
   writeGuardName,
 } from "../content/rules";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, blobContractInForce } from "../content/blob-contract";
+import { linkOwners, type LinkOwnerReport } from "../content/link-owners";
+import { restampLinkOwners } from "../content/topics";
 import { type CatalogDatabase, withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { migrationStatus } from "../migrations";
@@ -26,9 +28,11 @@ import { migrationStatus } from "../migrations";
  * primary.
  *
  * Exit 0 unless the database contradicts itself: an armed rule with a
- * violator (a row written while it was disarmed) or a trigger the migration
- * should have created and did not. A disarmed rule with violators is the
- * expected state until its type flips, and is reported, not failed.
+ * violator (a row written while it was disarmed), a trigger the migration
+ * should have created and did not, or a link whose owner is not its parent's
+ * (D24, which `--fix` repairs). A disarmed rule with violators is the
+ * expected state until its type flips, and is reported, not failed; so is a
+ * link to a row its owner cannot read.
  */
 
 const SAMPLE = 50;
@@ -91,6 +95,13 @@ export interface DoctorResult {
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
   /**
+   * Links and owners (D24): relations and manimkc mappings whose `owner_id`
+   * is not their topic's (`--fix` restamps them), and links or rows pointing
+   * at another owner's row that their own owner cannot read (reported only).
+   * Each counts as a violation.
+   */
+  links: LinkOwnerReport & { restamped: string[] };
+  /**
    * The per-owner blob caps in force, or why they cannot be read (phase 4).
    * Said, not counted: an unreadable cap refuses new uploads, which is the
    * environment's problem and not a row that breaks a rule. `blob audit`
@@ -101,15 +112,19 @@ export interface DoctorResult {
   ok: boolean;
 }
 
-export async function runDoctor(): Promise<DoctorResult> {
+export async function runDoctor(options: { fix?: boolean } = {}): Promise<DoctorResult> {
   const url = databaseUrl();
-  return withDatabase(({ db }) => doctor(db, redactUrl(url)));
+  return withDatabase(({ db }) => doctor(db, redactUrl(url), options));
 }
 
 /** The last migration of phase 0's expand, which every table this report reads needs. */
 const LAST_EXPAND = 11;
 
-export async function doctor(db: CatalogDatabase, database: string): Promise<DoctorResult> {
+export async function doctor(
+  db: CatalogDatabase,
+  database: string,
+  options: { fix?: boolean } = {},
+): Promise<DoctorResult> {
   const migrations = await migrationStatus(db);
   const empty: DoctorResult = {
     database,
@@ -123,6 +138,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     conceptTopicRequired: false,
     blobContract: { inForce: false, unstored: [], unkeyed: [] },
     writeGuards: {},
+    links: { mixed: [], unreadable: [], restamped: [] },
     caps: ownerCapsOrError(),
     violations: 0,
     ok: false,
@@ -213,6 +229,24 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     writeGuards[table] = states.get(writeGuardName(table)) ?? null;
   }
 
+  // Asked before the violations are summed, so a --fix that repaired the
+  // mixed rows reports what is left, which should be none.
+  let links = await linkOwners(db);
+  let restamped: string[] = [];
+  if (options.fix === true && links.mixed.length > 0) {
+    const written = await restampLinkOwners(
+      db,
+      links.mixed.map((row) => row.parent),
+      {
+        author: "catalog doctor",
+        authorKind: "person",
+        reason: "catalog doctor --fix: a relation or mapping belongs to its topic's owner (D24)",
+      },
+    );
+    restamped = written.map((revision) => revision.id);
+    links = await linkOwners(db);
+  }
+
   const violations =
     rules.reduce((a, rule) => a + rule.violators, 0) +
     orphans.rows.length +
@@ -238,8 +272,13 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     blobContract,
     writeGuards,
     caps: ownerCapsOrError(),
-    violations,
-    ok: !contradicted && !missingGuard,
+    links: { ...links, restamped },
+    violations: violations + links.mixed.length + links.unreadable.length,
+    // A mixed row contradicts D24, which the seam enforces for every write,
+    // as an armed rule's violator contradicts that rule; `--fix` repairs it.
+    // A link to an unreadable row is reported and does not fail: the seam
+    // carries one over on purpose, and removing it is a person's decision.
+    ok: !contradicted && !missingGuard && links.mixed.length === 0,
   };
 }
 
@@ -321,6 +360,18 @@ export function formatDoctor(result: DoctorResult): string {
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);
   lines.push(`write guards armed: ${armed.length === 0 ? "none" : armed.join(", ")}`);
   if (missing.length > 0) lines.push(`write guards MISSING: ${missing.join(", ")}`);
+  const links = result.links;
+  if (links.restamped.length > 0) lines.push(`restamped the links of ${links.restamped.join(", ")} to their topic's owner (D24)`);
+  lines.push(
+    `links whose owner is not their topic's: ${links.mixed.length === 0 ? "none" : `${links.mixed.length} (catalog doctor --fix restamps them)`}`,
+  );
+  for (const row of links.mixed.slice(0, SAMPLE)) {
+    lines.push(`  ${row.table} ${row.parent} -> ${row.far}: ${row.owner}, its topic ${row.parentOwner}`);
+  }
+  lines.push(`links to a row their owner cannot read: ${links.unreadable.length === 0 ? "none" : links.unreadable.length}`);
+  for (const row of links.unreadable.slice(0, SAMPLE)) {
+    lines.push(`  ${row.table} ${row.parent} (${row.parentOwner}) -> ${row.far} (${row.farOwner})`);
+  }
   lines.push("", `${result.violations} violations; ${result.ok ? "consistent" : "INCONSISTENT"}`);
   return lines.join("\n");
 }

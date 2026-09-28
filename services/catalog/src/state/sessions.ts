@@ -47,6 +47,10 @@ export interface SessionInput {
  * deliberately not a thing this does: the state machine has no way back out of
  * a terminal state, and quietly resurrecting one would make "closed" mean
  * nothing.
+ *
+ * An id another learner already holds is refused rather than adopted (phase
+ * 4): ids are global, and an event or a job hung off that session would be
+ * recorded against somebody else's. The sentence does not say whose.
  */
 export async function ensureSession(
   db: CatalogDatabase,
@@ -70,14 +74,31 @@ export async function ensureSession(
       metadata: input.metadata ?? {},
     })
     .onConflictDoNothing();
+  const [held] = await db
+    .select({ learnerId: session.learnerId })
+    .from(session)
+    .where(eq(session.id, id))
+    .limit(1);
+  if (held !== undefined && held.learnerId !== learnerId) {
+    throw new StateError(`session id "${id}" is already in use; start a new session.`);
+  }
   return id;
 }
 
+/**
+ * One session by id, or undefined. With `learnerId`, only that learner's
+ * (phase 4): another learner's session reads as absent.
+ */
 export async function readSession(
   db: CatalogDatabase,
   id: string,
+  learnerId?: string,
 ): Promise<Session | undefined> {
-  const rows = await db.select().from(session).where(eq(session.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(session)
+    .where(and(eq(session.id, id), learnerId === undefined ? undefined : eq(session.learnerId, learnerId)))
+    .limit(1);
   return rows[0];
 }
 
@@ -94,12 +115,16 @@ export interface SessionEndInput {
  * moving `ended_at` to whenever the replay happened. `interrupted` is reachable
  * the same way and is never written by the process itself: it is what a
  * reconcile pass concludes about one that stopped writing heartbeats.
+ *
+ * Only the learner's own session (phase 4): another learner's id moves
+ * nothing and reads as a session that does not exist.
  */
 export async function endSession(
   db: CatalogDatabase,
   id: string,
   state: SessionState,
   input: SessionEndInput = {},
+  learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<{ moved: boolean; from: string | null }> {
   const from = (Object.keys(SESSION_TRANSITIONS) as SessionState[]).filter((candidate) =>
     canTransition(SESSION_TRANSITIONS, candidate, state),
@@ -107,7 +132,7 @@ export async function endSession(
   if (from.length === 0) {
     throw new StateError(`nothing can transition to session state "${state}"`);
   }
-  const before = await readSession(db, id);
+  const before = await readSession(db, id, learnerId);
   const updated = await db
     .update(session)
     .set({
@@ -117,7 +142,7 @@ export async function endSession(
       error: input.error ?? null,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(session.id, id), inArray(session.state, from)))
+    .where(and(eq(session.id, id), eq(session.learnerId, learnerId), inArray(session.state, from)))
     .returning({ id: session.id });
   return { moved: updated.length > 0, from: before?.state ?? null };
 }
