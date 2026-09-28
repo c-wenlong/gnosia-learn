@@ -374,15 +374,23 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     // snapshot, then waits on that lock; the upload commits its relink; the
     // unhook's write, based on the snapshot, is then refused.
     const other = connect({ url: scratch.url, max: 2 });
+    // Settled on every path, so a failure below neither leaves it unhandled
+    // nor lets it write into the scratch database during the cleanup.
+    let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookPosters>>; error?: unknown }> | undefined;
     try {
-      let unhooking: ReturnType<typeof unhookPosters> | undefined;
       await other.db.transaction(async (tx) => {
         await lockEntity(tx, "asset", poster);
-        unhooking = unhookPosters(scratch.db, [id], { author: "test", reason: "an import racing an upload" });
+        unhooking = unhookPosters(scratch.db, [id], { author: "test", reason: "an import racing an upload" }).then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
         for (let tries = 0; ; tries += 1) {
-          const { rows } = await other.db.execute<{ waiting: number }>(
-            sql`select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`,
-          );
+          // Only this scratch database: another suite's lock waiter on the same
+          // server must not release the recut before the unhook is waiting.
+          const { rows } = await other.db.execute<{ waiting: number }>(sql`
+            select count(*)::int as waiting from pg_locks
+            where locktype = 'advisory' and not granted
+              and database = (select oid from pg_database where datname = current_database())`);
           if ((rows[0]?.waiting ?? 0) > 0) break;
           if (tries > 200) throw new Error("the unhook never waited on the poster's lock");
           await new Promise((resolve) => setTimeout(resolve, 25));
@@ -403,8 +411,11 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
           },
         ]);
       });
-      expect(await unhooking).toEqual({ unhooked: [], moved: [poster] });
+      const settled = await unhooking;
+      if (settled?.error !== undefined) throw settled.error;
+      expect(settled?.value).toEqual({ unhooked: [], moved: [poster] });
     } finally {
+      await unhooking;
       await other.close();
     }
     expect(await derivedFrom(poster)).toEqual([id]);
