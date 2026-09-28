@@ -4,7 +4,7 @@ Source: Eero Alvar, ["How I Use AI to Learn Things"](https://www.youtube.com/wat
 
 These are notes on the three-phase system described in that video. This repo
 implements a four-phase loop (Probe → Plan → Teach → Close), documented in
-[learn/README.md](../learn/README.md).
+[LEARN.md](LEARN.md).
 
 ## 1. The diagnosis — why standard learning is lossy
 

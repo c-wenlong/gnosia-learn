@@ -1,7 +1,7 @@
 # The catalog schema
 
-One derived index over three content trees, in Postgres 17. This document is
-the reasoning; [`packages/schema/src/`](../../packages/schema/src/) is the
+The authored content, the learner state and the rows that run them, in
+Postgres 17. This document is the reasoning; [`packages/schema/src/`](../../packages/schema/src/) is the
 definition, and `services/catalog/drizzle/` is the SQL that definition
 generates. When they disagree, the code is right and this file is stale.
 
@@ -9,17 +9,21 @@ The plan is [#27](https://github.com/c-wenlong/self-learn/issues/27); this is
 the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues/21).
 
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
-that makes Postgres the source of truth for content. Its phase 0 expand
-migration, `0010_content_expand`, has landed: every table and column the plan
-needs exists, and [The content migration's foundation](#the-content-migrations-foundation)
-below describes them. The files are still the truth for every type until that
-type's flip; the rest of this document describes that files-as-truth state.
+that made Postgres the source of truth for content, and it is built through
+its phase 3 cut-over. Every content type is authored in the database, the
+repository's `content/` and `learn/` are gone (the tag `content-files-final`
+keeps every version of them), and files are an export format (D1 there):
+`catalog export` writes that layout, `catalog import` reads it back, and
+`seed/` is one such tree. [The content migration's foundation](#the-content-migrations-foundation)
+below describes the tables the plan added. Where a section below says an
+indexer "reads" `content/` or `learn/`, it means those folders inside the
+directory being imported: an export, `seed/`, or `content-files-final`.
 
 ## The two halves
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision` | Files in git, until each type flips (docs/CONTENT-MIGRATION.md). Every row the indexers write is rebuildable by re-running them. `content_revision` is not: it is the only record of who wrote what, and why. |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
@@ -32,7 +36,7 @@ checkout looks exactly like a fresh one.
 
 It carries one thing that is not a report on the run, and the distinction is
 worth stating because the column names invite confusion. `source_root` is what
-the run *read*: `learn/concepts` for the notes, and for manimkc the checkout the
+the run *read*: the imported directory's `learn/concepts` for the notes, and for manimkc the checkout the
 CLI was pointed at. `metadata.outRoot`, written by the manimkc source only, is
 what that source's `asset.path` strings are *relative to*, which is manimkc's
 own data root and is a different directory whenever `$MANIMKC_HOME` is set.
@@ -50,11 +54,15 @@ Chromium fell over sitting beside a Bayesian belief about the dot product would
 make both harder to read. `catalog status` counts it apart for exactly that
 reason.
 
-Losing the content half costs an index run. Losing the state half loses the
-study record, which is why `event` is append-only and why the derived state
-tables can always be recomputed rather than restored. Losing the studio half
-loses the provenance: the files are still in git with their authors, and what
-goes is the record of which brief produced them.
+Losing the content half used to cost an index run. Since the cut-over it
+loses what was authored after the last export (the nightly one keeps thirty
+under `$SELF_LEARN_HOME/archive/`) and the revision history, which only a
+database backup holds; the manimkc rows alone come back from an import.
+Losing the state half loses the study record, which is why `event` is
+append-only and why the derived state tables can always be recomputed rather
+than restored. Losing the studio half loses the provenance: the diagrams stay,
+with their revisions in `content_revision`, and what goes is the record of
+which brief produced them.
 
 ## Entities
 
@@ -63,7 +71,7 @@ goes is the record of which brief produced them.
 | Table | Purpose |
 | --- | --- |
 | `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
-| `concept` | One authored note under `learn/concepts/`. Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
+| `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. |
@@ -74,7 +82,7 @@ goes is the record of which brief produced them.
 | `asset_derivation` | This asset was produced from that one: a transcript from a video, an SVG from a `.tldr`. |
 | `curriculum_item_topic` | This checklist row covers this topic. How a course reaches the assets. |
 | `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
-| `tag` | A cross-course theme from `content/tags.yaml`, at its position in the file. Since 0010, filled by the `tags` source since 0.5. |
+| `tag` | A cross-course theme (`content/tags.yaml` in the export layout), at its position in the list. Since 0010, filled by the `tags` source since 0.5, and written by `catalog tag` since Track A. |
 | `collection_tag` | This course carries this tag, at its place in the course's `tags:`. Makes a stale tag a `23503` instead of a string in jsonb. |
 | `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. Read from a topic's `relations:` list, at its position there. |
 | `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
@@ -101,7 +109,7 @@ goes is the record of which brief produced them.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
-| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. The importers read a type with no row from files; the web app refuses it. See [Who owns a type](#who-owns-a-type). |
+| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. The importers read a type with no row from files; a reader, the web app's included, reads it from the database, the default since the cut-over. See [Who owns a type](#who-owns-a-type). |
 | `catalog_instance` | One row: this database is `primary` or `copy`. A copy refuses every write (the copy guard below). |
 
 ### Studio
@@ -144,8 +152,8 @@ is still running until the runner has killed Chromium.
 **`topic_slug` is a column and a foreign key; the rest of the brief is jsonb.**
 A foreign key does not survive being stuffed into JSON — the same argument that
 keeps `curriculum_item` out of `asset` — and the topic is the earliest moment
-refuse-never-skip can fire: a brief naming a slug that is not in
-`content/topics.yaml` fails the enqueue with a `23503` before any GPU time.
+refuse-never-skip can fire: a brief naming a slug that has no `topic` row
+fails the enqueue with a `23503` before any GPU time.
 
 ## Decisions
 
@@ -258,8 +266,11 @@ rather than data to recover, and why `review` has no `history` column: every
 grade is already an event of type `review`, and a second copy would be a second
 version of the truth.
 
-The whole content half is derived too, from files in git. Nothing in this
-database is authored here.
+The content half was derived too, from files in git, until the phase 3
+cut-over. It is authored here now: every write goes through the write seam
+with an author and a reason, and nothing rebuilds it but a restore or an
+import of an export. The manimkc rows and the mirror ledger are the part
+still derived, from manimkc's CLI.
 
 `progress`, `recap` and `preference` are *not* derived. They are the only copy.
 Bundle 5 filled them: `catalog backfill` from `learn/state/*.json`, and
@@ -471,11 +482,18 @@ computed from `event` and can be thrown away and rebuilt.
 
 ## Filling it
 
-`npm run catalog -- import` reads the content trees and rewrites the derived
-rows; `catalog import <dir>` does the same from any directory in the same
-layout (`seed/`, an export). `catalog index` is its old name, kept as an alias
-that says so once on stderr. Eight sources, run in the order the foreign keys require regardless of
-how `--only` names them:
+`npm run catalog -- import <dir>` reads a directory in the export layout
+(`seed/`, an export) and rewrites the rows it owns; with no directory it
+reads the repository, which has held no content since the phase 3 cut-over.
+A type the database owns is skipped when the directory holds none of its
+files or they are its own last export, so on a database that owns all six a
+bare `import` runs only manimkc and the mirror ledger. Once topics are
+flipped the vocabulary every source resolves a slug against comes from the
+topic rows (`vocabularyOf` in `src/index/vocabulary.ts`), not from the
+directory's `content/topics.yaml`. `catalog index` is the old name, kept as an
+alias that says so once on stderr. Eight sources, run in the order the
+foreign keys require regardless of how `--only` names them, each path
+relative to the directory:
 
 | Source | Reads | Produces |
 | --- | --- | --- |
@@ -484,7 +502,7 @@ how `--only` names them:
 | `concepts` | `learn/concepts/<domain>/*.md` | `concept`, `concept_prerequisite`, `note` assets |
 | `courses` | `content/courses/*.yaml` | `collection`, `curriculum_item`, `collection_item`, `collection_tag`, `curriculum_item_topic`, `concept_curriculum_item`, `link` assets with their `resource_type` |
 | `manimkc` | `manimkc topics --json` | `video`, `transcript`, `chapters`, `captions` assets and their derivations |
-| `diagrams` | `tldrawkc list learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
+| `diagrams` | `tldrawkc list <dir>/learn/assets --json`, or the `.tldr` JSON | `diagram_svg`, `diagram_source` assets |
 | `sessions` | `learn/sessions/*.md` | `session` assets, linked by the body's wikilinks |
 | `mirrors` | `manimkc mirrors --json` | `mirror` |
 
@@ -532,7 +550,7 @@ than a guess: a stem matching no concept was filed nowhere and nothing said so.
 
 The metadata is read through `tldrawkc list <dir> --json` when the submodule is
 built, and by parsing the `.tldr` JSON directly when it is not, since a fresh
-clone has the files and not the build. `services/catalog/test/tldr.test.ts`
+clone has the seed's files and not the build. `services/catalog/test/tldr.test.ts`
 asserts the two readers agree on the same directory.
 
 The one thing still filed by its stem is an SVG with no `.tldr` beside it. It
@@ -695,7 +713,7 @@ read are tracked at, `import:<sha>-dirty` when some under `content/` or
 is tracked (an export in a scratch folder is not the enclosing checkout's
 commit). The reason names the directory and the file or folder read,
 repository-relative or under `~`, never a home path. A second run over an
-unchanged tree appends none, which `catalog.test.ts` asserts on the real tree.
+unchanged tree appends none, which `catalog.test.ts` asserts on `seed/`.
 
 ## The content migration's foundation
 
@@ -806,11 +824,13 @@ something about it. The row is the authority (D18): the importers and
 `selectSource`'s `ownership()` callback (`contentOwnership` in
 `src/content/ownership.ts`, passed by the web app's
 `apps/web/src/data/source.ts`) unless `CONTENT_SOURCE` overrides it for that
-reader. Since phase 2 the web app has no file reader: a type with no row, a
-row that says `files`, or `CONTENT_SOURCE` pointing a type at files is refused
-with a `ContentUnavailableError` naming `catalog flip <type>`, and rows that
-cannot be read are refused too (logged once per outage), where they used to
-fall back to the files. The files are an export and an import format, never a
+reader. A type with no row resolves to `db`, the default since the phase 3
+cut-over (it was `files` before), so `CONTENT_SOURCE` is a test's switch.
+Since phase 2 the web app has no file reader: a row that says `files`, or
+`CONTENT_SOURCE` pointing a type at files, is refused with a
+`ContentUnavailableError` naming `catalog flip <type>`, and rows that cannot
+be read are refused too (logged once per outage), where they used to fall
+back to the files. The files are an export and an import format, never a
 read path for the app.
 
 | Column | Written by | Read by |
@@ -856,9 +876,12 @@ else. A waived rule is disarmed even if an earlier strict flip armed it.
 ### Export, import and parity
 
 `catalog import` with no directory reads the repository root, and with one
-reads that directory: one code path, reading any directory laid out like the
-repository, with the pinned tools (`tools/manimkc`, `tools/tldrawkc`) always
-the repository's own. Phase 2 made `import` the name; `catalog index`, the old
+reads that directory: one code path, reading any directory in the export
+layout, with the pinned tools (`tools/manimkc`, `tools/tldrawkc`) always
+the repository's own. Since the cut-over the repository root holds none of
+the six types' files, and a type the database owns is skipped when the
+directory holds none of them, its root left as it was (`ownedSkips` in
+`src/index/run.ts`). Phase 2 made `import` the name; `catalog index`, the old
 one, still runs it and prints the new name once, on stderr so a `--json`
 reader's stdout is unchanged.
 
@@ -874,14 +897,15 @@ imported from, or through a symlink that leaves `<dir>` (a check every export
 now makes). It records no export hash. `seed/` is made this way (seed/README.md).
 
 `catalog export --out <dir>` writes the same layout back. Topics, tags and
-courses are written from rows, in the house style they are authored in, so an
-export of an unchanged database into the working tree changes no byte.
+courses are written from rows, in the house style they were authored in, so
+an export of an unchanged database over its own last export changes no byte.
 Diagrams are written from their rows and the blob store (see "Diagrams: a row
-and a blob" for the one byte-level difference). Concept notes and session logs
-are copied from the directory their import read, recorded as
-`index_run.metadata.root`, and each copy is checked against the
-`content_hash` its asset row recorded; the export refuses what it cannot vouch
-for. That copy step goes when Track C moves the text into rows.
+and a blob" for the one byte-level difference). Since Track C concept notes
+and session logs are rendered from their rows too: a note from its columns
+and `body`, a log from its `session_log_entry` rows concatenated. Once every
+type is flipped nothing writes these files as a side effect of a write
+(D17 ended), so an export is something a person runs, or the nightly export
+(`scripts/nightly-export.mjs`, into `$SELF_LEARN_HOME/archive/<UTC time>/`).
 
 `catalog parity <dir>` renders the export in memory and compares it with
 `<dir>` entity by entity: a topic, a tag, a course file, a note, a log, a
@@ -957,7 +981,8 @@ expression cannot unnest an array. Near-duplicate search is `title % $1` and
 createdb self_learn                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
 npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
-npm run catalog -- import              # fill it from content/ and learn/ (or: import seed)
+MANIMKC_ROOT=/nonexistent npm run catalog -- import seed   # fill it from the seed (or: import <an export>)
+for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 ```
 
 Reading it back, cheapest first. Every command takes `--json`.
@@ -969,16 +994,17 @@ npm run catalog -- show master-theorem         # one entity, and its paths
 npm run catalog -- path big-o-witness-definition master-theorem
 npm run catalog -- search "common data bus"    # titles and aliases, top 20
 npm run catalog -- doctor                      # completeness rules, guards, primary or copy
-npm run catalog -- export --out /tmp/export    # the database as content/ and learn/ files
+npm run catalog -- export --out /tmp/export    # the database as files in the export layout
 npm run catalog -- parity /tmp/export          # entity by entity against a directory; exit 1 on a mismatch
-npm run catalog -- import /tmp/export          # a directory back in; `index` is `import` of the repo
+npm run catalog -- import /tmp/export          # a directory back in; a bare `import` refreshes manimkc
 npm run catalog -- flip tags                   # the database owns tags (needs a clean parity first)
 npm run catalog -- history topic tomasulo-algorithm   # every revision, oldest first
 npm run catalog -- diff 42                     # what revision 42 changed; or diff 41 42
 ```
 
-`show` returns paths, never bodies. The database says which file to read; git
-holds the words.
+`show` returns paths, never bodies; the paths are logical names in the export
+layout. The words are in the rows: `learn concept show` for a note,
+`catalog diagram checkout` for a diagram, `catalog export` for everything.
 
 Every command exits 0 when it worked, 1 when it failed, 2 on a wrong
 invocation, 3 when the database is unreachable: nothing listening, or a host
@@ -1021,25 +1047,26 @@ forever everywhere it has already run, and one drizzle will not apply again.
   of 1 to 16 (`BLOB_KEY_PATTERN` in `packages/schema/src/content.ts`). A
   hand-written block first lists every stored-kind asset with no blob and every
   key the package would not make, and raises with them; `catalog doctor`
-  reports the same two lists (`src/content/blob-contract.ts`). **It is applied
+  reports the same two lists (`src/content/blob-contract.ts`). **It applies
   only after `catalog import` (which stores each diagram SVG) and `catalog
   asset upload --source manimkc` have run on that database**, which on the
-  owner's is flip day. `catalog migrate` knows that: it applies everything
-  before 0013 as its own run, asks the same question, and holds 0013 (and
-  anything after it) with the reason while the answer is not none, exiting 0
-  with `held` in its output. Every other command runs on a database whose
-  first outstanding migration is a held one (`assertMigrated`), since 0013 adds
-  no column; that is what lets a database at 0009 migrate to 0012 and then run
-  the upload 0013 waits on. drizzle applies in order, so a migration added
-  after 0013 waits behind it on any database still holding it; until every
-  database has applied 0013, such a migration must be one `catalog import` and
-  `catalog asset upload` can run without; `test/blob-contract.test.ts` fails
-  while any journal entry follows a registered contract migration, and phase 3
-  takes 0013 out of `CONTRACT_MIGRATIONS` once the owner's database has it.
-  While 0013 is held, `catalog status`, `learn init` and `learn doctor` say it
-  is held and why (`heldMigrations`) instead of "run migrate", which would only
-  hold it again. The flip-day script's last two steps are `doctor` (nothing in
-  the way) and `migrate` (0013 applied).
+  owner's was flip day. Until the phase 3 cut-over `catalog migrate` held it
+  back: 0013 was registered in `CONTRACT_MIGRATIONS`
+  (`src/migrations.ts`), so `migrate` applied everything before it as its own
+  run, asked the same question, and held 0013 (and anything after it) with
+  the reason, exiting 0 with `held`, which let a database at 0009 migrate to
+  0012 and then run the upload 0013 waits on. The price was that a migration
+  generated after 0013 waited behind it on any database still holding it.
+  The owner's database applied it before the cut-over merged, so the cut-over
+  unregistered it and `CONTRACT_MIGRATIONS` is empty: migrations may follow
+  0013 again. On a database without it, `migrate` applies it like any other
+  migration, and its guard raises with the ids and rolls that run back if
+  the data is not ready; `catalog status`, `learn init` and `learn doctor`
+  report it as outstanding and say "run migrate". The holding machinery
+  (`migrateHolding`, `heldMigrations`, `assertMigrated`) stays for the next
+  contract migration, and `test/blob-contract.test.ts` registers 0013 through
+  their `contracts` option to test it, and fails if a registered contract is
+  ever not the journal's last entry.
 
 - **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its
   foreign key is `ON DELETE RESTRICT` instead of the `SET NULL` that could

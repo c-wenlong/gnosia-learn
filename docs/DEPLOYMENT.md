@@ -220,7 +220,7 @@ canonical origin.
 
 ## The blob store
 
-Videos, their posters and sidecars, and diagram SVGs are moving out of the
+Videos, their posters and sidecars, and diagram SVGs have moved out of the
 repository and the manimkc data root into a content-addressed blob store
 (docs/CONTENT-MIGRATION.md 0.4, D5). Until go-live it is local only: the `fs`
 adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
@@ -313,6 +313,98 @@ deletes a row or an object that anything references. It exits 1 while the
 table and the store disagree or while any asset points at a `pending` blob,
 including one `--fix` just sent back, so a clean exit means every stored asset
 serves.
+
+## The nightly export
+
+Since the phase 3 cut-over the content is authored in the database and the
+repository holds none of it, so git is no longer a readable copy of what was
+written. `scripts/nightly-export.mjs` is that copy
+([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#phase-3-cut-over)):
+
+```bash
+npm run export:nightly                     # node scripts/nightly-export.mjs
+node scripts/nightly-export.mjs --keep 60 --json
+```
+
+It runs `catalog export --out` into `$SELF_LEARN_HOME/archive/<UTC time>/`
+(`~/.self-learn/archive/` when the variable is unset), a whole tree in the
+export layout that `catalog import <dir>` reads back and anyone can read
+without a database. It writes into a hidden `.<UTC time>.partial` first and
+renames it into place only when the export finished, so every dated folder is
+a whole export. It then points `archive/latest` at the new one by renaming a
+fresh link over the old, so the link is never missing, deletes all but the
+newest 30 exports (`--keep N`), and removes a failed run's partial once it is
+more than a day old. It refuses an archive inside the self-learn checkout, for
+the reason the blob store does: a `git clean` or a relayout can delete it. It
+records nothing on the database, since an export records its hash only into a
+tree a type was imported from. Exit 0 is exported, 1 is an export or a prune
+that failed, 2 is a wrong invocation.
+
+It is a copy of the content only. The learner state (`event`, `mastery`,
+`review`, `progress`, `recap`) and `content_revision` are not in an export,
+so it does not replace the `pg_dump` under [The database](#the-database).
+
+**Scheduling it on the laptop** is a launchd agent. Save this as
+`~/Library/LaunchAgents/com.self-learn.nightly-export.plist`, with every
+path made absolute for your machine (launchd expands neither `~` nor
+`$HOME`), `which node` for the first argument, and your own connection
+string in place of the placeholder:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.self-learn.nightly-export</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/YOU/path/to/self-learn/scripts/nightly-export.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/YOU/path/to/self-learn</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DATABASE_URL</key>
+    <string>postgres://USER@localhost:5432/self_learn</string>
+    <key>SELF_LEARN_HOME</key>
+    <string>/Users/YOU/.self-learn</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/YOU/Library/Logs/self-learn-nightly-export.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOU/Library/Logs/self-learn-nightly-export.log</string>
+</dict>
+</plist>
+```
+
+```bash
+plutil -lint ~/Library/LaunchAgents/com.self-learn.nightly-export.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.self-learn.nightly-export.plist
+launchctl kickstart gui/$(id -u)/com.self-learn.nightly-export    # one run now, to check
+launchctl bootout gui/$(id -u)/com.self-learn.nightly-export      # to stop it
+```
+
+Set `SELF_LEARN_HOME` in the plist even when `services/catalog/.env` names
+it: the catalog reads that file, so the export would find the diagram SVGs in
+the right blob store, but the script itself takes the archive's location from
+its own environment only. A run the laptop sleeps through starts when it
+wakes, since that is how launchd treats a missed `StartCalendarInterval`.
+
+**The archive is local, and pushing it anywhere is the owner's decision.**
+Nothing here creates a remote copy. One shape that would work later: make
+`$SELF_LEARN_HOME/archive` a private git repository and add a second job
+after this one that commits and pushes it, which would also keep the exports
+the 30-deep prune has deleted. Until someone decides that, the archive lives
+on one disk beside the database it copies.
 
 ## Deploying from the command line
 

@@ -1909,9 +1909,9 @@ commands.help = async () => {
                                    edited session log is refused
   doctor                         validate the graph and the state store
 
-Notes and session logs are files under learn/ until \`catalog flip concepts\`
-and \`catalog flip sessions\`, and rows after; the same commands work on
-either, and every one that writes them needs the database. Mastery, the
+Notes and session logs are rows in the catalog; the repository has held no
+files for them since the cut-over, and LEARN_ROOT names a tree of files for
+tests only. Every command that writes them needs the database. Mastery, the
 schedule and the event log are tables; DATABASE_URL points at them and
 defaults to postgres://localhost:5432/self_learn. --reason R names why, on
 any command that writes a note or a log.

@@ -13,20 +13,20 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the code is shaped and why |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, test and PR conventions |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
-| [learn/README.md](learn/README.md) | Pipeline internals: formulas, primitives, the `--json` shapes, known limits |
+| [docs/LEARN.md](docs/LEARN.md) | Pipeline internals: formulas, primitives, the `--json` shapes, known limits |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The tables, and why each one is shaped that way |
 | [packages/blob/README.md](packages/blob/README.md) | The blob store: the interface contract, the `<owner_id>/<sha256>.<ext>` keys, the `fs` adapter, and what a cloud adapter must pass |
 | [services/catalog/LEARN.md](services/catalog/LEARN.md) | What each `learn/state/*` file became, and how to recover |
 | [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md) | The catalog: every table, why the links are typed, how `event` stays append-only, how to run migrations |
-| [content/README.md](content/README.md) | The three content folders, and the rules for editing the topic vocabulary |
-| [content/courses/README.md](content/courses/README.md) | The course YAML: the shape of a file and what the reader refuses |
+| [seed/README.md](seed/README.md) | The export format (the layout `catalog export` writes and `catalog import` reads), and the seed, which is all the content a fresh clone has |
+| [seed/COURSES.md](seed/COURSES.md) | The course YAML of the export format: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
 | [docs/proposals/course-items-declare-concepts.md](docs/proposals/course-items-declare-concepts.md) | Proposal: the course file lists each item's concepts, and progress derives from mastery everywhere the path already does |
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
 | [docs/STUDIO-CHAT-FIRST.md](docs/STUDIO-CHAT-FIRST.md) | The studio's proposed chat-first redesign: the planner agent, the `draft` table, the plus card and chat panel, and the tldraw manual in the drawing prompt |
-| [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Proposed: moving authored content out of files in git into Postgres and object storage, in phases run in parallel, with the revision table, the blob store and the decisions behind them |
+| [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (top bar, tab bar, `data-layout`), the habit data, `/courses`, and the screenshot tool |
 | [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
@@ -39,7 +39,7 @@ two on purpose:
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
-| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes in `learn/`, the learner state in Postgres, the web view at `apps/web/src/app/learn/` |
+| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes, session logs and diagrams as rows in the catalog database beside the learner state (Postgres), the web view at `apps/web/src/app/(app)/learn/` |
 
 The `/learn` and `/review` skills are not in this repo. They live in the
 `learning` plugin under the `learning` marketplace, at
@@ -52,18 +52,22 @@ Do not add copies of those skills or agents back under `.claude/`. A local copy
 would shadow the plugin and the two would drift apart. Edit the plugin instead.
 
 Architecture, primitives and the honest list of known limits are in
-[learn/README.md](learn/README.md).
+[docs/LEARN.md](docs/LEARN.md).
 
-Once `concepts` and `sessions` are flipped, the notes and logs are rows, not
-files under `learn/`, and Obsidian reads them from a **vault**:
+The notes and logs are rows, and since the phase 3 cut-over the repository has
+no `learn/` or `content/` at all: they were deleted, and every version stays
+reachable at the tag `content-files-final` (`git show
+content-files-final:content/topics.yaml`). Obsidian reads the notes from a
+**vault**:
 `npm run learn -- vault pull` writes every note, every log and every diagram's
 SVG (under `assets/`, read-only) to `~/.self-learn/vault/`, and
 `npm run learn -- vault push --reason R` takes edited notes back, one revision
 each, refusing a note that moved in the database since the pull. Neither
 command overwrites an edit nobody pushed, and a vault inside any checkout of
-this repository is refused, since a `learn/` there is an import tree. The rules
-are in `services/catalog/src/learn/vault.ts` and
-[learn/README.md](learn/README.md), "Where the notes and logs live".
+this repository is refused, since notes written there are untracked files in
+`git status`, and a vault pulled into a `learn/` would be read by the next
+`catalog import` of that tree. The rules are in `services/catalog/src/learn/vault.ts` and
+[docs/LEARN.md](docs/LEARN.md), "Where the notes and logs live".
 
 ## Asset generation: tools/manimkc/
 
@@ -159,29 +163,41 @@ Rules of engagement:
   `serve`, which mirrors a document in a real browser tab for a human to
   watch. Exit code 3 means lints remain, and it is deliberate: a diagram is
   not finished until `inspect` exits 0.
-- **The loop does not end at `export`.** Run `verify <file.svg>` on what got
-  committed: it renders the SVG back to a PNG and checks it is
+- **The loop does not end at `export`.** Run `verify <file.svg>` on the SVG
+  you are about to store: it renders the SVG back to a PNG and checks it is
   self-contained, its fonts applied, its text visible and its declared size
   honest, then Read the PNG it wrote to confirm the diagram actually looks
   right before calling the diagram done.
-- Outputs go to `learn/assets/<concept-id>.tldr` and
-  `learn/assets/<concept-id>.svg`, and **both are committed**: the `.tldr` is
-  the editable source the next session extends, the `.svg` is what the
-  session log embeds as `![[<concept-id>.svg]]`. Iteration PNGs go to the
-  scratchpad and are never committed.
-- **`learn/map.md` stays mermaid, and is not a job for this tool.** It is a
+- **A diagram lands in the catalog, never in a file in the tree.** The
+  repository has had no `learn/assets/` since the phase 3 cut-over. Draw in a
+  checkout: `npm run --silent learn -- diagram checkout <concept-id>` (or
+  `catalog diagram checkout`) writes `<concept-id>.tldr` under
+  `$STUDIO_HOME/work/` with the revision it came from, and
+  `diagram commit <concept-id> --reason R` stores it, refused when the
+  diagram moved since the checkout. `diagram put --slug S --tldr F --svg F
+  --reason R` stores a document drawn anywhere else. Either way the document
+  is the `diagram` row and the SVG a blob, one revision per write.
+  `learn/assets/<concept-id>.tldr` and `.svg` survive only as logical names
+  (the asset ids and `job.target_path`, D11 of
+  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md)), not as paths to
+  open. The `.tldr` is the editable source the next session checks out, the
+  `.svg` is what the session log embeds as `![[<concept-id>.svg]]`, which
+  `learn vault pull` resolves by writing every diagram's SVG into the vault.
+  Iteration PNGs go to the scratchpad and are never committed.
+- **The concept map stays mermaid, and is not a job for this tool.** It is a
   document `learn map` renders from the graph and the mastery model on demand:
-  to stdout by default, into a file only with `--out <file>`, so the committed
-  `learn/map.md` is no longer rewritten by a session and is regenerated only
-  when someone asks for it (Track C of
-  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md)). Only teaching
+  to stdout by default, into a file only with `--out <file>` (Track C of
+  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md)). The repository
+  keeps no copy; the old `learn/map.md` went with the cut-over. Only teaching
   diagrams go on the canvas.
-- **Every `.tldr` needs a topic, or `catalog import` refuses it by name.** The
-  topic and concepts live in `meta.tldrawkc` on the document record, written
-  by `new --topic ...` or backfilled with
+- **Every `.tldr` needs a topic, or `catalog diagram put` refuses it by
+  name**, with the same `resolveSubject` rule `catalog import` applies to an
+  export. The topic and concepts live in `meta.tldrawkc` on the document
+  record, written by `new --topic ...` or backfilled with
   `npm run --silent canvas -- meta set <file> --topic <slug>`, and the slug
-  must exist in `content/topics.yaml`. Re-export the SVG afterwards, since
-  `export --svg` stamps the title and topic onto it.
+  must be a topic in the catalog (`npm run --silent catalog -- topic ls`).
+  Re-export the SVG afterwards, since `export --svg` stamps the title and
+  topic onto it.
 - The end-to-end process is the `tldrawkc-diagram` skill, which lives in the
   submodule and is symlinked into `.claude/skills/tldrawkc-diagram`.
 - **The `diagram-maker` agent drives the same CLI, and falls back when it is
@@ -201,8 +217,8 @@ Rules of engagement:
 studio at `/studio`: a screen that browses the diagrams in the catalog, opens
 one on a live tldraw canvas, and lets a person brief an agent to draw or extend a
 diagram, review its work, and accept or discard it. It exists so drawing a
-diagram can be delegated to an agent without a candidate ever landing on a
-committed file until a person says so.
+diagram can be delegated to an agent without a candidate ever landing in the
+catalog until a person says so.
 
 Rules of engagement:
 
@@ -254,18 +270,26 @@ Rules of engagement:
   relative to `STUDIO_HOME`, and the catalog refuses any other value. A job
   recorded before the move still names `learn/assets/.candidates/<slug>`, which
   the runner resolves against the repository, so it can be accepted, discarded
-  or resumed. And since Track D of
-  [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md) Accept lands nothing
-  in the tree: it is `catalog diagram put --job`, the diagram as rows and its
-  SVG as a blob, with the job's starting revision as the base, so a commit that
-  landed while the job ran refuses it. Once `catalog flip diagrams` has run
-  there is nothing to `git add`; before the flip the put also writes the
-  `.tldr` and `.svg` through into the tree diagrams were last imported from
-  (D17), so the next `catalog import` does not undo it, and Accept names those
-  two files with the `git add` line to run. With Postgres down Accept refuses
-  and the candidate waits in the job workspace. `indexed: false` after
-  an accept means the diagram landed and the job row did not record it;
+  or resumed. Accept writes no file under `learn/assets/`, which the phase 3
+  cut-over removed: it is `catalog diagram put --job`, the diagram as rows and
+  its SVG as a blob, with the job's starting revision as the base, so a commit
+  that landed while the job ran refuses it, and the candidates are deleted
+  from the workspace once it succeeds. There is nothing to `git add`. The
+  write-through branch in `services/catalog/src/content/diagrams.ts`, which
+  also wrote the `.tldr` and `.svg` into a tree and had the panel print a
+  `git add` line, runs only on a database that has not flipped diagrams,
+  which after the cut-over is a test's scratch one. With Postgres down Accept
+  refuses and the candidate waits in the job workspace. `indexed: false`
+  after an accept means the diagram landed and the job row did not record it;
   Reindex finishes it.
+- A brief's `source` names the concept the diagram came out of, by slug (the
+  form's placeholder), or as `learn/concepts/<domain>/<slug>.md` or
+  `<slug>.md` for an old brief. A note is a row since the cut-over, so when no
+  such file is on disk the runner reads it with `learn concept show --json`
+  into the job's scratch directory, `source/<slug>.md`, and points the agent
+  there (`services/studio/src/source-note.ts`). Any other file in the tree is
+  passed through as it is, and a slug the database does not answer for leaves
+  the agent drawing from the brief alone.
 - Every `canvas` verb and the mirror run on the diagram's checkout,
   `$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout` with a
   record of the revision it came from. The canvas saves there, and only an
@@ -495,22 +519,31 @@ not have to be worked out again.
   missing from the catalog, and the audit in #27 recorded that happening once
   already.
 - **The web app reads authored content from the database only, and refuses
-  a type nobody flipped.** `apps/web/src/data/source.ts` builds the reader
+  a type sent to files.** `apps/web/src/data/source.ts` builds the reader
   seam with no file reader: a type whose `content_source` row says `files`,
-  or has no row, or that `CONTENT_SOURCE` points at files, throws a
+  or that `CONTENT_SOURCE` points at files, throws a
   `ContentUnavailableError` naming `npm run catalog -- flip <type>`, and a
   database that does not answer throws too, where both used to fall back to
-  `content/` and `learn/`. The page's error boundary, `app/(app)/error.tsx`,
+  `content/` and `learn/`. A type with no row reads the database, the
+  default since the cut-over. The page's error boundary, `app/(app)/error.tsx`,
   renders inside the shell and the server log says which it was. So a
-  checkout pointed at a database still at `0009`, or one that never ran the
-  six flips, shows that panel on every course page: migrate, import and flip
-  it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
+  checkout pointed at a database still at `0009` shows that panel, and one
+  never imported has nothing to show: migrate, import the seed (or an export)
+  and flip it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
   or `getTags()` from `@/data/*`, never a parser from `@self-learn/content`;
   a test that wants real course data mocks `contentSource` with
   `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
   opening a database. There
   is no `outputFileTracingIncludes` and no repo-root walk any more: the app
   opens no content file, so a deployment needs none in its bundle.
+- **`CONTENT_SOURCE` defaults to `db`, and `files` is a test's switch.**
+  `resolveOwnership` in `packages/content/src/select.ts` takes the variable,
+  then the `content_source` row, then `db`; before the cut-over the last
+  default was `files`. So a type with no row reads the database, and an
+  ownership read that fails resolves as no row, whose database read then
+  fails and says why. Setting a type to `files` only makes sense in a suite
+  that hands the seam a tree of its own; the web app refuses it, and there is
+  no tree in the repository to point it at.
 - **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
@@ -547,42 +580,90 @@ not have to be worked out again.
   local run is not proof the schema is sound. CI runs a `postgres:17` service
   and is where they are a real gate. The suites never read `self_learn`'s rows:
   each makes a scratch database, and the end-to-end one imports `seed/`, a
-  small real slice cut with `catalog export --subset` (seed/README.md), not
-  `content/` and `learn/`, which phase 3 removes. A database of your own to
-  look at is `createdb`, `migrate`, then
-  `MANIMKC_ROOT=/nonexistent npm run catalog -- import seed`.
-- **`catalog import` is the name; `catalog index` is the alias.** With no
-  directory `import` reads the repository, which is all `index` did; `index`
-  still runs it and prints the new name once on stderr, so a `--json` reader
-  is unaffected. The web app and the studio still name `catalog index` in a
-  few messages; both work.
-- **Flip day is a script, and rehearsing it is one command.**
-  `node scripts/flip-rehearsal.mjs --tree-from <checkout>` copies `self_learn`
-  with `createdb -T`, imports a temp copy of that checkout's tree, flips the six
-  types in the plan's order with an export after each group, imports and
-  checks parity again, uploads manimkc's renders twice into a temp blob store,
-  audits it, and drops the copy (`--keep` leaves it). Point `MANIMKC_ROOT` and
-  `TLDRAWKC_ROOT` at a checkout with the submodules when the worktree has none.
-  Two steps guard the database: the first is a `pg_dump -Fc` backup checked to
-  list the learner tables, and the first import runs on a throwaway copy and
-  fails if it would remove any row (a tree without the owner's untracked
-  files prunes their rows, and deletions cascade). `--real --database <name>
-  --checkout <dir>` runs the same steps against that database in place, from
-  the checkout the script sits in only, with no tracked edits under
-  `content/` or `learn/`, with the backup at
-  `~/<name>-preflip-<time>.dump`; it asks for the name to be typed on a
-  terminal and has no `--yes`, so it is the owner's to run, never an agent's.
-- **`catalog migrate` can exit 0 without reaching the head, on purpose.**
-  Migration `0013` requires a blob behind every video, sidecar, poster and
-  diagram SVG, and on a database whose renders were never uploaded its guard
-  would raise and roll the whole run back. So `migrate` applies everything
-  before it, holds it with the reason (`held` in `--json`, one line each in
-  text), and the other commands run anyway; `catalog doctor` lists what is in
-  the way. After `catalog import` and `catalog asset upload --source manimkc`
-  a second `migrate` applies it. From then on the manimkc import stores each
-  file itself, and a test fixture that writes a stored-kind asset needs a blob
-  (`services/catalog/test/stored-blob.ts`), or a scratch database stopped at
-  0012 (`partialMigrations(BEFORE_BLOB_CONTRACT)`) when the upload before the
+  small real slice cut with `catalog export --subset` (seed/README.md), since
+  the phase 3 cut-over removed `content/` and `learn/`. A database of your own
+  to look at is `createdb`, `migrate`,
+  `MANIMKC_ROOT=/nonexistent npm run catalog -- import seed`, then
+  `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
+  that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
+  e2e` builds exactly that database on its own.
+- **`catalog import` is the name; `catalog index` is the alias.** `index`
+  is `import` with no directory; it still runs it and prints the new name once
+  on stderr, so a `--json` reader is unaffected. A few comments still say
+  `catalog index`; both work.
+- **A bare `catalog import` refreshes manimkc and the mirror ledger, and
+  nothing else.** With no directory it reads the repository, which has held no
+  content since the cut-over. A type the database owns is skipped when the
+  directory holds none of that type's files, as well as when they are its own
+  last export (`ownedSkips` in `services/catalog/src/index/run.ts`), and once
+  topics are flipped the vocabulary the other sources resolve slugs against
+  comes from the topic rows, not `content/topics.yaml`. So on a database that
+  owns all six types it reads nothing for them and runs manimkc and mirrors.
+  `catalog import seed` still loads the seed into a fresh database, and an
+  export directory (`catalog import <dir>`) is how files come back in.
+- **Writers stop writing files once all six types are flipped (D17
+  amended).** `exportsFiles()` in
+  `services/catalog/src/content/write-through.ts`, read inside each write's
+  transaction, is true while any export type is not the database's. After
+  that, a topic, tag or course write, `course import`, item
+  archive, restore or purge, and `learn concept add` write rows and no file.
+  A copy of the files is something a person or a schedule asks for:
+  `catalog export --out <dir>`, or the nightly export. A database part-way
+  through its flips still gets the old write-through, into the tree each type
+  was imported from, which is why a test that flips some types sees files
+  written.
+- **Flip day and the cut-over were a script, and it stays.**
+  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `self_learn`
+  with `createdb -T`, imports a temp copy of `<dir>/content` and
+  `<dir>/learn`, flips the six types in the plan's order with an export after
+  each group, imports and checks parity again, uploads manimkc's renders
+  twice into a temp blob store, audits it, and drops the copy (`--keep`
+  leaves it). Since the cut-over a checkout has neither folder, so a rehearsal
+  with no `--tree-from` refuses by name; point it at an export
+  (`catalog export --out <dir>`) or `seed/`. It expects a database that holds
+  0013, or holds nothing 0013's guard would refuse: one at 0009 with renders
+  nobody uploaded fails its first `migrate`. Point `MANIMKC_ROOT` and
+  `TLDRAWKC_ROOT` at a checkout with the submodules when the worktree has
+  none. Two steps guard the database: the first is a `pg_dump -Fc` backup
+  checked to list the learner tables, and the first import runs on a
+  throwaway copy and fails if it would remove any row (a tree without the
+  owner's untracked files prunes their rows, and deletions cascade).
+  `--real --database <name> --checkout <dir>` runs the same steps against
+  that database in place, from the checkout the script sits in only, with the
+  backup at `~/<name>-preflip-<time>.dump`, and `--real --cutover` (#157) is
+  the cut-over itself, run from a checkout that still had `content/` and
+  `learn/` (docs/CONTENT-MIGRATION.md, "Phase 3: cut-over"). Both ask for the
+  name to be typed on a terminal and have no `--yes`, so they are the owner's
+  to run, never an agent's.
+- **The nightly export is the readable backup, and it lives outside the
+  checkout.** `npm run export:nightly` (`scripts/nightly-export.mjs [--keep N]
+  [--json]`) runs `catalog export --out` into
+  `$SELF_LEARN_HOME/archive/<UTC time>/` (default `~/.self-learn/archive/`).
+  It writes into `.<UTC time>.partial` first and renames it on success,
+  replaces the `latest` symlink with a rename so the link is never missing,
+  keeps the newest 30, removes partials more than a day old, and refuses an
+  archive inside the checkout, where a `git clean` or a relayout could delete
+  it. It records nothing on the database. Scheduling it is the launchd
+  example in docs/DEPLOYMENT.md, "The nightly export".
+- **`0013_asset_blob_contract` is an ordinary migration again, and
+  `CONTRACT_MIGRATIONS` is empty.** 0013 requires a blob behind every video,
+  sidecar, poster and diagram SVG. Until the cut-over it was registered in
+  `services/catalog/src/migrations.ts`, so `migrate` held it back on a
+  database whose renders were never uploaded, since its guard would have
+  raised and rolled back the whole run, 0010 to 0012 included, which the
+  upload needs. The cost was that any migration generated after it waited
+  behind it on such a database. The owner's database applied it before the
+  cut-over merged, so the cut-over unregistered it and migrations may follow
+  it again. On a database without it, `migrate` now applies it like any
+  other, and its guard raises naming the assets and keys in the way and rolls
+  that run back: run `catalog import` and `catalog asset upload --source
+  manimkc` first (`catalog doctor` lists what is in the way). The holding
+  machinery stays for the next contract, and `test/blob-contract.test.ts`
+  registers 0013 through the `contracts` option to keep it tested. The
+  manimkc import stores each file itself, so a test fixture that writes a
+  stored-kind asset needs a blob (`services/catalog/test/stored-blob.ts`), or
+  a scratch database stopped at 0012
+  (`partialMigrations(BEFORE_BLOB_CONTRACT)`) when the upload before the
   contract is what it tests.
 - **Never edit a migration under `services/catalog/drizzle/` once it has been
   applied.** drizzle applies by the journal's timestamp (`when`), running
@@ -595,12 +676,25 @@ not have to be worked out again.
 - **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
   tables; `index.json` is a query. `npm run learn -- status` fails when the
-  database is down, which is deliberate — both skills open with it and stop.
+  database is down, which is deliberate: both skills open with it and stop.
   Since Track C, `concept add`, `check add` and `session log` need it too: they
   read the `content_source` row to know whether a note or a log is a file or
-  rows, and once flipped nothing under `learn/` is written; a whole note is
-  edited with `learn concept checkout` and `commit`. The file-to-table mapping is
+  rows, and since the cut-over every one is rows; a whole note is edited with
+  `learn concept checkout` and `commit`, and read with `learn concept show`.
+  `learn status` says "Knowledge base: the catalog at <db>", and `learn init`
+  that the notes, logs and diagrams are rows in the catalog.
+  The file-to-table mapping is
   [services/catalog/LEARN.md](services/catalog/LEARN.md).
+- **The `learn` CLI reads files only from the tree `LEARN_ROOT` names.**
+  Notes, logs and courses come from rows. The CLI's file half runs only
+  against a tree that `LEARN_ROOT` names (a test's, a scratch copy), and it
+  never creates `learn/` in the repository (`namedTree()` in
+  `services/catalog/src/learn/paths.ts`, `rowsFor` in `files.ts`). With no
+  `LEARN_ROOT`, a type the database does not own is refused with a message
+  naming `catalog import <dir>` then `catalog flip <type>`, or `LEARN_ROOT`;
+  an unreachable database is refused too. Before the cut-over both cases read
+  the repository's folder, and an empty folder answered "no notes" when the
+  truth was a database that was down or had not flipped the type.
 - **Migration `0010` seeds two rows and guards every table, and both surprise a
   test.** It inserts the `local` learner (before the first `owner_id` foreign
   key) and a `catalog_instance` row saying `primary`, so a fresh scratch
@@ -615,24 +709,23 @@ not have to be worked out again.
   `services/catalog/test/content-writes.test.ts` checks by grep, and a
   `collection` or `curriculum_item` is archived, never deleted: `progress`,
   `recap` and the items under a module are `RESTRICT`.
-- **A new note cannot carry evidence until it is indexed.**
+- **A new note cannot carry evidence until it has a row under a topic.**
   `mastery.concept_slug` and `event.concept_slug` are foreign keys, so
-  `learn observe` on a note that no index run has taken in refuses, `--force`
-  included. `learn index` refuses in turn if the note is in no topic's
-  `maps.concepts` in `content/topics.yaml`. `learn concept add --topic <slug>`
-  does all of it in one call: it files the concept under the topic through the
-  catalog (a revision, and `topics.yaml` rewritten from the rows), then, while
-  notes are files, indexes them. Once the database owns concepts the note is
-  its row, written in the same transaction as the topic mapping, and there is
-  nothing to index. With `--item`, the listing on the course row goes in
-  through `catalog course import` whenever the database owns concepts or
-  courses. Without `--topic`, `concept add` prints the reminder at the point
-  the note is written. Do not hand-edit `maps.concepts`: the catalog writes that
-  list now, and refuses to write over an edit it has not imported.
+  `learn observe` on a concept the catalog has no row for refuses, `--force`
+  included. `learn concept add --topic <slug>` writes the note as its row,
+  filed under the topic (its `maps.concepts`) in the same transaction, so it
+  can carry mastery at the next `observe`; `learn index` has nothing to do
+  once the database owns notes, and says so. With `--item`, the listing on
+  the course row goes in through `catalog course import`: the CLI exports the
+  course, stamped with its base revision, into a temp directory
+  (`services/catalog/src/learn/course-tree.ts`), lists the concept there and
+  imports that file, so a course write that landed in between is refused
+  rather than undone. The temp directory is removed however the command
+  ends.
 - **The `--json` shapes are a contract with a plugin outside this repo.**
   `status`, `frontier`, `plan`, `observe` and `review due` are parsed by
   `/learn` and `/review`, documented in
-  [learn/README.md](learn/README.md#the-json-shapes), and pinned by golden
+  [docs/LEARN.md](docs/LEARN.md#the-json-shapes), and pinned by golden
   tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
   breaking change to the plugin, not a refactor.
 - **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
@@ -734,20 +827,29 @@ not have to be worked out again.
   when the config loads.
 - **No test may write into the tracked tree, and `vitest.setup.ts` now fails one
   that does.** vitest runs test files in parallel workers against one checkout,
-  so a fixture dropped into `learn/assets/` is visible to every other suite
-  while it is there. `services/catalog/test/catalog.test.ts` indexes that
-  directory three times and asserts the second pass deletes nothing, so a
-  `.tldr` the studio's tests wrote and removed between two passes was pruned by
-  the second one and failed a suite that had nothing to do with it, about once
-  in eight full runs and never when run alone. Two overlapping `npm test` runs
-  failed every time. The studio's paths are all repo-relative by design, so
-  `STUDIO_REPO_ROOT` points `services/studio/src/paths.ts` at a symlink farm
-  under the OS temp directory and the setup file checks the tracked listing
-  after every test file: `learn/assets/`, and every file under `seed/`, which
-  suites import and so record as the root a seam write keeps in step. A new
-  suite that needs a tree to write into takes a temp one, the way `LEARN_ROOT`
-  and `STUDIO_HOME` already do; one that imports the seed and then writes
-  copies it to a temp directory first.
+  so a fixture dropped into the tree is visible to every other suite while it
+  is there. It began with `learn/assets/`: `services/catalog/test/catalog.test.ts`
+  indexed that directory three times and asserted the second pass deleted
+  nothing, so a `.tldr` the studio's tests wrote and removed between two passes
+  was pruned by the second one and failed a suite that had nothing to do with
+  it, about once in eight full runs and never when run alone. Two overlapping
+  `npm test` runs failed every time. The studio's paths are all repo-relative
+  by design, so `STUDIO_REPO_ROOT` points `services/studio/src/paths.ts` at a
+  symlink farm under the OS temp directory, which links neither `content/` nor
+  `learn/`, and the setup file checks two things after every test file: every
+  file under `seed/`, which suites import and so record as the root a seam
+  write keeps in step, and whatever is at the repository's `content/` and
+  `learn/`. The cut-over removed those two, so they must be as absent after a
+  test file as before it (or, in a checkout with untracked leftovers,
+  unchanged): the one way they come back is code that still treats the
+  repository as its knowledge base, such as an `ensureDirs` or a
+  write-through to a root recorded before the cut-over. A new suite that
+  needs a tree to write into takes a temp one, the way `LEARN_ROOT` and
+  `STUDIO_HOME` already do; one that imports the seed and then writes copies
+  it to a temp directory first. `services/catalog/test/after-cutover.test.ts`
+  holds the whole post-cut-over case: a database owning every type, no
+  `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a
+  bare import, none of which recreates either folder.
 - **A studio job's `candidate_path` is relative to `STUDIO_HOME`, not to the
   repository.** The catalog stores `jobs/<id>/candidate/<slug>.tldr` and
   refuses any other value, absolute included (`briefCandidate` in

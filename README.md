@@ -32,7 +32,7 @@ Gnosia
 
 **Self-Learn** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
 
-Behind the hub sits a file-backed tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it learns about you lands in `learn/` as plain Markdown and JSON you can read, diff, and revert.
+Behind the hub sits a tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it writes lands in Postgres, each change a revision with an author and a reason that `catalog history` shows, and `learn vault pull` hands the notes back as plain Markdown you can read and edit.
 
 A third part, the `tools/manimkc/` submodule, renders narrated animations for concepts that text and SVG cannot carry.
 
@@ -55,10 +55,10 @@ Knowing what is worth learning and actually learning it are two different proble
 | Part | Where | What it does |
 | --- | --- | --- |
 | Roadmap | `apps/web/` | Next.js hub over the AY2026/27 shortlist: progress, notes, resources, tutoring sessions, topic recaps |
-| Learning pipeline | `scripts/learn/`, `learn/` | Probe → Plan → Teach → Close loop with a file-backed knowledge base |
+| Learning pipeline | `scripts/learn/`, `services/catalog/src/learn/` | Probe → Plan → Teach → Close loop over a knowledge base in Postgres |
 | Asset generation | `tools/manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
 | Diagrams | [`tools/tldrawkc/`](tools/tldrawkc/README.md) (submodule) | Teaching diagrams drawn on a real tldraw canvas, exported as self-contained SVG with the editable `.tldr` committed beside it |
-| Catalog | `packages/schema/`, `services/catalog/` | Postgres index over the three content trees, and the `catalog` CLI agents read |
+| Catalog | `packages/schema/`, `services/catalog/` | The Postgres database that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
 
 Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are no accounts yet, just one learner row behind one owner password (`/sign-in`). A browser that used the old `localStorage` document imports it once, automatically, on first load.
 
@@ -80,12 +80,12 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 
 ```
 apps/web/         The Next.js app: src/app · src/components · src/data · src/lib · public/
-packages/content/ One reader for content/, shared by the app and the indexers
+packages/content/ One reader for the export format's content/, and the content types
 packages/schema/  Drizzle tables: the single source of the catalog's row shapes
 services/catalog/ Migrations, the database connection and the catalog CLI
 scripts/learn/    Pipeline CLI: bkt · graph · schedule · markdown · store · render
-content/          Authored data: topics.yaml, the shared vocabulary, and courses/
-learn/            The knowledge base itself (see learn/README.md)
+seed/             A small slice of the content in the export format: a fresh clone's data
+docs/             Long-form docs, the pipeline's among them (docs/LEARN.md)
 tools/manimkc/    Submodule: narrated manim videos
 tools/tldrawkc/   Submodule: tldraw diagrams
 .claude/          launch.json, plus the two skills symlinked from the submodules
@@ -96,14 +96,18 @@ one `npm ci` at the root installs the lot and `npm run lint`, `typecheck` and
 `test` cover all of them from there. `tools/` is not a workspace: both
 submodules carry their own lockfiles and toolchains.
 
-The catalog is the join the three trees never had: one `topic` vocabulary every
+The catalog is the join the content never had: one `topic` vocabulary every
 asset points at, typed link tables with foreign keys at both ends, and an
-append-only `event` log the learner state is replayed from. `npm run catalog --
-import` fills it from `content/`, `learn/` and `manimkc topics --json`, and
-agents read it back in layers with `ls`, `show`, `path` and `search`, every one
-of them `--json` and bounded. The design is in
-[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md), the content it indexes
-in [content/README.md](content/README.md).
+append-only `event` log the learner state is replayed from. It owns the
+courses, topics, tags, notes, session logs and diagrams outright; every change
+goes through a `catalog` or `learn` command with a reason, and `catalog export
+--out <dir>` writes them out as files whenever you want a copy. `npm run
+catalog -- import <dir>` reads such a tree into a database, and a bare
+`import` refreshes what it reads from `manimkc topics --json`. Agents read it
+back in layers with `ls`, `show`, `path` and `search`, every one of them
+`--json` and bounded. The design is in
+[services/catalog/SCHEMA.md](services/catalog/SCHEMA.md), the export format in
+[seed/README.md](seed/README.md#the-export-format).
 
 `.claude/` holds no learning skills. `/learn`, `/review` and the three subagents live in the globally installed `learning` plugin, so they work in every project; see [AGENTS.md](AGENTS.md) for why copying them back here would be a mistake.
 
@@ -121,15 +125,16 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required.
 
-The app reads its courses, topics, notes and diagrams from Postgres, and nothing else, so it needs Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). With it up, the first time:
+The app reads its courses, topics, notes and diagrams from Postgres, and nothing else, so it needs Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. With Postgres up, the first time:
 
 ```bash
-createdb self_learn                                 # first checkout only; a second checkout reuses it
-npm run catalog -- migrate                          # creates the tables, or brings them up to date
-npm run catalog -- import                           # reads content/, learn/ and manimkc's renders into the catalog
-for t in topics tags courses concepts sessions diagrams; do npm run catalog -- flip $t; done   # the database owns each type
-npm run catalog -- asset upload --source manimkc    # videos, captions and posters into the blob store
+createdb self_learn                                         # first checkout only; a second checkout reuses it
+npm run catalog -- migrate                                  # creates the tables, or brings them up to date
+MANIMKC_ROOT=/nonexistent npm run catalog -- import seed    # the seed, leaving manimkc out
+for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done   # the database owns each type
 ```
+
+The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMKC_ROOT=/nonexistent` leaves manimkc out, since no seed topic maps a video folder and the import would refuse the renders it found; the seed's README says more. With your own content, import an export of it (`catalog import <dir>`) in place of `seed`. Once topics map their folders (`catalog topic map`), a bare `npm run catalog -- import` takes in the submodule's videos and `npm run catalog -- asset upload --source manimkc` copies them, their captions and posters into the blob store. `npm run e2e` builds exactly this database on its own, under a throwaway name, so the smoke test needs none of these steps.
 
 A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). Without Postgres the app shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
 
@@ -149,7 +154,7 @@ Skip it if you are not drawing diagrams; nothing else in the repo depends on it.
 
 Four phases, driven by a dependency-free Node CLI. **Probe** ranks concepts by expected information gain, so it binary-searches the edge of your understanding instead of marching through a syllabus; being asked does not count as being taught. **Plan** returns a topologically ordered path from what you hold to the goal, with mastered prerequisites dropped and claims fact-checked before anything is taught. **Teach** hands back one concept at a time at the frontier, with a check after each step. **Close** writes the concept notes, stores the checks, logs the session, and schedules the reviews.
 
-Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. The `event` table is the source of truth, an append-only record of every answer with its before and after belief — append-only enforced by a trigger, not by convention — so the mastery model and the schedule are both projections that can be thrown away and replayed, and the model parameters are safe to change. Concept notes, session logs and the map stay plain files in git.
+Mastery uses Bayesian Knowledge Tracing; review scheduling uses SM-2. Both are written from scratch in under 200 lines each with no dependencies. The `event` table is the source of truth, an append-only record of every answer with its before and after belief (append-only enforced by a trigger, not by convention), so the mastery model and the schedule are both projections that can be thrown away and replayed, and the model parameters are safe to change. Concept notes and session logs are rows too, one revision per write; `learn vault pull` writes them out as a folder of Markdown for Obsidian, and `learn map` prints the map.
 
 ```bash
 npm run learn -- status      # where you are
@@ -157,11 +162,11 @@ npm run learn -- doctor      # validate the concept graph
 npm run learn -- help        # the full primitive surface
 ```
 
-The `/learn` and `/review` skills are not in this repo. They live in the globally installed `learning` plugin, and both open by running `npm run learn -- status` so they refuse to improvise a session that records nothing. Full architecture, formulas, and an honest list of what these models get wrong: **[learn/README.md](learn/README.md)**.
+The `/learn` and `/review` skills are not in this repo. They live in the globally installed `learning` plugin, and both open by running `npm run learn -- status` so they refuse to improvise a session that records nothing. Full architecture, formulas, and an honest list of what these models get wrong: **[docs/LEARN.md](docs/LEARN.md)**.
 
 ## Drawing diagrams
 
-`tools/tldrawkc/` draws teaching diagrams on a real tldraw canvas: a snippet places boxes and arrows, the agent looks at a screenshot and fixes what reads wrong, then exports a self-contained SVG. Both the editable `.tldr` and the exported `.svg` are committed to `learn/assets/`; the PNGs used to look at a diagram mid-edit are scratch and never are.
+`tools/tldrawkc/` draws teaching diagrams on a real tldraw canvas: a snippet places boxes and arrows, the agent looks at a screenshot and fixes what reads wrong, then exports a self-contained SVG. Both the editable `.tldr` and the exported `.svg` are stored in the catalog as one revision (`catalog diagram commit`, or Accept in the studio at `/studio`); the PNGs used to look at a diagram mid-edit are scratch and never stored.
 
 | Entry point | How | When |
 | --- | --- | --- |
@@ -171,13 +176,14 @@ The `/learn` and `/review` skills are not in this repo. They live in the globall
 | The library | A relative import, e.g. `import { run } from "../tools/tldrawkc/dist/lib/index.js"` from `scripts/`. `tools/` is not an npm workspace, so there is no bare `"tldrawkc"` specifier | Node code that wants the verbs without a shell |
 | `serve` | A real browser tab, open until Ctrl+C | A human watching and nudging shapes by hand |
 
-The deployed web app is not an entry point. It reads `learn/` and renders the exported SVGs; it never runs the tool, because a Vercel build has no local Chromium and no business writing local files.
+The deployed web app is not an entry point. It reads the diagrams from the catalog and serves the stored SVGs; it never runs the tool, because a Vercel build has no local Chromium and no business writing local files.
 
 A CLI session, start to finish (needs the submodule built first, see [Install](#install)):
 
 ```bash
 npm run --silent canvas -- doctor
-npm run --silent canvas -- run learn/assets/probe-and-frontier.tldr --create \
+npm run --silent catalog -- diagram checkout probe-and-frontier --dir /tmp/diagrams   # a new slug: a record, no file yet
+npm run --silent canvas -- run /tmp/diagrams/probe-and-frontier.tldr --create \
   --shot /tmp/probe-and-frontier.png --code - <<'JS'
 helpers.box('probe', 'probe', { x: 60, y: 60, w: 160, h: 64 })
 helpers.box('teach', 'teach', { after: 'probe', gap: 120, w: 160, h: 64 })
@@ -185,17 +191,17 @@ helpers.connect('probe', 'teach', { label: 'frontier' })
 return helpers.describe().lints
 JS
 # look: the "frontier" label wraps, gap is too small. fix with a second snippet:
-npm run --silent canvas -- run learn/assets/probe-and-frontier.tldr \
+npm run --silent canvas -- run /tmp/diagrams/probe-and-frontier.tldr \
   --shot /tmp/probe-and-frontier.png --code - <<'JS'
 helpers.box('teach', 'teach', { after: 'probe', gap: 160, w: 160, h: 64 })
 return helpers.describe().lints
 JS
-# look again: fixed. file it and export:
-npm run --silent canvas -- meta set learn/assets/probe-and-frontier.tldr \
+# look again: fixed. file it, export, and store both in the catalog:
+npm run --silent canvas -- meta set /tmp/diagrams/probe-and-frontier.tldr \
   --topic vector-and-linear-algebra-basics
-npm run --silent canvas -- export learn/assets/probe-and-frontier.tldr \
-  --svg learn/assets/probe-and-frontier.svg
-npm run --silent canvas -- list
+npm run --silent canvas -- export /tmp/diagrams/probe-and-frontier.tldr \
+  --svg /tmp/diagrams/probe-and-frontier.svg
+npm run --silent catalog -- diagram commit probe-and-frontier --dir /tmp/diagrams --reason "probe feeds teach"
 ```
 
 | Verb | What |
@@ -208,7 +214,7 @@ npm run --silent canvas -- list
 | `inspect` | print every shape, binding, lint and the metadata. Exits 3 on lints |
 | `export` | write the files that get committed |
 | `from-mermaid` | build a document from a mermaid flowchart |
-| `list` | every .tldr in a directory (default `learn/assets`), no browser |
+| `list` | every .tldr in a directory, no browser (its default, `learn/assets`, no longer exists here, so name one) |
 | `meta set` | stamp metadata on an existing document, no browser |
 | `serve` | mirror the document in a real browser tab until Ctrl+C |
 
@@ -216,7 +222,7 @@ Three things that bite:
 
 - `npm run canvas` without `--silent` prints npm's own banner ahead of the tool's stdout, which breaks `--json` parsing. Same for `npm run learn`.
 - Exit 3 means the file saved but lints remain: read them and run again, or pass `--allow-lints`. Exit 2 means the snippet threw and nothing was written.
-- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog import` will take it.
+- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from the vocabulary (`catalog topic ls`) before the catalog will store it.
 
 ## How it works
 
@@ -231,9 +237,9 @@ flowchart LR
         LIB["bkt · graph<br/>schedule"]
         ST["the learner store"]
     end
-    subgraph KB["learn/ (plain files, in git)"]
-        REC["concepts/ · sessions/<br/>(authored during Close)"]
-        MAP["map.md<br/>(derived)"]
+    subgraph KB["the notes (rows in postgres)"]
+        REC["concept · session_log_entry<br/>(authored during Close)"]
+        MAP["learn map<br/>(derived, printed)"]
     end
     subgraph PG["postgres"]
         EV[("event<br/>source of truth, append-only")]
@@ -258,9 +264,9 @@ flowchart LR
 
 | Path | Purpose | Shipped? |
 | --- | --- | --- |
-| `learn/concepts/<domain>/<id>.md` | Atomic concept notes, Obsidian-compatible and wikilinked | tracked |
-| `learn/sessions/*.md`, `learn/assets/*.svg` and `*.tldr` | One log per session, written live; diagrams drawn with `npm run canvas` while teaching, the `.tldr` source committed beside each SVG | tracked |
-| `learn/map.md` | The mermaid knowledge map, regenerated by `learn map` | tracked |
+| `concept`, `session_log_entry`, `diagram` (Postgres) | Atomic concept notes (Obsidian-compatible and wikilinked once pulled), one log per session written live, and the diagrams drawn while teaching. `catalog export` or the nightly export is the copy | not in git |
+| `seed/` | A small slice of the content in the export format, for a fresh clone and the tests | tracked |
+| `~/.self-learn/` (`SELF_LEARN_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
 | `event`, `mastery`, `review` (Postgres) | The trajectory and its projections. `event` is the only copy | not in git |
 | `progress`, `recap`, `preference` (Postgres) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
 | `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL`, provider keys; read from `apps/web/`, never the root | gitignored |
@@ -290,7 +296,7 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | `npm run test` | Vitest, single run |
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
-| `npm run e2e` | Headless smoke test of a production build against a throwaway database copy. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
+| `npm run e2e` | Headless smoke test of a production build against a throwaway database it builds from `seed/`. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
 | `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
