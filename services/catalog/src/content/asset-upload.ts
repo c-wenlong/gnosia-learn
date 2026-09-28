@@ -471,11 +471,15 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       // The bytes are stored and confirmed; only the rows are refused. A rerun
       // reads the rows as they are now and links the same keys.
       const refused = new Set(writes.map((w) => w.id));
+      // `refused` counts files, not items: a poster already refused (its cap,
+      // or no frame to cut) whose detach write this was is not counted again.
+      const counted = new Set(items.slice(groupStart).filter((i) => i.action === "refused").map((i) => i.id));
       for (const item of items.slice(groupStart)) {
         if (!refused.has(item.id) || item.action === "refused") continue;
         item.action = "refused";
         item.detail = `its row changed while this upload ran, so it was not pointed at ${item.key ?? "its blob"}. ${error.message}`;
-        result.refused += 1;
+        if (!counted.has(item.id)) result.refused += 1;
+        counted.add(item.id);
       }
     }
   }

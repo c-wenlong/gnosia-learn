@@ -172,13 +172,18 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
         await held;
         await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
       });
-      await isLocked;
-      const retry = upload("local", "stale");
-      retry.catch(() => {});
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      release();
-      await audit;
-      await expect(retry).rejects.toMatchObject({ cap: "uploads-per-day" });
+      try {
+        await isLocked;
+        const retry = upload("local", "stale");
+        retry.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        release();
+        await audit;
+        await expect(retry).rejects.toMatchObject({ cap: "uploads-per-day" });
+      } finally {
+        release();
+        await audit.catch(() => {});
+      }
     } finally {
       await other.close();
     }
@@ -234,16 +239,23 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
           state: "pending",
         });
       });
-      await isLocked;
-      let settled = false;
-      const second = upload("local", "abcdefgh").finally(() => (settled = true));
-      second.catch(() => {});
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      // Waiting on the lock rather than checking against what it can see.
-      expect(settled).toBe(false);
-      release();
-      await inFlight;
-      await expect(second).rejects.toBeInstanceOf(OwnerCapError);
+      try {
+        await isLocked;
+        let settled = false;
+        const second = upload("local", "abcdefgh").finally(() => (settled = true));
+        second.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        // Waiting on the lock rather than checking against what it can see.
+        expect(settled).toBe(false);
+        release();
+        await inFlight;
+        await expect(second).rejects.toBeInstanceOf(OwnerCapError);
+      } finally {
+        // A failed assertion above must not leave the other transaction open,
+        // or closing its connection waits on it and the test times out.
+        release();
+        await inFlight.catch(() => {});
+      }
     } finally {
       await other.close();
     }
