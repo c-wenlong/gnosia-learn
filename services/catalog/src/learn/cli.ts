@@ -73,6 +73,8 @@ import {
 import { ContentError, TOPICS_FILE } from "@self-learn/content";
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
 
+import { runDiagramCommand } from "../commands/diagram";
+import { classifyConnectionFailure, describeConnectionFailure, EXIT_UNREACHABLE } from "../connection-failure";
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { IndexError } from "../index/errors";
@@ -1757,6 +1759,11 @@ commands.help = async () => {
   map [--out F]                  the concept map, to stdout or to F
   index                          re-read the notes into the catalog (a no-op
                                    once the database owns them)
+  diagram checkout|commit|put|list|show
+                                 diagrams in the database, as \`catalog diagram\`
+                                   does them, written as the diagram-maker agent
+                                   unless --author-kind says otherwise. Draw in
+                                   the path checkout prints, then commit --reason.
   doctor                         validate the graph and the state store
 
 Notes and session logs are files under learn/ until \`catalog flip concepts\`
@@ -1815,7 +1822,45 @@ const OPTIONS = {
   out: { type: "string" },
 } as const;
 
+/**
+ * `learn diagram <verb>`: the plugin's door to diagrams in the database
+ * (Track D of docs/CONTENT-MIGRATION.md, D15). The same verbs and flags as
+ * `catalog diagram` (`checkout`, `commit`, `put`, `list`, `show`), because
+ * the diagram-maker agent draws in a checkout and ends with a commit, and
+ * two spellings of one write would drift. Its own parser, so none of its
+ * flags join this CLI's option table. The one difference is who a write is
+ * attributed to by default: the agent (`diagram-maker`), since that is who
+ * runs it from a session, unless `--author` and `--author-kind` say otherwise.
+ */
+async function diagram(argv: string[]): Promise<number> {
+  const given = (flag: string) => argv.some((arg) => arg === flag || arg.startsWith(`${flag}=`));
+  const attributed = given("--author-kind")
+    ? argv
+    : [...argv, "--author-kind", "agent", ...(given("--author") ? [] : ["--author", "diagram-maker"])];
+  const outcome = await runDiagramCommand(attributed, {
+    stdout: (text) => process.stdout.write(text),
+    stderr: (text) => process.stderr.write(text),
+  });
+  if ("code" in outcome) return outcome.code;
+  const error = outcome.error;
+  if (error instanceof MigrationsOutstanding) {
+    process.stderr.write(`learn: ${redactUrl(databaseUrl())} is behind this code. ${error.message}\n`);
+    return EXIT_MIGRATIONS_OUTSTANDING;
+  }
+  // A database that is down exits 3, as `catalog diagram` does, so the agent
+  // can tell "the catalog is not there" from "the write was refused" by the
+  // code alone and say which in its return.
+  const failure = classifyConnectionFailure(error);
+  const message = error instanceof Error ? error.message : String(error);
+  if (argv.includes("--json")) process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+  process.stderr.write(
+    `learn diagram: ${failure === null ? message : describeConnectionFailure(failure)}\n`,
+  );
+  return failure?.unreachable === true ? EXIT_UNREACHABLE : 1;
+}
+
 export async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "diagram") return diagram(argv.slice(1));
   let parsed;
   try {
     parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true });
