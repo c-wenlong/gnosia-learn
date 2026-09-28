@@ -568,6 +568,15 @@ refused when the diagram moved past it. Until `catalog flip diagrams`, a put
 also writes its files under the directory diagrams were last imported from
 (D17), so the next import reads back what was written rather than undoing it.
 
+An SVG drawn without the canvas has no document, so it is no `diagram` row:
+`put --slug --svg --topic [--concept]` with no `--tldr` writes one
+`diagram_svg` asset and its blob, filed under what the writer names, and is
+refused for a slug that has a document (asked again under the SVG asset's
+lock, which a document put also takes, and, until the flip, counting a
+`.tldr` on disk that no import has read yet). Until the flip the import files such
+an SVG by its name alone (the concept of that name and its topic), so the put
+is refused unless it names exactly that; after it, the writer's links stand.
+
 ### The mirror ledger
 
 `mirror` holds what one audit saw, not what is true now. `manimkc mirrors

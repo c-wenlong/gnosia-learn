@@ -22,10 +22,13 @@ import {
   documentHash,
   listDiagrams,
   putDiagram,
+  putSvgOnly,
   type PutInput,
 } from "../src/content/diagrams";
+import { connect } from "../src/db";
 import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
+import { lockEntity } from "../src/content/revisions";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
@@ -448,6 +451,47 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(await readFile(path.join(dir, "second-diagram.svg"), "utf8")).toBe(svgOf("exported, not committed"));
   });
 
+  const putSvg = async (slug: string, topic: string, concepts: string[], contents: string) =>
+    putSvgOnly(scratch.db, store, {
+      slug,
+      svg: await file(`${slug}-only.svg`, contents),
+      topic,
+      concepts,
+      reason: "drawn by hand",
+      author: "diagram-maker",
+      authorKind: "agent",
+    });
+
+  it("stores an SVG drawn without the canvas as an asset and a blob, which the next import leaves alone", async () => {
+    const result = await putSvg("base", "alpha", ["base"], svgOf("by hand"));
+    expect(result).toMatchObject({ changed: true, concepts: ["base"], files: ["learn/assets/base.svg"] });
+    expect(await readFile(path.join(fixture.root, "learn/assets/base.svg"), "utf8")).toBe(svgOf("by hand"));
+    const [row] = await scratch.db.select().from(blobObject).where(eq(blobObject.key, result.svg?.key ?? ""));
+    expect(row?.state).toBe("present");
+    // Filed by its name, which is what the import reads it back as.
+    const again = await runImportCommand({ dir: fixture.root, only: ["diagrams"] });
+    expect(again.sources.find((s) => s.source === "diagrams")?.revisions).toEqual({});
+  });
+
+  it("refuses an SVG on its own that the import would file differently, or whose slug has a document", async () => {
+    // "hand-drawn" names no concept, so the import would file it under no topic.
+    await expect(putSvg("hand-drawn", "alpha", [], svgOf("x"))).rejects.toMatchObject({ code: "write-through" });
+    // "base" is under alpha, not beta.
+    await expect(putSvg("base", "beta", ["base"], svgOf("x"))).rejects.toMatchObject({ code: "write-through" });
+    await expect(putSvg("first-diagram", "alpha", [], svgOf("x"))).rejects.toMatchObject({ code: "unresolved" });
+    await expect(readdir(path.join(fixture.root, "learn/assets"))).resolves.not.toContain("hand-drawn.svg");
+  });
+
+  it("refuses an SVG on its own while a document for its slug waits on disk for an import", async () => {
+    // Review on #143: the next import would file the SVG under that document's stamp.
+    await fixture.write("learn/assets/base.tldr", documentOf({ title: "Not imported yet" }));
+    try {
+      await expect(putSvg("base", "alpha", ["base"], svgOf("x"))).rejects.toThrow(/not imported yet/);
+    } finally {
+      await rm(path.join(fixture.root, "learn/assets/base.tldr"), { force: true });
+    }
+  });
+
   it("writes no file once the database owns diagrams", async () => {
     await flip(scratch.db, { type: "diagrams", readers: new Set(["diagrams"]) });
     const before = await readdir(path.join(fixture.root, "learn/assets"));
@@ -461,6 +505,56 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
     const [listed] = await listDiagrams(scratch.db, "after-the-flip");
     expect(listed?.svgState).toBe("current");
+    // An SVG on its own is filed as named once no import reads files back.
+    const bare = await putSvg("hand-drawn", "beta", [], svgOf("after, by hand"));
+    expect(bare).toMatchObject({ changed: true, files: [], concepts: [] });
+    expect(await readdir(path.join(fixture.root, "learn/assets"))).toEqual(before);
+  });
+
+  it("refuses an SVG on its own when a document lands while it waits, rather than replacing that document's SVG", async () => {
+    // Review on #143: the no-document answer has to hold through the write.
+    // A second connection plays the document put: it holds the SVG asset's
+    // lock, waits until the SVG-only put is blocked on that lock (so it has
+    // already passed its early check and read nothing under the lock yet),
+    // then lands the document and commits. The put must find it then.
+    const slug = "raced";
+    const other = connect({ url: scratch.url });
+    let pending: Promise<unknown> = Promise.resolve();
+    try {
+      await other.db.transaction(async (tx) => {
+        await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
+        pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
+        pending.catch(() => undefined);
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const waiting = await tx.execute<{ n: number }>(
+            // This scratch database is this file's alone, and its tests run one at a time.
+            sql`select count(*)::int as n from pg_locks
+                where locktype = 'advisory' and not granted
+                  and database = (select oid from pg_database where datname = current_database())`,
+          );
+          if ((waiting.rows[0]?.n ?? 0) > 0) break;
+          if (Date.now() > deadline) throw new Error("the SVG-only put never waited on the lock");
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        await putDiagram(tx, store, {
+          slug,
+          tldr: await file("raced.tldr", documentOf({ title: "Raced" })),
+          svg: await file("raced.svg", svgOf("exported")),
+          reason: "a test",
+          author: "local",
+          authorKind: "person",
+        });
+      });
+    } finally {
+      await other.close();
+    }
+    await expect(pending).rejects.toMatchObject({ code: "unresolved" });
+    const [row] = await scratch.db.select().from(diagram).where(eq(diagram.slug, slug));
+    const assets = await scratch.db.execute<{ blob_key: string }>(
+      sql`select blob_key from asset where id = ${`diagram:learn/assets/${slug}.svg`}`,
+    );
+    expect(assets.rows[0]?.blob_key).toBe(row?.svgBlobKey);
   });
 
   it.skipIf(!hasCanvasCli(REPO_ROOT))("lists what `tldrawkc list` lists for the same documents", async () => {
