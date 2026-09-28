@@ -3,6 +3,7 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import { assetsForConcept, type CatalogDatabase } from "@self-learn/catalog/state";
 
+import { contentSource } from "@/data/source";
 import { resolveAssetFile } from "@/lib/asset-files";
 import { parseConceptNote, type ConceptCheck, type ConceptFrontmatter } from "@/lib/concept-note-core";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -29,7 +30,7 @@ export type ConceptNoteRead =
       ok: true;
       /** Repo-relative, as the catalog stores it. */
       path: string;
-      /** The file as it is on disk, frontmatter and all: what `NoteProse` takes. */
+      /** The note as stored, frontmatter and all: what `NoteProse` takes. */
       source: string;
       frontmatter: ConceptFrontmatter;
       checks: ConceptCheck[];
@@ -56,7 +57,15 @@ export async function findNoteAsset(db: CatalogDatabase, slug: string) {
   return notes.find((row) => row.path?.endsWith(`/${slug}.md`)) ?? (notes.length === 1 ? notes[0] : null);
 }
 
-/** Read and parse one concept's note. Degrades to a reason, never throws. */
+/**
+ * Read and parse one concept's note. Degrades to a reason, never throws.
+ *
+ * Once the database owns the notes (`catalog flip concepts`, Track C of
+ * docs/CONTENT-MIGRATION.md) the note is `concept.body` under the frontmatter
+ * its row renders, read through the content seam, and no file is opened.
+ * Until then it is the file, found through its asset row as below. The same
+ * 256 KB cap applies to both.
+ */
 export async function readConceptNote(slug: string): Promise<ConceptNoteRead> {
   let db: CatalogDatabase;
   try {
@@ -65,6 +74,15 @@ export async function readConceptNote(slug: string): Promise<ConceptNoteRead> {
     return { ok: false, code: "unreachable", message: messageOf(error) };
   }
   try {
+    const seam = contentSource();
+    if ((await seam.resolution()).concepts.kind === "db") {
+      const note = await seam.concept(slug);
+      if (note === null) return { ok: false, code: "no-note", message: `No note is stored for ${slug}.` };
+      if (Buffer.byteLength(note.markdown, "utf8") > NOTE_READ_LIMIT) {
+        return { ok: false, code: "file-missing", message: `${note.path} is larger than the note reader reads.` };
+      }
+      return { ok: true, path: note.path, source: note.markdown, ...parseConceptNote(note.markdown) };
+    }
     const row = await findNoteAsset(db, slug);
     if (row === null || row.path === null) {
       return { ok: false, code: "no-note", message: `No note is indexed for ${slug}.` };

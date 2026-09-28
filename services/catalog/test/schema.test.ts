@@ -82,11 +82,13 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
         {
           slug: "master-theorem",
           title: "Master Theorem",
+          topicSlug: "asymptotics",
           path: "learn/concepts/algorithms/master-theorem.md",
         },
         {
           slug: "recursion-tree-method",
           title: "Recursion tree method",
+          topicSlug: "asymptotics",
           path: "learn/concepts/algorithms/recursion-tree-method.md",
         },
       ]);
@@ -234,6 +236,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       await scratch.db.insert(concept).values({
         slug: "deletable",
         title: "Deletable",
+        topicSlug: "asymptotics",
         path: "learn/concepts/algorithms/deletable.md",
       });
 

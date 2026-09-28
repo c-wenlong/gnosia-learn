@@ -1,13 +1,9 @@
 import "server-only";
 
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { connection } from "next/server";
 import {
   assetsByIds,
   dueReviews,
-  notePaths,
   readEvents,
   readKnowledgeBase,
   readLearnerSnapshot,
@@ -17,7 +13,7 @@ import {
 } from "@self-learn/catalog/state";
 
 import { getCourses } from "@/data/courses";
-import { REPO_ROOT } from "@/data/repo-root";
+import { contentSource } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
@@ -94,7 +90,7 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
 
   const shown = due.slice(0, REVIEW_ROWS);
   const [checks, assets] = await Promise.all([
-    checkCounts(db, shown.map((card) => card.conceptId)),
+    checkCounts(shown.map((card) => card.conceptId)),
     assetTitles(db, events),
   ]);
   const reviewRows: ReviewRow[] = shown.map((card) => {
@@ -187,32 +183,24 @@ function placeOf(
 }
 
 /**
- * How many check blocks each concept's note holds, read from the files the
- * catalog indexed. A note that cannot be read (a deployment without `learn/`,
- * a file moved since the last index) counts as none, which the row prints as
- * "recall": the card is still due, it just has nothing stored to ask.
+ * How many check blocks each concept's note holds, read through the content
+ * seam: `concept.body` once the database owns the notes, the note file until
+ * then (Track C of docs/CONTENT-MIGRATION.md). A note that cannot be read (a
+ * deployment without `learn/`, a slug with no note) counts as none, which the
+ * row prints as "recall": the card is still due, it just has nothing stored
+ * to ask.
  */
-async function checkCounts(db: CatalogDatabase, slugs: string[]): Promise<Record<string, number>> {
+async function checkCounts(slugs: string[]): Promise<Record<string, number>> {
   if (slugs.length === 0) return {};
-  let paths: Record<string, string>;
-  try {
-    paths = await notePaths(db, slugs);
-  } catch {
-    // The rest of the dashboard was read a moment ago; losing the counts
-    // costs the "check · 2" labels, not the page.
-    return {};
-  }
-  const root = path.resolve(REPO_ROOT);
+  const source = contentSource();
   const entries = await Promise.all(
-    Object.entries(paths).map(async ([slug, relative]) => {
-      const file = path.resolve(root, relative);
-      // The path came from the index, which read it out of git, but a row is
-      // still data: a note is a Markdown file inside the repository or it is
-      // not read.
-      if (!file.startsWith(root + path.sep) || !file.endsWith(".md")) return [slug, 0] as const;
+    slugs.map(async (slug) => {
       try {
-        return [slug, countCheckBlocks(await readFile(file, "utf8"))] as const;
+        const note = await source.concept(slug);
+        return [slug, note === null ? 0 : countCheckBlocks(note.markdown)] as const;
       } catch {
+        // The rest of the dashboard was read a moment ago; losing the counts
+        // costs the "check · 2" labels, not the page.
         return [slug, 0] as const;
       }
     }),

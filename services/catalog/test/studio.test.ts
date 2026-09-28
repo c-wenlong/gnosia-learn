@@ -101,7 +101,7 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
     ]);
     await scratch.db
       .insert(concept)
-      .values({ slug: "dot-product", title: "The dot product", path: "learn/concepts/dot-product.md" });
+      .values({ slug: "dot-product", title: "The dot product", topicSlug: "alpha", path: "learn/concepts/dot-product.md" });
   }, 60_000);
 
   afterAll(async () => {

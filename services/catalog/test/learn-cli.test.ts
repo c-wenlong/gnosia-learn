@@ -335,9 +335,12 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
       await rm(path.join(root, "learn", "concepts", "fixtures", "widgets.md"), { force: true });
     });
 
-    it("map writes learn/map.md", async () => {
-      await learn("map");
-      const map = await readFile(path.join(root, "learn", "map.md"), "utf8");
+    it("map prints the map, and writes a file only when --out names one", async () => {
+      const { stdout } = await learn("map");
+      expect(stdout).toContain("# Knowledge Map");
+      await expect(readFile(path.join(root, "learn", "map.md"), "utf8")).rejects.toThrow(/ENOENT/);
+      await learn("map", "--out", path.join(root, "out", "map.md"));
+      const map = await readFile(path.join(root, "out", "map.md"), "utf8");
       expect(map).toContain("# Knowledge Map");
       expect(map).toContain("Alpha");
     });
@@ -355,6 +358,58 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
         "---\nid: alpha\ntitle: Alpha\nsummary: The first one.\n---\n\n# Alpha\n",
         "utf8",
       );
+    });
+
+    it("checks a note out to a work copy and commits it back to its file, refusing a moved one", async () => {
+      const note = path.join(root, "learn", "concepts", "fixtures", "beta.md");
+      const original = await readFile(note, "utf8");
+      try {
+        const checkout = await json<{ id: string; path: string; revision: number | null }>(
+          "concept", "checkout", "beta",
+        );
+        expect(checkout).toEqual({ id: "beta", path: path.join(root, "work", "concepts", "beta.md"), revision: null });
+        expect(await readFile(checkout.path, "utf8")).toBe(original);
+
+        await writeFile(checkout.path, `${original}\nA line the session added.\n`, "utf8");
+        // This fixture has no vocabulary, so the index after the write refuses,
+        // and says the file was written anyway.
+        const committed = await learn("concept", "commit", "beta", "--reason", "add a line").catch(
+          (error: { stderr: string }) => error,
+        );
+        expect(committed.stderr).toContain("was written, but it is not in the catalog");
+        expect(await readFile(note, "utf8")).toContain("A line the session added.");
+
+        // A second checkout of an uncommitted copy is refused rather than lost,
+        // and so is one whose sidecar is gone, since nothing vouches for it.
+        await writeFile(checkout.path, "---\nid: beta\n---\n\nedited again\n", "utf8");
+        const again = await learn("concept", "checkout", "beta").catch((error: { stderr: string }) => error);
+        expect(again.stderr).toMatch(/has edits no commit has taken/);
+        const sidecar = path.join(root, "work", "concepts", "beta.checkout.json");
+        const kept = await readFile(sidecar, "utf8");
+        await rm(sidecar);
+        const orphan = await learn("concept", "checkout", "beta").catch((error: { stderr: string }) => error);
+        expect(orphan.stderr).toMatch(/has edits no commit has taken/);
+        await writeFile(sidecar, kept, "utf8");
+
+        // A copy checked out from another knowledge base is not committed here.
+        await writeFile(sidecar, kept.replace(/"from": "[^"]*"/, '"from": "/elsewhere postgres://elsewhere/db"'), "utf8");
+        const foreign = await learn("concept", "commit", "beta", "--reason", "wrong place").catch(
+          (error: { stderr: string }) => error,
+        );
+        expect(foreign.stderr).toMatch(/was checked out from \/elsewhere/);
+        await writeFile(sidecar, kept, "utf8");
+
+        // The note moved under the copy: the commit is refused and the file kept.
+        await writeFile(note, `${original}\nSomeone else's edit.\n`, "utf8");
+        const moved = await learn("concept", "commit", "beta", "--reason", "late").catch(
+          (error: { stderr: string }) => error,
+        );
+        expect(moved.stderr).toMatch(/has changed since it was checked out/);
+        expect(await readFile(note, "utf8")).toContain("Someone else's edit.");
+      } finally {
+        await writeFile(note, original, "utf8");
+        await rm(path.join(root, "work"), { recursive: true, force: true });
+      }
     });
   });
 
