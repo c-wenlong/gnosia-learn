@@ -98,9 +98,9 @@
 //   origin) names another commit, a tracked file under content/ or learn/
 //   differs from HEAD and is not flip day's export, or HEAD moved. Never
 //   pushed.
-// It ends by printing the commands that follow: push the tag if it made it,
-// and the `git add` and commit that would keep flip day's export on a branch
-// of the checkout (printed, never run).
+// It ends by printing the commands that follow: push the tag unless origin was
+// seen to hold it on that commit, and the `git add` and commit that would keep
+// flip day's export on a branch of the checkout (printed, never run).
 //
 // Flip day's exports rewrite a few tracked files (five notes' frontmatter, the
 // .tldr key order) and write the untracked ones again (the tailscale pair).
@@ -1360,14 +1360,19 @@ async function main(argv) {
     // a person's to make, and so is keeping flip day's export in git.
     const q = shellQuote;
     const git = report.checkout;
-    if (state.tag.made && state.tagged.remote !== state.tag.commit) {
+    // Whenever origin was not seen to hold it: a tag made before the run
+    // and never pushed keeps nothing once the checkout is gone.
+    if (state.tagged.remote !== state.tag.commit) {
       report.next.push(`git -C ${q(checkout)} push origin ${FINAL_TAG}`);
     }
     if (state.exported.length > 0) {
+      const files = state.exported.map(q).join(' ');
       if (git.branch === 'HEAD') report.next.push(`git -C ${q(checkout)} switch -c content-files-export`);
+      // The commit names the files too, so anything else already staged in
+      // the checkout stays out of what is presented as flip day's export.
       report.next.push(
-        `git -C ${q(checkout)} add -- ${state.exported.map(q).join(' ')}`,
-        `git -C ${q(checkout)} commit -m ${q('The export flip day wrote into content/ and learn/')}`,
+        `git -C ${q(checkout)} add -- ${files}`,
+        `git -C ${q(checkout)} commit -m ${q('The export flip day wrote into content/ and learn/')} -- ${files}`,
       );
     }
   }

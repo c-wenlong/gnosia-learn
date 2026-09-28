@@ -667,11 +667,14 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
     const head = (await git(files, "rev-parse", "HEAD")).stdout.trim();
     expect(report.cutover.tag).toMatchObject({ commit: head, made: false });
     expect(report.cutover.exported).toEqual([tldr]);
+    // The stand-in's origin is not asked (it has none), so the push is
+    // printed: a tag origin was not seen to hold is one to push.
     const at = await realpath(files);
     expect(report.next).toEqual([
+      `git -C ${at} push origin content-files-final`,
       `git -C ${at} switch -c content-files-export`,
       `git -C ${at} add -- ${tldr}`,
-      `git -C ${at} commit -m 'The export flip day wrote into content/ and learn/'`,
+      `git -C ${at} commit -m 'The export flip day wrote into content/ and learn/' -- ${tldr}`,
     ]);
     // Nothing written in the worktree, and the tag is the one made before.
     expect(await status()).toBe(before);

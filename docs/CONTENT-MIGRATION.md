@@ -2076,8 +2076,9 @@ every type is flipped, the tag is absent or already on `HEAD` (here and on
    pushed; or, when the tag is already on that commit, nothing.
 
 It ends by printing what the operator does next, never running it: push the
-tag if it made one, and the `git switch -c content-files-export`, `git add`
-and `git commit` that would keep flip day's export (the tracked edits and the
+tag unless `origin` was seen to hold it on that commit, and the `git switch -c
+content-files-export`, `git add` and `git commit` (naming the same files) that
+would keep flip day's export (the tracked edits and the
 untracked files the export also writes) on a branch of the checkout. The
 untracked files under `content/` and `learn/` (the tailscale diagram) are
 listed: the import read them into the database, and the tag does not hold
@@ -2130,8 +2131,11 @@ main checkout's, which runs against the worktree.
       tag's commit (`tagWorktreeProblem`). Flip day's `--real` keeps the rule
       that `--checkout` is the script's own checkout.
 - [x] The end of the run prints the `git switch -c content-files-export`,
-      `git add -- <files>` and `git commit` for the exported files, and the tag
-      push only when it made the tag. Nothing is committed or pushed.
+      `git add -- <files>` and `git commit -- <files>` for the exported files
+      (the commit names them, so nothing else already staged goes in with
+      them), and the tag push whenever `origin` was not seen to hold the tag
+      on that commit, made by this run or before it. Nothing is committed or
+      pushed.
 - [x] `--cutover --checkout <worktree>` without `--real` rehearses the owner's
       cut-over: it copies `--from` (default `self_learn`), which must be
       flipped already, clones the blob store `--blob-store` names (default:
