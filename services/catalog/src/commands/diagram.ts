@@ -1,7 +1,7 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID } from "@self-learn/schema";
+import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
 
 import { openBlobStore } from "../content/blob";
 import {
@@ -18,6 +18,7 @@ import {
   type DiagramSummary,
   type PutResult,
 } from "../content/diagrams";
+import { CLI_OWNER } from "../content/scope";
 import { withDatabase } from "../db";
 import { assertMigrated } from "../migrations";
 
@@ -62,6 +63,10 @@ Verbs:
           One diagram, with where its checkout stands.
 
 Options:
+  --owner ID             Whose diagrams: every verb reads only what this owner
+                         may read (their own and the commons') and writes as
+                         them. Default: ${CLI_OWNER}. The studio passes the
+                         owner its runner serves.
   --author NAME          Who is writing. Default: ${LOCAL_LEARNER_ID}.
   --author-kind KIND     ${AUTHOR_KINDS.join(" | ")}. Default: person.
 
@@ -122,9 +127,12 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
       "author-kind": { type: "string", multiple: true },
       topic: { type: "string", multiple: true },
       concept: { type: "string", multiple: true },
+      owner: { type: "string", multiple: true },
     },
   });
   const verb = positionals[0];
+  const owner = (one(values.owner, "--owner", false) ?? CLI_OWNER).trim();
+  const scope = ownerScope(owner);
   const author = one(values.author, "--author", false) ?? LOCAL_LEARNER_ID;
   const kind = authorKind(one(values["author-kind"], "--author-kind", false));
   const dir = path.resolve(one(values.dir, "--dir", false) ?? defaultWorkDir());
@@ -165,6 +173,7 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
                 reason,
                 author,
                 authorKind: kind,
+                ownerId: owner,
               });
             }),
         };
@@ -192,6 +201,7 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
               authorKind: kind,
               ...(base === undefined ? {} : { base }),
               ...(jobId === undefined ? {} : { jobId }),
+              ownerId: owner,
             });
           }),
       };
@@ -204,7 +214,7 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
         run: () =>
           withDatabase(async ({ db }) => {
             await assertMigrated(db);
-            return checkoutDiagram(db, openBlobStore(), slug, dir, { force: values.force });
+            return checkoutDiagram(db, openBlobStore(), slug, dir, scope, { force: values.force });
           }),
       };
     }
@@ -228,6 +238,7 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
               authorKind: kind,
               ...(svgGiven !== undefined ? { svg: path.resolve(svgGiven) } : values["keep-svg"] ? { svg: null } : {}),
               ...(jobId === undefined ? {} : { jobId }),
+              ownerId: owner,
             });
           }),
       };
@@ -239,7 +250,7 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
         run: () =>
           withDatabase(async ({ db }) => {
             await assertMigrated(db);
-            return { ok: true as const, diagrams: await listDiagrams(db) };
+            return { ok: true as const, diagrams: await listDiagrams(db, scope) };
           }),
       };
     case "show": {
@@ -250,11 +261,11 @@ export function parseDiagram(argv: string[]): ParsedDiagram {
         run: () =>
           withDatabase(async ({ db }) => {
             await assertMigrated(db);
-            const [found] = await listDiagrams(db, slug);
+            const [found] = await listDiagrams(db, scope, slug);
             return {
               ok: true as const,
               diagram: found ?? null,
-              checkout: await checkoutState(db, slug, dir),
+              checkout: await checkoutState(db, slug, dir, scope),
             };
           }),
       };

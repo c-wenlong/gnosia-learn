@@ -1,3 +1,4 @@
+import { studioOwner } from "./config";
 import { NPM, run } from "./proc";
 
 /**
@@ -220,24 +221,35 @@ export function jobAccept(jobId: string): Promise<CatalogResult> {
 /* Diagrams (Track D of docs/CONTENT-MIGRATION.md)                            */
 /* -------------------------------------------------------------------------- */
 
-/** `catalog diagram list`: every live diagram, as the database holds it. */
+/**
+ * `--owner`, on every diagram verb: the catalog then lists, shows and checks
+ * out only what this studio's owner may read (their own diagrams and the
+ * commons'), and writes as them (phase 4). Without it the CLI would read as
+ * its own default owner, which is only the same person by coincidence.
+ * `test/owner.test.ts` fails a diagram verb here that leaves it out.
+ */
+function owned(): string[] {
+  return ["--owner", studioOwner()];
+}
+
+/** `catalog diagram list`: every live diagram this studio's owner may read. */
 export function diagramList(): Promise<CatalogResult> {
-  return catalog(["diagram", "list"], 60_000);
+  return catalog(["diagram", "list", ...owned()], 60_000);
 }
 
 /** `catalog diagram show <slug> --dir <work>`: one diagram and where its checkout stands. */
 export function diagramShow(slug: string, dir: string): Promise<CatalogResult> {
-  return catalog(["diagram", "show", slug, "--dir", dir], 60_000);
+  return catalog(["diagram", "show", slug, "--dir", dir, ...owned()], 60_000);
 }
 
 /** `catalog diagram checkout <slug> --dir <work>`: refresh the file every verb runs on. */
 export function diagramCheckout(slug: string, dir: string): Promise<CatalogResult> {
-  return catalog(["diagram", "checkout", slug, "--dir", dir], 60_000);
+  return catalog(["diagram", "checkout", slug, "--dir", dir, ...owned()], 60_000);
 }
 
 /** `catalog diagram commit <slug>`: the checkout into the database, refused when its base moved. */
 export function diagramCommit(slug: string, dir: string, reason: string): Promise<CatalogResult> {
-  return catalog(["diagram", "commit", slug, "--dir", dir, "--reason", reason]);
+  return catalog(["diagram", "commit", slug, "--dir", dir, "--reason", reason, ...owned()]);
 }
 
 export interface DiagramPutInput {
@@ -269,6 +281,7 @@ export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
     ...(input.base === undefined ? [] : ["--base", input.base === null ? "none" : String(input.base)]),
     "--reason",
     input.reason,
+    ...owned(),
   ]);
 }
 

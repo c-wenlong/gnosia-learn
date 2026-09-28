@@ -16,6 +16,7 @@ import {
   writeNoteRow,
   type NoteRow,
 } from "../content/note-rows";
+import { CLI_OWNER, cliScope } from "../content/scope";
 import { ContentWriteError } from "../content/write";
 import { writeThrough } from "../content/write-through";
 import { NOTE_KEYS, type NoteFields } from "../content/notes";
@@ -265,7 +266,7 @@ async function readConceptAt(
 export async function readConcept(id: string): Promise<ConceptNote | null> {
   const db = await rowsFor("concepts", false);
   if (db !== null) {
-    const [row] = await readNoteRows(db, [id]);
+    const [row] = await readNoteRows(db, [id], cliScope().readable);
     return row === undefined ? null : noteFromRow(row);
   }
   const { index } = await scanConcepts();
@@ -295,7 +296,7 @@ export async function readConceptForWrite(id: string): Promise<ConceptRead | nul
   }
   return db.transaction(
     async (tx) => {
-      const [row] = await readNoteRows(tx, [id]);
+      const [row] = await readNoteRows(tx, [id], cliScope().readable);
       return row === undefined ? null : { note: noteFromRow(row), base: await noteRevision(tx, id) };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
@@ -336,7 +337,7 @@ export async function updateConcept(
 export async function listConcepts(): Promise<ConceptNote[]> {
   const db = await rowsFor("concepts", false);
   if (db !== null) {
-    return (await readNoteRows(db)).map(noteFromRow).sort((a, b) => a.id.localeCompare(b.id));
+    return (await readNoteRows(db, undefined, cliScope().readable)).map(noteFromRow).sort((a, b) => a.id.localeCompare(b.id));
   }
   const { index } = await scanConcepts();
   const concepts: ConceptNote[] = [];
@@ -352,7 +353,7 @@ export async function listDomains(): Promise<{ domain: string | null; count: num
   const db = await rowsFor("concepts", false);
   const domains =
     db !== null
-      ? (await readNoteRows(db)).map((row) => ({ domain: row.domain }))
+      ? (await readNoteRows(db, undefined, cliScope().readable)).map((row) => ({ domain: row.domain }))
       : [...(await scanConcepts()).index.values()];
   const counts = new Map<string, number>();
   for (const { domain } of domains) {
@@ -455,7 +456,7 @@ export async function writeConceptNote(
     // content/topics.yaml, so that file is rewritten from the rows in the
     // same transaction (D17, `writeThrough`). An existing note keeps its
     // topic, and nothing in topics.yaml moves.
-    const isNew = (await readNoteRows(db, [note.id])).length === 0;
+    const isNew = (await readNoteRows(db, [note.id], cliScope().readable)).length === 0;
     try {
       const written = isNew
         ? (await writeThrough(db, ["topics"], (tx) => writeNoteRow(tx, input))).value
@@ -509,7 +510,7 @@ export function sessionPath(id: string): string {
 
 export async function listSessions(): Promise<string[]> {
   const db = await rowsFor("sessions", false);
-  if (db !== null) return (await listLogIds(db)).map((id) => `${id}.md`);
+  if (db !== null) return (await listLogIds(db, CLI_OWNER)).map((id) => `${id}.md`);
   try {
     const files = await fs.readdir(sessionsDir());
     return files.filter((f) => f.endsWith(".md")).sort();
@@ -574,7 +575,7 @@ export interface NoteSnapshot {
 export async function readNoteText(id: string): Promise<NoteSnapshot | null> {
   const db = await rowsFor("concepts", true);
   if (db !== null) {
-    const found = await noteText(db, id);
+    const found = await noteText(db, id, cliScope().readable);
     return found === null ? null : { text: found.text, revision: found.revision, hash: sha256(found.text), owner: "db" };
   }
   const note = await readConcept(id);

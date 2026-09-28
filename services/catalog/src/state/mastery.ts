@@ -134,7 +134,7 @@ export async function readModel(
  */
 async function unknownSlugs(db: CatalogDatabase, slugs: string[], owners?: readonly string[]): Promise<string[]> {
   if (slugs.length === 0) return [];
-  const known = await scopedRead(owners, (readable) =>
+  const known = await scopedRead(db, owners, (readable) =>
     db
       .select({ slug: concept.slug })
       .from(concept)

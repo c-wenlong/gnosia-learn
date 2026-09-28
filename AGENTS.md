@@ -232,6 +232,15 @@ Rules of engagement:
   blob the diagram's row names, by the key in its (cached) diagram list, so a
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
+- The runner serves one owner, `STUDIO_OWNER` (default `local`). Every
+  `catalog diagram` verb it spawns passes `--owner` with it, so the grid,
+  the inspector, the SVG route and a checkout see that owner's diagrams and
+  the commons' and nothing else; `services/studio/test/owner.test.ts` fails a
+  diagram verb that leaves it out. The web app names the signed-in owner in
+  `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
+  session after dropping any value a page sent, and the runner refuses a
+  request naming anyone else: its queue, checkouts, cached list and agent
+  account are that one owner's, so there is no view of them to scope.
 - The spawned agent does not inherit the runner's Anthropic credentials.
   `agentEnv` in `services/studio/src/agent.ts` strips the auth variables
   (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and the rest, listed there) so
@@ -654,16 +663,18 @@ not have to be worked out again.
   database whose renders were never uploaded, since its guard would have
   raised and rolled back the whole run, 0010 to 0012 included, which the
   upload needs. The cost was that any migration generated after it waited
-  behind it on such a database. The owner's database applied it before the
-  cut-over merged, so the cut-over unregistered it and migrations may follow
-  it again. On a database without it, `migrate` now applies it like any
+  behind it on such a database. The cut-over unregistered it so migrations
+  may follow it again; the owner chose to merge that before their own
+  database had been through flip day, so theirs is the one database still
+  behind it. On a database without it, `migrate` now applies it like any
   other, and its guard raises naming the assets and keys in the way and rolls
   that run back. On such a database `catalog import` and `catalog asset
   upload` then refuse too, since migrations are outstanding, so the way
   forward is the code from before the cut-over, where 0013 is still held:
-  `git worktree add <dir> content-files-final`, run flip day there
-  (`node scripts/flip-rehearsal.mjs --real ...`, which uploads and applies
-  0013), then come back. Only a database that was never through flip day can
+  `git worktree add <dir> content-files-final` (the tag on `a0afd93`), run
+  flip day there (`node scripts/flip-rehearsal.mjs --real ...`, which
+  uploads and applies 0013), then come back; docs/CONTENT-MIGRATION.md,
+  "After the merge", has the steps. Only a database that was never through flip day can
   be in that state; a fresh one has nothing 0013 refuses, since the import
   after 0013 stores every file before its row. The holding
   machinery stays for the next contract, and `test/blob-contract.test.ts`
@@ -736,6 +747,18 @@ not have to be worked out again.
   [docs/LEARN.md](docs/LEARN.md#the-json-shapes), and pinned by golden
   tests in `services/catalog/test/learn-cli.test.ts`. Changing one is a
   breaking change to the plugin, not a refactor.
+- **A read that forgets its owner reads every owner.** Ids are global (D23),
+  so a query with no `owner_id` filter serves another owner's rows by slug
+  and nothing fails. Anything the web app, the studio or the `learn` CLI's
+  learner view reaches takes an `OwnerScope` (`cliScope()` in a CLI) and
+  filters links by their far end too: the phase 4 review found a note's
+  `requires:` naming another owner's concept, and the studio listing another
+  owner's diagrams, both through reads that were scoped at the row and not
+  at the edge. The operator's whole-database tools are listed in
+  `services/catalog/SCHEMA.md` under "Owners", and a type still on files has
+  no owner at all, so accounts need every type flipped first. Do not answer
+  a scoped read's error by reading unscoped: `scopedRead` does that only
+  after the catalog says `owner_id` is absent.
 - **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
   `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
   load-bearing: the

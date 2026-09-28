@@ -3,12 +3,14 @@ import {
   assetConcept,
   assetDerivation,
   assetTopic,
+  collection,
   collectionItem,
   concept,
   type OwnerScope,
   topic,
 } from "@self-learn/schema";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { andOwnedBy, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
@@ -97,12 +99,15 @@ export function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
  * to the players without the caller sorting anything.
  */
 export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(assetTopic)
       .innerJoin(asset, eq(asset.id, assetTopic.assetId))
-      .where(and(eq(assetTopic.topicSlug, slug), ownedBy(asset.ownerId, owners)))
+      // The topic too: asked about one the reader cannot see, the answer is
+      // the one a missing topic gets, not the reader's own assets filed there.
+      .innerJoin(topic, eq(topic.slug, assetTopic.topicSlug))
+      .where(and(eq(assetTopic.topicSlug, slug), ownedBy(asset.ownerId, owners), ownedBy(topic.ownerId, owners)))
       .orderBy(asc(asset.kind), asc(asset.id)),
   );
 }
@@ -113,12 +118,14 @@ export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: O
  * with none, and the empty array is the normal answer rather than a gap.
  */
 export async function assetsForConcept(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(assetConcept)
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
-      .where(and(eq(assetConcept.conceptSlug, slug), ownedBy(asset.ownerId, owners)))
+      // As `assetsForTopic`: an unreadable concept answers as a missing one.
+      .innerJoin(concept, eq(concept.slug, assetConcept.conceptSlug))
+      .where(and(eq(assetConcept.conceptSlug, slug), ownedBy(asset.ownerId, owners), ownedBy(concept.ownerId, owners)))
       .orderBy(asc(asset.kind), asc(asset.id)),
   );
 }
@@ -145,7 +152,7 @@ export async function conceptsForAssets(
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ assetId: assetConcept.assetId, conceptSlug: assetConcept.conceptSlug })
       .from(assetConcept)
@@ -202,21 +209,31 @@ export async function conceptsForAsset(db: CatalogDatabase, id: string, scope: O
  * Postgres only accepts output column names.
  */
 export async function assetsForCollection(db: CatalogDatabase, id: string, scope: OwnerScope): Promise<AssetRef[]> {
-  const [viaTopic, viaConcept, direct] = await scopedRead(scope.readable, (owners) => {
-    const mine = ownedBy(asset.ownerId, owners);
+  const [viaTopic, viaConcept, direct] = await scopedRead(db, scope.readable, (owners) => {
+    // Every hop readable: the asset, the collection asked about (an
+    // unreadable one answers as a missing one), and the topic or concept a
+    // member reaches the asset through.
+    const mine = and(
+      ownedBy(asset.ownerId, owners),
+      owners === undefined
+        ? undefined
+        : sql`exists (select 1 from ${collection} where ${collection.id} = ${collectionItem.collectionId}${andOwnedBy(sql`${collection.ownerId}`, owners)})`,
+    );
     return Promise.all([
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
       .innerJoin(assetTopic, eq(assetTopic.topicSlug, collectionItem.topicSlug))
+      .innerJoin(topic, eq(topic.slug, collectionItem.topicSlug))
       .innerJoin(asset, eq(asset.id, assetTopic.assetId))
-      .where(and(eq(collectionItem.collectionId, id), mine)),
+      .where(and(eq(collectionItem.collectionId, id), mine, ownedBy(topic.ownerId, owners))),
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
       .innerJoin(assetConcept, eq(assetConcept.conceptSlug, collectionItem.conceptSlug))
+      .innerJoin(concept, eq(concept.slug, collectionItem.conceptSlug))
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
-      .where(and(eq(collectionItem.collectionId, id), mine)),
+      .where(and(eq(collectionItem.collectionId, id), mine, ownedBy(concept.ownerId, owners))),
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
@@ -255,7 +272,7 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
  */
 export async function assetsByIds(db: CatalogDatabase, ids: string[], scope: OwnerScope): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select(ASSET_COLUMNS)
       .from(asset)
@@ -344,6 +361,9 @@ export async function assetDerivations(
  * which would be three round trips each. Absent keys mean "derived from
  * nothing", as in `conceptsForAssets`.
  */
+/** The derived end of a derivation, joined under its own name. */
+const derivedAsset = alias(asset, "derived");
+
 export async function derivationSources(
   db: CatalogDatabase,
   ids: readonly string[],
@@ -351,12 +371,21 @@ export async function derivationSources(
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ assetId: assetDerivation.assetId, sourceId: assetDerivation.sourceAssetId })
       .from(assetDerivation)
       .innerJoin(asset, eq(asset.id, assetDerivation.sourceAssetId))
-      .where(and(inArray(assetDerivation.assetId, wanted), ownedBy(asset.ownerId, owners)))
+      .innerJoin(derivedAsset, eq(derivedAsset.id, assetDerivation.assetId))
+      // Both ends: a readable source answered for an unreadable derived id
+      // would say that id exists, and what it was cut from.
+      .where(
+        and(
+          inArray(assetDerivation.assetId, wanted),
+          ownedBy(asset.ownerId, owners),
+          ownedBy(derivedAsset.ownerId, owners),
+        ),
+      )
       .orderBy(asc(assetDerivation.assetId), asc(assetDerivation.sourceAssetId)),
   );
   const out: Record<string, string[]> = {};
@@ -452,7 +481,7 @@ export async function listAssets(
   // spells that. Short-circuiting also saves the round trip, the same way
   // `assetsByIds` does.
   if (options.ids !== undefined && options.ids.length === 0) return [];
-  return scopedRead(scope.readable, (owners) => listScoped(db, options, owners));
+  return scopedRead(db, scope.readable, (owners) => listScoped(db, options, owners));
 }
 
 /** `listAssets` for one set of owners, or every owner on a database from before 0010. */
@@ -523,7 +552,7 @@ export interface AssetKindCount {
  * something the catalog does not have and never lies about one it does.
  */
 export async function assetCounts(db: CatalogDatabase, scope: OwnerScope): Promise<AssetKindCount[]> {
-  return scopedRead(scope.readable, (owners) =>
+  return scopedRead(db, scope.readable, (owners) =>
     db
       .select({ kind: asset.kind, count: count() })
       .from(asset)

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, contentRevision, type NewAsset } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, COMMONS_OWNER, contentRevision, type NewAsset } from "@self-learn/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -14,6 +14,7 @@ import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
+import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -214,6 +215,84 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     }
   });
 
+  it("uploads a video the commons holds under the commons' prefix, and writes each row as the commons (phase 4)", async () => {
+    // D23's move of the manimkc library to the commons is an update of
+    // owner_id; the next upload keys the bytes and writes the rows as that
+    // owner. Written as the CLI's owner, the seam refused every row with
+    // foreign-owner after the bytes were stored, and the run aborted.
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER });
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.refused).toBe(0);
+    expect(result.rowsWritten).toBe(4);
+    for (const [id, bytes, ext] of [
+      [VIDEO_ID, VIDEO, "mp4"],
+      [TRANSCRIPT_ID, TRANSCRIPT, "json"],
+      [VTT_ID, VTT, "vtt"],
+      [posterId(VIDEO_ID), JPEG, "jpg"],
+    ] as const) {
+      const stored = await assetRow(id);
+      expect(stored?.ownerId, id).toBe(COMMONS_OWNER);
+      expect(stored?.blobKey, id).toBe(blobKey(COMMONS_OWNER, sha256(bytes), ext));
+    }
+    const owners = await scratch.db.select({ owner: blobObject.ownerId }).from(blobObject);
+    expect(new Set(owners.map((o) => o.owner))).toEqual(new Set([COMMONS_OWNER]));
+    const authors = await scratch.db.select({ owner: contentRevision.ownerId }).from(contentRevision);
+    expect(new Set(authors.map((a) => a.owner))).toEqual(new Set([COMMONS_OWNER]));
+  });
+
+  it("refuses a poster left with another owner than its video, before cutting or storing it (phase 4)", async () => {
+    await uploadAssets(scratch.db, options());
+    // D23's move done for the video and its sidecars but not its poster.
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER }).where(sql`${asset.id} like 'manimkc:%'`);
+    const before = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    const result = await uploadAssets(scratch.db, options());
+    const poster = result.items.filter((i) => i.id === posterId(VIDEO_ID));
+    expect(poster.map((i) => i.action)).toEqual(["refused", "detached"]);
+    expect(poster[0]?.detail).toContain("belongs to local and its video to commons");
+    // Unhooked from the video whose link just changed, so it is not served
+    // as that video's current picture.
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
+    expect(derived).toEqual([]);
+    expect((await assetRow(posterId(VIDEO_ID)))?.ownerId).toBe("local");
+
+    // The video and its sidecars moved to the commons' prefix; no poster
+    // bytes were cut for either owner.
+    expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey(COMMONS_OWNER, sha256(VIDEO), "mp4"));
+    const after = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    expect(after.filter((k) => !before.includes(k)).every((k) => !k.endsWith(".jpg"))).toBe(true);
+  });
+
+  it("says a mismatched poster is to be moved even when it is present and its video unchanged (phase 4)", async () => {
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER });
+    await uploadAssets(scratch.db, options());
+    await scratch.db.update(asset).set({ ownerId: "local" }).where(eq(asset.id, posterId(VIDEO_ID)));
+    const result = await uploadAssets(scratch.db, options());
+    const poster = result.items.filter((i) => i.id === posterId(VIDEO_ID));
+    // Refused by name, not reported as present; and left hooked up, since its
+    // video did not change and it is still the right picture.
+    expect(poster.map((i) => i.action)).toEqual(["refused"]);
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
+    expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
+  });
+
+  it("refuses another owner's video before storing a byte, and goes on with the rest (phase 4)", async () => {
+    await ensureLearner(scratch.db, "other");
+    await scratch.db.update(asset).set({ ownerId: "other" }).where(eq(asset.id, VIDEO_ID));
+    const result = await uploadAssets(scratch.db, options());
+    const refused = result.items.filter((i) => i.action === "refused");
+    expect(refused.map((i) => i.id)).toEqual([VIDEO_ID]);
+    expect(refused[0]?.detail).toContain("belongs to other");
+    expect((await assetRow(VIDEO_ID))?.blobKey).toBeNull();
+    const keys = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
+    expect(keys.some((k) => k.startsWith("other/"))).toBe(false);
+    expect(keys.some((k) => k.endsWith(`${sha256(VIDEO)}.mp4`))).toBe(false);
+    // Its sidecars are the owner's and went up.
+    expect((await assetRow(TRANSCRIPT_ID))?.blobKey).not.toBeNull();
+  });
+
   it("finishes an upload an earlier run left pending (edge case 5)", async () => {
     const key = blobKey("local", sha256(VIDEO), "mp4");
     await scratch.db.insert(blobObject).values({
@@ -241,6 +320,47 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const objects: string[] = [];
     for await (const object of store.list("")) objects.push(object.key);
     expect(objects).toEqual([]);
+  });
+
+  it("says on a dry run which files the caps would refuse, counting what it has planned", async () => {
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "2";
+    try {
+      const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
+      const real = await uploadAssets(scratch.db, options());
+      // The same files are refused, by the dry run as by the real one, the
+      // poster included (the day's count is asked for it; its bytes cannot be).
+      const refusedIds = (r: typeof dry) => r.items.filter((i) => i.action === "refused").map((i) => i.id).sort();
+      expect(refusedIds(dry)).toEqual(refusedIds(real));
+      expect(dry.items.filter((i) => i.action === "would-upload")).toHaveLength(2);
+      for (const item of dry.items.filter((i) => i.action === "refused")) {
+        expect(item.detail).toContain("a real run would refuse it");
+      }
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
+  });
+
+  it("counts a key once on a dry run, as a real run's row would", async () => {
+    // A second deliverable with the video's bytes: one key, one upload.
+    const COPY_PATH = "out/algorithms/demo/copy.mp4";
+    await writeFile(path.join(outRoot, COPY_PATH), VIDEO);
+    await scratch.db.insert(asset).values(row(`manimkc:${COPY_PATH}`, "video", COPY_PATH, VIDEO));
+    const withCopy = report();
+    const sections = withCopy.topics[0]?.sections as unknown[];
+    sections.push({ section: "copy", deliverable: { path: COPY_PATH, exists: true, sidecars: {} } });
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "3";
+    try {
+      const dry = await uploadAssets(scratch.db, options({ dryRun: true, ffmpeg: null, report: withCopy }));
+      expect(dry.items.filter((i) => i.action === "refused")).toEqual([]);
+      const real = await uploadAssets(scratch.db, options({ ffmpeg: null, report: withCopy }));
+      expect(real.refused).toBe(0);
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
   });
 
   it("refuses a file re-rendered since it was indexed, by name, and leaves its row alone", async () => {
@@ -314,7 +434,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
             row(TRANSCRIPT_ID, "transcript", TRANSCRIPT_PATH, Buffer.from("re-rendered")),
             { ...row(VTT_ID, "captions", VTT_PATH, VTT), blobKey: null },
           ],
-        }),
+        }, "local"),
       );
       const [kept, dropped, explicit] = rows.asset ?? [];
       expect(kept?.blobKey).toBe(video?.blobKey);

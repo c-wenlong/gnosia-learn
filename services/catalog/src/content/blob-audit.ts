@@ -6,7 +6,7 @@ import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { POSTER_PREFIX } from "./asset-upload";
-import { markBlobPending, ownerUsage, type OwnerUsage } from "./blob";
+import { markBlobPending, ownerCapLock, ownerUsage, type OwnerUsage } from "./blob";
 import {
   BlobOwnerError,
   type BlobRootOwner,
@@ -208,10 +208,20 @@ export async function auditBlobs(
         // of the same key starting now writes the row back to pending with a
         // fresh `updated_at` before it moves a byte; deleting that row would
         // leave the upload confirming a row that is gone.
-        const deleted = await db
-          .delete(blobObject)
-          .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending"), lt(blobObject.updatedAt, cutoff)))
-          .returning({ key: blobObject.key });
+        //
+        // And under the owner's cap lock (`ownerCapLock`), the one an upload
+        // measures under: an upload of this key that has already asked whether
+        // the row exists finishes first, so the row it counted on is not
+        // deleted before its own pending write, which would let a new object
+        // past both caps unmeasured. Its write refreshes `updated_at`, and the
+        // age guard then keeps the row.
+        const deleted = await db.transaction(async (tx) => {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(row.ownerId)}, 0))`);
+          return tx
+            .delete(blobObject)
+            .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending"), lt(blobObject.updatedAt, cutoff)))
+            .returning({ key: blobObject.key });
+        });
         if (deleted.length > 0) finding.fixed = "row-deleted";
         else finding.detail += "; an upload took it up again while the audit ran, so it was kept";
       }

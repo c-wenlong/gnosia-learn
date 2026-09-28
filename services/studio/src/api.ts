@@ -5,7 +5,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatus, type ValidBrief } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
-import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
+import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+
+import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
 import { diagramCommit } from "./catalog";
 import {
@@ -154,6 +156,32 @@ function guard(request: IncomingMessage): string | null {
   return null;
 }
 
+/**
+ * Whether this request is for the owner this runner serves (phase 4 of
+ * docs/CONTENT-MIGRATION.md), or null when it is.
+ *
+ * The web app names the signed-in owner in `STUDIO_OWNER_HEADER`, set by its
+ * server from the session after stripping any value a page sent, so the header
+ * is the app's word rather than the browser's. A request without it is a
+ * program on this machine (curl, a test), which is who could already reach
+ * every verb before owners existed, and is served as the runner's own owner.
+ *
+ * Another owner is refused outright rather than served a scoped view: the
+ * runner's queue, checkouts, cache and agent account are this owner's
+ * (`studioOwner` says why), so there is no view of them that belongs to
+ * anybody else. The refusal names neither owner.
+ */
+export function ownerRefusal(request: IncomingMessage, owner: string = studioOwner()): string | null {
+  const raw = request.headers[STUDIO_OWNER_HEADER];
+  if (raw === undefined) return null;
+  const named = (Array.isArray(raw) ? raw : [raw]).map((value) => value.trim());
+  if (named.length === 1 && named[0] === owner) return null;
+  return (
+    "this studio runs for one account, the one it was started for, and this request is from another. " +
+    "Its diagrams, jobs and agent sessions are that account's alone."
+  );
+}
+
 function send(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body, null, 1);
   response.writeHead(status, { ...JSON_HEADERS, "content-length": Buffer.byteLength(payload) });
@@ -252,6 +280,8 @@ async function handle(
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
+  const foreign = ownerRefusal(request);
+  if (foreign !== null) return fail(response, 403, foreign);
 
   const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
   const segments = url.pathname.split("/").filter((segment) => segment !== "");

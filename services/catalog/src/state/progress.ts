@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import { PREFERENCE_KEYS } from "@self-learn/schema";
 
+import { ownedBy, type Owners, readableFor } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { StateError } from "./errors";
 import { bumpEpoch, ensureLearner, withLearnerLock } from "./learner";
@@ -38,12 +39,13 @@ export interface ProgressRow {
 async function itemStates(
   db: CatalogDatabase,
   ids: string[],
+  owners?: Owners,
 ): Promise<{ unknown: string[]; archived: string[] }> {
   if (ids.length === 0) return { unknown: [], archived: [] };
   const known = await db
     .select({ id: curriculumItem.id, archivedAt: curriculumItem.archivedAt })
     .from(curriculumItem)
-    .where(inArray(curriculumItem.id, ids));
+    .where(and(inArray(curriculumItem.id, ids), ownedBy(curriculumItem.ownerId, owners)));
   const present = new Map(known.map((row) => [row.id, row.archivedAt !== null]));
   return {
     unknown: ids.filter((id) => !present.has(id)),
@@ -75,8 +77,9 @@ export async function assertKnownItems(
   db: CatalogDatabase,
   ids: string[],
   options: WriteOptions = {},
+  owners?: Owners,
 ): Promise<void> {
-  const { unknown, archived } = await itemStates(db, ids);
+  const { unknown, archived } = await itemStates(db, ids, owners);
   if (unknown.length > 0) {
     throw new StateError(
       `no curriculum item in the catalog for ${unknown.map((id) => `"${id}"`).join(", ")}. ` +
@@ -89,6 +92,23 @@ export async function assertKnownItems(
         `longer lists it. What was recorded on it is kept, and nothing new is. Reload the course page.`,
     );
   }
+}
+
+/**
+ * `assertKnownItems`, for a learner's own write: only an item the learner may
+ * read counts (phase 4), one of their own or the commons'. Another owner's
+ * item is refused with the sentence a missing one gets, so a tick is neither
+ * a row on something the learner cannot open nor a way to ask whether an id
+ * exists. Every learner write that names an item checks this: a tick, a note,
+ * a recap, and the legacy import.
+ */
+export async function assertReadableItems(
+  db: CatalogDatabase,
+  ids: string[],
+  learnerId: string,
+  options: WriteOptions = {},
+): Promise<void> {
+  await assertKnownItems(db, ids, options, await readableFor(db, learnerId));
 }
 
 export async function readProgress(
@@ -129,7 +149,7 @@ export async function setProgress(
   options: { learnerId?: string; at?: Date } & WriteOptions = {},
 ): Promise<void> {
   const { learnerId = LOCAL_LEARNER_ID, at = new Date() } = options;
-  await assertKnownItems(db, [curriculumItemId], options);
+  await assertReadableItems(db, [curriculumItemId], learnerId, options);
   await ensureLearner(db, learnerId);
   const completedAt = completed ? at : null;
   await db
@@ -150,7 +170,7 @@ export async function setNote(
   learnerId: string = LOCAL_LEARNER_ID,
   options: WriteOptions = {},
 ): Promise<void> {
-  await assertKnownItems(db, [curriculumItemId], options);
+  await assertReadableItems(db, [curriculumItemId], learnerId, options);
   await ensureLearner(db, learnerId);
   const value = note.trim() === "" ? null : note;
   await db
@@ -176,12 +196,25 @@ export async function resetProgress(
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<number> {
   if (curriculumItemIds.length === 0) return 0;
+  // Only items the learner may read (phase 4). The learner's own rows are all
+  // that is ever deleted; this keeps the count a reset reports from saying
+  // anything about an item they cannot open. Nothing is refused, so a course
+  // page listing an id the catalog lacks resets what it can, as before.
+  const owners = await readableFor(db, learnerId);
+  const readable =
+    owners === undefined
+      ? undefined
+      : inArray(
+          progress.curriculumItemId,
+          db.select({ id: curriculumItem.id }).from(curriculumItem).where(ownedBy(curriculumItem.ownerId, owners)),
+        );
   const result = await db
     .delete(progress)
     .where(
       and(
         eq(progress.learnerId, learnerId),
         inArray(progress.curriculumItemId, curriculumItemIds),
+        readable,
       ),
     );
   return result.rowCount ?? 0;

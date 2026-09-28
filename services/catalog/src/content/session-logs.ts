@@ -95,9 +95,19 @@ export async function readLogs(db: CatalogDatabase): Promise<{ id: string; markd
   return rows;
 }
 
-/** The ids of every log with an entry, sorted as file names sort. */
-export async function listLogIds(db: CatalogDatabase): Promise<string[]> {
-  const rows = await db.selectDistinct({ id: sessionLogEntry.sessionId }).from(sessionLogEntry);
+/**
+ * The session ids that have a log: every learner's (the export), or one
+ * learner's own, which is what the `learn` CLI counts and lists (phase 4).
+ */
+export async function listLogIds(db: CatalogDatabase, learnerId?: string): Promise<string[]> {
+  const rows =
+    learnerId === undefined
+      ? await db.selectDistinct({ id: sessionLogEntry.sessionId }).from(sessionLogEntry)
+      : await db
+          .selectDistinct({ id: sessionLogEntry.sessionId })
+          .from(sessionLogEntry)
+          .innerJoin(session, eq(session.id, sessionLogEntry.sessionId))
+          .where(eq(session.learnerId, learnerId));
   return rows.map((row) => row.id).sort();
 }
 
@@ -262,16 +272,22 @@ export interface ImportedLog {
  * Refused, all at once and by file: a log edited above its last entry, and a
  * log whose file is gone while its entries are not, since neither can be
  * written as an append.
+ *
+ * Only `learnerId`'s logs are this import's (phase 4): another learner's log
+ * missing from the tree is not gone, it was never this tree's, and a file
+ * whose id is another learner's session is refused rather than appended to
+ * their log.
  */
 export async function importLogs(
   db: CatalogDatabase,
   logs: readonly ImportedLog[],
+  learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<{ appended: number; sessions: number; problems: string[] }> {
   const problems: string[] = [];
   let appended = 0;
   let sessions = 0;
   const reading = new Set(logs.map((log) => log.id));
-  for (const id of await listLogIds(db)) {
+  for (const id of await listLogIds(db, learnerId)) {
     if (reading.has(id)) continue;
     problems.push(
       `${logPath(id)}: is gone, but its log is in the database, whose entries are append-only (D20). ` +
@@ -282,12 +298,23 @@ export async function importLogs(
   const known = new Map(
     (ids.length === 0
       ? []
-      : await db.select({ id: session.id, kind: session.kind }).from(session).where(inArray(session.id, ids))
-    ).map((row) => [row.id, row.kind]),
+      : await db
+          .select({ id: session.id, kind: session.kind, learner: session.learnerId })
+          .from(session)
+          .where(inArray(session.id, ids))
+    ).map((row) => [row.id, row] as const),
   );
   for (const log of [...logs].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
     await lockLog(db, log.id);
-    const kind = known.get(log.id);
+    const held = known.get(log.id);
+    if (held !== undefined && held.learner !== learnerId) {
+      problems.push(
+        `${log.path}: session "${log.id}" is ${held.learner}'s, and this import writes ${learnerId}'s logs. ` +
+          `Session ids are shared across learners; give the log another name.`,
+      );
+      continue;
+    }
+    const kind = held?.kind;
     if (kind !== undefined && kind !== "tutor") {
       problems.push(`${log.path}: session "${log.id}" is a ${kind} session, and only a tutor session keeps a log`);
       continue;
@@ -307,7 +334,7 @@ export async function importLogs(
         .values({
           id: log.id,
           kind: "tutor",
-          learnerId: LOCAL_LEARNER_ID,
+          learnerId,
           state: "interrupted",
           title: log.title,
           goal: log.goal,

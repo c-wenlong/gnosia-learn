@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 
 import { openBlobStore, readBlob } from "../content/blob";
 import { databaseIdentity } from "../content/import-root";
+import { andOwnedBy, CLI_OWNER, cliScope } from "../content/scope";
 import { commitNoteText, noteText, NoteWriteError, readNoteRows } from "../content/note-rows";
 import { NoteError, readNote, renderNote } from "../content/notes";
 import { sha256 } from "../content/layout";
@@ -601,7 +602,9 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
     async (tx) => {
       const problems: string[] = [];
       const items: Item[] = [];
-      const notes = await readNoteRows(tx);
+      // The learner's vault (phase 4): their notes and the commons', and
+      // their own sessions' logs, never another owner's.
+      const notes = await readNoteRows(tx, undefined, cliScope().readable);
       const revisions = await latestRevisions(
         tx,
         "concept",
@@ -627,8 +630,10 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
         }
       }
       const { rows: logs } = await tx.execute<{ id: string; markdown: string; entries: number }>(sql`
-        select session_id as id, string_agg(markdown, '' order by seq) as markdown, count(*)::int as entries
-        from ${sessionLogEntry} group by session_id order by session_id collate "C"
+        select e.session_id as id, string_agg(e.markdown, '' order by e.seq) as markdown, count(*)::int as entries
+        from ${sessionLogEntry} e join session s on s.id = e.session_id
+        where s.learner_id = ${CLI_OWNER}
+        group by e.session_id order by e.session_id collate "C"
       `);
       for (const log of logs) {
         try {
@@ -856,7 +861,7 @@ async function readSvgs(db: CatalogDatabase, problems: string[]): Promise<Svg[]>
   const { rows } = await db.execute<{ slug: string; key: string; sha256: string }>(sql`
     select d.slug, d.svg_blob_key as key, b.sha256
     from diagram d join blob_object b on b.key = d.svg_blob_key
-    where d.archived_at is null
+    where d.archived_at is null${andOwnedBy(sql`d.owner_id`, cliScope().readable)}
     order by d.slug collate "C"
   `);
   const svgs: Svg[] = [];
@@ -1061,7 +1066,7 @@ async function pushNote(
     else report.unchanged.push(rel);
   } catch (error) {
     if (error instanceof ContentWriteError && error.code === "stale-base") {
-      const now = await noteText(db, entry.id);
+      const now = await noteText(db, entry.id, cliScope().readable);
       if (now === null) {
         report.refused.push({ path: rel, reason: `${entry.id} is no longer a live note in the database.` });
         return;
