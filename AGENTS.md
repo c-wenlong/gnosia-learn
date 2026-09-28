@@ -540,7 +540,8 @@ not have to be worked out again.
   fails if it would remove any row (a tree without the owner's untracked
   files prunes their rows, and deletions cascade). `--real --database <name>
   --checkout <dir>` runs the same steps against that database in place, from
-  the checkout the script sits in only, with the backup at
+  the checkout the script sits in only, with no tracked edits under
+  `content/` or `learn/`, with the backup at
   `~/<name>-preflip-<time>.dump`; it asks for the name to be typed on a
   terminal and has no `--yes`, so it is the owner's to run, never an agent's.
 - **`catalog migrate` can exit 0 without reaching the head, on purpose.**

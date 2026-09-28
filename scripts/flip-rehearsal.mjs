@@ -312,6 +312,31 @@ function redact(url) {
   return parsed.toString();
 }
 
+/** One argument for a POSIX shell, quoted only when it has to be. */
+function shellQuote(value) {
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * The commands that put `database` back from `file`, naming the host, port
+ * and user `url` does (the password stays in PGPASSWORD or ~/.pgpass, never
+ * on a command line). `dropdb --force` ends the sessions still open on it.
+ */
+function restoreCommand(url, database, file) {
+  const parsed = new URL(url);
+  const server = [
+    ...(parsed.hostname === '' ? [] : ['-h', decodeURIComponent(parsed.hostname)]),
+    ...(parsed.port === '' ? [] : ['-p', parsed.port]),
+    ...(parsed.username === '' ? [] : ['-U', decodeURIComponent(parsed.username)]),
+  ];
+  const line = (tool, ...args) => [join(PG_BIN, tool), ...server, ...args].map(shellQuote).join(' ');
+  return [
+    line('dropdb', '--force', database),
+    line('createdb', database),
+    line('pg_restore', '--no-owner', '--exit-on-error', '-d', database, file),
+  ].join(' && ');
+}
+
 /** A UTC time a file name can carry: 20260928T064512Z. */
 function fileStamp(date = new Date()) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
@@ -436,9 +461,10 @@ async function main(argv) {
   // The server the catalog commands reach, for the client tools.
   const maintenance = pgEnv(url);
   const backupFile = join(real ? homedir() : scratch, `${database}-preflip-${fileStamp()}.dump`);
-  const restore =
-    `${join(PG_BIN, 'dropdb')} --force ${database} && ${join(PG_BIN, 'createdb')} ${database} && ` +
-    `${join(PG_BIN, 'pg_restore')} --no-owner --exit-on-error -d ${database} ${backupFile}`;
+  // Spelled out with the server and the user the backup was taken from, and
+  // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
+  // self_learn` in another shell could drop a different server's database.
+  const restore = restoreCommand(url, database, backupFile);
 
   const report = {
     mode: real ? 'real' : 'rehearsal',
@@ -591,6 +617,18 @@ async function main(argv) {
     if (real) {
       const git = await describeCheckout(checkout);
       report.checkout = { path: checkout, ...git };
+      // The exports rewrite tracked files here, and the way back from a failed
+      // run is `git checkout -- content learn`, which would take an edit made
+      // before flip day with it. Untracked files (the owner's diagram) are
+      // imported, and no checkout touches them.
+      if (git.status === null) throw new Refusal(`git status failed in ${checkout}; flip day needs to see the tree it imports.`);
+      const edited = git.status.filter((line) => !line.startsWith('??'));
+      if (edited.length > 0) {
+        throw new Refusal(
+          `content/ or learn/ has changes to tracked files in ${checkout}:\n  ${edited.join('\n  ')}\n` +
+            'Commit or stash them first: the exports rewrite files here, and undoing a failed run restores these folders from HEAD.',
+        );
+      }
       const status =
         git.status === null
           ? ['            (git status failed)']
@@ -695,7 +733,7 @@ async function main(argv) {
     } else if (report.backup !== null) {
       say(`${database} may be part-way through flip day. The backup from before step 1 is ${backupFile}.`);
       say(`To put the database back as it was: ${restore}`);
-      say('and `git checkout -- content learn` for any file an export rewrote.');
+      say('and `git checkout -- content learn` for any file an export rewrote (they had no edits of their own when it started).');
     } else {
       say(`nothing was changed: the run stopped before the backup, and every other step waits for it.`);
     }

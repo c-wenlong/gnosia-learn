@@ -290,6 +290,10 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // The backup is the copy as it was before step 1, and restores as it.
       expect(report.backup).toMatchObject({ path: expect.stringMatching(new RegExp(`${name}-preflip-\\d{8}T\\d{6}Z\\.dump$`)) });
       expect(report.backup?.bytes).toBeGreaterThan(0);
+      // The restore names the server it was taken from: the tools do not read DATABASE_URL.
+      const server = new URL(url(name));
+      expect(report.backup?.restore).toContain(`dropdb${server.hostname === "" ? "" : ` -h ${server.hostname}`}`);
+      expect(report.backup?.restore).toMatch(new RegExp(`pg_restore .*--exit-on-error -d ${name} .*\\.dump$`));
       const env = pgToolEnv();
       await execFileAsync(path.join(PG_BIN, "createdb"), [restored], { env });
       await execFileAsync(path.join(PG_BIN, "pg_restore"), ["--no-owner", "--exit-on-error", "-d", restored, report.backup?.path ?? ""], { env });

@@ -1622,7 +1622,8 @@ Phase 3's cut-over comes after it. The steps, each checked before the next:
    file, which must list data for `event`, `mastery` and `review`. Nothing
    else runs without it, because everything after it is forward-only and the
    learner state lives in this database alone; the summary prints the file and
-   the commands that restore it.
+   the commands that restore it, naming the server and user it was taken from
+   (the client tools do not read `DATABASE_URL`).
 1. `catalog migrate`, then `catalog doctor`.
 2. `catalog import <tree>` into a throwaway `createdb -T` copy of the
    database, which must remove no row, then the same import into the database
@@ -1657,8 +1658,10 @@ the copy and its temp directories unless `--keep`. `--real` refuses without
 in (so a copy of the script elsewhere cannot import a tree missing the owner's
 files); it refuses a rehearsal's options, drops `CATALOG_COPY_OK`, uses the
 blob store the environment names (asked of `@self-learn/blob`, not guessed),
-shows `git status` of `content/` and `learn/`, and asks for the database name
-to be typed on a terminal; there is no `--yes`, so no agent or script can run
+shows `git status` of `content/` and `learn/` and refuses while a tracked file
+there has an edit (the exports rewrite those files, and undoing a failed run
+restores them from `HEAD`), and asks for the database name to be typed on a
+terminal; there is no `--yes`, so no agent or script can run
 it. Every child runs in its own process group, and a signal to the script is
 forwarded to the catalog command in flight, which a `kill` of the script used
 to leave running.
