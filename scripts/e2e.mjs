@@ -656,8 +656,12 @@ async function run() {
     await page.waitForURL(/\/library\/[^/?]+$/);
     // No button to press: the player saves its own place. Play a moment,
     // pause, and the pause is a save the route has to accept.
+    // The save that carries what played, not any request to the route.
     const saved = page.waitForResponse(
-      (response) => response.url().endsWith('/api/learner/playback') && response.request().method() === 'POST',
+      (response) =>
+        response.url().endsWith('/api/learner/playback') &&
+        response.request().method() === 'POST' &&
+        (response.request().postDataJSON()?.ranges?.length ?? 0) > 0,
     );
     await clickHydrated(page, main.getByRole('button', { name: 'Play (k)' }));
     await main.getByRole('button', { name: 'Pause (k)' }).waitFor();

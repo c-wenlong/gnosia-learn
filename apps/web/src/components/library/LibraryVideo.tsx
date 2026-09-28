@@ -79,8 +79,10 @@ export function LibraryVideo({
     last: startAt,
     duration: saved?.duration ?? Number.NaN,
     ranges: [] as Range[],
+    // Zero until playback first reports: the fifteen seconds count from then,
+    // not from the epoch, so the first time update is not a save of nothing.
     sentAt: 0,
-    sentPosition: -1,
+    sentPosition: startAt,
   });
 
   /** Close the stretch playing now at `end`, and start none. */
@@ -156,7 +158,8 @@ export function LibraryVideo({
             s.open = signal.time;
           }
           s.last = signal.time;
-          if (Date.now() - s.sentAt >= SAVE_EVERY_MS) save(false);
+          if (s.sentAt === 0) s.sentAt = Date.now();
+          else if (Date.now() - s.sentAt >= SAVE_EVERY_MS) save(false);
           break;
         }
         case "seeking":
