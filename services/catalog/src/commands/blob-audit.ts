@@ -1,5 +1,5 @@
 import { auditBlobs, type BlobAuditResult } from "../content/blob-audit";
-import { openBlobStore, ownerCaps, type OwnerCaps } from "../content/blob";
+import { openBlobStore, ownerCapsOrError, type OwnerCaps } from "../content/blob";
 import { ownerIdentity, describeOwner, sameOwner } from "../content/blob-owner";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -10,7 +10,9 @@ import { databaseUrl, redactUrl } from "../env";
  * while a disagreement is left standing.
  *
  * The store is the one `SELF_LEARN_HOME` names, the same one the web app
- * serves and every upload writes. There is no flag for another root: a
+ * serves and every upload writes. Also exits 1 while a per-owner cap cannot
+ * be read, since every new upload is refused until it can. There is no flag
+ * for another root: a
  * scratch audit sets `SELF_LEARN_HOME` for the whole run, so the rows it
  * reads and the store it compares them with cannot come from two places.
  */
@@ -30,12 +32,7 @@ export async function runBlobAudit(options: { fix: boolean }): Promise<BlobAudit
   return withDatabase(async ({ db }) => {
     const result = await auditBlobs(db, store, { fix: options.fix, root: store.root });
     const self = await ownerIdentity(db);
-    let caps: BlobAuditCommandResult["caps"];
-    try {
-      caps = ownerCaps();
-    } catch (error) {
-      caps = { error: error instanceof Error ? error.message : String(error) };
-    }
+    const caps = ownerCapsOrError();
     return {
       database: redactUrl(url),
       blobRoot: store.root,
@@ -46,8 +43,9 @@ export async function runBlobAudit(options: { fix: boolean }): Promise<BlobAudit
   });
 }
 
-function formatCaps(caps: BlobAuditCommandResult["caps"]): string {
-  if ("error" in caps) return `unreadable, so every upload is refused: ${caps.error}`;
+/** The caps as one line, for `blob audit`, `status` and `doctor`. */
+export function formatCaps(caps: OwnerCaps | { error: string }): string {
+  if ("error" in caps) return `unreadable, so every new upload is refused (a re-store of a key with a row is not): ${caps.error}`;
   if (caps.bytes === null && caps.uploadsPerDay === null) return "none per owner";
   const parts = [
     caps.bytes === null ? null : `${caps.bytes} bytes stored`,
