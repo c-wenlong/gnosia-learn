@@ -72,12 +72,11 @@ import {
 
 import { ContentError, TOPICS_FILE } from "@self-learn/content";
 import { LOCAL_LEARNER_ID } from "@self-learn/schema";
-import { sql } from "drizzle-orm";
 
 import { connect, type CatalogDatabase, type Connection } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { IndexError } from "../index/errors";
-import { checkOwnedFiles, runIndex } from "../index/run";
+import { runIndex } from "../index/run";
 import {
   assertMigrated,
   EXIT_MIGRATIONS_OUTSTANDING,
@@ -127,6 +126,7 @@ import { checkItem, CourseEditError, listConceptOnItem } from "./course-edit";
 import { FileLockError } from "./file-lock";
 import { checkConceptTopic, fileConceptUnderTopic, TopicError } from "../content/topics";
 import { WriteThroughError } from "../content/write-through";
+import { CourseWriteError, importCourse } from "../content/courses";
 import { NoteError, readNote } from "../content/notes";
 
 /** A message meant for the learner, not a stack trace. Exit 1, same as before. */
@@ -483,17 +483,32 @@ commands.concept = async ({ values, positionals }, session) => {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);
     }
 
-    // On rows, a listing on a course row is linked by the courses source
-    // after the write (below), and that source refuses to read notes that are
-    // not the database's recorded export. Ask it now, read-only, so that
-    // refusal comes while nothing has moved. The course file itself was read
-    // by `checkItem` above, which refuses a row listing a concept its
-    // module's topic does not map.
-    if (itemId !== undefined && (await ownedByDatabase("concepts"))) {
+    // On rows, the listing on a course row goes in through the course
+    // writer, `course import` of the edited file, which writes the row's
+    // link and keeps the course files in step (D17). Everything that could
+    // refuse that import is asked now, by a dry run of the file as it is,
+    // so the refusal comes while nothing has moved: every course file and
+    // topics.yaml must be what the database holds, and this one must hold no
+    // edit the database has not imported, since the import would take it in
+    // under this command's reason.
+    const rowsMode = await ownedByDatabase("concepts");
+    const courseFile = itemFile === undefined ? undefined : path.join(repoRoot(), itemFile);
+    const courseReason = values.reason?.trim() || `learn concept add ${id} --item ${itemId ?? ""}`;
+    if (rowsMode && courseFile !== undefined) {
       try {
-        await checkOwnedFiles(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+        const dry = await importCourse(await session.db(), { file: courseFile, reason: courseReason, dryRun: true });
+        if (dry.revisions > 0) {
+          fail(
+            `nothing was written: ${itemFile} holds edits the database has not imported ` +
+              `(${dry.changes.filter((c) => c.op !== null).map((c) => `${c.type} ${c.id}`).join(", ")}). ` +
+              `Import them first with \`npm run --silent catalog -- course import ${itemFile} --reason "..."\`, ` +
+              `or put the file back with \`catalog course export\`.`,
+          );
+        }
       } catch (error) {
-        if (error instanceof IndexError) fail(`nothing was written: ${error.message}`);
+        if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
+          fail(`nothing was written: ${error.message}`);
+        }
         throw error;
       }
     }
@@ -534,7 +549,7 @@ commands.concept = async ({ values, positionals }, session) => {
     // note needs both a topic and a folder; an existing one keeps its folder
     // unless --domain names another, which rows refuse. On files, omitting
     // --domain files the note at the root, as it always has.
-    const rows = await ownedByDatabase("concepts");
+    const rows = rowsMode;
     const file = await writeConcept(
       { ...concept, body },
       rows
@@ -619,24 +634,18 @@ commands.concept = async ({ values, positionals }, session) => {
         // they are the database's last export, and refuses when they are not,
         // saying how to record one.
         if (!rows) await runIndex(await session.db(), { only: ["concepts"], repoRoot: repoRoot() });
-        else if (itemId !== undefined) {
+        else if (courseFile !== undefined) {
           try {
-            await runIndex(await session.db(), { only: ["courses"], repoRoot: repoRoot() });
+            await importCourse(await session.db(), { file: courseFile, reason: courseReason });
           } catch (error) {
-            // The run reads every course file, and runs other sources after
-            // courses, each committing on its own. So a problem in a file this
-            // command never touched can stop it after the note and the
-            // listing are in, with the row's link written or not. Whether it
-            // is there is asked, not guessed; which file stopped the run is
-            // the index error's to say, since it names it, and a link from
-            // an earlier run means this message cannot know which source it was.
-            if (error instanceof IndexError) {
-              const linked = await isLinkedToItem(await session.db(), id, itemId);
+            // The dry run above passed, so this is a write that landed in
+            // between. The note and the listing are in; the import is what
+            // is missing, and running it again is the whole recovery.
+            if (error instanceof CourseWriteError || error instanceof WriteThroughError) {
               fail(
-                `${rel(file)} was written as rows and listed on ${itemId}, ` +
-                  (linked ? `and the row links to it, ` : `but the row's link to it is not in the catalog yet, `) +
-                  `and the index run stopped: ${error.message}\n  ` +
-                  `Fix that, then run: npm run --silent catalog -- index --only courses`,
+                `${rel(file)} was written as rows and listed on ${itemId}, but the course import that ` +
+                  `links them refused: ${error.message}\n  Fix that, then run: npm run --silent catalog -- ` +
+                  `course import ${itemFile} --reason "${courseReason}"`,
               );
             }
             throw error;
@@ -1864,13 +1873,6 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-/** Whether the courses source has written the link from `itemId` to `concept`. */
-async function isLinkedToItem(db: CatalogDatabase, concept: string, itemId: string): Promise<boolean> {
-  const { rows } = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from concept_curriculum_item where concept_slug = ${concept} and curriculum_item_id = ${itemId}`,
-  );
-  return (rows[0]?.n ?? 0) > 0;
-}
 
 process.exitCode = await main(process.argv.slice(2));
 
