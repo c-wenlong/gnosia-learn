@@ -60,15 +60,19 @@ export interface AssetBlob {
 const video = alias(asset, "video");
 
 /**
- * The asset's blob, and only when the blob is the asset's owner's: a key's
- * prefix is whose store and quota the bytes are in (D5), so a row naming
- * another owner's key would serve bytes that owner stored. The write seam
- * refuses such a key; this is the read side of the same rule, and it holds
- * for a row written before the seam checked. `blob_object`'s own check ties
- * its `owner_id` to the key's prefix, so comparing the columns compares the
- * prefix.
+ * The asset's blob, and only when the reader may read the blob's owner: a
+ * key's prefix is whose store and quota the bytes are in (D5), so a row
+ * naming another owner's key would otherwise serve bytes that owner stored to
+ * anyone who can read the row. The write seam refuses a new such key; this is
+ * the read side, and it holds for a row written before the seam checked.
+ * Keyed on the reader rather than on the row's owner so that D23's move of a
+ * row to the commons, which leaves its `local/` key until `catalog asset
+ * upload` re-keys it, keeps serving the owner who stored the bytes. The
+ * table's check ties `owner_id` to the key's prefix, so this is the prefix.
  */
-const keyedByOwner = and(eq(blobObject.key, asset.blobKey), eq(blobObject.ownerId, asset.ownerId));
+function keyedFor(scope: OwnerScope) {
+  return and(eq(blobObject.key, asset.blobKey), ownedBy(blobObject.ownerId, scope.readable));
+}
 
 const COLUMNS = {
   assetId: asset.id,
@@ -91,7 +95,7 @@ export async function assetBlobs(
       db
         .select(COLUMNS)
         .from(asset)
-        .innerJoin(blobObject, keyedByOwner)
+        .innerJoin(blobObject, keyedFor(scope))
         .where(and(inArray(asset.id, [...ids]), ownedBy(asset.ownerId, scope.readable))),
     [],
   );
@@ -117,7 +121,7 @@ export async function videosWithStoredPoster(
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
         .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
-        .innerJoin(blobObject, keyedByOwner)
+        .innerJoin(blobObject, keyedFor(scope))
         .where(
           and(
             inArray(assetDerivation.sourceAssetId, [...videoIds]),
@@ -146,7 +150,7 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
         .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
-        .innerJoin(blobObject, keyedByOwner)
+        .innerJoin(blobObject, keyedFor(scope))
         .where(
           and(
             eq(assetDerivation.sourceAssetId, videoId),

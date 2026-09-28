@@ -350,8 +350,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
    */
   const caps = dryRun ? ownerCapsOrError() : null;
   const planned = new Map<string, { bytes: number; uploads: number }>();
+  // A key planned once is a row by the time a real run reaches it again (two
+  // files with the same bytes), so it is counted once.
+  const plannedKeys = new Set<string>();
   const wouldCap = async (owner: string, key: string, bytes: number): Promise<string | null> => {
-    if (caps === null) return null;
+    if (caps === null || plannedKeys.has(key)) return null;
     if ("error" in caps) return `a real run would refuse this new object: ${caps.error}`;
     if (caps.bytes === null && caps.uploadsPerDay === null) return null;
     let tally = planned.get(owner);
@@ -367,6 +370,28 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before it; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
     }
     tally.bytes += bytes;
+    tally.uploads += 1;
+    plannedKeys.add(key);
+    return null;
+  };
+  /**
+   * The same for a poster the dry run would cut: its bytes are unknown until
+   * ffmpeg runs, so only the day's count can be asked; the bytes cap is said
+   * to be unknowable rather than guessed.
+   */
+  const wouldCapPoster = async (owner: string): Promise<string | null> => {
+    if (caps === null) return null;
+    if ("error" in caps) return `a real run would refuse this new poster: ${caps.error}`;
+    if (caps.uploadsPerDay === null) return null;
+    let tally = planned.get(owner);
+    if (tally === undefined) {
+      const [usage] = await ownerUsage(db, { owner });
+      tally = { bytes: usage?.bytes ?? 0, uploads: usage?.uploadsLastDay ?? 0 };
+      planned.set(owner, tally);
+    }
+    if (tally.uploads + 1 > caps.uploadsPerDay) {
+      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this poster; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
+    }
     tally.uploads += 1;
     return null;
   };
@@ -552,8 +577,22 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
     if (dryRun) {
       if (options.ffmpeg === null) return null;
+      const capped = await wouldCapPoster(video.row.ownerId);
+      if (capped !== null) {
+        refuse(id, "poster", capped);
+        return null;
+      }
       result.counts.posters += 1;
-      items.push({ id, kind: "poster", action: "would-make", key: null, bytes: null });
+      items.push({
+        id,
+        kind: "poster",
+        action: "would-make",
+        key: null,
+        bytes: null,
+        ...(caps !== null && !("error" in caps) && caps.bytes !== null
+          ? { detail: `its size is known only once it is cut, so the ${OWNER_BYTES_CAP_ENV} cap is not asked` }
+          : {}),
+      });
       return null;
     }
     /**

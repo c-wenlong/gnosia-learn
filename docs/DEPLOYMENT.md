@@ -353,8 +353,9 @@ what uploads.
   video's bytes count against the commons. A row another tenant holds is
   refused by name before a byte is read.
 - **A dry run** (`asset upload --dry-run`) asks the caps too, counting what it
-  has already planned, and lists as refused the files a real run would
-  refuse.
+  has already planned (a key once, as a real run's row would), and lists as
+  refused the files a real run would refuse. A poster it would cut is asked
+  against the day's count only: its size is known once it is cut.
 - **`--json`**: a command that fails on a cap carries `code: "BLOB_CAP"` with
   the owner and the cap (`bytes` or `uploads-per-day`), or `code:
   "BLOB_CAP_CONFIG"` for a value that cannot be read.

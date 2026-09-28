@@ -457,6 +457,14 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
       blobKey: key(B, "a", "mp4"),
     });
     expect(await assetBlobs(scratch.db, ["fx:borrowed"], LOCAL)).toEqual(new Map());
+    // A row moved to the commons keeps its `local/` key until the upload
+    // re-keys it (D23): still served to the owner whose bytes they are, and
+    // to nobody who cannot read that owner.
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER }).where(eq(asset.id, POSTER));
+    expect((await assetBlobs(scratch.db, [POSTER], LOCAL)).get(POSTER)?.key).toBe(key("local", "b", "jpg"));
+    expect(await assetBlobs(scratch.db, [POSTER], TENANT)).toEqual(new Map());
+    await scratch.db.update(asset).set({ ownerId: LOCAL_LEARNER_ID }).where(eq(asset.id, POSTER));
     expect((await assetBlobs(scratch.db, [VIDEO], TENANT)).get(VIDEO)?.key).toBe(key(B, "a", "mp4"));
     await scratch.db.delete(asset).where(eq(asset.id, "fx:borrowed"));
   });

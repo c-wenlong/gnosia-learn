@@ -249,13 +249,35 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     try {
       const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
       const real = await uploadAssets(scratch.db, options());
-      // The same files are refused, by the dry run as by the real one.
+      // The same files are refused, by the dry run as by the real one, the
+      // poster included (the day's count is asked for it; its bytes cannot be).
       const refusedIds = (r: typeof dry) => r.items.filter((i) => i.action === "refused").map((i) => i.id).sort();
-      expect(refusedIds(dry)).toEqual(refusedIds(real).filter((id) => !id.startsWith("poster:")));
+      expect(refusedIds(dry)).toEqual(refusedIds(real));
       expect(dry.items.filter((i) => i.action === "would-upload")).toHaveLength(2);
       for (const item of dry.items.filter((i) => i.action === "refused")) {
         expect(item.detail).toContain("a real run would refuse it");
       }
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
+  });
+
+  it("counts a key once on a dry run, as a real run's row would", async () => {
+    // A second deliverable with the video's bytes: one key, one upload.
+    const COPY_PATH = "out/algorithms/demo/copy.mp4";
+    await writeFile(path.join(outRoot, COPY_PATH), VIDEO);
+    await scratch.db.insert(asset).values(row(`manimkc:${COPY_PATH}`, "video", COPY_PATH, VIDEO));
+    const withCopy = report();
+    const sections = withCopy.topics[0]?.sections as unknown[];
+    sections.push({ section: "copy", deliverable: { path: COPY_PATH, exists: true, sidecars: {} } });
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "3";
+    try {
+      const dry = await uploadAssets(scratch.db, options({ dryRun: true, ffmpeg: null, report: withCopy }));
+      expect(dry.items.filter((i) => i.action === "refused")).toEqual([]);
+      const real = await uploadAssets(scratch.db, options({ ffmpeg: null, report: withCopy }));
+      expect(real.refused).toBe(0);
     } finally {
       if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
       else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
