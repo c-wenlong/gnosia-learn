@@ -46,8 +46,9 @@ import { repoRoot } from "./paths";
  * - a side copy (`.incoming` or `.conflict`) is itself replaced or removed
  *   only while it still hashes to what was written into it, since a person
  *   may merge into it rather than into the note;
- * - every replace re-reads the file just before it renames over it, so an
- *   edit saved while the command ran is kept, not lost.
+ * - no file is replaced or removed unread: the old one is moved aside in one
+ *   rename and judged there, and the new text goes in only where nothing is,
+ *   so an edit saved while the command runs is kept, not lost.
  *
  * Settling a side copy is deleting it. The copy is the database's version at
  * a newer base; whoever deletes it says they have merged what they wanted of
