@@ -271,7 +271,10 @@ object with Range support; a cloud store's signed URL (an hour) would be a
 of the plan). An asset whose blob is `pending`, or whose object the store has
 lost, answers 404 with the code `not-uploaded`. A database not yet migrated
 to 0010 has no blob columns, and the routes then serve the legacy file exactly
-as before, with one warning in the server log saying to migrate.
+as before, with one warning in the server log saying to migrate. A note, a
+session log or a `.tldr` whose type the database owns is served from its row,
+also whatever the switch says. The pages decide per row the same way, so with
+the switch unset a stored video plays and a stored diagram draws.
 
 ### Checking it
 

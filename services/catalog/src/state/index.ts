@@ -65,6 +65,9 @@ export { blobRoot } from "../env";
  * fallback cuts the same picture the upload stored.
  */
 export { assetBlobs, posterBlob, type AssetBlob } from "./blobs";
+// A diagram's `.tldr` bytes once the database owns diagrams: the canonical
+// form every export and checkout writes, so the web app serves the same bytes.
+export { documentBytes } from "../content/diagram-document";
 export {
   ffmpegArgs,
   POSTER_CONTENT_TYPE,

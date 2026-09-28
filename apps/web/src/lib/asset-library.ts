@@ -5,7 +5,6 @@ import { connection } from "next/server";
 import {
   assetCounts,
   assetDerivations,
-  conceptsForAsset,
   conceptsForAssets,
   derivationSources,
   indexedRoot,
@@ -14,13 +13,13 @@ import {
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
+  type AssetRef,
   type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
-import { contentSource } from "@/data/source";
-import { assetFilesEnabled, openBlob, resolveAsset } from "@/lib/asset-files";
+import { assetFilesEnabled, openBlob, resolveAsset, servedWithoutFiles } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -368,26 +367,68 @@ const FILES_OFF: FileAccess = {
   reason: "off",
   headline: "This deployment does not serve asset files.",
   detail:
-    "The library can still say what the catalog holds — every title, topic, size and path below is real — " +
-    "but the videos and diagrams themselves are not being served, so nothing here will play or draw. " +
-    "Off is the default: production carries the course files and nothing else, and a render lives on a laptop.",
+    "The library can still say what the catalog holds: every title, topic, size and path below is real. " +
+    "What it does not serve is a file kept only on this machine's disk, so those videos and diagrams will not " +
+    "play or draw. Anything uploaded to the blob store, and any note, log or diagram the database owns, is " +
+    "shown whatever this says. Off is the default: production carries the course files and nothing else, " +
+    "and a render lives on a laptop.",
   fix: "ASSET_FILES_ENABLED=1",
 };
 
 /**
- * Answered for the whole page rather than per card, because both failures are
- * properties of the deployment and of the index, never of one row: if one
- * manimkc video cannot be resolved then none of the thirty can, and thirty
- * copies of the same explanation is not a better page than one.
+ * The two deployment-wide answers, plus the rows that need neither.
  *
- * `self-learn` assets — the diagrams, the notes, the session logs — resolve
+ * `served` is the per-row half (S5 of the phase 1 review): an asset whose
+ * bytes are a `present` blob, or a row the database owns, is served whatever
+ * the switch says and wherever manimkc was indexed, exactly as `resolveAsset`
+ * decides it for the route. Without it a page with the switch off drew a
+ * placeholder for a video the route would have played.
+ */
+export interface FileAccessMap {
+  selfLearn: FileAccess;
+  manimkc: FileAccess;
+  served: ReadonlySet<string>;
+}
+
+/**
+ * The legacy files are answered for the whole page rather than per card,
+ * because both failures are properties of the deployment and of the index,
+ * never of one row: if one manimkc video cannot be resolved from its data root
+ * then none of the thirty can, and thirty copies of the same explanation is
+ * not a better page than one. The rows passed in get the per-row answer on
+ * top, `served`, since a blob or a row owned by the database needs neither.
+ *
+ * `self-learn` files (the diagrams, the notes, the session logs) resolve
  * against the repository, which is always there, so the switch is the only
  * thing that can stop them. manimkc's resolve against a data root recorded on
  * `index_run.metadata.outRoot` at index time, which is why the second and third
  * answers exist. `@/lib/asset-files` has the full reasoning for why that value
  * cannot be read out of `$MANIMKC_HOME` here.
  */
-export async function readFileAccess(): Promise<{ selfLearn: FileAccess; manimkc: FileAccess }> {
+export async function readFileAccess(
+  rows: readonly Pick<AssetRef, "id" | "kind">[] = [],
+): Promise<FileAccessMap> {
+  const served = await readServed(rows);
+  return { ...(await readRepoAccess()), served };
+}
+
+/**
+ * The rows among these whose bytes come from the store or the database. A
+ * failure here is an empty set, which is what the page drew before the store
+ * existed: placeholders where the switch is off, never a picture that cannot
+ * load.
+ */
+async function readServed(rows: readonly Pick<AssetRef, "id" | "kind">[]): Promise<ReadonlySet<string>> {
+  if (rows.length === 0) return new Set();
+  try {
+    return await servedWithoutFiles(await catalogDatabase(), rows);
+  } catch (error) {
+    warn("stored assets", error);
+    return new Set();
+  }
+}
+
+async function readRepoAccess(): Promise<{ selfLearn: FileAccess; manimkc: FileAccess }> {
   if (!assetFilesEnabled()) return { selfLearn: FILES_OFF, manimkc: FILES_OFF };
 
   let run: Awaited<ReturnType<typeof indexedRoot>>;
@@ -447,9 +488,22 @@ export async function readFileAccess(): Promise<{ selfLearn: FileAccess; manimkc
 }
 
 /** As `readFileAccess`, with the marker that keeps it out of the build. */
-export async function loadFileAccess(): Promise<{ selfLearn: FileAccess; manimkc: FileAccess }> {
+export async function loadFileAccess(
+  rows: readonly Pick<AssetRef, "id" | "kind">[] = [],
+): Promise<FileAccessMap> {
   await connection();
-  return readFileAccess();
+  return readFileAccess(rows);
+}
+
+/**
+ * Whether a row's picture can be asked for: its bytes are served without the
+ * disk (`served`), or its repo's deployment-wide answer is yes.
+ */
+export function servable(
+  row: Pick<AssetWithTopics, "id" | "sourceRepo">,
+  access: FileAccessMap,
+): boolean {
+  return access.served.has(row.id) || accessFor(access, row.sourceRepo).ok;
 }
 
 /** Which of the two verdicts above applies to a row, by the source it came from. */
@@ -534,16 +588,17 @@ function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
  * for it, or cuts one out of it. Everything else has no picture to show and
  * says so.
  *
- * Both depend on the file route being reachable for that asset's repo, which
- * is a per-request answer rather than a property of the row: the route is off
- * in production, and a manimkc index older than it answers 503. When it is
- * not reachable the placeholder is the correct output, not a broken image.
+ * Both depend on the file route being able to answer for that row: a blob in
+ * the store or a row the database owns always can, and a legacy file can when
+ * its repo's deployment-wide answer is yes (the switch is on, and manimkc's
+ * index records its data root). When it cannot, the placeholder is the
+ * correct output, not a broken image.
  */
 export function thumbnailFor(
   row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
-  access: { selfLearn: FileAccess; manimkc: FileAccess },
+  access: FileAccessMap,
 ): string | null {
-  if (!accessFor(access, row.sourceRepo).ok) return null;
+  if (!servable(row, access)) return null;
   if (row.kind === "diagram_svg" || row.kind === "poster") return assetFileHref(row.id);
   return row.kind === "video" ? assetPosterHref(row.id) : null;
 }
@@ -555,7 +610,7 @@ export function thumbnailFor(
  */
 export function thumbnailStatusFor(
   row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
-  access: { selfLearn: FileAccess; manimkc: FileAccess },
+  access: FileAccessMap,
 ): string | undefined {
   if (thumbnailFor(row, access) === null) return undefined;
   return assetStatusHref(row.id, row.kind === "video" ? "poster" : "file");
@@ -617,9 +672,10 @@ export async function readFileProblems(
  * resolve, and the extension has to be on a closed list. A page that read
  * `path.join(root, row.path)` itself would be a second, weaker copy of that.
  *
- * A blob is read from the store, and a legacy file only with the switch on,
- * because a deployment that says it does not serve those files should not read
- * them either.
+ * A blob is read from the store, a note, a log or a `.tldr` the database owns
+ * from its row, and a legacy file only with the switch on, because a
+ * deployment that says it does not serve those files should not read them
+ * either.
  *
  * Null means "no text to show", for every reason there is: the switch is off,
  * the row has no file, the file is gone, it is larger than the cap. The callers
@@ -631,17 +687,10 @@ export async function readAssetText(
   id: string,
   limit = TEXT_PREVIEW_BYTES,
 ): Promise<string | null> {
-  // A note or a log the database owns is its row, not its file.
-  try {
-    const stored = await storedText(db, id);
-    if (stored !== undefined) return stored !== null && Buffer.byteLength(stored, "utf8") <= limit ? stored : null;
-  } catch (error) {
-    warn(`asset text ${id}`, error);
-    return null;
-  }
   try {
     const resolved = await resolveAsset(db, id);
     if (resolved.ok === false || resolved.bytes > limit) return null;
+    if (resolved.source === "row") return resolved.body.toString("utf8");
     if (resolved.source === "file") return await readFile(resolved.file, "utf8");
     const read = await openBlob(resolved.key);
     const chunks: Buffer[] = [];
@@ -652,49 +701,6 @@ export async function readAssetText(
     return null;
   }
 }
-
-/**
- * A note's or a session log's text when the database owns its type, within
- * the preview cap, or null: not such an asset, not on rows, or no text. Not
- * gated by `ASSET_FILES_ENABLED` and not dependent on the file being there,
- * since the text is a row; the library page asks this before it asks whether
- * the file can be served.
- */
-export async function readRowText(db: CatalogDatabase, id: string, limit = TEXT_PREVIEW_BYTES): Promise<string | null> {
-  try {
-    const stored = await storedText(db, id);
-    return stored !== undefined && stored !== null && Buffer.byteLength(stored, "utf8") <= limit ? stored : null;
-  } catch (error) {
-    warn(`asset text ${id}`, error);
-    return null;
-  }
-}
-
-/**
- * A note's or a session log's text from the database, once it owns that type
- * (Track C of docs/CONTENT-MIGRATION.md): the file under `learn/` is then an
- * export no write touches, and reading it would show the note as it was at
- * the flip. `undefined` means this asset is not such a text, and the caller
- * reads its file as before; `null` means the database has no text for it.
- *
- * A note asset's concept is the one it is linked to (the concepts indexer
- * and the row writer both link exactly one); a log's id is its file stem.
- */
-async function storedText(db: CatalogDatabase, id: string): Promise<string | null | undefined> {
-  const note = id.startsWith(ASSET_ID_PREFIX.note);
-  const log = id.startsWith(ASSET_ID_PREFIX.session);
-  if (!note && !log) return undefined;
-  const seam = contentSource();
-  if ((await seam.resolution())[note ? "concepts" : "sessions"].kind !== "db") return undefined;
-  if (log) {
-    const stem = id.slice(ASSET_ID_PREFIX.session.length).replace(/^.*\//, "").replace(/\.md$/, "");
-    return (await seam.sessionLog(stem))?.markdown ?? null;
-  }
-  const [slug] = await conceptsForAsset(db, id);
-  return slug === undefined ? null : ((await seam.concept(slug))?.markdown ?? null);
-}
-
-const ASSET_ID_PREFIX = { note: "note:", session: "session:" } as const;
 
 /**
  * The kinds whose words the library search reads, beside every row's name.
@@ -724,7 +730,8 @@ const NO_TEXT: SearchText = { texts: new Map(), sources: {}, searchedText: false
  * The words of every note and transcript, for one search.
  *
  * Read per request, through `readAssetText`, so it inherits every rule that
- * function has: the same switch as the file route (off means titles only), the
+ * function has: the same per-row answer as the file route (with the switch off
+ * a legacy file is not read, a row or a blob is), the
  * same containment checks, and the same `TEXT_PREVIEW_BYTES` cap, over which a
  * file is searched by name alone. A transcript is parsed and searched by what
  * was said and its chapter titles, not by its JSON keys; one that does not
@@ -740,7 +747,7 @@ export async function readSearchText(
   rows: readonly AssetWithTopics[],
   terms: readonly string[],
 ): Promise<SearchText> {
-  if (terms.length === 0 || !assetFilesEnabled()) return NO_TEXT;
+  if (terms.length === 0) return NO_TEXT;
   const candidates = rows.filter((row) => SEARCH_TEXT_KINDS.has(row.kind) && row.path !== null);
   if (candidates.length === 0) return { ...NO_TEXT, searchedText: true };
   try {
@@ -759,7 +766,9 @@ export async function readSearchText(
     ]);
     const texts = new Map<string, string>();
     for (const [id, text] of bodies) if (text !== null) texts.set(id, text);
-    return { texts, sources, searchedText: true };
+    // With the switch off a note the database owns is still read, so text was
+    // searched when any came back; none at all is "titles only".
+    return { texts, sources, searchedText: assetFilesEnabled() || texts.size > 0 };
   } catch (error) {
     warn("search text", error);
     return NO_TEXT;

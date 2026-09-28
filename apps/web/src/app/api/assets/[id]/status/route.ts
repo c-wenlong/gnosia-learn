@@ -56,7 +56,8 @@ import { withLearnerStore } from "@/lib/learner-store";
  * two cannot disagree about whether a marker is current.
  *
  * Same resolvers as the routes it describes (`resolveAsset`, `posterSource`),
- * so a stored blob is `ok` or `not-uploaded` whatever the switch says, and a
+ * so a stored blob is `ok` or `not-uploaded` whatever the switch says, a
+ * note, log or `.tldr` the database owns is `ok` from its row, and a
  * legacy file with `ASSET_FILES_ENABLED` off is `files-off`, which is exactly
  * as much as the file route says. A stored poster never reaches the cache
  * checks below: nothing is cut for it.

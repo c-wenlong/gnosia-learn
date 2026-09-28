@@ -88,13 +88,15 @@ export default async function LibraryPage({
   const sort = parseSort(firstParam(params.sort));
   const filters: LibraryFilters = { kind, topic, course, q, sort };
 
-  const [library, access, { kb }, courses] = await Promise.all([
-    loadLibrary(),
-    loadFileAccess(),
-    loadKnowledgeBase(),
-    getCourses(),
-  ]);
+  const [library, { kb }, courses] = await Promise.all([loadLibrary(), loadKnowledgeBase(), getCourses()]);
   const { rows, counts, reachable, truncated, titles, concepts } = library;
+  // Per row on top of the deployment-wide answers: a video in the blob store
+  // or a note the database owns draws whatever the switch says.
+  const access = await loadFileAccess(rows);
+  // The files-off and manimkc notices are about files on this machine's disk,
+  // so they are said only when some row here still depends on one.
+  const needsFiles = (repo: string) =>
+    rows.some((row) => row.sourceRepo === repo && row.path !== null && !access.served.has(row.id));
 
   const facets = kindFacets(counts);
   const libraryCourses: LibraryCourse[] = courses.map((c) => ({
@@ -219,11 +221,11 @@ export default async function LibraryPage({
             </Form>
           </section>
 
-          {!access.selfLearn.ok ? (
+          {!access.selfLearn.ok && needsFiles("self-learn") ? (
             <Notice role="status" title={access.selfLearn.headline} command={access.selfLearn.fix}>
               {access.selfLearn.detail}
             </Notice>
-          ) : !access.manimkc.ok ? (
+          ) : !access.manimkc.ok && needsFiles("manimkc") ? (
             <Notice role="status" title={access.manimkc.headline} command={access.manimkc.fix}>
               {access.manimkc.detail}
             </Notice>

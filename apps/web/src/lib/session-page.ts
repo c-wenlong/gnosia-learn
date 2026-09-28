@@ -3,8 +3,8 @@ import "server-only";
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@self-learn/catalog/state";
 
 import { resolveProviders } from "@/lib/agent/providers";
-import { accessFor, loadFileAccess, readFileProblems } from "@/lib/asset-library";
-import { problemForAccess, type RouteProblemCode } from "@/lib/asset-problems";
+import { readFileProblems } from "@/lib/asset-library";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
@@ -67,8 +67,8 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
   if (pick === null) return { kind: "none" };
 
   const title = pick.title ?? pick.path?.split("/").pop() ?? pick.id;
-  const access = accessFor(await loadFileAccess(), pick.sourceRepo);
-  if (!access.ok) return { kind: "failed", title, code: problemForAccess(access.reason) };
+  // Per row, through the route's own resolver: a blob in the store plays with
+  // the switch off, and a legacy file with it off is `files-off`.
   const problem = (await readFileProblems([pick.id])).get(pick.id) ?? null;
   if (problem !== null) return { kind: "failed", title, code: problem };
 
