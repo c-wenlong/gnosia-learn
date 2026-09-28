@@ -512,7 +512,7 @@ export async function runIndex(
     // write changed, so a run that failed between the two is repaired.
     if (indexer.source === "manimkc" && context.blobsRequired === true) {
       const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
-      const unhooked = await unhookPosters(db, videos, {
+      const { unhooked, moved } = await unhookPosters(db, videos, {
         author,
         reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the poster was cut from`,
       });
@@ -520,6 +520,11 @@ export async function runIndex(
         write.notes.push(
           `${unhooked.length} poster(s) unhooked from a re-rendered video; the next \`catalog asset upload\` cuts new ones`,
         );
+      }
+      if (moved.length > 0) {
+        // Written since this import read them, by an upload that recut them:
+        // left as that write made them, and the next import asks again.
+        write.notes.push(`${moved.length} poster(s) changed while this import ran, so left as they are: ${moved.join(", ")}`);
       }
     }
 
