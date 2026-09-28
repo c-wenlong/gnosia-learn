@@ -65,7 +65,8 @@
 // a copy's dump is left to finish and its database is then dropped. A second
 // signal sends SIGKILL.
 //
-// Environment: DATABASE_URL (its host and credentials are kept; its database
+// Environment: the per-owner blob caps are off for every step (see `env`
+// below). DATABASE_URL (its host and credentials are kept; its database
 // name is replaced), PG_BIN (default /opt/homebrew/opt/postgresql@17/bin),
 // MANIMKC_ROOT and TLDRAWKC_ROOT as the catalog reads them (a worktree with no
 // submodules points them at a checkout that has them).
@@ -631,7 +632,14 @@ async function main(argv) {
   const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'self-learn-flip-rehearsal-')));
   const tree = real ? checkout : join(scratch, 'tree');
   const url = urlFor(database);
-  const env = { ...process.env, DATABASE_URL: url };
+  // The per-owner blob caps (phase 4) are off for every step. Flip day stores
+  // the bytes the owner already has, some 160 objects in one sitting, and an
+  // uploads-per-day cap below that would refuse part of it and fail the
+  // "refuses nothing" check halfway through a forward-only procedure. Set to
+  // the empty string rather than removed, since an existing variable wins
+  // over services/catalog/.env and the empty string reads as no cap. The day
+  // window still counts flip day's objects for the 24 hours after it.
+  const env = { ...process.env, DATABASE_URL: url, SELF_LEARN_OWNER_BYTES_CAP: '', SELF_LEARN_OWNER_UPLOADS_PER_DAY: '' };
   if (real) delete env.CATALOG_COPY_OK;
   else Object.assign(env, { CATALOG_COPY_OK: '1', SELF_LEARN_HOME: join(scratch, 'home') });
   // The server the catalog commands reach, for the client tools.

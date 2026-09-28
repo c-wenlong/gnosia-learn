@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,8 +10,11 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { formatBlobAudit, runBlobAudit, type BlobAuditCommandResult } from "../src/commands/blob-audit";
+import { doctor, formatDoctor } from "../src/commands/doctor";
+import { formatStatus, runStatus } from "../src/commands/status";
 import { auditBlobs } from "../src/content/blob-audit";
 import {
+  capFailureFields,
   OWNER_BYTES_CAP_ENV,
   OWNER_UPLOADS_PER_DAY_ENV,
   OwnerCapConfigError,
@@ -51,6 +55,20 @@ describe("ownerCaps", () => {
       bytes: 5_000_000_000,
       uploadsPerDay: 0,
     });
+  });
+
+  it("says a value too large to count exactly is too large, not that it is no number", () => {
+    const error = (() => {
+      try {
+        ownerCaps({ [OWNER_BYTES_CAP_ENV]: "99999999999999999999" });
+      } catch (e) {
+        return e as Error;
+      }
+      return null;
+    })();
+    expect(error).toBeInstanceOf(OwnerCapConfigError);
+    expect(error?.message).toContain("is larger than 9007199254740991");
+    expect(error?.message).not.toContain("not a whole number");
   });
 
   it("refuses a value that is not a whole number rather than dropping the cap", () => {
@@ -189,6 +207,149 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     }
   });
 
+  it("never lets a delete between the existence check and the pending write past the day cap", async () => {
+    // The reviewer's window: an audit's `--fix` that does not take the owner's
+    // lock deletes the stale row after the upload has asked whether it exists
+    // and before its pending write. Here the delete is held open across that
+    // moment. The upload's check locks the row it asks about, so it waits for
+    // the delete, then sees no row and measures a new object.
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
+    await upload("local", "today");
+    await scratch.db.insert(blobObject).values({
+      key: keyOf("local", "stale"),
+      ownerId: "local",
+      sha256: sha256("stale"),
+      bytes: 5,
+      mime: "application/octet-stream",
+      provider: "fs",
+      state: "pending",
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    });
+    const other = connect({ url: scratch.url, max: 1 });
+    try {
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let deleted: () => void = () => {};
+      const isDeleted = new Promise<void>((resolve) => (deleted = resolve));
+      const audit = other.db.transaction(async (tx) => {
+        await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
+        deleted();
+        await held;
+      });
+      try {
+        await isDeleted;
+        let settled = false;
+        const retry = upload("local", "stale").finally(() => (settled = true));
+        retry.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        // Waiting on the row the delete holds, not answering from a snapshot
+        // in which the row still exists.
+        expect(settled).toBe(false);
+        release();
+        await audit;
+        await expect(retry).rejects.toMatchObject({ cap: "uploads-per-day" });
+        expect(await rowOf(keyOf("local", "stale"))).toBeUndefined();
+      } finally {
+        release();
+        await audit.catch(() => {});
+      }
+    } finally {
+      await other.close();
+    }
+  });
+
+  it("makes the audit's stale-pending delete wait for an upload of the key in flight, and then keep the row", async () => {
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "5";
+    const key = keyOf("local", "stale");
+    await scratch.db.insert(blobObject).values({
+      key,
+      ownerId: "local",
+      sha256: sha256("stale"),
+      bytes: 5,
+      mime: "application/octet-stream",
+      provider: "fs",
+      state: "pending",
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    });
+    const other = connect({ url: scratch.url, max: 1 });
+    try {
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let locked: () => void = () => {};
+      const isLocked = new Promise<void>((resolve) => (locked = resolve));
+      // An upload of the key between its cap check and its pending write:
+      // it holds the owner's lock, and its write refreshes `updated_at`.
+      const inFlight = other.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        locked();
+        await held;
+        await tx.update(blobObject).set({ updatedAt: sql`now()` }).where(eq(blobObject.key, key));
+      });
+      try {
+        await isLocked;
+        let settled = false;
+        const audit = auditBlobs(scratch.db, store, { fix: true }).finally(() => (settled = true));
+        audit.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(settled).toBe(false);
+        release();
+        await inFlight;
+        const result = await audit;
+        const finding = result.findings.find((f) => f.key === key);
+        expect(finding?.fixed).toBeUndefined();
+        expect(finding?.detail).toContain("an upload took it up again");
+        expect(await rowOf(key)).toBeDefined();
+      } finally {
+        release();
+        await inFlight.catch(() => {});
+      }
+    } finally {
+      await other.close();
+    }
+  });
+
+  it("checks the day cap under the owner's lock, so an upload in flight is counted", async () => {
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
+    const other = connect({ url: scratch.url, max: 1 });
+    try {
+      let release: () => void = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let locked: () => void = () => {};
+      const isLocked = new Promise<void>((resolve) => (locked = resolve));
+      const inFlight = other.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        locked();
+        await held;
+        await tx.insert(blobObject).values({
+          key: keyOf("local", "first"),
+          ownerId: "local",
+          sha256: sha256("first"),
+          bytes: 5,
+          mime: "application/octet-stream",
+          provider: "fs",
+          state: "pending",
+        });
+      });
+      try {
+        await isLocked;
+        let settled = false;
+        const second = upload("local", "second").finally(() => (settled = true));
+        second.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(settled).toBe(false);
+        release();
+        await inFlight;
+        await expect(second).rejects.toMatchObject({ cap: "uploads-per-day" });
+      } finally {
+        release();
+        await inFlight.catch(() => {});
+      }
+    } finally {
+      await other.close();
+    }
+  });
+
   it("refuses the upload past the day's count, and lets it through once the oldest leaves the window", async () => {
     process.env[OWNER_UPLOADS_PER_DAY_ENV] = "2";
     await upload("local", "first");
@@ -204,15 +365,64 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     expect((await upload("local", "third")).uploaded).toBe(true);
   });
 
-  it("refuses every new upload at a cap of zero", async () => {
+  it("refuses every new upload at a cap of zero, with the fields a --json failure carries", async () => {
     process.env[OWNER_UPLOADS_PER_DAY_ENV] = "0";
-    await expect(upload("local", "anything")).rejects.toBeInstanceOf(OwnerCapError);
+    const error = await upload("local", "anything").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OwnerCapError);
+    expect(capFailureFields(error)).toEqual({ code: "BLOB_CAP", owner: "local", cap: "uploads-per-day" });
+    expect(capFailureFields(new Error("other"))).toEqual({});
   });
 
-  it("refuses a malformed cap before reading or storing anything", async () => {
+  it("refuses a new object under a malformed cap before storing anything", async () => {
     process.env[OWNER_BYTES_CAP_ENV] = "5GB";
     await expect(upload("local", "anything")).rejects.toBeInstanceOf(OwnerCapConfigError);
     expect(await scratch.db.select().from(blobObject)).toEqual([]);
+    expect(await store.stat(keyOf("local", "anything"))).toBeNull();
+  });
+
+  it("lets a key that already has a row through a malformed cap: a re-store, and putting back a lost object", async () => {
+    delete process.env[OWNER_BYTES_CAP_ENV];
+    await upload("local", "kept");
+    process.env[OWNER_BYTES_CAP_ENV] = "5GB";
+    // Present and in the store: what every unchanged `catalog import` and
+    // `diagram put` does after the contract.
+    expect((await upload("local", "kept")).uploaded).toBe(false);
+    // Present in the table, gone from the store: put back, never refused.
+    await store.delete(keyOf("local", "kept"));
+    expect((await upload("local", "kept")).uploaded).toBe(true);
+  });
+
+  it("counts a pending row, bytes and day both: an upload in flight is about to be stored", async () => {
+    process.env[OWNER_BYTES_CAP_ENV] = "10";
+    await scratch.db.insert(blobObject).values({
+      key: keyOf("local", "12345678"),
+      ownerId: "local",
+      sha256: sha256("12345678"),
+      bytes: 8,
+      mime: "application/octet-stream",
+      provider: "fs",
+      state: "pending",
+    });
+    await expect(upload("local", "abc")).rejects.toMatchObject({ cap: "bytes" });
+    delete process.env[OWNER_BYTES_CAP_ENV];
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
+    await expect(upload("local", "abc")).rejects.toMatchObject({ cap: "uploads-per-day" });
+    expect(await rowOf(keyOf("local", "abc"))).toBeUndefined();
+  });
+
+  it("measures the day on the database's clock", async () => {
+    process.env[OWNER_UPLOADS_PER_DAY_ENV] = "1";
+    await upload("local", "old");
+    await scratch.db
+      .update(blobObject)
+      .set({ createdAt: sql`now() - interval '23 hours 59 minutes'` })
+      .where(eq(blobObject.key, keyOf("local", "old")));
+    await expect(upload("local", "new")).rejects.toMatchObject({ cap: "uploads-per-day" });
+    await scratch.db
+      .update(blobObject)
+      .set({ createdAt: sql`now() - interval '24 hours 1 minute'` })
+      .where(eq(blobObject.key, keyOf("local", "old")));
+    expect((await upload("local", "new")).uploaded).toBe(true);
   });
 
   it("checks the cap under the owner's lock, so an upload in flight is counted", async () => {
@@ -306,7 +516,7 @@ describe("the audit's caps and per-owner lines", () => {
 
   it("says a malformed cap refuses every upload, rather than hiding it", () => {
     expect(formatBlobAudit(result({ error: "SELF_LEARN_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
-      'caps       unreadable, so every upload is refused: SELF_LEARN_OWNER_BYTES_CAP="5GB" is not a whole number.',
+      'caps       unreadable, so every new upload is refused (a re-store of a key with a row is not): SELF_LEARN_OWNER_BYTES_CAP="5GB" is not a whole number.',
     );
   });
 
@@ -347,6 +557,25 @@ describe("the audit's caps and per-owner lines", () => {
       expect(bad.byOwner).toEqual([]);
       process.env[OWNER_BYTES_CAP_ENV] = "1000";
       expect((await runBlobAudit({ fix: false })).caps).toEqual({ bytes: 1000, uploadsPerDay: null });
+    });
+
+    it("says an unreadable cap in doctor and status too, and blob audit exits 1 on it", async () => {
+      process.env[OWNER_BYTES_CAP_ENV] = "5GB";
+      const status = await runStatus();
+      expect(status.caps).toEqual({ error: expect.stringContaining(OWNER_BYTES_CAP_ENV) });
+      expect(formatStatus(status)).toContain("blob caps  unreadable, so every new upload is refused");
+      const report = await doctor(scratch.db, "scratch");
+      expect(report.caps).toEqual({ error: expect.stringContaining(OWNER_BYTES_CAP_ENV) });
+      expect(formatDoctor(report)).toContain("blob caps: unreadable");
+      const cli = path.resolve(import.meta.dirname, "../src/cli.ts");
+      const ran = spawnSync(process.execPath, ["--import", "tsx", cli, "blob", "audit", "--json"], {
+        env: { ...process.env },
+        encoding: "utf8",
+      });
+      expect(ran.status).toBe(1);
+      expect(JSON.parse(ran.stdout).caps).toEqual({ error: expect.stringContaining(OWNER_BYTES_CAP_ENV) });
+      process.env[OWNER_BYTES_CAP_ENV] = "1000";
+      expect((await runStatus()).caps).toEqual({ bytes: 1000, uploadsPerDay: null });
     });
   });
 });

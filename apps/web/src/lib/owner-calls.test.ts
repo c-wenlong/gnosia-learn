@@ -24,6 +24,14 @@ import { describe, expect, it } from "vitest";
  * `learnerId` out of), so a function added to the door later is covered the
  * day it lands. The content reads take a required `OwnerScope`, which the
  * compiler already enforces; they are checked here too, which costs nothing.
+ *
+ * The ways around that check are refused outright, since each one hands the
+ * owner to something this test cannot follow: a hard-coded `'local'` or
+ * `LOCAL_LEARNER_ID` outside `owner.ts`, a scope built by hand (an object with
+ * `owner` and `readable`, or `ownerScope`/`readableOwners` given a literal), a
+ * namespace or unbound dynamic import of the catalog, a re-export of it, any
+ * other `@self-learn/catalog` entry point, and a query of the app's own
+ * (`drizzle-orm`, or `.execute(`), which would bypass every scoped reader.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +41,9 @@ const DOOR = "@self-learn/catalog/state";
 const DOOR_INDEX = path.join(REPO, "services", "catalog", "src", "state", "index.ts");
 
 const OWNER_PARAMS = new Set(["learnerId", "owner", "scope"]);
+
+/** The one module that may name the owner, and build a scope, itself. */
+const OWNER_MODULE = path.join(WEB_SRC, "lib", "owner.ts");
 
 /** Where the owner goes in a call: the n-th argument, or a `learnerId` key of the n-th argument. */
 type OwnerSlot = { kind: "positional"; index: number } | { kind: "option"; index: number };
@@ -174,6 +185,83 @@ function violationsIn(file: string, text: string, table: ReadonlyMap<string, Own
   const report = (node: ts.Node, name: string, why: string) => {
     out.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1, name, why });
   };
+  const isOwnerModule = path.resolve(file) === OWNER_MODULE;
+  const catalogSpecifier = (text: string) => text === "@self-learn/catalog" || text.startsWith("@self-learn/catalog/");
+  const bypasses = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      const specifier = node.moduleSpecifier;
+      if (specifier !== undefined && ts.isStringLiteral(specifier)) {
+        const text = specifier.text;
+        if (text === "drizzle-orm" || text.startsWith("drizzle-orm/")) {
+          report(node, text, "a query of the web app's own bypasses the scoped readers; add one to the catalog");
+        } else if (catalogSpecifier(text) && text !== DOOR) {
+          report(node, text, `the web app reaches the catalog through ${DOOR} only`);
+        } else if (
+          text === DOOR &&
+          ts.isExportDeclaration(node) &&
+          (node.exportClause === undefined ||
+            (ts.isNamedExports(node.exportClause) &&
+              node.exportClause.elements.some((e) => table.has((e.propertyName ?? e.name).text))))
+        ) {
+          // Types and pure helpers may pass through; an owner-bearing function
+          // re-exported would be called where this check cannot see it.
+          report(node, text, "a re-export hides the calls from this check; import where it is called");
+        } else if (
+          text === DOOR &&
+          ts.isImportDeclaration(node) &&
+          node.importClause?.namedBindings !== undefined &&
+          ts.isNamespaceImport(node.importClause.namedBindings)
+        ) {
+          report(node, text, "a namespace import hides the calls from this check; import each function by name");
+        }
+      }
+    }
+    // `await import(DOOR)` bound to a name rather than destructured.
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] !== undefined &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      catalogSpecifier(node.arguments[0].text)
+    ) {
+      let binding: ts.Node = node.parent;
+      if (ts.isAwaitExpression(binding)) binding = binding.parent;
+      if (!(ts.isVariableDeclaration(binding) && ts.isObjectBindingPattern(binding.name))) {
+        report(node, node.arguments[0].text, "a dynamic import must destructure the functions it calls");
+      }
+    }
+    if (ts.isPropertyAccessExpression(node) && node.name.text === "execute" && ts.isCallExpression(node.parent)) {
+      report(node, "execute", "a raw query bypasses the scoped readers; add one to the catalog");
+    }
+    if (!isOwnerModule) {
+      if (ts.isStringLiteral(node) && node.text === "local" && !ts.isImportDeclaration(node.parent)) {
+        report(node, "'local'", "the owner comes from currentOwner(), never a literal");
+      }
+      if (ts.isIdentifier(node) && node.text === "LOCAL_LEARNER_ID") {
+        report(node, "LOCAL_LEARNER_ID", "the owner comes from currentOwner(), never the default learner");
+      }
+      if (
+        ts.isObjectLiteralExpression(node) &&
+        ["owner", "readable"].every((key) =>
+          node.properties.some((p) => p.name !== undefined && ts.isIdentifier(p.name) && p.name.text === key),
+        )
+      ) {
+        report(node, "{ owner, readable }", "a scope built by hand; use currentScope() or ownerScope(await currentOwner())");
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        (node.expression.text === "ownerScope" || node.expression.text === "readableOwners") &&
+        node.arguments[0] !== undefined &&
+        (ts.isStringLiteral(node.arguments[0]) || ts.isNoSubstitutionTemplateLiteral(node.arguments[0]))
+      ) {
+        report(node, node.expression.text, "a scope for a literal owner; pass the owner currentOwner() resolved");
+      }
+    }
+    ts.forEachChild(node, bypasses);
+  };
+  bypasses(source);
+
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && bound.has(node.text)) {
       const parent = node.parent;
@@ -260,8 +348,51 @@ describe("owner-bearing catalog calls in the web app", () => {
       `import { readEvents, recordObservation } from "${DOOR}";`,
       `await readEvents(db, owner);`,
       `await recordObservation(db, { conceptId, correct, learnerId: owner });`,
+      `const { dbSource } = await import("${DOOR}");`,
+      `dbSource(db, ownerScope(owner));`,
+      `export type { KnowledgeBase } from "${DOOR}";`,
     ].join("\n");
     expect(violationsIn("good.ts", good, table)).toEqual([]);
+  });
+
+  it("catches the ways around the owner: literals, hand-built scopes, namespace imports, re-exports, raw queries", () => {
+    const bad = [
+      `import * as state from "${DOOR}";`,
+      `export { readEvents } from "${DOOR}";`,
+      `export * from "${DOOR}";`,
+      `import { sql } from "drizzle-orm";`,
+      `import { writeContent } from "@self-learn/catalog/src/content/write";`,
+      `import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";`,
+      `const mod = await import("${DOOR}");`,
+      `await db.execute(sql\`select 1\`);`,
+      `await readEvents(db, "local");`,
+      `await readEvents(db, LOCAL_LEARNER_ID);`,
+      `const scope = { owner: me, readable: [me, "commons"] };`,
+      `const s = ownerScope("someone");`,
+      `const r = readableOwners(\`someone\`);`,
+    ].join("\n");
+    const found = violationsIn("bad.ts", bad, ownerTable()).map((v) => `${v.line} ${v.name}`);
+    expect(found).toEqual(
+      expect.arrayContaining([
+        `1 ${DOOR}`,
+        `2 ${DOOR}`,
+        `3 ${DOOR}`,
+        "4 drizzle-orm",
+        "5 @self-learn/catalog/src/content/write",
+        "6 LOCAL_LEARNER_ID",
+        `7 ${DOOR}`,
+        "8 execute",
+        "9 'local'",
+        "10 LOCAL_LEARNER_ID",
+        "11 { owner, readable }",
+        "12 ownerScope",
+        "13 readableOwners",
+      ]),
+    );
+    // owner.ts is the one place allowed to name the default learner.
+    expect(
+      violationsIn(OWNER_MODULE, `import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";\nreturn LOCAL_LEARNER_ID;`, ownerTable()),
+    ).toEqual([]);
   });
 
   it("passes an owner on every call in apps/web/src", () => {
