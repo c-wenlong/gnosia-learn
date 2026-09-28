@@ -228,7 +228,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const result = await uploadAssets(scratch.db, options());
     const refused = result.items.filter((i) => i.action === "refused");
     expect(refused.map((i) => i.id)).toEqual([VIDEO_ID]);
-    expect(refused[0]?.detail).toContain("catalog -- index --only manimkc");
+    expect(refused[0]?.detail).toContain("catalog -- import --only manimkc");
     expect((await assetRow(VIDEO_ID))?.blobKey).toBeNull();
     // No video, no poster: a poster of bytes nobody indexed would be a lie.
     expect(await assetRow(posterId(VIDEO_ID))).toBeUndefined();

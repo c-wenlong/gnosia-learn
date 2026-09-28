@@ -145,7 +145,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     if (recorded === null) {
       throw new FlipRefused(
         `${type} has not been imported since 0.5, so nothing records which files it came from. ` +
-          `Run \`catalog index\` (or \`catalog import <dir>\`), then flip.`,
+          `Run \`catalog import [<dir>]\`, then flip.`,
       );
     }
     // A root another database recorded is a tree this one never read: a
@@ -156,7 +156,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
         `${type} was last imported from ${recorded.root} by ` +
           (recorded.database === null ? "an import that did not record its database" : `another database (${recorded.database})`) +
           `, not by this one (${here}), so parity against it would check a tree this database never read. ` +
-          `Run \`catalog index\` (or \`catalog import <dir>\`) against this database, then flip.`,
+          `Run \`catalog import [<dir>]\` against this database, then flip.`,
       );
     }
     const root = recorded.root;

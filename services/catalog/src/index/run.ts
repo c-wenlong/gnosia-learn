@@ -424,7 +424,7 @@ export async function runIndex(
       continue;
     }
     // `--only manimkc` is asking for it; a default full run is not. Without
-    // that distinction `catalog index` on a clone with no submodule fails
+    // that distinction `catalog import` on a clone with no submodule fails
     // outright instead of indexing the sources it can.
     const source = indexer.source as keyof typeof MANIMKC_COMMAND;
     const asked = options.only?.includes(source) ?? false;

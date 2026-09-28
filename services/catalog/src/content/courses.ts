@@ -53,7 +53,7 @@ import { assertInStep, type ExportedType, writeThrough } from "./write-through";
  *
  * **The rows it writes are the rows the courses indexer writes** for the same
  * file, column for column, so importing an unchanged file appends no revision
- * and a later `catalog index` of the same tree appends none either.
+ * and a later `catalog import` of the same tree appends none either.
  *
  * **The file is kept in step** (D17, the shared `write-through.ts`): in the
  * same transaction the course file, and `topics.yaml` when a module's topic
@@ -393,7 +393,7 @@ async function plan(
   const orphans = candidates.filter((id) => !stillHeld.has(id)).sort();
 
   // Sparse positions (D22), placed the way the courses indexer places them,
-  // so a later `catalog index` of the same tree keeps every number.
+  // so a later `catalog import` of the same tree keeps every number.
   const revised = await withRevisions(
     db,
     existing.items.map((i) => ["curriculum_item", i.id] as [RevisionEntityType, string]),
@@ -588,7 +588,7 @@ function isArchived(row: { archivedAt: Date | null } | undefined): boolean {
   return row !== undefined && row.archivedAt !== null;
 }
 
-/** `placePositions`, with its gap refusal turned into the sentence `catalog index` uses. */
+/** `placePositions`, with its gap refusal turned into the sentence `catalog import` uses. */
 function placeOrRefuse(
   order: readonly string[],
   stored: ReadonlyMap<string, number>,

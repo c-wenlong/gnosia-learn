@@ -24,7 +24,7 @@ import { canonicalJson } from "./snapshot";
  *   order between entries, so each also yields `<file> (order)`, the list
  *   of keys as written;
  * - a session log has its frontmatter parsed (the knowledge base's own
- *   dialect, the one `catalog index` reads) and its body compared byte for
+ *   dialect, the one `catalog import` reads) and its body compared byte for
  *   byte; a concept note is compared as the fields its row holds and its body
  *   byte for byte (`noteParityForm`), since a row keeps a note's frontmatter
  *   values but not their layout;

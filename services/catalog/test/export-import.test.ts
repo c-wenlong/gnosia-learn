@@ -18,9 +18,9 @@ import { compare } from "../src/content/parity";
 import { contentOwnership } from "../src/content/ownership";
 import { triggerStates } from "../src/content/rules";
 import { blockScalar, flowList } from "../src/content/yaml-out";
-import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, type Fixture } from "./fixture-tree";
+import { SEED } from "./seed";
 import { createScratchDatabase, probe, sqlMessage, type Scratch } from "./scratch-database";
 
 /**
@@ -28,8 +28,9 @@ import { createScratchDatabase, probe, sqlMessage, type Scratch } from "./scratc
  * (docs/CONTENT-MIGRATION.md 0.5): files into a database, the database back
  * out as files, and parity between the two, entity by entity.
  *
- * Proved on the real tree, read only, into scratch databases, and on small
- * fixture trees for what the real tree cannot show: relations, a hand-edited
+ * Proved on the seed tree (real content, seed/README.md), read only, into
+ * scratch databases, and on small fixture trees for what the seed cannot
+ * show: relations, a hand-edited
  * export of a type the database owns, and `flip --strict` refused and then
  * allowed. Every file written goes under the OS temp directory.
  *
@@ -146,7 +147,7 @@ describe("the export's YAML, without a database", () => {
   });
 });
 
-describe.skipIf(!reachable.ok)("export, import and parity on the real tree", () => {
+describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () => {
   let first: Scratch;
   let second: Scratch;
   let out: string;
@@ -169,11 +170,11 @@ describe.skipIf(!reachable.ok)("export, import and parity on the real tree", () 
 
   it("imports the tree, exports it, and finds zero mismatches against both", async () => {
     await against(first.name, async () => {
-      await runImportCommand({ dir: REPO_ROOT });
+      await runImportCommand({ dir: SEED });
       await runExport({ out });
     });
 
-    for (const dir of [out, REPO_ROOT]) {
+    for (const dir of [out, SEED]) {
       const result = await against(first.name, () => runParity({ dir }));
       const summary = result.types.map((t) => ({
         type: t.type,
@@ -196,15 +197,15 @@ describe.skipIf(!reachable.ok)("export, import and parity on the real tree", () 
 
   it("keeps the vocabulary's header and one divider per domain", async () => {
     const comments = (text: string) => text.split("\n").filter((line) => line.trimStart().startsWith("#"));
-    const source = await readFile(path.join(REPO_ROOT, "content/topics.yaml"), "utf8");
+    const source = await readFile(path.join(SEED, "content/topics.yaml"), "utf8");
     const exported = await readFile(path.join(out, "content/topics.yaml"), "utf8");
     const domains = new Set([...source.matchAll(/^ {4}domain: (.+)$/gm)].map((m) => m[1])).size;
-    // The five header lines and 23 dividers the file has today (edge case 8):
-    // derived here rather than hard-coded, so adding a domain is not a test edit.
+    // The five header lines and one divider per domain (edge case 8): derived
+    // here rather than hard-coded, so a recut seed is not a test edit.
     expect(comments(source)).toHaveLength(5 + domains);
     expect(comments(exported)).toEqual(comments(source));
     expect(comments(await readFile(path.join(out, "content/tags.yaml"), "utf8"))).toEqual(
-      comments(await readFile(path.join(REPO_ROOT, "content/tags.yaml"), "utf8")),
+      comments(await readFile(path.join(SEED, "content/tags.yaml"), "utf8")),
     );
   });
 
@@ -219,7 +220,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the real tree", () 
     // hash, which covers its row and its owned links, is equal on both sides.
     const a = await latestSnapshots(first);
     const b = await latestSnapshots(second);
-    expect(a.size).toBeGreaterThan(300);
+    expect(a.size).toBeGreaterThan(30);
     expect([...b.entries()].sort()).toEqual([...a.entries()].sort());
 
     // And the second export is the first, byte for byte.
@@ -235,7 +236,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the real tree", () 
   }, 240_000);
 
   it("writes zero revisions on a second import of the same tree", async () => {
-    const result = await against(first.name, () => runImportCommand({ dir: REPO_ROOT }));
+    const result = await against(first.name, () => runImportCommand({ dir: SEED }));
     expect(revisionCount(result)).toBe(0);
     expect(result.totals.deleted).toBe(0);
   }, 120_000);
@@ -735,7 +736,7 @@ const lastRevisionId = async (scratch: Scratch) =>
       0,
   );
 
-describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the real tree", () => {
+describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the seed tree", () => {
   let scratch: Scratch;
   let copy: string;
   let restore: () => void;
@@ -745,7 +746,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the real tre
     await applyMigrations(scratch.db);
     copy = await tempDir("sparse-copy");
     for (const dir of ["content", "learn"]) {
-      await cp(path.join(REPO_ROOT, dir), path.join(copy, dir), { recursive: true });
+      await cp(path.join(SEED, dir), path.join(copy, dir), { recursive: true });
     }
     restore = pointAt(scratch.name);
     await runImportCommand({ dir: copy });
@@ -806,13 +807,14 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the real tre
 
   it("writes one revision, for the moved topic, when a topic moves, and parity names the reorder first", async () => {
     const doc = parse(await readFile(topicsFile(), "utf8")) as { topics: { slug: string }[] };
-    const [moved] = doc.topics.splice(40, 1);
-    doc.topics.splice(5, 0, moved as { slug: string });
+    // The last topic moves up between the first two.
+    const [moved] = doc.topics.splice(doc.topics.length - 1, 1);
+    doc.topics.splice(1, 0, moved as { slug: string });
     await writeFile(topicsFile(), stringify(doc));
 
     const before = await runParity({ dir: copy, only: ["topics"] });
     expect(before.types[0]?.mismatches).toEqual([
-      expect.objectContaining({ id: "content/topics.yaml (order)", kind: "changed", detail: expect.stringMatching(/^position 6:/) }),
+      expect.objectContaining({ id: "content/topics.yaml (order)", kind: "changed", detail: expect.stringMatching(/^position 2:/) }),
     ]);
 
     const since = await lastRevisionId(scratch);

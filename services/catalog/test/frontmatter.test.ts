@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/env";
 import { noteId } from "@self-learn/content";
+import { SEED } from "./seed";
 
 import { extractWikilinks, parseFrontmatter, readText } from "../src/index/frontmatter";
 
@@ -12,7 +13,7 @@ import { extractWikilinks, parseFrontmatter, readText } from "../src/index/front
  * The catalog parses the knowledge base's frontmatter with its own TypeScript
  * port of `scripts/learn/lib/markdown.mjs`. Two parsers for one dialect is a
  * drift risk, and this is what makes it a safe one: both are run over every
- * real note and session in the repo and must agree exactly.
+ * real note and session in the seed tree and must agree exactly.
  *
  * If the `learn` CLI's dialect changes, this fails here rather than the catalog
  * quietly reading the same files a different way.
@@ -29,7 +30,7 @@ const learn = (await import(
 
 async function everyNote(): Promise<string[]> {
   const files: string[] = [];
-  const concepts = path.join(REPO_ROOT, "learn", "concepts");
+  const concepts = path.join(SEED, "learn", "concepts");
   for (const domain of await readdir(concepts, { withFileTypes: true })) {
     if (!domain.isDirectory()) continue;
     const dir = path.join(concepts, domain.name);
@@ -37,7 +38,7 @@ async function everyNote(): Promise<string[]> {
       if (entry.endsWith(".md")) files.push(path.join(dir, entry));
     }
   }
-  const sessions = path.join(REPO_ROOT, "learn", "sessions");
+  const sessions = path.join(SEED, "learn", "sessions");
   for (const entry of await readdir(sessions)) {
     if (entry.endsWith(".md")) files.push(path.join(sessions, entry));
   }
@@ -45,15 +46,15 @@ async function everyNote(): Promise<string[]> {
 }
 
 describe("frontmatter parity with the learn CLI", () => {
-  it("agrees on every note and session in the repo", async () => {
+  it("agrees on every note and session in the seed", async () => {
     const files = await everyNote();
-    expect(files.length).toBeGreaterThan(30);
+    expect(files.length).toBe(12);
 
     for (const file of files) {
       const text = await readFile(file, "utf8");
       const mine = parseFrontmatter(text);
       const theirs = learn.parseFrontmatter(text);
-      const where = path.relative(REPO_ROOT, file);
+      const where = path.relative(SEED, file);
 
       expect(mine.data, `${where} frontmatter`).toEqual(theirs.data);
       expect(mine.body, `${where} body`).toEqual(theirs.body);
@@ -66,7 +67,7 @@ describe("frontmatter parity with the learn CLI", () => {
       const { body } = parseFrontmatter(text);
       // The catalog deduplicates, because two mentions of a concept are still
       // one `asset_concept` row. Order and membership must still match.
-      expect(extractWikilinks(body), path.relative(REPO_ROOT, file)).toEqual([
+      expect(extractWikilinks(body), path.relative(SEED, file)).toEqual([
         ...new Set(learn.extractWikilinks(body)),
       ]);
     }

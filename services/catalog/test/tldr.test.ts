@@ -27,8 +27,8 @@ import {
 
 const built = hasCanvasCli(REPO_ROOT);
 
-/** The one stamped diagram in the repo, and the source of truth for the shapes. */
-const STAMPED = path.join(REPO_ROOT, "learn", "assets", "vector-as-a-list-of-numbers.tldr");
+/** The seed's stamped diagram (seed/README.md), and the source of truth for the shapes. */
+const STAMPED = path.join(REPO_ROOT, "seed", "learn", "assets", "vector-as-a-list-of-numbers.tldr");
 
 /** A minimal document with whatever metadata the case needs. */
 function document(meta: unknown): string {

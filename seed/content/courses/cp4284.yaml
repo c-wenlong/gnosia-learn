@@ -1,0 +1,76 @@
+id: cp4284
+slug: cp4284
+code: CP4284
+title: LLM Reasoning Agents
+credits: 4
+order: 6
+prereq: 120 units only
+notes: Strongest overlap with agent internals, tool use, and transformer architecture.
+inferred: false
+tags: [agentic-ai, transformers]
+modules:
+  - id: cp4284-m1
+    slug: m1-llm-foundations-recap
+    title: LLM Foundations Recap
+    order: 1
+    topic: transformer-architecture-and-training
+    topics:
+      - id: cp4284-m1-t1
+        title: Transformer architecture and tokenization
+        concepts:
+          - query-key-value-projections
+          - attention-weights
+          - self-attention
+          - multi-head-attention
+          - positional-encoding
+          - transformer-block
+        subtopics:
+          - Self-attention
+          - Tokenization pipelines
+      - id: cp4284-m1-t2
+        title: Pretraining vs fine-tuning vs RLHF
+        subtopics:
+          - Contextual refresher on training stages
+    resources:
+      - id: cp4284-m1-r1
+        title: The Illustrated Transformer
+        url: https://jalammar.github.io/illustrated-transformer/
+        type: docs
+      - id: cp4284-m1-r2
+        title: Vaswani et al. — Attention Is All You Need
+        url: https://arxiv.org/abs/1706.03762
+        type: paper
+  - id: cp4284-m3
+    slug: m3-agentic-frameworks
+    title: Agentic Frameworks
+    order: 3
+    topic: agent-tool-use-and-reasoning-loops
+    topics:
+      - id: cp4284-m3-t1
+        title: ReAct-style reasoning + acting loops
+        concepts:
+          - react-loop
+        subtopics:
+          - Interleaved thought and tool calls
+      - id: cp4284-m3-t2
+        title: Tool use / function calling and multi-step decomposition
+        concepts:
+          - tool-calling
+        subtopics:
+          - Tool schemas
+          - Task graphs
+      - id: cp4284-m3-t3
+        title: Agent memory and state management
+        subtopics:
+          - Short-term context
+          - Long-term memory stores
+    resources:
+      - id: cp4284-m3-r1
+        title: Yao et al. — ReAct
+        url: https://arxiv.org/abs/2210.03629
+        type: paper
+      - id: cp4284-m3-r2
+        title: OpenAI — Function calling guide
+        url: https://platform.openai.com/docs/guides/function-calling
+        type: docs
+capstone: Build a small tool-using reasoning agent end-to-end (plan → act → reflect loop).

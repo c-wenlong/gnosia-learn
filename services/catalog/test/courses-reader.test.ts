@@ -10,10 +10,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DB_READERS } from "../src/content/flip";
 import { readCourses } from "../src/content/readers/courses";
 import { dbSource } from "../src/content/source";
-import { REPO_ROOT } from "../src/env";
 import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { SEED } from "./seed";
 
 /**
  * Track B's database reader (docs/CONTENT-MIGRATION.md, phase 1): the courses
@@ -23,7 +23,7 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
  * "The same" means `JSON.stringify` equal, not just deep equal: the pages hand
  * courses to client components as props, React serialises them in key order,
  * and the flip is checked by the server HTML being byte-identical between the
- * two sources. The real tree is imported read only into a scratch database.
+ * two sources. The seed tree is imported read only into a scratch database.
  */
 
 const reachable = await probe();
@@ -35,7 +35,7 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db);
     await runIndex(scratch.db, {
-      repoRoot: REPO_ROOT,
+      repoRoot: SEED,
       only: ["topics", "tags", "concepts", "courses"],
       manimkcRoot: path.join(tmpdir(), "catalog-test-no-manimkc"),
     });
@@ -49,13 +49,13 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     expect(DB_READERS.has("courses")).toBe(true);
   });
 
-  it("returns what fileSource returns for the real tree, key for key and in order", async () => {
-    const files = await fileSource(REPO_ROOT).courses();
+  it("returns what fileSource returns for the seed, key for key and in order", async () => {
+    const files = await fileSource(SEED).courses();
     const rows = await dbSource(scratch.db).courses();
-    expect(rows.length).toBe(10);
-    expect(rows.reduce((n, c) => n + c.modules.length, 0)).toBe(61);
-    expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.topics.length, 0), 0)).toBe(137);
-    expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.resources.length, 0), 0)).toBe(68);
+    expect(rows.length).toBe(1);
+    expect(rows.reduce((n, c) => n + c.modules.length, 0)).toBe(2);
+    expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.topics.length, 0), 0)).toBe(5);
+    expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.resources.length, 0), 0)).toBe(4);
     expect(JSON.stringify(rows)).toBe(JSON.stringify(files));
   });
 
@@ -80,7 +80,7 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     const item = mod?.topics[0];
     const other = first?.modules[1];
     if (first === undefined || mod === undefined || item === undefined || other === undefined) {
-      throw new Error("the real tree has no course with two modules");
+      throw new Error("the seed has no course with two modules");
     }
     await scratch.db.update(curriculumItem).set({ archivedAt: sql`now()` }).where(eq(curriculumItem.id, item.id));
     await scratch.db.update(collection).set({ archivedAt: sql`now()` }).where(eq(collection.id, other.id));
@@ -98,6 +98,6 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
         .set({ archivedAt: null })
         .where(sql`${collection.id} in (${first.id}, ${other.id})`);
     }
-    expect(JSON.stringify(await readCourses(scratch.db))).toBe(JSON.stringify(await fileSource(REPO_ROOT).courses()));
+    expect(JSON.stringify(await readCourses(scratch.db))).toBe(JSON.stringify(await fileSource(SEED).courses()));
   });
 });

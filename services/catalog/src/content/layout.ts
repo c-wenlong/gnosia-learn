@@ -19,7 +19,7 @@ import type { ContentType } from "@self-learn/schema";
  * It is the repository's own layout, so `catalog export --out <dir>` writes a
  * tree `catalog import <dir>` reads back unchanged, `catalog parity` compares
  * the database against the working tree and against an export with one rule,
- * and `catalog index` is simply an import of the repository root
+ * and `catalog import` is simply an import of the repository root
  * (docs/CONTENT-MIGRATION.md 0.5). Paths are repo-relative with forward
  * slashes, the form every `asset.path` and `concept.path` already takes.
  */

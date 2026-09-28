@@ -40,7 +40,7 @@ npm run learn -- index             # the notes back into the catalog, while they
 
 Two rows in `content_source` decide it, one for `concepts` and one for
 `sessions`, written by `catalog flip`. Until a type is flipped its files under
-`learn/` are the truth, as they always were, and `catalog index` copies them
+`learn/` are the truth, as they always were, and `catalog import` copies them
 into the catalog. From the flip on, the rows are: a note is its `concept` row
 (the frontmatter as columns, the markdown after it as `concept.body`), a log
 is its `session_log_entry` rows (each one exactly what was appended), every

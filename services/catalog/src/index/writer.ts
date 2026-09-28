@@ -81,7 +81,7 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * back the concepts that were already indexed correctly.
  */
 
-/** Everything one `catalog index` run did to one source. */
+/** Everything one `catalog import` run did to one source. */
 export interface SourceWrite {
   source: string;
   /** Rows inserted or updated, per SQL table name. */

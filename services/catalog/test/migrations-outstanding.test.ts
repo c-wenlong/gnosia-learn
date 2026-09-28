@@ -91,7 +91,7 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
   }, 30_000);
 
   it("still answers a wrong invocation as one, exit 2, whatever state the database is in", async () => {
-    for (const argv of [["export"], ["show"], ["parity"], ["flip"], ["import"]]) {
+    for (const argv of [["export"], ["show"], ["parity"], ["flip"], ["index", "seed"]]) {
       const ran = await run(CATALOG, { DATABASE_URL: scratch.url }, ...argv);
       expect(ran.code, `${argv.join(" ")}: ${ran.stderr}`).toBe(2);
       expect(ran.stderr).not.toContain("migration(s) outstanding");

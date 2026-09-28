@@ -24,7 +24,16 @@ npm run catalog -- status
 ```
 
 Without a reachable Postgres the catalog tests skip themselves with a reason
-and `npm test` still passes.
+and `npm test` still passes. With one, they never read your `self_learn`: each
+suite creates and drops its own scratch database, and the end-to-end suite
+imports [`seed/`](seed/README.md), a small real slice of the content in the
+export format, rather than `content/` and `learn/`. Those two go in phase 3 of
+[docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md), and the suites already
+pass without them. No test may write into `seed/` or `learn/assets/`:
+`vitest.setup.ts` lists both before each test file and fails the one that
+changed a file. `seed/` is regenerated only with `catalog export --subset`,
+as its README says, and `EXPECTED` in `services/catalog/test/catalog.test.ts`
+moves with it in the same commit.
 
 `apps/web/.env.local` is where Next reads variables from: the app lives in
 `apps/web/`, and Next loads `.env*` files from the directory it starts in, so
@@ -170,6 +179,14 @@ copies the database to `self_learn_e2e_<pid>_<time>` (`createdb -T`, or `pg_dump
 another connection holds the template open) and drops the copy afterwards,
 on a failure and on Ctrl-C too. `--keep-db` leaves it behind to inspect, and
 prints the `dropdb` line; `--headed` shows the browser.
+
+`--seed` builds the database instead of copying one: an empty database,
+migrated, `catalog import seed/`, and one `learn observe` so a review card is
+due, with the diagram's SVG in a temp blob store. It is what the run will do by
+default once phase 3 removes `content/` and `learn/` and `self_learn` stops
+being a template anyone should copy. The seed has no videos, so the Mark
+watched step prints `SKIP` with the reason and counts as neither a pass nor a
+failure.
 
 Reading a failure: the run prints one line per step and a final `PASS` or
 `FAIL`, and exits 1 on any failure (2 when a prerequisite is missing). A

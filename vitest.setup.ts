@@ -38,15 +38,20 @@ import { afterAll, expect } from "vitest";
  *    regression this file exists to prevent, and it catches it whether or not a
  *    fixture happens to still be on disk when anybody looks.
  * 3. Every test file, studio or not, has the tracked `learn/assets/` listing
- *    taken before it runs and checked after it, names with sizes and
- *    modification times, so an edit in place counts as well as a new file. This
- *    one is a backstop and samples at two points: a suite that writes a file and
- *    deletes it again inside one test is invisible to it, which is exactly why
- *    the check above it is not a sample.
+ *    and the whole `seed/` tree taken before it runs and checked after it,
+ *    names with sizes and modification times, so an edit in place counts as
+ *    well as a new file. This one is a backstop and samples at two points: a
+ *    suite that writes a file and deletes it again inside one test is
+ *    invisible to it, which is exactly why the check above it is not a sample.
+ *    `seed/` is watched because suites import it (edge case 11 of
+ *    docs/CONTENT-MIGRATION.md), and an import records it as the root a seam
+ *    write keeps in step, so a suite that imports it and then writes a topic
+ *    would rewrite the seed. `learn/assets/` stays until phase 3 removes it.
  */
 
 const REPO_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const TRACKED_ASSETS = path.join(REPO_ROOT, "learn", "assets");
+const SEED = path.join(REPO_ROOT, "seed");
 
 /**
  * Mirrors `from` into `into` as symlinks, one per entry, minus the entries the
@@ -57,6 +62,9 @@ const TRACKED_ASSETS = path.join(REPO_ROOT, "learn", "assets");
  */
 function farm(from: string, into: string, rebuilt: readonly string[] = []): void {
   mkdirSync(into, { recursive: true });
+  // A tree with no `learn/` (phase 3 removes it, and the phase 2 done-when
+  // deletes it on purpose) still gets the directories the studio writes into.
+  if (!existsSync(from)) return;
   for (const entry of readdirSync(from)) {
     if (rebuilt.includes(entry)) continue;
     symlinkSync(path.join(from, entry), path.join(into, entry));
@@ -87,6 +95,22 @@ function listing(directory: string): string[] {
       return `${entry} ${facts.size} ${facts.mtimeMs}`;
     })
     .sort();
+}
+
+/** The same, for every file under `directory` at any depth, by path relative to it. */
+function deepListing(directory: string, prefix = ""): string[] {
+  if (!existsSync(directory)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      out.push(`${relative}/`, ...deepListing(path.join(directory, entry.name), relative));
+      continue;
+    }
+    const facts = statSync(path.join(directory, entry.name));
+    out.push(`${relative} ${facts.size} ${facts.mtimeMs}`);
+  }
+  return out.sort();
 }
 
 const root = studioRepoRoot();
@@ -122,14 +146,15 @@ if (!process.env.SELF_LEARN_HOME?.trim()) {
 }
 
 const before = listing(TRACKED_ASSETS);
+const seedBefore = deepListing(SEED);
 
 afterAll(() => {
-  const after = listing(TRACKED_ASSETS);
   try {
     expect(
-      after,
+      listing(TRACKED_ASSETS),
       `this test file wrote into the tracked ${path.relative(REPO_ROOT, TRACKED_ASSETS)}`,
     ).toEqual(before);
+    expect(deepListing(SEED), "this test file wrote into the tracked seed/").toEqual(seedBefore);
   } finally {
     if (root.startsWith(`${temp}${path.sep}`)) rmSync(root, { recursive: true, force: true });
     if (blobHome?.startsWith(`${temp}${path.sep}`)) rmSync(blobHome, { recursive: true, force: true });
