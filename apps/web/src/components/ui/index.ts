@@ -1,13 +1,14 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
- * `FilterMenu`, a client component that takes an `onChange` and so is rendered
- * from another client component; the contract (names and props) is written
+ * `FilterMenu` and `Composer`, client components that take an `onChange` and
+ * so are rendered from another client component; the contract (names and props) is written
  * down in docs/design/IMPLEMENTATION.md.
  */
 export { Button, type ButtonProps } from "./Button";
 export { Card, CardAction } from "./Card";
 export { Chip } from "./Chip";
 export { ChoiceRow, type ChoiceState } from "./ChoiceRow";
+export { Composer } from "./Composer";
 export { Divider } from "./Divider";
 export { Eyebrow } from "./Eyebrow";
 export { FeedbackBar } from "./FeedbackBar";

@@ -88,6 +88,7 @@ export function NoteProse({
   resolveEmbed,
   idPrefix = "",
   className = "",
+  images = "show",
 }: {
   /** The file as it is on disk, frontmatter and all. */
   source: string;
@@ -116,9 +117,16 @@ export function NoteProse({
   idPrefix?: string;
   /** Merged onto the root, so a caller can give it padding or a scroll box. */
   className?: string;
+  /**
+   * `link` renders a markdown image (`![alt](url)`) as a link to it rather
+   * than an `<img>`, so text nobody on this site wrote (a model's reply)
+   * cannot make the browser fetch a URL of its choosing just by being shown.
+   * A note keeps `show`: its author put the picture there.
+   */
+  images?: "show" | "link";
 }) {
   const { blocks } = parseNote(source);
-  const links: Resolvers = { resolveNote, resolveEmbed };
+  const links: Resolvers = { resolveNote, resolveEmbed, imagesAsLinks: images === "link" };
   const ids = headingIds(blocks, idPrefix);
 
   if (blocks.length === 0) {
@@ -141,6 +149,8 @@ export function NoteProse({
 interface Resolvers {
   resolveNote?: (slug: string) => string | undefined;
   resolveEmbed?: (name: string) => EmbedResolution | undefined;
+  /** `NoteProse`'s `images="link"`. */
+  imagesAsLinks?: boolean;
 }
 
 /**
@@ -551,6 +561,19 @@ function Figure({
   links: Resolvers;
   className: string;
 }) {
+  if (node.kind === "image" && links.imagesAsLinks === true) {
+    const href = safeHref(node.src);
+    return (
+      <p className={`${className} text-sm text-[var(--muted)]`}>
+        Image:{" "}
+        {href === null ? (
+          <span className="font-mono">{node.alt || node.src}</span>
+        ) : (
+          <Anchor href={href}>{node.alt || node.src}</Anchor>
+        )}
+      </p>
+    );
+  }
   const resolved: EmbedResolution | null =
     node.kind === "image" ? node.src : (links.resolveEmbed?.(node.target) ?? null);
   const name = node.kind === "image" ? node.alt || node.src : node.target;
