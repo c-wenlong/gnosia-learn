@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { createApi } from "./api";
+import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { Mirrors } from "./mirrors";
 import { REPO_ROOT, studioHome } from "./paths";
@@ -37,9 +38,20 @@ async function main(): Promise<void> {
     );
   }
 
+  // Drafts after jobs: a draft follows its newest job, so the job records are
+  // in memory first. An interrupted turn is written down as cut off (C1) and
+  // nothing is resent by itself.
+  const drafts = new Drafts(store, runner);
+  await drafts.load();
+  const cut = await drafts.reconcile();
+  if (cut.length > 0) {
+    process.stdout.write(`marked ${cut.length} planner turn${cut.length === 1 ? "" : "s"} cut off: ${cut.join(", ")}\n`);
+  }
+  runner.extraSpend = () => drafts.spendEntries();
+
   const mirrors = new Mirrors();
   runner.canvasOpen = (target) => mirrors.isOpen(target);
-  const server = createApi({ store, runner, mirrors });
+  const server = createApi({ store, runner, mirrors, drafts });
   server.listen(PORT, HOST, () => {
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
@@ -62,6 +74,7 @@ async function main(): Promise<void> {
     // fallback port for a document that is not open anywhere.
     void mirrors
       .stopAll()
+      .then(() => drafts.drain())
       .then(() => runner.drain())
       .finally(() => {
         server.close(() => process.exit(0));

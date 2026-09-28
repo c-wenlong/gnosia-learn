@@ -97,6 +97,12 @@ export interface JobRecord {
   agentSessionId: string | null;
   /** The job this one revises, when it is a revision. */
   parentJobId: string | null;
+  /**
+   * The chat that asked for it, when a draft's Draw press queued it
+   * (docs/STUDIO-CHAT-FIRST.md, D35). Optional so a job recorded before drafts
+   * existed still parses; absent means none.
+   */
+  draftId?: string | null;
   /** What the person asked to be different, verbatim. The revise prompt. */
   changes: string | null;
   idempotencyKey: string;
@@ -251,7 +257,7 @@ const atomicWrite = async (file: string, body: string): Promise<void> => {
  * at each of the surfaces. Caught by Greptile on the phase 7 PR.
  */
 function normalise(record: JobRecord): JobRecord {
-  return { ...record, costSource: record.costSource ?? null };
+  return { ...record, costSource: record.costSource ?? null, draftId: record.draftId ?? null };
 }
 
 export class JobStore {
@@ -268,6 +274,18 @@ export class JobStore {
    * that file the record, so it has to be the newest one.
    */
   private readonly writes = new Map<string, Promise<void>>();
+  /** Told whenever a job's state changes, after the record carrying it is written. */
+  private readonly stateListeners = new Set<(record: JobRecord, from: JobState) => void>();
+
+  /**
+   * Hear every state change, after `job.json` holds it. The drafts use this to
+   * follow their newest job (`drawing` follows the job), without the runner
+   * and the review verbs each having to remember to tell them.
+   */
+  onStateChange(listener: (record: JobRecord, from: JobState) => void): () => void {
+    this.stateListeners.add(listener);
+    return () => this.stateListeners.delete(listener);
+  }
 
   /** Read every job workspace back into memory. Called once, at start. */
   async load(): Promise<void> {
@@ -344,6 +362,9 @@ export class JobStore {
     const next = { ...record, ...patch };
     this.records.set(id, next);
     await this.persist(next);
+    if (next.state !== record.state) {
+      for (const listener of this.stateListeners) listener(next, record.state);
+    }
     return next;
   }
 

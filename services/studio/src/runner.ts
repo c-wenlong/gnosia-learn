@@ -20,7 +20,7 @@ import {
   RUNNER_NAME,
   type AgentAuth,
 } from "./config";
-import { costFromLog, JobCostMeter, spendWindow, type CostReading } from "./cost";
+import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEntry } from "./cost";
 import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
 import { checkoutRevision, documentHashOf, ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
@@ -151,6 +151,12 @@ export class Runner {
    * canvas could be saving into (see `ensureCheckout`).
    */
   canvasOpen: (target: string) => boolean = () => false;
+  /**
+   * Spend that is not a job: the planner's turns, one entry per turn dated at
+   * its own end (D36 of docs/STUDIO-CHAT-FIRST.md). Set by `index.ts` once the
+   * drafts exist, so the cap counts a chat as it counts a drawing.
+   */
+  extraSpend: () => readonly SpendEntry[] = () => [];
 
   constructor(store: JobStore) {
     this.store = store;
@@ -313,6 +319,7 @@ export class Runner {
   async enqueue(
     brief: ValidBrief,
     parent?: ParentJob,
+    options: { draftId?: string | null } = {},
   ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
     const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
     if (existing !== undefined) {
@@ -354,7 +361,7 @@ export class Runner {
     // about the *account* rather than about this brief. A10's five — the cheap
     // model, the turn cap, three attempts, the ceiling, and the recorded
     // figure — all still fire where they already did, and none of them moved.
-    this.refuseOverCap();
+    this.assertUnderCap();
 
     const id = randomUUID();
     const record: JobRecord = {
@@ -379,6 +386,7 @@ export class Runner {
       // means in the API table, and what the Resume button A7 describes does.
       agentSessionId: parent?.agentSessionId ?? null,
       parentJobId: parent?.jobId ?? null,
+      draftId: options.draftId ?? null,
       changes: parent?.changes ?? null,
       idempotencyKey: brief.idempotencyKey,
       targetHashBefore: base.hash,
@@ -414,6 +422,7 @@ export class Runner {
           // Relative to STUDIO_HOME, the form the catalog derives and checks.
           candidate: candidateRef(id, brief.slug),
           idempotencyKey: brief.idempotencyKey,
+          ...(options.draftId === undefined || options.draftId === null ? {} : { draft: options.draftId }),
           brief,
         },
         null,
@@ -471,19 +480,25 @@ export class Runner {
     // Whole records: `SpendEntry` is structural, so `startedAt`, `finishedAt`
     // and `costUsd` are read off them directly and nothing has to be kept in
     // step with a second shape.
-    return spendWindow(this.store.list(), DAILY_WINDOW_MS, now);
+    return spendWindow([...this.store.list(), ...this.extraSpend()], DAILY_WINDOW_MS, now);
   }
 
   /** What the cap is, and where it stands. For `/api/health` and the UI. */
   capStatus(now: number = Date.now()): {
     capUsd: number | null;
     exceeded: boolean;
+    /** The planner's share of `totalUsd`, and how many turns it was. */
+    plannerUsd: number;
+    plannerTurns: number;
   } & ReturnType<typeof spendWindow> {
     const window = this.spend(now);
+    const planner = spendWindow(this.extraSpend(), DAILY_WINDOW_MS, now);
     const cap = dailyCapUsd();
     return {
       capUsd: cap,
       ...window,
+      plannerUsd: planner.totalUsd,
+      plannerTurns: planner.jobs,
       exceeded: cap !== null && window.totalUsd >= cap,
     };
   }
@@ -505,7 +520,7 @@ export class Runner {
    * oldest counted attempt leaves the window, because a refusal that does not
    * say when to come back is a dead end.
    */
-  private refuseOverCap(now: number = Date.now()): void {
+  assertUnderCap(now: number = Date.now()): void {
     const cap = dailyCapUsd();
     if (cap === null) return;
     const window = this.spend(now);
