@@ -75,7 +75,7 @@ interface Report {
   ok: boolean;
   tree: string;
   copy: { name: string; method: string; kept: boolean; dropped: boolean };
-  backup: { path: string; bytes: number; tables: number; restore: string } | null;
+  backup: { path: string; bytes: number; tables: number; restore: string; restoreArgv: string[][] } | null;
   steps: Step[];
   warnings: number;
 }
@@ -295,14 +295,16 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // was before step 1. That is the owner's way back from a failed --real.
       const server = new URL(url(name));
       const flags = [
-        ...(server.hostname === "" ? [] : [`-h ${decodeURIComponent(server.hostname)}`]),
-        ...(server.port === "" ? [] : [`-p ${server.port}`]),
-        ...(server.username === "" ? [] : [`-U ${decodeURIComponent(server.username)}`]),
-      ].join(" ");
-      const commands = (report.backup?.restore ?? "").split(" && ");
-      expect(commands.map((c) => path.basename(c.split(" ")[0] ?? ""))).toEqual(["dropdb", "createdb", "pg_restore"]);
-      for (const command of commands) expect(command, command).toContain(`${flags} `);
-      expect(commands[2]).toMatch(new RegExp(`-d ${name} \\S+\\.dump$`));
+        ...(server.hostname === "" ? [] : ["-h", decodeURIComponent(server.hostname)]),
+        ...(server.port === "" ? [] : ["-p", server.port]),
+        ...(server.username === "" ? [] : ["-U", decodeURIComponent(server.username)]),
+      ];
+      // Checked on the argument lists, which the printed line is the quoted
+      // join of; running the line below is what checks the quoting.
+      const commands = report.backup?.restoreArgv ?? [];
+      expect(commands.map((argv) => path.basename(argv[0] ?? ""))).toEqual(["dropdb", "createdb", "pg_restore"]);
+      for (const argv of commands) expect(argv.slice(1, 1 + flags.length), argv.join(" ")).toEqual(flags);
+      expect(commands[2]?.slice(-3)).toEqual(["-d", name, report.backup?.path]);
       const onlyPassword = pgToolEnv();
       for (const key of ["PGHOST", "PGPORT", "PGUSER", "PGDATABASE"]) delete onlyPassword[key];
       await execFileAsync("/bin/sh", ["-c", report.backup?.restore ?? "false"], { env: onlyPassword });

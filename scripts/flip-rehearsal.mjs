@@ -322,20 +322,23 @@ function shellQuote(value) {
  * and user `url` does (the password stays in PGPASSWORD or ~/.pgpass, never
  * on a command line). `dropdb --force` ends the sessions still open on it.
  */
-function restoreCommand(url, database, file) {
+function restoreCommands(url, database, file) {
   const parsed = new URL(url);
   const server = [
     ...(parsed.hostname === '' ? [] : ['-h', decodeURIComponent(parsed.hostname)]),
     ...(parsed.port === '' ? [] : ['-p', parsed.port]),
     ...(parsed.username === '' ? [] : ['-U', decodeURIComponent(parsed.username)]),
   ];
-  const line = (tool, ...args) => [join(PG_BIN, tool), ...server, ...args].map(shellQuote).join(' ');
+  const argv = (tool, ...args) => [join(PG_BIN, tool), ...server, ...args];
   return [
-    line('dropdb', '--force', database),
-    line('createdb', database),
-    line('pg_restore', '--no-owner', '--exit-on-error', '-d', database, file),
-  ].join(' && ');
+    argv('dropdb', '--force', database),
+    argv('createdb', database),
+    argv('pg_restore', '--no-owner', '--exit-on-error', '-d', database, file),
+  ];
 }
+
+/** `restoreCommands` as one line to paste into a shell. */
+const asShellLine = (commands) => commands.map((argv) => argv.map(shellQuote).join(' ')).join(' && ');
 
 /** A UTC time a file name can carry: 20260928T064512Z. */
 function fileStamp(date = new Date()) {
@@ -464,7 +467,8 @@ async function main(argv) {
   // Spelled out with the server and the user the backup was taken from, and
   // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
   // self_learn` in another shell could drop a different server's database.
-  const restore = restoreCommand(url, database, backupFile);
+  const restoreArgv = restoreCommands(url, database, backupFile);
+  const restore = asShellLine(restoreArgv);
 
   const report = {
     mode: real ? 'real' : 'rehearsal',
@@ -572,7 +576,7 @@ async function main(argv) {
           result: { path: backupFile, bytes, tables },
         };
       }
-      report.backup = { path: backupFile, bytes, tables: tables.length, restore };
+      report.backup = { path: backupFile, bytes, tables: tables.length, restore, restoreArgv };
       return {
         problem: null,
         result: report.backup,
