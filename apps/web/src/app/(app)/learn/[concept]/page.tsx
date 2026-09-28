@@ -12,8 +12,8 @@ import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCard
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
 import { buildConceptSessionContext, tutorStyleLabel } from "@/lib/agent/prompt";
-import { accessFor, loadFileAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
-import { problemForAccess } from "@/lib/asset-problems";
+import { loadFileAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
 import { habitTimeZone } from "@/lib/habit";
@@ -76,18 +76,18 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
 
   // Pictures: an asset row's thumbnail and the note's `![[embeds]]`, decided
   // on the server exactly as the library decides them, so neither renders a
-  // broken image when the file route is off or a file is gone.
-  const access = await loadFileAccess();
+  // broken image when the file route is off or a file is gone. Per row: an
+  // SVG in the blob store shows with the switch off, as the route serves it.
+  const access = await loadFileAccess(w.assets);
   const assets: StudioAsset[] = w.assets
     .filter((a) => !isCompanionKind(a.kind))
     .map((a) => ({ ...a, thumbnail: thumbnailFor(a, access) }));
 
   const embedId = (name: string) => `diagram:learn/assets/${name}`;
-  const selfLearn = accessFor(access, "self-learn");
-  const embedProblems =
-    w.note.available && selfLearn.ok ? await readFileProblems(embedTargets(w.note.source).map(embedId)) : new Map();
+  const embedProblems = w.note.available
+    ? await readFileProblems(embedTargets(w.note.source).map(embedId))
+    : new Map<string, RouteProblemCode | null>();
   const resolveEmbed = (name: string): EmbedResolution => {
-    if (!selfLearn.ok) return { problem: problemForAccess(selfLearn.reason) };
     const id = embedId(name);
     const problem = embedProblems.get(id) ?? null;
     if (problem !== null) return { problem };

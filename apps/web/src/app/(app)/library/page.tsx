@@ -88,13 +88,11 @@ export default async function LibraryPage({
   const sort = parseSort(firstParam(params.sort));
   const filters: LibraryFilters = { kind, topic, course, q, sort };
 
-  const [library, access, { kb }, courses] = await Promise.all([
-    loadLibrary(),
-    loadFileAccess(),
-    loadKnowledgeBase(),
-    getCourses(),
-  ]);
+  const [library, { kb }, courses] = await Promise.all([loadLibrary(), loadKnowledgeBase(), getCourses()]);
   const { rows, counts, reachable, truncated, titles, concepts } = library;
+  // Per row on top of the deployment-wide answers: a video in the blob store
+  // or a note the database owns draws whatever the switch says.
+  const access = await loadFileAccess(rows);
 
   const facets = kindFacets(counts);
   const libraryCourses: LibraryCourse[] = courses.map((c) => ({
@@ -115,6 +113,10 @@ export default async function LibraryPage({
   const hits = search === null ? null : searchHits(rows, terms, search.texts, search.sources);
 
   const matching = sortRows(filterRows(rows, { kind, topic, courseTopics, hits }), sort);
+  // The files-off and manimkc notices are about files on this machine's disk,
+  // so they are said only when some row in this view still depends on one.
+  const needsFiles = (repo: string) =>
+    matching.some((row) => row.sourceRepo === repo && row.path !== null && !access.served.has(row.id));
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
   const filtered = kind !== null || topic !== null || course !== null || q !== null;
   const kindLabel = (k: string) =>
@@ -219,11 +221,11 @@ export default async function LibraryPage({
             </Form>
           </section>
 
-          {!access.selfLearn.ok ? (
+          {!access.selfLearn.ok && needsFiles("self-learn") ? (
             <Notice role="status" title={access.selfLearn.headline} command={access.selfLearn.fix}>
               {access.selfLearn.detail}
             </Notice>
-          ) : !access.manimkc.ok ? (
+          ) : !access.manimkc.ok && needsFiles("manimkc") ? (
             <Notice role="status" title={access.manimkc.headline} command={access.manimkc.fix}>
               {access.manimkc.detail}
             </Notice>
@@ -233,6 +235,13 @@ export default async function LibraryPage({
             <p role="status" className="text-[12px] text-text2">
               Searched titles only: this deployment does not read asset files, so notes and
               transcripts were matched by name, not by what they say.
+            </p>
+          )}
+          {search !== null && search.searchedText && search.skipped > 0 && (
+            <p role="status" className="text-[12px] text-text2">
+              {search.skipped} {search.skipped === 1 ? "note or transcript was" : "notes and transcripts were"}{" "}
+              matched by name only: {search.skipped === 1 ? "its file is" : "their files are"} kept on this
+              machine&rsquo;s disk, which this deployment does not read.
             </p>
           )}
 

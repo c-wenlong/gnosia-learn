@@ -197,6 +197,12 @@ a 404 `not-uploaded`, never a quiet fall back to a file that may have been
 re-rendered since. `catalog asset upload` is what fills the store and sets the
 keys, and `catalog blob audit` is what checks the two agree.
 
+After the blob store comes the row: once the database owns notes, session logs
+or diagrams, a `note`, `session` or `diagram_source` asset is served from its
+row (the note as its row renders it, the log as its entries concatenated, the
+`.tldr` as its canonical document), also whatever the switch says, since the
+file under `learn/` is at best the export as of the flip.
+
 The poster route asks for the stored poster first: `catalog asset upload` cuts
 one per video on the laptop, with the recipe in
 `services/catalog/src/poster/recipe.ts`, and records it as a `poster` asset
@@ -281,7 +287,9 @@ never evidence, since both replays read only `observation` and `review`.
 manimkc never indexed here, and a manimkc index older than the run that recorded
 its data root are three different answers with three different fixes, and the
 first is what a fresh clone and production both look like. Nothing renders a
-dead player or a broken image in any of them.
+dead player or a broken image in any of them. Each is decided per row, through
+the route's own resolver: an asset in the blob store or a row the database owns
+shows whatever the switch says, and only a legacy file waits on it.
 
 `apps/web/src/lib/transcript.ts` parses the sidecars, defensively: a malformed
 one costs the transcript panel and leaves the video playing. Its cues are read
