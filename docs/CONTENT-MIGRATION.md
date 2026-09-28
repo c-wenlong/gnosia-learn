@@ -280,8 +280,11 @@ reaches zero and refuses the tenth hole forever after.
   verb pair replaces the edit, and the plugin's version is bumped in the same
   change (D15).
 - **Reversible until cut-over.** `catalog export` regenerates the whole
-  `content/` and `learn/` tree from the database at any moment until phase 3,
-  and `CONTENT_SOURCE=files` points readers back at it.
+  `content/` and `learn/` tree from the database at any moment until phase 3.
+  Until phase 2, `CONTENT_SOURCE=files` pointed readers back at it; since
+  phase 2 the web app has no file reader and refuses a type the database does
+  not own, so rolling reads back means reverting the phase 2 web PR (#152) or
+  restoring the pre-flip dump, not setting a variable.
 
 ## Phase 0: the foundation
 
@@ -1473,12 +1476,55 @@ read and its write, and fails without the fix:
 
 Parallel by area once every type has flipped. Four PRs (*guessed*).
 
-- [ ] **Web app:** `fileSource` is removed from the app's composition root;
+- [x] **Web app:** `fileSource` is removed from the app's composition root;
       `apps/web/src/data/repo-root.ts` and its five callers go;
       `outputFileTracingIncludes` and its comment go from
       `apps/web/next.config.ts:46-47`, keeping `outputFileTracingRoot` for the
       workspace packages; the legacy file branch of `asset-files.ts` goes.
-- [ ] **Studio:** reads through the seam with its cache only; the repo-root
+
+      **Built** (branch `p2/readers-db-only`, held until the owner's
+      database is flipped). `contentSource()` hands `selectSource` a file
+      reader that only refuses: a type whose row says `files`, that has no
+      row, or that `CONTENT_SOURCE` sends to files throws
+      `ContentUnavailableError` naming `npm run catalog -- flip <type>`, and
+      an ownership read that fails throws too, where it used to fall back to
+      the files (edge case 20). `app/(app)/error.tsx` renders either inside
+      the shell; Next keeps the message out of the browser, so the panel names
+      both causes and the digest, and the server log names the one it was.
+      The legacy file branch goes with `ASSET_FILES_ENABLED`, and with it the
+      request-time ffmpeg poster (`asset-posters.ts`), which read the video's
+      file: the routes serve a blob or a row, a poster only when the upload
+      stored one, and anything else is `not-uploaded`; a note, log or
+      `.tldr` whose type is not flipped is a 503 `not-flipped`. The pages
+      decide servability per row (the go-live follow-up Track E left), and
+      the library grid's notice counts the rows in view with no stored copy
+      and names `catalog asset upload`. Suites that want real course data
+      mock the seam with `apps/web/src/test/content-files.ts`, which reads
+      `seed/`; with `content/` and `learn/` moved out of the worktree, every
+      `apps/web` and `services/studio` suite still passes (93 files). Proof on a
+      `createdb -T self_learn` copy, migrated, imported from a throwaway copy
+      of the tree (the untracked tailscale diagram included), all six types
+      flipped and exported, and `asset upload` into a temporary
+      `SELF_LEARN_HOME` (159 objects, 433.6 MB): 71 routes served by this
+      branch from rows gave the same server HTML, scripts and hashed asset
+      names set aside, as `origin/main` with `CONTENT_SOURCE=files` and
+      `ASSET_FILES_ENABLED=1` on an identical copy; 34 full-page screenshots
+      at 1440, light and dark, of 17 of those routes: 20 matched pixel for
+      pixel and 14 differed only in about 190 pixels of the wordmark's
+      resampling; `scripts/e2e.mjs` passed 12 of 12
+      against the flipped copy (`E2E_TEMPLATE_DB` names it); with the
+      courses row set back to `files`, `/courses` rendered the panel and the
+      log named `catalog flip courses`, and with `DATABASE_URL` at a dead
+      port it rendered the panel beside the store banner.
+      **Review fixes** (same branch): the two agent routes that read courses
+      answer a refused read with a `{ error, code }` 503
+      (`CONTENT_NOT_FLIPPED` or `CONTENT_UNAVAILABLE`) instead of a bare 500;
+      Today rethrows courses that are not flipped to the error boundary rather
+      than showing the empty dashboard, and `/api/learner/today` answers 503;
+      a diagram SVG with no stored copy names `catalog diagram put`, not the
+      manimkc upload; the dead `indexedRoot` is gone; the docs no longer
+      offer `CONTENT_SOURCE=files` as the rollback (D18).
+- [x] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
       `vitest.setup.ts`'s tracked-tree check moves to the seed's assets
@@ -1486,6 +1532,36 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       The web app's studio screen shows D13's "stale since" banner from the
       runner's `health.vocabulary` (`stale`, `readAt`), which exists since 0.6
       and which nothing in `apps/web` reads yet.
+
+      **Built** (same branch). `paths.ts` takes the repo root from its own
+      location, as the catalog's `env.ts` does, with `STUDIO_REPO_ROOT` kept
+      for the tests. The vocabulary is `catalog topic ls --json` through
+      `readThrough("topics")`, so the studio still opens no database
+      connection, and `fileSource` is gone from it. Candidates are
+      `$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr|.svg`, and
+      `job.candidate_path` holds that path relative to `STUDIO_HOME`,
+      derived and checked by the catalog (a job id must be one path segment
+      now, since it names the directory); `CANDIDATES_DIR` is gone. The
+      permission file allows exactly the job's two candidate files and denies
+      every other job, `work/`, `cache/` and anything else under
+      `STUDIO_HOME`. A record from before the move keeps resolving against
+      the repository, and a queued one is re-pointed at its workspace before it
+      draws. `/api/vocabulary` serves the cached list, and the two studio
+      screens take their topics from it rather than from the app's
+      database-only read, which throws with Postgres down (U3); they show the
+      "stale since" banner from `health.vocabulary`, louder when `readAt` is
+      null. Proof on its own flipped copy: the runner reported the vocabulary
+      fresh, then stale with the cached `readAt` against a dead port, where
+      `/studio` rendered the banner; a real Sonnet job drew in its workspace
+      and Accept landed a revision with `git status` clean. The tracked-tree
+      check's retargeting to `seed/` stays with the Tests item.
+      **Review fixes** (same branch): the permission file also denies, by
+      glob, every job id but the agent's own, so a job queued after the agent
+      started is out of its reach (proved against the CLI: read without the
+      globs, refused with them); `/api/health` reuses the last vocabulary read
+      for `STUDIO_VOCABULARY_STATUS_MS` rather than spawning `topic ls` per
+      call; the dirty-tree backstop leaves a `STUDIO_HOME` inside the checkout
+      out again, as it did the old candidates directory.
 - [x] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
@@ -2333,10 +2409,12 @@ session log, and changes in its next version bump.
 ### D18. The database records which types it owns
 
 **Verdict:** `content_source` rows, written by `catalog flip`, are obeyed by
-importers and writers; `CONTENT_SOURCE` overrides readers only, for tests and
-as the read rollback lever. **Why:** an environment variable set differently on
-two processes is two truths, and a row is one. **Rejected:** the variable as the
-authority.
+importers and writers; `CONTENT_SOURCE` overrides readers only, for tests.
+Until phase 2 it was also the read rollback lever; since phase 2 the web app
+refuses a type the variable sends to files rather than reading them, so the
+rollback is reverting the phase 2 web PR (#152) or restoring the pre-flip
+dump. **Why:** an environment variable set differently on two processes is two
+truths, and a row is one. **Rejected:** the variable as the authority.
 
 ### D19. Vercel connects with a role that cannot write content
 

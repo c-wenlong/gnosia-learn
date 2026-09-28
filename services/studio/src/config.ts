@@ -165,6 +165,14 @@ export const MIRROR_IDLE_MS = integer("STUDIO_MIRROR_IDLE_MS", 15 * 60_000, 30_0
 /** How long `serve` gets to print the object that says it is listening. */
 export const MIRROR_START_MS = integer("STUDIO_MIRROR_START_MS", 30_000, 2_000, 300_000);
 
+/**
+ * How long `/api/health` reuses the last vocabulary read instead of spawning
+ * `catalog topic ls` again. Every studio page render asks health, and a
+ * `topic ls` is a Node process and a database round trip; a brief is still
+ * checked against a fresh read, so this only bounds how old the health line is.
+ */
+export const VOCABULARY_STATUS_MS = integer("STUDIO_VOCABULARY_STATUS_MS", 30_000, 0, 600_000);
+
 /** The server-side poll of a mirror's own `/api/health`, which the page cannot do (D13). */
 export const MIRROR_HEALTH_MS = integer("STUDIO_MIRROR_HEALTH_MS", 2_000, 200, 30_000);
 

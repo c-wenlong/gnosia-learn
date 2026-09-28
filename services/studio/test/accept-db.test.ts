@@ -10,7 +10,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { applyMigrations } from "../../catalog/src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "../../catalog/test/fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "../../catalog/test/scratch-database";
-import { absolute, candidatePath, candidateSvgPath, REPO_ROOT, targetPath, targetSvgPath } from "../src/paths";
+import {
+  absolute,
+  candidatePath,
+  candidateRef,
+  candidateSvgPath,
+  REPO_ROOT,
+  targetPath,
+  targetSvgPath,
+} from "../src/paths";
 import { NPM, run } from "../src/proc";
 import type { JobRecord } from "../src/store";
 
@@ -40,6 +48,8 @@ vi.mock("../src/canvas", async (importOriginal) => {
 
 const reachable = await probe();
 const SLUG = "studio-accept-db-fixture";
+/** Named rather than minted, so the brief can carry the candidate the catalog derives from it. */
+const JOB_ID = "studio-accept-db-job";
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><title>accepted</title></svg>`;
 
 function documentOf(): string {
@@ -118,7 +128,6 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
-    for (const file of [candidatePath(SLUG), candidateSvgPath(SLUG)]) await rm(absolute(file), { force: true });
     await scratch?.drop();
     await fixture?.cleanup();
     for (const dir of [home, blobs]) if (dir !== undefined) await rm(dir, { recursive: true, force: true });
@@ -134,10 +143,13 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
     await writeFile(
       briefFile,
       JSON.stringify({
+        id: JOB_ID,
         kind: "diagram",
         topic: "alpha",
         target: targetPath(SLUG),
-        candidate: candidatePath(SLUG),
+        // The form the runner sends and the catalog checks: the job's own
+        // workspace, relative to STUDIO_HOME.
+        candidate: candidateRef(JOB_ID, SLUG),
         idempotencyKey: "accept-db-key",
         brief: { intent: "i", topic: "alpha", slug: SLUG, title: "Accepted", mode: "new" },
       }),
@@ -145,14 +157,24 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
     const enqueued = await catalog.jobEnqueue(briefFile);
     expect(enqueued.error).toBeNull();
     const jobId = (enqueued.json as { job: { id: string } }).job.id;
+    expect(jobId).toBe(JOB_ID);
     expect((await catalog.sessionStart({ id: "studio-accept-db", title: "Accepted" })).error).toBeNull();
     expect((await catalog.jobClaim(jobId, "test-runner", "studio-accept-db")).error).toBeNull();
-    expect((await catalog.jobFinish({ jobId, state: "awaiting_review", phase: "ready" })).error).toBeNull();
+    expect(
+      (await catalog.jobFinish({
+        jobId,
+        state: "awaiting_review",
+        phase: "ready",
+        candidatePath: candidateRef(jobId, SLUG),
+      })).error,
+    ).toBeNull();
+    const [queued] = await scratch.db.select().from(job).where(eq(job.id, jobId));
+    expect(queued?.candidatePath).toBe(`jobs/${jobId}/candidate/${SLUG}.tldr`);
 
-    // The candidates, where the agent writes them.
-    await mkdir(path.dirname(absolute(candidatePath(SLUG))), { recursive: true });
-    await writeFile(absolute(candidatePath(SLUG)), documentOf(), "utf8");
-    await writeFile(absolute(candidateSvgPath(SLUG)), SVG, "utf8");
+    // The candidates, where the agent writes them: the job's own workspace.
+    await mkdir(path.dirname(candidatePath(jobId, SLUG)), { recursive: true });
+    await writeFile(candidatePath(jobId, SLUG), documentOf(), "utf8");
+    await writeFile(candidateSvgPath(jobId, SLUG), SVG, "utf8");
     const before = await tree(path.join(REPO_ROOT, "learn"));
     const fixtureBefore = await tree(fixture.root);
 
@@ -176,8 +198,8 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
       },
       targetPath: targetPath(SLUG),
       targetSvgPath: targetSvgPath(SLUG),
-      candidatePath: candidatePath(SLUG),
-      candidateSvgPath: candidateSvgPath(SLUG),
+      candidatePath: candidatePath(jobId, SLUG),
+      candidateSvgPath: candidateSvgPath(jobId, SLUG),
       topic: "alpha",
       slug: SLUG,
       attempt: 1,
@@ -204,7 +226,7 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
         findings: [],
         shapes: 1,
         lints: 0,
-        svg: { path: candidateSvgPath(SLUG), bytes: SVG.length },
+        svg: { path: candidateSvgPath(jobId, SLUG), bytes: SVG.length },
         exportFailed: false,
         checkedAt: new Date().toISOString(),
       },
@@ -225,10 +247,12 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
     expect(result.landed).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
     expect(result.note).toMatch(/nothing to commit/);
 
-    // The sandbox tree is as it was, bar the two candidates Accept removed.
-    const after = await tree(path.join(REPO_ROOT, "learn"));
-    const candidates = [candidatePath(SLUG), candidateSvgPath(SLUG)].map((p) => path.relative("learn", p));
-    expect(after).toEqual(Object.fromEntries(Object.entries(before).filter(([file]) => !candidates.includes(file))));
+    // The sandbox tree is exactly as it was: the candidates were never in it,
+    // and Accept removed them from the job's workspace.
+    expect(await tree(path.join(REPO_ROOT, "learn"))).toEqual(before);
+    for (const file of [candidatePath(jobId, SLUG), candidateSvgPath(jobId, SLUG)]) {
+      await expect(stat(file)).rejects.toThrow();
+    }
     await expect(stat(absolute(targetPath(SLUG)))).rejects.toThrow();
     await expect(stat(absolute(targetSvgPath(SLUG)))).rejects.toThrow();
     // And the tree diagrams were imported from is untouched too.

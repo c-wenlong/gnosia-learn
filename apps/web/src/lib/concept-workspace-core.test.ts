@@ -165,7 +165,7 @@ describe("the concept context for the tutor", () => {
 
   it("has no body when the note file could not be read", () => {
     const p = toConceptPromptInput(
-      buildConceptWorkspace(input({ note: { available: false, code: "file-missing", message: "gone" } }))!,
+      buildConceptWorkspace(input({ note: { available: false, code: "too-large", message: "too big" } }))!,
     );
     expect(p.body).toBeNull();
   });

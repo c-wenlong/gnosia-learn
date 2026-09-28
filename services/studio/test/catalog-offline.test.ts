@@ -1,13 +1,14 @@
-import { mkdir, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deadPort, refusingPostgres, type RefusingPostgres } from "../../catalog/test/fake-postgres";
-import { loadVocabulary, validateBrief, type ValidBrief } from "../src/brief";
-import { absolute, CANDIDATES_DIR, jobDir, targetPath, targetSvgPath } from "../src/paths";
+import { validateBrief, type ValidBrief } from "../src/brief";
+import { absolute, jobDir, targetPath, targetSvgPath } from "../src/paths";
 import { allSettled, until } from "./wait";
+import { testVocabulary } from "./vocabulary";
 
 /**
  * D16 end to end: the real `catalog` CLI, a real runner, and a database that is
@@ -78,7 +79,7 @@ async function brief(): Promise<ValidBrief> {
       relations: [],
       idempotencyKey: `key-${Math.random()}`,
     },
-    await loadVocabulary(),
+    testVocabulary(),
   );
 }
 
@@ -121,7 +122,6 @@ beforeEach(async () => {
   );
   store = new JobStore();
   runner = new Runner(store);
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
 });
 
 afterEach(async () => {
@@ -130,8 +130,6 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME ?? "", { recursive: true, force: true });
   await rm(absolute(targetPath(SLUG)), { force: true });
   await rm(absolute(targetSvgPath(SLUG)), { force: true });
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.tldr`), { force: true });
-  await rm(absolute(`${CANDIDATES_DIR}/${SLUG}.svg`), { force: true });
   delete process.env.STUDIO_HOME;
   vi.unstubAllEnvs();
 });

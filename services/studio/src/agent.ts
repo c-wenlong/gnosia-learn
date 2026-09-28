@@ -11,7 +11,7 @@ import {
   type AgentAuth,
   type Model,
 } from "./config";
-import { REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
+import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
 import { run, signalGroup } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
@@ -424,9 +424,11 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  * - No bare tool name anywhere. `--allowedTools Bash` would allow every
  *   command, which is what the design's first draft got wrong; the allowlist
  *   lives in the settings file as prefixed rules and nothing here overrides it.
- * - `--add-dir <scratch>` because the scratch directory can sit outside the
- *   repository when `STUDIO_HOME` does, and `blockReadsOutsideWorkingDirectories`
- *   would otherwise refuse the agent its own snippets.
+ * - `--add-dir <scratch>` and `--add-dir <candidate>` because both sit in the
+ *   job workspace, which is outside the repository whenever `STUDIO_HOME` is,
+ *   and `blockReadsOutsideWorkingDirectories` would otherwise refuse the agent
+ *   its own snippets and the document it is drawing. The candidate directory
+ *   and not the workspace: the workspace root holds the runner's records.
  * - `--max-turns` capped server side regardless of the brief.
  */
 export async function startAgent(options: AgentOptions): Promise<AgentRun> {
@@ -437,6 +439,7 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
   };
   const file = settingsPath(options.jobId);
   await mkdir(scratchDir(options.jobId), { recursive: true });
+  await mkdir(candidateDir(options.jobId), { recursive: true });
   await mkdir(tmpDir(options.jobId), { recursive: true });
   await writeFile(file, `${JSON.stringify(buildSettings(settingsInput), null, 1)}\n`, "utf8");
 
@@ -454,6 +457,8 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     "none",
     "--add-dir",
     scratchDir(options.jobId),
+    "--add-dir",
+    candidateDir(options.jobId),
     "--model",
     options.model,
     "--max-turns",

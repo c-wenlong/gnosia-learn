@@ -78,9 +78,15 @@ export interface JobRecord {
   state: JobState;
   phase: string | null;
   brief: ValidBrief;
-  /** Repo-relative, all four. */
+  /** The diagram's logical names, `learn/assets/<slug>.tldr` and `.svg`, repo-relative. */
   targetPath: string;
   targetSvgPath: string;
+  /**
+   * Where the job draws: absolute, in its own workspace
+   * (`$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr` and `.svg`). A record from
+   * before candidates moved there holds the repo-relative
+   * `learn/assets/.candidates/<slug>` paths, which `absolute` still resolves.
+   */
   candidatePath: string;
   candidateSvgPath: string;
   topic: string;
@@ -121,10 +127,11 @@ export interface JobRecord {
    * The candidate's sha256 when the reconcile pass marked this job
    * `interrupted`, or null when there was nothing there.
    *
-   * The candidate path is per slug and an interrupted job releases the target's
-   * lease, so another job can write that same path before anyone presses
-   * Resume. This is how a resume tells its own half-drawn document from
-   * somebody else's leftovers, and it is only ever set by the reconcile pass.
+   * A resume adopts the parent's candidate only when it still hashes to this.
+   * In the job's own workspace nothing else writes that file; a record from
+   * before the move names the per-slug path, where an interrupted job holds no
+   * lease and another job can write the same file before anyone presses
+   * Resume. It is only ever set by the reconcile pass.
    */
   candidateHash?: string | null;
   requestedAt: string;

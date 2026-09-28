@@ -263,9 +263,9 @@ describe("the hrefs", () => {
   });
 
   it("points a thumbnail at the studio's own proxy and not at the library's file route", () => {
-    // `/api/assets/{id}/file` needs ASSET_FILES_ENABLED *and* an indexed asset,
-    // and an untopiced diagram has no asset row at all. That is the tile that
-    // matters most, so it cannot be the one that breaks.
+    // `/api/assets/{id}/file` serves an asset row, and a diagram being drawn
+    // has none until it is accepted. The runner's route answers for every
+    // diagram it lists, behind the studio's one gate.
     expect(thumbnailHref("dot-product")).toBe("/studio/api/diagrams/dot-product/svg");
   });
 });

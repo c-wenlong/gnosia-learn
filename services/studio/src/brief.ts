@@ -1,8 +1,8 @@
-import { fileSource, selectSource, type ContentSource, type TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@self-learn/content";
 
-import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, type Model } from "./config";
-import { readThrough } from "./content-cache";
-import { REPO_ROOT } from "./paths";
+import { topicList } from "./catalog";
+import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, VOCABULARY_STATUS_MS, type Model } from "./config";
+import { readThrough, type CachedRead } from "./content-cache";
 
 /**
  * The brief, and the refusals that happen before anything is spent.
@@ -132,6 +132,11 @@ function oneOf<T extends string>(value: unknown, field: string, allowed: readonl
 /** The topic vocabulary, as a brief is checked against it. */
 export interface Vocabulary {
   topics: Map<string, { title: string; concepts: string[] }>;
+  /**
+   * Every topic as the catalog listed it, for a screen that shows titles and
+   * domains (the web studio's chips and the brief form's picker).
+   */
+  entries: TopicEntry[];
   /** When the vocabulary was read from its source, as an ISO instant. */
   readAt: string;
   /**
@@ -145,53 +150,124 @@ export interface Vocabulary {
 }
 
 /**
- * The studio's content source, one per process so the file source's parse is
- * kept between briefs.
- *
- * Through the same seam the web app reads (`packages/content`), so the day the
- * vocabulary moves into Postgres this is where it changes. The studio holds no
- * database connection of its own (it reaches Postgres through the catalog
- * CLI), so it passes no `db`: a `CONTENT_SOURCE` that sends topics to the
- * database makes the read throw, and the cache answers until track A gives the
- * studio a way to read rows.
+ * The topics, as `catalog topic ls --json` lists them, cut to the fields a
+ * `TopicEntry` has so the cached copy is the same shape the rest of the repo
+ * reads. The listing's `incoming` edges are the planner's and are not kept.
  */
-let studioSource: ContentSource | null = null;
-function source(): ContentSource {
-  studioSource ??= selectSource({ files: fileSource(REPO_ROOT) });
-  return studioSource;
+async function readTopics(): Promise<TopicEntry[]> {
+  const result = await topicList();
+  const listed = (result.json as { topics?: unknown } | null)?.topics;
+  if (!result.ok || !Array.isArray(listed)) {
+    throw new Error(result.error ?? "catalog topic ls printed no topics list");
+  }
+  const entries: TopicEntry[] = [];
+  for (const item of listed) {
+    const entry = entryOf(item);
+    if (entry === null) {
+      throw new Error(`catalog topic ls printed a topic without a slug, a title or a concepts list: ${JSON.stringify(item)}`);
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** One listed topic as a `TopicEntry`, or null when a field a brief is checked on is missing. */
+function entryOf(value: unknown): TopicEntry | null {
+  if (typeof value !== "object" || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  const maps = (typeof raw.maps === "object" && raw.maps !== null ? raw.maps : {}) as Record<string, unknown>;
+  if (typeof raw.slug !== "string" || typeof raw.title !== "string") return null;
+  if (!Array.isArray(maps.concepts) || !maps.concepts.every((c: unknown) => typeof c === "string")) return null;
+  return {
+    slug: raw.slug,
+    title: raw.title,
+    domain: typeof raw.domain === "string" ? raw.domain : "",
+    summary: typeof raw.summary === "string" ? raw.summary : null,
+    aliases: strings(raw.aliases),
+    relations: Array.isArray(raw.relations) ? (raw.relations as TopicEntry["relations"]) : [],
+    maps: { manimkc: strings(maps.manimkc), courses: strings(maps.courses), concepts: maps.concepts as string[] },
+  };
 }
 
 /**
- * The vocabulary, through the reader seam and the studio's cache.
+ * The vocabulary: the catalog's topic rows, through the studio's cache.
  *
- * Not from the catalog on purpose: with Postgres down the studio still browses
- * and still draws (U3), and the topic list is one of the three things that
- * makes that true. Today the seam reads `content/topics.yaml`; when topics move
- * into the database, a failed read falls back to the copy in
- * `$STUDIO_HOME/cache/topics.json` and says how old it is. The foreign key at
- * enqueue is the second check on the same fact, and the gate is the third: D7
- * explains why all three are worth having.
+ * Read with `catalog topic ls` because the studio opens no database connection
+ * of its own (`catalog.ts` says why), and the rows are the one truth the
+ * enqueue's foreign key and the gate check the same slug against: D7 explains
+ * why all three checks are worth having. Every good read is kept in
+ * `$STUDIO_HOME/cache/topics.json`, and a read that fails for any reason (the
+ * database down, the CLI exiting 3, a listing that does not parse) is answered
+ * from that copy, marked stale with the time it was read (D13). With Postgres
+ * down the studio still browses and still draws (U3), and the topic list is one
+ * of the things that makes that true.
  *
- * The vocabulary is validated by the same parser the catalog indexes with, so a
- * malformed file is refused here as it is by `catalog index`, and the cached
- * copy is used until it is fixed. The studio's own lenient parser, which
- * skipped a bad entry without a word, is gone.
- *
- * `repoRoot` reads the files under another root, for a test.
+ * With no copy on disk a failed read throws: `/api/health` then reports
+ * `readAt: null`, and a brief cannot be checked until the catalog answers.
  */
-export async function loadVocabulary(repoRoot?: string): Promise<Vocabulary> {
-  const from = repoRoot === undefined ? source() : fileSource(repoRoot);
-  const read = await readThrough("topics", () => from.topics(), { isValue: isTopicList });
+export async function loadVocabulary(): Promise<Vocabulary> {
+  let read: CachedRead<TopicEntry[]>;
+  try {
+    read = await readThrough("topics", readTopics, { isValue: isTopicList });
+  } catch (error) {
+    remember({ readAt: null, stale: true, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+  remember({ readAt: read.readAt, stale: read.stale, ...(read.error === undefined ? {} : { error: read.error }) });
   const topics = new Map<string, { title: string; concepts: string[] }>();
   for (const entry of read.value) {
     topics.set(entry.slug, { title: entry.title, concepts: [...entry.maps.concepts] });
   }
   return {
     topics,
+    entries: read.value,
     readAt: read.readAt,
     stale: read.stale,
     ...(read.error === undefined ? {} : { staleReason: read.error }),
   };
+}
+
+/** Where the vocabulary stands, as `/api/health` reports it. `readAt: null` means no copy at all. */
+export interface VocabularyStatus {
+  readAt: string | null;
+  stale: boolean;
+  error?: string;
+}
+
+/** The outcome of the last `loadVocabulary`, from any route, and when it came. */
+let lastStatus: { at: number; status: VocabularyStatus } | null = null;
+let statusRead: Promise<VocabularyStatus> | null = null;
+
+function remember(status: VocabularyStatus): void {
+  lastStatus = { at: Date.now(), status };
+}
+
+/**
+ * The vocabulary's state for `/api/health`, without a `catalog topic ls` per
+ * call.
+ *
+ * Every studio page render asks health, and each read spawns the catalog CLI.
+ * So health reuses the last read any route made (a brief's enqueue, the
+ * vocabulary route, an earlier health) when it is younger than
+ * `STUDIO_VOCABULARY_STATUS_MS`, and concurrent callers share one read. A
+ * brief is still checked against a read of its own, so the cost of the reuse
+ * is only that the health line can be that many seconds behind an outage.
+ */
+export async function vocabularyStatus(maxAgeMs: number = VOCABULARY_STATUS_MS): Promise<VocabularyStatus> {
+  if (lastStatus !== null && Date.now() - lastStatus.at < maxAgeMs) return lastStatus.status;
+  statusRead ??= loadVocabulary()
+    .then(
+      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
+      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
+    )
+    .finally(() => {
+      statusRead = null;
+    });
+  return statusRead;
 }
 
 /** The fields `loadVocabulary` reads, checked on a cached copy before it is trusted. */
@@ -231,8 +307,8 @@ export function validateBrief(input: unknown, vocabulary: Vocabulary): ValidBrie
   if (known === undefined) {
     throw new BriefError(
       "topic",
-      `no topic "${topic}" in content/topics.yaml. A diagram is filed under a topic that ` +
-        `already exists; add the topic there first if this is a new subject.`,
+      `no topic "${topic}" in the catalog's vocabulary. A diagram is filed under a topic that ` +
+        `already exists; add it with \`catalog topic add\` first if this is a new subject.`,
     );
   }
   const diagramSlug = slug(raw.slug, "slug");
@@ -294,9 +370,8 @@ export function validateBrief(input: unknown, vocabulary: Vocabulary): ValidBrie
     if (!known.concepts.includes(concept)) {
       throw new BriefError(
         "concepts",
-        `"${concept}" is not filed under topic "${topic}" in content/topics.yaml. The indexer ` +
-          `reads the same file, so a concept it does not know would be dropped from the asset ` +
-          `row after the diagram is drawn.`,
+        `"${concept}" is not filed under topic "${topic}" in the catalog's vocabulary, so it ` +
+          `would be dropped from the asset row after the diagram is drawn.`,
       );
     }
   }

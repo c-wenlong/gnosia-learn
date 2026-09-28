@@ -1,9 +1,12 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { asset, indexRun } from "@self-learn/schema";
+import { fsStore, key as blobKey } from "@self-learn/blob";
+import { asset, blobObject, indexRun } from "@self-learn/schema";
 
 import type { RouteProblemCode } from "@/lib/asset-problems";
 
@@ -22,35 +25,40 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 }));
 
 /**
- * `GET /api/assets/<id>/file`, against a scratch database and a scratch data
- * root.
+ * `GET /api/assets/<id>/file` and its status route, against a scratch database
+ * and a scratch blob store: the refusals and the headers. The streaming and
+ * Range answers for a stored video are in `asset-blob.test.ts`, row text in
+ * `asset-rows.test.ts`.
  *
- * The route reads files off the filesystem from an identifier in a URL, so the
- * interesting assertions are the refusals. Four of them are here and nowhere
- * else: an id that tries to climb out of the tree finds no row, a stored path
- * that climbs out is refused on the resolved path rather than on a string
- * prefix, a symlink inside the tree that points out of it is caught after
- * `realpath`, and an extension nobody has declared is refused instead of
- * guessed at.
+ * The one property this file adds since phase 2: **the route reads no file
+ * off this machine's disk.** A video's bytes sit under a data root the
+ * catalog recorded, exactly where the legacy branch used to find them, and
+ * the answer is still `not-uploaded`, with `ASSET_FILES_ENABLED` set to the
+ * value that used to switch that branch on. If the branch ever comes back,
+ * this is the test that says so.
  *
- * The manimkc data root is a temporary directory, which is also what makes the
- * fifth case testable: the root moving and nobody re-indexing is the state the
- * real database was found in, and it has to read as "re-run the indexer"
- * rather than as "the video is gone".
- *
- * `DATABASE_URL` and `ASSET_FILES_ENABLED` are both set before the route is
- * imported: the store opens one pool per process on first use, and the gate is
- * read per request but the module is not worth importing twice.
+ * The scratch database stops at 0012 on purpose. A video row with no
+ * `blob_key` is the state the legacy branch served, and the phase 2 contract
+ * migration forbids it; before that migration such rows are exactly what an
+ * unflipped database holds, so this is the schema the property has to be
+ * proved on.
  */
+
 
 const reachable = await probe();
 
-/** 1 kB of recognisable bytes, so a slice can be checked against its offset. */
-const VIDEO = Buffer.from(
-  Array.from({ length: 1_000 }, (_, i) => (i % 251) + 1),
-);
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
-const VIDEO_ID = "manimkc:out/algorithms/demo/demo.mp4";
+const VIDEO = Buffer.from(Array.from({ length: 1_000 }, (_, i) => (i % 251) + 1));
+const SVG = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg"><title>dot</title></svg>`);
+const EMPTY = Buffer.alloc(0);
+const ODD = Buffer.from("a kind nobody declared");
+
+const ON_DISK_ID = "manimkc:out/algorithms/demo/demo.mp4";
+const SVG_ID = "diagram:learn/assets/dot-product.svg";
+const EMPTY_ID = "manimkc:out/empty.mp4";
+const ODD_ID = "manimkc:out/odd.bin";
+const LINK_ID = "link:cs3230-notes";
 const ORIGIN = "http://localhost:3000";
 
 type Handler = (
@@ -66,12 +74,10 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
   let scratch: Scratch;
   let GET: Handler;
   let STATUS: Handler;
-  /** manimkc's data root for this run: the base every `out/…` path resolves against. */
-  let dataRoot: string;
-  /** A directory beside it, standing in for anything the route must not reach. */
-  let outside: string;
-  /** The temporary tree holding both, removed at the end of the run. */
+  /** The temporary tree: a manimkc data root, and the blob store's home. */
   let base: string;
+  let dataRoot: string;
+  const saved: Record<string, string | undefined> = {};
 
   const call = async (id: string, headers: Record<string, string> = {}) =>
     GET(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/file`, { headers }), {
@@ -79,8 +85,8 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     });
 
   /** `GET /api/assets/<id>/status`, the probe a failed element makes. */
-  const status = async (id: string) =>
-    STATUS(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status`), {
+  const status = async (id: string, query = "") =>
+    STATUS(new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status${query}`), {
       params: Promise.resolve({ id }),
     });
 
@@ -95,128 +101,101 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     expect(await probe.json(), id).toEqual({ ok: false, code });
   };
 
-  const seed = async (row: {
-    id: string;
-    kind: string;
-    path?: string;
-    url?: string;
-    sourceRepo: string;
-  }) => {
+  /** Stores `bytes` and writes the `blob_object` row, as an upload leaves them. */
+  const stored = async (bytes: Buffer, ext: string) => {
+    const key = blobKey("local", sha256(bytes), ext);
+    const file = path.join(base, `upload.${ext}`);
+    await writeFile(file, bytes);
+    await fsStore(path.join(base, "home", "blobs")).put(key, createReadStream(file), {
+      sha256: sha256(bytes),
+      bytes: bytes.length,
+      mime: "application/octet-stream",
+    });
     await scratch.db
-      .insert(asset)
+      .insert(blobObject)
       .values({
-        id: row.id,
-        kind: row.kind,
-        path: row.path ?? null,
-        url: row.url ?? null,
-        sourceRepo: row.sourceRepo,
+        key,
+        sha256: sha256(bytes),
+        bytes: bytes.length,
+        mime: "application/octet-stream",
+        provider: "fs",
+        state: "present",
+        confirmedAt: new Date(),
       })
       .onConflictDoNothing();
+    return key;
   };
 
-  /** The `index_run` row the route reads the manimkc data root out of. */
-  const recordRun = async (metadata: Record<string, unknown>) => {
-    const now = new Date();
-    await scratch.db
-      .insert(indexRun)
-      .values({
-        source: "manimkc",
-        // Deliberately not the data root: this is the checkout the CLI read,
-        // which is exactly the distinction the route has to get right.
-        sourceRoot: path.join(outside, "checkout"),
-        startedAt: now,
-        finishedAt: now,
-        metadata,
-      })
-      .onConflictDoUpdate({ target: indexRun.source, set: { metadata } });
-  };
+  const row = (id: string, kind: string, file: string | null, key: string | null, sourceRepo = "manimkc") => ({
+    id,
+    kind,
+    path: file,
+    url: file === null ? "https://example.com/notes" : null,
+    sourceRepo,
+    blobKey: key,
+  });
 
   beforeAll(async () => {
+    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "ASSET_FILES_ENABLED"]) saved[key] = process.env[key];
     base = await mkdtemp(path.join(tmpdir(), "asset-files-"));
     dataRoot = path.join(base, "manimkc-home");
-    outside = path.join(base, "outside");
     await mkdir(path.join(dataRoot, "out", "algorithms", "demo"), { recursive: true });
-    await mkdir(outside, { recursive: true });
     await writeFile(path.join(dataRoot, "out", "algorithms", "demo", "demo.mp4"), VIDEO);
-    await writeFile(path.join(dataRoot, "out", "empty.mp4"), "");
-    await writeFile(path.join(outside, "secret.mp4"), "not yours");
-    await symlink(
-      path.join(outside, "secret.mp4"),
-      path.join(dataRoot, "out", "algorithms", "demo", "link.mp4"),
-    );
 
     scratch = await createScratchDatabase();
-    // At 0012: these rows carry a path and no blob, which the contract (0013)
-    // forbids; p2/readers-db-only rewrites the suite for the contract.
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     process.env.DATABASE_URL = scratch.url;
+    process.env.SELF_LEARN_HOME = path.join(base, "home");
+    // The value that used to turn the legacy branch on. Nothing reads it now.
     process.env.ASSET_FILES_ENABLED = "1";
     ({ GET } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
 
-    await seed({ id: VIDEO_ID, kind: "video", path: "out/algorithms/demo/demo.mp4", sourceRepo: "manimkc" });
-    await seed({ id: "manimkc:out/empty.mp4", kind: "video", path: "out/empty.mp4", sourceRepo: "manimkc" });
-    await seed({ id: "manimkc:out/gone.mp4", kind: "video", path: "out/gone.mp4", sourceRepo: "manimkc" });
-    await seed({
-      id: "manimkc:climb",
-      kind: "video",
-      path: "out/../../outside/secret.mp4",
-      sourceRepo: "manimkc",
-    });
-    await seed({
-      id: "manimkc:out/algorithms/demo/link.mp4",
-      kind: "video",
-      path: "out/algorithms/demo/link.mp4",
-      sourceRepo: "manimkc",
-    });
-    await seed({
-      id: "diagram:dot-product",
-      kind: "diagram_svg",
-      path: "learn/assets/dot-product.svg",
-      sourceRepo: "self-learn",
-    });
-    await seed({
-      id: "diagram:dot-product.tldr",
-      kind: "diagram_source",
-      path: "learn/assets/dot-product.tldr",
-      sourceRepo: "self-learn",
-    });
-    await seed({
-      id: "link:cs3230-notes",
-      kind: "link",
-      url: "https://example.com/notes",
-      sourceRepo: "self-learn",
+    await scratch.db.insert(asset).values([
+      row(ON_DISK_ID, "video", "out/algorithms/demo/demo.mp4", null),
+      row(SVG_ID, "diagram_svg", "learn/assets/dot-product.svg", await stored(SVG, "svg"), "self-learn"),
+      row(EMPTY_ID, "video", "out/empty.mp4", await stored(EMPTY, "mp4")),
+      row(ODD_ID, "video", "out/odd.bin", await stored(ODD, "bin")),
+      row(LINK_ID, "link", null, null, "self-learn"),
+    ]);
+    // Where manimkc's `out/…` paths resolved, as the indexer records it: the
+    // legacy branch's root, and the reason the video above is findable on disk.
+    const now = new Date();
+    await scratch.db.insert(indexRun).values({
+      source: "manimkc",
+      sourceRoot: path.join(base, "checkout"),
+      startedAt: now,
+      finishedAt: now,
+      metadata: { outRoot: dataRoot },
     });
   }, 60_000);
 
   afterAll(async () => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     await scratch?.drop();
     if (base !== undefined) await rm(base, { recursive: true, force: true });
-    delete process.env.ASSET_FILES_ENABLED;
   });
 
-  beforeEach(async () => {
-    process.env.ASSET_FILES_ENABLED = "1";
-    await recordRun({ outRoot: dataRoot });
-  });
-
-  it("serves a whole file with the headers a player needs", async () => {
-    const response = await call(VIDEO_ID);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("video/mp4");
-    expect(response.headers.get("content-length")).toBe("1000");
-    expect(response.headers.get("accept-ranges")).toBe("bytes");
-    expect(response.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
-    expect(Buffer.from(await response.arrayBuffer())).toEqual(VIDEO);
+  it("reads no file off the disk, even one sitting under the recorded data root", async () => {
+    await expectRefusal(ON_DISK_ID, 404, "not-uploaded");
+    const response = await call(ON_DISK_ID);
+    const text = await response.text();
+    expect(text).toContain("catalog -- asset upload");
+    // Not one byte of the file that is right there.
+    expect(Buffer.from(text).includes(VIDEO.subarray(0, 32))).toBe(false);
   });
 
   it("refuses to let a stored file execute as script in this origin", async () => {
-    const response = await call("diagram:dot-product");
+    const response = await call(SVG_ID);
     expect(response.status).toBe(200);
     // An SVG is a document, so the type is right and the sandbox is what makes
     // it safe. nosniff keeps everything else from being re-read as one.
     expect(response.headers.get("content-type")).toBe("image/svg+xml");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await response.arrayBuffer()).equals(SVG)).toBe(true);
 
     const csp = response.headers.get("content-security-policy") ?? "";
     // Script off, in both the way that stops it and the way that says so.
@@ -225,61 +204,30 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     expect(csp).toContain("default-src 'none'");
     // And the three a tldrawkc export needs, or the diagram comes back 200 and
     // unstyled: it writes its CSS inline and embeds its fonts as data URLs.
-    // Whether that actually renders is not a thing jsdom can answer, so it is
-    // verified by opening one in a browser; this pins the header.
     expect(csp).toContain("style-src 'unsafe-inline'");
     expect(csp).toContain("font-src data:");
     expect(csp).toContain("img-src data:");
   });
 
-  it("answers a range with a 206 and the slice that was asked for", async () => {
-    const response = await call(VIDEO_ID, { range: "bytes=10-19" });
-    expect(response.status).toBe(206);
-    expect(response.headers.get("content-range")).toBe("bytes 10-19/1000");
-    expect(response.headers.get("content-length")).toBe("10");
-    expect(Buffer.from(await response.arrayBuffer())).toEqual(VIDEO.subarray(10, 20));
-  });
-
-  it("reads an open range and a suffix range to the end of the file", async () => {
-    const open = await call(VIDEO_ID, { range: "bytes=990-" });
-    expect(open.headers.get("content-range")).toBe("bytes 990-999/1000");
-    expect(Buffer.from(await open.arrayBuffer())).toEqual(VIDEO.subarray(990));
-
-    const suffix = await call(VIDEO_ID, { range: "bytes=-10" });
-    expect(suffix.headers.get("content-range")).toBe("bytes 990-999/1000");
-    expect(Buffer.from(await suffix.arrayBuffer())).toEqual(VIDEO.subarray(990));
-  });
-
-  it("answers 416 with the real length when the range is past the end", async () => {
-    const response = await call(VIDEO_ID, { range: "bytes=5000-6000" });
-    expect(response.status).toBe(416);
-    expect(response.headers.get("content-range")).toBe("bytes */1000");
-    expect(await response.text()).toBe("");
-
-    // An empty file can satisfy no range at all.
-    const empty = await call("manimkc:out/empty.mp4", { range: "bytes=0-" });
+  it("answers any range against an empty object with 416", async () => {
+    const empty = await call(EMPTY_ID, { range: "bytes=0-" });
     expect(empty.status).toBe(416);
     expect(empty.headers.get("content-range")).toBe("bytes */0");
   });
 
-  it("sends the whole file when the range header is one it does not speak", async () => {
+  it("sends the whole object when the range header is one it does not speak", async () => {
     // RFC 9110 lets a server ignore a Range it cannot honour, and a multipart
     // response is work no browser needs to scrub a video.
     for (const range of ["frames=1-2", "bytes=abc", "bytes=0-9,20-29", ""]) {
-      const response = await call(VIDEO_ID, { range });
+      const response = await call(SVG_ID, { range });
       expect(response.status, range).toBe(200);
-      expect(response.headers.get("content-length"), range).toBe("1000");
+      expect(response.headers.get("content-length"), range).toBe(String(SVG.length));
     }
   });
 
-  it("404s an id the catalog does not have", async () => {
+  it("404s an id the catalog does not have, and a link that has no file", async () => {
     await expectRefusal("manimkc:out/nothing-like-this.mp4", 404, "not-in-catalog");
-  });
-
-  it("404s a row whose file is not on disk, and one that has no file at all", async () => {
-    await expectRefusal("manimkc:out/gone.mp4", 404, "file-missing");
-    // A link asset is a url and nothing else.
-    await expectRefusal("link:cs3230-notes", 404, "no-file");
+    await expectRefusal(LINK_ID, 404, "no-file");
   });
 
   it("never joins the id onto a path", async () => {
@@ -290,93 +238,35 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     expect(await response.text()).not.toContain("root:");
   });
 
-  it("refuses a stored path that climbs out of its root", async () => {
-    const response = await call("manimkc:climb");
-    expect(response.status).toBe(404);
-    expect(await response.text()).not.toContain("not yours");
-    await expectRefusal("manimkc:climb", 404, "refused");
-  });
-
-  it("refuses a symlink inside the root that points out of it", async () => {
-    const response = await call("manimkc:out/algorithms/demo/link.mp4");
-    expect(response.status).toBe(404);
-    expect(await response.text()).not.toContain("not yours");
-    await expectRefusal("manimkc:out/algorithms/demo/link.mp4", 404, "refused");
-  });
-
-  it("refuses an extension it has no declared type for", async () => {
-    // A real committed file, so this is the refusal and not a missing file.
-    await expectRefusal("diagram:dot-product.tldr", 404, "unsupported-type");
-  });
-
-  it("says the index is stale rather than pretending the file is gone", async () => {
-    await recordRun({});
-    const response = await call(VIDEO_ID);
-    expect(response.status).toBe(503);
-    const body = (await response.json()) as { detail: string };
-    expect(body.detail).toContain("npm run catalog -- index --only manimkc");
-    await expectRefusal(VIDEO_ID, 503, "manimkc-stale");
-  });
-
-  it("says so when manimkc has never been indexed here", async () => {
-    await scratch.db.delete(indexRun);
-    const response = await call(VIDEO_ID);
-    expect(response.status).toBe(503);
-    const body = (await response.json()) as { detail: string };
-    expect(body.detail).toContain("never been indexed");
-    await expectRefusal(VIDEO_ID, 503, "manimkc-unindexed");
-  });
-
-  it("serves nothing at all when the deployment has not opted in", async () => {
-    delete process.env.ASSET_FILES_ENABLED;
-    const response = await call(VIDEO_ID);
-    expect(response.status).toBe(404);
-    await expectRefusal(VIDEO_ID, 404, "files-off");
-
-    process.env.ASSET_FILES_ENABLED = "false";
-    expect((await call(VIDEO_ID)).status).toBe(404);
+  it("refuses a stored object whose extension nobody declared", async () => {
+    await expectRefusal(ODD_ID, 404, "unsupported-type");
   });
 
   describe("the status route", () => {
-    it("answers ok for a file the route would serve, and sends none of it", async () => {
-      const response = await status(VIDEO_ID);
+    it("answers ok for an asset the route would serve, and sends none of it", async () => {
+      const response = await status(SVG_ID);
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
       const text = await response.text();
       expect(JSON.parse(text)).toEqual({ ok: true });
-      // A few bytes of JSON, never the 1 kB file.
       expect(text.length).toBeLessThan(40);
     });
 
     it("never carries a stored path, only the category", async () => {
-      const response = await status("manimkc:out/gone.mp4");
-      const text = await response.text();
-      expect(text).not.toContain("out/gone.mp4");
+      const text = await (await status(ON_DISK_ID)).text();
+      expect(text).not.toContain("out/algorithms");
       expect(text).not.toContain(dataRoot);
       expect(Object.keys(JSON.parse(text) as object).sort()).toEqual(["code", "ok"]);
     });
 
-    it("adds the poster route's refusals when asked about a poster", async () => {
-      const poster = async (id: string) =>
-        STATUS(
-          new Request(`${ORIGIN}/api/assets/${encodeURIComponent(id)}/status?for=poster`),
-          { params: Promise.resolve({ id }) },
-        );
-
-      const notVideo = await poster("diagram:dot-product");
+    it("gives the poster route's answers when asked about a poster", async () => {
+      const notVideo = await status(SVG_ID, "?for=poster");
       expect(notVideo.status).toBe(404);
       expect(await notVideo.json()).toEqual({ ok: false, code: "not-a-video" });
 
-      const previous = process.env.FFMPEG_PATH;
-      process.env.FFMPEG_PATH = path.join(base, "no-ffmpeg-here");
-      try {
-        const noFfmpeg = await poster(VIDEO_ID);
-        expect(noFfmpeg.status).toBe(503);
-        expect(await noFfmpeg.json()).toEqual({ ok: false, code: "no-ffmpeg" });
-      } finally {
-        if (previous === undefined) delete process.env.FFMPEG_PATH;
-        else process.env.FFMPEG_PATH = previous;
-      }
+      const noPoster = await status(ON_DISK_ID, "?for=poster");
+      expect(noPoster.status).toBe(404);
+      expect(await noPoster.json()).toEqual({ ok: false, code: "not-uploaded" });
     });
   });
 });

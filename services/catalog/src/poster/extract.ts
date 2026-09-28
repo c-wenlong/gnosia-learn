@@ -8,14 +8,16 @@ import { ffmpegArgs, POSTER_OFFSETS_SECONDS } from "./recipe";
 /**
  * Making one poster on the laptop, for `catalog asset upload`.
  *
- * The web app's fallback (`apps/web/src/lib/asset-posters.ts`) does the same
- * with a cache, a concurrency cap and failure markers, because it runs inside
- * a request. This runs once per video from a command a person started, one at
- * a time, so it keeps only the bounds that stop a bad file from hanging or
- * flooding the command: a timeout and a cap on what ffmpeg may write.
+ * The only place a poster is made: the web app used to cut one per request
+ * from the video's file as a fallback, and phase 2 of
+ * docs/CONTENT-MIGRATION.md removed that with the rest of its file reads, so
+ * it now serves only what this stored. This runs once per video from a
+ * command a person started, one at a time, so it keeps only the bounds that
+ * stop a bad file from hanging or flooding the command: a timeout and a cap
+ * on what ffmpeg may write.
  */
 
-/** Same variable the web app reads, with the same rule: absolute, or ignored. */
+/** The ffmpeg to run: absolute, or ignored. */
 export const FFMPEG_ENV = "FFMPEG_PATH";
 
 export const POSTER_TIMEOUT_MS = 30_000;

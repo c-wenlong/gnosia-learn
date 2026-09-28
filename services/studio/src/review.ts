@@ -1,14 +1,15 @@
 import { rm, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { canvas, EXIT, explainExit, type VerifyReport } from "./canvas";
 import { diagramPut, diagramShow, jobAccept, jobDiscard } from "./catalog";
 import { ensureCheckout, forgetDiagramList } from "./diagrams";
-import { absolute, CANDIDATES_DIR, workDir } from "./paths";
+import { absolute, ASSETS_DIR, REPO_ROOT, studioHome, workDir } from "./paths";
 import { run } from "./proc";
 import type { JobRecord, JobStore } from "./store";
 
 /**
- * Accept and discard: the only writes outside the candidates directory, and the
+ * Accept and discard: the only writes outside a job's own workspace, and the
  * only ones a person asked for.
  *
  * **A diagram lives in the database** (Track D of docs/CONTENT-MIGRATION.md),
@@ -227,7 +228,7 @@ async function acceptLocked(
       mirrorClosed,
       note: put.offline
         ? `the catalog is unreachable, and a diagram lives in the database, so nothing landed. ` +
-          `The candidate stays in ${CANDIDATES_DIR}/; press Accept again once Postgres answers.`
+          `The candidate stays at ${record.candidatePath}; press Accept again once Postgres answers.`
         : refusal.code === "stale-base"
           ? `${record.targetPath} was committed while this job ran, so accepting would write over ` +
             `a change nobody reviewed. Discard this and run the brief again over the current diagram.`
@@ -253,8 +254,9 @@ async function acceptLocked(
     indexed: false,
   });
 
-  // The candidates have landed; the directory is scratch, and a later job for
-  // the same slug must not find these and take them for its own.
+  // The candidates have landed. Removed rather than left in the workspace, so
+  // the workspace of an accepted job says there is nothing waiting in it, and
+  // a legacy record's per-slug file is not found by a later job for the slug.
   await rm(candidate, { force: true });
   await rm(absolute(record.candidateSvgPath), { force: true });
   // The canvas opens the accepted drawing next time, unless the checkout
@@ -349,7 +351,7 @@ async function targetMoved(record: JobRecord): Promise<Moved> {
         indexed: false,
         note: shown.offline
           ? `the catalog is unreachable, and a diagram lives in the database, so nothing can land ` +
-            `yet. The candidate stays in ${CANDIDATES_DIR}/; press Accept again once Postgres answers.`
+            `yet. The candidate stays at ${record.candidatePath}; press Accept again once Postgres answers.`
           : `the catalog could not say where ${record.targetPath} stands: ${shown.error ?? "no reason given"}`,
         error: shown.offline ? "catalog-offline" : "catalog-failed",
       },
@@ -483,8 +485,11 @@ async function discardLocked(store: JobStore, record: JobRecord): Promise<Accept
 }
 
 /**
- * The A4 backstop: what is dirty in the working tree, ignoring the candidates
- * directory the job is allowed to write.
+ * The A4 backstop: what is dirty in the working tree. A job writes nothing in
+ * it at all, since its candidate is in its own workspace under `STUDIO_HOME`,
+ * which is gitignored when it sits at the default `.studio/`. A `STUDIO_HOME`
+ * set to some other folder inside the checkout is not, so its paths are left
+ * out here (`jobWorkspacePath`), as the old candidates directory's were.
  *
  * Read-only `git status --porcelain` and nothing else. D6 removed the runner's
  * mutating git access on purpose, and this is not that access coming back: a
@@ -510,5 +515,24 @@ export async function dirtyFiles(): Promise<string[]> {
     // says where something landed.
     .map((file) => (file.includes(" -> ") ? (file.split(" -> ")[1] ?? file) : file))
     .map((file) => file.replaceAll('"', ""))
-    .filter((file) => !file.startsWith(CANDIDATES_DIR));
+    .filter((file) => !jobWorkspacePath(file));
+}
+
+/** Where a job from before candidates moved into the job workspace wrote. */
+const LEGACY_CANDIDATES = `${ASSETS_DIR}/.candidates/`;
+
+/**
+ * True for a `git status` path that is the studio's own and not the tree:
+ * under `STUDIO_HOME` when that sits inside the checkout, or the old
+ * candidates directory a legacy record still names. Without it a job run with
+ * `STUDIO_HOME` inside the checkout would find its own candidate dirty and
+ * fail. An untracked parent of the home (`tmp/` for `tmp/studio`) is not
+ * left out: it exists before the job starts, so the before-and-after already
+ * drops it, and leaving it out would hide everything else beneath it.
+ */
+export function jobWorkspacePath(file: string): boolean {
+  if (file.startsWith(LEGACY_CANDIDATES)) return true;
+  const home = path.relative(REPO_ROOT, studioHome());
+  if (home === "" || home.startsWith("..") || path.isAbsolute(home)) return false;
+  return file.startsWith(`${home.split(path.sep).join("/")}/`);
 }
