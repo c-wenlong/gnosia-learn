@@ -1,6 +1,6 @@
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive } from "@/lib/studio-jobs";
-import type { DraftView, PendingTopic, Refusal, TranscriptEntry } from "@/lib/studio-drafts";
+import type { DraftState, DraftView, PendingTopic, Refusal, TranscriptEntry } from "@/lib/studio-drafts";
 import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts";
 
 /**
@@ -301,26 +301,63 @@ export function modeLine(brief: Pick<Brief, "mode" | "slug">): { lead: string; s
   return brief.mode === "extend" ? { lead: "Extends", slug: brief.slug } : { lead: "New diagram, saved as", slug: brief.slug };
 }
 
+/** The runner's refusal text as a sentence: a capital first, a full stop last. */
+export function sentence(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === "") return trimmed;
+  const capital = trimmed[0]!.toUpperCase() + trimmed.slice(1);
+  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
+}
+
+export interface DrawRefusal {
+  text: string;
+  /** The job holding the target, when that is the reason: the card links to it. */
+  holder: string | null;
+  /**
+   * The runner's own words, which its studio note repeats (`Draw was refused:
+   * <error>`) for the refusals it writes one for. The card hides its line once
+   * that note is in the thread, and only then.
+   */
+  error: string;
+}
+
 /**
  * A refused Draw (E7), in words, with the one action it offers.
  *
- * The runner also writes each refusal into the transcript as a studio note,
- * so this is what the card says under its button until the record arrives.
+ * Keyed on the runner's `detail.reason` (phase 1a's `drafts.ts`), and on the
+ * status for the refusals `POST /api/jobs` shares. What the runner says is
+ * kept wherever it names something this side cannot (a slug, a job, a path).
  */
-export function drawRefusal(status: number, refusal: Refusal): { text: string; holder: string | null } {
+export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
   const reason = refusalReason(refusal);
-  if (status === 409 && reason === "topic-exists") {
-    return {
-      text: "That topic was created elsewhere in the meantime. The brief now uses it, so Draw again.",
-      holder: null,
-    };
+  const own = (text: string, holder: string | null = null): DrawRefusal => ({ text, holder, error: refusal.error });
+  switch (reason) {
+    case "topic-exists":
+      return own(
+        refusalDetailFlag(refusal, "pendingTopicCleared")
+          ? "That topic was created elsewhere in the meantime. The brief now uses it, so Draw again."
+          : sentence(refusal.error),
+      );
+    case "not-briefed":
+      return own(
+        refusalString(refusal, "state") === "drawing"
+          ? "This conversation's drawing is already in progress."
+          : "There is no brief to draw right now.",
+      );
+    case "in-flight":
+      return own("The planner is still answering. Draw once its reply is in.");
+    case "draw-in-progress":
+      return own("Draw was just pressed. Wait a moment for the drawing to be queued.");
+    case "topic-owner":
+      return own(sentence(refusal.error));
+    case "catalog-unreachable":
+      return own(`${sentence(refusal.error)} Nothing was queued.`);
+    case "topic-add":
+      return own(`The new topic was refused: ${sentence(refusal.error)}`);
+    default:
+      break;
   }
-  if (status === 409 && reason === "not-briefed") {
-    return { text: "There is no brief to draw right now.", holder: null };
-  }
-  if (status === 409) {
-    return { text: refusal.error, holder: refusalString(refusal, "holder") };
-  }
+  if (status === 409) return own(sentence(refusal.error), refusalString(refusal, "holder"));
   if (status === 429) {
     const totalUsd = refusalNumber(refusal, "totalUsd");
     const cap = capFrom({
@@ -329,12 +366,124 @@ export function drawRefusal(status: number, refusal: Refusal): { text: string; h
       exceeded: true,
       oldestAgesOutAt: refusalString(refusal, "oldestAgesOutAt"),
     });
-    return { text: totalUsd === null || cap === null ? refusal.error : capSentence(cap), holder: null };
+    return own(totalUsd === null || cap === null ? sentence(refusal.error) : capSentence(cap));
   }
-  if (status === 503) {
-    return { text: `${refusal.error}. Nothing was queued.`, holder: null };
+  if (status === 0) return own("The studio runner is not answering, so nothing was queued.");
+  return own(sentence(refusal.error));
+}
+
+function refusalDetailFlag(refusal: Refusal, field: string): boolean {
+  const detail = refusal.detail;
+  return typeof detail === "object" && detail !== null && (detail as Record<string, unknown>)[field] === true;
+}
+
+/**
+ * A refused message, in words. `null` for the daily cap, which the composer
+ * itself then says (E3), so it is not said twice.
+ */
+export function sendRefusal(status: number, refusal: Refusal): string | null {
+  if (status === 429) return null;
+  switch (refusalReason(refusal)) {
+    case "in-flight":
+      return "The planner is still answering the last message.";
+    case "drawing":
+      return "A diagram from this conversation is drawing. Wait for it, or cancel it.";
+    case "abandoned":
+      return "This conversation was closed. Start a new one.";
+    case "turn-cap":
+      return null;
+    case "planner-busy":
+      return "Every planner is busy right now. Try again in a few seconds.";
+    case "shutdown":
+      return "The studio is shutting down. Try again once it is back.";
+    case "draw-in-progress":
+      return "Draw was just pressed. Wait a moment for the drawing to be queued.";
+    default:
+      break;
   }
-  return { text: refusal.error, holder: null };
+  if (status === 0) return "The studio runner is not answering. Your message is still in the box.";
+  return sentence(refusal.error);
+}
+
+/**
+ * Whether a refused Draw's line is already said by the runner's studio note:
+ * a note after the refusal that repeats the runner's words. A refusal the
+ * runner writes no note for (a reply in flight, a second press) keeps its line.
+ */
+export function refusalNoted(
+  refused: { seq: number; error: string },
+  entries: readonly Pick<TranscriptEntry, "seq" | "role" | "text">[],
+): boolean {
+  const words = refused.error.trim();
+  if (words === "") return false;
+  return entries.some((entry) => entry.role === "studio" && entry.seq > refused.seq && entry.text.includes(words));
+}
+
+/**
+ * The idempotency key for one press of Draw: the brief it draws and the job
+ * the draft had before it. A double press, or a press repeated after a reload,
+ * is the same key and gets the first press's job back; Draw again after that
+ * job failed is a new key, because the draft's newest job has changed.
+ */
+export function drawKey(draftId: string, briefSeq: number, previousJobId: string | null): string {
+  return `draw:${draftId}:${briefSeq}:${previousJobId ?? "none"}`;
+}
+
+/** Cmd or Ctrl+Enter: Draw only from an empty composer; words there are sent. */
+export function modEnterAction(text: string, drawLive: boolean): "draw" | "send" | "none" {
+  if (text.trim() !== "") return "send";
+  return drawLive ? "draw" : "none";
+}
+
+/**
+ * The line under a planner turn in progress. "Thinking" until words arrive;
+ * once the reply has landed and the turn is still open, the runner is
+ * checking its brief (and may be asking the planner to fix it).
+ */
+export function turnIndicator(
+  view: Pick<DraftView, "inFlight" | "transcript">,
+  streaming: boolean,
+): "thinking" | "checking" | null {
+  if (!view.inFlight || streaming) return null;
+  const visible = visibleEntries(view.transcript);
+  const lastPerson = visible.filter((entry) => entry.role === "person").at(-1)?.seq ?? 0;
+  const replied = visible.some((entry) => entry.role === "planner" && entry.seq > lastPerson);
+  return replied ? "checking" : "thinking";
+}
+
+/**
+ * The topic a brief card shows as "New topic". The live card reads the
+ * draft's own `pendingTopic`, which the runner clears once the topic exists,
+ * so its button stops saying "Create topic and draw". An older card keeps
+ * what its reply proposed, as the record of that reply.
+ */
+export function cardPendingTopic(
+  status: CardStatus,
+  entry: Pick<TranscriptEntry, "pendingTopic">,
+  view: Pick<DraftView, "pendingTopic">,
+): PendingTopic | null {
+  return status === "live" ? view.pendingTopic : (entry.pendingTopic ?? null);
+}
+
+/**
+ * Where a job link from inside a conversation goes: the same panel when the
+ * job is this draft's, otherwise out of the conversation, so another job is
+ * not shown under this conversation's back bar.
+ */
+export function jobPatch(
+  jobId: string,
+  draft: { draftId: string; jobId: string | null },
+  jobs: readonly Pick<Job, "jobId" | "draftId">[],
+): { job: string; draft?: null } {
+  const own = jobId === draft.jobId || jobs.some((job) => job.jobId === jobId && job.draftId === draft.draftId);
+  return own ? { job: jobId } : { job: jobId, draft: null };
+}
+
+/** What Start over does first: close this draft, leave it, or refuse. */
+export function startOverStep(state: DraftState): "abandon" | "skip" | "refuse" {
+  if (state === "open" || state === "briefed") return "abandon";
+  if (state === "drawing") return "refuse";
+  return "skip";
 }
 
 /* -------------------------------------------------------------------------- */

@@ -294,6 +294,11 @@ export function abandonDraft(draftId: string) {
   });
 }
 
+/** Backoff between reconnects after the browser gave up: 1s, 2s, 4s, up to 30s. */
+export function reconnectDelay(attempt: number): number {
+  return Math.min(30_000, 1_000 * 2 ** Math.max(0, attempt));
+}
+
 /**
  * `GET /api/drafts/{id}/events?after=<seq>`: the stream.
  *
@@ -303,21 +308,33 @@ export function abandonDraft(draftId: string) {
  * `id: <seq>`; `delta` carries none, and is re-sent after the replay when a
  * turn is still in flight.
  *
+ * **A stream the browser closed for good is reopened here.** `EventSource`
+ * retries a dropped connection by itself, but a retry answered with anything
+ * but 200 (the runner restarting, so the proxy answers 502) closes it for
+ * good, and the panel would then sit on polling alone. So on an error that
+ * leaves the source `CLOSED`, this opens a new one after a backoff, from
+ * whatever `after()` says the record holds now, and tells the caller through
+ * `onReopen` so it can read the record for what it missed.
+ *
  * A payload that does not parse is dropped: the record is re-read after every
  * event that matters, so a lost one costs nothing but a moment.
  */
 export function openDraftEvents(
   draftId: string,
-  after: number,
+  after: number | (() => number),
   handlers: {
     onEvent: (event: DraftEvent) => void;
     onOpen?: () => void;
     onDrop?: () => void;
+    onReopen?: () => void;
   },
 ): () => void {
-  const source = new EventSource(draftPath(draftId, `/events?after=${Math.max(0, after)}`));
-  source.onopen = () => handlers.onOpen?.();
-  source.onerror = () => handlers.onDrop?.();
+  const from = () => Math.max(0, typeof after === "function" ? after() : after);
+  let source: EventSource | null = null;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+  let stopped = false;
+
   const listeners = DRAFT_EVENT_TYPES.map((type) => {
     const listener = (message: MessageEvent<string>) => {
       let data: unknown;
@@ -329,13 +346,58 @@ export function openDraftEvents(
       if (typeof data !== "object" || data === null) return;
       handlers.onEvent({ type, data } as DraftEvent);
     };
-    source.addEventListener(type, listener as EventListener);
     return [type, listener] as const;
   });
-  return () => {
-    for (const [type, listener] of listeners) source.removeEventListener(type, listener as EventListener);
-    source.close();
+
+  const detach = (held: EventSource) => {
+    for (const [type, listener] of listeners) held.removeEventListener(type, listener as EventListener);
+    held.close();
   };
+
+  const connect = () => {
+    if (stopped) return;
+    const next = new EventSource(draftPath(draftId, `/events?after=${from()}`));
+    source = next;
+    next.onopen = () => {
+      attempt = 0;
+      handlers.onOpen?.();
+    };
+    next.onerror = () => {
+      handlers.onDrop?.();
+      if (next.readyState !== EventSource.CLOSED || stopped) return;
+      detach(next);
+      if (source === next) source = null;
+      const wait = reconnectDelay(attempt);
+      attempt += 1;
+      retry = setTimeout(() => {
+        retry = null;
+        if (stopped) return;
+        handlers.onReopen?.();
+        connect();
+      }, wait);
+    };
+    for (const [type, listener] of listeners) next.addEventListener(type, listener as EventListener);
+  };
+
+  connect();
+  return () => {
+    stopped = true;
+    if (retry !== null) clearTimeout(retry);
+    if (source !== null) detach(source);
+    source = null;
+  };
+}
+
+/**
+ * The daily cap as `GET /api/health` reports it, or null when the runner did
+ * not answer. Not a draft route, but Draw and Send are disabled on it, so it
+ * lives with them. Health runs `doctor` (cached for 30 seconds on the runner)
+ * and `claude --version`, so the panel reads it on focus at most every 30
+ * seconds and once when the cap's oldest spend ages out, never on a timer.
+ */
+export async function readDailyCap(): Promise<unknown> {
+  const result = await call<{ dailyCap?: unknown }>("/studio/api/health");
+  return result.ok ? (result.data.dailyCap ?? null) : null;
 }
 
 /* -------------------------------------------------------------------------- */

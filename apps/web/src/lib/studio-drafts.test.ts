@@ -8,6 +8,8 @@ import {
   idempotencyKey,
   listDrafts,
   openDraftEvents,
+  readDailyCap,
+  reconnectDelay,
   refusalNumber,
   refusalReason,
   refusalString,
@@ -80,21 +82,32 @@ describe("the calls", () => {
     expect(refusalReason({ error: "x", detail: "a sentence" })).toBeNull();
   });
 
-  it("makes a fresh key every time", () => {
+  it("makes a fresh key for each new conversation (Draw's key is deterministic: drawKey)", () => {
     expect(idempotencyKey("draft")).not.toBe(idempotencyKey("draft"));
-    expect(idempotencyKey("draw")).toMatch(/^studio-ui:draw:/);
+    expect(idempotencyKey("draft")).toMatch(/^studio-ui:draft:/);
+  });
+
+  it("reads the daily cap from health, or nothing", async () => {
+    answer(200, { ok: true, dailyCap: { capUsd: 5, totalUsd: 1, exceeded: false } });
+    expect(await readDailyCap()).toEqual({ capUsd: 5, totalUsd: 1, exceeded: false });
+    answer(502, { error: "down" });
+    expect(await readDailyCap()).toBeNull();
   });
 });
 
 describe("openDraftEvents", () => {
   class FakeSource {
+    static CLOSED = 2;
     static last: FakeSource | null = null;
+    static made: FakeSource[] = [];
     listeners = new Map<string, (message: MessageEvent<string>) => void>();
     closed = false;
+    readyState = 1;
     onopen: (() => void) | null = null;
     onerror: (() => void) | null = null;
     constructor(public url: string) {
       FakeSource.last = this;
+      FakeSource.made.push(this);
     }
     addEventListener(type: string, listener: (message: MessageEvent<string>) => void) {
       this.listeners.set(type, listener);
@@ -104,6 +117,7 @@ describe("openDraftEvents", () => {
     }
     close() {
       this.closed = true;
+      this.readyState = 2;
     }
     emit(type: string, data: string) {
       this.listeners.get(type)?.({ data } as MessageEvent<string>);
@@ -132,5 +146,62 @@ describe("openDraftEvents", () => {
     stop();
     expect(source.closed).toBe(true);
     expect(source.listeners.size).toBe(0);
+  });
+
+  it("retries nothing itself while the browser is reconnecting", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", FakeSource);
+    FakeSource.made = [];
+    const stop = openDraftEvents("d1", 0, { onEvent: () => {} });
+    const source = FakeSource.last!;
+    source.readyState = 0; // CONNECTING: the browser's own retry
+    source.onerror?.();
+    vi.advanceTimersByTime(60_000);
+    expect(FakeSource.made).toHaveLength(1);
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("reopens a stream the browser closed for good, from the record's newest seq, with backoff", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", FakeSource);
+    FakeSource.made = [];
+    let seq = 3;
+    const reopened = vi.fn();
+    const stop = openDraftEvents("d1", () => seq, { onEvent: () => {}, onReopen: reopened });
+    expect(FakeSource.last!.url).toBe("/studio/api/drafts/d1/events?after=3");
+
+    // The runner restarted: the retry got a 502 and the browser gave up.
+    const first = FakeSource.last!;
+    first.readyState = 2;
+    first.onerror?.();
+    expect(first.closed).toBe(true);
+    seq = 9;
+    vi.advanceTimersByTime(999);
+    expect(FakeSource.made).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(reopened).toHaveBeenCalledOnce();
+    expect(FakeSource.made).toHaveLength(2);
+    expect(FakeSource.last!.url).toBe("/studio/api/drafts/d1/events?after=9");
+
+    // A second failure waits twice as long; an open resets the backoff.
+    FakeSource.last!.readyState = 2;
+    FakeSource.last!.onerror?.();
+    vi.advanceTimersByTime(1_999);
+    expect(FakeSource.made).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(FakeSource.made).toHaveLength(3);
+
+    // Stopping cancels a pending reopen.
+    FakeSource.last!.readyState = 2;
+    FakeSource.last!.onerror?.();
+    stop();
+    vi.advanceTimersByTime(60_000);
+    expect(FakeSource.made).toHaveLength(3);
+    vi.useRealTimers();
+  });
+
+  it("backs off to thirty seconds at most", () => {
+    expect([0, 1, 2, 5, 10].map(reconnectDelay)).toEqual([1_000, 2_000, 4_000, 30_000, 30_000]);
   });
 });

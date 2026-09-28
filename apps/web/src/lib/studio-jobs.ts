@@ -138,6 +138,8 @@ export interface Job {
   finished: string | null;
   updated: string;
   cancelRequestedAt: string | null;
+  /** The conversation that started it (docs/STUDIO-CHAT-FIRST.md). Optional: an older runner does not send it. */
+  draftId?: string | null;
   /**
    * Every catalog call that did not go through, newest last.
    *
@@ -542,7 +544,7 @@ export function failureFooter(job: Job): string {
 /* What a refused enqueue means                                               */
 /* -------------------------------------------------------------------------- */
 
-export type RefusalCode = "daily-cap" | "target-held" | "brief" | "unavailable" | "unknown";
+export type RefusalCode = "daily-cap" | "target-held" | "draft-busy" | "brief" | "unavailable" | "unknown";
 
 export interface RefusalReport {
   code: RefusalCode;
@@ -595,6 +597,23 @@ export function refusalReport(status: number, body: unknown): RefusalReport {
         (clears === null
           ? "Nothing was queued. Raise STUDIO_DAILY_USD, or wait for the window to move."
           : `Nothing was queued. The oldest counted attempt leaves the 24 hour window at ${clears}, which is the earliest this can fall.`),
+      actions: [],
+    };
+  }
+  // A brief sent with its conversation's `draftId` (the brief form opened
+  // from the chat) can be refused for the conversation's sake rather than
+  // the target's: phase 1a's `assertDrawable` and the Draw lock.
+  const reason = typeof detail.reason === "string" ? detail.reason : null;
+  if (status === 409 && (reason === "not-briefed" || reason === "in-flight" || reason === "draw-in-progress")) {
+    return {
+      code: "draft-busy",
+      headline:
+        reason === "in-flight"
+          ? "the planner is still answering in this conversation"
+          : reason === "draw-in-progress"
+            ? "Draw was just pressed in this conversation"
+            : "this conversation cannot start a job right now",
+      detail: message,
       actions: [],
     };
   }

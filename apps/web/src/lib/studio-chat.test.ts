@@ -12,8 +12,17 @@ import {
   costLabel,
   drawBlock,
   drawLabel,
+  cardPendingTopic,
+  drawKey,
   drawRefusal,
   isEmptyConversation,
+  jobPatch,
+  modEnterAction,
+  refusalNoted,
+  sendRefusal,
+  sentence,
+  startOverStep,
+  turnIndicator,
   lastPersonText,
   latestBriefSeq,
   modeLine,
@@ -223,13 +232,109 @@ describe("Draw", () => {
   });
 
   it("turns a refused Draw into a sentence and an action", () => {
-    expect(drawRefusal(409, { error: "held", detail: { holder: "j9", state: "running" } })).toEqual({ text: "held", holder: "j9" });
+    expect(drawRefusal(409, { error: "held by job j9", detail: { holder: "j9", state: "running" } })).toEqual({
+      text: "Held by job j9.",
+      holder: "j9",
+      error: "held by job j9",
+    });
     expect(drawRefusal(409, { error: "x", detail: { reason: "topic-exists", pendingTopicCleared: true } }).text).toMatch(/Draw again/);
-    expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed" } }).text).toMatch(/no brief/);
+    expect(drawRefusal(409, { error: "it exists", detail: { reason: "topic-exists", pendingTopicCleared: false } }).text).toBe("It exists.");
+    expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "open" } }).text).toMatch(/no brief/);
+    expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "drawing" } }).text).toMatch(/already in progress/);
+    expect(drawRefusal(409, { error: "x", detail: { reason: "in-flight" } }).text).toMatch(/still answering/);
+    expect(drawRefusal(409, { error: "x", detail: { reason: "draw-in-progress" } }).text).toMatch(/just pressed/);
+    expect(drawRefusal(409, { error: 'a new topic can only be created as "local"', detail: { reason: "topic-owner" } }).text).toBe(
+      'A new topic can only be created as "local".',
+    );
     expect(drawRefusal(429, { error: "cap", detail: { totalUsd: 6, capUsd: 5, oldestAgesOutAt: null } }).text).toMatch(/\$6.00 of the \$5.00/);
-    expect(drawRefusal(429, { error: "cap", detail: null }).text).toBe("cap");
-    expect(drawRefusal(503, { error: "catalog unreachable", detail: null }).text).toBe("catalog unreachable. Nothing was queued.");
-    expect(drawRefusal(400, { error: "bad topic", detail: null }).text).toBe("bad topic");
+    expect(drawRefusal(429, { error: "cap", detail: null }).text).toBe("Cap.");
+    expect(drawRefusal(503, { error: "the catalog cannot be reached", detail: { reason: "catalog-unreachable" } }).text).toBe(
+      "The catalog cannot be reached. Nothing was queued.",
+    );
+    expect(drawRefusal(503, { error: "tldrawkc cannot run on this machine, so nothing was queued", detail: null }).text).toBe(
+      "Tldrawkc cannot run on this machine, so nothing was queued.",
+    );
+    expect(drawRefusal(400, { error: "no such domain", detail: { reason: "topic-add" } }).text).toBe("The new topic was refused: No such domain.");
+    expect(drawRefusal(0, { error: "down", detail: null }).text).toMatch(/not answering/);
+  });
+
+  it("keys a press on the brief and the job before it", () => {
+    expect(drawKey("d1", 6, null)).toBe("draw:d1:6:none");
+    expect(drawKey("d1", 6, null)).toBe(drawKey("d1", 6, null));
+    // Draw again after that job failed is a new press, not the old job back.
+    expect(drawKey("d1", 6, "j1")).not.toBe(drawKey("d1", 6, null));
+  });
+
+  it("gives Cmd+Enter to Draw only from an empty composer", () => {
+    expect(modEnterAction("", true)).toBe("draw");
+    expect(modEnterAction("no, use the relay", true)).toBe("send");
+    expect(modEnterAction("", false)).toBe("none");
+  });
+
+  it("keeps a refusal's line until the runner's note for that same refusal", () => {
+    const refused = { seq: 6, error: "learn/assets/x.tldr is already held by job j9" };
+    expect(refusalNoted(refused, [entry(7, "studio", "The topic was created.")])).toBe(false);
+    expect(refusalNoted(refused, [entry(5, "studio", `Draw was refused: ${refused.error}`)])).toBe(false);
+    expect(refusalNoted(refused, [entry(7, "studio", `Draw was refused: ${refused.error}`)])).toBe(true);
+    expect(refusalNoted({ seq: 6, error: "" }, [entry(7, "studio", "anything")])).toBe(false);
+  });
+
+  it("shows the live card's topic from the draft, and an older card's from its reply", () => {
+    const pending = { entry: { slug: "a", title: "A", domain: "d", summary: null, aliases: [], relations: [] }, nearMatches: [] };
+    expect(cardPendingTopic("live", { pendingTopic: pending }, { pendingTopic: null })).toBeNull();
+    expect(cardPendingTopic("live", {}, { pendingTopic: pending })).toBe(pending);
+    expect(cardPendingTopic("stale", { pendingTopic: pending }, { pendingTopic: null })).toBe(pending);
+  });
+
+  it("opens another conversation's job outside this one", () => {
+    const draft = { draftId: "d1", jobId: "j1" };
+    expect(jobPatch("j1", draft, [])).toEqual({ job: "j1" });
+    expect(jobPatch("j0", draft, [{ jobId: "j0", draftId: "d1" }])).toEqual({ job: "j0" });
+    expect(jobPatch("j9", draft, [{ jobId: "j9", draftId: "d2" }])).toEqual({ job: "j9", draft: null });
+    expect(jobPatch("j9", draft, [])).toEqual({ job: "j9", draft: null });
+  });
+
+  it("abandons only an open or briefed draft before starting over", () => {
+    expect(startOverStep("open")).toBe("abandon");
+    expect(startOverStep("briefed")).toBe("abandon");
+    expect(startOverStep("drawing")).toBe("refuse");
+    expect(startOverStep("done")).toBe("skip");
+    expect(startOverStep("abandoned")).toBe("skip");
+  });
+});
+
+describe("sendRefusal", () => {
+  it("names each reason the runner gives", () => {
+    const say = (status: number, reason: string | null, error = "x") => sendRefusal(status, { error, detail: reason === null ? null : { reason } });
+    expect(say(409, "in-flight")).toMatch(/still answering/);
+    expect(say(409, "drawing")).toMatch(/is drawing/);
+    expect(say(409, "abandoned")).toMatch(/was closed/);
+    expect(say(409, "draw-in-progress")).toMatch(/just pressed/);
+    expect(say(503, "planner-busy")).toMatch(/busy/);
+    expect(say(503, "shutdown")).toMatch(/shutting down/);
+    expect(say(422, "turn-cap")).toBeNull();
+    expect(say(429, "daily-cap")).toBeNull();
+    expect(say(0, null)).toMatch(/still in the box/);
+    expect(say(400, null, "text is over 8000 characters")).toBe("Text is over 8000 characters.");
+  });
+
+  it("makes a sentence of the runner's words", () => {
+    expect(sentence("held")).toBe("Held.");
+    expect(sentence("Done!")).toBe("Done!");
+    expect(sentence("  ")).toBe("");
+  });
+});
+
+describe("turnIndicator", () => {
+  it("thinks until a reply lands, then checks the brief while the turn stays open", () => {
+    const asked = [entry(1, "person", "draw it")];
+    expect(turnIndicator(view({ inFlight: true, transcript: asked }), false)).toBe("thinking");
+    expect(turnIndicator(view({ inFlight: true, transcript: asked }), true)).toBeNull();
+    const replied = [...asked, entry(2, "planner", "Here it is")];
+    expect(turnIndicator(view({ inFlight: true, transcript: replied }), false)).toBe("checking");
+    expect(turnIndicator(view({ inFlight: false, transcript: replied }), false)).toBeNull();
+    const again = [...replied, entry(3, "person", "change it")];
+    expect(turnIndicator(view({ inFlight: true, transcript: again }), false)).toBe("thinking");
   });
 });
 
