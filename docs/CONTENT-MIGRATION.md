@@ -1919,10 +1919,12 @@ before, so it merged before flip day and does not depend on #152.
       meanwhile) is already counted, so a rerun or putting back an object the
       store lost is never refused, even under a cap lowered below what the
       owner holds. The day is rolling, as the studio's spend cap.
-      A value that is not a whole number refuses every upload with the
+      A value that is not a whole number refuses every new object with the
       variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
       does: an upload is a command a person watches, and a quota that a typo
-      turns off is the failure that matters here. No migration: `blob_object`
+      turns off is the failure that matters here. (The phase 4 review found it
+      refused a re-store of a key with a row too, so every unchanged import
+      failed; it now reads the caps only for a new object.) No migration: `blob_object`
       already holds the key, the size and `created_at`, so a cap table would
       only duplicate them. `catalog blob audit` prints each owner's objects,
       bytes and uploads in the last 24 hours, and the caps in force.
@@ -2013,6 +2015,43 @@ is its own list.
       commons; another owner's row is refused by name before a byte is read.
       D23's "one update per table" step now says the upload is its second
       half. `test/asset-upload.test.ts`.
+- [x] The caps hold under an audit and a typo (S9). A cap check locks the
+      row it asks about and the audit's stale-pending delete takes the
+      owner's cap lock, so a delete between the check and the pending write
+      cannot let a new object past both caps; the caps are read only for a
+      new object, so a malformed value refuses no re-store (an unchanged
+      post-contract import went from failing to `456 rows written, 0
+      removed`), and `doctor`, `status` and `blob audit` (exit 1) say it.
+      **Built:** `src/content/blob.ts`, `src/content/blob-audit.ts`,
+      `test/blob-caps.test.ts` (the widened window, the audit waiting, the
+      day cap under the lock, pending rows counting; removing the row lock,
+      the audit lock or the pending count each fails a case).
+- [x] Tests that fail when a filter goes (S10). `test/tenancy.test.ts`
+      compares every read whole with another owner's rows grafted into the
+      owner's course, deck and topic. Disabling each `ownedBy`/`andOwnedBy`
+      call in `services/catalog/src` one at a time, 53 of 60 fail it or the
+      other owner suites (`scope-reads`, `diagrams`, `import-tenancy`). Two
+      survivors are equivalent (child rows grouped by a parent id no
+      unreadable parent is ever looked up by, `readers/courses.ts:107,143`);
+      five are slice 1's (`content/diagrams.ts:121,125,955`,
+      `learn/vault.ts:864`, `state/progress.ts:209`) and no suite pins them
+      yet. It found four leaks,
+      fixed in `src/state/assets.ts`: `assetsForTopic`, `assetsForConcept`,
+      `assetsForCollection` and `derivationSources` answered for a topic,
+      concept, collection or derived id the reader cannot read.
+      `apps/web/src/lib/owner-calls.test.ts` also refuses literal owners,
+      hand-built scopes, namespace and unbound dynamic imports, re-exports of
+      owner-bearing functions, other catalog entry points, `drizzle-orm` and
+      `.execute(`.
+- [x] The nits. Usage by `owner_id` on the database's clock; an overflowing
+      cap says it is too large; `asset upload --dry-run` asks the caps (a key
+      once, a poster against the day's count); `--json` keeps
+      `code: "BLOB_CAP"`; flip day runs with the caps off; a row may name
+      only a blob under its own owner's prefix (the seam refuses a new one,
+      the blob reads serve a blob only to a reader of its owner).
+- [x] Docs (S11, this slice's half): DEPLOYMENT.md "Per-owner caps",
+      SCHEMA.md "Owners" rows for the import, the upload, `uploadBlob` and
+      blob keys, and D23's limit.
 
 ## Dependencies and parallel work
 

@@ -13,7 +13,14 @@ import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/mani
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
-import { OwnerCapError, uploadBlob } from "./blob";
+import {
+  OWNER_BYTES_CAP_ENV,
+  OWNER_UPLOADS_PER_DAY_ENV,
+  OwnerCapError,
+  ownerCapsOrError,
+  ownerUsage,
+  uploadBlob,
+} from "./blob";
 import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
 import { CLI_OWNER } from "./scope";
@@ -359,6 +366,59 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     items,
   };
 
+  /**
+   * For a dry run: why the caps would refuse a new object, or null. Each
+   * owner is measured once and the objects the dry run has planned are added
+   * as it goes, the way a real run's own uploads would count against the next.
+   */
+  const caps = dryRun ? ownerCapsOrError() : null;
+  const planned = new Map<string, { bytes: number; uploads: number }>();
+  // A key planned once is a row by the time a real run reaches it again (two
+  // files with the same bytes), so it is counted once.
+  const plannedKeys = new Set<string>();
+  const wouldCap = async (owner: string, key: string, bytes: number): Promise<string | null> => {
+    if (caps === null || plannedKeys.has(key)) return null;
+    if ("error" in caps) return `a real run would refuse this new object: ${caps.error}`;
+    if (caps.bytes === null && caps.uploadsPerDay === null) return null;
+    let tally = planned.get(owner);
+    if (tally === undefined) {
+      const [usage] = await ownerUsage(db, { owner });
+      tally = { bytes: usage?.bytes ?? 0, uploads: usage?.uploadsLastDay ?? 0 };
+      planned.set(owner, tally);
+    }
+    if (caps.bytes !== null && tally.bytes + bytes > caps.bytes) {
+      return `${key} is ${bytes} bytes, and ${owner} would store ${tally.bytes} before it; a real run would refuse it under the ${caps.bytes}-byte ${OWNER_BYTES_CAP_ENV} cap`;
+    }
+    if (caps.uploadsPerDay !== null && tally.uploads + 1 > caps.uploadsPerDay) {
+      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before it; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
+    }
+    tally.bytes += bytes;
+    tally.uploads += 1;
+    plannedKeys.add(key);
+    return null;
+  };
+  /**
+   * The same for a poster the dry run would cut: its bytes are unknown until
+   * ffmpeg runs, so only the day's count can be asked; the bytes cap is said
+   * to be unknowable rather than guessed.
+   */
+  const wouldCapPoster = async (owner: string): Promise<string | null> => {
+    if (caps === null) return null;
+    if ("error" in caps) return `a real run would refuse this new poster: ${caps.error}`;
+    if (caps.uploadsPerDay === null) return null;
+    let tally = planned.get(owner);
+    if (tally === undefined) {
+      const [usage] = await ownerUsage(db, { owner });
+      tally = { bytes: usage?.bytes ?? 0, uploads: usage?.uploadsLastDay ?? 0 };
+      planned.set(owner, tally);
+    }
+    if (tally.uploads + 1 > caps.uploadsPerDay) {
+      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this poster; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
+    }
+    tally.uploads += 1;
+    return null;
+  };
+
   const refuse = (id: string, kind: string, detail: string) => {
     items.push({ id, kind, action: "refused", key: null, bytes: null, detail });
     result.refused += 1;
@@ -413,6 +473,14 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     if (dryRun) {
       const [stored] = await db.select({ state: blobObject.state }).from(blobObject).where(eq(blobObject.key, key));
       const there = stored?.state === "present" && (await store.stat(key)) !== null;
+      // A new object is what the caps measure, so the dry run asks them too,
+      // counting what it has already planned, and says which files a real
+      // run would refuse rather than calling every one `would-upload`.
+      const capped = stored === undefined ? await wouldCap(row.ownerId, key, facts.bytes) : null;
+      if (capped !== null) {
+        refuse(row.id, row.kind, capped);
+        return null;
+      }
       items.push({ id: row.id, kind: row.kind, action: there ? "would-link" : "would-upload", key, bytes: facts.bytes });
       return { key, changed: true };
     }
@@ -581,8 +649,22 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
     if (dryRun) {
       if (options.ffmpeg === null) return null;
+      const capped = await wouldCapPoster(video.row.ownerId);
+      if (capped !== null) {
+        refuse(id, "poster", capped);
+        return null;
+      }
       result.counts.posters += 1;
-      items.push({ id, kind: "poster", action: "would-make", key: null, bytes: null });
+      items.push({
+        id,
+        kind: "poster",
+        action: "would-make",
+        key: null,
+        bytes: null,
+        ...(caps !== null && !("error" in caps) && caps.bytes !== null
+          ? { detail: `its size is known only once it is cut, so the ${OWNER_BYTES_CAP_ENV} cap is not asked` }
+          : {}),
+      });
       return null;
     }
     if (options.ffmpeg === null) return detach("no ffmpeg to cut a poster from the new render");

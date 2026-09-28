@@ -321,16 +321,50 @@ including one `--fix` just sent back, so a clean exit means every stored asset
 serves.
 
 It also prints each owner's totals (objects, bytes, and new objects in the
-last 24 hours, grouped by the key's `<owner_id>/` prefix) and the per-owner
-caps in force. Two variables set them, both unset by default, which is no cap:
+last 24 hours, by `owner_id`, which the table ties to the key's `<owner_id>/`
+prefix) and the per-owner caps in force.
+
+### Per-owner caps
+
+Two variables set them, both unset by default, which is no cap:
 `SELF_LEARN_OWNER_BYTES_CAP` (bytes one owner may store) and
 `SELF_LEARN_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
-rolling 24 hours). Every upload checks them before a byte moves and refuses,
-storing and recording nothing, a new object that would take its owner past
-either; `asset upload` lists it as refused and carries on. A key that already
-has a row is never refused, so a rerun can always put back an object the
-store lost. Set them in `services/catalog/.env`
-beside `SELF_LEARN_HOME`, since the catalog CLI is what uploads.
+rolling 24 hours, measured on the database's clock). Set them in
+`services/catalog/.env` beside `SELF_LEARN_HOME`, since the catalog CLI is
+what uploads.
+
+- **What is measured.** Only a new object: one whose key has no
+  `blob_object` row. It is checked under a lock per owner, before a byte
+  moves, and a refusal stores and records nothing; `asset upload` lists it as
+  refused and carries on. A pending row counts, bytes and day both, since an
+  upload in flight is about to be stored. A key that already has a row is
+  never refused, so a rerun can always put back an object the store lost, and
+  `blob audit --fix` deleting a stale pending row cannot slip a new object
+  past the check (the row is locked while it is asked about, and the audit's
+  delete takes the same owner lock).
+- **A value that cannot be read** (not a whole number, or larger than
+  2^53 - 1) refuses every new object with the variable named, rather than
+  dropping the cap. It never refuses a key that already has a row, so an
+  unchanged `catalog import` or `diagram put` still goes through. `catalog
+  doctor` and `catalog status` print it, and `catalog blob audit` exits 1 on
+  it.
+- **Whose cap.** An object is its row's owner's: `asset upload` keys each
+  file by its row's owner and writes the row as that owner, so a commons
+  video's bytes count against the commons. A row another tenant holds is
+  refused by name before a byte is read.
+- **A dry run** (`asset upload --dry-run`) asks the caps too, counting what it
+  has already planned (a key once, as a real run's row would), and lists as
+  refused the files a real run would refuse. A poster it would cut is asked
+  against the day's count only: its size is known once it is cut.
+- **`--json`**: a command that fails on a cap carries `code: "BLOB_CAP"` with
+  the owner and the cap (`bytes` or `uploads-per-day`), or `code:
+  "BLOB_CAP_CONFIG"` for a value that cannot be read.
+- **Flip day** (`scripts/flip-rehearsal.mjs`) runs every step with both caps
+  off: it stores some 160 objects the owner already has in one sitting, and a
+  day cap below that would refuse part of it halfway through a forward-only
+  procedure. The day window still counts those objects for the 24 hours
+  after it, so a day cap set on flip day refuses new uploads until they age
+  out.
 
 ## Deploying from the command line
 
