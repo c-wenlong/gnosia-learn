@@ -74,6 +74,33 @@ export async function assetBlobs(db: CatalogDatabase, ids: readonly string[]): P
 }
 
 /**
+ * Which of these videos have a stored poster whose blob is `present`: the
+ * thumbnail check for a page of cards, in one query. A video whose own blob is
+ * stored can still have no poster (the upload ran without ffmpeg), and its
+ * card must not ask the poster route for one the route would have to cut.
+ */
+export async function videosWithStoredPoster(db: CatalogDatabase, videoIds: readonly string[]): Promise<Set<string>> {
+  if (videoIds.length === 0) return new Set();
+  const rows = await orNoBlobs(
+    () =>
+      db
+        .select({ videoId: assetDerivation.sourceAssetId })
+        .from(assetDerivation)
+        .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
+        .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
+        .where(
+          and(
+            inArray(assetDerivation.sourceAssetId, [...videoIds]),
+            eq(asset.kind, "poster"),
+            eq(blobObject.state, "present"),
+          ),
+        ),
+    [],
+  );
+  return new Set(rows.map((row) => row.videoId));
+}
+
+/**
  * The stored poster of one video: the `poster` asset derived from it, with its
  * blob. Null when the video has none yet, which is every video until
  * `catalog asset upload` has run, and then the web app's ffmpeg fallback is

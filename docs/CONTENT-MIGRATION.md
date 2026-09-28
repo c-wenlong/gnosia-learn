@@ -1127,9 +1127,9 @@ library pages of a note and a log differs only in the `asOf` timestamp;
 the rows render it. A scratch session run then (start, observe with
 `--session`, checkout and commit, check add, close, map) left rows and
 revisions and no file under `learn/` changed, and the committed line showed
-on the page from rows and not from files. Not moved here: the raw file route
-`/api/assets/{id}/file` still serves a note's or a log's file; it is Track E's
-route, and phase 2 removes the files it would serve.
+on the page from rows and not from files. Not moved here, and fixed after the
+phase 1 review (Track E's review fixes): the raw file route
+`/api/assets/{id}/file` served a note's or a log's file.
 
 **Built, the contract migration (PR 4 of the track).** `0012_concept_topic_not_null`:
 `concept.topic_slug` is `NOT NULL`, and its foreign key `RESTRICT` rather than
@@ -1293,6 +1293,13 @@ Opus. **Size:** 3 to 4 PRs (*guessed*).
       object with no row, a `present` row whose object is gone or no longer
       hashes to its key, a stale `pending` row, an object nothing points at, a
       poster whose video is gone.
+- [x] Servability per row, added by the phase 1 review (S5): a page decides
+      whether it can show an asset from that row through `resolveAsset`, the
+      route's own resolver (a `present` blob, a row the database owns, or a
+      legacy file with `ASSET_FILES_ENABLED` on), never from the switch alone.
+- [x] The file route serves row text for a type the database owns (S4): a
+      note as its row renders it, a session log as its entries concatenated,
+      a `.tldr` as its canonical document, before the legacy file branch.
 
 **Built** (branch `p1/e-videos`). The upload is `services/catalog/src/content/asset-upload.ts`
 behind `commands/asset-upload.ts`, on Track D's `uploadBlob`. Three things the
@@ -1321,10 +1328,33 @@ which the status route and the pages' pre-render check (`readFileProblems`,
 `readAssetText`) share, so a blob that serves is `ok` everywhere. With the
 switch off and no catalog the routes still answer `files-off`, exactly as
 before. Not built: edge case 15's one retry in the player for an expired URL,
-since the `fs` store signs nothing and it belongs with the cloud adapter; and
-per-row servability on the pages, which still read the switch deployment-wide
-(`readFileAccess`), so with it off a page shows the "files off" state even for
-an asset the route would serve from the store. Both are go-live work.
+since the `fs` store signs nothing and it belongs with the cloud adapter.
+
+**Built, review fixes (S4 and S5 of the phase 1 review).** `resolveAsset`
+asks three places in order: the blob store when the row names a key, then the
+row itself when the database owns the asset's type (`resolveRowText`: a
+`note`, a `session` or a `diagram_source` whose type resolves to `db`), then
+the legacy file, which the switch gates. Before this, after the concepts and
+sessions flips the route served the tree file as of the flip (a line
+committed since was missing), a log started since answered 404
+`file-missing`, and a `.tldr` answered `unsupported-type`. A row's `.tldr`
+is served as `application/json`; the legacy branch still refuses a `.tldr`
+file, since the only `.tldr` worth serving is the document the database
+holds. The pages stopped
+reading the switch deployment-wide: the library's asset page, the concept
+workspace's note embeds and thumbnails, the session page's teaching picture
+and embeds, the course rails and the library grid all decide per row, the
+detail pages through `readFileProblems` (which is `resolveAsset`) and the
+thumbnails through one batched `servedWithoutFiles` read (a `present` blob or
+an owned row type); a video's card draws only when a poster is stored for it
+or its file may be read, since a stored video with no stored poster would
+need the file to cut one. The grid's files-off notice shows only while some
+row in the current view still needs a file on disk, and search reads a row's
+text with the switch off and says how many notes and transcripts it matched
+by name only. `apps/web/src/app/api/assets/asset-rows.test.ts` imports a fixture, flips
+`concepts`, `sessions` and `diagrams` on a scratch database, and holds the
+route, the status route and the page checks to it with `ASSET_FILES_ENABLED`
+unset.
 
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
 `content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
@@ -1343,6 +1373,7 @@ keeps for an adapter with no signed URLs; the redirect path is exercised by a
 test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
+<<<<<<< HEAD
 ## Phase 1 review fixes
 
 A read-only review of the merged phase 1 found these; two slices fixed them
@@ -1376,6 +1407,62 @@ at once. The web slice (routes, `concept add --item`, tests, docs):
 
 The seam slice's items (B2 to B4, S2, S3, S6 to S11) carry their own
 **Built** notes in the tracks they touch.
+=======
+### Phase 1 review fixes, slice 1b
+
+A read-only review of the merged phase 1 found writers that could undo each
+other. **Built** (branch `p1/fixes-seam-2`), each with a test that makes the
+other write on a second connection at the moment between the first writer's
+read and its write, and fails without the fix:
+
+- **S3, lost updates.** `writeNoteRow` takes `base` with no default. The
+  `learn` verbs that rewrite a note (`concept edit`, `check add`, `session
+  close`, `concept add --force`) read it and its revision in one snapshot
+  (`readConceptForWrite`, `updateConcept` in `learn/files.ts`); `concept
+  edit` is refused when the note moved, while an appended check or session
+  link is read again and reapplied. A checkout's next base is the revision
+  its commit wrote, never a read after it. `course export` stamps
+  `# base-revision: N` on the file, and `course import` refuses a stamped
+  file the course has moved past unless `--force-base`, then moves the stamp
+  on; the tree's own file is left unstamped. `asset upload` reads each row and
+  its revision in one snapshot at the start and writes against it, so a
+  `catalog index` that rewrote the row mid-upload is reported as refused.
+  Tests: `services/catalog/test/lost-updates.test.ts`,
+  `services/catalog/test/blob-owner.test.ts`.
+- **S2.** `item purge` locks the item row `FOR UPDATE` before reading its
+  learner rows, so a tick committed mid-purge is in the revision.
+- **S9.** Every catalog failure prints the deepest `cause` too
+  (`failureText`), so migration 0012's RAISE is visible under drizzle's
+  "Failed query".
+- **S10.** `topic rename` lists every SVG under the topic as stale, refuses
+  while a studio job is running or awaiting review under the old slug (a
+  queued one still has its brief rewritten), and decides whether to write the
+  course files again under its locks. The diagram vocabulary leaves archived
+  topics out.
+- **S8.** `--blob-root` is removed from `asset upload` and `blob audit`, and
+  refused by name: rows written through it pointed at bytes the web app never
+  reads, and a copy made with `createdb -T` is `primary` too, so "refuse on a
+  primary" could not tell a scratch run from the real one.
+  `SELF_LEARN_HOME` is the one knob, and both sides read it.
+- **S6.** `<root>/.owner` names the database (its name and
+  `pg_database` oid, as the write-through names an importing database, and
+  its server's port, since two servers can hand out the same oid) that
+  first writes or `--fix`es a root; an upload and `--fix`
+  both refuse a root naming another, since each would leave that database
+  with objects it has no row for. The stale-pending delete also requires the row still be a
+  day old, and `--fix` sweeps day-old `.tmp/*.part`.
+- **Consolidated:** one blob-store factory in the catalog (`openBlobStore`),
+  one canonical JSON (`canonical`, `canonicalJson` in
+  `@self-learn/schema/shared`, used by the catalog and the studio), one file
+  hash (`fileFacts`). `LEARN_ROOT` at or inside the repository is refused for
+  checkouts, which would land in the tree.
+- **Left, and why:** the three delete-revision paths build different
+  snapshots (a purge's carries the learner rows) and already share the
+  append; `readTopicEntries` copying the export's queries, the two
+  checkout-sidecar implementations (notes and diagrams) and pruning the
+  posters of removed videos are each a refactor or a new sweep with no bug
+  behind it, left for phase 2.
+>>>>>>> origin/main
 
 ## Phase 2: readers go database-only
 

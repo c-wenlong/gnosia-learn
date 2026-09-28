@@ -4,7 +4,7 @@ import { assetsForTopic, type AssetRef } from "@self-learn/catalog/state";
 import { connection } from "next/server";
 
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
-import { readFileAccess, thumbnailFor, thumbnailStatusFor, withCatalog } from "@/lib/asset-library";
+import { readFileAccess, thumbnailFor, thumbnailStatusFor, withCatalog, type FileAccessMap } from "@/lib/asset-library";
 import { assetHref, compareByKindThenId, isCompanionKind, libraryHref } from "@/lib/library";
 
 /**
@@ -63,20 +63,25 @@ export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<C
   const rows = await withCatalog((db) => Promise.all(slugs.map((slug) => assetsForTopic(db, slug))));
   if (rows === null) return { reachable: false, byTopic: {} };
 
-  const access = await readFileAccess();
+  const shown = slugs.map((_, i) =>
+    (rows[i] ?? []).filter((row) => !isCompanionKind(row.kind)).sort(compareByKindThenId),
+  );
+  // Only the rows a rail draws are asked about, per row: a stored video's
+  // poster shows with the switch off.
+  const access = await readFileAccess(shown.flatMap((list) => list.slice(0, RAIL_ASSET_LIMIT)));
   const byTopic: Record<string, ModuleAssets> = {};
   for (const [i, slug] of slugs.entries()) {
-    const shown = (rows[i] ?? []).filter((row) => !isCompanionKind(row.kind)).sort(compareByKindThenId);
+    const list = shown[i] ?? [];
     byTopic[slug] = {
-      count: shown.length,
-      top: shown.slice(0, RAIL_ASSET_LIMIT).map((row) => toPathAsset(row, access)),
+      count: list.length,
+      top: list.slice(0, RAIL_ASSET_LIMIT).map((row) => toPathAsset(row, access)),
       libraryHref: libraryHref({ topic: slug }),
     };
   }
   return { reachable: true, byTopic };
 }
 
-function toPathAsset(row: AssetRef, access: Awaited<ReturnType<typeof readFileAccess>>): PathAsset {
+function toPathAsset(row: AssetRef, access: FileAccessMap): PathAsset {
   const name = assetDisplayTitle(row);
   // `thumbnailFor` reads the kind, the id and the source repo; the topic list
   // it also accepts is not consulted.

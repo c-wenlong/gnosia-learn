@@ -1,25 +1,24 @@
-import path from "node:path";
-
-import { fsStore } from "@self-learn/blob";
-
 import { uploadAssets, type AssetUploadResult, type UploadSource } from "../content/asset-upload";
+import { openBlobStore } from "../content/blob";
 import { withDatabase } from "../db";
-import { blobRoot, databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot } from "../env";
+import { databaseUrl, REPO_ROOT, redactUrl, resolveManimkcRoot } from "../env";
 import { findFfmpeg } from "../poster/extract";
 
 /**
- * `catalog asset upload --source manimkc [--dry-run] [--blob-root DIR]`: the
- * connection, the store and the printing. What it uploads and why each rule
- * holds is in `../content/asset-upload.ts`.
+ * `catalog asset upload --source manimkc [--dry-run]`: the connection, the
+ * store and the printing. What it uploads and why each rule holds is in
+ * `../content/asset-upload.ts`.
  *
- * `--blob-root` is for a scratch run against a temporary store; without it the
- * store is the one `SELF_LEARN_HOME` names, the same one the web app serves.
+ * The store is the one `SELF_LEARN_HOME` names, the same one the web app
+ * serves. It had a `--blob-root` flag for a scratch store, which wrote rows
+ * pointing at bytes the web app never read, since the app resolves its root
+ * from `SELF_LEARN_HOME` alone. A scratch run sets that variable instead, and
+ * both sides follow it.
  */
 
 export interface AssetUploadCommandOptions {
   source: UploadSource;
   dryRun: boolean;
-  blobRoot?: string;
   manimkcRoot?: string;
   reason?: string;
 }
@@ -30,13 +29,12 @@ export interface AssetUploadCommandResult extends AssetUploadResult {
 }
 
 export async function runAssetUpload(options: AssetUploadCommandOptions): Promise<AssetUploadCommandResult> {
-  const root = options.blobRoot === undefined ? blobRoot() : path.resolve(options.blobRoot);
-  const store = fsStore(root);
+  const store = openBlobStore();
   const ffmpeg = await findFfmpeg();
   const url = databaseUrl();
   return withDatabase(async ({ db }) => ({
     database: redactUrl(url),
-    blobRoot: root,
+    blobRoot: store.root,
     ...(await uploadAssets(db, {
       store,
       repoRoot: REPO_ROOT,

@@ -15,7 +15,7 @@ import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import { uploadBlob } from "./blob";
 import { latestRevisions } from "./revisions";
-import { writeContents, type WriteContentInput } from "./write";
+import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
 
 /**
  * `catalog asset upload --source manimkc`: manimkc's rendered videos and their
@@ -195,11 +195,21 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   const found = deliverables(report);
   const ids = found.flatMap((d) => [d.videoPath, ...d.sidecars]).map((p) => `${ASSET_PREFIX.manimkc}${p}`);
   const posterIds = found.map((d) => posterId(`${ASSET_PREFIX.manimkc}${d.videoPath}`));
-  const rows = new Map(
-    (ids.length + posterIds.length === 0
-      ? []
-      : await db.select().from(asset).where(inArray(asset.id, [...ids, ...posterIds]))
-    ).map((row) => [row.id, row] as const),
+  // The rows and the revision each was read at, in one snapshot. Every write
+  // below copies the row it read and changes its blob key, so it is based on
+  // that revision: a `catalog index` that rewrote the row in the minutes an
+  // upload takes is refused, not overwritten with the row as it was.
+  const { rows, bases } = await db.transaction(
+    async (tx) => {
+      const all = [...ids, ...posterIds];
+      const read = all.length === 0 ? [] : await tx.select().from(asset).where(inArray(asset.id, all));
+      const latest = await latestRevisions(tx, "asset", all);
+      return {
+        rows: new Map(read.map((row) => [row.id, row] as const)),
+        bases: new Map(all.map((id) => [id, latest.get(id)?.id ?? null] as const)),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
   );
   const keys = [...rows.values()].map((row) => row.blobKey).filter((k): k is string => k !== null);
   const blobs = new Map(
@@ -311,6 +321,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       continue;
     }
     const writes: WriteContentInput[] = [];
+    const groupStart = items.length;
     const linkTo = (row: Asset, key: string) =>
       writes.push({
         type: "asset",
@@ -337,14 +348,22 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
 
     if (dryRun || writes.length === 0) continue;
-    const latest = await latestRevisions(
-      db,
-      "asset",
-      writes.map((w) => w.id),
-    );
-    for (const write of writes) write.base = latest.get(write.id)?.id ?? null;
-    const written = await writeContents(db, writes);
-    result.rowsWritten += written.filter((w) => w.changed).length;
+    for (const write of writes) write.base = bases.get(write.id) ?? null;
+    try {
+      const written = await writeContents(db, writes);
+      result.rowsWritten += written.filter((w) => w.changed).length;
+    } catch (error) {
+      if (!(error instanceof ContentWriteError) || error.code !== "stale-base") throw error;
+      // The bytes are stored and confirmed; only the rows are refused. A rerun
+      // reads the rows as they are now and links the same keys.
+      const refused = new Set(writes.map((w) => w.id));
+      for (const item of items.slice(groupStart)) {
+        if (!refused.has(item.id) || item.action === "refused") continue;
+        item.action = "refused";
+        item.detail = `its row changed while this upload ran, so it was not pointed at ${item.key ?? "its blob"}. ${error.message}`;
+        result.refused += 1;
+      }
+    }
   }
 
   return result;

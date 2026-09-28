@@ -8,8 +8,8 @@ import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
 import { SessionFocus } from "@/components/session/SessionFocus";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { WidgetFailure } from "@/components/WidgetFailure";
-import { accessFor, loadFileAccess, readFileProblems } from "@/lib/asset-library";
-import { problemForAccess } from "@/lib/asset-problems";
+import { readFileProblems } from "@/lib/asset-library";
+import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
 import { loadHabit } from "@/lib/habit";
@@ -64,17 +64,18 @@ export default async function SessionPage({ params, searchParams }: Props) {
   if (read.state === "unreachable") return <Unreachable slug={slug} />;
   const w = read.workspace;
 
-  const [data, habit, access] = await Promise.all([loadSessionPage(w, mode), loadHabit(), loadFileAccess()]);
+  const [data, habit] = await Promise.all([loadSessionPage(w, mode), loadHabit()]);
 
   // The note's own `![[embeds]]`, decided on the server exactly as the
-  // workspace decides them, so the prose never renders a broken picture.
+  // workspace decides them, so the prose never renders a broken picture, and
+  // per embed, so one in the blob store shows with the switch off.
   const prose = w.note.available ? teachProse(w.note.source) : "";
   const embedId = (name: string) => `diagram:learn/assets/${name}`;
-  const selfLearn = accessFor(access, "self-learn");
   const embedProblems =
-    prose !== "" && selfLearn.ok ? await readFileProblems(embedTargets(prose).map(embedId)) : new Map();
+    prose !== ""
+      ? await readFileProblems(embedTargets(prose).map(embedId))
+      : new Map<string, RouteProblemCode | null>();
   const resolveEmbed = (name: string): EmbedResolution => {
-    if (!selfLearn.ok) return { problem: problemForAccess(selfLearn.reason) };
     const id = embedId(name);
     const problem = embedProblems.get(id) ?? null;
     if (problem !== null) return { problem };

@@ -39,6 +39,16 @@ npm run catalog -- course import /tmp/cs2111.yaml --reason "cs2111-m2-t1 teaches
 npm run catalog -- history curriculum_item cs2111-m2-t1          # what changed, who, why
 ```
 
+The exported file's first line is `# base-revision: N`, the newest revision
+of anything the course is made of when it was exported. `course import`
+refuses the file once the course has moved past N (an item archived, a
+concept linked, a link deleted since), naming what moved, because importing
+it would undo that; export again and reapply the edit, or pass `--force-base`
+to import it as it stands. After an import the stamp in the file moves on
+with it, so editing the same file and importing again is not stale. The
+course's own file in the tree carries no stamp, since the write-through
+compares it byte for byte with the database's export and keeps it in step.
+
 `course import` reads the file with the same parser the web app uses, then
 checks what it points at against the database rather than against other
 files: every module topic, tag and concept must exist, each item's concepts

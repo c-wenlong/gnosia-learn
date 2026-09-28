@@ -7,7 +7,14 @@ import {
   stringifyFrontmatter,
 } from "../../../../scripts/learn/lib/markdown.mjs";
 import { readContentSources } from "../content/ownership";
-import { commitNoteText as commitRows, noteText, readNoteRows, writeNoteRow, type NoteRow } from "../content/note-rows";
+import {
+  commitNoteText as commitRows,
+  noteRevision,
+  noteText,
+  readNoteRows,
+  writeNoteRow,
+  type NoteRow,
+} from "../content/note-rows";
 import { ContentWriteError } from "../content/write";
 import { writeThrough } from "../content/write-through";
 import { NOTE_KEYS, type NoteFields } from "../content/notes";
@@ -229,6 +236,65 @@ export async function readConcept(id: string): Promise<ConceptNote | null> {
   return readConceptAt(id, entry.file, entry.domain);
 }
 
+/** A note and the revision it was read at, for a writer that changes what it read. */
+export interface ConceptRead {
+  note: ConceptNote;
+  /** The concept's latest revision in the same snapshot as `note`; null on files, and for a note with none. */
+  base: number | null;
+}
+
+/**
+ * `readConcept`, with the revision the note was read at. On rows both come
+ * from one snapshot: read apart, a commit landing between them would pair old
+ * fields with the new revision, and a write of those fields would pass the
+ * base check and undo the commit.
+ */
+export async function readConceptForWrite(id: string): Promise<ConceptRead | null> {
+  const db = await rowsFor("concepts", true);
+  if (db === null) {
+    const note = await readConcept(id);
+    return note === null ? null : { note, base: null };
+  }
+  return db.transaction(
+    async (tx) => {
+      const [row] = await readNoteRows(tx, [id]);
+      return row === undefined ? null : { note: noteFromRow(row), base: await noteRevision(tx, id) };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+}
+
+/**
+ * Read a note, change it, write it back against the revision it was read at.
+ * `change` returns the note to write, or null to write nothing. A commit that
+ * lands between the read and the write refuses the write with
+ * `MovedBaseError` (edge case 16), and with `attempts` above one the note is
+ * read again and `change` applied to what is there now: right for a change
+ * that is the same whatever the note holds (an appended check, a link back to
+ * a session), wrong for one that replaces what the caller saw, which keeps
+ * the default of one and refuses. Null when there is no such note.
+ */
+export async function updateConcept(
+  id: string,
+  change: (
+    note: ConceptNote,
+  ) => (Record<string, unknown> & { id: string }) | null | Promise<(Record<string, unknown> & { id: string }) | null>,
+  options: Omit<WriteOptions, "base"> & { attempts?: number },
+): Promise<{ written: Written | null; note: ConceptNote } | null> {
+  const attempts = Math.max(1, options.attempts ?? 1);
+  for (let attempt = 1; ; attempt += 1) {
+    const read = await readConceptForWrite(id);
+    if (read === null) return null;
+    const next = await change(read.note);
+    if (next === null) return { written: null, note: read.note };
+    try {
+      return { written: await writeConceptNote(next, { ...options, base: read.base }), note: read.note };
+    } catch (error) {
+      if (!(error instanceof MovedBaseError) || attempt >= attempts) throw error;
+    }
+  }
+}
+
 export async function listConcepts(): Promise<ConceptNote[]> {
   const db = await rowsFor("concepts", false);
   if (db !== null) {
@@ -268,8 +334,12 @@ export interface WriteOptions {
   topic?: string;
   /** The revision's reason, on rows. */
   reason?: string;
-  /** The revision a checkout started from, on rows; a moved one is refused. Left out, the latest. */
-  base?: number | null;
+  /**
+   * On rows, the revision the note was read at (`readConceptForWrite`), or
+   * null for a note that has none yet; a note that moved since is refused
+   * with `MovedBaseError`. Ignored on files.
+   */
+  base: number | null;
   /** The tutoring session the write came from, on rows. */
   session?: string;
 }
@@ -279,6 +349,8 @@ export interface Written {
   path: string;
   revision: number | null;
   changed: boolean;
+  /** sha256 of the note as written: the file's bytes, or the text its revision renders. */
+  hash: string;
 }
 
 /**
@@ -321,7 +393,7 @@ function fieldsOf(note: Record<string, unknown> & { id: string }): NoteFields {
  */
 export async function writeConcept(
   note: Record<string, unknown> & { id: string },
-  options: WriteOptions = {},
+  options: WriteOptions,
 ): Promise<string> {
   return (await writeConceptNote(note, options)).path;
 }
@@ -329,7 +401,7 @@ export async function writeConcept(
 /** `writeConcept`, saying which revision it wrote and whether anything changed. */
 export async function writeConceptNote(
   note: Record<string, unknown> & { id: string },
-  options: WriteOptions = {},
+  options: WriteOptions,
 ): Promise<Written> {
   const db = await rowsFor("concepts", true);
   if (db !== null) {
@@ -337,7 +409,7 @@ export async function writeConceptNote(
       fields: fieldsOf(note),
       ...(options.domain !== undefined ? { domain: options.domain } : {}),
       ...(options.topic !== undefined ? { topicSlug: options.topic } : {}),
-      ...(options.base !== undefined ? { base: options.base } : {}),
+      base: options.base,
       reason: options.reason ?? `learn: write ${note.id}`,
       sessionId: options.session,
     };
@@ -346,12 +418,23 @@ export async function writeConceptNote(
     // same transaction (D17, `writeThrough`). An existing note keeps its
     // topic, and nothing in topics.yaml moves.
     const isNew = (await readNoteRows(db, [note.id])).length === 0;
-    const written = isNew
-      ? (await writeThrough(db, ["topics"], (tx) => writeNoteRow(tx, input))).value
-      : await writeNoteRow(db, input);
-    return { path: path.join(repoRoot(), written.path), revision: written.revision, changed: written.changed };
+    try {
+      const written = isNew
+        ? (await writeThrough(db, ["topics"], (tx) => writeNoteRow(tx, input))).value
+        : await writeNoteRow(db, input);
+      return {
+        path: path.join(repoRoot(), written.path),
+        revision: written.revision,
+        changed: written.changed,
+        hash: written.hash,
+      };
+    } catch (error) {
+      if (error instanceof ContentWriteError && error.code === "stale-base") throw new MovedBaseError(error.message);
+      throw error;
+    }
   }
-  return { path: await writeConceptFile(note, options), revision: null, changed: true };
+  const file = await writeConceptFile(note, options);
+  return { path: file, revision: null, changed: true, hash: sha256(await fs.readFile(file, "utf8")) };
 }
 
 async function writeConceptFile(
@@ -493,7 +576,12 @@ export async function commitNoteText(
   if (db !== null) {
     try {
       const written = await commitRows(db, id, text, { base: base.revision, reason: options.reason, sessionId: options.session });
-      return { path: path.join(repoRoot(), written.path), revision: written.revision, changed: written.changed };
+      return {
+        path: path.join(repoRoot(), written.path),
+        revision: written.revision,
+        changed: written.changed,
+        hash: written.hash,
+      };
     } catch (error) {
       if (error instanceof ContentWriteError && error.code === "stale-base") throw new MovedBaseError(error.message);
       throw error;
@@ -513,9 +601,9 @@ export async function commitNoteText(
   if (declaredId !== id) {
     throw new Error(`the checkout of "${id}" now says id: ${declaredId}; a note cannot be renamed by editing it`);
   }
-  if (current === text) return { path: note.path, revision: null, changed: false };
+  if (current === text) return { path: note.path, revision: null, changed: false, hash: sha256(text) };
   await fs.writeFile(note.path, text, "utf8");
-  return { path: note.path, revision: null, changed: true };
+  return { path: note.path, revision: null, changed: true, hash: sha256(text) };
 }
 
 function sha256(text: string): string {

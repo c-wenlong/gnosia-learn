@@ -11,6 +11,7 @@ import {
   resolveAsset,
   webStreamFrom,
   type AssetFileProblem,
+  type AssetRowText,
   type AssetSource,
   type AssetStored,
 } from "@/lib/asset-files";
@@ -57,8 +58,14 @@ import { withLearnerStore } from "@/lib/learner-store";
  * through here with the same Range handling when it cannot (the laptop's `fs`
  * store). The redirect carries the store's URL and nothing of the asset's
  * path. A `pending` blob, or one the store has lost, is a 404 `not-uploaded`,
- * never a fall back to the file, which may have been re-rendered since. Only a
- * row with no key reads the legacy file under its data root.
+ * never a fall back to the file, which may have been re-rendered since.
+ *
+ * **Then the row, once the database owns the type** (Tracks C and D). A note,
+ * a session log or a `.tldr` whose type has been flipped is served from its
+ * row: after the flip the file is at best the export as of the flip, so
+ * serving it would show a note without its latest commit and answer 404 for a
+ * log started since. Only a row with no key and no row text reads the legacy
+ * file under its data root.
  *
  * **The legacy file is off unless a machine opts in.** `ASSET_FILES_ENABLED`,
  * the shape `STUDIO_ENABLED` uses in decision D11 of
@@ -161,6 +168,7 @@ export async function GET(
 
   if (resolved.ok === false) return problem(resolved);
   if (resolved.source === "blob") return serveBlob(request, resolved);
+  if (resolved.source === "row") return serveRow(request, resolved);
 
   const headers = baseHeaders(resolved);
   const range = parseRange(request.headers.get("range"), resolved.bytes);
@@ -255,4 +263,35 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
     }
     return problem(blobStoreProblem(error));
   }
+}
+
+/**
+ * Row text, held whole: the same headers and Range answers as a file, sliced
+ * from the buffer. A note or a log is a few kilobytes and a `.tldr` tens, so
+ * nothing is gained by streaming what the database already handed over.
+ */
+function serveRow(request: Request, text: AssetRowText): Response {
+  const headers = baseHeaders(text);
+  const range = parseRange(request.headers.get("range"), text.bytes);
+  if (range.kind === "unsatisfiable") {
+    return new Response(null, {
+      status: 416,
+      headers: { ...headers, "Content-Range": `bytes */${text.bytes}` },
+    });
+  }
+  if (range.kind === "partial") {
+    const { start, end } = range;
+    return new Response(new Uint8Array(text.body.subarray(start, end + 1)), {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Range": `bytes ${start}-${end}/${text.bytes}`,
+        "Content-Length": String(end - start + 1),
+      },
+    });
+  }
+  return new Response(new Uint8Array(text.body), {
+    status: 200,
+    headers: { ...headers, "Content-Length": String(text.bytes) },
+  });
 }

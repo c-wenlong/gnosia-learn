@@ -114,9 +114,11 @@ import {
   listSessions,
   ownedByDatabase,
   readConcept,
+  readConceptForWrite,
   sessionPath,
   startSessionLog,
   bindCatalog,
+  updateConcept,
   writeConcept,
 } from "./files";
 import { NoteWriteError } from "../content/note-rows";
@@ -484,7 +486,8 @@ commands.concept = async ({ values, positionals }, session) => {
       }
     }
 
-    const existing = await readConcept(id);
+    const read = await readConceptForWrite(id);
+    const existing = read?.note ?? null;
     if (existing !== null && !values.force) {
       fail(`concept "${id}" already exists (pass --force to overwrite)`);
     }
@@ -569,8 +572,9 @@ commands.concept = async ({ values, positionals }, session) => {
             ...(values.domain !== undefined ? { domain: values.domain || null } : {}),
             ...(topicSlug !== undefined ? { topic: topicSlug } : {}),
             reason: values.reason ?? `learn concept add ${id}${topicSlug !== undefined ? ` --topic ${topicSlug}` : ""}`,
+            base: read?.base ?? null,
           }
-        : { domain: values.domain === undefined ? null : values.domain || null },
+        : { domain: values.domain === undefined ? null : values.domain || null, base: null },
     );
     await ensureDirs();
 
@@ -720,8 +724,6 @@ commands.concept = async ({ values, positionals }, session) => {
   if (sub === "edit") {
     const id = positionals[2] ?? values.id;
     if (id === undefined) fail("concept edit requires an id");
-    const concept = await readConcept(id);
-    if (concept === null) fail(`no such concept: ${id}`);
 
     // Only touch what was passed. An explicit empty string clears a list,
     // which is how you drop a prerequisite without hand-editing frontmatter.
@@ -753,9 +755,13 @@ commands.concept = async ({ values, positionals }, session) => {
 
     // writeConcept drops body/path/id/domain from the frontmatter itself.
     // Passing domain moves the file; omitting it leaves the note where it is.
+    // The note is written against the revision it was read at, and not read
+    // again when that moved: the flags replace fields the caller saw, so a
+    // commit landing in between is refused rather than overwritten.
     const moved = values.domain !== undefined;
-    const file = await writeConcept(
-      { ...concept, ...patch, ...(body !== undefined ? { body } : {}) },
+    const updated = await updateConcept(
+      id,
+      (concept) => ({ ...concept, ...patch, ...(body !== undefined ? { body } : {}) }),
       {
         ...(moved ? { domain: values.domain || null } : {}),
         reason:
@@ -763,6 +769,8 @@ commands.concept = async ({ values, positionals }, session) => {
           `learn concept edit ${id}: ${[...Object.keys(patch), ...(moved ? ["domain"] : [])].join(", ")}`,
       },
     );
+    if (updated === null || updated.written === null) fail(`no such concept: ${id}`);
+    const file = updated.written.path;
     if (moved) patch.domain = values.domain || "(unfiled)";
     if (body !== undefined) patch.body = `${body.length} characters`;
 
@@ -894,21 +902,28 @@ commands.check = async ({ values, positionals }) => {
   if (sub === "add") {
     const id = values.concept;
     if (id === undefined) fail("check add requires --concept");
-    if (values.question === undefined) fail("check add requires --question");
-    const concept = await readConcept(id);
-    if (concept === null) fail(`no such concept: ${id}`);
+    const question = values.question;
+    if (question === undefined) fail("check add requires --question");
 
-    const body = appendCheck(concept.body, {
-      question: values.question,
-      answer: values.answer ?? "",
-      why: values.why ?? "",
-      source: values.sources ?? "",
-    }) as string;
-    // writeConcept strips body/path/id itself, so pass the note straight back.
-    await writeConcept(
-      { ...concept, body },
-      { reason: values.reason ?? `learn check add ${id}: ${values.question}` },
+    // An appended check is the same edit whatever the note holds, so a commit
+    // landing between the read and the write is read again and the check
+    // appended to it, rather than the write undoing it.
+    let body = "";
+    const updated = await updateConcept(
+      id,
+      (concept) => {
+        body = appendCheck(concept.body, {
+          question,
+          answer: values.answer ?? "",
+          why: values.why ?? "",
+          source: values.sources ?? "",
+        }) as string;
+        // writeConcept strips body/path/id itself, so pass the note straight back.
+        return { ...concept, body };
+      },
+      { reason: values.reason ?? `learn check add ${id}: ${question}`, attempts: 3 },
     );
+    if (updated === null) fail(`no such concept: ${id}`);
 
     const checks = parseChecks(body) as Check[];
     if (values.json) return out({ concept: id, checks: checks.length }, true);
@@ -1381,20 +1396,22 @@ commands.session = async ({ values, positionals }, session) => {
     const linked: string[] = [];
     const unchecked: string[] = [];
     for (const conceptId of touched) {
-      const concept = await readConcept(conceptId);
-      if (concept === null) continue;
-
       const answered = mine.filter((e) => e.concept === conceptId);
       const right = answered.filter((e) => e.correct).length;
       const detail = `${right}/${answered.length} correct, ${pct(masteryOf(model, conceptId) as number).trim()}`;
-      const body = appendSessionLink(concept.body, id, detail) as string;
-      if (body !== concept.body) {
-        await writeConcept(
-          { ...concept, body },
-          { reason: `learn session close ${id}: link the note back to the session`, session: id },
-        );
-        linked.push(conceptId);
-      }
+      // The link is appended to whatever the note holds when it is written,
+      // so a commit landing in between is read again rather than undone.
+      const updated = await updateConcept(
+        conceptId,
+        (concept) => {
+          const body = appendSessionLink(concept.body, id, detail) as string;
+          return body === concept.body ? null : { ...concept, body };
+        },
+        { reason: `learn session close ${id}: link the note back to the session`, session: id, attempts: 3 },
+      );
+      if (updated === null) continue;
+      const concept = updated.note;
+      if (updated.written !== null) linked.push(conceptId);
 
       // A scheduled concept with no stored check gives /review nothing to ask.
       if (reviews.cards[conceptId] && (parseChecks(concept.body) as Check[]).length === 0) {
