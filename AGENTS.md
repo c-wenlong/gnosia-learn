@@ -511,8 +511,10 @@ not have to be worked out again.
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
   tables; `index.json` is a query. `npm run learn -- status` fails when the
   database is down, which is deliberate — both skills open with it and stop.
-  `concept add`, `check add` and `session log` still work without it, because
-  they only touch files. The file-to-table mapping is
+  Since Track C, `concept add`, `check add` and `session log` need it too: they
+  read the `content_source` row to know whether a note or a log is a file or
+  rows, and once flipped nothing under `learn/` is written; a whole note is
+  edited with `learn concept checkout` and `commit`. The file-to-table mapping is
   [services/catalog/LEARN.md](services/catalog/LEARN.md).
 - **Migration `0010` seeds two rows and guards every table, and both surprise a
   test.** It inserts the `local` learner (before the first `owner_id` foreign
