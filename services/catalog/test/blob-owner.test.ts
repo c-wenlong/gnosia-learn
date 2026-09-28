@@ -12,7 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { uploadAssets } from "../src/content/asset-upload";
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
-import { OWNER_FILE, readOwner, removePartial, stalePartials } from "../src/content/blob-owner";
+import { ownerIdentity, OWNER_FILE, readOwner, removePartial, stalePartials } from "../src/content/blob-owner";
 import { writeContent } from "../src/content/write";
 import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
@@ -176,14 +176,17 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       const file = path.join(base, "b-bytes.bin");
       await writeFile(file, "bytes database b wrote");
       const put = await uploadBlob(b.db, shared, { ownerId: "local", file, mime: "application/octet-stream", ext: "bin" });
-      expect(await readOwner(shared.root)).toEqual({ database: expect.stringMatching(new RegExp(`^${b.name}:\\d+$`)) });
+      expect(await readOwner(shared.root)).toEqual({
+        database: expect.stringMatching(new RegExp(`^${b.name}:\\d+$`)),
+        port: expect.stringMatching(/^\d+$/),
+      });
 
       // A cannot write there: its objects would be orphans to B's audit.
       const other = path.join(base, "a-bytes.bin");
       await writeFile(other, "bytes database a wanted to write");
       await expect(
         uploadBlob(a.db, shared, { ownerId: "local", file: other, mime: "application/octet-stream", ext: "bin" }),
-      ).rejects.toThrow(new RegExp(`belongs to database "${b.name}:\\d+".*nothing was uploaded`));
+      ).rejects.toThrow(new RegExp(`belongs to database "${b.name}:\\d+" on port \\d+.*nothing was uploaded`));
       expect(await a.db.select().from(blobObject)).toEqual([]);
 
       // To A the object is an orphan, a day old. A read-only audit says so and whose root it is.
@@ -193,7 +196,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       expect(listed.findings).toEqual([expect.objectContaining({ kind: "orphan", key: put.key })]);
       // --fix from A is refused before anything changes.
       await expect(auditBlobs(a.db, shared, { fix: true, root: shared.root, now: later })).rejects.toThrow(
-        new RegExp(`belongs to database "${b.name}:\\d+" \\(its \\.owner\\), and this is database "${a.name}:\\d+"`),
+        new RegExp(`belongs to database "${b.name}:\\d+" on port \\d+ \\(its \\.owner\\), and this is database "${a.name}:\\d+" on port \\d+`),
       );
       expect(await shared.stat(put.key)).not.toBeNull();
       // From B, the owner, the same object is its own and stays.
@@ -206,6 +209,12 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       if (saved === undefined) delete process.env["SELF_LEARN_HOME"];
       else process.env["SELF_LEARN_HOME"] = saved;
     }
+  });
+
+  it("tells a database from one of the same name and oid on another server by its port", async () => {
+    const self = await ownerIdentity(a.db);
+    await writeFile(path.join(root, OWNER_FILE), JSON.stringify({ database: self.database, port: `${self.port}0` }));
+    await expect(auditBlobs(a.db, store, { fix: true, root })).rejects.toThrow(/belongs to database .* on port \d+0 /);
   });
 
   it("claims an unclaimed root on its first --fix, then deletes its own day-old orphans there", async () => {

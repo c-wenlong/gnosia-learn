@@ -1372,7 +1372,8 @@ read and its write, and fails without the fix:
   primary" could not tell a scratch run from the real one.
   `SELF_LEARN_HOME` is the one knob, and both sides read it.
 - **S6.** `<root>/.owner` names the database (its name and
-  `pg_database` oid, as the write-through names an importing database) that
+  `pg_database` oid, as the write-through names an importing database, and
+  its server's port, since two servers can hand out the same oid) that
   first writes or `--fix`es a root; an upload and `--fix`
   both refuse a root naming another, since each would leave that database
   with objects it has no row for. The stale-pending delete also requires the row still be a
