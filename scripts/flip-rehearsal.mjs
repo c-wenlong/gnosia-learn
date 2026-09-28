@@ -26,7 +26,9 @@
 //   flip diagrams, export diagrams;
 //   import the tree again (every content type skipped as its own export); parity;
 //   asset upload --source manimkc, twice (the second stores and writes nothing);
-//   blob audit.
+//   blob audit;
+//   doctor (nothing stands in the contract's way) and migrate again, which
+//   applies the contract migration (0013) the first migrate held back.
 // Each step runs the catalog CLI with --json and is checked, and the first
 // step that fails its check stops the run.
 //
@@ -120,6 +122,25 @@ function procedure(tree) {
           : `the second upload stored ${json.uploaded} object(s) and wrote ${json.rowsWritten} row(s); it should do neither`,
     },
     { name: 'blob audit', args: ['blob', 'audit'] },
+    // The contract (0013): a blob behind every video, sidecar, poster and
+    // diagram SVG. The first migrate held it back; now nothing stands in its way.
+    {
+      name: 'doctor again',
+      args: ['doctor'],
+      check: (json) => {
+        const contract = json.blobContract ?? { unstored: [], unkeyed: [] };
+        const distance = contract.unstored.length + contract.unkeyed.length;
+        return distance === 0 ? null : `${distance} asset(s) or key(s) still stand in the contract's way`;
+      },
+    },
+    {
+      name: 'migrate the contract',
+      args: ['migrate'],
+      check: (json) =>
+        (json.held ?? []).length === 0
+          ? null
+          : `still held: ${json.held.map((h) => `${h.tag} (${h.reason})`).join('; ')}`,
+    },
   ];
 }
 
@@ -128,9 +149,15 @@ function gist(step, json) {
   if (json === null) return '';
   switch (step.args[0]) {
     case 'migrate':
-      return json.applied.length === 0 ? `already at ${json.head}` : `applied ${json.applied.join(', ')}; head ${json.head}`;
+      return (
+        (json.applied.length === 0 ? `already at ${json.head}` : `applied ${json.applied.join(', ')}; head ${json.head}`) +
+        (json.held?.length > 0 ? `; held ${json.held.map((h) => h.tag).join(', ')}` : '')
+      );
     case 'doctor':
-      return `${json.violations} violation(s); rules ${json.rules.map((r) => `${r.name} ${r.state} ${r.violators}`).join(', ')}`;
+      return (
+        `${json.violations} violation(s); rules ${json.rules.map((r) => `${r.name} ${r.state} ${r.violators}`).join(', ')}` +
+        (json.blobContract === undefined ? '' : `; stored assets with no blob ${json.blobContract.unstored.length}`)
+      );
     case 'import':
       return (
         `${json.totals.written} rows written, ${json.totals.deleted} removed` +

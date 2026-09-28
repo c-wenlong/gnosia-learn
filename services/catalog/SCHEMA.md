@@ -647,6 +647,12 @@ with no `blob_key`, and the upsert sets every column, so the writer carries the
 stored key forward whenever the stored blob's sha256 is the `content_hash` just
 read (`services/catalog/src/index/blob-keys.ts`). A re-render changes the hash
 and drops the key, so the asset falls back to its file until the next upload.
+That is the order before the contract migration, 0013 (below). After it a
+stored-kind row cannot exist without its blob, so the manimkc source does what
+the diagrams source always did: it hands each video and sidecar to the runner
+to store first and names the content-addressed key on the row
+(`IndexContext.blobsRequired`, set when `asset_stored_blob_check` exists). A
+re-render then lands under its own key in the same import.
 
 Because deletions cascade, `index` prints the keys it removed rather than a
 count.
@@ -993,6 +999,28 @@ Never edit an applied migration. drizzle keys them by the sha256 of the file, so
 an edit makes the migration look unapplied everywhere it has already run.
 
 ## Still open
+
+- **Settled in migration `0013`, phase 2's contract: a stored kind has a
+  blob, and a key is the package's.** `asset_stored_blob_check` narrows the
+  location check: a `video`, `transcript`, `chapters`, `captions`, `poster` or
+  `diagram_svg` row must name a `blob_key` (a note, a log, a `.tldr` and a
+  link are rows or URLs, and keep their path). `blob_object_key_check`
+  tightens from 0010's `^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$` to the key
+  `@self-learn/blob` makes: a lowercase owner of 1 to 64, a required extension
+  of 1 to 16 (`BLOB_KEY_PATTERN` in `packages/schema/src/content.ts`). A
+  hand-written block first lists every stored-kind asset with no blob and every
+  key the package would not make, and raises with them; `catalog doctor`
+  reports the same two lists (`src/content/blob-contract.ts`). **It is applied
+  only after `catalog import` (which stores each diagram SVG) and `catalog
+  asset upload --source manimkc` have run on that database**, which on the
+  owner's is flip day. `catalog migrate` knows that: it applies everything
+  before 0013 as its own run, asks the same question, and holds 0013 (and
+  anything after it) with the reason while the answer is not none, exiting 0
+  with `held` in its output. Every other command runs on a database whose only
+  outstanding migrations are held ones (`assertMigrated`), since 0013 adds no
+  column; that is what lets a database at 0009 migrate to 0012 and then run
+  the upload 0013 waits on. The flip-day script's last two steps are `doctor`
+  (nothing in the way) and `migrate` (0013 applied).
 
 - **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its
   foreign key is `ON DELETE RESTRICT` instead of the `SET NULL` that could

@@ -9,7 +9,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
-import { readTopicsReport, type TopicsReport } from "../index/manimkc";
+import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/manimkc";
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
@@ -64,13 +64,8 @@ export function posterId(videoId: string): string {
   return `${POSTER_PREFIX}${videoId}`;
 }
 
-/** Media types for what this command uploads, by extension. */
-const MIME: Readonly<Record<string, string>> = {
-  mp4: "video/mp4",
-  json: "application/json",
-  vtt: "text/vtt",
-  jpg: POSTER_CONTENT_TYPE,
-};
+/** Media types for what this command uploads, by extension: manimkc's own, and the poster. */
+const MIME: Readonly<Record<string, string>> = { ...MANIMKC_MIME, jpg: POSTER_CONTENT_TYPE };
 
 export type UploadSource = "manimkc";
 export const UPLOAD_SOURCES: readonly UploadSource[] = ["manimkc"];

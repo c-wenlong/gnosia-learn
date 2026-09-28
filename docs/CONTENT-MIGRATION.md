@@ -1507,7 +1507,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       `tldr.test.ts` reads the seed's diagram; `scripts/e2e.mjs` templates from
       a local database built by `catalog import seed/`; `vitest.setup.ts`'s
       tracked-tree check watches `seed/`.
-- [ ] **Contract migration:** the `asset` location check narrows so a video,
+- [x] **Contract migration:** the `asset` location check narrows so a video,
       sidecar, poster or SVG must have a `blob_key`; and `blob_object_key_check`
       tightens to the blob package's own key rule (`packages/blob/src/key.ts`:
       a lowercase owner of 1 to 64 characters, a required extension of 1 to
@@ -1556,6 +1556,39 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
   phase 3.
 - **Flip day is `scripts/flip-rehearsal.mjs`** (below).
 
+**Built** (the contract migration; branch `p2/contract-migration`):
+`0013_asset_blob_contract` adds `asset_stored_blob_check` (a video, sidecar,
+poster or diagram SVG names its `blob_key`) beside the location check, and
+tightens `blob_object_key_check` to the package's key rule. A hand-written
+block ahead of drizzle's output lists every stored-kind asset with no blob and
+every bad key and raises with them, so on a database whose videos were never
+uploaded it refuses by id rather than failing on the constraint. Where it
+departs from the plan:
+
+- **`catalog migrate` holds it back rather than failing.** drizzle applies a
+  run in one transaction, so on the owner's database (at 0009, nothing
+  uploaded) the raise would have rolled 0010 to 0012 back with it, and the
+  upload needs 0010's columns: flip day could not have started. `migrate` now
+  applies everything before 0013 as its own run, asks the question the guard
+  asks, and holds 0013 and anything after it with the reason, exiting 0 with
+  `held`; the other commands accept a database whose only outstanding
+  migrations are held ones. `catalog doctor` lists the same assets and keys.
+- **After 0013 the manimkc import stores the bytes itself.** A row can no
+  longer go in before its blob, so under the contract the manimkc source hands
+  each file to the runner to store first, as the diagrams source does, and a
+  re-render lands under its own key in the same import. `catalog asset upload`
+  then only makes posters. Before 0013 nothing changes: rows first, then the
+  upload, which is flip day's order.
+- **The suites that test the upload itself** (`asset-upload`, `blob-owner`)
+  run on a scratch database stopped at 0012, since that flow only exists
+  before the contract; fixtures elsewhere that wrote a stored-kind row with a
+  path alone now name a `present` blob (`test/stored-blob.ts`).
+
+Measured on a copy of `self_learn` (0009): the rehearsal's first `migrate`
+applied 0010 to 0012 and held 0013 with 123 manimkc assets and 3 diagram SVGs
+without a blob; after the import and the uploads `doctor` listed none, and the
+last `migrate` applied 0013.
+
 ### Flip day, as a script
 
 `node scripts/flip-rehearsal.mjs` runs flip day against a copy, and `--real
@@ -1577,6 +1610,9 @@ checked before the next:
 8. `asset upload --source manimkc`, twice; the second must store nothing and
    write no row.
 9. `blob audit`, which must find nothing outstanding.
+10. `doctor` again, which must list no stored asset without a blob and no bad
+    key, then `migrate` again, which applies the contract migration (0013) that
+    step 1 held back, and must hold nothing.
 
 Each flip must record its export hash and each export must record its hash at
 the tree, or the next import would refuse the files as edited; the script
@@ -1595,7 +1631,8 @@ checkout's tree, the untracked `tailscale-vpn-communication` diagram included:
 notes and the diagrams flip 3 files an export rewrites; the uploads stored 159
 objects (36 videos, 87 sidecars, 36 posters) and then none; the audit found
 162 rows and 162 objects (the three diagram SVGs the import stored, and the
-159), with nothing outstanding. `services/catalog/test/flip-rehearsal.test.ts`
+159), with nothing outstanding. Since the contract migration, the same run
+ends with `doctor` and `migrate` applying 0013 (21 of 21 steps). `services/catalog/test/flip-rehearsal.test.ts`
 runs the script on a scratch template at 0009 with the seed tree and a stand-in
 manimkc CLI, and holds `--real`'s refusals.
 

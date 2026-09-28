@@ -53,6 +53,22 @@ export const ASSET_KINDS = [
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
+/**
+ * The kinds whose bytes live only in the blob store once phase 2's contract
+ * migration (0013) is applied: an `asset` row of one of these must name its
+ * blob (`asset_stored_blob_check`). A note, a session log and a `.tldr` are
+ * rows the database renders; a link is a URL.
+ */
+export const BLOB_STORED_KINDS = ["video", "transcript", "chapters", "captions", "poster", "diagram_svg"] as const satisfies readonly AssetKind[];
+
+/**
+ * A blob key as `@self-learn/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
+ * a lowercase owner of 1 to 64 characters, a lowercase hex sha256, and a
+ * required extension of 1 to 16 lowercase letters and digits. The database's
+ * `blob_object_key_check` holds a key to it from 0013 on.
+ */
+export const BLOB_KEY_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}/[0-9a-f]{64}[.][a-z0-9]{1,16}$";
+
 /** Which repository an asset's bytes live in. */
 export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc"] as const;
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
@@ -341,7 +357,7 @@ export const blobObject = pgTable(
     check("blob_object_sha256_check", sql`sha256 ~ '^[0-9a-f]{64}$'`),
     check(
       "blob_object_key_check",
-      sql`key ~ '^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$' and starts_with(key, owner_id || '/' || sha256)`,
+      sql.raw(`key ~ '${BLOB_KEY_PATTERN}' and starts_with(key, owner_id || '/' || sha256)`),
     ),
     check("blob_object_bytes_check", sql`bytes >= 0`),
     check("blob_object_provider_check", inList("provider", BLOB_PROVIDERS)),
@@ -392,6 +408,11 @@ export const asset = pgTable(
       "asset_location_check",
       sql`(url is null) = (path is not null or blob_key is not null)`,
     ),
+    // The location check, narrowed for the stored kinds (0013): their bytes
+    // are in the blob store and nowhere else the app reads, so a path alone is
+    // no location. Applied only once `catalog asset upload` has run; the
+    // migration raises with the ids first otherwise.
+    check("asset_stored_blob_check", sql.raw(`kind not in (${quoted(BLOB_STORED_KINDS)}) or blob_key is not null`)),
     check("asset_bytes_check", sql`bytes is null or bytes >= 0`),
     check(
       "asset_resource_type_check",

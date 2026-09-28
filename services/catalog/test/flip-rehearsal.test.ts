@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,14 +11,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
+import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * `scripts/flip-rehearsal.mjs`, the flip-day procedure that phase 3 runs
  * against the owner's database, run end to end against a copy.
  *
- * The template is what the owner's database is today: migrated to 0009 and
- * never flipped. The tree is the seed with one manimkc topic folder mapped,
+ * The template is what the owner's database is today: migrated to 0009,
+ * never flipped, and holding a video row whose bytes were never uploaded, so
+ * the first migrate has to hold the contract migration (0013) back and the
+ * last one applies it. The tree is the seed with one manimkc topic folder mapped,
  * and the manimkc CLI a stand-in reporting one rendered video and its
  * transcript, so the two uploads have something to store and the second has
  * nothing left to. No ffmpeg (`FFMPEG_PATH` names none), so posters are
@@ -113,48 +116,17 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
     template = await createScratchDatabase();
     // Where the owner's database is: at 0009, never flipped, no content rows.
     await applyMigrations(template.db, { folder: await partialMigrations(10) });
+    // The render an earlier `catalog index` recorded, as the owner's rows do.
+    await template.db.execute(
+      sql`insert into asset (id, kind, path, source_repo) values ('manimkc:out/demo/one/one.mp4', 'video', 'out/demo/one/one.mp4', 'manimkc')`,
+    );
 
     work = await mkdtemp(path.join(tmpdir(), "catalog-flip-rehearsal-"));
     tree = path.join(work, "tree");
-    for (const folder of ["content", "learn"]) {
-      await cp(path.join(REPO_ROOT, "seed", folder), path.join(tree, folder), { recursive: true });
-    }
-    // One manimkc topic folder, under one of the seed's topics.
-    const topics = path.join(tree, "content", "topics.yaml");
-    const vocabulary = await readFile(topics, "utf8");
-    const mapped = vocabulary.replace(
-      /(- slug: agent-tool-use-and-reasoning-loops\n(?:.*\n)*?\s+manimkc: )\[\]/,
-      "$1[demo/one]",
-    );
-    expect(mapped).not.toBe(vocabulary);
-    await writeFile(topics, mapped);
-
+    await seedWithManimkc(tree);
     // A manimkc checkout whose data root holds one render and its transcript.
     manimkc = path.join(work, "manimkc");
-    const out = path.join(manimkc, "out", "demo", "one");
-    await mkdir(out, { recursive: true });
-    await writeFile(path.join(out, "one.mp4"), randomBytes(4096));
-    await writeFile(path.join(out, "one.transcript.json"), JSON.stringify({ segments: [] }));
-    const cli = path.join(manimkc, "tools", "cli", "manimkc");
-    await mkdir(path.dirname(cli), { recursive: true });
-    await writeFile(
-      cli,
-      [
-        "#!/usr/bin/env python3",
-        "import json, sys",
-        'root = sys.argv[sys.argv.index("--root") + 1]',
-        'if "mirrors" in sys.argv:',
-        '    print(json.dumps({"outRoot": root, "destinations": {}}))',
-        "else:",
-        '    print(json.dumps({"outRoot": root, "topics": [{"path": "demo/one", "title": "One", "topic": None,',
-        '        "out_dir": "out/demo/one", "sections": [{"section": "main", "deliverable": {',
-        '        "path": "out/demo/one/one.mp4", "exists": True, "sidecars": {',
-        '        "transcript": {"path": "out/demo/one/one.transcript.json", "exists": True}}}}]}],',
-        '        "drift": {"orphans": [], "unrendered": []}}))',
-        "",
-      ].join("\n"),
-    );
-    await chmod(cli, 0o755);
+    await manimkcStandIn(manimkc, randomBytes(4096));
 
     // `createdb -T` needs the template to have no other session.
     const admin = new pg.Client({ connectionString: url("postgres") });
@@ -207,6 +179,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       "asset upload",
       "asset upload again",
       "blob audit",
+      "doctor again",
+      "migrate the contract",
     ]);
     const step = (stepName: string) => report.steps.find((s) => s.name === stepName)?.result ?? {};
 
@@ -215,6 +189,15 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       "0011_content_export_positions",
       "0012_concept_topic_not_null",
     ]);
+    // Held, not attempted: its guard would have raised and rolled all four back.
+    expect(step("migrate")["held"]).toEqual([
+      { tag: "0013_asset_blob_contract", reason: expect.stringMatching(/^1 asset\(s\) of a stored kind have no blob/) },
+    ]);
+    expect(step("doctor")["blobContract"]).toEqual({
+      inForce: false,
+      unstored: [{ id: "manimkc:out/demo/one/one.mp4", kind: "video" }],
+      unkeyed: [],
+    });
     // Courses flip without --strict: two seed items name no concept.
     expect(step("flip courses")["rulesArmed"]).toEqual([]);
     const skipped = (step("import the tree again")["skipped"] as { source: string }[]).map((s) => s.source).sort();
@@ -224,6 +207,12 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
     expect(step("asset upload again")).toMatchObject({ uploaded: 0, rowsWritten: 0, refused: 0 });
     // The seed's diagram SVG, which the import stored, and the two uploads.
     expect(step("blob audit")).toMatchObject({ rows: 3, objects: 3, outstanding: 0 });
+    expect(step("doctor again")["blobContract"]).toEqual({ inForce: false, unstored: [], unkeyed: [] });
+    expect(step("migrate the contract")).toMatchObject({
+      applied: ["0013_asset_blob_contract"],
+      head: "0013_asset_blob_contract",
+      held: [],
+    });
 
     // The copy is gone, and the template is as it was: at 0009, no content.
     const admin = new pg.Client({ connectionString: url("postgres") });
@@ -236,6 +225,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
     }
     const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
     expect(topics.rows[0]?.n).toBe(0);
+    const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
+    expect(assets.rows[0]?.n).toBe(1);
     const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
     expect(applied.rows[0]?.n).toBe(10);
   }, 240_000);

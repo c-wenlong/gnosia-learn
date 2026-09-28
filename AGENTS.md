@@ -538,6 +538,18 @@ not have to be worked out again.
   `--real --database <name>` runs the same steps against that database in
   place; it asks for the name to be typed on a terminal and has no `--yes`, so
   it is the owner's to run, never an agent's.
+- **`catalog migrate` can exit 0 without reaching the head, on purpose.**
+  Migration `0013` requires a blob behind every video, sidecar, poster and
+  diagram SVG, and on a database whose renders were never uploaded its guard
+  would raise and roll the whole run back. So `migrate` applies everything
+  before it, holds it with the reason (`held` in `--json`, one line each in
+  text), and the other commands run anyway; `catalog doctor` lists what is in
+  the way. After `catalog import` and `catalog asset upload --source manimkc`
+  a second `migrate` applies it. From then on the manimkc import stores each
+  file itself, and a test fixture that writes a stored-kind asset needs a blob
+  (`services/catalog/test/stored-blob.ts`), or a scratch database stopped at
+  0012 (`partialMigrations(BEFORE_BLOB_CONTRACT)`) when the upload before the
+  contract is what it tests.
 - **Never edit a migration under `services/catalog/drizzle/` once it has been
   applied.** drizzle keys applied migrations by the sha256 of the file, so an
   edit makes it look unapplied on every database that already ran it. Change

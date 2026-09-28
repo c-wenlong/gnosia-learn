@@ -50,6 +50,14 @@ export interface IndexContext {
   toolsRoot?: string;
   /** Absolute path to the manimkc checkout to read. Only the manimkc source uses it. */
   manimkcRoot: string;
+  /**
+   * Whether this database is under phase 2's contract (migration 0013): a
+   * stored-kind asset row must name its blob, so the manimkc source hands
+   * each file to the runner to store before the row that names it, as the
+   * diagrams source does for SVGs. Absent or false before 0013, when rows go
+   * in first and `catalog asset upload` stores the bytes.
+   */
+  blobsRequired?: boolean;
   /** `content/topics.yaml`, loaded once and shared by every source. */
   vocabulary: Vocabulary;
   /**

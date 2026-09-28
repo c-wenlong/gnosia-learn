@@ -18,6 +18,7 @@ import path from "node:path";
 import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
+import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
@@ -357,6 +358,7 @@ export async function runIndex(
     toolsRoot,
     manimkcRoot,
     vocabulary,
+    blobsRequired: await blobContractInForce(db),
     knownConcepts: () => {
       conceptCache ??= ranConcepts
         ? Promise.resolve(producedConcepts)
