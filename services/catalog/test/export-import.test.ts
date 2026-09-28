@@ -8,7 +8,7 @@ import { parse, stringify } from "yaml";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { doctor } from "../src/commands/doctor";
+import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
 import { runFlip } from "../src/commands/flip";
 import { runImportCommand } from "../src/commands/index-command";
@@ -717,6 +717,14 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
     await fixture?.cleanup();
   });
 
+  it("reports every rule as unsettled before a strict flip, the cut-over's distance", async () => {
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.unsettled).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
+    expect(formatDoctor(report)).toContain(
+      "neither armed nor waived: module-has-item, item-has-concept, item-concept-in-module-topic",
+    );
+  });
+
   it("refuses a waiver with no reason, or for another type's rule", async () => {
     await expect(
       runFlip({ type: "courses", strict: true, readers: READERS, waive: [{ rule: "item-has-concept", reason: " " }] }),
@@ -741,6 +749,9 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
       violators: 1,
       waived: { type: "courses", reason: "nine courses are still being filled in" },
     });
+    // Armed or waived: what phase 3's cut-over requires of every rule.
+    expect(report.unsettled).toEqual([]);
+    expect(formatDoctor(report)).toContain("every rule is armed or waived");
   });
 });
 

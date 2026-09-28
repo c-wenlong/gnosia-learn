@@ -1,8 +1,9 @@
 // Flip day, rehearsed: every step that moves a database's content from files to
 // rows, in the order docs/CONTENT-MIGRATION.md gives it, run against a copy.
 //
-// usage: node scripts/flip-rehearsal.mjs [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]
-//        node scripts/flip-rehearsal.mjs --real --database DB --checkout DIR
+// usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]
+//                                        [--waive-reason TEXT]
+//        node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR
 //
 // A rehearsal (the default):
 //   1. `createdb -T <from> <copy>` (pg_dump into an empty database when the
@@ -69,26 +70,68 @@
 // MANIMKC_ROOT and TLDRAWKC_ROOT as the catalog reads them (a worktree with no
 // submodules points them at a checkout that has them).
 //
+// --cutover is cut-over day (phase 3), which comes after flip day and before
+// the PR that removes content/ and learn/ from the tree merges. Its steps
+// (CUTOVER below), each checked before the next:
+//   back up the database (<database>-precutover-<UTC>.dump);
+//   migrate, which must hold nothing (the contract, 0013, is applied);
+//   every content type is the database's (flip day ran);
+//   import the tree into a throwaway copy, then into the database: each must
+//   remove nothing, and the second must skip all six types as their own
+//   export (the flips held, and nobody edited the files since);
+//   export everything into a temp directory, then parity of the database
+//   against the tree, saved with a byte comparison of that export and the
+//   tree to ~/<database>-cutover-<UTC>.parity.json, for the PR body;
+//   decide the waivers: doctor, and for each completeness rule with
+//   violators, item-has-concept may be waived with a reason typed on the
+//   terminal (an empty one is refused), and any other rule stops the run;
+//   flip every type --strict, the waiver passed to courses;
+//   doctor, which must report every rule armed or waived;
+//   git tag content-files-final on HEAD, refused if the tag exists or a
+//   tracked file under content/ or learn/ differs from HEAD. Never pushed.
+// It ends by printing the commands that follow: push the tag, then merge the
+// cut-over PR. --real --cutover refuses unless every type is flipped already,
+// with the same guards as --real (named database, --checkout, a terminal, the
+// backup first). A rehearsal with --cutover runs flip day's steps and then the
+// cut-over's on one copy, tags a throwaway git repository made of the copied
+// tree rather than the checkout, and takes the waiver's reason from
+// --waive-reason when there is no terminal. It refuses a template that is
+// flipped already: its blobs are in a store the rehearsal does not use, so
+// rehearse from an unflipped database (the pre-flip dump restored into one).
+//
 // Exit codes: 0 every step passed, 1 a step failed, 2 the invocation or a
 // prerequisite was wrong, 130 interrupted.
-import { cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { FLIP_GROUPS } from './lib/flip-order.mjs';
+import { CONTENT_FOLDERS, compareTrees, FINAL_TAG, makeFinalTag, tagProblems } from './lib/cutover.mjs';
+import { FLIP_GROUPS, FLIP_ORDER } from './lib/flip-order.mjs';
 import { copyDatabase, exec, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
 const USAGE =
-  'usage: node scripts/flip-rehearsal.mjs [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]\n' +
-  '       node scripts/flip-rehearsal.mjs --real --database DB --checkout DIR';
+  'usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]\n' +
+  '                                       [--waive-reason TEXT]\n' +
+  '       node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR';
 
 /** The learner state: a backup whose archive does not list these tables' data is no backup. */
 const LEARNER_TABLES = ['event', 'mastery', 'review'];
+
+/**
+ * The one completeness rule the cut-over may waive, with a reason: 133 items
+ * named no concept when phase 3 was built, and filling them is the owner's
+ * content work (docs/CONTENT-MIGRATION.md, D21). Any other rule with a
+ * violator stops the cut-over.
+ */
+const WAIVABLE = 'item-has-concept';
+
+/** The migration the cut-over PR stops treating as a contract; it must be applied first. */
+const CONTRACT = '0013_asset_blob_contract';
 
 /** Why the invocation cannot run, exit 2. */
 class Refusal extends Error {}
@@ -215,10 +258,85 @@ function procedure(tree, own) {
   ];
 }
 
+/**
+ * Cut-over day's steps (the header lists them). `state` carries what one step
+ * decides to the ones after it: the waivers and each type's rules.
+ */
+function cutoverProcedure(tree, own, state) {
+  const flipped = (json) => {
+    if (json.export?.recorded !== true) return 'the flip recorded no export hash (is this database marked copy?)';
+    const rules = state.rulesByType[json.type] ?? [];
+    const want = rules.filter((rule) => !state.waivers.some((w) => w.rule === rule)).sort();
+    const armed = [...(json.rulesArmed ?? [])].sort();
+    if (want.join(',') !== armed.join(',')) return `armed ${armed.join(', ') || 'no rule'}, expected ${want.join(', ') || 'none'}`;
+    const missing = state.waivers.filter((w) => rules.includes(w.rule) && !(json.waivers ?? []).some((r) => r.rule === w.rule));
+    return missing.length === 0 ? null : `the waiver for ${missing.map((w) => w.rule).join(', ')} was not recorded`;
+  };
+  return [
+    { name: 'cut-over: back up the database', command: 'pg_dump -Fc', action: own.backUp },
+    {
+      name: 'cut-over: migrate',
+      args: ['migrate'],
+      // The cut-over PR unregisters the contract (services/catalog/src/
+      // migrations.ts), which is only safe once this database has applied it.
+      check: (json) =>
+        (json.held ?? []).length > 0
+          ? `still held: ${json.held.map((h) => `${h.tag} (${h.reason})`).join('; ')}`
+          : Number(String(json.head ?? '').slice(0, 4)) < Number(CONTRACT.slice(0, 4))
+            ? `the head is ${json.head}, not yet ${CONTRACT}`
+            : null,
+    },
+    { name: 'cut-over: every type flipped', command: 'select from content_source', action: own.allFlipped },
+    { name: 'cut-over: import into a throwaway copy', command: `createdb -T; catalog import ${tree}`, action: own.importIntoCopy },
+    {
+      name: 'cut-over: import the tree',
+      args: ['import', tree],
+      check: (json) => {
+        const skipped = new Set((json.skipped ?? []).map((s) => s.source));
+        const read = FLIP_ORDER.filter((t) => !skipped.has(t));
+        return read.length === 0
+          ? removesNothing(json)
+          : `the import read ${read.join(', ')} from files, so the tree is not the last export of those types`;
+      },
+    },
+    {
+      name: 'cut-over: export',
+      args: () => ['export', '--out', state.exportDir],
+      check: (json) =>
+        (json.types ?? []).length === FLIP_ORDER.length ? null : `exported ${(json.types ?? []).map((t) => t.type).join(', ')}`,
+    },
+    { name: 'cut-over: parity', command: `catalog parity ${tree}; compare the export with the tree`, action: own.parityReport },
+    { name: 'cut-over: decide the waivers', command: 'catalog doctor', action: own.decideWaivers },
+    ...FLIP_ORDER.map((type) => ({
+      name: `cut-over: flip ${type} --strict`,
+      args: () => [
+        'flip',
+        type,
+        '--strict',
+        ...state.waivers
+          .filter((w) => (state.rulesByType[type] ?? []).includes(w.rule))
+          .flatMap((w) => ['--waive', w.rule, '--reason', w.reason]),
+      ],
+      check: flipped,
+    })),
+    {
+      name: 'cut-over: doctor',
+      args: ['doctor'],
+      check: (json) => {
+        const unsettled =
+          json.unsettled ?? (json.rules ?? []).filter((r) => r.state !== 'armed' && r.waived === null).map((r) => r.name);
+        if (unsettled.length > 0) return `neither armed nor waived: ${unsettled.join(', ')}`;
+        return json.ok === true ? null : 'doctor reports the database inconsistent';
+      },
+    },
+    { name: `cut-over: tag ${FINAL_TAG}`, command: `git tag ${FINAL_TAG}`, action: own.tag },
+  ];
+}
+
 /** One line per step for the summary, from the command's own --json. */
-function gist(step, json) {
+function gist(args, json) {
   if (json === null) return '';
-  switch (step.args[0]) {
+  switch (args[0]) {
     case 'migrate':
       return (
         (json.applied.length === 0 ? `already at ${json.head}` : `applied ${json.applied.join(', ')}; head ${json.head}`) +
@@ -226,7 +344,9 @@ function gist(step, json) {
       );
     case 'doctor':
       return (
-        `${json.violations} violation(s); rules ${json.rules.map((r) => `${r.name} ${r.state} ${r.violators}`).join(', ')}` +
+        `${json.violations} violation(s); rules ${json.rules
+          .map((r) => `${r.name} ${r.waived === null ? r.state : 'waived'} ${r.violators}`)
+          .join(', ')}` +
         (json.blobContract === undefined ? '' : `; stored assets with no blob ${json.blobContract.unstored.length}`)
       );
     case 'import':
@@ -237,7 +357,11 @@ function gist(step, json) {
     case 'parity':
       return json.types.map((t) => `${t.type} ${t.expected}`).join(', ') + `; ${json.mismatches} mismatches`;
     case 'flip':
-      return `hash ${json.export.hash.slice(0, 12)} recorded; ${json.export.rewrites.length} file(s) an export rewrites`;
+      return (
+        `hash ${json.export.hash.slice(0, 12)} recorded; ${json.export.rewrites.length} file(s) an export rewrites` +
+        (json.rulesArmed.length === 0 ? '' : `; armed ${json.rulesArmed.join(', ')}`) +
+        (json.waivers.length === 0 ? '' : `; waived ${json.waivers.map((w) => w.rule).join(', ')}`)
+      );
     case 'export':
       return json.types.map((t) => `${t.type} ${t.files} file(s)`).join(', ');
     case 'asset':
@@ -264,6 +388,8 @@ function options(argv) {
         keep: { type: 'boolean', default: false },
         json: { type: 'boolean', default: false },
         real: { type: 'boolean', default: false },
+        cutover: { type: 'boolean', default: false },
+        'waive-reason': { type: 'string' },
         database: { type: 'string' },
         checkout: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
@@ -273,11 +399,14 @@ function options(argv) {
     throw new Refusal(`${error.message}\n${USAGE}`);
   }
   if (parsed.real) {
-    const stray = ['from', 'name', 'tree-from', 'keep'].filter((k) => parsed[k] !== undefined && parsed[k] !== false);
+    const stray = ['from', 'name', 'tree-from', 'keep', 'waive-reason'].filter(
+      (k) => parsed[k] !== undefined && parsed[k] !== false,
+    );
     if (stray.length > 0) {
       throw new Refusal(
         `--real runs against the named database itself and this checkout's tree: --${stray.join(', --')} ` +
-          'belong to a rehearsal.',
+          'belong to a rehearsal.' +
+          (stray.includes('waive-reason') ? " A real cut-over asks for the waiver's reason on the terminal." : ''),
       );
     }
     if (parsed.database === undefined || parsed.database.trim() === '') {
@@ -294,6 +423,12 @@ function options(argv) {
       if (parsed[flag] !== undefined) {
         throw new Refusal(`--${flag} goes with --real. A rehearsal copies --from (default self_learn) instead.`);
       }
+    }
+  }
+  if (parsed['waive-reason'] !== undefined) {
+    if (!parsed.cutover) throw new Refusal('--waive-reason goes with --cutover: flip day flips courses without --strict.');
+    if (parsed['waive-reason'].trim() === '') {
+      throw new Refusal('--waive-reason is empty: a waiver is a decision someone has to be able to read.');
     }
   }
   return parsed;
@@ -406,27 +541,55 @@ async function blobRoot(env) {
   return ran.stdout;
 }
 
-/** The operator types the database's name on a terminal, or nothing runs. */
-async function confirm(name, lines, signal) {
-  process.stdout.write(`${lines.join('\n')}\n\n`);
+/**
+ * One line typed on the terminal. Ctrl-C, Ctrl-D and a signal to the script
+ * are a no, each rejecting with the Refusal the caller names.
+ */
+async function ask(question, signal, { interrupted, closed }) {
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   // In a terminal's raw mode Ctrl-C and Ctrl-D reach readline, not the
   // process: either is a no.
   const declined = new Promise((_, reject) => {
-    prompt.once('SIGINT', () => reject(new Interrupted('Interrupted at the confirmation. Nothing was run.')));
-    prompt.once('close', () => reject(new Refusal('No name was typed. Nothing was run.')));
-    signal.addEventListener('abort', () => reject(new Interrupted('Interrupted at the confirmation. Nothing was run.')));
+    prompt.once('SIGINT', () => reject(new Interrupted(interrupted)));
+    prompt.once('close', () => reject(new Refusal(closed)));
+    signal.addEventListener('abort', () => reject(new Interrupted(interrupted)));
   });
   try {
-    const typed = await Promise.race([
-      prompt.question(`Type the database name (${name}) to run flip day against it: `),
-      declined,
-    ]);
-    if (typed.trim() !== name) throw new Refusal(`"${typed.trim()}" is not ${name}. Nothing was run.`);
+    return (await Promise.race([prompt.question(question), declined])).trim();
   } finally {
     prompt.removeAllListeners('close');
     prompt.close();
   }
+}
+
+/** The operator types the database's name on a terminal, or nothing runs. */
+async function confirm(name, lines, signal, what) {
+  process.stdout.write(`${lines.join('\n')}\n\n`);
+  const typed = await ask(`Type the database name (${name}) to run ${what} against it: `, signal, {
+    interrupted: 'Interrupted at the confirmation. Nothing was run.',
+    closed: 'No name was typed. Nothing was run.',
+  });
+  if (typed !== name) throw new Refusal(`"${typed}" is not ${name}. Nothing was run.`);
+}
+
+/** One query's rows through psql, each row's columns split on `|`; null when psql fails. */
+async function query(database, env, text) {
+  const ran = await pgTool('psql', ['-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-d', database, '-c', text], { env });
+  if (ran.status !== 0) return null;
+  return ran.stdout
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => line.split('|'));
+}
+
+/** The content types `database` says it owns, from `content_source`; empty before 0010. */
+async function flippedTypes(database, env) {
+  const present = await query(database, env, "select to_regclass('public.content_source') is not null");
+  if (present === null) throw new Refusal(`could not read ${database}: is it there, and is Postgres up?`);
+  if (present[0]?.[0] !== 't') return [];
+  const rows = await query(database, env, "select type from content_source where source = 'db' order by type");
+  if (rows === null) throw new Refusal(`could not read content_source in ${database}`);
+  return rows.map(([type]) => type);
 }
 
 async function main(argv) {
@@ -440,6 +603,8 @@ async function main(argv) {
   };
 
   const real = opts.real;
+  const cutover = opts.cutover;
+  const day = cutover ? 'the cut-over' : 'flip day';
   const stamp = `${process.pid}_${Date.now().toString(36)}`;
   const from = opts.from ?? 'self_learn';
   const database = real ? opts.database.trim() : (opts.name ?? `self_learn_rehearsal_${stamp}`);
@@ -463,15 +628,11 @@ async function main(argv) {
   else Object.assign(env, { CATALOG_COPY_OK: '1', SELF_LEARN_HOME: join(scratch, 'home') });
   // The server the catalog commands reach, for the client tools.
   const maintenance = pgEnv(url);
-  const backupFile = join(real ? homedir() : scratch, `${database}-preflip-${fileStamp()}.dump`);
-  // Spelled out with the server and the user the backup was taken from, and
-  // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
-  // self_learn` in another shell could drop a different server's database.
-  const restoreArgv = restoreCommands(url, database, backupFile);
-  const restore = asShellLine(restoreArgv);
-
+  const kept = real ? homedir() : scratch;
+  const backupFile = (label) => join(kept, `${database}-${label}-${fileStamp()}.dump`);
   const report = {
     mode: real ? 'real' : 'rehearsal',
+    cutover,
     database: redact(url),
     template: real ? null : from,
     tree,
@@ -479,10 +640,21 @@ async function main(argv) {
     blobRoot: null,
     copy: real ? null : { name: database, method: null, kept: opts.keep, dropped: false },
     backup: null,
+    backups: [],
     steps: [],
     warnings: 0,
     interrupted: false,
     ok: false,
+    next: [],
+  };
+  /** What the cut-over's steps hand on to each other. */
+  const state = {
+    waivers: [],
+    rulesByType: {},
+    exportDir: null,
+    parityReport: null,
+    tag: null,
+    untracked: [],
   };
 
   // --- Stopping. -----------------------------------------------------------
@@ -520,7 +692,7 @@ async function main(argv) {
   };
 
   // --- The script's own steps. ---------------------------------------------
-  const catalog = async (args, stepEnv) => {
+  const catalog = async (args, stepEnv, { exits = [0] } = {}) => {
     const ran = await exec(process.execPath, ['--import', 'tsx', CLI, ...args, '--json'], {
       env: stepEnv,
       cwd: ROOT,
@@ -532,57 +704,66 @@ async function main(argv) {
     } catch {
       json = null;
     }
-    const failed =
-      ran.status !== 0
-        ? ran.signal !== null
-          ? `stopped by ${ran.signal}`
-          : `exit ${ran.status}: ${(ran.stderr.trim() || (json?.error ?? ran.stdout.trim())).slice(-1200)}`
-        : json === null
-          ? `printed no JSON: ${ran.stdout.trim().slice(-400)}`
-          : null;
+    const failed = !exits.includes(ran.status)
+      ? ran.signal !== null
+        ? `stopped by ${ran.signal}`
+        : `exit ${ran.status}: ${(ran.stderr.trim() || (json?.error ?? ran.stdout.trim())).slice(-1200)}`
+      : json === null
+        ? `printed no JSON: ${ran.stdout.trim().slice(-400)}`
+        : null;
     return { json, failed };
   };
 
-  const own = {
-    /**
-     * pg_dump -Fc of the database before anything changes it, then
-     * `pg_restore --list` of the file: an archive that will not list, or
-     * lists no data for the learner tables, is no way back.
-     */
-    backUp: async () => {
-      if (existsSync(backupFile)) {
-        return { problem: `${backupFile} already exists, and a backup is never written over`, result: null };
-      }
-      const dumped = await pgTool('pg_dump', ['-Fc', '-f', backupFile, '-d', database], { env: maintenance, onSpawn: forwardTo });
-      if (dumped.status !== 0) {
-        return { problem: `pg_dump failed${dumped.signal ? ` (${dumped.signal})` : ''}: ${dumped.stderr.trim().slice(-600)}`, result: null };
-      }
-      const bytes = existsSync(backupFile) ? statSync(backupFile).size : 0;
-      if (bytes === 0) return { problem: `pg_dump exited 0 and ${backupFile} is empty`, result: null };
-      const listed = await pgTool('pg_restore', ['--list', backupFile], { env: maintenance });
-      if (listed.status !== 0) return { problem: `pg_restore --list cannot read ${backupFile}: ${listed.stderr.trim()}`, result: null };
-      const tables = [
-        ...new Set(
-          listed.stdout
-            .split('\n')
-            .map((line) => / TABLE DATA public (\S+) /.exec(line)?.[1])
-            .filter((table) => table !== undefined),
-        ),
-      ].sort();
-      const missing = LEARNER_TABLES.filter((table) => !tables.includes(table));
-      if (missing.length > 0) {
-        return {
-          problem: `${backupFile} lists no data for ${missing.join(', ')}, so it would not bring the learner state back`,
-          result: { path: backupFile, bytes, tables },
-        };
-      }
-      report.backup = { path: backupFile, bytes, tables: tables.length, restore, restoreArgv };
+  /**
+   * pg_dump -Fc of the database before a day's first change, then
+   * `pg_restore --list` of the file: an archive that will not list, or
+   * lists no data for the learner tables, is no way back.
+   */
+  const backUp = (label) => async () => {
+    const file = backupFile(label);
+    if (existsSync(file)) {
+      return { problem: `${file} already exists, and a backup is never written over`, result: null };
+    }
+    const dumped = await pgTool('pg_dump', ['-Fc', '-f', file, '-d', database], { env: maintenance, onSpawn: forwardTo });
+    if (dumped.status !== 0) {
+      return { problem: `pg_dump failed${dumped.signal ? ` (${dumped.signal})` : ''}: ${dumped.stderr.trim().slice(-600)}`, result: null };
+    }
+    const bytes = existsSync(file) ? statSync(file).size : 0;
+    if (bytes === 0) return { problem: `pg_dump exited 0 and ${file} is empty`, result: null };
+    const listed = await pgTool('pg_restore', ['--list', file], { env: maintenance });
+    if (listed.status !== 0) return { problem: `pg_restore --list cannot read ${file}: ${listed.stderr.trim()}`, result: null };
+    const tables = [
+      ...new Set(
+        listed.stdout
+          .split('\n')
+          .map((line) => / TABLE DATA public (\S+) /.exec(line)?.[1])
+          .filter((table) => table !== undefined),
+      ),
+    ].sort();
+    const missing = LEARNER_TABLES.filter((table) => !tables.includes(table));
+    if (missing.length > 0) {
       return {
-        problem: null,
-        result: report.backup,
-        gist: `${backupFile}, ${bytes} bytes, data for ${tables.length} tables (${LEARNER_TABLES.join(', ')} among them)`,
+        problem: `${file} lists no data for ${missing.join(', ')}, so it would not bring the learner state back`,
+        result: { path: file, bytes, tables },
       };
-    },
+    }
+    // Spelled out with the server and the user the backup was taken from, and
+    // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
+    // self_learn` in another shell could drop a different server's database.
+    const restoreArgv = restoreCommands(url, database, file);
+    const backup = { label, path: file, bytes, tables: tables.length, restore: asShellLine(restoreArgv), restoreArgv };
+    report.backups.push(backup);
+    // The first backup is the way back from everything after it.
+    report.backup ??= backup;
+    return {
+      problem: null,
+      result: backup,
+      gist: `${file}, ${bytes} bytes, data for ${tables.length} tables (${LEARNER_TABLES.join(', ')} among them)`,
+    };
+  };
+
+  const own = {
+    backUp: backUp('preflip'),
 
     /**
      * The first import, run on a throwaway copy of the database as it is now:
@@ -614,34 +795,207 @@ async function main(argv) {
     },
   };
 
+  const cutoverOwn = {
+    backUp: backUp('precutover'),
+    importIntoCopy: own.importIntoCopy,
+
+    allFlipped: async () => {
+      const types = await flippedTypes(database, maintenance);
+      const missing = FLIP_ORDER.filter((type) => !types.includes(type));
+      return missing.length === 0
+        ? { problem: null, result: { flipped: types }, gist: `${types.length} of ${FLIP_ORDER.length}: ${types.join(', ')}` }
+        : { problem: `not flipped: ${missing.join(', ')}. Flip day comes first.`, result: { flipped: types } };
+    },
+
+    /**
+     * Parity of the database against the tree, and the fresh export compared
+     * with the tree byte for byte, saved together as the report the PR body
+     * quotes.
+     */
+    parityReport: async () => {
+      const { json, failed } = await catalog(['parity', tree], env, { exits: [0, 1] });
+      if (failed !== null) return { problem: failed, result: json };
+      const bytes = compareTrees(state.exportDir, tree);
+      const file = join(kept, `${database}-cutover-${fileStamp()}.parity.json`);
+      const saved = {
+        at: new Date().toISOString(),
+        database: redact(url),
+        tree,
+        export: state.exportDir,
+        parity: json,
+        bytes,
+      };
+      writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`, { flag: 'wx' });
+      state.parityReport = file;
+      const counts = json.types.map((t) => `${t.type} ${t.expected}`).join(', ');
+      if (!json.clean) {
+        const first = json.types
+          .flatMap((t) => [...(t.error === null ? [] : [`${t.type}: ${t.error}`]), ...t.mismatches.map((m) => `${m.kind} ${m.id}`)])
+          .slice(0, 10);
+        return {
+          problem:
+            `${json.mismatches} parity mismatch(es) between the database and ${tree} (${first.join('; ')}); report ${file}. ` +
+            'If the database moved on since flip day (a note, a log, a diagram written since), export it into the tree ' +
+            `(catalog export --out ${tree}), commit, and run again.`,
+          result: saved,
+        };
+      }
+      const differ = bytes.differ.length + bytes.onlyInExport.length;
+      return {
+        problem: null,
+        result: { ...saved, path: file },
+        gist: `${counts}; 0 mismatches; ${bytes.identical} of ${bytes.compared} exported files identical in the tree; report ${file}`,
+        warning:
+          differ === 0
+            ? null
+            : `${differ} file(s) an export writes differ in bytes from the tree (${[...bytes.differ, ...bytes.onlyInExport]
+                .slice(0, 10)
+                .join(', ')}); parity is clean, so the difference is formatting, and the tag keeps the tree's bytes`,
+      };
+    },
+
+    /**
+     * Doctor, then a decision per completeness rule: clean rules are armed by
+     * the strict flips; item-has-concept with violators is waived with a
+     * reason typed on the terminal (or --waive-reason on a rehearsal); any
+     * other rule with a violator stops the cut-over before anything is armed.
+     */
+    decideWaivers: async () => {
+      const { json, failed } = await catalog(['doctor'], env);
+      if (failed !== null) return { problem: failed, result: json };
+      state.rulesByType = {};
+      for (const rule of json.rules) (state.rulesByType[rule.type] ??= []).push(rule.name);
+      const broken = json.rules.filter((rule) => rule.violators > 0);
+      const stuck = broken.filter((rule) => rule.name !== WAIVABLE);
+      if (stuck.length > 0) {
+        return {
+          problem:
+            `only ${WAIVABLE} may be waived at the cut-over, and ${stuck
+              .map((r) => `${r.name} has ${r.violators} violator(s) (${r.sample.slice(0, 5).map((s) => s.id).join(', ')})`)
+              .join('; ')}. Fix them (catalog doctor lists them all), then run again.`,
+          result: json,
+        };
+      }
+      const waivable = broken.find((rule) => rule.name === WAIVABLE);
+      if (waivable !== undefined) {
+        let reason = opts['waive-reason']?.trim() ?? null;
+        if (reason === null) {
+          if (!process.stdin.isTTY) {
+            return {
+              problem: `${WAIVABLE} has ${waivable.violators} violator(s) and there is no terminal to ask why it is waived. Pass --waive-reason on a rehearsal.`,
+              result: json,
+            };
+          }
+          if (!opts.json) {
+            process.stdout.write(
+              `\n${WAIVABLE}: ${waivable.violators} curriculum item(s) name no concept` +
+                (json.conceptlessCourses.length === 0 ? '' : ` (courses with none at all: ${json.conceptlessCourses.join(', ')})`) +
+                '.\nThe rule is waived, not armed, and the reason is recorded on content_source, where doctor shows it on every run.\n',
+            );
+          }
+          for (let tries = 0; tries < 3 && (reason === null || reason === ''); tries += 1) {
+            reason = await ask(`Why is ${WAIVABLE} waived? `, stopping.signal, {
+              interrupted: 'Interrupted at the waiver. The database is backed up and nothing is armed yet.',
+              closed: 'No reason was typed. Nothing is armed.',
+            });
+            if (reason === '') process.stdout.write('An empty reason is refused: a waiver is a decision someone has to be able to read.\n');
+          }
+          if (reason === '') return { problem: 'no reason for the waiver was typed, three times', result: json };
+        }
+        state.waivers = [{ rule: WAIVABLE, reason }];
+      }
+      const clean = json.rules.filter((rule) => rule.violators === 0).map((rule) => rule.name);
+      return {
+        problem: null,
+        result: { rules: json.rules, waivers: state.waivers },
+        gist:
+          (clean.length === 0 ? '' : `arm ${clean.join(', ')}`) +
+          (state.waivers.length === 0
+            ? ''
+            : `${clean.length === 0 ? '' : '; '}waive ${WAIVABLE} (${waivable.violators} violators): "${state.waivers[0].reason}"`),
+      };
+    },
+
+    tag: async () => {
+      if (!real) {
+        // A rehearsal's tree is a temp copy: make it a repository, as the
+        // checkout is, so the tag is made (and its checks run) on it.
+        const git = (...args) =>
+          exec('git', ['-C', tree, '-c', 'user.name=flip-rehearsal', '-c', 'user.email=flip-rehearsal@localhost', '-c', 'commit.gpgsign=false', ...args]);
+        for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'flip-rehearsal: the tree at the cut-over']]) {
+          const ran = await git(...args);
+          if (ran.status !== 0) return { problem: `git ${args[0]} in the rehearsal's tree failed: ${ran.stderr.trim()}`, result: null };
+        }
+      }
+      const made = await makeFinalTag(tree);
+      state.untracked = made.untracked;
+      if (made.problem !== null) return { problem: made.problem, result: made };
+      state.tag = made.tag;
+      return {
+        problem: null,
+        result: made,
+        gist: `${FINAL_TAG} at ${made.tag.commit.slice(0, 12)} in ${real ? tree : 'a throwaway repository of the tree'}; not pushed`,
+      };
+    },
+  };
+
   // --- The run. ------------------------------------------------------------
+  let total = 0;
   try {
     report.blobRoot = await blobRoot(env);
-    const steps = procedure(tree, own);
+    const flipDay = procedure(tree, own);
+    const steps = cutover
+      ? [...(real ? [] : flipDay), ...cutoverProcedure(tree, cutoverOwn, state)]
+      : flipDay;
+    total = steps.length;
     if (real) {
       const git = await describeCheckout(checkout);
       report.checkout = { path: checkout, ...git };
-      // The exports rewrite tracked files here, and the way back from a failed
-      // run is `git checkout -- content learn`, which would take an edit made
-      // before flip day with it. Untracked files (the owner's diagram) are
-      // imported, and no checkout touches them.
-      if (git.status === null) throw new Refusal(`git status failed in ${checkout}; flip day needs to see the tree it imports.`);
+      if (git.status === null) throw new Refusal(`git status failed in ${checkout}; ${day} needs to see the tree it imports.`);
       const edited = git.status.filter((line) => !line.startsWith('??'));
       if (edited.length > 0) {
         throw new Refusal(
           `content/ or learn/ has changes to tracked files in ${checkout}:\n  ${edited.join('\n  ')}\n` +
-            'Commit or stash them first: the exports rewrite files here, and undoing a failed run restores these folders from HEAD.',
+            (cutover
+              ? 'Commit them first: the tag must hold the files the import and parity read.'
+              : 'Commit or stash them first: the exports rewrite files here, and undoing a failed run restores these folders from HEAD.'),
         );
       }
-      const status =
-        git.status === null
-          ? ['            (git status failed)']
-          : git.status.length === 0
-            ? ['            clean']
-            : git.status.map((line) => `            ${line}`);
-      await confirm(
-        database,
-        [
+      const lines = [];
+      if (cutover) {
+        // Everything the cut-over needs of the database and the checkout is
+        // read before the confirmation, so a run that cannot finish never starts.
+        const flipped = await flippedTypes(database, maintenance);
+        const missing = FLIP_ORDER.filter((type) => !flipped.includes(type));
+        if (missing.length > 0) {
+          throw new Refusal(
+            `${database} does not own ${missing.join(', ')} yet: the cut-over comes after flip day ` +
+              `(node scripts/flip-rehearsal.mjs --real --database ${database} --checkout ${checkout}).`,
+          );
+        }
+        const tagging = await tagProblems(checkout, { remote: 'origin' });
+        if (tagging.problems.length > 0) throw new Refusal(tagging.problems.join('\n'));
+        lines.push(
+          `the cut-over against ${redact(url)}, in place: every type flipped already.`,
+          `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
+            (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
+          '            imported and compared; nothing here is written but the tag',
+          `tag         ${FINAL_TAG} on ${tagging.head.slice(0, 12)}, made here and not pushed`,
+          ...tagging.warnings.map((w) => `            ${w}`),
+          ...(tagging.untracked.length === 0
+            ? []
+            : [
+                'untracked under content/ and learn/ (imported, so in the database and its export; not in the tag):',
+                ...tagging.untracked.map((file) => `            ${file}`),
+              ]),
+          `blob store  ${report.blobRoot}`,
+          `backup      ${join(kept, `${database}-precutover-<UTC>.dump`)} (pg_dump -Fc, before anything else)`,
+          `waiver      ${WAIVABLE}, if it has violators: you will be asked why`,
+          `steps       ${steps.map((s) => s.name.replace(/^cut-over: /, '')).join('; ')}`,
+        );
+      } else {
+        const status = git.status.length === 0 ? ['            clean'] : git.status.map((line) => `            ${line}`);
+        lines.push(
           `flip day against ${redact(url)}, in place.`,
           `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
             (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
@@ -649,14 +1003,26 @@ async function main(argv) {
           'content/ and learn/ against HEAD (these are what gets imported):',
           ...status,
           `blob store  ${report.blobRoot}`,
-          `backup      ${backupFile} (pg_dump -Fc, before anything else; restore: ${restore})`,
+          `backup      ${join(kept, `${database}-preflip-<UTC>.dump`)} (pg_dump -Fc, before anything else)`,
           `steps       ${steps.map((s) => s.name).join('; ')}`,
-        ],
-        stopping.signal,
-      );
+        );
+      }
+      await confirm(database, lines, stopping.signal, day);
     } else {
+      if (cutover) {
+        // Flip day's steps run first on the copy, and they need blobs this
+        // rehearsal's temp store has; a flipped template's are elsewhere.
+        const flipped = await flippedTypes(from, maintenance);
+        if (flipped.length > 0) {
+          throw new Refusal(
+            `${from} owns ${flipped.join(', ')} already, and a --cutover rehearsal runs flip day first, into a temp blob ` +
+              'store. Rehearse from an unflipped database: restore the pre-flip dump into a new one and pass it as --from.',
+          );
+        }
+        state.exportDir = join(scratch, 'export');
+      }
       const source = resolve(opts['tree-from'] ?? ROOT);
-      for (const folder of ['content', 'learn']) {
+      for (const folder of CONTENT_FOLDERS) {
         if (!existsSync(join(source, folder))) throw new Refusal(`${source} has no ${folder}/ to rehearse with.`);
         // The studio's candidates are not content, and no import reads them.
         cpSync(join(source, folder), join(tree, folder), {
@@ -667,29 +1033,32 @@ async function main(argv) {
       report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
       say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${report.blobRoot}`);
     }
+    if (real && cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-export-'));
 
     for (const step of steps) {
       if (report.interrupted) break;
       const started = Date.now();
+      const args = typeof step.args === 'function' ? step.args() : step.args;
       let outcome;
       try {
         if (step.action !== undefined) {
           outcome = await step.action();
         } else {
-          const { json, failed } = await catalog(step.args, env);
+          const { json, failed } = await catalog(args, env);
           const problem = failed ?? step.check?.(json) ?? null;
-          outcome = { result: json, problem, gist: problem === null ? gist(step, json) : undefined };
+          outcome = { result: json, problem, gist: problem === null ? gist(args, json) : undefined };
           if (problem === null) outcome.warning = step.warn?.(json) ?? null;
         }
       } catch (error) {
         // A copy that could not be made, a tool that would not start: the
         // step failed, and the summary below still says where that leaves
-        // the database.
+        // the database. An interruption at a prompt is the run stopping.
+        if (error instanceof Interrupted) report.interrupted = true;
         outcome = { result: null, problem: error?.message ?? String(error) };
       }
       const entry = {
         name: step.name,
-        command: step.args === undefined ? step.command : `catalog ${step.args.join(' ')}`,
+        command: args === undefined ? step.command : `catalog ${args.join(' ')}`,
         ok: outcome.problem === null,
         ms: Date.now() - started,
         gist: outcome.problem ?? outcome.gist ?? '',
@@ -697,47 +1066,79 @@ async function main(argv) {
         result: outcome.result,
       };
       report.steps.push(entry);
-      say(`${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name.padEnd(28)} ${entry.gist}`);
+      say(`${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name.padEnd(34)} ${entry.gist}`);
       if (entry.warning !== null) {
         report.warnings += 1;
-        say(`warn  ${''.padEnd(28)} ${entry.warning}`);
+        say(`warn  ${''.padEnd(34)} ${entry.warning}`);
       }
       if (!entry.ok) break;
     }
     report.ok = !report.interrupted && report.steps.length === steps.length && report.steps.every((s) => s.ok);
+    if (cutover) {
+      report.cutover = {
+        parityReport: state.parityReport,
+        waivers: state.waivers,
+        tag: state.tag,
+        untracked: state.untracked,
+      };
+    }
   } finally {
     for (const name of [...made]) {
       if (name === database && opts.keep) continue;
       const dropped = await drop(name);
       if (name === database) report.copy.dropped = dropped;
     }
+    if (real && state.exportDir !== null) rmSync(state.exportDir, { recursive: true, force: true });
     if (scratch !== null && !opts.keep) rmSync(scratch, { recursive: true, force: true });
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.off(signal, onSignal);
   }
 
-  const total = procedure(tree, own).length;
+  if (report.ok && cutover) {
+    // What the operator does next. Nothing here pushes or merges: the tag and
+    // the merge are a person's to make.
+    report.next = real
+      ? [
+          `git -C ${shellQuote(checkout)} push origin ${FINAL_TAG}`,
+          'gh pr merge p3/cutover --squash --delete-branch',
+          `git -C ${shellQuote(checkout)} pull --ff-only`,
+        ]
+      : [];
+  }
   if (opts.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else {
     say('');
     const passed = report.steps.filter((s) => s.ok).length;
+    const name = cutover ? (real ? 'the cut-over' : 'flip day and the cut-over') : 'flip day';
     say(
-      `${report.ok ? 'flip day passed' : report.interrupted ? 'flip day interrupted' : 'flip day stopped'}: ` +
+      `${report.ok ? `${name} passed` : report.interrupted ? `${name} interrupted` : `${name} stopped`}: ` +
         `${passed} of ${total} steps` +
         (report.warnings > 0 ? `, ${report.warnings} warning(s)` : ''),
     );
+    if (cutover && state.parityReport !== null) say(`parity report: ${state.parityReport}`);
     if (!real) {
       say(
         opts.keep
           ? `kept ${database} and ${scratch}. Drop them with: ${join(PG_BIN, 'dropdb')} ${database} && rm -rf ${scratch}`
           : `dropped ${database}${report.ok ? '' : '; rerun with --keep to look at it'}`,
       );
+    } else if (report.ok && cutover) {
+      const backup = report.backups.at(-1);
+      say(`tagged ${FINAL_TAG} at ${state.tag.commit} in ${checkout}. It is not pushed. Next, in this order:`);
+      say(`  1. ${report.next[0]}`);
+      say(`  2. ${report.next[1]}    (the cut-over PR: it removes content/ and learn/ from the tree)`);
+      say(`  3. ${report.next[2]}`);
+      if (state.untracked.length > 0) {
+        say(`the pull leaves these untracked files behind, which are in the database and its export; remove them once checked:`);
+        for (const file of state.untracked) say(`     ${file}`);
+      }
+      say(`the backup from before the cut-over is ${backup.path}; keep it until the app has been checked after the merge`);
     } else if (report.ok) {
       say('the exports rewrote files in this checkout: `git status content learn` lists them, to commit');
-      say(`the backup from before step 1 is ${backupFile}; keep it until the app has been checked on the flipped database`);
+      say(`the backup from before step 1 is ${report.backup.path}; keep it until the app has been checked on the flipped database`);
     } else if (report.backup !== null) {
-      say(`${database} may be part-way through flip day. The backup from before step 1 is ${backupFile}.`);
-      say(`To put the database back as it was: ${restore}`);
-      say('and `git checkout -- content learn` for any file an export rewrote (they had no edits of their own when it started).');
+      say(`${database} may be part-way through ${day}. The backup from before it is ${report.backup.path}.`);
+      say(`To put the database back as it was: ${report.backup.restore}`);
+      if (!cutover) say('and `git checkout -- content learn` for any file an export rewrote (they had no edits of their own when it started).');
     } else {
       say(`nothing was changed: the run stopped before the backup, and every other step waits for it.`);
     }
