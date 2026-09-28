@@ -10,8 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { renderType } from "../src/content/export";
 import { flip } from "../src/content/flip";
-import { exportHash, readTypeFiles } from "../src/content/layout";
-import { recordExport } from "../src/content/ownership";
+import { databaseIdentity } from "../src/content/import-root";
 import { conceptsIndexer } from "../src/index/concepts";
 import { coursesIndexer } from "../src/index/courses";
 import { runIndex } from "../src/index/run";
@@ -55,7 +54,7 @@ interface Mixed {
   learn: (...args: string[]) => Promise<{ stdout: string; stderr: string }>;
 }
 
-/** A fixture imported source by source, then `owned` flipped with its export recorded, as on flip day. */
+/** A fixture imported source by source, then `owned` flipped, as on flip day. */
 async function mixed(owned: "courses" | "concepts"): Promise<Mixed> {
   const scratch = await createScratchDatabase();
   await applyMigrations(scratch.db);
@@ -65,19 +64,21 @@ async function mixed(owned: "courses" | "concepts"): Promise<Mixed> {
   await fixture.write("content/courses/xx1000.yaml", COURSE);
   await fixture.write("learn/concepts/fixtures/alpha.md", note({ id: "alpha", title: "Alpha", summary: "The first one." }));
   const context = await fixture.context({ knownConcepts: async () => new Set(["alpha"]) });
+  const database = await databaseIdentity(scratch.db);
   for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer, coursesIndexer, sessionsIndexer]) {
     const { rows, logs } = await indexer.read(context);
-    await writeSource(scratch.db, indexer, rows, [], indexer.root(context), { logs, metadata: { root: fixture.root } });
+    await writeSource(scratch.db, indexer, rows, [], indexer.root(context), {
+      logs,
+      metadata: { root: fixture.root, database },
+    });
   }
   // The vocabulary as the rows write it, since `--topic` writes it through.
   for (const file of await renderType(scratch.db, "topics")) {
     await writeFile(path.join(fixture.root, file.path), file.bytes);
   }
   const types = owned === "concepts" ? (["concepts", "sessions"] as const) : (["courses"] as const);
-  for (const type of types) {
-    await flip(scratch.db, { type, readers: new Set(types) });
-    await recordExport(scratch.db, type, exportHash(await readTypeFiles(fixture.root, type)));
-  }
+  // The flip records the tree it checked as the type's export.
+  for (const type of types) await flip(scratch.db, { type, readers: new Set(types) });
   const learn = (...args: string[]) =>
     execFileAsync(process.execPath, ["--import", "tsx", ENTRY, ...args], {
       env: { ...process.env, LEARN_ROOT: fixture.root, DATABASE_URL: scratch.url },
