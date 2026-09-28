@@ -18,10 +18,17 @@ import type { ReactNode } from "react";
  * studio's metadata rows are denser than anything else in the app.
  */
 
-/** The 40px strip under the app header. Sticky, and its height never changes. */
+/**
+ * The 40px strip under the app header. Sticky, and its height never changes.
+ *
+ * `min-w-0`, and the page under it too: the strip's controls do not shrink,
+ * so its min-content width used to widen the whole page on a phone, and the
+ * grid laid out two columns for a screen that shows one. Now the topic chips
+ * give up their room first, as their overflow already allows.
+ */
 export function StudioStrip({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3">
+    <div className="sticky top-0 z-10 flex h-10 min-w-0 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3">
       {children}
     </div>
   );

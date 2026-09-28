@@ -86,7 +86,7 @@ export default async function StudioPage({
   const health = await studioApi<Health>("/api/health", { timeoutMs: 150_000 });
   if (!health.ok) {
     return (
-      <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
+      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard
           title={health.headline}
           lead={health.detail}
@@ -103,7 +103,7 @@ export default async function StudioPage({
   // thumbnails, every verb 503 — is worse than a page that says what is wrong.
   if (!health.data.tldrawkc) {
     return (
-      <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
+      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard
           title="tldrawkc cannot run on this machine"
           lead="Every verb the studio drives launches this tool, so nothing here would work. doctor says:"
@@ -134,7 +134,7 @@ export default async function StudioPage({
   const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
     return (
-      <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
+      <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard title={listed.headline} lead={listed.detail} retryHref={path} />
       </div>
     );
@@ -222,7 +222,7 @@ export default async function StudioPage({
   }
 
   return (
-    <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
+    <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
       <StudioStrip>
         <SearchField view={view} />
         <TopicChips chips={chips} view={view} />

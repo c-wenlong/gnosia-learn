@@ -106,8 +106,8 @@ delete the alias block.
 Under [apps/web/src/components/ui/](../../apps/web/src/components/ui/), one
 file each, all safe in a server component (no `"use client"`, no state or
 effects; `Button` calls `useId`, which React allows there), except
-`FilterMenu`, which holds open state and takes an `onChange`, so a client
-component renders it. The
+`FilterMenu` and `Composer`, which hold state and take an `onChange`, so a
+client component renders them. The
 class strings live in the React-free [classes.ts](../../apps/web/src/components/ui/classes.ts),
 so a client component, a server component or a test can compose them.
 Import from `@/components/ui` or from the file.
@@ -120,6 +120,7 @@ Import from `@/components/ui` or from the file.
 | `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
 | `Chip` | `active?: boolean`, `size?: "md" \| "sm"` (34px or 28px), `href?` (a link), `onClick?` (a toggle with `aria-pressed`), `title?`, `className?`. Neither `href` nor `onClick` renders a static label | `Chip` |
 | `FilterMenu` | `label: string` ("Type"), `options: FilterOption[]` (`value`, `label`, `short?` for the trigger, `count?` at the right, `detail?` as a muted second line, `section?` heading), `value`, `defaultValue` (the "All" value; any other fills the trigger), `onChange(value)`, `busy?` (dims the trigger while a navigation runs), `className?`. A `Chip`-styled trigger reading "Label: Value" over an ARIA listbox: arrows, Home, End, typeahead, Enter or Space picks, Escape, Tab or a click outside closes. The first option is "All" and is how a filter is cleared. Single-select. A client component, the kit's only one; its model is the React-free `filter-menu.ts` | none (see Deviations) |
+| `Composer` | `value`, `onChange(value)`, `onSubmit(value)`, `label` (screen-reader name), `placeholder?`, `maxLength?`, `disabled?` (the field and Send), `sendDisabled?` (Send only, as while a reply arrives), `disabledReason?` (12px under the field, tied by `aria-describedby`), `autoFocus?`, `inputRef?`, `onModEnter?` (Cmd/Ctrl+Enter; sends when absent), `maxRows?` (default 6), `sendLabel?`. The chat input the concept tutor and the studio's planner share: a 52px textarea at radius 16 growing to six lines, Enter sends, Shift+Enter is a new line, and an IME's Enter is left alone. A client component; its key and height rules are the React-free `composer-keys.ts` | the tutor's input |
 | `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
 | `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "div"`, `className?` | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |

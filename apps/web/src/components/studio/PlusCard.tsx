@@ -92,14 +92,17 @@ export function PlusCard({ path, layout = "grid" }: { path: string; layout?: "gr
       aria-describedby={error === null ? undefined : "studio-plus-error"}
       className={cx(
         "group flex min-w-0 flex-col overflow-hidden rounded-xl border-2 border-dashed border-border bg-transparent text-left",
+        // A phone's single column would make a 4:3 frame the whole first
+        // screen, so there it is a row: the plus, then the words.
+        "max-sm:flex-row max-sm:items-center",
         "transition-colors duration-100 hover:border-accent hover:bg-surface disabled:cursor-progress",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
       )}
     >
-      <span className="flex aspect-[4/3] w-full items-center justify-center">
+      <span className="flex aspect-[4/3] w-full items-center justify-center max-sm:aspect-auto max-sm:w-auto max-sm:p-4">
         <span
           className={cx(
-            "flex h-16 w-16 items-center justify-center rounded-full bg-surface2 text-text3 transition-colors",
+            "flex h-16 w-16 items-center justify-center rounded-full bg-surface2 text-text3 transition-colors max-sm:h-12 max-sm:w-12",
             "group-hover:bg-accent group-hover:text-white",
             busy && "animate-pulse",
           )}
@@ -107,7 +110,7 @@ export function PlusCard({ path, layout = "grid" }: { path: string; layout?: "gr
           <PlusGlyph className="h-10 w-10" />
         </span>
       </span>
-      <span className="flex min-w-0 flex-col gap-0.5 px-3 pb-3">
+      <span className="flex min-w-0 flex-col gap-0.5 px-3 pb-3 max-sm:pb-0 max-sm:pl-0">
         <span className="text-sm font-semibold text-text">{busy ? "Opening a conversation…" : "New diagram"}</span>
         {error === null ? (
           <span className="text-xs text-text3">Say what it should show. The planner writes the brief.</span>

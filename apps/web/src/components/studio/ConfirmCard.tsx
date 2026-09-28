@@ -45,7 +45,7 @@ export function ConfirmCard({
   block: DrawBlock | null;
   busy: boolean;
   /** A refused press (E7), until the transcript carries the runner's note. */
-  refusal: { text: string; holder: string | null } | null;
+  refusal: { text: string | null; holder: string | null } | null;
   onDraw: () => void;
   /** On a `drawn` card: the job this brief started. */
   jobHref: string | null;
@@ -106,7 +106,8 @@ export function ConfirmCard({
                     </span>
                   </span>
                 ))}
-                . Say &ldquo;use {proposed.nearMatches[0]?.title} instead&rdquo; if one of those fits.
+                . Say &ldquo;use {proposed.nearMatches[0]?.title} instead&rdquo; if{" "}
+                {proposed.nearMatches.length === 1 ? "it" : "one of those"} fits.
               </p>
             )}
           </div>
@@ -168,7 +169,7 @@ export function ConfirmCard({
             <span className="min-w-0 break-all font-mono text-[12px] text-text3">{candidatePathFor(brief.slug)}</span>
           </div>
           {block !== null && <p className="text-[12px] leading-4 text-text2">{block.reason}</p>}
-          {refusal !== null && block === null && (
+          {refusal !== null && refusal.text !== null && block === null && (
             <p role="alert" className="text-[13px] leading-5 text-text">
               {refusal.text}
             </p>
@@ -180,7 +181,11 @@ export function ConfirmCard({
           )}
           {block === null && refusal === null && (
             <p className="text-[12px] text-text3">
-              Nothing is drawn or spent until you press it. <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
+              Nothing is drawn or spent until you press it.
+              <span className="max-md:hidden">
+                {" "}
+                <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
+              </span>
             </p>
           )}
         </div>

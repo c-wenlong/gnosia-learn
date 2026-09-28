@@ -472,7 +472,7 @@ export function DraftPanel({
             topics={topicMap}
             block={entry.seq === liveSeq ? block : null}
             busy={drawing}
-            refusal={refused !== null && refused.seq === entry.seq ? refused : null}
+            refusal={refused !== null && refused.seq === entry.seq ? refusalShown(refused, entries) : null}
             onDraw={() => void draw()}
             path={path}
           />
@@ -491,6 +491,7 @@ export function DraftPanel({
             onAskAgain={problem.case === "E6" ? () => void send(askAgainText(problem)) : null}
             formHref={panelHref(path, { brief: "" })}
             onStartOver={() => setConfirmStartOver(true)}
+            cutOffShown={entries.at(-1)?.interrupted === true}
           />
         )}
 
@@ -557,6 +558,19 @@ export function DraftPanel({
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * A refused Draw says so under the button until the runner's own studio note
+ * (E7) is in the thread; after that the card keeps only the action, so the
+ * sentence is not on screen twice.
+ */
+function refusalShown(
+  refused: { seq: number; text: string; holder: string | null },
+  entries: readonly TranscriptEntry[],
+): { text: string | null; holder: string | null } {
+  const noted = entries.some((entry) => entry.role === "studio" && entry.seq > refused.seq);
+  return { text: noted ? null : refused.text, holder: refused.holder };
+}
+
 function Entry({
   entry,
   view,
@@ -572,7 +586,7 @@ function Entry({
   topics: ReadonlyMap<string, TopicOption>;
   block: ReturnType<typeof drawBlock>;
   busy: boolean;
-  refusal: { text: string; holder: string | null } | null;
+  refusal: { text: string | null; holder: string | null } | null;
   onDraw: () => void;
   path: string;
 }) {
@@ -659,13 +673,25 @@ function Problem({
   onAskAgain,
   formHref,
   onStartOver,
+  cutOffShown,
 }: {
   problem: ThreadProblem;
+  /** The cut-off reply already says so under its text: E2 is then only Try again. */
+  cutOffShown: boolean;
   onRetry: (() => void) | null;
   onAskAgain: (() => void) | null;
   formHref: string;
   onStartOver: () => void;
 }) {
+  if (problem.case === "E2" && cutOffShown) {
+    return onRetry === null ? null : (
+      <div className="-mt-3 px-1.5">
+        <Button size="sm" variant="secondary" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
   return (
     <div role="alert" className="flex flex-col gap-3 rounded-xl bg-warn-tint px-4 py-3.5 text-[14px] text-text">
       {problem.case === "E1" && (
