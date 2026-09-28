@@ -1,0 +1,13 @@
+# Cross-course themes. `id` is what a course file's `tags:` names, so it is a
+# permanent key: renaming one silently unlinks every course that used it, and
+# related-course links are computed from shared tags.
+# Order is the order the home page renders the theme chips in.
+
+tags:
+  - id: agentic-ai
+    label: Agentic AI
+    description: Tool-using agents, orchestration, and agentic workflows
+
+  - id: transformers
+    label: Transformers
+    description: Attention architectures and transformer-based generation

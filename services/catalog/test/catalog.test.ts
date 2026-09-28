@@ -8,12 +8,17 @@ import {
   topic,
 } from "@self-learn/schema";
 import { eq, isNull, sql } from "drizzle-orm";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { loadCourses } from "@self-learn/content";
 
 import { runDoctor } from "../src/commands/doctor";
-import { runIndexCommand } from "../src/commands/index-command";
+import { runExport } from "../src/commands/export";
+import { EXPORT_TYPES, readTypeFiles } from "../src/content/layout";
+import { runImportCommand } from "../src/commands/index-command";
 import { formatLs, runLs } from "../src/commands/ls";
 import { runPath } from "../src/commands/path";
 import { runSearch } from "../src/commands/search";
@@ -27,44 +32,56 @@ import {
 } from "../src/commands/show";
 import { runStatus } from "../src/commands/status";
 import { REPO_ROOT } from "../src/env";
-import { hasManimkcCli } from "../src/index/manimkc";
 import { applyMigrations } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
- * The whole thing, against the repo's real content, once.
+ * The whole thing, against the seed tree, once.
  *
  * The unit suites prove the indexers read files correctly and the writer writes
- * them correctly. This proves the two meet the actual trees: that the numbers
- * come out right, that nothing in `content/` or `learn/` currently fails to
- * resolve, and that the read commands an agent will call return what they say.
+ * them correctly. This proves the two meet a real tree: that the numbers come
+ * out right, that nothing in it fails to resolve, and that the read commands an
+ * agent will call return what they say.
+ *
+ * The tree is `seed/`, not the repository's `content/` and `learn/`: those go
+ * in phase 3 (docs/CONTENT-MIGRATION.md, edge case 11), and the seed is real
+ * content cut from them with `catalog export --subset` (seed/README.md), so it
+ * imports on its own and stays still while the owner's content moves.
  *
  * The counts are asserted exactly. A loose `toBeGreaterThan` would pass while a
- * whole course quietly stopped being indexed, which is the failure this bundle
- * is for. When content is added on purpose, these numbers get updated on
+ * whole course quietly stopped being imported, which is the failure this suite
+ * is for. When the seed is regenerated on purpose, these numbers get updated on
  * purpose, in the same commit.
  *
- * manimkc is left out unless the submodule is checked out. The rows it produces
- * depend on which videos happen to be rendered in that checkout, so asserting
- * on them would be asserting on a working directory.
+ * manimkc is always left out: the seed has no videos (D7), and the rows
+ * manimkc would produce depend on which videos happen to be rendered on this
+ * machine. `MANIMKC_ROOT` points at an empty directory for the suite, which is
+ * how a clone with no submodule runs.
  */
 
 const reachable = await probe();
-const withManimkc = hasManimkcCli(REPO_ROOT);
 
-/** What `content/` and `learn/` hold today. Update deliberately. */
+/** The seed, which the test imports and never writes (vitest.setup.ts watches it). */
+const SEED = path.join(REPO_ROOT, "seed");
+
+/** What `seed/` holds. Update deliberately, with the seed. */
 const EXPECTED = {
-  topics: 86,
-  domains: 23,
-  concepts: 32,
-  courses: 10,
-  modules: 61,
+  topics: 5,
+  domains: 4,
+  concepts: 11,
+  courses: 1,
+  modules: 2,
 } as const;
+
+/** Every source the import runs once manimkc is out: the seed's own, in dependency order. */
+const importSeed = () => runImportCommand({ dir: SEED });
 
 describe.skipIf(!reachable.ok)("catalog end to end", () => {
   let scratch: Scratch;
   let previousUrl: string | undefined;
+  let previousManimkc: string | undefined;
+  let noManimkc: string;
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
@@ -76,47 +93,59 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
     url.pathname = `/${scratch.name}`;
     process.env["DATABASE_URL"] = url.toString();
+    previousManimkc = process.env["MANIMKC_ROOT"];
+    noManimkc = await mkdtemp(path.join(tmpdir(), "catalog-no-manimkc-"));
+    process.env["MANIMKC_ROOT"] = noManimkc;
 
-    // No `only`: the runner drops manimkc by itself when the submodule is not
-    // checked out, which is how CI runs and is the path worth exercising.
-    await runIndexCommand({});
+    await importSeed();
   }, 120_000);
 
   afterAll(async () => {
     if (previousUrl === undefined) delete process.env["DATABASE_URL"];
     else process.env["DATABASE_URL"] = previousUrl;
+    if (previousManimkc === undefined) delete process.env["MANIMKC_ROOT"];
+    else process.env["MANIMKC_ROOT"] = previousManimkc;
+    await rm(noManimkc, { recursive: true, force: true });
     await scratch?.drop();
   });
 
-  describe("index", () => {
-    it("runs the two manimkc sources, or skips both with a reason", async () => {
-      const result = await runIndexCommand({});
+  describe("import", () => {
+    it("skips the two manimkc sources with a reason, since there is no CLI to run", async () => {
+      const result = await importSeed();
       const ran = result.sources.map((s) => s.source);
-      // `mirrors` reads the same CLI out of the same submodule, so it is
+      // `mirrors` reads the same CLI out of the same checkout, so it is
       // absent for exactly the same reason `manimkc` is and never on its own.
-      if (withManimkc) {
-        expect(ran).toEqual(expect.arrayContaining(["manimkc", "mirrors"]));
-        expect(result.skipped).toEqual([]);
-      } else {
-        expect(ran).not.toContain("manimkc");
-        expect(ran).not.toContain("mirrors");
-        expect(result.skipped).toEqual([
-          { source: "manimkc", reason: expect.stringContaining("never been indexed") },
-          { source: "mirrors", reason: expect.stringContaining("never been indexed") },
-        ]);
-      }
+      expect(ran).not.toContain("manimkc");
+      expect(ran).not.toContain("mirrors");
+      expect(result.skipped).toEqual([
+        { source: "manimkc", reason: expect.stringContaining("never been indexed") },
+        { source: "mirrors", reason: expect.stringContaining("never been indexed") },
+      ]);
     });
 
-    it("refuses --only manimkc or --only mirrors when the submodule is absent", async () => {
-      if (withManimkc) return;
+    it("refuses --only manimkc or --only mirrors when there is no manimkc CLI", async () => {
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
-      await expect(runIndexCommand({ only: ["manimkc"] })).rejects.toThrow(
+      await expect(runImportCommand({ dir: SEED, only: ["manimkc"] })).rejects.toThrow(
         /submodule is not initialised.*manimkc topics --json/s,
       );
-      await expect(runIndexCommand({ only: ["mirrors"] })).rejects.toThrow(
+      await expect(runImportCommand({ dir: SEED, only: ["mirrors"] })).rejects.toThrow(
         /submodule is not initialised.*manimkc mirrors --json/s,
       );
+    });
+
+    it("holds every other count the seed has", async () => {
+      const count = async (table: string) =>
+        (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.identifier(table)}`)).rows[0]?.n;
+      expect({
+        tags: await count("tag"),
+        items: await count("curriculum_item"),
+        conceptLinks: await count("concept_curriculum_item"),
+        prerequisites: await count("concept_prerequisite"),
+        sessions: await count("session_log_entry"),
+        diagrams: await count("diagram"),
+        videos: (await scratch.db.select().from(asset).where(eq(asset.kind, "video"))).length,
+      }).toEqual({ tags: 2, items: 5, conceptLinks: 8, prerequisites: 13, sessions: 1, diagrams: 1, videos: 0 });
     });
 
     it("indexes the whole shared vocabulary", async () => {
@@ -164,8 +193,29 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       expect(untagged.rows[0]?.n).toBe(0);
     });
 
+    it("reads back as its own export, byte for byte", async () => {
+      // The seed is `catalog export --subset` output, so exporting what it
+      // imported writes the same files. A seed edited by hand, or cut by an
+      // older exporter, fails here rather than drifting from what the
+      // database would write.
+      const out = await mkdtemp(path.join(tmpdir(), "catalog-seed-export-"));
+      try {
+        await runExport({ out });
+        const files = async (root: string) =>
+          (await Promise.all(EXPORT_TYPES.map((type) => readTypeFiles(root, type)))).flat();
+        const exported = await files(out);
+        const seed = await files(SEED);
+        expect(exported.map((f) => f.path)).toEqual(seed.map((f) => f.path));
+        for (const [i, file] of exported.entries()) {
+          expect(file.bytes.equals(seed[i]?.bytes ?? Buffer.alloc(0)), file.path).toBe(true);
+        }
+      } finally {
+        await rm(out, { recursive: true, force: true });
+      }
+    });
+
     it("is idempotent: a second run changes nothing", async () => {
-      const second = await runIndexCommand({});
+      const second = await importSeed();
       expect(second.totals.deleted).toBe(0);
       // Nothing changed, so no entity's snapshot moved and no revision is
       // appended (docs/CONTENT-MIGRATION.md 0.3), and nothing is archived.
@@ -183,7 +233,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       // Computed from the files rather than pinned: the owner is filling these
       // in (Track B), and the count is supposed to fall. It was nine when the
       // rule was written down.
-      const expected = loadCourses({ root: REPO_ROOT })
+      const expected = loadCourses({ root: SEED })
         .filter((course) =>
           course.modules.every((mod) => mod.topics.every((item) => item.concepts.length === 0)),
         )
@@ -199,7 +249,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         .filter((row) => expected.includes(row.course))
         .reduce((a, row) => a + row.items, 0);
       expect(rule?.violators).toBeGreaterThanOrEqual(inThem);
-      // The two rules the parser already enforces hold on the real tree.
+      // The two rules the parser already enforces hold on the seed.
       expect(result.rules.find((r) => r.name === "module-has-item")?.violators).toBe(0);
       expect(result.rules.find((r) => r.name === "item-concept-in-module-topic")?.violators).toBe(0);
       expect(result.conceptsWithoutTopic).toEqual([]);
@@ -216,34 +266,15 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         expect(bySource.get(source)?.lastIndexedAt, source).not.toBeNull();
       }
       expect(bySource.get("topics")?.counts).toMatchObject({ topic: EXPECTED.topics });
-      if (!withManimkc) {
-        expect(bySource.get("manimkc")?.lastIndexedAt).toBeNull();
-        expect(bySource.get("mirrors")?.lastIndexedAt).toBeNull();
-      }
+      expect(bySource.get("manimkc")?.lastIndexedAt).toBeNull();
+      expect(bySource.get("mirrors")?.lastIndexedAt).toBeNull();
     });
 
     it("says how many of each course's rows list a concept", async () => {
       const status = await runStatus();
-      // Every course on the shortlist, in shortlist order.
-      expect(status.coverage.map((c) => c.course)).toEqual([
-        "cs2111", "cs4263", "cp4281", "cp4282", "cp4283", "cp4284", "cp4285", "cs3216", "cs3227", "cs3249",
-      ]);
-      // The courses whose rows list concepts today, and the rest untouched.
-      // cp4283's is the row Track B filled where an existing note fits
-      // (docs/CONTENT-MIGRATION.md, "Concepts filled").
-      const filled: Record<string, { items: number; withConcepts: number }> = {
-        cp4283: { items: 13, withConcepts: 1 },
-        cp4284: { items: 13, withConcepts: 3 },
-      };
-      for (const c of status.coverage) {
-        const expected = filled[c.course];
-        if (expected !== undefined) {
-          expect(c, c.course).toEqual({ course: c.course, ...expected });
-          continue;
-        }
-        expect(c.withConcepts, c.course).toBe(0);
-        expect(c.items, c.course).toBeGreaterThan(0);
-      }
+      // The seed's one course, cut to the two modules under its topics: three
+      // of its five rows list concepts (m1-t1 and m3-t1, m3-t2).
+      expect(status.coverage).toEqual([{ course: "cp4284", items: 5, withConcepts: 3 }]);
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
@@ -284,20 +315,20 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("lists one domain's topics with counts", async () => {
-      const result = await runLs("algorithms");
+      const result = await runLs("machine-learning");
       expect(result.kind).toBe("domain");
       if (result.kind !== "domain") return;
-      expect(result.topics.map((t) => t.slug)).toContain("recurrence-relations");
-      const recurrences = result.topics.find((t) => t.slug === "recurrence-relations");
-      expect(recurrences?.concepts).toBe(5);
+      expect(result.topics.map((t) => t.slug)).toContain("transformer-architecture-and-training");
+      const transformers = result.topics.find((t) => t.slug === "transformer-architecture-and-training");
+      expect(transformers?.concepts).toBe(7);
     });
 
     it("walks a course's tree", async () => {
-      const result = await runLs("cs4263");
+      const result = await runLs("cp4284");
       expect(result.kind).toBe("collection");
       if (result.kind !== "collection") return;
-      expect(result.children).toHaveLength(7);
-      expect(result.children[0]?.topicSlug).toBe("search-algorithms");
+      expect(result.children).toHaveLength(2);
+      expect(result.children[0]?.topicSlug).toBe("transformer-architecture-and-training");
       expect(result.children[0]?.curriculumItems.length).toBeGreaterThan(0);
       // Modules contain curriculum items, which are not collections, so there
       // is nothing a level further down to omit.
@@ -311,26 +342,27 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
   describe("show", () => {
     it("returns a concept with its prerequisites both ways and its path", async () => {
-      const result = (await runShow("master-theorem")) as ShowConcept;
+      const result = (await runShow("attention-weights")) as ShowConcept;
       expect(result.type).toBe("concept");
-      expect(result.topicSlug).toBe("recurrence-relations");
-      expect(result.path).toBe("learn/concepts/algorithms/master-theorem.md");
+      expect(result.topicSlug).toBe("transformer-architecture-and-training");
+      expect(result.path).toBe("learn/concepts/transformers/attention-weights.md");
       expect(result.requires.map((r) => r.slug).sort()).toEqual([
-        "comparing-growth-rates",
-        "recurrence-for-recursive-running-time",
-        "recursion-tree-method",
+        "dot-product",
+        "query-key-value-projections",
+        "softmax",
       ]);
-      expect(result.requiredBy.map((r) => r.slug)).toContain("master-theorem-limits");
+      expect(result.requiredBy.map((r) => r.slug)).toContain("self-attention");
       // The note itself is an asset, so an agent is told which file to read.
-      expect(result.assets["note"]?.[0]?.path).toBe("learn/concepts/algorithms/master-theorem.md");
+      expect(result.assets["note"]?.[0]?.path).toBe("learn/concepts/transformers/attention-weights.md");
     });
 
     it("returns a topic with its concepts and curriculum items", async () => {
-      const result = (await runShow("recurrence-relations")) as ShowTopic;
+      const result = (await runShow("transformer-architecture-and-training")) as ShowTopic;
       expect(result.type).toBe("topic");
-      expect(result.domain).toBe("algorithms");
-      expect(result.concepts).toHaveLength(5);
-      expect(result.aliases).toContain("master theorem");
+      expect(result.domain).toBe("machine-learning");
+      expect(result.concepts).toHaveLength(7);
+      expect(result.aliases).toContain("multi-head attention");
+      expect(result.curriculumItems.map((i) => i.id)).toEqual(["cp4284-m1-t1", "cp4284-m1-t2"]);
     });
 
     /**
@@ -342,31 +374,24 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
      * collection in the catalog. Nothing recorded that empty output as expected,
      * which is why no test caught it.
      *
-     * The `link` group is asserted exactly and the rest is not: this topic is
-     * shared with another module, so which notes and videos hang off it moves
-     * with the content and with whether manimkc is checked out. The authored
-     * resources do not.
+     * The seed keeps one module per topic, so the links are this module's own
+     * two. (In the full tree `cp4283-m6-r1`, authored under another module on
+     * the same topic, is listed too: a module's assets are its subject's.)
      */
     it("returns a module's assets through the topic it contains", async () => {
       const result = (await runShow("cp4284-m1")) as ShowCollection;
       expect(result.type).toBe("collection");
       expect(result.topicSlug).toBe("transformer-architecture-and-training");
-      // `cp4283-m6-r1` is authored under a different module that maps to the
-      // same topic. A module's assets are its subject's assets, so it belongs.
-      expect(result.assets["link"]?.map((a) => a.id)).toEqual([
-        "link:cp4283-m6-r1",
-        "link:cp4284-m1-r1",
-        "link:cp4284-m1-r2",
-      ]);
-      expect(result.assets["note"]?.length).toBeGreaterThan(0);
+      expect(result.assets["link"]?.map((a) => a.id)).toEqual(["link:cp4284-m1-r1", "link:cp4284-m1-r2"]);
+      expect(result.assets["note"]).toHaveLength(7);
     });
 
     it("never returns a body, only paths", async () => {
-      const result = (await runShow("master-theorem")) as ShowConcept;
+      const result = (await runShow("self-attention")) as ShowConcept;
       const serialised = JSON.stringify(result);
       // The note's body has an h1; the summary is a legitimate field, the
       // markdown body is not.
-      expect(serialised).not.toContain("# Master Theorem");
+      expect(serialised).not.toContain("# Self-attention");
       expect(serialised).not.toContain("## Worked example");
     });
 
@@ -390,21 +415,21 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
   describe("path", () => {
     it("returns the chain in learning order", async () => {
-      const result = await runPath("comparing-growth-rates", "master-theorem-limits");
+      const result = await runPath("vector-as-a-list-of-numbers", "transformer-block");
       expect(result.found).toBe(true);
-      expect(result.path[0]?.slug).toBe("comparing-growth-rates");
-      expect(result.path.at(-1)?.slug).toBe("master-theorem-limits");
+      expect(result.path[0]?.slug).toBe("vector-as-a-list-of-numbers");
+      expect(result.path.at(-1)?.slug).toBe("transformer-block");
     });
 
     it("says there is no path, and offers the reverse when there is one", async () => {
-      const result = await runPath("master-theorem", "comparing-growth-rates");
+      const result = await runPath("self-attention", "vector-as-a-list-of-numbers");
       expect(result.found).toBe(false);
       expect(result.path).toEqual([]);
-      expect(result.hint).toMatch(/catalog path comparing-growth-rates master-theorem/);
+      expect(result.hint).toMatch(/catalog path vector-as-a-list-of-numbers self-attention/);
     });
 
     it("refuses a slug that is not a concept", async () => {
-      await expect(runPath("master-theorem", "recurrence-relations")).rejects.toThrow(
+      await expect(runPath("self-attention", "transformer-architecture-and-training")).rejects.toThrow(
         /is not a concept/,
       );
     });
@@ -416,47 +441,47 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // directly here and put back, so the cases above see the tree as it is.
     const archive = async (on: boolean) => {
       const at = on ? sql`now()` : sql`null`;
-      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where id = 'cp4284-m1-t1'`);
-      await scratch.db.execute(sql`update collection set archived_at = ${at} where id = 'cs4263-m7'`);
-      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where collection_id = 'cs4263-m7'`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where id = 'cp4284-m3-t1'`);
+      await scratch.db.execute(sql`update collection set archived_at = ${at} where id = 'cp4284-m1'`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where collection_id = 'cp4284-m1'`);
     };
 
     it("leaves them out of status's coverage, ls, and show's lists, and says so when shown directly", async () => {
       const before = await runStatus();
-      const cs4263 = (await runLs("cs4263")) as Extract<Awaited<ReturnType<typeof runLs>>, { kind: "collection" }>;
-      const m7Items = cs4263.children.find((c) => c.id === "cs4263-m7")?.curriculumItems.length ?? 0;
-      expect(m7Items).toBeGreaterThan(0);
+      const cp4284 = (await runLs("cp4284")) as Extract<Awaited<ReturnType<typeof runLs>>, { kind: "collection" }>;
+      const m1Items = cp4284.children.find((c) => c.id === "cp4284-m1")?.curriculumItems.length ?? 0;
+      expect(m1Items).toBe(2);
       await archive(true);
       try {
         const after = await runStatus();
-        const cp4284 = (report: typeof before) => report.coverage.find((c) => c.course === "cp4284");
-        const cs = (report: typeof before) => report.coverage.find((c) => c.course === "cs4263");
-        expect(cp4284(after)).toEqual({ ...cp4284(before), items: (cp4284(before)?.items ?? 0) - 1, withConcepts: 2 });
-        expect(cs(after)?.items).toBe((cs(before)?.items ?? 0) - m7Items);
+        const course = (report: typeof before) => report.coverage.find((c) => c.course === "cp4284");
+        // Five rows, less m3-t1 (react-loop) and m1's two (one with concepts):
+        // two left, and only m3-t2 (tool-calling) names a concept.
+        expect(course(after)).toEqual({ ...course(before), items: 5 - 1 - m1Items, withConcepts: 1 });
 
-        const tree = await runLs("cs4263");
+        const tree = await runLs("cp4284");
         if (tree.kind !== "collection") throw new Error("not a collection");
-        expect(tree.children.map((c) => c.id)).not.toContain("cs4263-m7");
+        expect(tree.children.map((c) => c.id)).toEqual(["cp4284-m3"]);
         expect(tree.archived).toBe(false);
         // Named directly it still answers, since its id is how the learner
         // rows kept under it are found, and says it is archived.
-        const gone = await runLs("cs4263-m7");
+        const gone = await runLs("cp4284-m1");
         if (gone.kind !== "collection") throw new Error("not a collection");
         expect(gone.archived).toBe(true);
         expect(formatLs(gone)).toContain("archived: its course file no longer lists it");
         const overview = await runLs(undefined);
         if (overview.kind !== "overview") throw new Error("not the overview");
-        expect(overview.collections.find((c) => c.id === "cs4263")?.children).toBe(6);
+        expect(overview.collections.find((c) => c.id === "cp4284")?.children).toBe(1);
 
-        const shown = (await runShow("cp4284-m1")) as ShowCollection;
-        expect(shown.curriculumItems.map((i) => i.id)).not.toContain("cp4284-m1-t1");
+        const shown = (await runShow("cp4284-m3")) as ShowCollection;
+        expect(shown.curriculumItems.map((i) => i.id)).toEqual(["cp4284-m3-t2", "cp4284-m3-t3"]);
         expect(shown.archived).toBe(false);
-        const course = (await runShow("cs4263")) as ShowCollection;
-        expect(course.children.map((c) => c.id)).not.toContain("cs4263-m7");
-        const item = (await runShow("cp4284-m1-t1")) as ShowCurriculumItem;
+        const whole = (await runShow("cp4284")) as ShowCollection;
+        expect(whole.children.map((c) => c.id)).toEqual(["cp4284-m3"]);
+        const item = (await runShow("cp4284-m3-t1")) as ShowCurriculumItem;
         expect(item.archived).toBe(true);
-        const topic = (await runShow("transformer-architecture-and-training")) as ShowTopic;
-        expect(topic.curriculumItems.map((i) => i.id)).not.toContain("cp4284-m1-t1");
+        const topic = (await runShow("agent-tool-use-and-reasoning-loops")) as ShowTopic;
+        expect(topic.curriculumItems.map((i) => i.id)).not.toContain("cp4284-m3-t1");
       } finally {
         await archive(false);
       }
@@ -468,20 +493,20 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       const courses = (await runStatus()).coverage.map((c) => c.course);
       await scratch.db.execute(
         sql`update curriculum_item set archived_at = now()
-            where collection_id in (select id from collection where parent_id = 'cs3249')`,
+            where collection_id in (select id from collection where parent_id = 'cp4284')`,
       );
       try {
         const after = await runStatus();
         expect(after.coverage.map((c) => c.course)).toEqual(courses);
-        expect(after.coverage.find((c) => c.course === "cs3249")).toEqual({
-          course: "cs3249",
+        expect(after.coverage.find((c) => c.course === "cp4284")).toEqual({
+          course: "cp4284",
           items: 0,
           withConcepts: 0,
         });
       } finally {
         await scratch.db.execute(
           sql`update curriculum_item set archived_at = null
-              where collection_id in (select id from collection where parent_id = 'cs3249')`,
+              where collection_id in (select id from collection where parent_id = 'cp4284')`,
         );
       }
     });
@@ -498,8 +523,8 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("finds concepts by title", async () => {
-      const result = await runSearch("master theorem");
-      expect(result.hits.map((h) => h.id)).toContain("master-theorem");
+      const result = await runSearch("multi-head attention");
+      expect(result.hits.map((h) => h.id)).toContain("multi-head-attention");
       expect(result.hits.length).toBeLessThanOrEqual(20);
     });
 

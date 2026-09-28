@@ -8,7 +8,7 @@ import type { SourceRows } from "./source";
  * An indexer never knows about blobs: it reads a tree and hands over rows
  * without a `blobKey`. The writer's upsert sets every column from the row it
  * is given (`updateSet` in `../content/upsert.ts`, deliberately), so without
- * this a plain `catalog index --only manimkc` after `catalog asset upload`
+ * this a plain `catalog import --only manimkc` after `catalog asset upload`
  * would put every `blob_key` back to null and write an asset revision saying
  * so, and the file route would drop back to the legacy file.
  *

@@ -339,7 +339,7 @@ export function formatStatus(result: StatusResult): string {
   lines.push("");
   lines.push("mirrors");
   if (destinations.length === 0) {
-    lines.push("  nothing audited yet. Run `npm run catalog -- index --only mirrors`.");
+    lines.push("  nothing audited yet. Run `npm run catalog -- import --only mirrors`.");
   } else {
     const mirrorWidth = Math.max(...destinations.map((d) => d.length));
     for (const destination of destinations) {
@@ -355,7 +355,7 @@ export function formatStatus(result: StatusResult): string {
   lines.push("");
   lines.push("coverage");
   if (result.coverage.length === 0) {
-    lines.push("  no courses indexed yet. Run `npm run catalog -- index --only courses`.");
+    lines.push("  no courses indexed yet. Run `npm run catalog -- import --only courses`.");
     return lines.join("\n");
   }
   const courseWidth = Math.max(...result.coverage.map((c) => c.course.length));

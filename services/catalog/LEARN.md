@@ -58,7 +58,7 @@ in [`learn/README.md`](../../learn/README.md#the-json-shapes) and pinned by
   DAG and SM-2, and they keep their own tests.
 - `learn index` re-reads the notes into the catalog instead of writing
   `state/index.json`. It refuses if a note is in no topic's `maps.concepts` in
-  `content/topics.yaml`, which is the same refusal `catalog index` gives: a note
+  `content/topics.yaml`, which is the same refusal `catalog import` gives: a note
   with no topic cannot be reached from a course or a video about the same
   subject, and it cannot carry mastery either, because `mastery.concept_slug`
   is a foreign key.

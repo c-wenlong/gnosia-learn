@@ -1,7 +1,7 @@
 // End-to-end smoke test: the built app, a throwaway copy of the database, and
 // headless Chromium walking the flows a person uses every day.
 //
-// usage: npm run e2e [-- --keep-db] [-- --headed]
+// usage: npm run e2e [-- --keep-db] [-- --headed] [-- --seed]
 //
 // What it does, in order:
 //   1. Copies `self_learn` into `self_learn_e2e_<pid>_<time>` with `createdb -T`.
@@ -9,6 +9,10 @@
 //      watched, a settings change) writes real rows, and AGENTS.md is plain
 //      that anything which grades runs against a copy, never `self_learn`.
 //      The copy is dropped in `finally`, on a failure and on Ctrl-C too.
+//      With --seed it builds that database instead: an empty one, migrated,
+//      `catalog import seed/`, and one `learn observe` so a review card is due.
+//      That is what phase 3 of docs/CONTENT-MIGRATION.md makes the default,
+//      once `content/` and `learn/` are gone and `self_learn` is no template.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
 //      with a fixed test password and secret and with every provider key blank.
 //      It builds nothing: run `npm run build` first.
@@ -21,6 +25,9 @@
 // Options:
 //   --keep-db    leave the copy behind and print its name, to look at afterwards
 //   --headed     show the browser instead of running headless
+//   --seed       build the database from seed/ rather than copying self_learn.
+//                The seed has no videos (D7), so the Mark watched step is
+//                skipped and says so; its blob store is a temp directory.
 //
 // Environment:
 //   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
@@ -47,8 +54,9 @@ const WEB = join(ROOT, 'apps/web');
 const flags = new Set(process.argv.slice(2));
 const KEEP_DB = flags.delete('--keep-db');
 const HEADED = flags.delete('--headed');
+const SEED = flags.delete('--seed');
 if (flags.size > 0) {
-  console.error(`unknown option: ${[...flags].join(' ')}\nusage: npm run e2e [-- --keep-db] [-- --headed]`);
+  console.error(`unknown option: ${[...flags].join(' ')}\nusage: npm run e2e [-- --keep-db] [-- --headed] [-- --seed]`);
   process.exit(2);
 }
 
@@ -105,6 +113,16 @@ const { chromium } = await import(pathToFileURL(corePath).href);
 const OUT = mkdtempSync(join(tmpdir(), 'self-learn-e2e-'));
 const SERVER_LOG = join(OUT, 'server.log');
 console.log(`e2e: screenshots and the server log go to ${OUT}`);
+
+/**
+ * With --seed, the blob store the import puts the seed's diagram SVG in, and
+ * the server reads it from: under OUT, never `~/.self-learn`. And an empty
+ * manimkc root, so the import runs no manimkc source: the seed maps no topic
+ * folder (it has no videos), and a real checkout's renders would be refused
+ * as folders no topic maps.
+ */
+const SEED_HOME = SEED ? join(OUT, 'home') : null;
+const NO_MANIMKC = SEED ? mkdtempSync(join(OUT, 'no-manimkc-')) : null;
 
 // ---------------------------------------------------------------------------
 // Cleanup. One idempotent teardown, reached from `finally` and from a signal,
@@ -169,9 +187,9 @@ function stopIfInterrupted() {
  * of its own, so a Ctrl-C meant for this script does not kill createdb halfway
  * through; the handler above decides what stops, and in what order.
  */
-function exec(command, args) {
+function exec(command, args, env = process.env) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(command, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env, cwd: ROOT });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => (stdout += chunk));
@@ -247,7 +265,46 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // ---------------------------------------------------------------------------
 // The database copy.
 
+/** The environment every catalog and learn command against the seed database runs with. */
+function seedEnv() {
+  return {
+    ...process.env,
+    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
+    SELF_LEARN_HOME: SEED_HOME,
+    MANIMKC_ROOT: NO_MANIMKC,
+    // The knowledge base is the seed's: the learn CLI reads the notes from
+    // files until concepts are flipped, and the seed database never is.
+    LEARN_ROOT: join(ROOT, 'seed'),
+  };
+}
+
+/** One `npm run --silent <script> -- ...` against the seed database, or a thrown error naming it. */
+async function seedCommand(script, args) {
+  const ran = await exec('npm', ['run', '--silent', script, '--', ...args], seedEnv());
+  if (ran.status !== 0) {
+    throw new Error(`\`npm run ${script} -- ${args.join(' ')}\` failed (${ran.status}): ${(ran.stderr || ran.stdout).trim().slice(-600)}`);
+  }
+}
+
+/**
+ * --seed: the database is built, not copied. Migrated, the seed imported the
+ * way `catalog import` reads any tree, and one answer recorded through the
+ * learn CLI so the review flow has a card (the seed carries content, not
+ * learner state).
+ */
+async function buildFromSeed() {
+  const made = await pg('createdb', [COPY_DB]);
+  if (made.status !== 0) throw new Error(`createdb ${COPY_DB} failed: ${made.stderr.trim()} (is Postgres running?)`);
+  await seedCommand('catalog', ['migrate']);
+  await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
+  await seedCommand('learn', ['observe', '--concept', 'tool-calling', '--correct', 'true']);
+}
+
 async function createCopy() {
+  if (SEED) {
+    await buildFromSeed();
+    return markReviewDue();
+  }
   // No `catalog migrate` afterwards: a template copy carries the schema and the
   // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
   let made = await pg('createdb', ['-T', TEMPLATE_DB, COPY_DB]);
@@ -265,7 +322,10 @@ async function createCopy() {
   if (made.status !== 0) {
     throw new Error(`createdb ${COPY_DB} from ${TEMPLATE_DB} failed: ${made.stderr.trim()} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
   }
+  await markReviewDue();
+}
 
+async function markReviewDue() {
   // Make the review step deterministic: whatever the owner has already cleared,
   // the earliest card in the copy is due now. `review` is a projection of the
   // event log, and this is a throwaway copy, so rewriting one row is harmless.
@@ -314,6 +374,8 @@ async function startServer(port) {
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
     ASSET_FILES_ENABLED: '1',
+    // The seed's blob store, where its import put the diagram SVG.
+    ...(SEED_HOME === null ? {} : { SELF_LEARN_HOME: SEED_HOME }),
     // The copy is throwaway, and may have been made from a database marked
     // `copy`; this is the flag that says writing to it is intended.
     CATALOG_COPY_OK: '1',
@@ -375,6 +437,11 @@ function tail(file, lines = 30) {
 // Steps.
 
 const results = [];
+
+/** A step this run cannot take, and why: listed as SKIP, never as a pass. */
+function skip(name, why) {
+  results.push({ name, ok: true, skipped: why, ms: 0 });
+}
 /** Console errors, page errors and bad responses, each tagged with the step it happened in. */
 const problems = [];
 let current = 'startup';
@@ -432,7 +499,7 @@ async function progressValue(bar) {
 async function run() {
   held.copying = createCopy();
   await held.copying;
-  console.log(`e2e: copied ${TEMPLATE_DB} to ${COPY_DB}`);
+  console.log(SEED ? `e2e: built ${COPY_DB} from seed/` : `e2e: copied ${TEMPLATE_DB} to ${COPY_DB}`);
   const base = await startServer(await freePort());
   console.log(`e2e: next start is answering on ${base}`);
 
@@ -600,7 +667,8 @@ async function run() {
     }
   });
 
-  await step('library: first video, Mark watched', page, async () => {
+  if (SEED) skip('library: first video, Mark watched', 'the seed has no videos (D7)');
+  else await step('library: first video, Mark watched', page, async () => {
     await go('/library');
     // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
     await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
@@ -661,6 +729,10 @@ if (interrupted) await new Promise(() => {});
 const width = Math.max(...results.map((r) => r.name.length), 40);
 console.log('');
 for (const r of results) {
+  if (r.skipped) {
+    console.log(`SKIP  ${r.name.padEnd(width)}  (${r.skipped})`);
+    continue;
+  }
   console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(width)}  ${String(r.ms).padStart(6)} ms`);
   if (!r.ok) {
     console.log(`      ${r.error}`);
@@ -674,7 +746,11 @@ if (fatal) console.log(`\nFAIL  setup: ${fatal.message}`);
 if (teardownProblem) console.log(`\nFAIL  teardown: ${teardownProblem}`);
 
 const failed = results.filter((r) => !r.ok).length;
+const skipped = results.filter((r) => r.skipped).length;
 const ok = !fatal && !teardownProblem && failed === 0 && clean;
-console.log(`\n${ok ? 'PASS' : 'FAIL'}: ${results.length - failed} of ${results.length} steps passed, ${problems.length} problem(s) logged.`);
+console.log(
+  `\n${ok ? 'PASS' : 'FAIL'}: ${results.length - failed - skipped} of ${results.length - skipped} steps passed` +
+    `${skipped > 0 ? `, ${skipped} skipped` : ''}, ${problems.length} problem(s) logged.`,
+);
 if (!ok) console.log(`Screenshots and the server log: ${OUT}`);
 process.exit(ok ? 0 : 1);

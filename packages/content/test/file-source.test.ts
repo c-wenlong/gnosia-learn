@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -16,20 +15,21 @@ import {
   SESSIONS_DIR,
 } from "../src/index";
 import { courseYaml, makeFixture, tagsYaml, topicsYaml, type Fixture } from "./fixture";
+import { SEED } from "./seed";
 
 /**
- * `fileSource` against the real tree, read only, and against fixtures for the
- * cases the real tree does not have.
+ * `fileSource` against the seed tree (real content, seed/README.md), read
+ * only, and against fixtures for the cases the seed does not have.
  *
  * The parity half is the promise the seam makes: a reader that moved from the
  * synchronous parsers to `fileSource` sees exactly what it saw before, so the
  * web app's conversion changes nothing a person can see.
  */
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const ROOT = SEED;
 const source = fileSource(ROOT);
 
-describe("fileSource over the real content tree", () => {
+describe("fileSource over the seed tree", () => {
   it("returns what the synchronous parsers return", async () => {
     expect(await source.topics()).toEqual(loadTopics({ root: ROOT }));
     expect(await source.tags()).toEqual(loadTags({ root: ROOT }));
@@ -53,9 +53,8 @@ describe("fileSource over the real content tree", () => {
         count += 1;
       }
     }
-    // The tree held 32 notes when this was written; any is enough to mean
-    // something, none would mean the loop proved nothing.
-    expect(count).toBeGreaterThan(0);
+    // None would mean the loop proved nothing.
+    expect(count).toBe(11);
   });
 
   it("returns every session log whole", async () => {
