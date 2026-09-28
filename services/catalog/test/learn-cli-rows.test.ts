@@ -206,7 +206,7 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       ).rows.map((r) => r.concept_slug);
     try {
       const message = await refused("concept", "add", "--title", "Eta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the courses source refused/);
+      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the courses source refused, so the row's link/);
       expect(message).toMatch(/yy2000-m1/);
       expect(message).toMatch(/catalog -- index --only courses/);
       expect(await row("eta")).toMatchObject({ topicSlug: "alpha" });
@@ -217,6 +217,20 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     // The recovery the message names is enough: the listing is in the file.
     await runIndex(scratch.db, { only: ["courses"], repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
     expect(await links()).toContain("eta");
+  }, 60_000);
+
+  it("says the link is in when a source after courses is what stopped the run", async () => {
+    // Diagrams run after courses and commit on their own, so a bad diagram
+    // stops the run with the courses source's link already written.
+    const bad = "learn/assets/broken.tldr";
+    await fixture.write(bad, "not a tldraw document");
+    try {
+      const message = await refused("concept", "add", "--title", "Theta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
+      expect(message).toMatch(/listed on xx1000-m1-t1, and the row links to it, but the index run then stopped on another source/);
+      expect(message).toMatch(/broken\.tldr/);
+    } finally {
+      await rm(path.join(fixture.root, bad));
+    }
   }, 60_000);
 
   it("refuses a new note with no topic, and a move to another folder", async () => {
