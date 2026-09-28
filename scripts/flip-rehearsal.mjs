@@ -3,6 +3,8 @@
 //
 // usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]
 //                                        [--waive-reason TEXT]
+//        node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from DB] [--name COPY] [--blob-store DIR] [--keep]
+//                                        [--json] [--waive-reason TEXT]
 //        node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR
 //
 // A rehearsal (the default):
@@ -91,29 +93,74 @@
 //   doctor, which must report every rule armed or waived;
 //   parity once more, with HEAD still the commit compared, since a write
 //   during the strict flips would leave the tag older than the database;
-//   git tag content-files-final on that commit, refused if the tag exists, a
-//   tracked file under content/ or learn/ differs from HEAD, or HEAD moved.
-//   Never pushed.
-// It ends by printing the commands that follow: push the tag, then merge the
-// cut-over PR. --real --cutover refuses unless every type is flipped already,
-// with the same guards as --real (named database, --checkout, a terminal, the
-// backup first). A rehearsal with --cutover runs flip day's steps and then the
+//   git tag content-files-final on that commit, or, when the tag is there
+//   already on that very commit, nothing: refused if the tag (here or on
+//   origin) names another commit, a tracked file under content/ or learn/
+//   differs from HEAD and is not flip day's export, or HEAD moved. Never
+//   pushed.
+// It ends by printing the commands that follow: push the tag unless origin was
+// seen to hold it on that commit, and the `git add` and commit that would keep
+// flip day's export on a branch of the checkout (printed, never run).
+//
+// Flip day's exports rewrite a few tracked files (five notes' frontmatter, the
+// .tldr key order) and write the untracked ones again (the tailscale pair).
+// The cut-over accepts those edits and no others: each must be a file changed
+// in place whose bytes are exactly what its fresh export writes, which is the
+// list `catalog flip` printed as the files an export rewrites. They are listed
+// before the confirmation, checked at the parity step, checked again at the
+// tag, and saved in the parity report.
+//
+// Where it runs. The owner tagged content-files-final on a0afd93, the last
+// commit with the files, before flip day, and ran flip day from a worktree at
+// the tag, with the tag's own script. The script at the tag refuses a tag that
+// exists and a tree the exports edited, so the cut-over runs from a checkout
+// with this script (the main checkout, pulled) with --checkout naming that
+// worktree. --cutover accepts a --checkout other than its own checkout only
+// when it is the top of a worktree of the same repository whose HEAD is the
+// tag's commit (lib/cutover.mjs, tagWorktreeProblem). Flip day's --real keeps
+// the rule that --checkout is the script's own checkout.
+//
+// --real --cutover refuses unless every type is flipped already, with the same
+// guards as --real (named database, --checkout, a terminal, the backup
+// first). A rehearsal with --cutover runs flip day's steps and then the
 // cut-over's on one copy, tags a throwaway git repository made of the copied
 // tree rather than the checkout, and takes the waiver's reason from
 // --waive-reason when there is no terminal. It refuses a template that is
 // flipped already: its blobs are in a store the rehearsal does not use, so
 // rehearse from an unflipped database (the pre-flip dump restored into one).
+// A rehearsal with --cutover --checkout <worktree at the tag> is the other
+// way round: it copies a --from that flip day has run on (every type flipped),
+// runs only the cut-over's steps on the copy, and reads the worktree in place
+// (it writes nothing there; the tag is there already, and is only checked).
+// That is the rehearsal of the owner's own cut-over, before --real. The copy's
+// rows name blobs flip day stored (the export reads the diagram SVGs back), so
+// the rehearsal copies the store --blob-store names (default: the one the
+// environment's SELF_LEARN_HOME names, which --real would use) into its own
+// temp one first, as a clone where the file system can, and writes nothing to
+// the original. The copy leaves out the store's .owner marker, which names the
+// database flip day ran on, so the rehearsal's copy claims its own.
 //
 // Exit codes: 0 every step passed, 1 a step failed, 2 the invocation or a
 // prerequisite was wrong, 130 interrupted.
-import { cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { constants, cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { CONTENT_FOLDERS, compareTrees, FINAL_TAG, headOf, makeFinalTag, tagProblems } from './lib/cutover.mjs';
+import {
+  CONTENT_FOLDERS,
+  compareTrees,
+  contentStatus,
+  exportRewrites,
+  FINAL_TAG,
+  headOf,
+  makeFinalTag,
+  tagProblems,
+  tagWorktreeProblem,
+  writeHeadTree,
+} from './lib/cutover.mjs';
 import { FLIP_GROUPS, FLIP_ORDER } from './lib/flip-order.mjs';
 import { copyDatabase, exec, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
 
@@ -122,6 +169,8 @@ const CLI = join(ROOT, 'services/catalog/src/cli.ts');
 const USAGE =
   'usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]\n' +
   '                                       [--waive-reason TEXT]\n' +
+  '       node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from DB] [--name COPY] [--blob-store DIR] [--keep]\n' +
+  '                                       [--json] [--waive-reason TEXT]\n' +
   '       node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR';
 
 /** The learner state: a backup whose archive does not list these tables' data is no backup. */
@@ -401,6 +450,7 @@ function options(argv) {
         'waive-reason': { type: 'string' },
         database: { type: 'string' },
         checkout: { type: 'string' },
+        'blob-store': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     }).values;
@@ -408,7 +458,7 @@ function options(argv) {
     throw new Refusal(`${error.message}\n${USAGE}`);
   }
   if (parsed.real) {
-    const stray = ['from', 'name', 'tree-from', 'keep', 'waive-reason'].filter(
+    const stray = ['from', 'name', 'tree-from', 'keep', 'waive-reason', 'blob-store'].filter(
       (k) => parsed[k] !== undefined && parsed[k] !== false,
     );
     if (stray.length > 0) {
@@ -428,10 +478,22 @@ function options(argv) {
       );
     }
   } else {
-    for (const flag of ['database', 'checkout']) {
-      if (parsed[flag] !== undefined) {
-        throw new Refusal(`--${flag} goes with --real. A rehearsal copies --from (default self_learn) instead.`);
+    if (parsed.database !== undefined) {
+      throw new Refusal('--database goes with --real. A rehearsal copies --from (default self_learn) instead.');
+    }
+    if (parsed.checkout !== undefined) {
+      if (!parsed.cutover) {
+        throw new Refusal(
+          '--checkout goes with --real, or with --cutover to rehearse the cut-over on a worktree at the tag. ' +
+            'A rehearsal of flip day copies --tree-from instead.',
+        );
       }
+      if (parsed.checkout.trim() === '') throw new Refusal('--checkout is empty.');
+      if (parsed['tree-from'] !== undefined) {
+        throw new Refusal('--tree-from and --checkout both name the tree: a cut-over rehearsal on a worktree reads --checkout in place.');
+      }
+    } else if (parsed['blob-store'] !== undefined) {
+      throw new Refusal('--blob-store goes with --cutover --checkout: a rehearsal of flip day fills a temp store of its own.');
     }
   }
   if (parsed['waive-reason'] !== undefined) {
@@ -455,6 +517,9 @@ function redact(url) {
   if (parsed.password !== '') parsed.password = '***';
   return parsed.toString();
 }
+
+/** A leading ~ as the home directory, the way a shell would have read it. */
+const tilde = (path) => path.replace(/^~(?=$|\/)/, homedir());
 
 /** One argument for a POSIX shell, quoted only when it has to be. */
 function shellQuote(value) {
@@ -490,21 +555,40 @@ function fileStamp(date = new Date()) {
 }
 
 /**
- * --real's checkout, confirmed: the directory the operator named must be the
- * one this script sits in, since that is the tree it imports and exports into.
- * A copy of the script in a worktree or a clone would otherwise import a tree
- * without the owner's untracked files, and prune their rows.
+ * The checkout the operator named, confirmed. Flip day's must be the one this
+ * script sits in, since that is the tree it imports and exports into: a copy
+ * of the script in a worktree or a clone would otherwise import a tree
+ * without the owner's untracked files, and prune their rows. The cut-over's
+ * may also be a worktree of this same repository at the content-files-final
+ * tag (`tagWorktreeProblem`), since the owner ran flip day from one and the
+ * script at the tag cannot run the cut-over there (see the header); a
+ * cut-over rehearsal's must be such a worktree, never this checkout.
  */
-function confirmedCheckout(named) {
-  const given = resolve(named.replace(/^~(?=$|\/)/, homedir()));
+async function confirmedCheckout(named, { cutover, real }) {
+  const given = resolve(tilde(named));
   if (!existsSync(given)) throw new Refusal(`--checkout ${named} does not exist.`);
-  if (realpathSync(given) !== realpathSync(ROOT)) {
+  const here = realpathSync(ROOT);
+  const there = realpathSync(given);
+  if (there === here) {
+    if (real) return { path: here, tagWorktree: false };
     throw new Refusal(
-      `--checkout ${realpathSync(given)} is not the checkout this script is in, ${realpathSync(ROOT)}. ` +
+      `--checkout ${there} is the checkout this script is in. A cut-over rehearsal reads a worktree at ${FINAL_TAG} ` +
+        `in place (git worktree add <dir> ${FINAL_TAG}); to rehearse from this tree, drop --checkout.`,
+    );
+  }
+  if (!cutover) {
+    throw new Refusal(
+      `--checkout ${there} is not the checkout this script is in, ${here}. ` +
         '--real imports and exports the tree beside the script: run the script from the checkout you mean.',
     );
   }
-  return realpathSync(ROOT);
+  const problem = await tagWorktreeProblem(here, there);
+  if (problem !== null) {
+    throw new Refusal(
+      `--checkout ${there} is neither the checkout this script is in (${here}) nor a worktree of it at ${FINAL_TAG}: ${problem}.`,
+    );
+  }
+  return { path: there, tagWorktree: true };
 }
 
 /** What `git` says about the checkout, for the confirmation. Read-only. */
@@ -618,7 +702,10 @@ async function main(argv) {
   const from = opts.from ?? 'self_learn';
   const database = real ? opts.database.trim() : (opts.name ?? `self_learn_rehearsal_${stamp}`);
   if (!real && database === from) throw new Refusal(`--name ${database} is the template; a rehearsal never runs on its template.`);
-  const checkout = real ? confirmedCheckout(opts.checkout) : null;
+  const confirmed = opts.checkout === undefined ? null : await confirmedCheckout(opts.checkout, { cutover, real });
+  const checkout = confirmed?.path ?? null;
+  /** A cut-over rehearsal on a worktree at the tag: that tree in place, and a copy of a flipped --from. */
+  const inPlace = !real && checkout !== null;
   if (real && (!process.stdin.isTTY || !process.stdout.isTTY)) {
     throw new Refusal(
       '--real asks for the database name to be typed on a terminal, and this process has none. ' +
@@ -630,7 +717,7 @@ async function main(argv) {
   }
 
   const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'self-learn-flip-rehearsal-')));
-  const tree = real ? checkout : join(scratch, 'tree');
+  const tree = checkout ?? join(scratch, 'tree');
   const url = urlFor(database);
   // The per-owner blob caps (phase 4) are off for every step. Flip day stores
   // the bytes the owner already has, some 160 objects in one sitting, and an
@@ -673,6 +760,12 @@ async function main(argv) {
     head: null,
     tag: null,
     untracked: [],
+    /** Tracked files that are flip day's export, checked byte for byte against the fresh one. */
+    rewrites: [],
+    /** Where the tag was before the run: here, and on origin (null when absent or not asked). */
+    tagged: { local: null, remote: null },
+    /** The files in the tree that are flip day's export in other bytes than HEAD's, or not in HEAD at all: the ones worth committing. */
+    exported: [],
   };
 
   // --- Stopping. -----------------------------------------------------------
@@ -848,7 +941,7 @@ async function main(argv) {
     parityReport: async () => {
       // A rehearsal's tree is a temp copy: made a repository here, as the
       // checkout is, so the commit compared is the commit the tag checks.
-      if (!real) {
+      if (!real && !inPlace) {
         const problem = await rehearsalRepository();
         if (problem !== null) return { problem, result: null };
       }
@@ -857,14 +950,46 @@ async function main(argv) {
       const { json, failed } = await catalog(['parity', tree], env, { exits: [0, 1] });
       if (failed !== null) return { problem: failed, result: json };
       const bytes = compareTrees(state.exportDir, tree);
+      // Flip day's exports rewrote some tracked files in place. Each must be
+      // exactly what the database exports now; any other edit is refused.
+      const status = await contentStatus(tree);
+      const edits = status.ok
+        ? exportRewrites(state.exportDir, tree, status.edits)
+        : { rewrites: [], unexpected: [`git status failed in ${tree}: ${status.err}`] };
+      state.rewrites = edits.rewrites;
+      // compareTrees below has to find every exported file identical in the
+      // tree before this list is used, so an untracked file the export also
+      // writes is flip day's export too (the tailscale pair).
+      state.exported = [...edits.rewrites, ...status.untracked.filter((f) => existsSync(join(state.exportDir, f)))].sort();
+      // The tag keeps HEAD's bytes, not the working tree's, so when the two
+      // differ HEAD's own files (with the untracked ones the import read) are
+      // held to the database too.
+      let headParity = null;
+      if (edits.unexpected.length === 0 && edits.rewrites.length > 0) {
+        const dir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-head-'));
+        try {
+          const wrote = await writeHeadTree(tree, dir, status.untracked);
+          if (wrote !== null) return { problem: wrote, result: null };
+          const ran = await catalog(['parity', dir], env, { exits: [0, 1] });
+          if (ran.failed !== null) return { problem: `parity of HEAD's files: ${ran.failed}`, result: ran.json };
+          headParity = { clean: ran.json.clean, mismatches: ran.json.mismatches, types: ran.json.types };
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      }
       const file = join(kept, `${database}-cutover-${fileStamp()}.parity.json`);
       const saved = {
         at: new Date().toISOString(),
         database: redact(url),
         tree,
+        head: state.head,
         export: state.exportDir,
         parity: json,
         bytes,
+        rewrites: edits.rewrites,
+        unexpected: edits.unexpected,
+        untracked: status.untracked,
+        headParity,
       };
       writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`, { flag: 'wx' });
       state.parityReport = file;
@@ -894,10 +1019,33 @@ async function main(argv) {
           result: saved,
         };
       }
+      if (edits.unexpected.length > 0) {
+        return {
+          problem:
+            `${edits.unexpected.length} tracked file(s) under content/ or learn/ differ from HEAD and are not flip day's ` +
+            `export: ${edits.unexpected.slice(0, 10).join('; ')}; report ${file}. The tag keeps HEAD's version, so ` +
+            'nothing here can say which is right: put them back (git checkout -- <file>) and run again.',
+          result: saved,
+        };
+      }
+      if (headParity !== null && !headParity.clean) {
+        return {
+          problem:
+            `${headParity.mismatches} parity mismatch(es) between the database and HEAD's own files (what the tag keeps), ` +
+            `though the working tree's export is clean; report ${file}. HEAD is not the tree flip day compared: ` +
+            'run the cut-over on the worktree flip day ran from.',
+          result: saved,
+        };
+      }
       return {
         problem: null,
         result: { ...saved, path: file },
-        gist: `${counts}; 0 mismatches; ${bytes.identical} of ${bytes.compared} exported files identical in the tree; report ${file}`,
+        gist:
+          `${counts}; 0 mismatches; ${bytes.identical} of ${bytes.compared} exported files identical in the tree` +
+          (edits.rewrites.length === 0
+            ? ''
+            : `; ${edits.rewrites.length} tracked file(s) are flip day's export (${edits.rewrites.join(', ')}), and HEAD's own files have parity too`) +
+          `; report ${file}`,
       };
     },
 
@@ -983,14 +1131,21 @@ async function main(argv) {
     },
 
     tag: async () => {
-      const made = await makeFinalTag(tree, { expectedHead: state.head });
+      // The tree's edits are checked once more against the export, in case
+      // one changed since the parity step.
+      const made = await makeFinalTag(tree, { expectedHead: state.head, exportDir: state.exportDir });
       state.untracked = made.untracked;
       if (made.problem !== null) return { problem: made.problem, result: made };
       state.tag = made.tag;
+      const where = real || inPlace ? tree : 'a throwaway repository of the tree';
       return {
         problem: null,
         result: made,
-        gist: `${FINAL_TAG} at ${made.tag.commit.slice(0, 12)} in ${real ? tree : 'a throwaway repository of the tree'}; not pushed`,
+        gist:
+          (made.tag.made
+            ? `${FINAL_TAG} at ${made.tag.commit.slice(0, 12)} in ${where}; not pushed`
+            : `${FINAL_TAG} was already on ${made.tag.commit.slice(0, 12)}, the commit compared; left as it is`) +
+          (made.rewrites.length === 0 ? '' : `; ${made.rewrites.length} tracked file(s) still flip day's export`),
       };
     },
   };
@@ -1000,56 +1155,83 @@ async function main(argv) {
   try {
     report.blobRoot = await blobRoot(env);
     const flipDay = procedure(tree, own);
+    // A cut-over on a checkout (--real, or a rehearsal on the tag's
+    // worktree) comes after flip day, which ran from that checkout already.
     const steps = cutover
-      ? [...(real ? [] : flipDay), ...cutoverProcedure(tree, cutoverOwn, state)]
+      ? [...(checkout !== null ? [] : flipDay), ...cutoverProcedure(tree, cutoverOwn, state)]
       : flipDay;
     total = steps.length;
-    if (real) {
-      const git = await describeCheckout(checkout);
-      report.checkout = { path: checkout, ...git };
-      if (git.status === null) throw new Refusal(`git status failed in ${checkout}; ${day} needs to see the tree it imports.`);
-      const edited = git.status.filter((line) => !line.startsWith('??'));
-      if (edited.length > 0) {
+
+    /**
+     * What the cut-over needs of the database and the checkout, read before
+     * the confirmation (or the copy), so a run that cannot finish never
+     * starts; and the lines that say it.
+     */
+    const cutoverPreflight = async (git, owner) => {
+      const flipped = await flippedTypes(owner, maintenance);
+      const missing = FLIP_ORDER.filter((type) => !flipped.includes(type));
+      if (missing.length > 0) {
         throw new Refusal(
-          `content/ or learn/ has changes to tracked files in ${checkout}:\n  ${edited.join('\n  ')}\n` +
-            (cutover
-              ? 'Commit them first: the tag must hold the files the import and parity read.'
-              : 'Commit or stash them first: the exports rewrite files here, and undoing a failed run restores these folders from HEAD.'),
+          `${owner} does not own ${missing.join(', ')} yet: the cut-over comes after flip day ` +
+            `(node scripts/flip-rehearsal.mjs --real --database ${owner} --checkout ${checkout}, from that checkout).`,
         );
       }
+      // Flip day's export rewrote files here; they pass for now, listed, and
+      // the parity step checks each against a fresh export before anything
+      // is armed. Any other edit refuses here.
+      const tagging = await tagProblems(checkout, { remote: 'origin', edits: 'pending' });
+      if (tagging.problems.length > 0) throw new Refusal(tagging.problems.join('\n'));
+      state.tagged = tagging.tagged;
+      const already = tagging.tagged.local === tagging.head;
+      return [
+        `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
+          (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
+        `            imported and compared; nothing here is written${already ? '' : ' but the tag'}`,
+        `tag         ${FINAL_TAG} on ${tagging.head.slice(0, 12)}, ` +
+          (already
+            ? `there already${tagging.tagged.remote === tagging.head ? ' and on origin' : ''}: checked, left as it is`
+            : 'made here and not pushed'),
+        ...tagging.warnings.map((w) => `            ${w}`),
+        ...(tagging.edited.length === 0
+          ? []
+          : [
+              "tracked files that differ from HEAD, to be flip day's export (each is checked against a fresh export before anything is armed):",
+              ...tagging.edited.map((file) => `            ${file}`),
+            ]),
+        ...(tagging.untracked.length === 0
+          ? []
+          : [
+              'untracked under content/ and learn/ (imported, so in the database and its export; not in the tag):',
+              ...tagging.untracked.map((file) => `            ${file}`),
+            ]),
+      ];
+    };
+
+    if (checkout !== null) {
+      const git = await describeCheckout(checkout);
+      report.checkout = { path: checkout, tagWorktree: confirmed.tagWorktree, ...git };
+      if (git.status === null) throw new Refusal(`git status failed in ${checkout}; ${day} needs to see the tree it imports.`);
+    }
+    if (real) {
+      const git = report.checkout;
       const lines = [];
       if (cutover) {
-        // Everything the cut-over needs of the database and the checkout is
-        // read before the confirmation, so a run that cannot finish never starts.
-        const flipped = await flippedTypes(database, maintenance);
-        const missing = FLIP_ORDER.filter((type) => !flipped.includes(type));
-        if (missing.length > 0) {
-          throw new Refusal(
-            `${database} does not own ${missing.join(', ')} yet: the cut-over comes after flip day ` +
-              `(node scripts/flip-rehearsal.mjs --real --database ${database} --checkout ${checkout}).`,
-          );
-        }
-        const tagging = await tagProblems(checkout, { remote: 'origin' });
-        if (tagging.problems.length > 0) throw new Refusal(tagging.problems.join('\n'));
         lines.push(
           `the cut-over against ${redact(url)}, in place: every type flipped already.`,
-          `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
-            (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
-          '            imported and compared; nothing here is written but the tag',
-          `tag         ${FINAL_TAG} on ${tagging.head.slice(0, 12)}, made here and not pushed`,
-          ...tagging.warnings.map((w) => `            ${w}`),
-          ...(tagging.untracked.length === 0
-            ? []
-            : [
-                'untracked under content/ and learn/ (imported, so in the database and its export; not in the tag):',
-                ...tagging.untracked.map((file) => `            ${file}`),
-              ]),
+          ...(await cutoverPreflight(git, database)),
           `blob store  ${report.blobRoot}`,
           `backup      ${join(kept, `${database}-precutover-<UTC>.dump`)} (pg_dump -Fc, before anything else)`,
           `waiver      ${WAIVABLE}, if it has violators: you will be asked why`,
           `steps       ${steps.map((s) => s.name.replace(/^cut-over: /, '')).join('; ')}`,
         );
       } else {
+        const edited = git.status.filter((line) => !line.startsWith('??'));
+        if (edited.length > 0) {
+          throw new Refusal(
+            `content/ or learn/ has changes to tracked files in ${checkout}:\n  ${edited.join('\n  ')}\n` +
+              'Commit or stash them first: the exports rewrite files here, and undoing a failed run restores these folders from HEAD.',
+          );
+        }
         const status = git.status.length === 0 ? ['            clean'] : git.status.map((line) => `            ${line}`);
         lines.push(
           `flip day against ${redact(url)}, in place.`,
@@ -1064,6 +1246,28 @@ async function main(argv) {
         );
       }
       await confirm(database, lines, stopping.signal, day);
+      if (cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-export-'));
+    } else if (inPlace) {
+      // The owner's cut-over, rehearsed: a copy of a database flip day ran
+      // on, and the worktree it ran from, read in place.
+      const lines = await cutoverPreflight(report.checkout, from);
+      state.exportDir = join(scratch, 'export');
+      // The store flip day filled, as the environment names it unless
+      // --blob-store says otherwise: read, never written.
+      const store = opts['blob-store'] === undefined ? await blobRoot(process.env) : resolve(tilde(opts['blob-store']));
+      if (!existsSync(store)) {
+        throw new Refusal(`the blob store ${store} does not exist; name the one flip day filled with --blob-store <dir>.`);
+      }
+      // Its .owner names the database flip day ran on, and the catalog
+      // refuses to write into a store another database owns; the copy
+      // claims its own copy on its first write, and a half-written .tmp is
+      // nobody's.
+      const skip = new Set([join(store, '.owner'), join(store, '.tmp')]);
+      cpSync(store, report.blobRoot, { recursive: true, mode: constants.COPYFILE_FICLONE, filter: (file) => !skip.has(file) });
+      lines.push(`blob store  a copy of ${store}`);
+      report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
+      say(`copied ${from} into ${database} (${report.copy.method}); blobs under ${report.blobRoot}`);
+      for (const line of lines) say(line);
     } else {
       if (cutover) {
         // Flip day's steps run first on the copy, and they need blobs this
@@ -1072,7 +1276,8 @@ async function main(argv) {
         if (flipped.length > 0) {
           throw new Refusal(
             `${from} owns ${flipped.join(', ')} already, and a --cutover rehearsal runs flip day first, into a temp blob ` +
-              'store. Rehearse from an unflipped database: restore the pre-flip dump into a new one and pass it as --from.',
+              'store. Rehearse from an unflipped database (restore the pre-flip dump into a new one and pass it as --from), ' +
+              `or rehearse the cut-over alone on the worktree flip day ran from: --cutover --from ${from} --checkout <dir>.`,
           );
         }
         state.exportDir = join(scratch, 'export');
@@ -1089,7 +1294,6 @@ async function main(argv) {
       report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
       say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${report.blobRoot}`);
     }
-    if (real && cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-export-'));
 
     for (const step of steps) {
       if (report.interrupted) break;
@@ -1136,6 +1340,8 @@ async function main(argv) {
         waivers: state.waivers,
         tag: state.tag,
         untracked: state.untracked,
+        rewrites: state.rewrites,
+        exported: state.exported,
       };
     }
   } finally {
@@ -1149,22 +1355,32 @@ async function main(argv) {
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.off(signal, onSignal);
   }
 
-  if (report.ok && cutover) {
-    // What the operator does next. Nothing here pushes or merges: the tag and
-    // the merge are a person's to make.
-    report.next = real
-      ? [
-          `git -C ${shellQuote(checkout)} push origin ${FINAL_TAG}`,
-          'gh pr merge p3/cutover --squash --delete-branch',
-          `git -C ${shellQuote(checkout)} pull --ff-only`,
-        ]
-      : [];
+  if (report.ok && cutover && checkout !== null) {
+    // What the operator does next, printed and never run: the tag's push is
+    // a person's to make, and so is keeping flip day's export in git.
+    const q = shellQuote;
+    const git = report.checkout;
+    // Whenever origin was not seen to hold it: a tag made before the run
+    // and never pushed keeps nothing once the checkout is gone.
+    if (state.tagged.remote !== state.tag.commit) {
+      report.next.push(`git -C ${q(checkout)} push origin ${FINAL_TAG}`);
+    }
+    if (state.exported.length > 0) {
+      const files = state.exported.map(q).join(' ');
+      if (git.branch === 'HEAD') report.next.push(`git -C ${q(checkout)} switch -c content-files-export`);
+      // The commit names the files too, so anything else already staged in
+      // the checkout stays out of what is presented as flip day's export.
+      report.next.push(
+        `git -C ${q(checkout)} add -- ${files}`,
+        `git -C ${q(checkout)} commit -m ${q('The export flip day wrote into content/ and learn/')} -- ${files}`,
+      );
+    }
   }
   if (opts.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else {
     say('');
     const passed = report.steps.filter((s) => s.ok).length;
-    const name = cutover ? (real ? 'the cut-over' : 'flip day and the cut-over') : 'flip day';
+    const name = cutover ? (checkout !== null ? 'the cut-over' : 'flip day and the cut-over') : 'flip day';
     say(
       `${report.ok ? `${name} passed` : report.interrupted ? `${name} interrupted` : `${name} stopped`}: ` +
         `${passed} of ${total} steps` +
@@ -1177,25 +1393,39 @@ async function main(argv) {
           ? `kept ${database} and ${scratch}. Drop them with: ${join(PG_BIN, 'dropdb')} ${database} && rm -rf ${scratch}`
           : `dropped ${database}${report.ok ? '' : '; rerun with --keep to look at it'}`,
       );
-    } else if (report.ok && cutover) {
-      const backup = report.backups.at(-1);
-      say(`tagged ${FINAL_TAG} at ${state.tag.commit} in ${checkout}. It is not pushed. Next, in this order:`);
-      say(`  1. ${report.next[0]}`);
-      say(`  2. ${report.next[1]}    (the cut-over PR: it removes content/ and learn/ from the tree)`);
-      say(`  3. ${report.next[2]}`);
-      if (state.untracked.length > 0) {
-        say(`the pull leaves these untracked files behind, which are in the database and its export; remove them once checked:`);
-        for (const file of state.untracked) say(`     ${file}`);
+    }
+    if (report.ok && cutover && checkout !== null) {
+      say(
+        state.tag.made
+          ? `tagged ${FINAL_TAG} at ${state.tag.commit} in ${checkout}. It is not pushed.`
+          : `${FINAL_TAG} was already on ${state.tag.commit}, the commit compared; it is left as it is.`,
+      );
+      if (report.next.length > 0) {
+        say(real ? 'Next, in this order (printed here, never run):' : 'The real run would print next, in this order:');
+        report.next.forEach((command, i) => say(`  ${i + 1}. ${command}`));
       }
-      say(`the backup from before the cut-over is ${backup.path}; keep it until the app has been checked after the merge`);
-    } else if (report.ok) {
+      if (state.exported.length > 0) {
+        say(
+          `The git add and commit keep flip day's export (${state.exported.length} file(s) HEAD holds in other bytes, or not at all) ` +
+            `on a branch of ${checkout}. They are optional: the database holds the same content, and the tag holds it in HEAD's bytes.`,
+        );
+      }
+      if (real) {
+        const backup = report.backups.at(-1);
+        if (state.untracked.length > 0) {
+          say('these untracked files are in the database and its export, and not in the tag; remove them once the app has been checked:');
+          for (const file of state.untracked) say(`     ${file}`);
+        }
+        say(`the backup from before the cut-over is ${backup.path}; keep it until the app has been checked`);
+      }
+    } else if (real && report.ok) {
       say('the exports rewrote files in this checkout: `git status content learn` lists them, to commit');
       say(`the backup from before step 1 is ${report.backup.path}; keep it until the app has been checked on the flipped database`);
-    } else if (report.backup !== null) {
+    } else if (real && report.backup !== null) {
       say(`${database} may be part-way through ${day}. The backup from before it is ${report.backup.path}.`);
       say(`To put the database back as it was: ${report.backup.restore}`);
       if (!cutover) say('and `git checkout -- content learn` for any file an export rewrote (they had no edits of their own when it started).');
-    } else {
+    } else if (real) {
       say(`nothing was changed: the run stopped before the backup, and every other step waits for it.`);
     }
   }

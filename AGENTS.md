@@ -643,10 +643,18 @@ not have to be worked out again.
   `--real --database <name> --checkout <dir>` runs the same steps against
   that database in place, from the checkout the script sits in only, with the
   backup at `~/<name>-preflip-<time>.dump`, and `--real --cutover` (#157) is
-  the cut-over itself, run from a checkout that still had `content/` and
-  `learn/` (docs/CONTENT-MIGRATION.md, "Phase 3: cut-over"). Both ask for the
-  name to be typed on a terminal and have no `--yes`, so they are the owner's
-  to run, never an agent's.
+  the cut-over itself. The owner tagged `content-files-final` on `a0afd93`
+  and ran flip day from a worktree at it, so the cut-over runs from the main
+  checkout's script with `--checkout` at that worktree: `--cutover` alone
+  accepts a `--checkout` that is a worktree of the same repository at the
+  tag, accepts the tag already on the commit it compares, and accepts flip
+  day's export in the tree (each tracked edit must be byte for byte what a
+  fresh export writes, and `HEAD`'s own files must have parity too); the
+  script at the tag refuses both. `--cutover --checkout <worktree>` without
+  `--real` rehearses that on copies of the database and its blob store.
+  docs/CONTENT-MIGRATION.md, "After the merge", has the order. Both `--real`
+  runs ask for the name to be typed on a terminal and have no `--yes`, so
+  they are the owner's to run, never an agent's.
 - **The nightly export is the readable backup, and it lives outside the
   checkout.** `npm run export:nightly` (`scripts/nightly-export.mjs [--keep N]
   [--json]`) runs `catalog export --out` into

@@ -342,6 +342,26 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     }
   });
 
+  it("says a dry run's bytes-cap answers are an estimate when it plans posters, whose sizes it cannot know", async () => {
+    const saved = process.env["SELF_LEARN_OWNER_BYTES_CAP"];
+    process.env["SELF_LEARN_OWNER_BYTES_CAP"] = "1000000000";
+    try {
+      const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
+      expect(dry.items.filter((i) => i.action === "would-make")).toHaveLength(1);
+      expect(dry.bytesCapEstimate).toMatch(/SELF_LEARN_OWNER_BYTES_CAP answers are an estimate: the 1 poster\(s\) this run would cut/);
+      // No posters planned (no ffmpeg), or no bytes cap: an exact answer, and nothing said.
+      expect((await uploadAssets(scratch.db, options({ dryRun: true, ffmpeg: null }))).bytesCapEstimate).toBeNull();
+      delete process.env["SELF_LEARN_OWNER_BYTES_CAP"];
+      expect((await uploadAssets(scratch.db, options({ dryRun: true }))).bytesCapEstimate).toBeNull();
+      // Nor on a real run, which measures each poster it cuts.
+      process.env["SELF_LEARN_OWNER_BYTES_CAP"] = "1000000000";
+      expect((await uploadAssets(scratch.db, options())).bytesCapEstimate).toBeNull();
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_BYTES_CAP"];
+      else process.env["SELF_LEARN_OWNER_BYTES_CAP"] = saved;
+    }
+  });
+
   it("counts a key once on a dry run, as a real run's row would", async () => {
     // A second deliverable with the video's bytes: one key, one upload.
     const COPY_PATH = "out/algorithms/demo/copy.mp4";

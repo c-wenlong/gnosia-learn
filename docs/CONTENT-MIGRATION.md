@@ -21,7 +21,9 @@ go-live step and phase 0 started at 0.2. The owner's `self_learn` database
 was still at `0009` and unflipped when the cut-over merged: flip day, run from
 a worktree at `content-files-final` ("After the merge", under
 [Phase 3: cut-over](#phase-3-cut-over)), backs it up, migrates it, flips every
-type and applies 0013, and the strict flips after it arm or waive every rule.
+type and applies 0013, and `--cutover`, run from the main checkout's script
+pointed at that worktree, arms or waives every rule and saves the parity
+report.
 Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
 working tree, `~/.self-learn/manimkc/out` and the local `self_learn` database;
@@ -1844,7 +1846,9 @@ One PR, one agent, Opus.
       tag, so every historical version stays reachable (open question 4).
       Built (#157), but the owner merged this phase before flip day, so the
       tag is made by hand on `a0afd93`, the last commit with `content/` and
-      `learn/` (step 1 below), rather than by `--cutover`.
+      `learn/` (step 1 below), and `--cutover` checks it rather than making
+      it: a tag already on the commit it compares is accepted, one anywhere
+      else refused ("Cut-over day, in the order the owner ran it", below).
 - [x] Remove `content/` and `learn/`, keeping `seed/`. `CONTENT_SOURCE`
       defaults to `db`, and `files` survives only as a test override.
 - [x] Docs: AGENTS.md (the pipeline table, the tldrawkc rules about
@@ -1870,7 +1874,8 @@ merge this phase before flip day, so the owner's database (at 0009, nothing
 flipped) meets code that has no `content/` or `learn/` and no longer holds
 0013 back; until step 3 the web app refuses every content page, which is the
 consequence accepted. Flip day therefore runs from the last commit that has
-the files, which is also the commit the tag keeps:
+the files, which is also the commit the tag keeps, and the cut-over runs from
+the main checkout's script, pointed at that commit's worktree:
 
 1. The tag, on `a0afd93` (#152, the last commit with `content/` and
    `learn/`):
@@ -1880,24 +1885,39 @@ the files, which is also the commit the tag keeps:
    nothing: `git worktree add ~/self-learn-files content-files-final`, copy
    every untracked file under the main checkout's `content/` and `learn/`
    into the same place in it, then `npm ci` there.
-3. Flip day from that worktree, whose code still holds 0013 until the
-   upload: `MANIMKC_ROOT=<main checkout>/tools/manimkc
+3. Flip day from that worktree, with its own script, whose code still holds
+   0013 until the upload: `MANIMKC_ROOT=<main checkout>/tools/manimkc
    TLDRAWKC_ROOT=<main checkout>/tools/tldrawkc node
    scripts/flip-rehearsal.mjs --real --database self_learn --checkout
    ~/self-learn-files`. It backs up, migrates to 0012, imports (on a
    throwaway copy first), flips the six types, uploads, and applies 0013.
-4. Arm the rules, from the same worktree while it is the root the flips
-   recorded: `npm run catalog -- flip <type> --strict` for topics, tags,
-   concepts, sessions and diagrams, and `npm run catalog -- flip courses
-   --strict --waive item-has-concept --reason "<why>"`; `npm run catalog --
-   doctor` must then list no rule as unsettled. `--cutover` is not the tool
-   in this order: its tag step would refuse the tag made in step 1, and flip
-   day's exports leave tracked edits in the worktree that it refuses too.
-5. In the main checkout, on `main`: `git pull`, `npm run catalog -- migrate`
-   (nothing left to apply), and check the app. Then remove the untracked
-   leftovers under `content/` and `learn/` and the worktree
-   (`git worktree remove --force ~/self-learn-files`); the rows, the backup
-   and the tag hold everything they held.
+   Its exports leave edits in the worktree: five notes' frontmatter and two
+   `.tldr` files' key order (tracked), and the tailscale pair written again
+   (untracked). Leave them as they are; step 4 checks them.
+4. The cut-over, from the main checkout, on `main`: `git pull --ff-only &&
+   npm ci`, then `node scripts/flip-rehearsal.mjs --real --cutover --database
+   self_learn --checkout ~/self-learn-files`. The script at the tag cannot do
+   this step (it refuses a tag that exists and a tree the exports edited), so
+   the main checkout's runs it, and accepts a `--checkout` other than its own
+   checkout only when it is a worktree of the same repository at the tag. It
+   backs up to `~/self_learn-precutover-<UTC>.dump`, imports (removing
+   nothing, skipping all six types), checks every tracked edit is flip day's
+   export byte for byte and HEAD's own files have parity too, saves
+   `~/self_learn-cutover-<UTC>.parity.json`, waives `item-has-concept` with a
+   reason typed on the terminal, runs `flip <type> --strict` for all six, and
+   finds the tag already on `a0afd93` and leaves it. It ends by printing the
+   `git switch -c`, `git add` and `git commit` that would keep flip day's
+   export on a branch of the worktree; running them is optional and the
+   owner's. To see it pass first, the same line without `--real` and
+   `--database` and with a `--waive-reason` rehearses it on a copy of
+   `self_learn` and of the blob store `SELF_LEARN_HOME` names, reading the
+   worktree in place and writing nothing there.
+5. In the main checkout: `npm run catalog -- migrate` (nothing left to
+   apply), and check the app. Then remove the untracked leftovers under
+   `content/` and `learn/` and the worktree
+   (`git worktree remove --force ~/self-learn-files`, which drops flip day's
+   uncommitted export with it); the rows, the backups, the parity report and
+   the tag hold everything they held.
 
 **Built** (branch `p3/cutover`, #159, merged before flip day at the owner's
 call; the operator half is #157):
@@ -1978,6 +1998,8 @@ call; the operator half is #157):
   `item-has-concept` waiver with a reason typed on the terminal (every other
   rule must be clean), `flip <type> --strict` for all six, doctor's
   `unsettled` empty, and `git tag content-files-final` on HEAD, not pushed.
+  Since the owner tagged first, it runs from the main checkout against the
+  tag's worktree, and accepts the tag and flip day's export there (below).
 - **The plugin.** `~/.quiver/plugins/learning/learning`, branch
   `content-migration-p3` (version 0.5.0, stacked on `content-migration-d`,
   not pushed yet): every `learn/` path is gone from the skills and agents, the
@@ -1988,7 +2010,10 @@ call; the operator half is #157):
 **Where the plan was wrong.** "One PR, one agent" did not hold: the operator
 half had to ship as its own PR (#157) against `main`, because `--real` runs
 only from the checkout the script sits in, and this phase's branch has no tree
-to import.
+to import. Then the owner merged the code half first, so `--cutover` as #157
+built it could not run at all in the order that followed: the tag existed
+before it, and flip day's exports left tracked edits it refused. A third PR
+taught it that order (below).
 
 **Done when:** a fresh clone with only `seed/` passes the local gate, the
 production site and a `/learn` session both work against the cloud database,
@@ -2004,13 +2029,17 @@ shipped first, on its own, as `node scripts/flip-rehearsal.mjs --cutover`
 (#157): `--real` refuses to run from any checkout but the one the script sits
 in, and the cut-over PR's own branch has no tree left to import. The owner
 then merged #159 first, so the order that applies is "After the merge" above,
-which does the same work by hand from a worktree at the tag.
+where the tag comes first and `--cutover` runs from the main checkout against
+a worktree at it; the section after this one says what changed for that.
 
 `--real --cutover --database <name> --checkout <dir>` has flip day's guards
-(the named database, the checkout the script is in, a terminal to type the
-name on, no `--yes`) and refuses up front unless every type is flipped, the
-tag does not exist here or on `origin`, and no tracked file under `content/`
-or `learn/` differs from `HEAD`. Its steps, each checked before the next:
+(the named database, a terminal to type the name on, no `--yes`), and a
+`--checkout` that is either the checkout the script is in or a worktree of
+the same repository at `content-files-final`. It refuses up front unless
+every type is flipped, the tag is absent or already on `HEAD` (here and on
+`origin`), and no tracked file under `content/` or `learn/` differs from
+`HEAD` other than by a change in place, which must then be flip day's export
+(checked in step 4). Its steps, each checked before the next:
 
 0. A backup, `~/<name>-precutover-<UTC time>.dump`, checked as flip day's is.
 1. `catalog migrate`, which must hold nothing: the cut-over PR stops treating
@@ -2025,7 +2054,12 @@ or `learn/` differs from `HEAD`. Its steps, each checked before the next:
    quotes. A parity mismatch, or a file the export writes in other bytes than
    the tree holds, stops the run and says how to catch the tree up: export
    into it, commit, run again (the database may have moved on since flip day),
-   so the tag holds the export itself.
+   so the tag holds the export itself. Each tracked edit must be a file
+   changed in place holding exactly what the export writes there (flip day's
+   export: the files `catalog flip` listed as an export's rewrites), and when
+   there are any, `HEAD`'s own files, with the untracked ones beside them, are
+   written out and held to the database by `catalog parity` too, since the
+   tag keeps `HEAD`'s bytes; the report lists the edits and that result.
 5. `catalog doctor`, and a decision per completeness rule: a clean rule is
    armed by the strict flips; `item-has-concept` with violators is waived
    with a reason typed on the terminal, an empty one refused; any other rule
@@ -2038,13 +2072,17 @@ or `learn/` differs from `HEAD`. Its steps, each checked before the next:
    in step 4: a write during the strict flips (a session logged) would
    otherwise leave the tag holding files older than the database.
 9. `git tag content-files-final` on that commit, checked again first (and
-   refused if `HEAD` moved), never pushed.
+   refused if `HEAD` moved, or an edit is no longer the export), never
+   pushed; or, when the tag is already on that commit, nothing.
 
-It ends by printing what the operator does next, in order: push the tag, merge
-the cut-over PR (`gh pr merge p3/cutover --squash --delete-branch`), pull. The
+It ends by printing what the operator does next, never running it: push the
+tag unless `origin` was seen to hold it on that commit, and the `git switch -c
+content-files-export`, `git add` and `git commit` (naming the same files) that
+would keep flip day's export (the tracked edits and the
+untracked files the export also writes) on a branch of the checkout. The
 untracked files under `content/` and `learn/` (the tailscale diagram) are
-listed: the import read them into the database, the tag does not hold them,
-and the pull leaves them on disk until someone removes them.
+listed: the import read them into the database, and the tag does not hold
+them.
 
 A rehearsal with `--cutover` runs flip day's steps and then these on one copy,
 tags a throwaway git repository made of the copied tree, and takes the
@@ -2064,6 +2102,75 @@ counted when phase 3 was planned), the other two rules armed, doctor with
 nothing unsettled, and the tag made. `services/catalog/test/flip-rehearsal.test.ts`
 runs the same on the seed tree and holds the refusals, and
 `scripts/lib/cutover.test.mjs` the tag's.
+
+### Cut-over day, in the order the owner ran it
+
+The owner tagged `a0afd93` and merged #159 before flip day, and ran flip day
+from a worktree at the tag with the tag's own script. `--cutover` as #157
+built it refused that order twice over: its tag step refused a tag that
+exists, and flip day's exports leave tracked edits in the worktree that it
+refused too. The script at the tag cannot be changed, so the fix is in the
+main checkout's, which runs against the worktree.
+
+- [x] `--cutover` accepts `content-files-final` already on the commit it
+      compares, here or on `origin` (an annotated tag is peeled, and on
+      `origin` its `^{}` line is asked for), and leaves it as it is; a tag on
+      any other commit is refused. `scripts/lib/cutover.mjs`, `tagProblems`
+      and `makeFinalTag`.
+- [x] Flip day's export in the tree is expected, and nothing else: up front a
+      tracked file changed in place passes and is listed (a deletion, an
+      addition or a rename refuses); at the parity step each must hold,
+      byte for byte, what a fresh export writes there, and `HEAD`'s own
+      files (with the untracked ones) must have parity too; at the tag the
+      bytes are checked once more. The report saves the list
+      (`rewrites`), anything refused (`unexpected`) and `headParity`.
+- [x] `--cutover` runs from the main checkout's script with `--checkout` at
+      the tag's worktree: a `--checkout` other than the script's own checkout
+      is accepted for the cut-over only when it is the top of a worktree of
+      the same repository (the same git common directory) whose `HEAD` is the
+      tag's commit (`tagWorktreeProblem`). Flip day's `--real` keeps the rule
+      that `--checkout` is the script's own checkout.
+- [x] The end of the run prints the `git switch -c content-files-export`,
+      `git add -- <files>` and `git commit -- <files>` for the exported files
+      (the commit names them, so nothing else already staged goes in with
+      them), and the tag push whenever `origin` was not seen to hold the tag
+      on that commit, made by this run or before it. Nothing is committed or
+      pushed.
+- [x] `--cutover --checkout <worktree>` without `--real` rehearses the owner's
+      cut-over: it copies `--from` (default `self_learn`), which must be
+      flipped already, clones the blob store `--blob-store` names (default:
+      the one `SELF_LEARN_HOME` names) into its temp one without the
+      store's `.owner` marker, so the copy claims its own and the original
+      is never written, and reads the worktree in place.
+- [x] `catalog asset upload --dry-run` says its bytes-cap answers are an
+      estimate when it plans posters (`bytesCapEstimate`), since a poster's
+      size is known only once ffmpeg cuts it.
+
+Measured 2026-09-28, the whole owner sequence on copies of `self_learn` (at
+0009), never on it: a clone of the repository, `content-files-final` made
+there on `a0afd93` (never pushed), a worktree at it with the main checkout's
+untracked tailscale pair copied in, and `npm ci` in both. Flip day, with the
+tag's script from the worktree and `--keep`: 23 of 23 steps (migrate applied
+0010 to 0012 and held 0013; the imports wrote 1,465 rows and removed none;
+the concepts flip listed 5 files an export rewrites and the diagrams flip 3;
+the uploads stored 159 objects and then none; the audit found 162 rows and
+162 objects; the last migrate applied 0013). Its export, copied into the
+worktree as `--real` would have left it, showed 7 tracked edits (five notes,
+`dot-product.tldr` and `vector-as-a-list-of-numbers.tldr`) and the untracked
+pair. Then the clone's `main` with this change, `--cutover --from <flip day's
+copy> --checkout <worktree> --blob-store <flip day's store>`: 17 of 17 steps.
+The backup was 346 KB with data for 34 tables; migrate had nothing to do; the
+imports skipped all six types and removed nothing; parity was clean (86
+topics, 8 tags, 10 courses, 32 notes, 3 logs, 6 diagram files) with 53 of 53
+exported files byte-identical in the worktree, the 7 edits all flip day's
+export, and `HEAD`'s own files clean too; `item-has-concept` was waived with
+133 violators and the other two rules armed; doctor had nothing unsettled;
+and the tag was found on `a0afd93` and left. The worktree's `git status` was
+the same before and after. A stray edit to `content/README.md` stopped it at
+the parity step, a stray edit to a note at the copy's import, and a deleted
+note before anything ran. `services/catalog/test/flip-rehearsal.test.ts` runs
+the same order on the seed in a stand-in repository, and
+`scripts/lib/cutover.test.mjs` the tag, edit and worktree checks.
 
 ## Phase 4: tenancy
 
