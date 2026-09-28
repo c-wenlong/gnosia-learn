@@ -389,14 +389,35 @@ export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Pro
     // the deletes would be deleted with the item and be in no revision.
     const [row] = await tx.select().from(curriculumItem).where(eq(curriculumItem.id, options.id)).for("update");
     if (row === undefined) throw new CourseWriteError(`no curriculum item "${options.id}" in the catalog`);
+    // A purge deletes around the seam, so it asks the seam's question itself
+    // (phase 4): another owner's item is theirs to purge, not this CLI's.
+    if (row.ownerId !== CLI_OWNER) {
+      throw new CourseWriteError(
+        `item "${options.id}" belongs to ${row.ownerId}, and this purge is for ${CLI_OWNER}. Ids are shared ` +
+          `across owners (D23 of docs/CONTENT-MIGRATION.md); nothing was deleted.`,
+      );
+    }
     if (row.archivedAt === null) {
       throw new CourseWriteError(
         `item "${options.id}" is live. Archive it first (\`catalog item archive ${options.id} --reason ...\`): ` +
           `a purge deletes, and only something already off the course path is deleted.`,
       );
     }
-    const ticks = await tx.select().from(progress).where(eq(progress.curriculumItemId, options.id)).for("update");
-    const recaps = await tx.select().from(recap).where(eq(recap.curriculumItemId, options.id)).for("update");
+    // Only the purging learner's own rows are ever deleted or copied into the
+    // revision (phase 4). Another learner's tick or recap is theirs: it keeps
+    // the item from being deleted (the foreign key restricts), and the purge
+    // says so rather than taking it.
+    const allTicks = await tx.select().from(progress).where(eq(progress.curriculumItemId, options.id)).for("update");
+    const allRecaps = await tx.select().from(recap).where(eq(recap.curriculumItemId, options.id)).for("update");
+    const ticks = allTicks.filter((r) => r.learnerId === CLI_OWNER);
+    const recaps = allRecaps.filter((r) => r.learnerId === CLI_OWNER);
+    const theirs = allTicks.length - ticks.length + (allRecaps.length - recaps.length);
+    if (theirs > 0) {
+      throw new CourseWriteError(
+        `item "${options.id}" carries ${theirs} progress or recap row(s) of other learners. A purge deletes only ` +
+          `${CLI_OWNER}'s own, and the item cannot go while theirs point at it, so it stays archived; nothing was deleted.`,
+      );
+    }
     if ((ticks.length > 0 || recaps.length > 0) && options.withLearnerData !== true) {
       const learners = [...new Set([...ticks, ...recaps].map((r) => r.learnerId))].sort();
       throw new CourseWriteError(
@@ -421,8 +442,8 @@ export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Pro
     const [revisionId] = await reserveRevisionIds(tx, 1);
     if (revisionId === undefined) throw new Error("could not reserve a revision id");
     await markSeam(tx, String(revisionId));
-    await tx.delete(progress).where(eq(progress.curriculumItemId, options.id));
-    await tx.delete(recap).where(eq(recap.curriculumItemId, options.id));
+    await tx.delete(progress).where(and(eq(progress.curriculumItemId, options.id), eq(progress.learnerId, CLI_OWNER)));
+    await tx.delete(recap).where(and(eq(recap.curriculumItemId, options.id), eq(recap.learnerId, CLI_OWNER)));
     await tx.delete(curriculumItem).where(eq(curriculumItem.id, options.id));
     await appendRevisions(tx, [
       {

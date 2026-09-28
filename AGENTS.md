@@ -217,10 +217,11 @@ Rules of engagement:
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
 - The runner serves one owner, `STUDIO_OWNER` (default `local`). Every
-  `catalog diagram` verb it spawns passes `--owner` with it, so the grid,
-  the inspector, the SVG route and a checkout see that owner's diagrams and
-  the commons' and nothing else; `services/studio/test/owner.test.ts` fails a
-  diagram verb that leaves it out. The web app names the signed-in owner in
+  `catalog diagram`, `job` and `session` verb it spawns passes `--owner` with
+  it, so the grid, the inspector, the SVG route and a checkout see that
+  owner's diagrams and the commons' and nothing else, and its jobs and
+  sessions are that owner's; `services/studio/test/owner.test.ts` fails a
+  verb that leaves it out. The web app names the signed-in owner in
   `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
   session after dropping any value a page sent, and the runner refuses a
   request naming anyone else: its queue, checkouts, cached list and agent

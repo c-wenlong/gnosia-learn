@@ -1978,6 +1978,40 @@ before 0010 each read still answers unscoped.
       **Built:** `dueReviews` lists no card on an unreadable concept, which
       covers `/today` and the streak; `openTutorSession`'s refusal of an id
       another learner holds no longer says whose it is.
+- [x] Write verbs stop going around the seam's owner check (S1).
+      **Built:** `catalog topic rename` refuses another owner's topic
+      (`foreign-owner`) before anything moves; `catalog item purge` refuses
+      another owner's item, deletes only the purging learner's own progress
+      and recaps, and refuses (the item stays archived) while another
+      learner's rows point at it.
+- [x] Links belong to their parent's owner (S2, D24).
+      **Built:** the topic writers no longer carry a link row's `owner_id`,
+      so the seam stamps every relation and mapping with its topic's owner
+      and a list holding a mixed row is repaired by the next write, not
+      refused; `catalog doctor` reports mixed rows and `doctor --fix`
+      restamps them through the seam. `course import` deletes the links a
+      file stops naming through the seam (`deleteContent`, which refuses
+      `foreign-owner`), and only the importer's own: another owner's link
+      loses the module's pointer and stays.
+- [x] Job and session verbs act only for their owner (S8).
+      **Built:** every `catalog job` verb takes `--owner` (default `local`)
+      and names the owner in its where clauses, so another owner's job is
+      "no job"; `enqueue` stamps the owner, refuses a key another owner used
+      without handing their job back, and refuses a topic the owner cannot
+      read or a slug another owner's diagram holds. `diagram put --job`
+      finds only the writer's own job. `ensureSession` refuses an id another
+      learner holds instead of adopting it, and `endSession` moves only the
+      learner's own. The studio passes its owner on every job and session
+      verb.
+- [x] No write points at a row its owner cannot read (nits).
+      **Built:** the seam checks every column that names another content
+      entity, a row's (`concept.topic_slug`, a module's parent) and a
+      link's far end (`ROW_FAR_ENDS` and `LINK_FAR_ENDS` in
+      `content/entities.ts`), and refuses a new one naming a row neither the
+      writer's nor the commons'; one the entity already points at is carried
+      over and reported by `catalog doctor`. `topic relate`, `topic add
+      --relation`, `concept add --topic` and a note's `requires:` refuse
+      another owner's topic or concept with the sentence a missing one gets.
 - [x] The whole-database readers are listed (S11, this slice's half).
       **Built:** `services/catalog/SCHEMA.md` "Owners", and the gotcha in
       `AGENTS.md`: which CLI verbs read every owner on purpose, and that a
@@ -2367,6 +2401,34 @@ produces whoever owns them, and its upsert would stamp a colliding row
 `local`. Before a second owner's first row exists, the import has to be
 restricted to the importing owner's rows (its stale keys, its link clearing and
 its conflicts), or refuse while any row belongs to another owner.
+
+### D24. A link belongs to its parent's owner
+
+**Verdict:** a link row (a relation, a mapping, a module's topic or link, an
+item's concept, a prerequisite) is part of the entity at its owning end, and
+belongs to that entity's owner. `topic_relation` and `manimkc_topic` carry an
+`owner_id` of their own, and it must equal their topic's: the seam stamps the
+write's owner on every link row it puts back and refuses one that names
+another, so replacing a parent's links by parent id deletes only that
+owner's rows, and the mixed state (a row under one owner's topic stamped with
+another's name) cannot arise through any writer. One that arose around the
+seam is reported by `catalog doctor` and repaired by `catalog doctor --fix`,
+which writes each such topic again through the seam as its owner. A link's
+far end is a separate question with its own rule: a new link may name only a
+row its owner may read (their own or the commons'); one already there is
+carried over and reported, never deleted. **Why:** the phase 4 review seeded a
+second owner's rows under the owner's topic, and deletion by parent id then
+removed them on `topic relate --remove` while any add to that list was refused
+as naming another owner, locking the owner out of their own topic. Either the
+parent owns its links, or every link write has to be split by owner; the
+first is what the schema already said (the owner rule above: "a link whose
+owner disagrees with its parent is a state the schema should not be able to
+express"). **Rejected:** a link owned by whoever wrote it (a topic's relation
+list would then be several owners' lists, each needing its own revision
+history); deleting mixed or unreadable links automatically (a decision about
+somebody's content, made by a maintenance command); a database constraint
+(a trigger comparing every link table's parent owner is heavy for a state no
+writer produces, and would refuse the repair's own first step).
 
 ## Decided by the owner
 

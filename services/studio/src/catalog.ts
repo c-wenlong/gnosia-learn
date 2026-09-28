@@ -131,6 +131,7 @@ export function sessionStart(input: SessionStartInput): Promise<CatalogResult> {
     input.title,
     ...(input.goal === undefined ? [] : ["--goal", input.goal]),
     ...(input.agentSessionId === undefined ? [] : ["--agent-session", input.agentSessionId]),
+    ...owned(),
   ]);
 }
 
@@ -143,16 +144,17 @@ export function sessionEnd(id: string, state: string, error?: string): Promise<C
     "--state",
     state,
     ...(error === undefined ? [] : ["--error", error.slice(0, 500)]),
+    ...owned(),
   ]);
 }
 
 /** `job enqueue --brief <file>`. The file is the job workspace's own brief.json. */
 export function jobEnqueue(briefFile: string): Promise<CatalogResult> {
-  return catalog(["job", "enqueue", "--brief", briefFile]);
+  return catalog(["job", "enqueue", "--brief", briefFile, ...owned()]);
 }
 
 export function jobClaim(jobId: string, runner: string, sessionId: string): Promise<CatalogResult> {
-  return catalog(["job", "claim", "--job", jobId, "--runner", runner, "--session", sessionId]);
+  return catalog(["job", "claim", "--job", jobId, "--runner", runner, "--session", sessionId, ...owned()]);
 }
 
 export interface JobFinishInput {
@@ -193,6 +195,7 @@ export function jobFinish(input: JobFinishInput): Promise<CatalogResult> {
       : ["--cost-source", input.costSource]),
     ...(input.errorKind === undefined ? [] : ["--error-kind", input.errorKind]),
     ...(input.error === undefined ? [] : ["--error", input.error.slice(0, 500)]),
+    ...owned(),
   ]);
 }
 
@@ -205,7 +208,7 @@ export function jobFinish(input: JobFinishInput): Promise<CatalogResult> {
  * the job answering Reindex, which runs this again.
  */
 export function jobAccept(jobId: string): Promise<CatalogResult> {
-  return catalog(["job", "accept", "--job", jobId]);
+  return catalog(["job", "accept", "--job", jobId, ...owned()]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -213,11 +216,12 @@ export function jobAccept(jobId: string): Promise<CatalogResult> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `--owner`, on every diagram verb: the catalog then lists, shows and checks
- * out only what this studio's owner may read (their own diagrams and the
- * commons'), and writes as them (phase 4). Without it the CLI would read as
- * its own default owner, which is only the same person by coincidence.
- * `test/owner.test.ts` fails a diagram verb here that leaves it out.
+ * `--owner`, on every diagram, job and session verb: the catalog then lists,
+ * shows and checks out only what this studio's owner may read (their own
+ * diagrams and the commons'), acts only on their jobs and sessions, and writes
+ * as them (phase 4). Without it the CLI would act as its own default owner,
+ * which is only the same person by coincidence. `test/owner.test.ts` fails a
+ * verb here that leaves it out.
  */
 function owned(): string[] {
   return ["--owner", studioOwner()];
@@ -277,11 +281,11 @@ export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
 }
 
 export function jobDiscard(jobId: string): Promise<CatalogResult> {
-  return catalog(["job", "discard", "--job", jobId]);
+  return catalog(["job", "discard", "--job", jobId, ...owned()]);
 }
 
 export function jobShow(jobId: string): Promise<CatalogResult> {
-  return catalog(["job", "show", "--job", jobId]);
+  return catalog(["job", "show", "--job", jobId, ...owned()]);
 }
 
 /** `catalog status`, used by `/api/health` to say whether Postgres is answering. */

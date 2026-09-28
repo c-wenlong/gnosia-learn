@@ -18,16 +18,15 @@ import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { renderType } from "./export";
 import { PositionGapError, placePositions } from "./positions";
-import {
-  appendRevisions,
-  latestRevisions,
-  lockEntity,
-  markSeam,
-  reserveRevisionIds,
-} from "./revisions";
+import { latestRevisions, lockEntity } from "./revisions";
 import { COMPLETENESS_RULES, triggerStates } from "./rules";
-import { readSnapshots } from "./snapshot";
-import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import {
+  ContentWriteError,
+  deleteContent,
+  writeContents,
+  type WriteContentInput,
+  type WriteContentResult,
+} from "./write";
 import { assertInStep, type ExportedType, writeThrough } from "./write-through";
 import { CLI_OWNER } from "./scope";
 
@@ -391,7 +390,22 @@ async function plan(
               )
           ).map((row) => row.id as string),
         );
-  const orphans = candidates.filter((id) => !stillHeld.has(id)).sort();
+  // Only the importer's own links become orphans (phase 4). A link another
+  // owner holds that a module of this course pointed at loses that pointer,
+  // which is the module's (D24), and is left where it is: it is not this
+  // course's to delete.
+  const mine =
+    candidates.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await db
+              .select({ id: asset.id })
+              .from(asset)
+              .where(and(inArray(asset.id, candidates), eq(asset.ownerId, CLI_OWNER)))
+          ).map((row) => row.id),
+        );
+  const orphans = candidates.filter((id) => !stillHeld.has(id) && mine.has(id)).sort();
 
   // Sparse positions (D22), placed the way the courses indexer places them,
   // so a later `catalog import` of the same tree keeps every number.
@@ -773,9 +787,11 @@ async function lockAll(db: CatalogDatabase, keys: readonly (readonly [RevisionEn
 }
 
 /**
- * Delete entities through the seam, each with a `delete` revision holding its
- * last state. For the curated links an import leaves pointing nowhere; the
- * caller holds their locks.
+ * Delete the curated links an import leaves pointing nowhere, through the
+ * seam (`deleteContent`), each with a `delete` revision holding its last
+ * state. The caller holds their locks. The seam refuses a link another owner
+ * holds; `plan` never names one, since only the importer's own links become
+ * orphans.
  */
 async function deleteAssets(
   db: CatalogDatabase,
@@ -783,35 +799,26 @@ async function deleteAssets(
   expected: ReadonlyMap<string, number>,
   by: { author: string; reason: string },
 ): Promise<EntityChange[]> {
-  if (ids.length === 0) return [];
-  const reads = await readSnapshots(db, "asset", ids);
-  const latest = await latestRevisions(db, "asset", ids);
   const changes: EntityChange[] = [];
   for (const id of ids) {
-    const read = reads.get(id);
-    if (read === undefined) continue;
-    const previous = latest.get(id);
-    if ((previous?.id ?? null) !== (expected.get(`asset ${id}`) ?? null)) {
-      throw new CourseWriteError(`asset "${id}" changed while this import ran. Run it again; nothing was written.`);
-    }
-    const [revisionId] = await reserveRevisionIds(db, 1);
-    if (revisionId === undefined) throw new Error("could not reserve a revision id");
-    await markSeam(db, String(revisionId));
-    await db.delete(asset).where(eq(asset.id, id));
-    await appendRevisions(db, [
-      {
-        id: revisionId,
+    let deleted: { revisionId: number } | null;
+    try {
+      deleted = await deleteContent(db, {
         type: "asset",
-        entityId: id,
-        read,
-        latest: previous,
-        op: "delete",
-        authorKind: "person",
+        id,
+        owner: CLI_OWNER,
+        base: expected.get(`asset ${id}`) ?? null,
         author: by.author,
+        authorKind: "person",
         reason: by.reason,
-      },
-    ]);
-    changes.push({ type: "asset", id, op: "delete", revisionId });
+      });
+    } catch (error) {
+      if (error instanceof ContentWriteError && error.code === "stale-base") {
+        throw new CourseWriteError(`asset "${id}" changed while this import ran. Run it again; nothing was written.`);
+      }
+      throw error;
+    }
+    if (deleted !== null) changes.push({ type: "asset", id, op: "delete", revisionId: deleted.revisionId });
   }
   return changes;
 }

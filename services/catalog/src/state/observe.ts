@@ -466,7 +466,7 @@ async function closeInTransaction(
     }
 
     await appendEvent(tx, { at: now.toISOString(), type: "session-close", session: id, concepts }, learnerId);
-    const { moved } = await endSession(tx, id, "closed");
+    const { moved } = await endSession(tx, id, "closed", {}, learnerId);
     return { ...summary, closed: moved };
   }
 }

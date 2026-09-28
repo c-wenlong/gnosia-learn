@@ -342,8 +342,9 @@ why the UI still lives in `apps/web` and how it stays out of production.
 
 **One owner per runner** (phase 4 of `docs/CONTENT-MIGRATION.md`). The runner
 serves `STUDIO_OWNER`, `local` unless set, and passes it as `--owner` to every
-`catalog diagram` verb, so the catalog lists, shows, checks out and writes only
-what that owner may (their diagrams and the commons'). The app's server names
+`catalog diagram`, `job` and `session` verb, so the catalog lists, shows,
+checks out and writes only what that owner may (their diagrams and the
+commons'), and enqueues, claims and finishes only that owner's jobs. The app's server names
 the signed-in owner in `x-self-learn-owner` on every call, the proxy dropping
 any value a page sent first, and the runner answers 403 to a request naming
 anyone else. It refuses rather than scopes because nothing the runner holds is

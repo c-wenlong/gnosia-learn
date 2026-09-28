@@ -18,9 +18,9 @@ import { cachePath } from "../src/content-cache";
  * owner's diagrams in both directions: every `catalog diagram` call read the
  * whole database. Two things close it, and each is pinned here:
  *
- * 1. Every diagram verb the runner spawns names the owner it serves
- *    (`--owner`), so the catalog reads and writes only what that owner may. The
- *    check reads `src/catalog.ts` rather than trusting a list, so a diagram
+ * 1. Every diagram, job and session verb the runner spawns names the owner it
+ *    serves (`--owner`), so the catalog reads and writes only what that owner
+ *    may. The check reads `src/catalog.ts` rather than trusting a list, so a
  *    verb added later without it fails here.
  * 2. The API answers only that owner: a request the web app names as another
  *    owner's is refused before any route runs.
@@ -50,12 +50,26 @@ function catalogCalls(): { fn: string; args: string }[] {
 }
 
 describe("the runner's catalog calls", () => {
-  it("name the owner on every diagram verb", () => {
-    const diagramCalls = catalogCalls().filter((call) => /^\[\s*"diagram"/.test(call.args));
-    expect(diagramCalls.map((call) => call.fn).sort()).toEqual(
-      ["diagramCheckout", "diagramCommit", "diagramList", "diagramPut", "diagramShow"].sort(),
+  it("name the owner on every diagram, job and session verb", () => {
+    const owning = catalogCalls().filter((call) => /^\[\s*"(diagram|job|session)"/.test(call.args));
+    expect(owning.map((call) => call.fn).sort()).toEqual(
+      [
+        "diagramCheckout",
+        "diagramCommit",
+        "diagramList",
+        "diagramPut",
+        "diagramShow",
+        "jobAccept",
+        "jobClaim",
+        "jobDiscard",
+        "jobEnqueue",
+        "jobFinish",
+        "jobShow",
+        "sessionEnd",
+        "sessionStart",
+      ].sort(),
     );
-    for (const call of diagramCalls) {
+    for (const call of owning) {
       expect(call.args, `${call.fn} leaves the owner to the CLI's default`).toContain("...owned()");
     }
   });

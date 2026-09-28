@@ -732,7 +732,10 @@ row-level security, which waits for a second service to read the database:
 | `catalog diagram list`, `show`, `checkout`, `commit`, `put` (`src/content/diagrams.ts`) | Take `--owner` (default `CLI_OWNER`): list and show only what that owner may read, check out another owner's slug as a slug with no diagram (no file, no revision number, and a checkout already on disk left untouched), and write as that owner. The studio passes the owner its runner serves |
 | The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-self-learn-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
 | The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
-| The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
+| The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. Stamps its link rows the same way (D24: a link belongs to its parent's owner) and refuses a new far end, or a row's own reference, naming a row neither the writer's nor the commons' (`ROW_FAR_ENDS`, `LINK_FAR_ENDS` in `src/content/entities.ts`); one already there is carried over. `deleteContent` deletes through the same two checks. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
+| The verbs that write around the seam | `topic rename` refuses another owner's topic; `item purge` refuses another owner's item and deletes only the purging learner's rows; `course import` deletes only its own orphaned links, through `deleteContent` |
+| `catalog job` and `catalog session` | Take `--owner` (default `CLI_OWNER`) and act only on that owner's jobs and sessions: another owner's is "no job", an id another learner holds is refused rather than adopted. The studio passes the owner it serves |
+| `catalog doctor` | Reports D24's mixed rows (a relation or mapping whose `owner_id` is not its topic's) and links pointing at a row their owner cannot read; `--fix` restamps the mixed rows through the seam, one revision per topic |
 | `catalog export`, parity, `topic ls` | Read every owner, through an `owners` argument that is optional only on those internal functions |
 | `uploadBlob` (`src/content/blob.ts`) | With `SELF_LEARN_OWNER_BYTES_CAP` or `SELF_LEARN_OWNER_UPLOADS_PER_DAY` set, refuses an upload that would take its owner past either, measured from `blob_object` by the key's `<owner_id>/` prefix under a per-owner advisory lock. `catalog blob audit` prints each owner's totals |
 
@@ -749,8 +752,7 @@ retry.
 against the owner's database and read every owner, so none of them may ever
 sit behind the web app's door: `catalog ls`, `search`, `path`, `revisions`,
 `topic ls`, `show` (the entity itself; the asset lists it prints are scoped to
-`CLI_OWNER`), `export`, `import`, `parity`, `status`, `doctor`, `blob audit`,
-and the `job` verbs (`ls`, `show`, `claim`, `finish`, `accept`, `discard`).
+`CLI_OWNER`), `export`, `import`, `parity`, `status`, `doctor`, `blob audit`.
 Everything else a CLI prints about content is scoped to `CLI_OWNER` as the
 table above says.
 
