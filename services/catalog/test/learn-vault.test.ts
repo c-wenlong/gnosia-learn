@@ -63,7 +63,10 @@ interface PushReport {
 }
 interface Manifest {
   database: string;
-  files: Record<string, { kind: string; id: string; base: number | null; hash: string | null; pending?: { path: string } }>;
+  files: Record<
+    string,
+    { kind: string; id: string; base: number | null; hash: string | null; pending?: { path: string; base?: number | null; hash?: string } }
+  >;
 }
 
 /** A minimal tldraw document stamped with topic `alpha`, as `canvas new` writes one. */
@@ -523,6 +526,40 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     ]);
     expect(await exists(vault, unedited)).toBe(false);
     expect(await read(vault, edited)).toBe("gone, and then edited here\n");
+  }, 60_000);
+
+  it("reports a stale file's side copy that is a link before removing anything, and keeps the manifest", async () => {
+    const vault = await newVault();
+    const outside = await newVault();
+    await pull(vault);
+    const recorded = await manifest(vault);
+    const hash = createHash("sha256").update("gone\n").digest("hex");
+    // One stale file removed cleanly, and one whose side copy is a link.
+    const clean = "concepts/fixtures/aaa-gone.md";
+    const linked = "concepts/fixtures/zzz-gone.md";
+    await writeFile(path.join(vault, clean), "gone\n");
+    await writeFile(path.join(vault, linked), "gone\n");
+    await writeFile(path.join(outside, "target.md"), "not the vault's\n");
+    await symlink(path.join(outside, "target.md"), path.join(vault, "concepts/fixtures/zzz-gone.incoming.md"));
+    recorded.files[clean] = { kind: "note", id: "aaa-gone", base: 1, hash };
+    recorded.files[linked] = {
+      kind: "note",
+      id: "zzz-gone",
+      base: 1,
+      hash,
+      pending: { path: "concepts/fixtures/zzz-gone.incoming.md", base: 1, hash },
+    };
+    await writeFile(path.join(vault, ".vault.json"), JSON.stringify(recorded, null, 2));
+
+    const result = await learn("vault", "pull", "--out", vault, "--json");
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.stdout) as PullReport;
+    expect(report.problems).toEqual([expect.stringMatching(/zzz-gone\.incoming\.md is not a plain file/)]);
+    expect(report.removed).toEqual([]);
+    expect(await read(vault, clean)).toBe("gone\n");
+    expect(await read(outside, "target.md")).toBe("not the vault's\n");
+    const after = await manifest(vault);
+    expect(Object.keys(after.files)).toEqual(expect.arrayContaining([clean, linked]));
   }, 60_000);
 
   it("never overwrites a save that lands while a pull is replacing the file", async () => {

@@ -721,24 +721,46 @@ export async function pullVault(
       if (entry.kind === "readme" || live.has(rel)) continue;
       const file = path.join(dir, rel);
       const current = await readText(dir, file).catch(notPlain);
-      if (current instanceof NotPlainFile) problems.push(current.message);
-      else stale.push({ rel, entry, file, current });
+      if (current instanceof NotPlainFile) {
+        problems.push(current.message);
+        continue;
+      }
+      // Its side copy too: removing the file removes the copy, and a copy
+      // that cannot be read would otherwise stop the run halfway through the
+      // removals, with the manifest still naming what was already gone.
+      if (entry.pending !== undefined) {
+        const side = await readText(dir, path.join(dir, entry.pending.path)).catch(notPlain);
+        if (side instanceof NotPlainFile) {
+          problems.push(side.message);
+          continue;
+        }
+      }
+      stale.push({ rel, entry, file, current });
     }
     for (const { rel, entry, file, current } of problems.length > 0 ? [] : stale) {
-      if (current === null) {
-        await clearSide(dir, entry);
-        delete manifest.files[rel];
-      } else if (entry.hash !== null && sha256(current) === entry.hash && (await removeIfUnchanged(dir, file, entry.hash))) {
-        await clearSide(dir, entry);
-        delete manifest.files[rel];
-        report.removed.push(rel);
-      } else {
-        report.modified.push({
-          path: rel,
-          incoming: null,
-          note: `the database no longer has this ${STALE_NAME[entry.kind]}; your copy is kept`,
-        });
+      try {
+        if (current === null) {
+          await clearSide(dir, entry);
+          delete manifest.files[rel];
+          continue;
+        }
+        if (entry.hash !== null && sha256(current) === entry.hash && (await removeIfUnchanged(dir, file, entry.hash))) {
+          await clearSide(dir, entry);
+          delete manifest.files[rel];
+          report.removed.push(rel);
+          continue;
+        }
+      } catch (error) {
+        // Replaced by a link since it was read: reported, and the entry kept,
+        // so the manifest written below still says what is in the vault.
+        problems.push(notPlain(error).message);
+        continue;
       }
+      report.modified.push({
+        path: rel,
+        incoming: null,
+        note: `the database no longer has this ${STALE_NAME[entry.kind]}; your copy is kept`,
+      });
     }
 
     // After the removals, so a store that cannot be read costs these SVGs
