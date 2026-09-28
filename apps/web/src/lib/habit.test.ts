@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
+
 /**
  * The top bar reads the habit numbers on every page, so a database that is
  * down must cost the numbers and not the page. As in `learner-store.test.ts`,

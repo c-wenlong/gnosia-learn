@@ -19,6 +19,10 @@ import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * Concept notes and session logs as rows (Track C of
@@ -134,7 +138,7 @@ describe.skipIf(!reachable.ok)("the seed's notes and logs, imported into a scrat
   });
 
   it("reads every note and log back through the database reader as the file reader does", async () => {
-    const rows = dbSource(scratch.db);
+    const rows = dbSource(scratch.db, LOCAL);
     const files = fileSource(SEED);
     let identical = 0;
     const notes = await realNotes();

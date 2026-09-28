@@ -306,6 +306,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     delete rest["updatedAt"];
     await writeContents(scratch.db, [
       {
+        owner: "local",
         type: "asset",
         id,
         next: { row: { ...rest, blobKey: stored.key, contentHash: stored.sha256, bytes: stored.bytes }, links: { asset_topic: [{ topicSlug: "agent-tool-use-and-reasoning-loops" }] } },
@@ -326,6 +327,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     ).then((r) => r.rows);
     await writeContents(scratch.db, [
       {
+        owner: "local",
         type: "asset",
         id: poster,
         next: { row: { ...posterRest, title: "A retitled poster" }, links: { asset_derivation: [{ sourceAssetId: id }] } },
@@ -359,6 +361,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     delete rest["updatedAt"];
     await writeContents(scratch.db, [
       {
+        owner: "local",
         type: "asset",
         id,
         next: { row: { ...rest, blobKey: stored.key, contentHash: stored.sha256, bytes: stored.bytes }, links: { asset_topic: [{ topicSlug: "agent-tool-use-and-reasoning-loops" }] } },
@@ -401,6 +404,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
         delete posterRest["updatedAt"];
         await writeContents(tx, [
           {
+            owner: "local",
             type: "asset",
             id: poster,
             next: { row: { ...posterRest, blobKey: recut }, links: { asset_derivation: [{ sourceAssetId: id }] } },

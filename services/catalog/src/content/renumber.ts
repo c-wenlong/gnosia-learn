@@ -14,6 +14,7 @@ import type { CatalogDatabase } from "../db";
 import { renumbered } from "./positions";
 import { latestRevisions } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog renumber <list>`: spread one sparse list back out to
@@ -92,6 +93,7 @@ export async function renumber(db: CatalogDatabase, options: RenumberOptions): P
   const results: WriteContentResult[] = await writeContents(
     db,
     changing.map((entry) => ({
+      owner: CLI_OWNER,
       type: entry.type,
       id: entry.id,
       next: entry.next(positions.get(entry.id) as number),

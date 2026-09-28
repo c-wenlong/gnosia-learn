@@ -1,6 +1,7 @@
 import { appendEvent, assetsByIds, StateError } from "@self-learn/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
+import { ownerScope } from "@/lib/owner";
 
 /**
  * The longest asset id accepted. Ids are `<source>:<path>` and a manimkc path
@@ -35,10 +36,10 @@ export const POST = handler(
     }
     return { assetId: value };
   },
-  async (db, { assetId }) => {
-    const [row] = await assetsByIds(db, [assetId]);
+  async (db, { assetId }, owner) => {
+    const [row] = await assetsByIds(db, [assetId], ownerScope(owner));
     if (row === undefined) throw new StateError(`no asset in the catalog for "${assetId}"`);
-    const event = await appendEvent(db, { type: "watched", asset: row.id, kind: row.kind });
+    const event = await appendEvent(db, { type: "watched", asset: row.id, kind: row.kind }, owner);
     return { assetId: row.id, at: event.at };
   },
 );

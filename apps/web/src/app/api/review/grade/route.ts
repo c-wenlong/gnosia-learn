@@ -44,8 +44,9 @@ export const POST = handler(
     }
     return { conceptId, rating, requestId };
   },
-  async (db, { conceptId, rating, requestId }: { conceptId: string; rating: Rating; requestId?: string }) => {
+  async (db, { conceptId, rating, requestId }: { conceptId: string; rating: Rating; requestId?: string }, owner) => {
     const recorded = await gradeReview(db, {
+      learnerId: owner,
       conceptId,
       grade: gradeForRating(rating),
       now: new Date(),

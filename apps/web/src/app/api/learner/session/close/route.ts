@@ -25,5 +25,5 @@ export const POST = handler(
     }
     return { sessionId: body.sessionId };
   },
-  async (db, { sessionId }: { sessionId: string }) => closeTutorSession(db, sessionId),
+  async (db, { sessionId }: { sessionId: string }, owner) => closeTutorSession(db, sessionId, { learnerId: owner }),
 );

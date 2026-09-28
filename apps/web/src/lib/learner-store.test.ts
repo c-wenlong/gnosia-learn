@@ -1,3 +1,4 @@
+import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
@@ -24,7 +25,7 @@ describe("the learner store with no database", () => {
   });
 
   it("returns an empty learner snapshot rather than throwing", async () => {
-    const { state, reachable } = await store.readSnapshot();
+    const { state, reachable } = await store.readSnapshot(LOCAL_LEARNER_ID);
     expect(reachable).toBe(false);
     expect(state.completed).toEqual({});
     expect(state.knowledge).toEqual({});
@@ -32,7 +33,7 @@ describe("the learner store with no database", () => {
   });
 
   it("returns an empty knowledge base rather than throwing", async () => {
-    const { kb, reachable } = await store.readKb();
+    const { kb, reachable } = await store.readKb(LOCAL_LEARNER_ID);
     expect(reachable).toBe(false);
     expect(kb.concepts).toEqual([]);
     expect(kb.stats).toEqual({ total: 0, mastered: 0, learning: 0, untouched: 0 });

@@ -29,6 +29,7 @@ import { COMPLETENESS_RULES, triggerStates } from "./rules";
 import { readSnapshots } from "./snapshot";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 import { assertInStep, type ExportedType, writeThrough } from "./write-through";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog course import <file.yaml>` and `catalog course export <id>`: one
@@ -426,6 +427,7 @@ async function plan(
   // longer lists, and the live-slug index must not see both.
   for (const mod of archive.modules) {
     inputs.push({
+      owner: CLI_OWNER,
       type: "collection",
       id: mod.id,
       next: { row: { ...mod, archivedAt: now } },
@@ -435,6 +437,7 @@ async function plan(
   }
   for (const item of archive.items) {
     inputs.push({
+      owner: CLI_OWNER,
       type: "curriculum_item",
       id: item.id,
       next: { row: { ...item, archivedAt: now } },
@@ -445,6 +448,7 @@ async function plan(
 
   // The course, its links assets, its modules, their items: parents first.
   inputs.push({
+    owner: CLI_OWNER,
     type: "collection",
     id: course.id,
     next: {
@@ -483,6 +487,7 @@ async function plan(
     for (const resource of mod.resources) {
       const id = `${ASSET_PREFIX.courses}${resource.id}`;
       inputs.push({
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: {
@@ -507,6 +512,7 @@ async function plan(
 
   for (const mod of course.modules) {
     inputs.push({
+      owner: CLI_OWNER,
       type: "collection",
       id: mod.id,
       next: {
@@ -548,6 +554,7 @@ async function plan(
   for (const mod of course.modules) {
     for (const item of mod.topics) {
       inputs.push({
+        owner: CLI_OWNER,
         type: "curriculum_item",
         id: item.id,
         next: {

@@ -11,6 +11,7 @@ import {
 import type { ConceptCheck } from "@/lib/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";
 import { catalogDatabase } from "@/lib/learner-store";
+import { currentOwner, ownerScope } from "@/lib/owner";
 import { buildChoices, type ReviewItem, type ReviewSessionData } from "@/lib/review-core";
 
 /**
@@ -106,9 +107,13 @@ export async function readReviewSession(
 ): Promise<ReviewSessionData> {
   let queue: Awaited<ReturnType<typeof reviewQueue>>;
   let summaries: ConceptSummary[];
+  const owner = await currentOwner();
   try {
     const db = await catalogDatabase();
-    [queue, summaries] = await Promise.all([reviewQueue(db, { now, focus }), conceptSummaries(db)]);
+    [queue, summaries] = await Promise.all([
+      reviewQueue(db, { now, focus, learnerId: owner }),
+      conceptSummaries(db, ownerScope(owner)),
+    ]);
   } catch (error) {
     console.warn(`review queue unavailable: ${error instanceof Error ? error.message : String(error)}`);
     return { reachable: false, items: [], nextDue: null };
