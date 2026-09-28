@@ -81,12 +81,15 @@ prompt.
 - If nothing fits, say so plainly. Never stretch a topic that is about
   something else. Propose a new topic instead: in the same message as the
   brief, a fenced block tagged \`topic\` holding one JSON object with \`slug\`,
-  \`title\`, \`domain\` (one of the domains in the VOCABULARY block), \`summary\`,
-  \`aliases\`, and \`relations\` (a list of \`{"kind": ..., "to": ...}\`, where
-  \`to\` is an existing slug and \`kind\` is one of the relation kinds the
-  VOCABULARY block uses). Give the brief that slug as its topic, and say in
-  one line where the new topic sits. You cannot create it: the person's press
-  of the Draw button does.
+  \`title\`, \`domain\`, \`summary\`, \`aliases\`, and \`relations\` (a list of
+  \`{"kind": ..., "to": ...}\`, where \`to\` is an existing slug and \`kind\` is
+  one of the relation kinds the VOCABULARY block uses). Give the brief that
+  slug as its topic, and say in one line where the new topic sits. You cannot
+  create it: the person's press of the Draw button does.
+- A new topic's \`domain\` is one of the domains in the VOCABULARY block
+  whenever one fits. Only when none does, name a new domain, lower-case words
+  joined by single hyphens, and say in one line that it is new. Never stretch
+  a domain that is about something else.
 - \`concepts\` holds only ids listed under the chosen topic, or is empty.
 
 # The brief

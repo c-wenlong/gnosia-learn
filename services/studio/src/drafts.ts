@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 
-import { DRAFT_TRANSITIONS, canTransition, type DraftErrorKind, type DraftState } from "@self-learn/schema/shared";
+import {
+  DRAFT_TRANSITIONS,
+  LOCAL_LEARNER_ID,
+  canTransition,
+  type DraftErrorKind,
+  type DraftState,
+} from "@self-learn/schema/shared";
 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
@@ -1103,6 +1109,24 @@ export class Drafts {
     if (repeated !== undefined && repeated.draftId === id) return { jobId: repeated.id, created: false };
     if (record.inFlight !== null || this.turnsInFlight.has(id)) {
       throw new JobRefused(409, "the planner is still answering; Draw once its reply is in", { reason: "in-flight" });
+    }
+    if (record.state === "briefed" && record.pendingTopic !== null && studioOwner() !== LOCAL_LEARNER_ID) {
+      // C16: `catalog topic add` writes as the catalog CLI's owner, `local`,
+      // and takes no `--owner` yet, so another owner's topic would be filed
+      // under `local`. Refused before anything is written; a brief on a topic
+      // that exists still draws.
+      const refusal = new JobRefused(
+        409,
+        `this studio serves an owner other than "${LOCAL_LEARNER_ID}", and a new topic can only be created ` +
+          `as "${LOCAL_LEARNER_ID}" until \`catalog topic add\` takes an owner. Nothing was written. Ask the planner ` +
+          `for a brief under a topic that exists, or add "${record.pendingTopic.entry.slug}" by hand.`,
+        { reason: "topic-owner", topic: record.pendingTopic.entry.slug },
+      );
+      await this.write(id, async () => {
+        await this.append(id, { type: "draw", refused: { status: refusal.status, error: refusal.message, detail: refusal.detail } });
+        await this.note(id, `Draw was refused: ${refusal.message}`);
+      });
+      throw refusal;
     }
     if (record.state !== "briefed" || record.brief === null) {
       throw new JobRefused(

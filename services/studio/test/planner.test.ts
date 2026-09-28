@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -81,6 +85,22 @@ describe("the planner's argv", () => {
 });
 
 describe("the system prompt", () => {
+  it("is the prompt the design doc quotes, word for word", () => {
+    // Read from the checkout this file sits in, never written: the doc and
+    // the code are one prompt, and a change to either has to reach both.
+    const doc = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "docs", "STUDIO-CHAT-FIRST.md"),
+      "utf8",
+    );
+    const quoted = /````text\n([\s\S]*?)\n````/.exec(doc)?.[1];
+    expect(quoted).toBe(PLANNER_PROMPT);
+  });
+
+  it("prefers an existing domain for a new topic, and allows a new one only when none fits", () => {
+    expect(PLANNER_PROMPT).toContain("A new topic's `domain` is one of the domains in the VOCABULARY block\n  whenever one fits. Only when none does, name a new domain");
+    expect(PLANNER_PROMPT).not.toContain("(one of the domains in the VOCABULARY block)");
+  });
+
   it("is the doc's prompt, then VOCABULARY and CORPUS, and EXTENDING only on extend", () => {
     const vocabulary = testVocabulary().entries;
     const plain = buildSystemPrompt({ vocabulary, corpus: [] });

@@ -264,6 +264,33 @@ describe("a proposed topic", () => {
     expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
   });
 
+  it("refuses a pending topic before any write when the studio serves another owner, and still draws an existing topic (C16)", async () => {
+    const saved = process.env.STUDIO_OWNER;
+    process.env.STUDIO_OWNER = "owner-b";
+    try {
+      await fake.script([{ text: withTopic({ ...good, topic: "mesh-vpn" }) }]);
+      const pending = (await drafts.create({})).record;
+      await say(pending.id, "tailscale tunnels");
+      expect(drafts.get(pending.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
+      await expect(drafts.draw(pending.id, "p")).rejects.toMatchObject({ status: 409, detail: { reason: "topic-owner" } });
+      expect(catalogMock.topicAdd).not.toHaveBeenCalled();
+      expect(runner.enqueue).not.toHaveBeenCalled();
+      expect(canvasMock.doctor).not.toHaveBeenCalled();
+      const view = await drafts.view(pending.id);
+      expect(view.state).toBe("briefed");
+      expect(view.transcript.at(-1)).toMatchObject({ role: "studio", text: expect.stringContaining("catalog topic add") });
+
+      await fake.script([{ text: proposing(good) }]);
+      const existing = (await drafts.create({})).record;
+      await say(existing.id, "the congestion window");
+      await expect(drafts.draw(existing.id, "p")).resolves.toMatchObject({ created: true });
+      expect(drafts.get(existing.id)?.state).toBe("drawing");
+    } finally {
+      if (saved === undefined) delete process.env.STUDIO_OWNER;
+      else process.env.STUDIO_OWNER = saved;
+    }
+  });
+
   it("refuses the same reply with a bad relation, and nothing is pending", async () => {
     const brief = { ...bad, topic: "mesh-vpn" };
     await fake.script([{ text: withTopic(brief) }, { text: withTopic(brief) }]);

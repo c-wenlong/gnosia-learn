@@ -267,12 +267,15 @@ prompt.
 - If nothing fits, say so plainly. Never stretch a topic that is about
   something else. Propose a new topic instead: in the same message as the
   brief, a fenced block tagged `topic` holding one JSON object with `slug`,
-  `title`, `domain` (one of the domains in the VOCABULARY block), `summary`,
-  `aliases`, and `relations` (a list of `{"kind": ..., "to": ...}`, where
-  `to` is an existing slug and `kind` is one of the relation kinds the
-  VOCABULARY block uses). Give the brief that slug as its topic, and say in
-  one line where the new topic sits. You cannot create it: the person's press
-  of the Draw button does.
+  `title`, `domain`, `summary`, `aliases`, and `relations` (a list of
+  `{"kind": ..., "to": ...}`, where `to` is an existing slug and `kind` is
+  one of the relation kinds the VOCABULARY block uses). Give the brief that
+  slug as its topic, and say in one line where the new topic sits. You cannot
+  create it: the person's press of the Draw button does.
+- A new topic's `domain` is one of the domains in the VOCABULARY block
+  whenever one fits. Only when none does, name a new domain, lower-case words
+  joined by single hyphens, and say in one line that it is new. Never stretch
+  a domain that is about something else.
 - `concepts` holds only ids listed under the chosen topic, or is empty.
 
 # The brief
@@ -724,6 +727,7 @@ C for the chat and planner, M for the manual.
 | C13 | The daily cap is crossed in the middle of a conversation | The turn in flight finishes. The next message is 429. A brief already proposed can still be drawn only when the window allows a job |
 | C14 | Messages arrive while the draft is `drawing` | 409 with "wait for the drawing, or cancel it". Talking about the next diagram while this one draws is an open question |
 | C15 | The claude.ai connectors load into a spawn anyway | `--strict-mcp-config` is what prevents it; a test asserts the init event's `tools` is empty for the planner, and the runner fails the turn with `agent` if it is not |
+| C16 | A runner serving an owner other than `local` meets a brief on a proposed topic | `catalog topic add` writes as the catalog CLI's owner, `local`, and takes no `--owner` yet, so the topic would be filed under the wrong owner. The Draw press refuses before any write with 409 `topic-owner` and a STUDIO note saying so; a brief whose topic already exists draws as usual. Lifted when the topic verbs take `--owner` |
 | M1 | The tldrawkc build changes between two attempts of one job | The session's recorded system prompt is reused on resume, so every attempt of a job reads the manual it started with. `manualHash` on the job says which |
 | M2 | `api --json` names a lint rule the static table does not | The manual carries the generated name with "no fix recorded", `/api/health` reports `manual: stale`, and a test fails in the suite |
 | M3 | A worked snippet stops passing against a new tldrawkc | The snippet test fails. Until it is fixed the manual still ships the snippet, because a slightly wrong example beats none, and `/api/health` says which |
