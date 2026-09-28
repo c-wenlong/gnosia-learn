@@ -37,7 +37,9 @@ interface CacheFile<T> {
   value: T;
 }
 
-const TYPE_PATTERN = /^[a-z]+$/;
+// A plain word, or a word and one owner id after a dot (`diagrams.<owner>`):
+// never a slash, and never a second dot, so no name can leave the directory.
+const TYPE_PATTERN = /^[a-z]+(\.[A-Za-z0-9_-]+)?$/;
 
 /** `$STUDIO_HOME/cache/`. Beside the job workspaces, and gitignored with them. */
 export function cacheDir(): string {
@@ -45,7 +47,7 @@ export function cacheDir(): string {
 }
 
 export function cachePath(type: string): string {
-  // The type becomes a file name, so it is one plain word and nothing else.
+  // The type becomes a file name, so it is a plain word, or one owner's copy of one.
   if (!TYPE_PATTERN.test(type)) throw new Error(`"${type}" is not a content type name`);
   return path.join(cacheDir(), `${type}.json`);
 }

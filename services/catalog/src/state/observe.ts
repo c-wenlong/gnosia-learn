@@ -391,9 +391,11 @@ async function openInTransaction(
     // An id is one session. A studio job's id, or another learner's, is not
     // this learner's tutor session to write evidence into; and a closed one
     // has already said which concepts it touched, so an answer arriving
-    // after it would contradict its own `session-close`.
+    // after it would contradict its own `session-close`. The sentence is the
+    // same for both, and says nothing about whose it is (phase 4): ids are
+    // global, so the refusal cannot hide that the id is taken, only by whom.
     if (existing !== undefined && (existing.kind !== "tutor" || existing.learnerId !== learnerId)) {
-      throw new StateError(`session "${id}" is not a tutor session of this learner.`);
+      throw new StateError(`session id "${id}" is already in use; start a new session.`);
     }
     if (existing !== undefined && existing.state !== "running") {
       throw new StateError(`session "${id}" is ${existing.state}; start a new one.`);
