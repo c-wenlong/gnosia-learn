@@ -109,6 +109,18 @@ if (studio.REPO_ROOT !== root) {
   );
 }
 
+// The blob store's root. Importing the repository now stores its diagram
+// SVGs, and without this every suite that indexes the tree would write them
+// into the owner's real `~/.self-learn/blobs`. Its own temp directory, not one
+// inside the farm above: the fs store refuses a root under anything that looks
+// like a self-learn checkout, and the farm links the checkout's package.json.
+// A suite that wants its own root still sets one.
+let blobHome: string | null = null;
+if (!process.env.SELF_LEARN_HOME?.trim()) {
+  blobHome = mkdtempSync(path.join(temp, "self-learn-home-"));
+  process.env.SELF_LEARN_HOME = blobHome;
+}
+
 const before = listing(TRACKED_ASSETS);
 
 afterAll(() => {
@@ -120,5 +132,6 @@ afterAll(() => {
     ).toEqual(before);
   } finally {
     if (root.startsWith(`${temp}${path.sep}`)) rmSync(root, { recursive: true, force: true });
+    if (blobHome?.startsWith(`${temp}${path.sep}`)) rmSync(blobHome, { recursive: true, force: true });
   }
 });
