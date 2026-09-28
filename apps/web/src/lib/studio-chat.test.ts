@@ -188,7 +188,8 @@ describe("composerState", () => {
   });
 
   it("closes for a drawing, the turn cap, the daily cap and an abandoned draft, in that order", () => {
-    expect(composerState(view({ state: "drawing" }), cap).reason).toMatch(/drawing/);
+    // A drawing job may be running or waiting for review: the sentence covers both.
+    expect(composerState(view({ state: "drawing" }), cap).reason).toMatch(/accepted, discarded or cancelled/);
     expect(composerState(view({ turns: 20 }), cap).reason).toBe("This conversation has reached its 20-turn limit.");
     expect(composerState(view(), cap).reason).toMatch(/daily cap/);
     expect(composerState(view({ state: "abandoned" }), null)).toMatchObject({ disabled: true });
@@ -307,7 +308,7 @@ describe("sendRefusal", () => {
   it("names each reason the runner gives", () => {
     const say = (status: number, reason: string | null, error = "x") => sendRefusal(status, { error, detail: reason === null ? null : { reason } });
     expect(say(409, "in-flight")).toMatch(/still answering/);
-    expect(say(409, "drawing")).toMatch(/is drawing/);
+    expect(say(409, "drawing")).toMatch(/Accept, discard or cancel/);
     expect(say(409, "abandoned")).toMatch(/was closed/);
     expect(say(409, "draw-in-progress")).toMatch(/just pressed/);
     expect(say(503, "planner-busy")).toMatch(/busy/);

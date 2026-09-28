@@ -227,7 +227,9 @@ export function composerState(
     return {
       disabled: true,
       sendDisabled: true,
-      reason: "A diagram from this conversation is drawing. Wait for it, or cancel it.",
+      // `drawing` covers a job still running and one waiting for review, so
+      // the sentence names every way out, not only the running case's.
+      reason: "A diagram from this conversation is still open. Talk again once it is accepted, discarded or cancelled.",
       placeholder,
     };
   }
@@ -387,7 +389,7 @@ export function sendRefusal(status: number, refusal: Refusal): string | null {
     case "in-flight":
       return "The planner is still answering the last message.";
     case "drawing":
-      return "A diagram from this conversation is drawing. Wait for it, or cancel it.";
+      return "A diagram from this conversation is still open. Accept, discard or cancel it first.";
     case "abandoned":
       return "This conversation was closed. Start a new one.";
     case "turn-cap":
