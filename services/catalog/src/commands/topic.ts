@@ -294,6 +294,9 @@ export function formatTopic(result: TopicCommandResult): string {
       lines.push(`renamed   ${result.from} -> ${result.to}; "${result.from}" is now an alias`);
       if (result.jobs.length > 0) lines.push(`jobs      briefs rewritten: ${result.jobs.join(", ")}`);
       for (const file of result.restamp) lines.push(`restamp   ${file}: still stamps "${result.from}"`);
+      for (const file of result.staleSvgs) {
+        lines.push(`stale svg ${file}: still says "${result.from}"; export it again from its .tldr and put it`);
+      }
       break;
     case "relate":
       lines.push(`${result.changed ? "recorded" : "unchanged"}  ${result.stored.from} ${result.stored.kind} ${result.stored.to} (stored under ${result.slug})`);

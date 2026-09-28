@@ -42,16 +42,27 @@ const reachable = await probe();
 
 /**
  * Point the command runners, which connect through DATABASE_URL as the CLI
- * does, at a scratch database until the returned function is called.
+ * does, at a scratch database until the returned function is called. Each
+ * database gets its own blob store too: a store belongs to the database that
+ * first wrote it (`content/blob-owner.ts`), and this file runs several.
  */
 function pointAt(name: string): () => void {
-  const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
+  const saved = {
+    url: process.env["DATABASE_URL"],
+    manimkc: process.env["MANIMKC_ROOT"],
+    home: process.env["SELF_LEARN_HOME"],
+  };
   const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
+  process.env["SELF_LEARN_HOME"] = path.join(tmpdir(), `self-learn-home-${name}`);
   return () => {
-    for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
+    for (const [key, value] of [
+      ["DATABASE_URL", saved.url],
+      ["MANIMKC_ROOT", saved.manimkc],
+      ["SELF_LEARN_HOME", saved.home],
+    ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

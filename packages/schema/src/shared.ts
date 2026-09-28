@@ -397,3 +397,38 @@ export function canTransition(
  * so the accept rename is atomic, and gitignored.
  */
 export const CANDIDATES_DIR = "learn/assets/.candidates";
+
+/** A value JSON can hold. */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+/**
+ * A value in canonical form: keys sorted at every depth, instants as ISO
+ * strings, `undefined` keys dropped. The one definition of "the same content"
+ * that a revision's `snapshot_hash`, a diagram's `document_hash` and the
+ * studio's check of a checked-out `.tldr` all hash, so the three cannot drift.
+ * Here because the studio reaches the catalog through its CLI only and takes
+ * nothing else from it.
+ */
+export function canonical(value: unknown): JsonValue {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object") {
+    const out: Record<string, JsonValue> = {};
+    for (const key of Object.keys(value as object).sort()) {
+      const inner = (value as Record<string, unknown>)[key];
+      if (inner !== undefined) out[key] = canonical(inner);
+    }
+    return out;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  throw new Error(`cannot put a ${typeof value} in canonical JSON`);
+}
+
+/** The canonical serialisation. `JSON.stringify` of a canonical value is already stable. */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonical(value));
+}

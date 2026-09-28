@@ -5,6 +5,7 @@ import {
   classifyConnectionFailure,
   describeConnectionFailure,
   EXIT_UNREACHABLE,
+  failureText,
 } from "../src/connection-failure";
 
 /**
@@ -152,5 +153,30 @@ describe("the line the CLI prints", () => {
 
   it("uses an exit code the CLI does not already mean something else by", () => {
     expect([0, 1, 2]).not.toContain(EXIT_UNREACHABLE);
+  });
+});
+
+describe("the message the CLI prints for any failure", () => {
+  it("adds the deepest cause, which is where a migration's RAISE lands under drizzle's wrapper", () => {
+    const raised = sqlstate("P0001", "1 concept(s) have no topic: orphan-note. File each under a topic, then migrate");
+    const text = failureText(wrapped(raised));
+    expect(text).toMatch(/^Failed query: select to_regclass/);
+    expect(text).toContain("\n  caused by: 1 concept(s) have no topic: orphan-note. File each under a topic, then migrate");
+  });
+
+  it("reads to the bottom of a longer chain, and says nothing extra when there is no cause", () => {
+    const bottom = new Error("the real reason");
+    const middle = new Error("middle", { cause: bottom });
+    expect(failureText(new Error("top", { cause: middle }))).toBe("top\n  caused by: the real reason");
+    expect(failureText(new Error("alone"))).toBe("alone");
+    expect(failureText("a string")).toBe("a string");
+  });
+
+  it("does not repeat a cause the top message already says, and stops on a loop", () => {
+    const cause = new Error("duplicate key value");
+    expect(failureText(new Error("insert failed: duplicate key value", { cause }))).toBe("insert failed: duplicate key value");
+    const loop = new Error("loop") as Error & { cause?: unknown };
+    loop.cause = loop;
+    expect(failureText(loop)).toBe("loop");
   });
 });

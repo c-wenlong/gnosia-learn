@@ -140,19 +140,19 @@ export async function commitConcept(id: string, options: { reason: string; sessi
   }
   const written = await commitNoteText(id, text, sidecar, { reason: options.reason, session: options.session });
 
-  // The copy is now what the note holds, so the next commit is based on it.
-  const next = await readNoteText(id);
-  if (next !== null) {
-    const moved: Sidecar = {
-      id,
-      from: sidecar.from,
-      owner: next.owner,
-      revision: next.revision,
-      hash: next.hash,
-      copy: sha256(text),
-    };
-    await fs.writeFile(sidecarPath(id), `${JSON.stringify(moved, null, 2)}\n`, "utf8");
-  }
+  // The copy is now what the note holds, so the next commit is based on the
+  // revision this commit wrote. Not on a fresh read: a commit from anywhere
+  // else landing between this one and that read would become the base, and
+  // the next commit of this copy would pass the check and undo it.
+  const moved: Sidecar = {
+    id,
+    from: sidecar.from,
+    owner: sidecar.owner,
+    revision: written.revision,
+    hash: written.hash,
+    copy: sha256(text),
+  };
+  await fs.writeFile(sidecarPath(id), `${JSON.stringify(moved, null, 2)}\n`, "utf8");
   return { ...written, id, copy: file, owner: sidecar.owner };
 }
 
