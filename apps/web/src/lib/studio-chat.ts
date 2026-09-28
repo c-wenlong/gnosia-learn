@@ -212,9 +212,14 @@ export function composerState(
   view: Pick<DraftView, "state" | "inFlight" | "turns" | "turnCap" | "jobId">,
   cap: CapStatus | null,
   pending = false,
+  empty = false,
 ): ComposerState {
   const placeholder =
-    view.jobId !== null ? "Ask for another diagram, or a change to this one" : "Describe the diagram";
+    view.jobId !== null
+      ? "Ask for another diagram, or a change to this one"
+      : empty
+        ? "Describe the diagram"
+        : "Reply to the planner";
   if (view.state === "abandoned") {
     return { disabled: true, sendDisabled: true, reason: "This conversation was closed.", placeholder };
   }

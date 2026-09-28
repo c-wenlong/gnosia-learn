@@ -160,12 +160,13 @@ describe("composerState", () => {
   const cap = { capUsd: 5, totalUsd: 6, exceeded: true, oldestAgesOutAt: null };
 
   it("is open on a fresh draft", () => {
-    expect(composerState(view(), null)).toEqual({
+    expect(composerState(view(), null, false, true)).toEqual({
       disabled: false,
       sendDisabled: false,
       reason: null,
       placeholder: "Describe the diagram",
     });
+    expect(composerState(view(), null).placeholder).toBe("Reply to the planner");
   });
 
   it("asks for another diagram once a job exists", () => {

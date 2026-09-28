@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
 
 import { BriefForm } from "@/components/studio/BriefForm";
-import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
+import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
+import { DraftPanel } from "@/components/studio/DraftPanel";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
+import { PlusCard } from "@/components/studio/PlusCard";
+import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
 import { BlockedCard, EmptyDirectory, type DoctorLine } from "@/components/studio/StudioBlocked";
-import {
-  ButtonLink,
-  Notice,
-  Spacer,
-  StudioStrip,
-  VerbNotice,
-} from "@/components/studio/StudioChrome";
+import { Notice, Spacer, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import {
   DisplayMenu,
   SearchField,
@@ -22,10 +19,13 @@ import {
 } from "@/components/studio/StudioControls";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
+import { capFrom, suggestions } from "@/lib/studio-chat";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
+  displayTitle,
   groupDiagrams,
+  panelHref,
   parseView,
   readOutcome,
   sortDiagrams,
@@ -66,6 +66,8 @@ interface Health {
   note: string;
   /** Where the topic list stands (D13). Optional: an older runner does not send it. */
   vocabulary?: VocabularyState;
+  /** The rolling day's spend against `STUDIO_DAILY_USD`, which Draw and Send are disabled on. */
+  dailyCap?: unknown;
 }
 
 export default async function StudioPage({
@@ -150,6 +152,75 @@ export default async function StudioPage({
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
 
+  const topicOptions = topicOptionsOf(topics);
+  const cap = capFrom(health.data.dailyCap);
+  const chatSuggestions = suggestions(
+    listing.diagrams.map((diagram) => diagram.topic),
+    topicTitles,
+  );
+  // Close drops every parameter the panel reads, and keeps the filters.
+  const closeHref = panelHref(path, { draft: null, job: null, brief: null, selected: null, shot: null });
+  const dialog = view.shot !== null ? null : panelFor();
+
+  function panelFor() {
+    if (view.draft !== null) {
+      return (
+        <StudioDialog key={`draft:${view.draft}`} closeHref={closeHref} label="New diagram" tall>
+          <DraftPanel
+            draftId={view.draft}
+            jobId={view.job}
+            form={view.brief}
+            path={path}
+            topics={topicOptions}
+            suggestions={chatSuggestions}
+            cap={cap}
+          />
+        </StudioDialog>
+      );
+    }
+    if (view.job !== null) {
+      const title = allJobs.find((job) => job.jobId === view.job)?.title ?? "Job";
+      return (
+        <StudioDialog key="job" closeHref={closeHref} label={title}>
+          <DialogHeader title={title} />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <JobPanel jobId={view.job} path={path} embedded />
+          </div>
+        </StudioDialog>
+      );
+    }
+    if (view.brief !== null) {
+      return (
+        <StudioDialog key="brief" closeHref={closeHref} label="Fill the brief yourself" tall>
+          <DialogHeader title="Fill the brief yourself" />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <BriefForm path={path} topics={topicOptions} from={view.brief} embedded />
+          </div>
+        </StudioDialog>
+      );
+    }
+    if (view.selected !== null) {
+      const title = selected === null ? view.selected : displayTitle(selected);
+      return (
+        <StudioDialog key={`sel:${view.selected}`} closeHref={closeHref} label={title}>
+          <DialogHeader title={title} />
+          {/* A verb run from this panel redirects back to it, so what it did is
+              said here, where the person is looking, and not behind the dimmed
+              grid. */}
+          {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
+          {selected === null ? (
+            <p className="p-5 text-[14px] text-text2">
+              There is no diagram named <span className="font-mono">{view.selected}</span> in this studio.
+            </p>
+          ) : (
+            <DiagramPanelBody diagram={selected} jobs={jobs} path={path} />
+          )}
+        </StudioDialog>
+      );
+    }
+    return null;
+  }
+
   return (
     <div data-layout="full" className="flex min-h-0 flex-1 flex-col">
       <StudioStrip>
@@ -158,19 +229,11 @@ export default async function StudioPage({
         <Spacer />
         <DisplayMenu view={view} />
         <SortMenu view={view} />
-        <ButtonLink href={studioHref(view, { panel: !view.panel })}>
-          {view.panel ? "Hide panel" : "Show panel"}
-        </ButtonLink>
-        {/* The one filled button on this screen, which is what the design
-            says it is: everything else here is navigation. */}
-        <ButtonLink href={studioHref(view, { brief: "", job: null, panel: true })} filled>
-          New diagram
-        </ButtonLink>
       </StudioStrip>
 
       <JobStrip path={path} stream={view.stream} />
 
-      {outcome !== null && <VerbNotice report={outcome} clearHref={path} />}
+      {outcome !== null && view.selected === null && <VerbNotice report={outcome} clearHref={path} />}
 
       {/* U5 and U3: both mean everything still works, so both are banners. */}
       {/* D13: the topic list is the saved copy, or there is none. */}
@@ -191,34 +254,63 @@ export default async function StudioPage({
           )}
         </Notice>
       )}
+      {/* U6: a document that will not parse has no tile, so this is the only
+          place it is visible. It used to be the empty inspector's content. */}
+      {listing.errors.length > 0 && (
+        <Notice tone="danger">
+          <details>
+            <summary className="cursor-pointer">
+              {listing.errors.length} diagram{listing.errors.length === 1 ? "" : "s"} could not be read and{" "}
+              {listing.errors.length === 1 ? "is" : "are"} not in the grid.
+            </summary>
+            <ul className="mt-1 space-y-1">
+              {listing.errors.map((problem) => (
+                <li key={problem.path}>
+                  <span className="font-mono">{problem.path}</span>: {problem.message}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </Notice>
+      )}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto">
-          {view.shot !== null && view.job !== null ? (
-            /* A thumbnail was clicked. The grid is behind it and one Close
-               brings it back, because a picture of a diagram is worth the whole
-               width and 320px of panel is not enough to look at one. */
-            <ShotView
-              jobId={view.job}
-              which={view.shot}
-              path={path}
-              title={allJobs.find((job) => job.jobId === view.job)?.target ?? view.job}
-              comparison={shown?.comparison ?? null}
-              mode={shown?.brief?.mode}
-            />
-          ) : listing.diagrams.length === 0 && listing.errors.length === 0 ? (
-            <EmptyDirectory dir={listing.dir} />
-          ) : visible.length === 0 ? (
-            <div className="p-8 text-sm text-[var(--muted)]">
-              No diagram matches this filter.{" "}
-              <a className="underline underline-offset-2" href="/studio">
-                Clear it
-              </a>
-              .
-            </div>
-          ) : (
-            <div className="space-y-6 p-4">
-              {groups.map((group) => (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {view.shot !== null && view.job !== null ? (
+          /* A thumbnail was clicked. The panel closes behind it and one Close
+             brings it back, because a picture of a diagram is worth the whole
+             width. */
+          <ShotView
+            jobId={view.job}
+            which={view.shot}
+            path={path}
+            title={allJobs.find((job) => job.jobId === view.job)?.target ?? view.job}
+            comparison={shown?.comparison ?? null}
+            mode={shown?.brief?.mode}
+          />
+        ) : (
+          <div className="space-y-6 p-4">
+            {/* The plus card is the first tile under any filter, and on an
+                empty directory it is the whole grid: one way in (D31). */}
+            {(visible.length === 0 || groups.length === 0) &&
+              (view.layout === "grid" ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+                  <PlusCard path={path} />
+                </div>
+              ) : (
+                <PlusCard path={path} layout="list" />
+              ))}
+            {listing.diagrams.length === 0 && listing.errors.length === 0 ? (
+              <EmptyDirectory dir={listing.dir} />
+            ) : visible.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">
+                No diagram matches this filter.{" "}
+                <a className="underline underline-offset-2" href="/studio">
+                  Clear it
+                </a>
+                .
+              </p>
+            ) : (
+              groups.map((group, at) => (
                 <section key={group.key}>
                   {group.label !== "" && (
                     <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
@@ -227,6 +319,7 @@ export default async function StudioPage({
                   )}
                   {view.layout === "grid" ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+                      {at === 0 && <PlusCard path={path} />}
                       {group.items.map((diagram) => (
                         <DiagramTile
                           key={diagram.name}
@@ -239,6 +332,7 @@ export default async function StudioPage({
                     </div>
                   ) : (
                     <div className="space-y-0.5">
+                      {at === 0 && <PlusCard path={path} layout="list" />}
                       {group.items.map((diagram) => (
                         <DiagramRow
                           key={diagram.name}
@@ -251,29 +345,13 @@ export default async function StudioPage({
                     </div>
                   )}
                 </section>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Below 1280px the panel is off by default and the strip's toggle
-            brings it back; below 1024px it is not rendered inline at all. */}
-        {/* The right panel has three contents and the URL says which: the
-            brief form, one job, or the inspector. All three are the same 320px
-            column, because a form that replaced the screen would hide the thing
-            the brief is about. */}
-        {view.panel && (
-          <aside className="hidden w-80 shrink-0 border-l border-[var(--border)] lg:block">
-            {view.brief !== null ? (
-              <BriefForm path={path} topics={topicOptionsOf(topics)} from={view.brief} suggested={undefined} />
-            ) : view.job !== null ? (
-              <JobPanel jobId={view.job} path={path} />
-            ) : (
-              <DiagramInspector listing={listing} diagram={selected} jobs={jobs} path={path} />
+              ))
             )}
-          </aside>
+          </div>
         )}
       </div>
+
+      {dialog}
     </div>
   );
 }
