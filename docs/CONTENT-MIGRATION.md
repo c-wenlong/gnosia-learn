@@ -276,8 +276,11 @@ reaches zero and refuses the tenth hole forever after.
   verb pair replaces the edit, and the plugin's version is bumped in the same
   change (D15).
 - **Reversible until cut-over.** `catalog export` regenerates the whole
-  `content/` and `learn/` tree from the database at any moment until phase 3,
-  and `CONTENT_SOURCE=files` points readers back at it.
+  `content/` and `learn/` tree from the database at any moment until phase 3.
+  Until phase 2, `CONTENT_SOURCE=files` pointed readers back at it; since
+  phase 2 the web app has no file reader and refuses a type the database does
+  not own, so rolling reads back means reverting the phase 2 web PR (#152) or
+  restoring the pre-flip dump, not setting a variable.
 
 ## Phase 0: the foundation
 
@@ -1509,6 +1512,14 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       courses row set back to `files`, `/courses` rendered the panel and the
       log named `catalog flip courses`, and with `DATABASE_URL` at a dead
       port it rendered the panel beside the store banner.
+      **Review fixes** (same branch): the two agent routes that read courses
+      answer a refused read with a `{ error, code }` 503
+      (`CONTENT_NOT_FLIPPED` or `CONTENT_UNAVAILABLE`) instead of a bare 500;
+      Today rethrows courses that are not flipped to the error boundary rather
+      than showing the empty dashboard, and `/api/learner/today` answers 503;
+      a diagram SVG with no stored copy names `catalog diagram put`, not the
+      manimkc upload; the dead `indexedRoot` is gone; the docs no longer
+      offer `CONTENT_SOURCE=files` as the rollback (D18).
 - [x] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
@@ -1530,7 +1541,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       permission file allows exactly the job's two candidate files and denies
       every other job, `work/`, `cache/` and anything else under
       `STUDIO_HOME`. A record from before the move keeps resolving against
-      the repository, and a queued one is moved into its workspace before it
+      the repository, and a queued one is re-pointed at its workspace before it
       draws. `/api/vocabulary` serves the cached list, and the two studio
       screens take their topics from it rather than from the app's
       database-only read, which throws with Postgres down (U3); they show the
@@ -1540,6 +1551,13 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       `/studio` rendered the banner; a real Sonnet job drew in its workspace
       and Accept landed a revision with `git status` clean. The tracked-tree
       check's retargeting to `seed/` stays with the Tests item.
+      **Review fixes** (same branch): the permission file also denies, by
+      glob, every job id but the agent's own, so a job queued after the agent
+      started is out of its reach (proved against the CLI: read without the
+      globs, refused with them); `/api/health` reuses the last vocabulary read
+      for `STUDIO_VOCABULARY_STATUS_MS` rather than spawning `topic ls` per
+      call; the dirty-tree backstop leaves a `STUDIO_HOME` inside the checkout
+      out again, as it did the old candidates directory.
 - [x] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
@@ -2014,10 +2032,12 @@ session log, and changes in its next version bump.
 ### D18. The database records which types it owns
 
 **Verdict:** `content_source` rows, written by `catalog flip`, are obeyed by
-importers and writers; `CONTENT_SOURCE` overrides readers only, for tests and
-as the read rollback lever. **Why:** an environment variable set differently on
-two processes is two truths, and a row is one. **Rejected:** the variable as the
-authority.
+importers and writers; `CONTENT_SOURCE` overrides readers only, for tests.
+Until phase 2 it was also the read rollback lever; since phase 2 the web app
+refuses a type the variable sends to files rather than reading them, so the
+rollback is reverting the phase 2 web PR (#152) or restoring the pre-flip
+dump. **Why:** an environment variable set differently on two processes is two
+truths, and a row is one. **Rejected:** the variable as the authority.
 
 ### D19. Vercel connects with a role that cannot write content
 

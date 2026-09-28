@@ -182,13 +182,11 @@ export {
   conceptsForAsset,
   conceptsForAssets,
   derivationSources,
-  indexedRoot,
   listAssets,
   type AssetDerivations,
   type AssetKindCount,
   type AssetRef,
   type AssetWithTopics,
-  type IndexedRoot,
   type ListAssetsOptions,
 } from "./assets";
 export {

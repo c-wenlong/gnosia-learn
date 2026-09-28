@@ -187,8 +187,8 @@ Rules of engagement:
 ## Diagram studio: services/studio/
 
 `services/studio/` is a local job runner and loopback API for the diagram
-studio at `/studio`: a screen that browses `learn/assets/`, opens one on a
-live tldraw canvas, and lets a person brief an agent to draw or extend a
+studio at `/studio`: a screen that browses the diagrams in the catalog, opens
+one on a live tldraw canvas, and lets a person brief an agent to draw or extend a
 diagram, review its work, and accept or discard it. It exists so drawing a
 diagram can be delegated to an agent without a candidate ever landing on a
 committed file until a person says so.
@@ -238,7 +238,8 @@ Rules of engagement:
 - A job writes only to its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`
   (`<slug>.tldr` and `.svg`), never into the tree. The permission file allows
   those two files and denies every other job's workspace and the rest of
-  `STUDIO_HOME`. `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
+  `STUDIO_HOME`, a job queued after the agent started included (globs over
+  every id but its own, since the file is written once, at spawn). `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
   relative to `STUDIO_HOME`, and the catalog refuses any other value. A job
   recorded before the move still names `learn/assets/.candidates/<slug>`, which
   the runner resolves against the repository, so it can be accepted, discarded

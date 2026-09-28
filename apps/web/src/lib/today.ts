@@ -13,7 +13,7 @@ import {
 } from "@self-learn/catalog/state";
 
 import { getCourses } from "@/data/courses";
-import { contentSource } from "@/data/source";
+import { ContentUnavailableError, contentSource } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
@@ -62,6 +62,11 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
     db = await catalogDatabase();
     rows = await readAll(db, now);
   } catch (error) {
+    // A courses type that is not flipped is not an outage. The database
+    // answered, so the shell shows no banner, and the empty dashboard would
+    // read as a learner with no courses; the error boundary names the flip
+    // instead, as it does on every other page.
+    if (error instanceof ContentUnavailableError && error.reason === "not-flipped") throw error;
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`today: dashboard unavailable, ${message}`);
     return emptyToday(now, timeZone);
@@ -136,10 +141,11 @@ export async function loadToday(): Promise<TodayModel> {
 }
 
 async function readAll(db: CatalogDatabase, now: Date) {
-  // The courses are read with the rows rather than after them because they
-  // will be rows too (docs/CONTENT-MIGRATION.md, track B), and a course read
-  // that fails has to degrade like the others: the empty dashboard, not a
-  // thrown render.
+  // The courses are read with the rows because they are rows (track B of
+  // docs/CONTENT-MIGRATION.md), and a course read that fails because the
+  // database is down degrades like the others: the empty dashboard, not a
+  // thrown render. One refused because courses are not flipped is rethrown by
+  // `readToday`.
   const [kb, events, preferences, due, snapshot, courses] = await Promise.all([
     readKnowledgeBase(db),
     readEvents(db),

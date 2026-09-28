@@ -171,7 +171,8 @@ export function candidateRef(jobId: string, slug: string): string {
  * Such a record still works everywhere a path is only resolved, since
  * `absolute` resolves a relative path against the repository, so an accept, a
  * discard or a resume of one reads the file where it was written. Only a job
- * that has not started yet is moved, by the runner, before anything is drawn.
+ * that has not started yet is re-pointed at its own workspace by the runner
+ * before anything is drawn; there is no file to move, only the record's paths.
  */
 export function isLegacyCandidate(candidate: string): boolean {
   return !path.isAbsolute(candidate);

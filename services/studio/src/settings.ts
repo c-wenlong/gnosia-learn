@@ -197,7 +197,9 @@ export interface SettingsInput {
  * a file that appears after the settings are written, but the enumerated paths
  * are what does not depend on how the matcher treats a `*`. The same walk over
  * `$STUDIO_HOME` denies everything the runner keeps there except this job's
- * own workspace: the checkouts, the cache and every other job.
+ * own workspace: the checkouts, the cache and every other job. A job queued
+ * after this file is written is not in any walk, so the other jobs are also
+ * denied by globs that match every id but this one (`siblingJobRules`).
  */
 export function buildSettings(input: SettingsInput): AgentSettings {
   const home = process.env.HOME ?? "";
@@ -331,19 +333,77 @@ function studioHomeRules(): string[] {
   return denyEach(studioHome(), (name) => name !== "jobs");
 }
 
-/** The other jobs' workspaces, by name, so this job's scratch stays reachable. */
+/**
+ * The alphabet of a job id: `randomUUID()` in the runner, lower-case hex and
+ * dashes. The globs below are built over it, so a character outside it in a
+ * sibling's name is covered only by the walk, never by a glob.
+ */
+const JOB_ID_ALPHABET = "0123456789abcdef-";
+
+/**
+ * Every other job's workspace, including a job enqueued after this one started.
+ *
+ * Two halves. The walk denies each job directory present at spawn by its own
+ * name, whatever that name is. The globs cover the rest: the runner writes this
+ * file once, when the agent starts, and a job queued while it runs creates a
+ * workspace no enumerated rule names. With the default `STUDIO_HOME` inside the
+ * repository that workspace is inside a working directory, so without a glob
+ * the running agent could read the new job's records and candidate.
+ *
+ * A glob cannot say "every job but mine", because deny beats allow and the
+ * matcher has no negated character class (it follows the gitignore rules, where
+ * `[!x]` is a class holding `!` and `x`). So "not my id" is spelled out
+ * position by position: a name that shares the first `i` characters of this id
+ * and differs at character `i` matches `jobs/<prefix>[<every other
+ * character>]*`. One pattern per position covers every id of this length or
+ * longer that is not this one, and a last pattern covers a name that extends
+ * this id. None of them matches this job's own directory, which the test
+ * checks with the same matcher the CLI uses.
+ */
 function siblingJobRules(jobId: string): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(path.join(studioHome(), "jobs"));
-  } catch {
-    return [];
-  }
+  const jobs = path.join(studioHome(), "jobs");
   const rules: string[] = [];
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(jobs);
+  } catch {
+    // No jobs directory yet: nothing to enumerate, and the globs still apply.
+  }
   for (const entry of entries) {
     if (entry === jobId) continue;
-    const directory = path.join(studioHome(), "jobs", entry);
+    const directory = path.join(jobs, entry);
     rules.push(rule("Read", directory, "/**"), rule("Edit", directory, "/**"));
   }
+  for (const pattern of otherJobPatterns(jobId)) {
+    const glob = path.join(jobs, pattern);
+    rules.push(rule("Read", glob, "/**"), rule("Edit", glob, "/**"));
+  }
   return rules;
+}
+
+/**
+ * Directory-name globs matching every job id except `jobId`.
+ *
+ * Exported for the test, which runs them through the gitignore matcher. An id
+ * holding a character that means something to that matcher gets no globs at
+ * all, only the walk: escaping inside a gitignore pattern is too easy to get
+ * subtly wrong for a rule whose failure is silent, and the runner's ids never
+ * hold one.
+ */
+export function otherJobPatterns(jobId: string): string[] {
+  if (!/^[A-Za-z0-9._-]+$/.test(jobId)) return [];
+  const patterns: string[] = [];
+  for (let i = 0; i < jobId.length; i += 1) {
+    const mine = jobId.charAt(i).toLowerCase();
+    const others = [...JOB_ID_ALPHABET].filter((character) => character !== mine);
+    patterns.push(`${jobId.slice(0, i)}[${characterClass(others)}]*`);
+  }
+  patterns.push(`${jobId}?*`);
+  return patterns;
+}
+
+/** A bracket body for these characters, with the dash last so it is literal. */
+function characterClass(characters: string[]): string {
+  const dash = characters.includes("-");
+  return `${characters.filter((character) => character !== "-").join("")}${dash ? "-" : ""}`;
 }

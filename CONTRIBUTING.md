@@ -109,10 +109,12 @@ bug fixes or docs. All welcome.
    none, and the web app's third-party list is `next`, `react`, `react-dom`,
    `@tailwindcss/typography` and `katex` (maths typesetting, pinned exactly;
    see `apps/web/src/lib/math.ts` for why it earned its place).
-2. **`npm run build` has to pass, not just `npm run typecheck`.**
-   `next-env.d.ts` imports `./.next/types/routes.d.ts`, which only `next dev`
-   or `next build` generates, so route types are checked properly only once a
-   build has run.
+2. **`npm run build` has to pass, not just `npm run typecheck`.** The web
+   app's `typecheck` runs `next typegen` first: `next-env.d.ts` (untracked, as
+   Next's docs say) and the route types under `.next/types/` it imports exist
+   only once `next typegen`, `next dev` or `next build` has run, and without
+   them a fresh clone's typecheck fails on every image import. The build is
+   still the gate that compiles the app the way it ships.
 3. **The knowledge base is a real study record, and half of it is not in git.**
    The notes and the session logs under `learn/` are versioned on purpose; the
    event log, the mastery model and the schedule are rows in Postgres and have

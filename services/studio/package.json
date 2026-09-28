@@ -15,8 +15,10 @@
     "@self-learn/content": "*",
     "@self-learn/schema": "*"
   },
+  "//devDependencies": "ignore is the gitignore matcher the claude CLI checks Read and Edit path rules with. The settings test runs the sibling-job globs through it, since a glob that matches this job's own workspace would silently take its candidate away.",
   "devDependencies": {
     "@types/node": "^22.20.2",
+    "ignore": "^7.0.10",
     "tsx": "^4.20.6",
     "typescript": "^5"
   }

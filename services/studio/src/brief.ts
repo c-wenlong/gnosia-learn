@@ -1,8 +1,8 @@
 import type { TopicEntry } from "@self-learn/content";
 
 import { topicList } from "./catalog";
-import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, type Model } from "./config";
-import { readThrough } from "./content-cache";
+import { MERMAID_LIMIT, MODELS, TEXT_LIMIT, VOCABULARY_STATUS_MS, type Model } from "./config";
+import { readThrough, type CachedRead } from "./content-cache";
 
 /**
  * The brief, and the refusals that happen before anything is spent.
@@ -210,7 +210,14 @@ function entryOf(value: unknown): TopicEntry | null {
  * `readAt: null`, and a brief cannot be checked until the catalog answers.
  */
 export async function loadVocabulary(): Promise<Vocabulary> {
-  const read = await readThrough("topics", readTopics, { isValue: isTopicList });
+  let read: CachedRead<TopicEntry[]>;
+  try {
+    read = await readThrough("topics", readTopics, { isValue: isTopicList });
+  } catch (error) {
+    remember({ readAt: null, stale: true, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+  remember({ readAt: read.readAt, stale: read.stale, ...(read.error === undefined ? {} : { error: read.error }) });
   const topics = new Map<string, { title: string; concepts: string[] }>();
   for (const entry of read.value) {
     topics.set(entry.slug, { title: entry.title, concepts: [...entry.maps.concepts] });
@@ -222,6 +229,45 @@ export async function loadVocabulary(): Promise<Vocabulary> {
     stale: read.stale,
     ...(read.error === undefined ? {} : { staleReason: read.error }),
   };
+}
+
+/** Where the vocabulary stands, as `/api/health` reports it. `readAt: null` means no copy at all. */
+export interface VocabularyStatus {
+  readAt: string | null;
+  stale: boolean;
+  error?: string;
+}
+
+/** The outcome of the last `loadVocabulary`, from any route, and when it came. */
+let lastStatus: { at: number; status: VocabularyStatus } | null = null;
+let statusRead: Promise<VocabularyStatus> | null = null;
+
+function remember(status: VocabularyStatus): void {
+  lastStatus = { at: Date.now(), status };
+}
+
+/**
+ * The vocabulary's state for `/api/health`, without a `catalog topic ls` per
+ * call.
+ *
+ * Every studio page render asks health, and each read spawns the catalog CLI.
+ * So health reuses the last read any route made (a brief's enqueue, the
+ * vocabulary route, an earlier health) when it is younger than
+ * `STUDIO_VOCABULARY_STATUS_MS`, and concurrent callers share one read. A
+ * brief is still checked against a read of its own, so the cost of the reuse
+ * is only that the health line can be that many seconds behind an outage.
+ */
+export async function vocabularyStatus(maxAgeMs: number = VOCABULARY_STATUS_MS): Promise<VocabularyStatus> {
+  if (lastStatus !== null && Date.now() - lastStatus.at < maxAgeMs) return lastStatus.status;
+  statusRead ??= loadVocabulary()
+    .then(
+      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
+      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
+    )
+    .finally(() => {
+      statusRead = null;
+    });
+  return statusRead;
 }
 
 /** The fields `loadVocabulary` reads, checked on a cached copy before it is trusted. */

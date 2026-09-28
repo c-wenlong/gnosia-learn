@@ -458,7 +458,14 @@ Each with the reason it exists.
   discourages it. Everything else under `STUDIO_HOME` is denied: every other
   job's workspace, the checkouts under `work/`, the cache, and any directory
   added there later, walked by name so that no deny sits on a parent of the
-  job's own files. Any diagram file still under `learn/assets/`, a leftover
+  job's own files. A job queued after the settings are written is in no walk,
+  so the other jobs are also denied by globs, one per character of this job's
+  id: `jobs/<first i characters>[<every other id character>]*/**` matches every
+  id that differs at character `i`, and no deny can say "every job but mine"
+  more directly, because deny beats allow and the CLI's gitignore matcher has
+  no negated class (`[!x]` means `!` or `x`). Checked against the CLI (2.1.274):
+  a later job's `job.json` was read without the globs and refused with them,
+  while the agent's own scratch and candidate stayed readable. Any diagram file still under `learn/assets/`, a leftover
   `.candidates/` included, is denied too. The candidate directory and the
   scratch directory are the agent's two `--add-dir` working directories, and
   the workspace root, which holds the runner's records, is not.
@@ -670,7 +677,8 @@ drawing's age), and nothing a job does touches the working tree. A job record
 from before the move names `learn/assets/.candidates/<slug>` repo-relative;
 the runner resolves it against the repository wherever it is used, so it is
 accepted, discarded or resumed from where it was written, and one still queued
-is moved into its workspace before anything is drawn.
+is re-pointed at its own workspace before anything is drawn: nothing was
+drawn yet, so there is no file to move, only the record's two paths.
 
 **Since Track D** the steps are: the base check (the diagram's latest revision
 against the one the job recorded at enqueue, asked of the catalog), the export,
@@ -1225,7 +1233,7 @@ raised it: S schema, A API and runner, U interface.
 | A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
 | U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
-| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.json`; `/api/health` reports `vocabulary.stale`, its `readAt` and the reason, and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
+| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.json`; `/api/health` reports `vocabulary.stale`, its `readAt` and the reason (from the last read any route made when it is younger than `STUDIO_VOCABULARY_STATUS_MS`, 30 seconds by default, so a page render does not spawn a `topic ls` each time), and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
 | U4 | tldrawkc is not built | The studio runs `doctor` once on entry and, on failure, replaces the whole content region with one card: the failing checks as doctor reported them, the two commands, and a Recheck button. Nothing else renders, because a grid that half-works is worse than a page that says what is wrong | Studio entry; A8 covers the API side |
 | U5 | `dist/page` is stale | A banner, and everything still runs. That is how `doctor` treats it: a stale bundle still works | Studio entry |
 | U6 | A `.tldr` will not parse | It is absent from the grid and listed under Errors in the panel with its file name and message, which is the only place it is visible | `list --json` errors |

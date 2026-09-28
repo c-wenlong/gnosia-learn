@@ -193,14 +193,14 @@ export default async function LibraryPage({
       {!reachable ? (
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
           This page is a view over the <code>asset</code> table, and the database could not be
-          asked. Nothing has been lost: the videos, the diagrams and the notes are all still where
-          they were, and one index run rebuilds every row here from the files in git.
+          asked. Nothing has been lost by that: the rows, and the stored copies of the videos and
+          diagrams, are where they were, and the page comes back when the database answers.
         </Notice>
       ) : facets.total === 0 ? (
         <Notice title="Nothing indexed yet" command="npm run catalog -- import">
-          The catalog is reachable and holds no assets. Every row on this page is derived from files
-          in git (concept notes, session logs, exported diagrams, the videos manimkc rendered), so
-          one index run fills it.
+          The catalog is reachable and holds no assets. The rows here are written by the catalog
+          itself: an import of an export tree or the seed, the note, log and diagram writers, and
+          the manimkc indexer for the videos. None of those has run against this database yet.
         </Notice>
       ) : (
         <>

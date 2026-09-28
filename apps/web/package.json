@@ -8,7 +8,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json"
   },
   "//dependencies": "@self-learn/catalog and @self-learn/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {

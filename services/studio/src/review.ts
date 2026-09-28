@@ -1,9 +1,10 @@
 import { rm, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { canvas, EXIT, explainExit, type VerifyReport } from "./canvas";
 import { diagramPut, diagramShow, jobAccept, jobDiscard } from "./catalog";
 import { ensureCheckout, forgetDiagramList } from "./diagrams";
-import { absolute, workDir } from "./paths";
+import { absolute, ASSETS_DIR, REPO_ROOT, studioHome, workDir } from "./paths";
 import { run } from "./proc";
 import type { JobRecord, JobStore } from "./store";
 
@@ -486,7 +487,9 @@ async function discardLocked(store: JobStore, record: JobRecord): Promise<Accept
 /**
  * The A4 backstop: what is dirty in the working tree. A job writes nothing in
  * it at all, since its candidate is in its own workspace under `STUDIO_HOME`,
- * which is gitignored when it sits in the checkout.
+ * which is gitignored when it sits at the default `.studio/`. A `STUDIO_HOME`
+ * set to some other folder inside the checkout is not, so its paths are left
+ * out here (`jobWorkspacePath`), as the old candidates directory's were.
  *
  * Read-only `git status --porcelain` and nothing else. D6 removed the runner's
  * mutating git access on purpose, and this is not that access coming back: a
@@ -511,5 +514,25 @@ export async function dirtyFiles(): Promise<string[]> {
     // A renamed path is reported as `old -> new`; the new name is the one that
     // says where something landed.
     .map((file) => (file.includes(" -> ") ? (file.split(" -> ")[1] ?? file) : file))
-    .map((file) => file.replaceAll('"', ""));
+    .map((file) => file.replaceAll('"', ""))
+    .filter((file) => !jobWorkspacePath(file));
+}
+
+/** Where a job from before candidates moved into the job workspace wrote. */
+const LEGACY_CANDIDATES = `${ASSETS_DIR}/.candidates/`;
+
+/**
+ * True for a `git status` path that is the studio's own and not the tree:
+ * under `STUDIO_HOME` when that sits inside the checkout, or the old
+ * candidates directory a legacy record still names. Without it a job run with
+ * `STUDIO_HOME` inside the checkout would find its own candidate dirty and
+ * fail. An untracked parent of the home (`tmp/` for `tmp/studio`) is not
+ * left out: it exists before the job starts, so the before-and-after already
+ * drops it, and leaving it out would hide everything else beneath it.
+ */
+export function jobWorkspacePath(file: string): boolean {
+  if (file.startsWith(LEGACY_CANDIDATES)) return true;
+  const home = path.relative(REPO_ROOT, studioHome());
+  if (home === "" || home.startsWith("..") || path.isAbsolute(home)) return false;
+  return file.startsWith(`${home.split(path.sep).join("/")}/`);
 }

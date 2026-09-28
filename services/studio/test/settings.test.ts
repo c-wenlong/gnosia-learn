@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import ignore from "ignore";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { BASH_ALLOW, buildSettings } from "../src/settings";
+import { BASH_ALLOW, buildSettings, otherJobPatterns } from "../src/settings";
 import { cacheDir } from "../src/content-cache";
 import {
   absolute,
@@ -213,6 +215,41 @@ describe("the candidate lives in the job's own workspace", () => {
     const theirs = buildSettings({ jobId: "job-other", slug: "dot-product" });
     expect(theirs.permissions.allow).toContain(`Edit(/${candidatePath("job-other", "dot-product")})`);
     expect(theirs.permissions.deny).toContain(`Edit(/${jobDir("job-1")}/**)`);
+  });
+
+  it("denies a job enqueued after this one started, and never this job's own workspace", () => {
+    // The settings are written once, at spawn. A job queued while the agent
+    // runs has a workspace no enumerated rule names, so only the globs stand
+    // between the agent and its records. They go through the matcher the CLI
+    // uses (node-ignore, gitignore rules); a CLI run against 2.1.274 read the
+    // sibling's job.json without them and was refused with them.
+    const own = randomUUID();
+    const rules = buildSettings({ jobId: own, slug: "dot-product" }).permissions.deny;
+    const prefix = `Read(/${path.join(home, "jobs")}/`;
+    const globs = rules.filter((rule) => rule.startsWith(prefix) && /[[?]/.test(rule)).map((rule) => `jobs/${rule.slice(prefix.length, -1)}`);
+    expect(globs.length).toBe(own.length + 1);
+    const matcher = ignore().add(globs);
+    for (const mine of ["candidate/dot-product.tldr", "candidate/dot-product.svg", "scratch/snippet.js", "scratch/shots/after.png"]) {
+      expect(matcher.ignores(`jobs/${own}/${mine}`), mine).toBe(false);
+    }
+    for (let i = 0; i < 500; i += 1) {
+      const later = randomUUID();
+      expect(matcher.ignores(`jobs/${later}/job.json`), later).toBe(true);
+      expect(matcher.ignores(`jobs/${later}/candidate/dot-product.tldr`), later).toBe(true);
+    }
+    // One character off at every position, and a name that extends this one.
+    for (let i = 0; i < own.length; i += 1) {
+      const swapped = own.charAt(i) === "0" ? "1" : "0";
+      const near = `${own.slice(0, i)}${own.charAt(i) === "-" ? "a" : swapped}${own.slice(i + 1)}`;
+      expect(matcher.ignores(`jobs/${near}/job.json`), near).toBe(true);
+    }
+    expect(matcher.ignores(`jobs/${own}.old/job.json`)).toBe(true);
+    expect(rules).toContain(`Edit(/${path.join(home, "jobs", otherJobPatterns(own)[0] ?? "")}/**)`);
+  });
+
+  it("gives an id the matcher would read as a pattern no globs, only the walk", () => {
+    expect(otherJobPatterns("job[1]")).toEqual([]);
+    expect(otherJobPatterns("job-1")).toHaveLength("job-1".length + 1);
   });
 
   it("denies the rest of STUDIO_HOME: the checkouts, the cache, and anything added later", () => {

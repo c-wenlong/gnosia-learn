@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { BriefError, loadVocabulary, validateBrief, type ValidBrief } from "./brief";
+import { BriefError, loadVocabulary, validateBrief, vocabularyStatus, type ValidBrief } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { status as catalogStatus } from "./catalog";
 import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, VERB_TIMEOUT_MS } from "./config";
@@ -703,9 +703,11 @@ async function resume(
  * it holds edits nobody committed; `commit` is how such edits reach the
  * database, with the base check (edge case 18).
  *
- * The SVG route streams the blob the row names. `/api/assets/{id}/file` is
- * gated on `ASSET_FILES_ENABLED` as well, so borrowing it for thumbnails would
- * tie the studio to a second switch; one gate, `STUDIO_ENABLED`, which is D11.
+ * The SVG route streams the blob the row names, by the key in the cached
+ * diagram list, so a tile still draws with Postgres down. The web app's
+ * `/api/assets/{id}/file` would answer only while the database does, and only
+ * for a diagram with an asset row; the studio keeps one gate of its own,
+ * `STUDIO_ENABLED`, which is D11.
  */
 async function diagrams(
   request: IncomingMessage,
@@ -1126,14 +1128,9 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     doctor().catch(() => null),
     run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
     catalogStatus().catch(() => null),
-    loadVocabulary().then(
-      (read) => ({
-        readAt: read.readAt,
-        stale: read.stale,
-        ...(read.staleReason === undefined ? {} : { error: read.staleReason }),
-      }),
-      (error: unknown) => ({ readAt: null, stale: true, error: (error as Error).message }),
-    ),
+    // The last read any route made, when it is recent, rather than a
+    // `catalog topic ls` on every page render.
+    vocabularyStatus(),
   ]);
   const queueDepth = store.list({ state: "queued" }).length;
   // The same window and the same arithmetic the cap refuses on, rather than a

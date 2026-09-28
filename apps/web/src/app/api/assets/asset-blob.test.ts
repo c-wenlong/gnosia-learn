@@ -37,6 +37,7 @@ const VIDEO_ID = "manimkc:out/algorithms/demo/demo.mp4";
 const POSTER_ID = `poster:${VIDEO_ID}`;
 const PENDING_ID = "manimkc:out/algorithms/demo/pending.mp4";
 const LOST_ID = "manimkc:out/algorithms/demo/lost.mp4";
+const SVG_ID = "tldrawkc:learn/assets/demo-diagram.svg";
 const ORIGIN = "http://localhost:3000";
 
 type Handler = (
@@ -120,6 +121,17 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       video(PENDING_ID, "out/algorithms/demo/pending.mp4", pendingKey, pendingBytes),
       video(LOST_ID, "out/algorithms/demo/lost.mp4", lostKey, lostBytes),
       {
+        id: SVG_ID,
+        kind: "diagram_svg",
+        path: "learn/assets/demo-diagram.svg",
+        url: null,
+        contentHash: sha256(Buffer.from("<svg/>")),
+        bytes: 6,
+        title: "Demo diagram",
+        sourceRepo: "self-learn",
+        blobKey: null,
+      },
+      {
         id: POSTER_ID,
         kind: "poster",
         path: null,
@@ -175,6 +187,15 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     const response = await call(FILE, "file", VIDEO_ID, { range: "bytes=5000-6000" });
     expect(response.status).toBe(416);
     expect(response.headers.get("content-range")).toBe(`bytes */${VIDEO.length}`);
+  });
+
+  it("names the diagram writer, not the manimkc upload, for a diagram SVG with no stored copy", async () => {
+    const response = await call(FILE, "file", SVG_ID);
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { code?: string; detail?: string };
+    expect(body.code).toBe("not-uploaded");
+    expect(body.detail).toContain("catalog -- diagram put --slug demo-diagram");
+    expect(body.detail).not.toContain("manimkc");
   });
 
   it("answers a pending blob with 404 not-uploaded, not a 500", async () => {

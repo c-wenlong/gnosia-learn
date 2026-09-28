@@ -101,7 +101,7 @@ goes is the record of which brief produced them.
 | --- | --- |
 | `index_run` | One row per source: when it last ran, what it read, what it wrote, and anything else it wanted remembered. Overwritten each run. |
 | `mirror` | One row per (asset, destination): what one audit saw of a deliverable on Google Drive or Seafile. |
-| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. A type with no row is read from files. See [Who owns a type](#who-owns-a-type). |
+| `content_source` | Which content types the database owns, written by `catalog flip`, with the last export's hash and the parity the flip checked. The importers read a type with no row from files; the web app refuses it. See [Who owns a type](#who-owns-a-type). |
 | `catalog_instance` | One row: this database is `primary` or `copy`. A copy refuses every write (the copy guard below). |
 
 ### Studio
@@ -795,13 +795,17 @@ it moves. The other positions order links inside one snapshot and stay
 ### Who owns a type
 
 `content_source` has one row per content type once anything has recorded
-something about it, and a type with no row is read from its files. The row is
-the authority (D18): the importers and `catalog flip` read it directly, and a
-reader follows it through `selectSource`'s `ownership()` callback
-(`contentOwnership` in `src/content/ownership.ts`, passed by the web app's
+something about it. The row is the authority (D18): the importers and
+`catalog flip` read it directly, and a reader follows it through
+`selectSource`'s `ownership()` callback (`contentOwnership` in
+`src/content/ownership.ts`, passed by the web app's
 `apps/web/src/data/source.ts`) unless `CONTENT_SOURCE` overrides it for that
-reader. When the rows cannot be read, a reader falls back to files and says so
-once per outage.
+reader. Since phase 2 the web app has no file reader: a type with no row, a
+row that says `files`, or `CONTENT_SOURCE` pointing a type at files is refused
+with a `ContentUnavailableError` naming `catalog flip <type>`, and rows that
+cannot be read are refused too (logged once per outage), where they used to
+fall back to the files. The files are an export and an import format, never a
+read path for the app.
 
 | Column | Written by | Read by |
 | --- | --- | --- |

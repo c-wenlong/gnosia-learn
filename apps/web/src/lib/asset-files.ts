@@ -281,11 +281,11 @@ export async function resolveRowText(
 ): Promise<AssetRowText | AssetFileProblem | undefined> {
   const type = rowTypeFor(row.kind);
   if (type === null) return undefined;
-  const seam = contentSource();
-
   const name = path.basename(row.path ?? row.id);
   let body: Buffer | null = null;
   try {
+    // Inside the try with the reads: the seam is where a refusal comes from.
+    const seam = contentSource();
     if (type === "concepts") {
       // A note asset is linked to exactly one concept, its own: the concepts
       // indexer and the row writer both link it so.
@@ -327,10 +327,21 @@ const noStoredCopy = (row: AssetRef): AssetFileProblem =>
         status: 404,
         code: "not-uploaded",
         error: "No such asset file.",
-        detail:
-          `Asset ${row.id} has no copy in the blob store, and this server reads no files off its disk. ` +
-          `Run \`npm run catalog -- asset upload --source manimkc\` for a video or its sidecars.`,
+        detail: `Asset ${row.id} has no copy in the blob store, and this server reads no files off its disk. ${uploadHint(row)}`,
       };
+
+/**
+ * The command that stores this kind's bytes. A diagram's SVG is stored by the
+ * diagram writer, never by the manimkc upload, which would walk the videos
+ * and leave the SVG missing.
+ */
+function uploadHint(row: AssetRef): string {
+  if (row.kind === "diagram_svg") {
+    const slug = path.basename(row.path ?? row.id).replace(/\.svg$/, "");
+    return `Run \`npm run catalog -- diagram put --slug ${slug} --tldr <file> --svg <file> --reason <text>\` to store the diagram and its SVG.`;
+  }
+  return "Run `npm run catalog -- asset upload --source manimkc` for a video or its sidecars.";
+}
 
 /**
  * An asset id to where its bytes are served from, or the reason there is

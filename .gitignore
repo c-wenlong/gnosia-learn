@@ -1,7 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# dependencies. Any depth: npm nests a workspace's own copy under it when
+# the root already holds a different major of the same package.
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*

@@ -568,15 +568,34 @@ describe("the vocabulary", () => {
   });
 
   it("is what /api/health reports on: fresh, then stale with the copy's readAt, then no copy", async () => {
+    // Health reuses the last read any route made, so each step is a read by
+    // the vocabulary route and then the health line that reports it.
+    await get("/api/vocabulary");
     const fresh = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string };
     expect(fresh.stale).toBe(false);
     catalogMock.topicList.mockResolvedValue(topicListDown());
+    await get("/api/vocabulary");
     const stale = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string; error: string };
     expect(stale).toMatchObject({ stale: true, readAt: fresh.readAt });
     expect(stale.error).toContain("ECONNREFUSED");
     await rm(path.join(process.env.STUDIO_HOME ?? "", "cache"), { recursive: true, force: true });
+    await get("/api/vocabulary");
     const none = (await get("/api/health")).body.vocabulary as { stale: boolean; readAt: string | null };
     expect(none).toMatchObject({ stale: true, readAt: null });
+  }, 60_000);
+
+  it("does not spawn a topic listing per health call, and reads again once the last read is old", async () => {
+    await get("/api/vocabulary");
+    const calls = catalogMock.topicList.mock.calls.length;
+    await get("/api/health");
+    await get("/api/health");
+    expect(catalogMock.topicList.mock.calls.length).toBe(calls);
+    // Past the reuse window: concurrent callers share one read.
+    const { vocabularyStatus } = await import("../src/brief");
+    const [first, second] = await Promise.all([vocabularyStatus(0), vocabularyStatus(0)]);
+    expect(catalogMock.topicList.mock.calls.length).toBe(calls + 1);
+    expect(first).toEqual(second);
+    expect(first.stale).toBe(false);
   }, 60_000);
 
   it("checks a brief against the catalog's topics, and refuses one it does not list", async () => {
