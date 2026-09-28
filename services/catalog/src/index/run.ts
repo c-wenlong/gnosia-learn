@@ -18,6 +18,8 @@ import path from "node:path";
 import type { BlobStore } from "@self-learn/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
+import { unhookPosters } from "../content/asset-upload";
+import { blobContractInForce } from "../content/blob-contract";
 import { databaseIdentity, recordRoot } from "../content/import-root";
 import { exportHash, isExportType, readTypeFiles, TYPE_LOCATION } from "../content/layout";
 import { readContentSources } from "../content/ownership";
@@ -357,6 +359,7 @@ export async function runIndex(
     toolsRoot,
     manimkcRoot,
     vocabulary,
+    blobsRequired: await blobContractInForce(db),
     knownConcepts: () => {
       conceptCache ??= ranConcepts
         ? Promise.resolve(producedConcepts)
@@ -503,6 +506,22 @@ export async function runIndex(
     };
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
+    // Under the contract the import links a re-render's bytes itself, so a
+    // poster cut from a video's earlier bytes is unhooked here, for the next
+    // upload to recut. Every video in the run is asked, not only the ones this
+    // write changed, so a run that failed between the two is repaired.
+    if (indexer.source === "manimkc" && context.blobsRequired === true) {
+      const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
+      const unhooked = await unhookPosters(db, videos, {
+        author,
+        reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the poster was cut from`,
+      });
+      if (unhooked.length > 0) {
+        write.notes.push(
+          `${unhooked.length} poster(s) unhooked from a re-rendered video; the next \`catalog asset upload\` cuts new ones`,
+        );
+      }
+    }
 
     // The concepts source has now moved or pruned what was filed under the
     // topics the topics source held, so they go, before any later source
@@ -574,6 +593,9 @@ async function ownedSkips(
   selected: readonly Indexer[],
 ): Promise<Map<IndexSource, { source: IndexSource; reason: string }>> {
   const out = new Map<IndexSource, { source: IndexSource; reason: string }>();
+  // Recorded only once every owned type has been checked: a later type's
+  // refusal refuses the whole import, which must then have written nothing.
+  const roots: Parameters<typeof recordRoot>[1][] = [];
   const rows = await readContentSources(db);
   for (const indexer of selected) {
     const type = CONTENT_TYPE[indexer.source];
@@ -606,11 +628,12 @@ async function ownedSkips(
       // This tree is where the type's files are now, for this database: a
       // copy imported from an export folder writes through to that folder,
       // not to the tree its template was imported from.
-      await recordRoot(db, type, root);
+      roots.push(type);
       continue;
     }
     throw new IndexError(await editedExport(db, type, root, files, row.exportHash === null));
   }
+  for (const type of roots) await recordRoot(db, type, root);
   if (out.has("manimkc") && !out.has("mirrors") && selected.some((i) => i.source === "mirrors")) {
     out.set("mirrors", {
       source: "mirrors",
@@ -636,12 +659,19 @@ async function editedExport(
     const expected = new Map((await renderType(db, type)).map((f) => [f.path, f.bytes]));
     const paths = new Set([...expected.keys(), ...files.map((f) => f.path)]);
     const actual = new Map(files.map((f) => [f.path, f.bytes]));
-    const same = (p: string) => {
+    // A file the export would write and the tree lacks was deleted, one the
+    // tree has and the export would not write was added: neither is an edit.
+    const change = (p: string): string | null => {
       const want = expected.get(p);
       const got = actual.get(p);
-      return want !== undefined && got !== undefined && want.equals(got);
+      if (want === undefined) return `${p} (added)`;
+      if (got === undefined) return `${p} (deleted)`;
+      return want.equals(got) ? null : `${p} (edited)`;
     };
-    differing = [...paths].filter((p) => !same(p)).sort();
+    differing = [...paths]
+      .sort()
+      .map(change)
+      .filter((c): c is string => c !== null);
   } catch {
     differing = [];
   }
@@ -656,7 +686,7 @@ async function editedExport(
   }
   return (
     head +
-    (differing.length === 0 ? "" : `Edited since the last export${which}. `) +
+    (differing.length === 0 ? "" : `Changed since the last export${which}. `) +
     `Apply the change through the catalog's ${type} command, which records who made it and why, ` +
     `then \`catalog export --only ${type} --out ${root}\` rewrites these files; or discard the edit.`
   );

@@ -12,6 +12,7 @@ import { commitNoteText, noteRevision } from "../../../../../../services/catalog
 import { appendLog, logAssetId } from "../../../../../../services/catalog/src/content/session-logs";
 import { dbSource } from "../../../../../../services/catalog/src/content/source";
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
+import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   makeFixture,
   note,
@@ -114,7 +115,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       saved[key] = process.env[key];
     }
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    // At 0012: these rows carry a path and no blob, which the contract (0013)
+    // forbids; p2/readers-db-only rewrites the suite for the contract.
+    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     home = await mkdtemp(path.join(tmpdir(), "asset-rows-"));
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;

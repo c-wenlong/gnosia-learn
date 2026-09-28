@@ -48,7 +48,7 @@ describe.skipIf(!reachable.ok)("concept.topic_slug NOT NULL", () => {
 
   it("is reported by doctor before the migration, archived rows included", async () => {
     const report = await doctor(scratch.db, "scratch");
-    expect(report.migrations.pending).toEqual(["0012_concept_topic_not_null"]);
+    expect(report.migrations.pending).toEqual(["0012_concept_topic_not_null", "0013_asset_blob_contract"]);
     expect(report.conceptsWithoutTopic).toEqual(["gone", "loose"]);
     expect(report.conceptTopicRequired).toBe(false);
   });

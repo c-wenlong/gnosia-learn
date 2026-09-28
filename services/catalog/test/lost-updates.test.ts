@@ -31,6 +31,7 @@ import { bindCatalog, MovedBaseError, updateConcept } from "../src/learn/files";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { storedBlob } from "./stored-blob";
 
 /**
  * Lost updates (docs/CONTENT-MIGRATION.md, phase 1 fixes S2, S3 and S10): a
@@ -438,9 +439,10 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
 
   it("includes the course files when a module joined the topic after the rename looked, and lists stale SVGs", async () => {
     // A diagram SVG filed under gamma: renaming the topic leaves its stamp stale.
+    const svg = await storedBlob(scratch.db, "gamma-map", "svg");
     await scratch.db.execute(sql`
-      insert into asset (id, kind, path, content_hash, bytes, title, source_repo)
-      values ('diagram:learn/assets/gamma-map.svg', 'diagram_svg', 'learn/assets/gamma-map.svg', 'x', 1, 'A map', 'self-learn')`);
+      insert into asset (id, kind, path, content_hash, bytes, title, source_repo, blob_key)
+      values ('diagram:learn/assets/gamma-map.svg', 'diagram_svg', 'learn/assets/gamma-map.svg', 'x', 1, 'A map', 'self-learn', ${svg})`);
     await scratch.db.execute(sql`insert into asset_topic (asset_id, topic_slug) values ('diagram:learn/assets/gamma-map.svg', 'gamma')`);
 
     // The course import that moves module two under gamma, holding its export
