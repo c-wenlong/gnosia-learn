@@ -1130,6 +1130,16 @@ export class Drafts {
     const record = this.require(id);
     const brief = record.brief!;
 
+    // A8, as `POST /api/jobs` refuses it, and before the topic is created:
+    // a press that can only fail should leave the vocabulary as it found it.
+    const checked = await doctor();
+    if (checked.code !== 0) {
+      throw new JobRefused(503, "tldrawkc cannot run on this machine, so nothing was queued", {
+        doctor: doctorChecks(checked).filter((check) => check.status !== "pass"),
+        fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
+      });
+    }
+
     if (record.pendingTopic !== null) await this.createTopic(id, record.pendingTopic);
 
     let vocabulary: Vocabulary;
@@ -1146,15 +1156,6 @@ export class Drafts {
     } catch (error) {
       if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
       throw error;
-    }
-
-    // A8, as `POST /api/jobs` refuses it.
-    const checked = await doctor();
-    if (checked.code !== 0) {
-      throw new JobRefused(503, "tldrawkc cannot run on this machine, so nothing was queued", {
-        doctor: doctorChecks(checked).filter((check) => check.status !== "pass"),
-        fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
-      });
     }
 
     // The row the job's `draft_id` names has to be there first.

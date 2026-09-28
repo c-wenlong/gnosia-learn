@@ -1024,18 +1024,18 @@ started, `[x]` done.
 Two PRs: 1a is the runner and the catalog (everything up to the routes), 1b is
 the web app. 1b builds against the API table above and lands after 1a.
 
-- [ ] Migration: `draft` (with `owner_id` and `kind`), `job.draft_id`, their
+- [x] Migration: `draft` (with `owner_id` and `kind`), `job.draft_id`, their
       indexes and `CHECK`s; `STUDIO_TABLES` gains `draft`; `catalog draft`
       verbs to upsert and show one, mirroring `catalog job`, each taking
       `--owner`
-- [ ] `services/studio/src/planner.ts`: the spawn with every flag in the
+- [x] `services/studio/src/planner.ts`: the spawn with every flag in the
       planner table, the system prompt assembly with its three blocks, the turn
       loop, the brief extraction and the one automatic retry
-- [ ] `services/studio/src/drafts.ts`: the disk record, the transcript, the
+- [x] `services/studio/src/drafts.ts`: the disk record, the transcript, the
       reconcile pass for an interrupted turn, the turn cap
-- [ ] Per-turn spend entries in `spendWindow`; `/api/health` counts them
-- [ ] The draft routes, and `draftId` on `POST /api/jobs`
-- [ ] A proposed topic: the `topic` block parsed, `catalog topic add
+- [x] Per-turn spend entries in `spendWindow`; `/api/health` counts them
+- [x] The draft routes, and `draftId` on `POST /api/jobs`
+- [x] A proposed topic: the `topic` block parsed, `catalog topic add
       --dry-run --json` run on it, stored as `pending_topic`, and created by
       `catalog topic add` on the Draw press before the enqueue
 - [ ] `Composer` extracted from `TutorChat` into `components/ui/`, and

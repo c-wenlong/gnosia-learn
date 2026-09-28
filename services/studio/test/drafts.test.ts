@@ -254,6 +254,16 @@ describe("a proposed topic", () => {
     expect(view.jobId).toBe("job-1");
   });
 
+  it("checks the doctor before creating the topic, so a press that can only fail creates nothing", async () => {
+    await fake.script([{ text: withTopic({ ...good, topic: "mesh-vpn" }) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "tailscale tunnels");
+    canvasMock.doctor.mockResolvedValue({ code: 1, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
+    await expect(drafts.draw(record.id, "p")).rejects.toMatchObject({ status: 503 });
+    expect(catalogMock.topicAdd).not.toHaveBeenCalled();
+    expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
+  });
+
   it("refuses the same reply with a bad relation, and nothing is pending", async () => {
     const brief = { ...bad, topic: "mesh-vpn" };
     await fake.script([{ text: withTopic(brief) }, { text: withTopic(brief) }]);
