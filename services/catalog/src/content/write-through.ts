@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -104,7 +104,12 @@ interface InStep {
  * Refuse unless each type's files are the database's own export. Exported so
  * a dry run can say up front that the real write would be refused.
  */
-export async function assertInStep(db: CatalogDatabase, types: readonly ExportType[]): Promise<InStep[]> {
+export async function assertInStep(
+  db: CatalogDatabase,
+  types: readonly ExportType[],
+  options: WriteThroughOptions = {},
+): Promise<InStep[]> {
+  const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolved)));
   const out: InStep[] = [];
   for (const type of types) {
     const root = await importRoot(db, type);
@@ -116,7 +121,10 @@ export async function assertInStep(db: CatalogDatabase, types: readonly ExportTy
     }
     const before = await readTypeFiles(root, type);
     const expected = await renderType(db, type);
-    const changed = differing(before, expected);
+    const changed: string[] = [];
+    for (const relative of differing(before, expected)) {
+      if (!exempt.has(await resolved(path.join(root, relative)))) changed.push(relative);
+    }
     if (changed.length > 0) {
       throw new WriteThroughError(
         `${TYPE_LOCATION[type]} under ${root} is not what the database holds: ${changed.join(", ")} ` +
@@ -128,6 +136,26 @@ export async function assertInStep(db: CatalogDatabase, types: readonly ExportTy
     out.push({ type, root, before });
   }
   return out;
+}
+
+/**
+ * `exempt`: files the writer was handed as its input, which may differ from
+ * the database because they are the edit being written. `catalog course
+ * import content/courses/cs2111.yaml` after editing that file in place is the
+ * ordinary way to change a course, and refusing it as an unimported edit
+ * would refuse the import of exactly that edit.
+ */
+export interface WriteThroughOptions {
+  exempt?: readonly string[];
+}
+
+/** A path with its symlinks resolved, so two spellings of one file compare equal. */
+async function resolved(file: string): Promise<string> {
+  try {
+    return await realpath(file);
+  } catch {
+    return path.resolve(file);
+  }
 }
 
 let temporaryCounter = 0;
@@ -148,6 +176,7 @@ export async function writeThrough<T>(
   db: CatalogDatabase,
   types: readonly ExportType[],
   write: (tx: CatalogDatabase) => Promise<T>,
+  options: WriteThroughOptions = {},
 ): Promise<WriteThroughResult<T>> {
   const sorted = [...new Set(types)].sort();
   /** Every file touched so far: the bytes it held before and the bytes written (null: absent). */
@@ -195,7 +224,7 @@ export async function writeThrough<T>(
   try {
     return await db.transaction(async (tx) => {
       for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
-      const steps = await assertInStep(tx, sorted);
+      const steps = await assertInStep(tx, sorted, options);
 
       const value = await write(tx);
 

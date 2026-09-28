@@ -18,7 +18,7 @@
  */
 
 export { ContentError } from "./errors";
-export { COURSES_DIR, loadCourses, type LoadCoursesOptions } from "./courses";
+export { COURSES_DIR, courseFileName, loadCourses, parseCourse, type LoadCoursesOptions } from "./courses";
 export { TAGS_FILE, loadTags } from "./tags";
 export { TOPIC_RELATION_KINDS, TOPICS_FILE, loadTopics } from "./topics";
 export type { LoadOptions } from "./read";
