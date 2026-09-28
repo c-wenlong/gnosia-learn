@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -10,8 +11,9 @@ import type {
 } from "@self-learn/schema";
 
 import { IndexError, IndexErrors } from "./errors";
-import { directoriesIn, fileFacts, filesIn, relativeTo } from "./files";
-import { parseFrontmatter, readList, readText } from "./frontmatter";
+import { directoriesIn, filesIn, relativeTo } from "./files";
+import { NoteError, readNote, renderNote } from "../content/notes";
+import { parseFrontmatter } from "./frontmatter";
 import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";
 
@@ -74,7 +76,8 @@ export const conceptsIndexer: Indexer = {
 
     for (const file of files) {
       const where = relativeTo(repoRoot, file);
-      const { data } = parseFrontmatter(await readFile(file, "utf8"));
+      const text = await readFile(file, "utf8");
+      const { data } = parseFrontmatter(text);
 
       if (RETIRED_LINK_KEY in data) {
         problems.add(
@@ -84,10 +87,23 @@ export const conceptsIndexer: Indexer = {
         continue;
       }
 
+      // The note's fields as the row holds them (Track C): the frontmatter's
+      // keys as columns and the markdown after it as `body`, so the database
+      // can render the note back without the file. A key the row has no
+      // column for is refused here, by name, rather than dropped.
+      let note;
+      try {
+        note = readNote(text, where, path.basename(file, ".md"));
+      } catch (error) {
+        if (!(error instanceof NoteError)) throw error;
+        for (const problem of error.problems) problems.add(problem);
+        continue;
+      }
+
       // The id in the frontmatter wins over the filename. They agree today, and
       // when they do not the id is what every `requires:` list in every other
       // note points at, so it is the one that must be the primary key.
-      const slug = readText(data, "id") ?? path.basename(file, ".md");
+      const slug = note.slug;
       if (slugs.has(slug)) {
         problems.add(`${where}: concept id "${slug}" is already defined by another note`);
         continue;
@@ -105,25 +121,37 @@ export const conceptsIndexer: Indexer = {
 
       concepts.push({
         slug,
-        title: readText(data, "title") ?? slug,
-        summary: readText(data, "summary"),
+        title: note.title,
+        summary: note.summary,
         topicSlug,
         // Where the topic lists it, so the export writes `maps.concepts` back
         // in the order it was authored. A rank; the writer places the stored
         // number (D22), so a note added to the list moves no other concept.
         topicPosition: (vocabulary.bySlug.get(topicSlug)?.maps.concepts.indexOf(slug) ?? -1) + 1,
         path: where,
+        // The folder under learn/concepts/, the one level the scan descends.
+        domain: path.basename(path.dirname(file)),
+        body: note.body,
+        tags: note.tags,
+        sources: note.sources,
+        authoredAt: note.created,
       });
 
       for (const kind of ["requires", "assumes"] as const) {
-        for (const target of readList(data, kind)) {
+        for (const target of note[kind]) {
           prerequisiteDrafts.push({ from: slug, to: target, kind, where });
         }
       }
 
-      // The note is also a file. Hashing it is what lets bundle 6 notice a
-      // diagram or a transcript that no longer matches the note it came from.
-      const { contentHash, bytes } = await fileFacts(file);
+      // The note is also an asset. Its hash is of the note as the catalog
+      // holds it, the file its row renders (`renderNote`), not of the bytes
+      // on disk: the two differ only in frontmatter layout a row does not
+      // keep, and hashing the rendering makes the asset the same whether it
+      // was imported from the tree, from an export of it, or written by
+      // `learn concept` once the database owns the notes.
+      const rendered = Buffer.from(renderNote(note), "utf8");
+      const contentHash = createHash("sha256").update(rendered).digest("hex");
+      const bytes = rendered.length;
       const id = `${ASSET_PREFIX.concepts}${where}`;
       assets.push({
         id,
@@ -132,7 +160,7 @@ export const conceptsIndexer: Indexer = {
         url: null,
         contentHash,
         bytes,
-        title: readText(data, "title") ?? slug,
+        title: note.title,
         sourceRepo: "self-learn",
       });
       assetConcepts.push({ assetId: id, conceptSlug: slug });

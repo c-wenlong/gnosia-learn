@@ -1232,6 +1232,12 @@ export interface FileConceptInput {
      * index, which reads every note and can resolve it.
      */
     prerequisites?: readonly { slug: string; kind: "requires" | "assumes" }[];
+    /**
+     * The rest of the note as its row holds it since Track C (the folder, the
+     * body, `tags`, `sources`, `created`), for a new row, so the concepts
+     * index that follows finds nothing to change here either.
+     */
+    note?: { domain: string | null; body: string; tags: string[]; sources: string[]; authoredAt: Date | null };
   };
 }
 
@@ -1299,7 +1305,15 @@ export async function fileConceptUnderTopic(
     const [existing] = await tx.select().from(concept).where(eq(concept.slug, slug));
     const row =
       existing === undefined
-        ? { slug, title: input.row.title, summary: input.row.summary, path: input.row.path, topicSlug: input.topic, topicPosition }
+        ? {
+            slug,
+            title: input.row.title,
+            summary: input.row.summary,
+            path: input.row.path,
+            topicSlug: input.topic,
+            topicPosition,
+            ...(input.row.note ?? {}),
+          }
         : { ...existing, topicSlug: input.topic, topicPosition };
     return writeContent(tx, {
       type: "concept",
