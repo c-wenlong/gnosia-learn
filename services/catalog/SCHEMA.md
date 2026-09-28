@@ -115,8 +115,10 @@ goes is the record of which brief produced them.
 Three shapes here are worth stating outright.
 
 **`target_path` and `candidate_path` are different files.** A job writes only
-the candidate, under `learn/assets/.candidates/`, and nothing under
-`learn/assets/` changes until a person accepts. So `target_path` names a file
+its candidate, in its own workspace, `jobs/<id>/candidate/<name>` relative to
+the runner's `STUDIO_HOME`, which is what `candidate_path` holds (rows from
+before phase 2 keep `learn/assets/.candidates/<name>` as history); nothing
+lands until a person accepts. So `target_path` names a file
 the job has never opened, and it is also the lease key:
 
 ```sql

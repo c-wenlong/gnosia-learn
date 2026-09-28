@@ -256,6 +256,12 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       expect(result.job.candidatePath).toBe("jobs/named-job/candidate/named.tldr");
     });
 
+    it("refuses an id that is not one path segment, since it names the job's workspace", async () => {
+      for (const id of ["../escape", "a/b", ".hidden", "x".repeat(65)]) {
+        await expect(enqueue({ id, target: "learn/assets/odd-id.tldr" })).rejects.toThrow(/is not a job id/);
+      }
+    });
+
     it("refuses a target outside learn/assets, or one that is not a .tldr", () => {
       expect(() => briefTarget("learn/assets/deep/x.tldr")).toThrow(/directly inside/);
       expect(() => briefTarget("../outside.tldr")).toThrow(/repo-relative/);

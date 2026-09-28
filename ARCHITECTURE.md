@@ -71,10 +71,10 @@ another repo.
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
-| `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, files unless a type resolves to the database |
+| `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, from the database only; a type not flipped is refused by name |
 | `apps/web/src/data/courses/index.ts` | Server-only `getCourses()` and the course lookups every page calls |
 | `apps/web/src/data/content.ts` | Server-only `getTags()`: the cross-course themes |
-| `apps/web/src/data/topics.ts` | Server-only `getTopics()`: the shared vocabulary, and the maps and picker options the studio builds from it |
+| `apps/web/src/data/topics.ts` | Server-only `getTopics()`: the shared vocabulary, and the pure maps and picker options the studio builds from the runner's copy of it |
 
 `packages/` and `services/` are npm workspaces, Node-only, with their own
 tsconfigs.
@@ -85,6 +85,7 @@ tsconfigs.
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
+| `services/studio/` | The diagram studio's job runner and loopback API. It reads the topic vocabulary only through `catalog topic ls`, with the last good read cached under `$STUDIO_HOME/cache/topics.json` (D13), and opens no database connection of its own. Each job draws in its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, never in the working tree, and Accept lands the candidate with `catalog diagram put --job`. Its repo root is where its code sits, not a walk up to `content/` ([docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)) |
 | `content/` | Authored data: the topic vocabulary, the theme tags and the course YAML |
 
 `scripts/learn/` is what is left of the pipeline once its state moved into

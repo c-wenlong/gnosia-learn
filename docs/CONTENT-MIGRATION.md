@@ -1508,7 +1508,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       courses row set back to `files`, `/courses` rendered the panel and the
       log named `catalog flip courses`, and with `DATABASE_URL` at a dead
       port it rendered the panel beside the store banner.
-- [ ] **Studio:** reads through the seam with its cache only; the repo-root
+- [x] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
       `vitest.setup.ts`'s tracked-tree check moves to the seed's assets
@@ -1516,6 +1516,29 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       The web app's studio screen shows D13's "stale since" banner from the
       runner's `health.vocabulary` (`stale`, `readAt`), which exists since 0.6
       and which nothing in `apps/web` reads yet.
+
+      **Built** (same branch). `paths.ts` takes the repo root from its own
+      location, as the catalog's `env.ts` does, with `STUDIO_REPO_ROOT` kept
+      for the tests. The vocabulary is `catalog topic ls --json` through
+      `readThrough("topics")`, so the studio still opens no database
+      connection, and `fileSource` is gone from it. Candidates are
+      `$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr|.svg`, and
+      `job.candidate_path` holds that path relative to `STUDIO_HOME`,
+      derived and checked by the catalog (a job id must be one path segment
+      now, since it names the directory); `CANDIDATES_DIR` is gone. The
+      permission file allows exactly the job's two candidate files and denies
+      every other job, `work/`, `cache/` and anything else under
+      `STUDIO_HOME`. A record from before the move keeps resolving against
+      the repository, and a queued one is moved into its workspace before it
+      draws. `/api/vocabulary` serves the cached list, and the two studio
+      screens take their topics from it rather than from the app's
+      database-only read, which throws with Postgres down (U3); they show the
+      "stale since" banner from `health.vocabulary`, louder when `readAt` is
+      null. Proof on its own flipped copy: the runner reported the vocabulary
+      fresh, then stale with the cached `readAt` against a dead port, where
+      `/studio` rendered the banner; a real Sonnet job drew in its workspace
+      and Accept landed a revision with `git status` clean. The tracked-tree
+      check's retargeting to `seed/` stays with the Tests item.
 - [ ] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The

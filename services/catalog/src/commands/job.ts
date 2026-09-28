@@ -259,6 +259,9 @@ export function briefTarget(given: string): string {
   return normalised;
 }
 
+/** A job id: one path segment, since it names the job's workspace. A UUID passes. */
+const JOB_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+
 /**
  * Where a job writes before anyone accepts it: `jobs/<id>/candidate/<name>`,
  * relative to the runner's `STUDIO_HOME`.
@@ -347,6 +350,11 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
   const targetPath = briefTarget(asString(document.target, "target"));
   const idempotencyKey = asString(document.idempotencyKey, "idempotencyKey");
   const id = document.id?.trim() || randomUUID();
+  // The id is a directory name now, in the candidate path below and in the
+  // runner's workspace, so a slash or a dot-dot in it would move both.
+  if (!JOB_ID.test(id)) {
+    throw new JobError(`"id" ${JSON.stringify(id)} is not a job id: letters, digits and dashes, up to 64.`);
+  }
   const candidatePath =
     document.candidate === undefined
       ? candidateFor(id, targetPath)

@@ -689,6 +689,14 @@ not have to be worked out again.
   under the OS temp directory and the setup file checks the tracked listing
   after every test file. A new suite that needs a tree to write into takes a
   temp one, the way `LEARN_ROOT` and `STUDIO_HOME` already do.
+- **A studio job's `candidate_path` is relative to `STUDIO_HOME`, not to the
+  repository.** The catalog stores `jobs/<id>/candidate/<slug>.tldr` and
+  refuses any other value, absolute included (`briefCandidate` in
+  `services/catalog/src/commands/job.ts`), while the runner's own `job.json`
+  holds the absolute path. Resolve a catalog value against `STUDIO_HOME`,
+  never the repo. A record from before phase 2 still names
+  `learn/assets/.candidates/<slug>` repo-relative, and the runner's
+  `absolute()` resolves it, which is why those paths are never rewritten.
 - **A studio job reaching a terminal state does not mean the runner has
   finished writing it.** `Runner.finish` in `services/studio/src/runner.ts`
   does five things in order: put the new state in the store's in-memory map,

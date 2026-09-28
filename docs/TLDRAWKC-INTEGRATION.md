@@ -1504,9 +1504,10 @@ program ran this". It is also the only form that can read `STUDIO_ENABLED` at
 request time, since `rewrites()` is evaluated when the config loads — so one
 build serves both the deployed encyclopedia and a local studio.
 
-*`ASSET_FILES_ENABLED` is a second variable and the studio does not touch it.*
-That flag did not exist when this decision was written; it now gates
-`/api/assets/{id}/file`. Borrowing that route for studio thumbnails would have
+*`ASSET_FILES_ENABLED` was a second variable and the studio did not touch it.*
+That flag did not exist when this decision was written; it gated
+`/api/assets/{id}/file`'s file branch until phase 2 of
+[CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) removed both. Borrowing that route for studio thumbnails would have
 made the studio depend on two flags — and worse, that route also requires the
 asset to be **indexed**, and an untopiced `.tldr` has no asset row at all. The
 blank tile would land on exactly the diagram the studio exists to show. So
