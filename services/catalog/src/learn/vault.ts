@@ -643,6 +643,9 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
 
     // A file the database no longer has goes, if unedited. Not when some rows
     // could not be read: the file of a note left out above is not gone.
+    // The README first, so a problem with it is known before anything is removed.
+    await pullReadme(dir, manifest, report.problems);
+
     // Every stale file is read before any is removed, so one that cannot be
     // read stops the removals rather than arriving halfway through them.
     const live = new Set(items.map((item) => item.rel));
@@ -671,7 +674,6 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
       }
     }
 
-    await pullReadme(dir, manifest, report.problems);
     manifest.pulledAt = new Date().toISOString();
     await writeManifest(dir, manifest);
     return report;

@@ -423,14 +423,22 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     expect(await read(vault, plain)).toBe("gone\n");
   }, 60_000);
 
-  it("reports a README that is not a plain file", async () => {
+  it("reports a README that is not a plain file, before removing anything", async () => {
     const vault = await newVault();
     await pull(vault);
     await rm(path.join(vault, "README.md"));
     await mkdir(path.join(vault, "README.md"));
+    const stale = "concepts/fixtures/gone.md";
+    await writeFile(path.join(vault, stale), "gone\n");
+    const recorded = await manifest(vault);
+    recorded.files[stale] = { kind: "note", id: "gone", base: 1, hash: createHash("sha256").update("gone\n").digest("hex") };
+    await writeFile(path.join(vault, ".vault.json"), JSON.stringify(recorded, null, 2));
     const pulled = await learn("vault", "pull", "--out", vault, "--json");
     expect(pulled.code).toBe(1);
-    expect((JSON.parse(pulled.stdout) as PullReport).problems).toEqual([expect.stringMatching(/README\.md is not a plain file/)]);
+    const report = JSON.parse(pulled.stdout) as PullReport;
+    expect(report.problems).toEqual([expect.stringMatching(/README\.md is not a plain file/)]);
+    expect(report.removed).toEqual([]);
+    expect(await read(vault, stale)).toBe("gone\n");
   }, 60_000);
 
   it("refuses a vault inside the repository", async () => {
