@@ -38,7 +38,19 @@ import { panelHref } from "@/lib/studio-view";
  * because "what did it do to get here" is the other half of deciding.
  */
 
-export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
+export function JobPanel({
+  jobId,
+  path,
+  embedded = false,
+}: {
+  jobId: string;
+  path: string;
+  /**
+   * Inside the studio's panel, which carries the title and Close in its own
+   * header and is 720px wide rather than 320px: the same parts, more room.
+   */
+  embedded?: boolean;
+}) {
   const { jobs, watching, events, connection, post, refresh } = useStudioJobs();
   const router = useRouter();
   const cached = jobs.find((entry) => entry.jobId === jobId) ?? null;
@@ -94,9 +106,13 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
     }
   };
 
+  const shell = embedded
+    ? "flex flex-col px-5 py-4"
+    : "flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3";
+
   if (job === null) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
+      <div className={shell}>
         <PanelHeading>Job</PanelHeading>
         <p className="text-xs text-[var(--muted)]">
           {looking ? (
@@ -132,7 +148,8 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
   const reviewing = job.state === "awaiting_review" || job.state === "accepted";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
+    <div className={shell}>
+      {!embedded && (
       <div className="mb-2 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <PanelHeading>Job</PanelHeading>
@@ -146,6 +163,7 @@ export function JobPanel({ jobId, path }: { jobId: string; path: string }) {
           Close
         </Link>
       </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <Chip tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{job.state}</Chip>

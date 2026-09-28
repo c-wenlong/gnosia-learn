@@ -159,6 +159,21 @@ describe("what it will not render", () => {
   });
 });
 
+describe("images as links", () => {
+  it("links a markdown image instead of loading it, for text nobody here wrote", () => {
+    const host = render("![a tracker](https://evil.example/pixel.png)", { images: "link" });
+    expect(host.querySelector("img")).toBeNull();
+    const link = host.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("https://evil.example/pixel.png");
+    expect(link.textContent).toBe("a tracker");
+  });
+
+  it("still loads it by default, for a note", () => {
+    const host = render("![a picture](/a.png)");
+    expect(host.querySelector("img")).not.toBeNull();
+  });
+});
+
 describe("embeds", () => {
   it("frames a resolved embed as a figure with the file as its alt text", () => {
     const host = render("![[vector-as-a-list-of-numbers.svg]]", {

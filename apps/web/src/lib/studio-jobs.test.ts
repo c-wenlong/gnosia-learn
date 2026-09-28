@@ -535,6 +535,15 @@ describe("a refused enqueue", () => {
     expect(report.detail).toContain("Nothing was queued");
   });
 
+  it("tells a conversation's own 409 from a held target", () => {
+    const busy = refusalReport(409, { error: "draft d1 is open", detail: { reason: "not-briefed", state: "open" } });
+    expect(busy.code).toBe("draft-busy");
+    expect(busy.detail).toBe("draft d1 is open");
+    expect(refusalReport(409, { error: "x", detail: { reason: "in-flight" } }).headline).toMatch(/still answering/);
+    expect(refusalReport(409, { error: "x", detail: { reason: "draw-in-progress" } }).headline).toMatch(/just pressed/);
+    expect(refusalReport(409, { error: "held", detail: { holder: "j1" } }).code).toBe("target-held");
+  });
+
   it("falls back to the runner's own sentence when the body carries no figures", () => {
     const report = refusalReport(429, { error: "over the cap" });
     expect(report.code).toBe("daily-cap");

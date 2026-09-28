@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Cite } from "@/components/ui/Cite";
+import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { CitationSource } from "@/lib/agent/prompt";
@@ -107,7 +108,7 @@ export function TutorChat({
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -149,11 +150,6 @@ export function TutorChat({
     const last = turns[turns.length - 1];
     if (last?.role !== "user") return;
     void ask(last.content, turns.slice(0, -1));
-  }
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    void ask(draft);
   }
 
   function prefill(question: string) {
@@ -259,24 +255,17 @@ export function TutorChat({
         ))}
       </div>
 
-      <form onSubmit={onSubmit} className="flex items-center gap-2.5">
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">Ask the tutor about {title}</span>
-          <input
-            ref={inputRef}
-            autoFocus={initialDraft !== undefined}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            maxLength={INPUT_LIMIT}
-            placeholder="Ask about this concept"
-            autoComplete="off"
-            className="h-[52px] w-full min-w-0 rounded-2xl border-2 border-border bg-surface px-4 text-[15px] text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent"
-          />
-        </label>
-        <Button type="submit" disabled={busy || draft.trim() === ""}>
-          Send
-        </Button>
-      </form>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={(text) => void ask(text)}
+        label={`Ask the tutor about ${title}`}
+        placeholder="Ask about this concept"
+        maxLength={INPUT_LIMIT}
+        autoFocus={initialDraft !== undefined}
+        inputRef={inputRef}
+        sendDisabled={busy}
+      />
     </div>
   );
 }

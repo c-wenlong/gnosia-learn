@@ -104,6 +104,7 @@ describe("writing the view back into a URL", () => {
       brief: "job-2",
       stream: false,
       shot: "after",
+      draft: "draft-1",
     };
     const href = studioHref(view);
     const params = Object.fromEntries(new URL(href, "http://x").searchParams);
@@ -303,6 +304,21 @@ describe("what the right panel holds", () => {
 
   it("closes one by dropping its parameter rather than by adding another", () => {
     expect(panelHref("/studio/d/x?job=job-1", { job: null })).toBe("/studio/d/x");
+  });
+
+  it("carries the open conversation, beside the job Draw started", () => {
+    expect(parsePanel({ draft: "d1" }).draft).toBe("d1");
+    expect(parsePanel({}).draft).toBeNull();
+    expect(panelHref("/studio?draft=d1", { job: "job-1" })).toBe("/studio?draft=d1&job=job-1");
+    expect(panelHref("/studio?draft=d1&job=job-1", { job: null })).toBe("/studio?draft=d1");
+    expect(panelHref("/studio?q=x", { draft: "d2" })).toBe("/studio?q=x&draft=d2");
+    expect(panelHref("/studio?draft=d1&job=j", { draft: null, job: null })).toBe("/studio");
+    expect(studioHref({ ...DEFAULT_VIEW, draft: "d1" })).toBe("/studio?draft=d1");
+  });
+
+  it("opens and closes a tile's panel by its selection", () => {
+    expect(panelHref("/studio?q=x", { selected: "dot-product" })).toBe("/studio?q=x&sel=dot-product");
+    expect(panelHref("/studio?sel=dot-product", { selected: null })).toBe("/studio");
   });
 
   it("drops a verb outcome, so a stale message does not read as this panel's", () => {
