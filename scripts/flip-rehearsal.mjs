@@ -257,16 +257,25 @@ function pgEnv() {
   return env;
 }
 
-/** `createdb -T`, or `pg_dump | psql` into an empty database when the template has sessions open. */
-async function copyDatabase(from, to) {
+/**
+ * `createdb -T`, or `pg_dump | psql` into an empty database when the template
+ * has sessions open. `created` is called the moment `to` exists, before any
+ * copying into it, so a failed or interrupted dump still leaves the copy for
+ * the cleanup to drop.
+ */
+async function copyDatabase(from, to, created) {
   const env = pgEnv();
   const made = await pg('createdb', ['-T', from, to], env);
-  if (made.status === 0) return 'createdb -T';
+  if (made.status === 0) {
+    created();
+    return 'createdb -T';
+  }
   if (!/being accessed by other users/.test(made.stderr)) {
     throw new Error(`createdb -T ${from} ${to} failed: ${made.stderr.trim()}`);
   }
   const empty = await pg('createdb', [to], env);
   if (empty.status !== 0) throw new Error(`createdb ${to} failed: ${empty.stderr.trim()}`);
+  created();
   const dumped = await new Promise((done) => {
     const dump = spawn(join(PG_BIN, 'pg_dump'), ['--no-owner', from], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     const load = spawn(join(PG_BIN, 'psql'), ['-q', '-v', 'ON_ERROR_STOP=1', '-d', to], { env, stdio: ['pipe', 'ignore', 'pipe'] });
@@ -338,7 +347,10 @@ async function main(argv) {
   };
 
   let made = false;
+  /** The copy in flight, so an interrupt drops it only once createdb or the dump has let go. */
+  let copying = null;
   const cleanup = async () => {
+    if (copying !== null) await copying.catch(() => {});
     if (real || !made || opts.keep) return;
     const drop = await pg('dropdb', ['--if-exists', '--force', database], pgEnv());
     report.copy.dropped = drop.status === 0;
@@ -375,8 +387,11 @@ async function main(argv) {
           filter: (file) => !file.includes(`${join('learn', 'assets', '.candidates')}`),
         });
       }
-      report.copy.method = await copyDatabase(from, database);
-      made = true;
+      copying = copyDatabase(from, database, () => {
+        made = true;
+      });
+      report.copy.method = await copying;
+      copying = null;
       say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${home}`);
     }
 

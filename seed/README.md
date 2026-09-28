@@ -63,9 +63,12 @@ The subset takes the named topics, the course's modules filed under them, every
 note filed under them, the one log and the one diagram. It refuses, naming the
 reference, anything that would leave the tree unable to import on its own: a
 note whose prerequisite sits under a topic left out, an item concept or a
-diagram outside the named topics. It never writes over the repository or over a
-tree the database imported from. When the counts change, `EXPECTED` in
-`catalog.test.ts` and the table above change in the same commit.
+diagram outside the named topics. It also refuses a topic relation to a topic
+left out, which the import would not miss but the seed would silently lose. It
+never writes over the repository or over a tree the database imported from,
+nor through a symlink out of the directory it was given. When the counts
+change, `EXPECTED` in `catalog.test.ts` and the table above change in the same
+commit.
 
 Nothing a test runs may write here: `vitest.setup.ts` lists every file under
 `seed/` before each test file and fails the file that changed one.

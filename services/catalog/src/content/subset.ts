@@ -23,7 +23,9 @@ import { ExportError, type RenderFilter } from "./export";
  * the reference named, rather than written with a hole the import would
  * refuse later: a note's `requires:` or `assumes:` naming a note outside the
  * subset, a module item's concept outside it, a diagram whose topic or
- * concepts are outside it. A session log's wikilinks are not references in
+ * concepts are outside it. A topic relation to a topic left out is refused
+ * too, though the import would take the tree without it: the export would
+ * drop the relation, and a recut seed would lose it with nothing said. A session log's wikilinks are not references in
  * that sense: the import counts one that names no concept and carries on.
  *
  * Videos never enter a subset (D7), so each topic's `maps.manimkc` is left
@@ -59,6 +61,20 @@ export async function subsetFilter(db: CatalogDatabase, subset: ExportSubset): P
   for (const slug of topics) {
     if (!found.has(slug)) problems.push(`topic "${slug}" does not exist`);
     else if (found.get(slug) === true) problems.push(`topic "${slug}" is archived`);
+  }
+
+  const relations = await rows<{ from_slug: string; kind: string; to_slug: string }>(
+    db,
+    sql`select from_slug, kind, to_slug from topic_relation
+        where from_slug in (${list(topics)}) or to_slug in (${list(topics)})
+        order by from_slug, kind, to_slug`,
+  );
+  for (const relation of relations) {
+    if (topics.has(relation.from_slug) && topics.has(relation.to_slug)) continue;
+    problems.push(
+      `topic relation ${relation.from_slug} ${relation.kind} ${relation.to_slug} names a topic left out; ` +
+        `name both topics or neither`,
+    );
   }
 
   const [course] = await rows<{ id: string; kind: string; archived: boolean }>(

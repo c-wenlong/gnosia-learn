@@ -1530,8 +1530,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
   modules filed under them and the course's tags, every note filed under them,
   one log, one diagram, and no `maps.manimkc`. It refuses by name a reference
   that would leave the tree (a prerequisite, an item's concept, a diagram's
-  topic or concept outside it), refuses to write over the repository or any
-  tree the database imported from, and records no hash.
+  topic or concept, or a topic relation outside it), refuses to write over the
+  repository, any tree the database imported from, or through a symlink out of
+  `--out` (every export checks that now), and records no hash.
 - **`seed/`, measured:** 5 topics in 4 domains, 2 tags, `cp4284` cut to 2
   modules (5 items, 4 links, 8 concept links), 11 notes (13 prerequisites),
   the `2026-08-19-react-agents` log, and `vector-as-a-list-of-numbers`; 300 KB,
