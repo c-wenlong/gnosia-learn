@@ -95,13 +95,24 @@ export async function runExport(options: {
     }
 
     const record = filter === undefined && (await mayRecord(db));
+    // The same check once more where the bytes land: a `content/` or `learn/`
+    // under `out` that is a symlink would carry a write into whatever tree it
+    // points at, which is how a subset could still replace an imported tree's
+    // vocabulary after the refusal above passed `out` itself.
+    const realOut = await resolvedPath(out);
+    for (const file of [...rendered.values()].flat()) {
+      const directory = path.dirname(path.join(out, file.path));
+      await mkdir(directory, { recursive: true });
+      const real = path.relative(realOut, await resolvedPath(directory));
+      if (real.startsWith("..") || path.isAbsolute(real)) {
+        throw new ExportError(
+          `refusing to write ${file.path}: ${directory} resolves to ${await resolvedPath(directory)}, outside ${realOut}`,
+        );
+      }
+    }
     const results: ExportTypeResult[] = [];
     for (const [type, files] of rendered) {
-      for (const file of files) {
-        const target = path.join(out, file.path);
-        await mkdir(path.dirname(target), { recursive: true });
-        await writeFile(target, file.bytes);
-      }
+      for (const file of files) await writeFile(path.join(out, file.path), file.bytes);
       const written = new Set(files.map((f) => f.path));
       const stale = (await typeFiles(out, type)).filter((p) => !written.has(p));
       // The database's export, not the tree: a stale file left beside it is

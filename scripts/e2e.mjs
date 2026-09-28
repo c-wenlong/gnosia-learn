@@ -272,6 +272,9 @@ function seedEnv() {
     DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
     SELF_LEARN_HOME: SEED_HOME,
     MANIMKC_ROOT: NO_MANIMKC,
+    // The knowledge base is the seed's: the learn CLI reads the notes from
+    // files until concepts are flipped, and the seed database never is.
+    LEARN_ROOT: join(ROOT, 'seed'),
   };
 }
 

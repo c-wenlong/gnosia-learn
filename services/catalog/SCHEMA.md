@@ -856,9 +856,10 @@ database on its own: the named topics, the course's modules filed under them
 (and the course's tags), every note filed under them, one log and one diagram,
 with each topic's `maps.manimkc` left out since the tree has no videos. It
 refuses, by name, a reference that would leave the tree (a note's prerequisite,
-an item's concept or a diagram under a topic not named), and it refuses to
-write over the repository or over any tree the database was imported from. It
-records no export hash. `seed/` is made this way (seed/README.md).
+an item's concept, a diagram or a topic relation reaching a topic not named),
+and it refuses to write over the repository, over any tree the database was
+imported from, or through a symlink that leaves `<dir>` (a check every export
+now makes). It records no export hash. `seed/` is made this way (seed/README.md).
 
 `catalog export --out <dir>` writes the same layout back. Topics, tags and
 courses are written from rows, in the house style they are authored in, so an

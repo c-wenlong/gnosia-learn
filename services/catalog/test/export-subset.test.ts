@@ -1,7 +1,8 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runExport } from "../src/commands/export";
@@ -99,6 +100,34 @@ describe.skipIf(!reachable.ok)("catalog export --subset", () => {
       { topics: ["vector-and-linear-algebra-basics", "tomasulo-algorithm"] },
       /no live module of "cp4284" is filed under a named topic; its modules sit under transformer-architecture-and-training, agent-tool-use-and-reasoning-loops/,
     );
+  });
+
+  it("refuses a topic relation to a topic it leaves out, rather than dropping it", async () => {
+    await scratch.db.execute(sql`insert into topic (slug, title, domain, position) values ('aaa-outside', 'Outside', 'x', 999000)`);
+    await scratch.db.execute(
+      sql`insert into topic_relation (from_slug, to_slug, kind) values ('aaa-outside', 'transformer-architecture-and-training', 'related')`,
+    );
+    try {
+      await refused(
+        {},
+        /topic relation aaa-outside related transformer-architecture-and-training names a topic left out; name both topics or neither/,
+      );
+      // Naming both keeps the relation, and the subset writes.
+      const into = await mkdtemp(path.join(out, "cut-"));
+      await runExport({ out: into, subset: { ...RECIPE, topics: [...RECIPE.topics, "aaa-outside"] } });
+    } finally {
+      await scratch.db.execute(sql`delete from topic_relation where from_slug = 'aaa-outside'`);
+      await scratch.db.execute(sql`delete from topic where slug = 'aaa-outside'`);
+    }
+  });
+
+  it("refuses to write through a symlink that leaves the output directory", async () => {
+    const elsewhere = await mkdtemp(path.join(out, "elsewhere-"));
+    const into = await mkdtemp(path.join(out, "cut-"));
+    await mkdir(path.join(elsewhere, "content"));
+    await symlink(path.join(elsewhere, "content"), path.join(into, "content"));
+    await expect(runExport({ out: into, subset: RECIPE })).rejects.toThrow(/refusing to write content\/topics\.yaml: .* outside /);
+    expect(await readdir(path.join(elsewhere, "content"))).toEqual([]);
   });
 
   it("refuses names that are not there", async () => {
