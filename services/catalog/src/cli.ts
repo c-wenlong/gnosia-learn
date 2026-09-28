@@ -84,7 +84,7 @@ import { parseSources } from "./index/run";
  * the layer above this is an agent's context window.
  */
 
-const USAGE = `catalog — the derived index over the content trees
+const USAGE = `catalog — the content database: import, export, write, and index
 
 Usage: npm run catalog -- <command> [options]
 
@@ -102,12 +102,9 @@ Commands:
                            last export, and refused when they were edited.
   export --out <dir>       Write the database back out as content/ and learn/
                            files: topics.yaml, tags.yaml, courses/<code>.yaml
-                           from rows; diagrams from rows and the blob store.
-                           Concept notes and session logs are copied from the
-                           directory their import read, checked against each
-                           row's sha256, until Track C moves their text into
-                           rows. Records each type's export hash on
-                           content_source.
+                           from rows; concept notes and session logs from
+                           rows; diagrams from rows and the blob store.
+                           Records each type's export hash on content_source.
   parity <dir>             Compare the database with <dir> entity by entity:
                            counts per type, sha256 per entity over a canonical
                            form. Lists every mismatch by id; exits 1 on any.

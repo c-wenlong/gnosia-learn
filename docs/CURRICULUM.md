@@ -149,10 +149,12 @@ deletes them, and it keeps a copy in its revision. Keep the
 `<course>-m<N>-t<N>` shape, and add new topics at the end of a module rather
 than renumbering.
 
-The same applies to concept links. A topic id also appears in the `topics:`
-frontmatter of concept notes under `learn/concepts/`, which is how the
-knowledge base connects back to the roadmap. Changing an id breaks that link
-without any error being raised.
+The same applies to concept links. An item names the concept notes that teach
+it in its own `concepts:` list, which the import stores as
+`concept_curriculum_item` rows; a note names no item, and the importer refuses
+a `topics:` key in a note's frontmatter. So a renamed item keeps its links on
+the archived old id, and the new id starts with none until its `concepts:`
+list names them again.
 
 **Prefer stable public URLs for curated resources.** A course page that links
 to a lecture recording behind a login is worth less than one that links to the

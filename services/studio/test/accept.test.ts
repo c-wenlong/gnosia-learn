@@ -233,7 +233,10 @@ describe("a clean accept", () => {
 
     expect(result.ok).toBe(true);
     expect(result.revision).toBe(6);
-    expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
+    // What landed, by its logical names; and what was written into the tree,
+    // which with the put naming no files is nothing.
+    expect(result.landed).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
+    expect(result.written).toEqual([]);
     expect(catalogMock.diagramPut).toHaveBeenCalledWith(
       expect.objectContaining({
         slug: SLUG,
@@ -278,6 +281,7 @@ describe("a clean accept", () => {
     });
     const result = await accept(store, await place());
     expect(result.ok).toBe(true);
+    expect(result.written).toEqual([targetPath(SLUG), targetSvgPath(SLUG)]);
     expect(result.note).toContain(`git add ${targetPath(SLUG)} ${targetSvgPath(SLUG)}`);
   });
 

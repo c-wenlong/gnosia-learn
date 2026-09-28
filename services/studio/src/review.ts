@@ -32,8 +32,15 @@ import type { JobRecord, JobStore } from "./store";
 
 export interface AcceptResult {
   ok: boolean;
-  /** The logical names that landed in the database (`learn/assets/<slug>.tldr` and `.svg`). */
+  /**
+   * The files this accept wrote into the working tree: the put's write-through
+   * while the files still own diagrams, and nothing once `catalog flip
+   * diagrams` hands them to the database. It used to list the logical names,
+   * which named two files the accept had not written.
+   */
   written: string[];
+  /** The logical names that landed in the database (`learn/assets/<slug>.tldr` and `.svg`), on success. */
+  landed?: string[];
   /** False when the job row did not record the accept yet; Reindex finishes it. */
   indexed: boolean;
   /** The diagram's revision the accept wrote, when it landed. */
@@ -202,7 +209,7 @@ async function acceptLocked(
    *    the job started from, so the catalog refuses it if the answer above
    *    went stale in the moments since; a retry after a put that landed and
    *    was never recorded finds its own write and changes nothing. */
-  const written = [record.targetPath, ...(hasSvg ? [record.targetSvgPath] : [])];
+  const landedNames = [record.targetPath, ...(hasSvg ? [record.targetSvgPath] : [])];
   const put = await diagramPut({
     slug: record.slug,
     tldr: candidate,
@@ -241,7 +248,7 @@ async function acceptLocked(
   await store.update(record.id, {
     state: "accepted",
     reviewedAt: new Date().toISOString(),
-    written,
+    written: landedNames,
     files,
     indexed: false,
   });
@@ -269,7 +276,8 @@ async function acceptLocked(
     await store.noteCatalogError(record.id, indexed.error ?? "accept could not be recorded");
     return {
       ok: true,
-      written,
+      written: files,
+      landed: landedNames,
       indexed: false,
       mirrorClosed,
       ...(typeof revision === "number" ? { revision } : {}),
@@ -282,7 +290,8 @@ async function acceptLocked(
   await store.update(record.id, { indexed: true });
   return {
     ok: true,
-    written,
+    written: files,
+    landed: landedNames,
     indexed: true,
     mirrorClosed,
     ...(typeof revision === "number" ? { revision } : {}),
@@ -386,7 +395,7 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
   if (record.state !== "accepted") {
     return {
       ok: false,
-      written: record.written,
+      written: record.files ?? [],
       indexed: record.indexed,
       note:
         `job ${record.id} is ${record.state}, and there is nothing to reindex: reindex finishes ` +
@@ -397,7 +406,8 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
   if (record.indexed) {
     return {
       ok: true,
-      written: record.written,
+      written: record.files ?? [],
+      landed: record.written,
       indexed: true,
       note: `job ${record.id} is already recorded in the catalog; nothing to do`,
     };
@@ -417,7 +427,8 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
     await store.noteCatalogError(record.id, indexed.error ?? "reindex could not be recorded");
     return {
       ok: false,
-      written: record.written,
+      written: record.files ?? [],
+      landed: record.written,
       indexed: false,
       note: `the catalog still will not record it: ${indexed.error}. The diagram is in the database either way.`,
       error: "catalog-failed",
@@ -426,7 +437,8 @@ async function reindexLocked(store: JobStore, record: JobRecord): Promise<Accept
   await store.update(record.id, { indexed: true });
   return {
     ok: true,
-    written: record.written,
+    written: record.files ?? [],
+    landed: record.written,
     indexed: true,
     note: `the catalog now records ${record.written.join(" and ")} as this job's output`,
   };

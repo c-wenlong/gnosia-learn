@@ -61,7 +61,7 @@ fact stated in one is cross-referenced rather than repeated in the others.
 | API | `services/studio/src/api/` | HTTP on `127.0.0.1:7250`. JSON in, JSON out, plus one SSE stream per job |
 | Runner | `services/studio/src/runner/` | Jobs, one runner per generator kind it drives — the diagrams runner is what phases 0 to 4 build. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws. See D25 |
 | Agent | a headless `claude -p` session | The drawing. Writes snippets, runs the draw-look-fix loop, reads its own screenshots. The only model call in the system |
-| Catalog | `services/catalog/src/` | The index. Gains one command, `assert-output`, and one migration |
+| Catalog | `services/catalog/src/` | Where a diagram lives. Accept is `catalog diagram put --job`, which writes the `diagram` row, the SVG blob and the job's `asset_job` rows in one transaction (Track D of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) retired `assert-output`) |
 | Tools | `tools/tldrawkc/`, `tools/manimkc/` | The canvas and the renderer. Neither changes for the studio |
 
 ### The pieces and the flow
@@ -84,7 +84,7 @@ flowchart TB
         CAND["learn/assets/.candidates/"]
         COMM["learn/assets/"]
     end
-    CAT[("postgres<br/>session, job, asset_job")]
+    CAT[("postgres<br/>diagram, asset, asset_job, job<br/>plus the SVG blob")]
     TK["tools/tldrawkc<br/>npm run --silent canvas"]
 
     UI -- "/studio/api/* rewrite" --> API
@@ -94,8 +94,7 @@ flowchart TB
     CL -- "Bash" --> TK
     TK -- "atomic write" --> CAND
     RUN -- "inspect, export, verify" --> TK
-    RUN -- "accept: rename" --> COMM
-    RUN -- "catalog assert-output" --> CAT
+    RUN -- "accept: catalog diagram put --job" --> CAT
     RUN -- "serve, ServeHandle" --> TK
     IF -. "cross-origin, no channel" .- UI
     TK -- "serve on 7240" --> IF
@@ -127,8 +126,11 @@ test where a grep test is possible, a named reviewer check where it is not.
    walking up to the directory holding `content/courses`, because the studio
    does not run from the repo root either.
 6. **Nothing in the studio writes an `asset` row itself.** It calls
-   `catalog assert-output`, which runs the owning indexer's reader. There is one
-   implementation of what a diagram asset row looks like.
+   `catalog diagram put --job`, the catalog's one diagram writer, which goes
+   through the content write seam. There is one implementation of what a
+   diagram asset row looks like. (`catalog assert-output`, which ran the
+   indexer's reader over one file, was deleted in Track D of
+   [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md).)
 7. **The disk record is written before the database row.**
    `jobs/<id>/session.ndjson` and `jobs/<id>/job.json` are the write-ahead log;
    Postgres is the query surface. See D3 below.
