@@ -6,6 +6,7 @@ import { readParams, readPreferences, type BktParams } from "@self-learn/catalog
 
 import { parseDailyTarget, parseLeeway, type DailyTarget } from "@/lib/habit-core";
 import { catalogDatabase } from "@/lib/learner-store";
+import { currentOwner } from "@/lib/owner";
 import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "@/lib/preferences";
 
 /**
@@ -28,9 +29,10 @@ export interface SettingsSnapshot {
 }
 
 export async function readSettings(): Promise<SettingsSnapshot> {
+  const owner = await currentOwner();
   try {
     const db = await catalogDatabase();
-    const [preferences, bkt] = await Promise.all([readPreferences(db), readParams(db)]);
+    const [preferences, bkt] = await Promise.all([readPreferences(db, owner), readParams(db, owner)]);
     return {
       reachable: true,
       target: parseDailyTarget(preferences[PREFERENCE_KEYS.dailyTarget]),
@@ -66,9 +68,10 @@ export async function loadSettings(): Promise<SettingsSnapshot> {
  * that is down has already answered 503 before this runs in practice.
  */
 export async function readTutorStyle(): Promise<TutorStyle> {
+  const owner = await currentOwner();
   try {
     const db = await catalogDatabase();
-    const preferences = await readPreferences(db);
+    const preferences = await readPreferences(db, owner);
     return parseTutorStyle(preferences[PREFERENCE_KEYS.tutorStyle]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

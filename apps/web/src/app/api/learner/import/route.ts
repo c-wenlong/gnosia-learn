@@ -28,5 +28,5 @@ export const POST = handler(
     }
     return body as LegacyPayload;
   },
-  async (db, payload) => importLegacyState(db, payload),
+  async (db, payload, owner) => importLegacyState(db, payload, owner),
 );

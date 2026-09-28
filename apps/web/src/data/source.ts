@@ -7,6 +7,7 @@ import { cache } from "react";
 
 import { REPO_ROOT } from "@/data/repo-root";
 import { catalogDatabase } from "@/lib/learner-store";
+import { currentScope } from "@/lib/owner";
 
 /**
  * Where the app's authored content comes from: the composition root of the
@@ -76,7 +77,8 @@ export const contentSource = cache(
       db: async () => {
         await connection();
         const { dbSource } = await import("@self-learn/catalog/state");
-        return dbSource(await catalogDatabase());
+        // The requesting owner's rows and the commons' only (phase 4).
+        return dbSource(await catalogDatabase(), await currentScope());
       },
     }),
 );

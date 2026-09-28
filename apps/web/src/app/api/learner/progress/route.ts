@@ -9,8 +9,8 @@ export const POST = handler(
     curriculumItemId: requireId(body, "curriculumItemId"),
     completed: requireBoolean(body, "completed"),
   }),
-  async (db, { curriculumItemId, completed }) => {
-    await setProgress(db, curriculumItemId, completed);
+  async (db, { curriculumItemId, completed }, owner) => {
+    await setProgress(db, curriculumItemId, completed, { learnerId: owner });
     return { curriculumItemId, completed };
   },
 );

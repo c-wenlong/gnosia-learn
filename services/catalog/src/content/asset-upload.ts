@@ -16,6 +16,7 @@ import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import { uploadBlob } from "./blob";
 import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog asset upload --source manimkc`: manimkc's rendered videos and their
@@ -268,6 +269,7 @@ export async function unhookPosters(
     try {
       await writeContents(db, [
         {
+          owner: CLI_OWNER,
           type: "asset" as const,
           id: row.id,
           next: { row: contentRow(row), links: { asset_derivation: [] } },
@@ -426,6 +428,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const groupStart = items.length;
     const linkTo = (row: Asset, key: string) =>
       writes.push({
+        owner: CLI_OWNER,
         type: "asset",
         id: row.id,
         next: { row: { ...contentRow(row), blobKey: key } },
@@ -510,6 +513,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       if (!videoChanged || existing === undefined || !derived) return null;
       items.push({ id, kind: "poster", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: { row: contentRow(existing), links: { asset_derivation: [] } },
@@ -545,6 +549,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "made", key: done.key, bytes: done.bytes });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: {

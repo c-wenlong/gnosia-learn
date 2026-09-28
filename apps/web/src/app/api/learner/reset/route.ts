@@ -18,5 +18,5 @@ import { handler, requireIdList } from "@/lib/learner-api";
 export const POST = handler(
   "reset",
   (body) => ({ curriculumItemIds: requireIdList(body, "curriculumItemIds") }),
-  async (db, { curriculumItemIds }) => resetCourse(db, curriculumItemIds),
+  async (db, { curriculumItemIds }, owner) => resetCourse(db, curriculumItemIds, owner),
 );

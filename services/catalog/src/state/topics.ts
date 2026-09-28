@@ -1,6 +1,7 @@
-import { topic } from "@self-learn/schema";
-import { asc, inArray } from "drizzle-orm";
+import { type OwnerScope, topic } from "@self-learn/schema";
+import { and, asc, inArray } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 
 /**
@@ -55,13 +56,15 @@ export type TopicTitles = Record<string, string>;
  * mistake `byKindThenId` in `assets.ts` was fixed for, applied to a lookup
  * instead of a sort.
  */
-export async function topicTitles(db: CatalogDatabase, slugs: string[]): Promise<TopicTitles> {
+export async function topicTitles(db: CatalogDatabase, slugs: string[], scope: OwnerScope): Promise<TopicTitles> {
   if (slugs.length === 0) return {};
-  const rows = await db
-    .select({ slug: topic.slug, title: topic.title })
-    .from(topic)
-    .where(inArray(topic.slug, slugs))
-    .orderBy(asc(topic.slug));
+  const rows = await scopedRead(scope.readable, (owners) =>
+    db
+      .select({ slug: topic.slug, title: topic.title })
+      .from(topic)
+      .where(and(inArray(topic.slug, slugs), ownedBy(topic.ownerId, owners)))
+      .orderBy(asc(topic.slug)),
+  );
 
   const titles: TopicTitles = {};
   for (const row of rows) titles[row.slug] = row.title;

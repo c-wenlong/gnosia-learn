@@ -15,12 +15,13 @@ import type { TypeReader } from "./reader";
  * the 32 notes of 2026-09-28), and it parses to the same fields in every case,
  * which is all a page reads from it. An archived concept has no note, as a
  * deleted file had none. A row with no body was imported before Track C stored
- * it, and is refused rather than shown as an empty note.
+ * it, and is refused rather than shown as an empty note. Another owner's note
+ * is null, as a slug nobody holds is (phase 4).
  */
 export const reader: TypeReader<"concept"> = {
   ready: true,
-  read: (db) => async (slug): Promise<ConceptNoteSource | null> => {
-    const [row] = await readNoteRows(db, [slug]);
+  read: (db, scope) => async (slug): Promise<ConceptNoteSource | null> => {
+    const [row] = await readNoteRows(db, [slug], scope.readable);
     if (row === undefined) return null;
     if (row.body === null) {
       throw new Error(`concept "${slug}" has no body in the database: re-run \`catalog import\` before reading it from rows`);

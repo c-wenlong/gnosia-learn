@@ -1,7 +1,7 @@
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { asset, indexRun } from "@self-learn/schema";
 
@@ -14,6 +14,12 @@ import {
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
+
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 
 /**
  * `GET /api/assets/<id>/poster`, against a scratch database, a scratch data
