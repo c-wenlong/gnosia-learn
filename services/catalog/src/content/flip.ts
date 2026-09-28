@@ -214,8 +214,13 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
 
     const now = new Date().toISOString();
     const previous = Array.isArray(row?.waivers) ? (row.waivers as (Waiver & { at: string })[]) : [];
+    // A waiver this flip renews is rewritten below; one for a rule this flip
+    // arms comes off the record, since a waiver on record for a rule that is
+    // refusing writes would be the lie the disarm above avoids, in reverse.
+    // `catalog doctor` read one such row as "armed ... waived" once.
+    const armed = new Set(armedRules.map((rule) => rule.name));
     const waivers = [
-      ...previous.filter((w) => !waived.has(w.rule)),
+      ...previous.filter((w) => !waived.has(w.rule) && !armed.has(w.rule)),
       ...waive.map((w) => ({ rule: w.rule, reason: w.reason.trim(), at: now })),
     ];
     // The files just passed parity, so they are the database's export, and

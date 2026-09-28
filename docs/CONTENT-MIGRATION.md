@@ -2172,6 +2172,20 @@ note before anything ran. `services/catalog/test/flip-rehearsal.test.ts` runs
 the same order on the seed in a stand-in repository, and
 `scripts/lib/cutover.test.mjs` the tag, edit and worktree checks.
 
+The waiver came off the same evening. Three agents wrote the 161 concept
+notes the 133 items were waiting on, through `learn concept add --item`,
+`concept checkout` and `commit`, and `check add`, all against `self_learn`,
+and `catalog doctor` reached zero violators on `item-has-concept`. The first
+`catalog flip courses --strict` refused: the database had moved past the
+files it was last imported from (ten course files, `concepts` now on every
+item). Since the database owns courses, the tree follows it: `catalog export
+--out <tag worktree>` rewrote the ten files, `topics.yaml` and 161 new notes
+and recorded the hashes, and the flip then passed with all three rules
+armed. That flip also showed the bug this section's PR fixes: a strict flip
+kept the earlier waiver on `content_source` for the rule it had just armed,
+so doctor read the rule as armed and waived at once. A strict flip now takes
+the waiver off the record for every rule it arms.
+
 ## Phase 4: tenancy
 
 After accounts exist; accounts themselves are out of scope. The plumbing
