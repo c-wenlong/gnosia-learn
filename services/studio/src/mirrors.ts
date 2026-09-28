@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { stat } from "node:fs/promises";
 
 import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
-import { absolute, REPO_ROOT } from "./paths";
+import { absolute, REPO_ROOT, slugOf, workPath } from "./paths";
 import { NPM, stopChild } from "./proc";
 
 /**
@@ -207,7 +207,11 @@ export class Mirrors {
   }
 
   private async spawn(file: string): Promise<MirrorView> {
-    const target = absolute(file);
+    // Mirrors are keyed by the logical name (`learn/assets/<slug>.tldr`, the
+    // string accept closes them by), and serve the diagram's checkout: the
+    // diagram is rows, and an edit reaches them only through a commit.
+    const slug = slugOf(file);
+    const target = slug === null ? absolute(file) : workPath(slug);
     const info = await stat(target).catch(() => null);
     if (info === null || !info.isFile()) {
       throw new MirrorRefused(
@@ -261,6 +265,11 @@ export class Mirrors {
   }
 
   /** Every mirror this process holds, newest first, with `file` touched if named. */
+  /** Whether a canvas is open on `file`, without counting as a look (unlike `list`). */
+  isOpen(file: string): boolean {
+    return this.open.has(file);
+  }
+
   list(file?: string): MirrorView[] {
     if (file !== undefined) {
       const one = this.open.get(file);

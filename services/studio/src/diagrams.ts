@@ -1,44 +1,56 @@
-import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 
-import { canvas } from "./canvas";
-import { absolute, ASSETS_DIR, targetPath, targetSvgPath } from "./paths";
+import { diagramCheckout, diagramList, diagramShow } from "./catalog";
+import { readThrough } from "./content-cache";
+import { ASSETS_DIR, workDir, workPath } from "./paths";
 
 /**
- * The corpus, as the browser screen reads it.
+ * The corpus, as the browser screen reads it: `catalog diagram list --json`.
  *
- * `canvas list --json` is the source and this module adds exactly one thing to
- * it: the SVG's own modified time, which the tool does not report. `list`
- * answers `svg: { path, exists }` and nothing more, so "is the picture older
- * than the document" — the only question the freshness pill asks — cannot be
- * answered from that output alone. One `stat` per entry closes it.
+ * A diagram lives in the database since Track D of docs/CONTENT-MIGRATION.md,
+ * so the list is the rows, read with no subprocess of tldrawkc's: the shape
+ * count and the stamp are read inside jsonb by the catalog. Freshness is the
+ * two hashes (`svg_document_hash` against `document_hash`), which replaced the
+ * modification-time comparison this module used to make, since a blob has no
+ * modification time worth comparing.
+ *
+ * Every successful list is kept under `$STUDIO_HOME/cache/diagrams.json`, and
+ * with Postgres down the screen is answered from that copy, marked stale with
+ * the time it was read (D13 and edge case 1). Drawing still runs on the
+ * checkouts; landing a diagram waits for the database.
  *
  * Why this lives in the runner rather than in a Next server component: layering
- * rule 1. The UI is a view over this service's HTTP API, and a page that
- * spawned `npm run canvas` itself would be a second implementation of what a
- * diagram is, drifting from the first the day either changed. D13 also says the
- * freshness answer is the server's to give, since the cross-origin mirror
- * cannot be asked.
- *
- * Deliberately *not* the `asset` table. `/library` reads that, and the indexer
- * refuses a `.tldr` with no topic by name — which is precisely the file the
- * studio exists to show, because a person has to see it to fix it.
+ * rule 1. The UI is a view over this service's HTTP API.
  */
 
-/** Whether the exported SVG still matches the document beside it. */
+/** Whether the exported SVG still matches the document. */
 export type SvgState = "current" | "stale" | "missing";
 
 export interface DiagramFile {
-  /** Repo-relative, so it is the same string the catalog and the job rows use. */
+  /** The logical name, `learn/assets/<slug>.tldr`, the same string the catalog and the job rows use (D11). */
   path: string;
   exists: boolean;
-  /** ISO 8601, or null when the file is not there. */
+  /** When the row last changed, as ISO 8601, or null when there is none. */
   modified: string | null;
   bytes: number | null;
 }
 
-/** One `.tldr` and everything the grid, the inspector and the strip show. */
+/** Where a diagram's checkout stands, when one exists. */
+export interface CheckoutView {
+  /** Absolute: the file the mirror and every verb open. */
+  path: string;
+  revision: number | null;
+  /** Edits made on the canvas that were never committed. */
+  dirty: boolean;
+  /** The diagram has a revision the checkout does not. */
+  behind: boolean;
+}
+
+/** One diagram and everything the grid, the inspector and the strip show. */
 export interface DiagramView {
-  /** The filename stem, which is the concept id and the route segment. */
+  /** The slug, which is the route segment and the embed name. */
   name: string;
   tldr: DiagramFile;
   svg: DiagramFile;
@@ -51,9 +63,13 @@ export interface DiagramView {
   /** From `meta.created`, the only creation time anything records. */
   created: string | null;
   svgState: SvgState;
+  /** The latest revision, what a job's base and a checkout are measured against. */
+  revision: number | null;
+  /** Only on a single diagram's read. */
+  checkout?: CheckoutView | null;
 }
 
-/** A `.tldr` that would not parse. U6: the one place it is visible. */
+/** A diagram that could not be read. The database refuses unreadable documents, so this is empty today. */
 export interface DiagramProblem {
   name: string;
   path: string;
@@ -61,145 +77,285 @@ export interface DiagramProblem {
 }
 
 export interface DiagramListing {
-  /** Repo-relative directory that was walked. */
+  /** Where the diagrams come from, for the screen's header. */
   dir: string;
   diagrams: DiagramView[];
   errors: DiagramProblem[];
   counts: { total: number; withTopic: number; unreadable: number };
+  /** True when the database could not be read and this is the copy from `readAt`. */
+  stale: boolean;
+  readAt: string;
+  error?: string;
 }
 
-/* -------------------------------------------------------------------------- */
-
-/** `learn/assets/x.tldr` from an absolute path, or the absolute path unchanged. */
-function relativise(file: string, root: string): string {
-  return file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file;
+/** What `catalog diagram list --json` returns per diagram. */
+interface Summary {
+  slug: string;
+  path: string;
+  svgPath: string | null;
+  title: string | null;
+  topic: string;
+  concepts: string[];
+  source: string | null;
+  created: string | null;
+  shapes: number;
+  documentBytes: number;
+  svg: { key: string; bytes: number; sha256: string } | null;
+  svgState: SvgState;
+  revision: number | null;
+  updatedAt: string;
+  svgUpdatedAt: string | null;
 }
 
-async function fileFacts(relative: string): Promise<DiagramFile> {
-  try {
-    const info = await stat(absolute(relative));
-    return {
-      path: relative,
-      exists: info.isFile(),
-      modified: info.mtime.toISOString(),
-      bytes: info.size,
-    };
-  } catch {
-    return { path: relative, exists: false, modified: null, bytes: null };
-  }
-}
-
-/**
- * Stale is `svg older than tldr`, and missing is its own answer.
- *
- * Strictly older rather than "not newer": the two files are written seconds
- * apart by `export`, and an equal-to-the-millisecond pair is the normal result
- * of a fresh export on a filesystem with coarse timestamps. Calling that stale
- * would leave the pill amber on every diagram the tool just made.
- */
-export function svgStateFor(tldrModified: string | null, svgModified: string | null): SvgState {
-  if (svgModified === null) return "missing";
-  if (tldrModified === null) return "current";
-  return Date.parse(svgModified) < Date.parse(tldrModified) ? "stale" : "current";
-}
-
-/** A name that is one path segment and cannot climb out of `learn/assets`. */
+/** A name that is one path segment and a slug, so no request can name anything else. */
 const NAME = /^[a-z0-9][a-z0-9-]*$/i;
 
 export function isDiagramName(value: string): boolean {
   return NAME.test(value) && value.length <= 120;
 }
 
-interface RawEntry {
-  path?: string;
-  name?: string;
-  relative?: string;
-  shapes?: number;
-  modified?: string;
-  meta?: {
-    title?: string;
-    topic?: string;
-    concepts?: string[];
-    source?: string;
-    created?: string;
-  } | null;
+function isSummaries(value: unknown): value is Summary[] {
+  return Array.isArray(value) && value.every((entry) => typeof (entry as Summary)?.slug === "string");
 }
 
-interface RawListing {
-  dir?: string;
-  diagrams?: RawEntry[];
-  errors?: { path?: string; relative?: string; message?: string }[];
-}
-
-function text(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-/**
- * Walk `learn/assets` and answer what is in it.
- *
- * A file that will not parse is data rather than a failure, which is `list`'s
- * own verdict and the reason this returns `errors` instead of throwing: the
- * caller asked what is in the directory, and "these two, and this one is
- * broken" is the complete answer.
- */
-export async function listDiagrams(): Promise<DiagramListing> {
-  const result = await canvas(["list", absolute(ASSETS_DIR), "--json"], 60_000);
-  if (result.code !== 0 || result.json === null) {
-    throw new Error(
-      `canvas list exited ${result.code ?? "on a signal"} and printed no JSON: ` +
-        `${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ") || "nothing at all"}`,
-    );
-  }
-  const raw = result.json as RawListing;
-  const root = absolute("");
-  const dir = relativise(text(raw.dir) ?? absolute(ASSETS_DIR), root.replace(/\/$/, ""));
-
-  const diagrams: DiagramView[] = [];
-  for (const entry of raw.diagrams ?? []) {
-    const name = text(entry.name);
-    if (name === null) continue;
-    const [tldr, svg] = await Promise.all([
-      fileFacts(targetPath(name)),
-      fileFacts(targetSvgPath(name)),
-    ]);
-    diagrams.push({
-      name,
-      tldr,
-      svg,
-      title: text(entry.meta?.title),
-      topic: text(entry.meta?.topic),
-      concepts: (entry.meta?.concepts ?? []).filter((slug) => typeof slug === "string"),
-      source: text(entry.meta?.source),
-      shapes: typeof entry.shapes === "number" ? entry.shapes : 0,
-      created: text(entry.meta?.created),
-      svgState: svgStateFor(tldr.modified, svg.modified),
-    });
-  }
-
-  const errors: DiagramProblem[] = (raw.errors ?? []).map((problem) => {
-    const relative = text(problem.relative) ?? text(problem.path) ?? "an unnamed file";
-    return {
-      name: relative.replace(/\.tldr$/, ""),
-      path: `${ASSETS_DIR}/${relative}`,
-      message: text(problem.message) ?? "would not parse",
-    };
-  });
-
+function viewOf(summary: Summary): DiagramView {
   return {
-    dir,
-    diagrams,
-    errors,
-    counts: {
-      total: diagrams.length,
-      withTopic: diagrams.filter((entry) => entry.topic !== null).length,
-      unreadable: errors.length,
+    name: summary.slug,
+    tldr: { path: summary.path, exists: true, modified: summary.updatedAt, bytes: summary.documentBytes },
+    svg: {
+      path: summary.svgPath ?? `${ASSETS_DIR}/${summary.slug}.svg`,
+      exists: summary.svg !== null,
+      modified: summary.svgUpdatedAt,
+      bytes: summary.svg?.bytes ?? null,
     },
+    title: summary.title,
+    topic: summary.topic,
+    concepts: summary.concepts,
+    source: summary.source,
+    shapes: summary.shapes,
+    created: summary.created,
+    svgState: summary.svgState,
+    revision: summary.revision,
   };
 }
 
-/** One diagram by name, or null when the directory has no such file. */
+/**
+ * How long one read of the list answers the thumbnails. A grid asks for every
+ * tile's SVG key at once; without this, each tile would start its own
+ * `catalog diagram list` subprocess and database query for the same rows.
+ * The screen's own list is read fresh every time.
+ */
+const THUMBNAIL_REUSE_MS = 2_000;
+let recent: { at: number; read: ReturnType<typeof summaries> } | null = null;
+
+function sharedSummaries(): ReturnType<typeof summaries> {
+  const now = Date.now();
+  if (recent !== null && now - recent.at < THUMBNAIL_REUSE_MS) return recent.read;
+  const read = summaries();
+  recent = { at: now, read };
+  // A failed read is not kept: the next tile asks again.
+  read.catch(() => {
+    if (recent?.read === read) recent = null;
+  });
+  return read;
+}
+
+/** Forget the list the thumbnails share, after a write that changed an SVG. */
+export function forgetDiagramList(): void {
+  recent = null;
+}
+
+/** Every diagram's row as the catalog lists it, through the cache. */
+async function summaries() {
+  return readThrough<Summary[]>(
+    "diagrams",
+    async () => {
+      const result = await diagramList();
+      const list = (result.json as { diagrams?: unknown } | null)?.diagrams;
+      if (!result.ok || !isSummaries(list)) {
+        throw new Error(result.error ?? "catalog diagram list printed no diagrams list");
+      }
+      return list;
+    },
+    { isValue: isSummaries },
+  );
+}
+
+/** The key of each diagram's SVG in the blob store, from the same (possibly cached) list. */
+export async function svgKeyOf(name: string): Promise<{ key: string | null; stale: boolean }> {
+  const read = await sharedSummaries();
+  const found = read.value.find((entry) => entry.slug === name);
+  return { key: found?.svg?.key ?? null, stale: read.stale };
+}
+
+export async function listDiagrams(): Promise<DiagramListing> {
+  const read = await summaries();
+  const diagrams = read.value.map(viewOf);
+  return {
+    dir: "the catalog",
+    diagrams,
+    errors: [],
+    counts: {
+      total: diagrams.length,
+      withTopic: diagrams.filter((entry) => entry.topic !== null).length,
+      unreadable: 0,
+    },
+    stale: read.stale,
+    readAt: read.readAt,
+    ...(read.error === undefined ? {} : { error: read.error }),
+  };
+}
+
+/** One diagram by name, with its checkout, or null when the database has no such diagram. */
 export async function readDiagram(name: string): Promise<DiagramView | null> {
   const listing = await listDiagrams();
-  return listing.diagrams.find((entry) => entry.name === name) ?? null;
+  const found = listing.diagrams.find((entry) => entry.name === name) ?? null;
+  if (found === null) return null;
+  return { ...found, checkout: await checkoutOf(name) };
+}
+
+/** Where the checkout of `name` stands, from the catalog, or from the file alone when the database is down. */
+export async function checkoutOf(name: string): Promise<CheckoutView | null> {
+  const shown = await diagramShow(name, workDir());
+  const state = (shown.json as { checkout?: unknown } | null)?.checkout as
+    | { record: { revision: number | null } | null; dirty: boolean; behind: boolean }
+    | undefined;
+  if (shown.ok && state !== undefined) {
+    if (state.record === null) return null;
+    return { path: workPath(name), revision: state.record.revision, dirty: state.dirty, behind: state.behind };
+  }
+  const exists = (await stat(workPath(name)).catch(() => null)) !== null;
+  return exists ? { path: workPath(name), revision: null, dirty: false, behind: false } : null;
+}
+
+export interface Checkout {
+  /** Absolute path to the file every verb and the mirror take. */
+  path: string;
+  /** Whether there is a document at that path. */
+  exists: boolean;
+  /** The revision it was written from, when the catalog said. */
+  revision: number | null;
+  /** A sentence for the screen: what happened, or why the file was left alone. */
+  note: string;
+  /** The catalog could not be reached, and the file is whatever was checked out last. */
+  offline: boolean;
+  /**
+   * The catalog answered and could not write the checkout, for a reason that
+   * is neither an outage nor uncommitted edits. The file on disk, if any, may
+   * be an older revision than the diagram, so nothing should build on it.
+   */
+  failed: boolean;
+}
+
+/** Keys sorted at every depth, which is the catalog's canonical JSON (`content/snapshot.ts`) for anything `JSON.parse` returns. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) out[key] = canonical((value as Record<string, unknown>)[key]);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * A document file's hash as the catalog defines `document_hash`: the sha256
+ * of its canonical JSON, so a file whose keys are in another order still
+ * matches the row it came from. Null when there is no file; the file's raw
+ * sha256 when it is not JSON, which then matches nothing, as it should.
+ */
+export async function documentHashOf(file: string): Promise<string | null> {
+  const bytes = await readFile(file).catch(() => null);
+  if (bytes === null) return null;
+  let text: string;
+  try {
+    text = JSON.stringify(canonical(JSON.parse(bytes.toString("utf8"))));
+  } catch {
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+/**
+ * The revision the checkout on disk was written from, read from the record the
+ * catalog keeps beside it (`<slug>.checkout.json`), with no database needed.
+ * Null when it was checked out before the diagram existed; undefined when
+ * there is no record to read.
+ */
+export async function checkoutRevision(name: string): Promise<number | null | undefined> {
+  const record = await readFile(path.join(workDir(), `${name}.checkout.json`), "utf8").catch(() => null);
+  if (record === null) return undefined;
+  try {
+    const revision = (JSON.parse(record) as { revision?: unknown }).revision;
+    return typeof revision === "number" || revision === null ? revision : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Bring the checkout up to the diagram's latest revision, and say where it is.
+ *
+ * A checkout holding edits nobody committed is left exactly as it is: the
+ * catalog refuses to overwrite it, and that refusal is an answer here, not a
+ * failure, since those edits exist nowhere else. With the database down, the
+ * last checkout on disk is what there is, and drawing still runs on it (D16).
+ */
+export async function ensureCheckout(name: string, options: { canvasOpen?: boolean } = {}): Promise<Checkout> {
+  const onDisk = async () => (await stat(workPath(name)).catch(() => null)) !== null;
+  // A canvas open on the checkout saves the whole document whenever a person
+  // presses Cmd+S. The catalog checks for edits and then writes, and a save
+  // landing between the two would be overwritten, so a checkout a canvas holds
+  // is never refreshed: the canvas already shows it, and a commit from it is
+  // checked against its base like any other.
+  if (options.canvasOpen === true) {
+    return {
+      path: workPath(name),
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
+      note: `a canvas is open on ${workPath(name)}, so it was used as it is rather than refreshed`,
+      offline: false,
+      failed: false,
+    };
+  }
+  const result = await diagramCheckout(name, workDir());
+  const json = (result.json ?? {}) as { exists?: unknown; revision?: unknown; note?: unknown; code?: unknown };
+  if (result.ok) {
+    return {
+      path: workPath(name),
+      exists: json.exists === true,
+      revision: typeof json.revision === "number" ? json.revision : null,
+      note: typeof json.note === "string" ? json.note : "checked out",
+      offline: false,
+      failed: false,
+    };
+  }
+  if (json.code === "dirty-checkout") {
+    return {
+      path: workPath(name),
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
+      note: `${workPath(name)} holds edits that were never committed, so it was left as it is`,
+      offline: false,
+      failed: false,
+    };
+  }
+  if (result.offline) {
+    return {
+      path: workPath(name),
+      exists: await onDisk(),
+      revision: (await checkoutRevision(name)) ?? null,
+      note: `the catalog is unreachable, so ${name} is the last checkout on disk`,
+      offline: true,
+      failed: false,
+    };
+  }
+  return {
+    path: workPath(name),
+    exists: await onDisk(),
+    revision: null,
+    note: `the catalog could not check ${name} out: ${result.error ?? "no reason given"}`,
+    offline: false,
+    failed: true,
+  };
 }

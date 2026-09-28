@@ -138,8 +138,8 @@ export function BriefForm({
         <div className="min-w-0 flex-1">
           <PanelHeading>New diagram</PanelHeading>
           <p className="text-xs text-[var(--muted)]">
-            An agent draws it into the candidates directory. Nothing under{" "}
-            <Mono>learn/assets/</Mono> changes until somebody accepts it.
+            An agent draws it into the candidates directory. Nothing in the catalog changes
+            until somebody accepts it.
           </p>
         </div>
         <Link

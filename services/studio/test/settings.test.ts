@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { BASH_ALLOW, buildSettings } from "../src/settings";
-import { absolute, candidatePath, candidateSvgPath, scratchDir, targetPath } from "../src/paths";
+import { absolute, candidatePath, candidateSvgPath, scratchDir, targetPath, workDir } from "../src/paths";
 
 /**
  * The settings file is the boundary, so these are the tests that matter most in
@@ -124,6 +124,13 @@ describe("the committed corpus is out of reach", () => {
     const target = absolute(targetPath("dot-product"));
     expect(deny).toContain(`Edit(/${target})`);
     expect(deny).toContain(`Read(/${target})`);
+  });
+
+  it("denies the checkouts, where every diagram in the database is a file", () => {
+    // The mirror's document and every other diagram live under
+    // $STUDIO_HOME/work/ since Track D: the clean-room rule reaches them there.
+    expect(deny).toContain(`Read(/${workDir()}/**)`);
+    expect(deny).toContain(`Edit(/${workDir()}/**)`);
   });
 
   it("denies every committed diagram by name, not only by glob", () => {

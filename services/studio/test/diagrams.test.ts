@@ -1,146 +1,212 @@
-import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fixtureDocument } from "./fixture-document";
 
 /**
- * The corpus reader: the one fact it adds to `canvas list --json`, and the one
- * refusal that keeps a request inside `learn/assets`.
+ * The corpus reader over the catalog (Track D of docs/CONTENT-MIGRATION.md):
+ * `catalog diagram list` into the views the screen draws, the cached copy that
+ * answers with Postgres down (D13), and the checkout every verb runs on.
  *
- * `list` reports `svg: { path, exists }` and no modified time, so "is the
- * picture older than the document" — the only question the freshness pill asks
- * — cannot be answered from its output. These tests are about the `stat` that
- * closes that, so the CLI itself is mocked: launching it would be testing
- * tldrawkc, which has its own suite.
+ * The catalog is mocked: its own suite holds the list to `tldrawkc list` and
+ * the checkout to its base check. These are about the studio's reading of it.
  */
 
-const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
-  return { ...actual, canvas: canvasMock.canvas };
+const catalogMock = vi.hoisted(() => ({
+  diagramList: vi.fn(),
+  diagramShow: vi.fn(),
+  diagramCheckout: vi.fn(),
+}));
+vi.mock("../src/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/catalog")>();
+  return { ...actual, ...catalogMock };
 });
 
-const { isDiagramName, listDiagrams, svgStateFor } = await import("../src/diagrams");
-const { absolute, targetPath, targetSvgPath } = await import("../src/paths");
+const { checkoutOf, checkoutRevision, documentHashOf, ensureCheckout, forgetDiagramList, isDiagramName, listDiagrams, readDiagram, svgKeyOf } =
+  await import("../src/diagrams");
+const { workPath } = await import("../src/paths");
 
-const NAME = "studio-diagrams-fixture";
+const summary = {
+  slug: "dot-product",
+  path: "learn/assets/dot-product.tldr",
+  svgPath: "learn/assets/dot-product.svg",
+  title: "The dot product",
+  topic: "vector-and-linear-algebra-basics",
+  concepts: ["dot-product"],
+  source: null,
+  created: "2026-09-12T23:51:55.236Z",
+  shapes: 44,
+  documentBytes: 25636,
+  svg: { key: `local/${"a".repeat(64)}.svg`, bytes: 313282, sha256: "a".repeat(64) },
+  svgState: "stale",
+  revision: 7,
+  updatedAt: "2026-09-28T01:00:00.000Z",
+  svgUpdatedAt: "2026-09-27T01:00:00.000Z",
+};
 
-function listing(name: string) {
-  return {
-    code: 0,
-    signal: null,
-    stdout: "",
-    stderr: "",
-    timedOut: false,
-    json: {
-      dir: absolute("learn/assets"),
-      diagrams: [
-        {
-          path: absolute(targetPath(name)),
-          relative: `${name}.tldr`,
-          name,
-          meta: {
-            title: "A fixture",
-            topic: "vector-and-linear-algebra-basics",
-            concepts: ["a", "b"],
-            source: "",
-            created: "2026-09-12T23:51:55.236Z",
-          },
-          shapes: 43,
-          svg: { path: absolute(targetSvgPath(name)), exists: true },
-          png: { path: "", exists: false },
-          modified: "2026-09-13T02:09:26.975Z",
-        },
-      ],
-      errors: [{ path: absolute("learn/assets/broken.tldr"), relative: "broken.tldr", message: "not JSON" }],
-      ms: 4,
-    },
-  };
-}
+const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
+const unreachable = { ok: false, json: null, error: "connect ECONNREFUSED", offline: true };
+
+let home = "";
 
 beforeEach(async () => {
-  await mkdir(absolute("learn/assets"), { recursive: true });
-  canvasMock.canvas.mockResolvedValue(listing(NAME));
+  home = await mkdtemp(path.join(tmpdir(), "studio-diagrams-"));
+  process.env.STUDIO_HOME = home;
+  catalogMock.diagramList.mockReset().mockResolvedValue(answer({ ok: true, diagrams: [summary] }));
+  catalogMock.diagramShow.mockReset();
+  catalogMock.diagramCheckout.mockReset();
+  forgetDiagramList();
 });
 
 afterEach(async () => {
-  await rm(absolute(targetPath(NAME)), { force: true });
-  await rm(absolute(targetSvgPath(NAME)), { force: true });
-  vi.restoreAllMocks();
+  if (home !== "") await rm(home, { recursive: true, force: true });
+  home = "";
+  delete process.env.STUDIO_HOME;
 });
 
-describe("what makes an SVG stale", () => {
-  it("is missing when there is no file beside the document", () => {
-    expect(svgStateFor("2026-09-13T00:00:00.000Z", null)).toBe("missing");
-  });
-
-  it("is stale when the SVG is strictly older than the document", () => {
-    expect(svgStateFor("2026-09-13T02:00:00.000Z", "2026-09-13T01:00:00.000Z")).toBe("stale");
-  });
-
-  it("is current when the two were written in the same millisecond", () => {
-    // `export` writes both seconds apart and a coarse filesystem can stamp them
-    // identically. Calling that stale would leave the pill amber on every
-    // diagram the tool had just finished making.
-    const at = "2026-09-13T02:00:00.000Z";
-    expect(svgStateFor(at, at)).toBe("current");
-  });
-
-  it("is current when the SVG is newer, which is the normal case", () => {
-    expect(svgStateFor("2026-09-13T01:00:00.000Z", "2026-09-13T02:00:00.000Z")).toBe("current");
-  });
-});
-
-describe("what counts as a diagram name", () => {
+describe("a diagram name", () => {
   it.each(["dot-product", "a", "vector-as-a-list-of-numbers", "m3r1"])("takes %j", (name) => {
     expect(isDiagramName(name)).toBe(true);
   });
 
   it.each(["../secrets", "a/b", "", ".hidden", "with space", "a%2Fb"])("refuses %j", (name) => {
-    // The route builds a path from this, so a name that is not one path segment
-    // is refused rather than sanitised: there is no correct file for it.
+    // The route builds a checkout path from this, so a name that is not one
+    // path segment is refused rather than sanitised.
     expect(isDiagramName(name)).toBe(false);
   });
 });
 
-describe("reading the directory", () => {
-  it("adds the SVG's own modified time, which list does not report", async () => {
-    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
-    await writeFile(absolute(targetSvgPath(NAME)), "<svg/>");
-    const old = new Date("2026-01-01T00:00:00.000Z");
-    await utimes(absolute(targetSvgPath(NAME)), old, old);
-
+describe("reading the catalog", () => {
+  it("draws each row as the view the grid reads, freshness from the two hashes", async () => {
     const result = await listDiagrams();
-    const entry = result.diagrams[0];
-    expect(entry?.svg.modified).toBe(old.toISOString());
-    expect(entry?.svgState).toBe("stale");
-    expect(entry?.svg.bytes).toBe(6);
-  });
-
-  it("reports a file that will not parse rather than throwing past it", async () => {
-    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
-    const result = await listDiagrams();
-    expect(result.errors).toEqual([
-      { name: "broken", path: "learn/assets/broken.tldr", message: "not JSON" },
-    ]);
-    expect(result.counts.unreadable).toBe(1);
-  });
-
-  it("counts the topiced ones apart, because the indexer refuses the others", async () => {
-    await writeFile(absolute(targetPath(NAME)), fixtureDocument());
-    const result = await listDiagrams();
-    expect(result.counts).toMatchObject({ total: 1, withTopic: 1 });
-  });
-
-  it("says so plainly when the CLI printed no JSON at all", async () => {
-    canvasMock.canvas.mockResolvedValue({
-      code: 1,
-      signal: null,
-      stdout: "",
-      stderr: "learn/assets does not exist.",
-      timedOut: false,
-      json: null,
+    expect(result.stale).toBe(false);
+    expect(result.counts).toEqual({ total: 1, withTopic: 1, unreadable: 0 });
+    expect(result.diagrams[0]).toEqual({
+      name: "dot-product",
+      tldr: { path: "learn/assets/dot-product.tldr", exists: true, modified: summary.updatedAt, bytes: 25636 },
+      svg: { path: "learn/assets/dot-product.svg", exists: true, modified: summary.svgUpdatedAt, bytes: 313282 },
+      title: "The dot product",
+      topic: "vector-and-linear-algebra-basics",
+      concepts: ["dot-product"],
+      source: null,
+      shapes: 44,
+      created: summary.created,
+      svgState: "stale",
+      revision: 7,
     });
-    await expect(listDiagrams()).rejects.toThrow(/does not exist/);
+  });
+
+  it("answers from the last copy, marked stale, when the database is down", async () => {
+    await listDiagrams();
+    catalogMock.diagramList.mockResolvedValue(unreachable);
+    const result = await listDiagrams();
+    expect(result.stale).toBe(true);
+    expect(result.error).toMatch(/ECONNREFUSED/);
+    expect(result.diagrams.map((d) => d.name)).toEqual(["dot-product"]);
+    // The thumbnail's key comes from the same copy, so tiles still draw.
+    expect(await svgKeyOf("dot-product")).toEqual({ key: summary.svg.key, stale: true });
+  });
+
+  it("answers a grid of thumbnails from one read of the list", async () => {
+    // Review on #142: each tile asked for its key, and each ask was a
+    // `catalog diagram list` subprocess and a query for the same rows.
+    await Promise.all(Array.from({ length: 12 }, () => svgKeyOf("dot-product")));
+    await svgKeyOf("dot-product");
+    expect(catalogMock.diagramList).toHaveBeenCalledTimes(1);
+    forgetDiagramList();
+    await svgKeyOf("dot-product");
+    expect(catalogMock.diagramList).toHaveBeenCalledTimes(2);
+  });
+
+  it("says so rather than inventing an empty list when there is no copy either", async () => {
+    catalogMock.diagramList.mockResolvedValue(unreachable);
+    await expect(listDiagrams()).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it("reads one diagram with where its checkout stands", async () => {
+    catalogMock.diagramShow.mockResolvedValue(
+      answer({ ok: true, diagram: summary, checkout: { record: { revision: 6 }, dirty: true, behind: true } }),
+    );
+    const one = await readDiagram("dot-product");
+    expect(one?.checkout).toEqual({ path: workPath("dot-product"), revision: 6, dirty: true, behind: true });
+    expect(await readDiagram("no-such-diagram")).toBeNull();
+  });
+});
+
+describe("the checkout", () => {
+  it("is where every verb runs, brought up to date by the catalog", async () => {
+    catalogMock.diagramCheckout.mockResolvedValue(
+      answer({ ok: true, exists: true, revision: 7, note: "checked out dot-product at revision 7" }),
+    );
+    const checkout = await ensureCheckout("dot-product");
+    expect(checkout).toMatchObject({ path: workPath("dot-product"), exists: true, revision: 7, offline: false });
+    expect(catalogMock.diagramCheckout).toHaveBeenCalledWith("dot-product", path.join(home, "work"));
+  });
+
+  it("is left alone, and still used, when it holds edits nobody committed", async () => {
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    catalogMock.diagramCheckout.mockResolvedValue({
+      ok: false,
+      json: { ok: false, code: "dirty-checkout", error: "holds edits" },
+      error: "holds edits",
+      offline: false,
+    });
+    const checkout = await ensureCheckout("dot-product");
+    expect(checkout).toMatchObject({ exists: true, offline: false });
+    expect(checkout.note).toMatch(/never committed/);
+  });
+
+  it("is not built on when the catalog answered and could not write it", async () => {
+    // Review on #142: a file left from an older revision must not be what an
+    // extend job copies when the refresh failed for any reason but an outage.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    catalogMock.diagramCheckout.mockResolvedValue({
+      ok: false,
+      json: { ok: false, code: "unreadable", error: "blob sha mismatch" },
+      error: "blob sha mismatch",
+      offline: false,
+    });
+    expect(await ensureCheckout("dot-product")).toMatchObject({ failed: true, offline: false });
+  });
+
+  it("is used as it is, never refreshed, while a canvas is open on it", async () => {
+    // Review on #142: the catalog checks for edits and then writes, and a
+    // canvas save between the two would be overwritten.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    await writeFile(path.join(home, "work", "dot-product.checkout.json"), JSON.stringify({ revision: 6 }));
+    const checkout = await ensureCheckout("dot-product", { canvasOpen: true });
+    expect(checkout).toMatchObject({ exists: true, revision: 6, failed: false });
+    expect(catalogMock.diagramCheckout).not.toHaveBeenCalled();
+    expect(await checkoutRevision("dot-product")).toBe(6);
+    expect(await checkoutRevision("no-record")).toBeUndefined();
+  });
+
+  it("hashes a document the way the catalog does, whatever order its keys are in", async () => {
+    // Review on #142: a job started offline is checked at Accept by this hash
+    // against the stored `document_hash`, which is of canonical JSON.
+    await mkdir(path.join(home, "work"), { recursive: true });
+    const a = path.join(home, "work", "a.tldr");
+    const b = path.join(home, "work", "b.tldr");
+    await writeFile(a, '{"records":[{"id":"x","typeName":"shape"}],"schema":{"v":2}}');
+    await writeFile(b, '{\n  "schema": { "v": 2 },\n  "records": [{ "typeName": "shape", "id": "x" }]\n}\n');
+    const expected = createHash("sha256").update('{"records":[{"id":"x","typeName":"shape"}],"schema":{"v":2}}').digest("hex");
+    expect(await documentHashOf(a)).toBe(expected);
+    expect(await documentHashOf(b)).toBe(expected);
+    expect(await documentHashOf(path.join(home, "work", "missing.tldr"))).toBeNull();
+  });
+
+  it("falls back to the file on disk with the database down (D16)", async () => {
+    catalogMock.diagramCheckout.mockResolvedValue(unreachable);
+    expect(await ensureCheckout("dot-product")).toMatchObject({ exists: false, offline: true });
+    await mkdir(path.join(home, "work"), { recursive: true });
+    await writeFile(workPath("dot-product"), "{}");
+    expect(await ensureCheckout("dot-product")).toMatchObject({ exists: true, offline: true });
+    catalogMock.diagramShow.mockResolvedValue(unreachable);
+    expect(await checkoutOf("dot-product")).toMatchObject({ path: workPath("dot-product"), dirty: false });
   });
 });

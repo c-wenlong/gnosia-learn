@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,6 +14,8 @@ import {
   shotPath,
   targetPath,
   targetSvgPath,
+  workDir,
+  workPath,
 } from "../src/paths";
 import type { JobRecord } from "../src/store";
 import type { Runner } from "../src/runner";
@@ -26,11 +29,37 @@ import { fixtureDocument } from "./fixture-document";
  * tells a caller that `reindex` exists at all.
  */
 
-const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
+const canvasMock = vi.hoisted(() => ({
+  doctor: vi.fn(),
+  /** Set by a test that fakes a verb; every other test runs the real tool. */
+  verb: null as null | ((args: string[]) => Promise<unknown>),
+}));
 vi.mock("../src/canvas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/canvas")>();
-  return { ...actual, doctor: canvasMock.doctor };
+  return {
+    ...actual,
+    doctor: canvasMock.doctor,
+    canvas: (args: string[], ...rest: unknown[]) =>
+      canvasMock.verb === null ? (actual.canvas as (...a: unknown[]) => unknown)(args, ...rest) : canvasMock.verb(args),
+  };
 });
+
+const catalogMock = vi.hoisted(() => ({
+  diagramShow: vi.fn(),
+  diagramCheckout: vi.fn(),
+  diagramList: vi.fn(),
+  diagramPut: vi.fn(),
+  diagramCommit: vi.fn(),
+  jobAccept: vi.fn(),
+  jobDiscard: vi.fn(),
+}));
+vi.mock("../src/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/catalog")>();
+  return { ...actual, ...catalogMock };
+});
+
+/** The diagram's latest revision as the fake catalog answers it. */
+let latestRevision = 5;
 
 const { createApi } = await import("../src/api");
 const { JobStore } = await import("../src/store");
@@ -100,6 +129,18 @@ beforeEach(async () => {
   store = new JobStore();
   enqueued.length = 0;
   canvasMock.doctor.mockResolvedValue({ code: 0, signal: null, stdout: "", stderr: "", json: null, timedOut: false });
+  latestRevision = 5;
+  canvasMock.verb = null;
+  catalogMock.diagramCommit.mockReset();
+  const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
+  catalogMock.diagramShow.mockImplementation(async () =>
+    answer({ ok: true, diagram: { revision: latestRevision, revisionJob: null }, checkout: null }),
+  );
+  catalogMock.diagramCheckout.mockImplementation(async () => answer({ ok: true, exists: false, revision: null, note: "no diagram" }));
+  catalogMock.diagramList.mockResolvedValue(answer({ ok: true, diagrams: [] }));
+  catalogMock.diagramPut.mockResolvedValue(answer({ ok: true, revision: 6, changed: true }));
+  catalogMock.jobAccept.mockResolvedValue(answer({}));
+  catalogMock.jobDiscard.mockResolvedValue(answer({}));
 
   const runner = {
     enqueue: (brief: Record<string, unknown>, parent?: Record<string, unknown>) => {
@@ -111,6 +152,13 @@ beforeEach(async () => {
       });
     },
     busy: 0,
+    // Whether there is a diagram to extend: the checkout on disk stands in for
+    // the catalog's answer here, as it does in the runner with Postgres down.
+    startingPoint: async (slug: string) => ({
+      exists: existsSync(workPath(slug)),
+      revision: null,
+      hash: null,
+    }),
   } as unknown as Runner;
 
   mirrors = new Mirrors();
@@ -135,8 +183,8 @@ describe("revising a diagram that was accepted", () => {
     // brief said `new`, and re-posting `new` walks into the guard that refuses
     // a `new` brief over an existing target — so the route was unreachable for
     // exactly the case it exists for.
-    await mkdir(absolute("learn/assets"), { recursive: true });
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath(SLUG), fixtureDocument(), "utf8");
     await store.create(record());
 
     const response = await fetch(`${base}/api/jobs/job-api/revise`, {
@@ -209,8 +257,8 @@ describe("resuming a job the runner died under", () => {
   });
 
   it("is a new job when the target is not there, and an extend when it is", async () => {
-    await mkdir(absolute("learn/assets"), { recursive: true });
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument(), "utf8");
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath(SLUG), fixtureDocument(), "utf8");
     await store.create(record({ state: "interrupted" }));
 
     const response = await fetch(`${base}/api/jobs/job-api/resume`, {
@@ -435,13 +483,12 @@ describe("accepting", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
-  it("flags a hash refusal as one the UI should offer to re-compare, not retry", async () => {
-    // The candidate is there and the target has moved under it, which is S4.
-    await mkdir(absolute("learn/assets"), { recursive: true });
+  it("flags a moved diagram as one the UI should offer to re-compare, not retry", async () => {
+    // The candidate is there and the diagram was committed under it, which is S4.
     await mkdir(absolute("learn/assets/.candidates"), { recursive: true });
     await writeFile(absolute(candidatePath(SLUG)), fixtureDocument(), "utf8");
-    await writeFile(absolute(targetPath(SLUG)), fixtureDocument({ title: "edited by hand" }), "utf8");
-    await store.create(record({ state: "awaiting_review", targetHashBefore: "a-hash-from-before" }));
+    latestRevision = 9;
+    await store.create(record({ state: "awaiting_review", targetRevisionBefore: 5 }));
 
     const response = await fetch(`${base}/api/jobs/job-api/accept`, {
       method: "POST",
@@ -514,6 +561,54 @@ describe("naming a diagram", () => {
   it("refuses a verb sent as a GET, because a verb writes a file", async () => {
     const response = await fetch(`${base}/api/diagrams/${SLUG}/export`);
     expect(response.status).toBe(405);
+  });
+});
+
+describe("Export SVG", () => {
+  const answer = (json: unknown) => ({ ok: true, json, error: null, offline: false });
+  /** The checkout as `diagram show` reports it: clean before the export, edited after it, as the new SVG makes it. */
+  function checkoutReads(...dirty: boolean[]) {
+    for (const d of dirty) {
+      catalogMock.diagramShow.mockResolvedValueOnce(
+        answer({ ok: true, diagram: { revision: 5 }, checkout: { record: { revision: 5 }, dirty: d, behind: false } }),
+      );
+    }
+  }
+
+  beforeEach(() => {
+    catalogMock.diagramCheckout.mockImplementation(async () => answer({ ok: true, exists: true, revision: 5, note: "checked out" }));
+    canvasMock.verb = async () => ({ code: 0, signal: null, stdout: "", stderr: "", json: { ok: true }, timedOut: false });
+    catalogMock.diagramCommit.mockResolvedValue(answer({ ok: true, revision: 6, changed: true }));
+  });
+
+  it("stores the fresh SVG when the document held no edits before it, though the export itself changed the checkout", async () => {
+    checkoutReads(false, true);
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await response.json()) as { note: string };
+    expect(response.status).toBe(200);
+    expect(body.note).toBe("export finished and the SVG is stored");
+    expect(catalogMock.diagramCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the SVG for the next commit when the canvas held edits nobody committed", async () => {
+    checkoutReads(true, true);
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await response.json()) as { note: string };
+    expect(response.status).toBe(200);
+    expect(body.note).toMatch(/waits for the next commit/);
+    expect(catalogMock.diagramCommit).not.toHaveBeenCalled();
+  });
+
+  it("refuses to run a verb on a checkout the catalog could not bring up to date", async () => {
+    catalogMock.diagramCheckout.mockImplementation(async () => ({
+      ok: false,
+      json: { ok: false, code: "unreadable", error: "blob sha mismatch" },
+      error: "blob sha mismatch",
+      offline: false,
+    }));
+    const response = await fetch(`${base}/api/diagrams/${SLUG}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect(response.status).toBe(502);
+    expect(catalogMock.diagramCommit).not.toHaveBeenCalled();
   });
 });
 

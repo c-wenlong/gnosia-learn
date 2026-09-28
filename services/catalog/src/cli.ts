@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import path from "node:path";
 
-import { formatAssertOutput, runAssertOutput } from "./commands/assert-output";
 import { formatAssetUpload, runAssetUpload } from "./commands/asset-upload";
 import { formatBlobAudit, runBlobAudit } from "./commands/blob-audit";
 import { UPLOAD_SOURCES, type UploadSource } from "./content/asset-upload";
@@ -139,8 +138,6 @@ Commands:
   diagram <verb>           Diagrams in the database: put, checkout, commit,
                            list, show. \`catalog diagram --help\` has the
                            flags.
-  assert-output            Index one file the way the owning source would, and
-                           record which job produced it. Needs --job and --path.
   session <verb>           The session row a job hangs off: start --id ID
                            [--kind studio] [--title T] [--goal G]
                            [--agent-session UUID], and end --id ID --state S.
@@ -255,9 +252,9 @@ Options:
                            Default: <repo>/${DEFAULT_STATE_DIR}.
   --kind a,b               ls: count only these asset kinds. job ls/claim: the
                            job kind, e.g. diagram.
-  --job ID                 assert-output, job: which job.
-  --path P                 assert-output, job accept: a repo-relative file the
-                           job landed. Repeatable on accept.
+  --job ID                 job: which job.
+  --path P                 Retired. job accept records what \`catalog diagram
+                           put --job\` landed, and refuses --path.
   --brief FILE             job enqueue: the brief JSON. Needs "topic", "target"
                            and "idempotencyKey"; "brief" is the generator's own
                            and is stored as jsonb.
@@ -324,7 +321,6 @@ type Command =
   | "search"
   | "job"
   | "session"
-  | "assert-output"
   | "history"
   | "diff"
   | "doctor"
@@ -351,7 +347,6 @@ const COMMANDS: readonly Command[] = [
   "search",
   "job",
   "session",
-  "assert-output",
   "history",
   "diff",
   "doctor",
@@ -689,18 +684,6 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatSearch(result));
         break;
       }
-      case "assert-output": {
-        const jobId = values.job;
-        const target = values.path?.[0];
-        if (jobId === undefined) throw new Usage("assert-output needs --job");
-        if (target === undefined) throw new Usage("assert-output needs --path");
-        if ((values.path?.length ?? 0) > 1) {
-          throw new Usage("assert-output takes one --path. Run it once per file.");
-        }
-        const result = await runAssertOutput({ jobId, path: target });
-        emit(result, formatAssertOutput(result));
-        break;
-      }
       case "session": {
         const result = await sessionCommand(positionals, values);
         emit(result, formatSession(result));
@@ -947,7 +930,13 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
       });
     }
     case "accept":
-      return runAccept({ jobId: needsJob(), paths: values.path });
+      if (values.path !== undefined) {
+        throw new Usage(
+          "job accept no longer takes --path: a diagram lands through `catalog diagram put --job <id>`, " +
+            "and accept records what that wrote",
+        );
+      }
+      return runAccept({ jobId: needsJob() });
     case "discard":
       return runDiscard({ jobId: needsJob() });
     case "ls":

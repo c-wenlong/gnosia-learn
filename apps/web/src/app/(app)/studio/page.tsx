@@ -172,8 +172,11 @@ export default async function StudioPage({
       )}
       {!health.data.postgres && (
         <Notice>
-          Not connected to the catalog: browsing and drawing still work, and anything that indexes
-          will report <span className="font-mono">indexed: false</span>.
+          Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
+          since a diagram lands in the database.
+          {listing.stale === true && listing.readAt !== undefined && (
+            <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
+          )}
         </Notice>
       )}
 
