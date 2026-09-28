@@ -23,7 +23,8 @@ import type { CatalogDatabase } from "../db";
  * tell the two apart.
  *
  * The file is a dot name at the root, which the `fs` store never lists: an
- * owner id cannot start with a dot.
+ * owner id cannot start with a dot. A writer refuses a root another database
+ * owns (`assertWritable`), since its objects would be that database's orphans.
  */
 
 export const OWNER_FILE = ".owner";
@@ -101,17 +102,28 @@ export async function claimRoot(root: string, self: BlobRootOwner): Promise<Blob
   }
 }
 
-/** Roots this process has already claimed or found claimed, so an upload does not read the marker per file. */
+/** Roots this process has already claimed or found claimed, by root and database, so an upload does not read the marker per file. */
 const known = new Map<string, BlobRootOwner>();
 
-/** `claimRoot` for a writer, once per root per process. */
-export async function claimOnce(db: CatalogDatabase, root: string): Promise<BlobRootOwner> {
+/**
+ * A writer's claim on a root: claimed for this database when nobody has it,
+ * refused when another database does. Its objects would have no row in the
+ * owner's table, so the owner's `blob audit --fix` would delete them a day
+ * later as orphans, and the rows here would point at nothing.
+ */
+export async function assertWritable(db: CatalogDatabase, root: string): Promise<void> {
   const resolved = path.resolve(root);
-  const cached = known.get(resolved);
-  if (cached !== undefined) return cached;
-  const owner = await claimRoot(resolved, await databaseIdentity(db));
-  known.set(resolved, owner);
-  return owner;
+  const self = await databaseIdentity(db);
+  const cacheKey = `${resolved}\n${self.database}\n${self.port}`;
+  const owner = known.get(cacheKey) ?? (await claimRoot(resolved, self));
+  if (!sameOwner(owner, self)) {
+    throw new BlobOwnerError(
+      `${resolved} belongs to ${describeOwner(owner)} (its ${OWNER_FILE}), and this is ${describeOwner(self)}. ` +
+        `An object written here would have no row in that database, whose \`blob audit --fix\` would delete it ` +
+        `as an orphan. Give this database its own store with SELF_LEARN_HOME; nothing was uploaded.`,
+    );
+  }
+  known.set(cacheKey, owner);
 }
 
 /** Where the `fs` store stages a write before its rename (`TEMP_DIR` in `@self-learn/blob`). */
@@ -148,6 +160,14 @@ export async function stalePartials(root: string, cutoff: Date): Promise<StagedW
   return out;
 }
 
-export async function removePartial(file: string): Promise<void> {
+/**
+ * Delete a staged write, asking its age again first: an upload that resumed
+ * writing it since the listing has moved its mtime past `cutoff`, and is left
+ * to finish. True when it was deleted.
+ */
+export async function removePartial(file: string, cutoff: Date): Promise<boolean> {
+  const facts = await stat(file).catch(() => null);
+  if (facts === null || facts.mtime >= cutoff) return false;
   await rm(file, { force: true });
+  return true;
 }

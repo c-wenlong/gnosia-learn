@@ -64,12 +64,18 @@ export async function runCourseExport(options: { id: string; out?: string }): Pr
   return { database: redactUrl(url), out, ...result, yaml };
 }
 
-/** Whether two paths name one file, links resolved; a file not there yet compares by its resolved directory. */
+/**
+ * Whether two paths name one file, every link resolved, the file's own
+ * included: an `--out` that is a link to the tree's file is the tree's file,
+ * since the write follows the link. A file not there yet compares by its
+ * resolved directory.
+ */
 async function sameFile(a: string, b: string): Promise<boolean> {
-  const real = async (file: string) => {
-    const dir = await realpath(path.dirname(file)).catch(() => path.resolve(path.dirname(file)));
-    return path.join(dir, path.basename(file));
-  };
+  const real = async (file: string) =>
+    realpath(file).catch(async () => {
+      const dir = await realpath(path.dirname(file)).catch(() => path.resolve(path.dirname(file)));
+      return path.join(dir, path.basename(file));
+    });
   return (await real(a)) === (await real(b));
 }
 

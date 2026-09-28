@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { blobRoot } from "../env";
 import { fileFacts } from "../index/files";
-import { claimOnce } from "./blob-owner";
+import { assertWritable } from "./blob-owner";
 
 /**
  * Putting bytes in the blob store and saying so in `blob_object`
@@ -87,9 +87,10 @@ export async function uploadBlob(
       ? { sha256: input.sha256.toLowerCase(), bytes: input.bytes }
       : await fileFacts(input.file).then((f) => ({ sha256: f.contentHash, bytes: f.bytes }));
   const key = blobKey(input.ownerId, facts.sha256, input.ext);
-  // The root names the database that writes it, so another database's
-  // `blob audit --fix` does not take these bytes for orphans (`blob-owner.ts`).
-  if ("root" in store && typeof store.root === "string") await claimOnce(db, store.root);
+  // The root names the database that writes it, and only that database
+  // writes it, so no `blob audit --fix` takes these bytes for orphans
+  // (`blob-owner.ts`).
+  if ("root" in store && typeof store.root === "string") await assertWritable(db, store.root);
   const result = { key, sha256: facts.sha256, bytes: facts.bytes, mime: input.mime };
 
   const [row] = await db.select().from(blobObject).where(eq(blobObject.key, key)).limit(1);

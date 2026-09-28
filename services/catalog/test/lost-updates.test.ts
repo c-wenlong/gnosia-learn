@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -370,6 +370,11 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     expect(readStamp(onDisk)).toBeUndefined();
     expect(onDisk).toBe((await exportCourse(scratch.db, "xx1000")).yaml);
     expect(exported.yaml).toBe(onDisk);
+    // A link to the tree's file is the tree's file: the write follows it.
+    const link = path.join(edits, "link-to-tree.yaml");
+    await symlink(courseFile(), link);
+    await runCourseExport({ id: "xx1000", out: link });
+    expect(readStamp(await readFile(courseFile(), "utf8"))).toBeUndefined();
     // And printed, it is stamped: stdout is how a file ends up anywhere.
     expect(readStamp((await runCourseExport({ id: "xx1000" })).yaml)).toEqual(expect.any(Number));
   });

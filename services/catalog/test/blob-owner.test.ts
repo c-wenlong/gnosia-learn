@@ -12,7 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { uploadAssets } from "../src/content/asset-upload";
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
-import { OWNER_FILE, readOwner } from "../src/content/blob-owner";
+import { OWNER_FILE, readOwner, removePartial, stalePartials } from "../src/content/blob-owner";
 import { writeContent } from "../src/content/write";
 import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
@@ -178,6 +178,14 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       const put = await uploadBlob(b.db, shared, { ownerId: "local", file, mime: "application/octet-stream", ext: "bin" });
       expect(await readOwner(shared.root)).toEqual({ database: b.name, port: expect.any(String) });
 
+      // A cannot write there: its objects would be orphans to B's audit.
+      const other = path.join(base, "a-bytes.bin");
+      await writeFile(other, "bytes database a wanted to write");
+      await expect(
+        uploadBlob(a.db, shared, { ownerId: "local", file: other, mime: "application/octet-stream", ext: "bin" }),
+      ).rejects.toThrow(new RegExp(`belongs to database "${b.name}".*nothing was uploaded`));
+      expect(await a.db.select().from(blobObject)).toEqual([]);
+
       // To A the object is an orphan, a day old. A read-only audit says so and whose root it is.
       const later = new Date(Date.now() + AUDIT_GRACE_MS * 2);
       const listed = await auditBlobs(a.db, shared, { root: shared.root, now: later });
@@ -256,6 +264,14 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
     const fixed = await auditBlobs(a.db, store, { fix: true, root });
     expect(fixed.findings).toEqual([expect.objectContaining({ kind: "partial", fixed: "deleted" })]);
     expect(fixed.outstanding).toBe(0);
+    expect(await readdir(tmp)).toEqual(["new.part"]);
+    // Asked again at the delete: a file written to since its listing stays.
+    await utimes(path.join(tmp, "new.part"), twoDaysAgo, twoDaysAgo);
+    const listedOld = await stalePartials(root, new Date(Date.now() - AUDIT_GRACE_MS));
+    expect(listedOld.map((p) => path.basename(p.file))).toEqual(["new.part"]);
+    const now = new Date();
+    await utimes(path.join(tmp, "new.part"), now, now);
+    expect(await removePartial(path.join(tmp, "new.part"), new Date(Date.now() - AUDIT_GRACE_MS))).toBe(false);
     expect(await readdir(tmp)).toEqual(["new.part"]);
   });
 });

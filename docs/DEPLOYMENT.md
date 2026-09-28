@@ -264,7 +264,8 @@ Each root names the database that writes it, in `<root>/.owner`, written by
 the first upload or the first `catalog blob audit --fix`. `--fix` deletes
 objects no row names, so it refuses a root whose marker names another
 database: a `createdb -T` copy sharing `~/.self-learn/blobs` would otherwise
-delete the primary's objects as orphans. `--fix` also sweeps `.tmp/*.part`
+delete the primary's objects as orphans. An upload refuses such a root too,
+since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
 files a crashed upload left, once they are a day old.
 
 A later `catalog index --only manimkc` keeps every key whose bytes it hashes

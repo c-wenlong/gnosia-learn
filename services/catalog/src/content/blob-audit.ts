@@ -255,8 +255,8 @@ export async function auditBlobs(
         detail: `${staged.bytes} bytes of an upload that never finished, last written ${staged.modified.toISOString()}`,
       };
       if (fix) {
-        await removePartial(staged.file);
-        finding.fixed = "deleted";
+        if (await removePartial(staged.file, cutoff)) finding.fixed = "deleted";
+        else finding.detail += "; written to again since it was listed, so it was kept";
       }
       findings.push(finding);
     }
