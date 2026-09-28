@@ -215,6 +215,24 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
         `their row over; nothing was written. Choose another id.`,
     );
   }
+  // A blob's key names whose store and whose quota the bytes are in (D5), so
+  // a row may name only a key under its own owner's prefix: one naming
+  // another owner's key would serve bytes that owner stored. The table has no
+  // CHECK for it (`owner_id` and the key's prefix are in different rows), so
+  // it is asserted here, where every write passes. A key the row already had
+  // is let through: after D23's move of a type to the commons a row keeps its
+  // `local/` key until `catalog asset upload` re-keys it.
+  for (const column of ["blobKey", "svgBlobKey"] as const) {
+    const key = input.next.row[column];
+    if (typeof key !== "string" || key.startsWith(`${input.owner}/`)) continue;
+    const kept = before?.snapshot.entity[column === "blobKey" ? "blob_key" : "svg_blob_key"];
+    if (kept === key) continue;
+    throw new ContentWriteError(
+      "invalid",
+      `${input.type} "${input.id}" names blob ${key}, which is not under "${input.owner}/", and this write is ` +
+        `for ${input.owner}. A row's blob is keyed by the row's owner (D5); upload the bytes as ${input.owner}.`,
+    );
+  }
   // The commons owner is reserved and has no learner row until its first
   // write, the way `local` had none until its first observation.
   if (input.owner === COMMONS_OWNER) await ensureLearner(tx, COMMONS_OWNER);

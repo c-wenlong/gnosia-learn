@@ -1,3 +1,5 @@
+import { formatCaps } from "./blob-audit";
+import { ownerCapsOrError, type OwnerCaps } from "../content/blob";
 import {
   collection,
   conceptCurriculumItem,
@@ -98,6 +100,12 @@ export interface StatusResult {
   mirrors: Record<string, MirrorCoverage>;
   /** Per course, how many checklist rows list a concept. Empty until courses are indexed. */
   coverage: CourseCoverage[];
+  /**
+   * The per-owner blob caps in force, or why they cannot be read, in which
+   * case every new upload is refused until they can (phase 4). Read from the
+   * environment, so it is said even when the database is behind.
+   */
+  caps: OwnerCaps | { error: string };
 }
 
 function half(name: TableName): "content" | "state" | "operational" | "studio" {
@@ -162,6 +170,7 @@ export async function runStatus(): Promise<StatusResult> {
         sources: sourceStatuses([]),
         mirrors: {},
         coverage: [],
+        caps: ownerCapsOrError(),
       };
     }
 
@@ -198,6 +207,7 @@ export async function runStatus(): Promise<StatusResult> {
       sources: sourceStatuses(runs),
       mirrors: await mirrorCoverage(db),
       coverage: await courseCoverage(db),
+      caps: ownerCapsOrError(),
     };
   });
 }
@@ -333,6 +343,7 @@ export function formatStatus(result: StatusResult): string {
     `content ${result.totals.content} rows, state ${result.totals.state} rows, ` +
       `operational ${result.totals.operational} rows, studio ${result.totals.studio} rows`,
   );
+  lines.push(`blob caps  ${formatCaps(result.caps)}`);
 
   lines.push("");
   lines.push("sources");

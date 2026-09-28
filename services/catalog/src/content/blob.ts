@@ -51,13 +51,20 @@ export interface OwnerCaps {
   uploadsPerDay: number | null;
 }
 
-/** A cap variable that is not a whole number. Thrown before anything is read or stored. */
+/**
+ * A cap variable that is not a whole number, or one too large to count
+ * exactly. Thrown before a new object is measured or stored; a key that
+ * already has a row never reads the caps at all (`uploadBlob`).
+ */
 export class OwnerCapConfigError extends Error {
+  readonly code = "BLOB_CAP_CONFIG";
   constructor(variable: string, value: string) {
+    const example = variable === OWNER_BYTES_CAP_ENV ? "bytes, such as 5000000000 for 5 GB" : "uploads, such as 200";
     super(
-      `${variable}=${JSON.stringify(value)} is not a whole number. Set it to a count ` +
-        `(${variable === OWNER_BYTES_CAP_ENV ? "bytes, such as 5000000000 for 5 GB" : "uploads, such as 200"}), ` +
-        `or unset it for no cap.`,
+      /^\d+$/.test(value)
+        ? `${variable}=${value} is larger than ${Number.MAX_SAFE_INTEGER}, the largest count the catalog can ` +
+            `compare exactly. Set it to a smaller count (${example}), or unset it for no cap.`
+        : `${variable}=${JSON.stringify(value)} is not a whole number. Set it to a count (${example}), or unset it for no cap.`,
     );
     this.name = "OwnerCapConfigError";
   }
@@ -71,6 +78,19 @@ function capFrom(env: Record<string, string | undefined>, variable: string): num
   // once, where silently dropping the cap would let an owner past it.
   if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw new OwnerCapConfigError(variable, raw);
   return Number(raw);
+}
+
+/**
+ * The caps, or the reason they cannot be read, for the commands that report
+ * them (`doctor`, `status`, `blob audit`) rather than upload under them.
+ */
+export function ownerCapsOrError(env?: Record<string, string | undefined>): OwnerCaps | { error: string } {
+  try {
+    return ownerCaps(env);
+  } catch (error) {
+    if (!(error instanceof OwnerCapConfigError)) throw error;
+    return { error: error.message };
+  }
 }
 
 /**
@@ -97,6 +117,17 @@ export class OwnerCapError extends Error {
   }
 }
 
+/**
+ * The fields a `--json` failure carries for a cap refusal, beside its
+ * sentence: the code a script branches on, and for `BLOB_CAP` whose cap it
+ * was. Empty for any other error.
+ */
+export function capFailureFields(error: unknown): Record<string, string> {
+  if (error instanceof OwnerCapError) return { code: error.code, owner: error.owner, cap: error.cap };
+  if (error instanceof OwnerCapConfigError) return { code: error.code };
+  return {};
+}
+
 /** What one owner holds in `blob_object`, measured by the key prefix every object carries. */
 export interface OwnerUsage {
   owner: string;
@@ -108,23 +139,27 @@ export interface OwnerUsage {
   uploadsLastDay: number;
 }
 
-/**
- * One owner's usage, or every owner's when `owner` is omitted, grouped by the
- * key's prefix rather than by `owner_id`, since the prefix is what the store
- * lists and deletes by (D5), and the two agree by construction (`key()`).
- */
+/** One owner's usage, or every owner's when `owner` is omitted. */
 export async function ownerUsage(
   db: CatalogDatabase,
   options: { owner?: string; now?: Date } = {},
 ): Promise<OwnerUsage[]> {
-  const since = new Date((options.now ?? new Date()).getTime() - UPLOAD_WINDOW_MS);
-  const prefix = sql`split_part(${blobObject.key}, '/', 1)`;
+  // The window is measured on the database's clock, the one that stamped
+  // `created_at`, so an app server whose clock drifts cannot move an upload
+  // in or out of it. `now` is for a caller that reports as of a moment.
+  const since =
+    options.now === undefined
+      ? sql`now() - make_interval(secs => ${UPLOAD_WINDOW_MS / 1000})`
+      : sql`${new Date(options.now.getTime() - UPLOAD_WINDOW_MS).toISOString()}::timestamptz`;
+  // By `owner_id`, which the table's check ties to the key's prefix
+  // (`starts_with(key, owner_id || '/' || sha256)`), so this is the prefix the
+  // store lists by and the column the owner index serves.
   const { rows } = await db.execute<{ owner: string; objects: number; bytes: string; uploads: number }>(sql`
-    select ${prefix} as owner, count(*)::int as objects, coalesce(sum(${blobObject.bytes}), 0)::text as bytes,
-           (count(*) filter (where ${blobObject.createdAt} > ${since.toISOString()}))::int as uploads
+    select ${blobObject.ownerId} as owner, count(*)::int as objects, coalesce(sum(${blobObject.bytes}), 0)::text as bytes,
+           (count(*) filter (where ${blobObject.createdAt} > ${since}))::int as uploads
     from ${blobObject}
     where true
-      ${options.owner === undefined ? sql`` : sql`and starts_with(${blobObject.key}, ${`${options.owner}/`})`}
+      ${options.owner === undefined ? sql`` : sql`and ${blobObject.ownerId} = ${options.owner}`}
     group by 1 order by 1
   `);
   return rows.map((row) => ({
@@ -148,18 +183,28 @@ export function ownerCapLock(owner: string): string {
  * Only a new object is measured. A key that already has a row is already
  * counted, bytes and day both, and writing it again (a rerun, or putting back
  * an object the store lost) adds nothing, so it is never refused, even by a
- * cap lowered below what the owner already holds. Whether the row exists is
- * asked here, under the lock, not before it: an audit's `--fix` may have
- * deleted a stale pending row in between, and then this is a new object.
+ * cap lowered below what the owner already holds, or one set to a value that
+ * cannot be read (`caps` is then the reason, and only a new object is
+ * refused with it). Whether the row exists is asked here, under the lock, and
+ * with the row locked until this transaction commits: an audit's `--fix`
+ * deleting a stale pending row cannot land between this answer and the
+ * pending write below, where it would turn a counted key into a new object
+ * nobody measured. A delete that committed first is seen as no row, and the
+ * object is measured as new.
  */
 async function checkCaps(
   tx: CatalogDatabase,
-  caps: OwnerCaps,
+  caps: OwnerCaps | OwnerCapConfigError,
   input: { owner: string; key: string; bytes: number },
 ): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(input.owner)}, 0))`);
-  const [existing] = await tx.select({ key: blobObject.key }).from(blobObject).where(eq(blobObject.key, input.key));
+  const [existing] = await tx
+    .select({ key: blobObject.key })
+    .from(blobObject)
+    .where(eq(blobObject.key, input.key))
+    .for("update");
   if (existing !== undefined) return;
+  if (caps instanceof OwnerCapConfigError) throw caps;
   const [usage] = await ownerUsage(tx, { owner: input.owner });
   const bytes = usage?.bytes ?? 0;
   const uploads = usage?.uploadsLastDay ?? 0;
@@ -230,14 +275,15 @@ export interface UploadResult {
  * With a cap set (`ownerCaps`), a new object that would take its owner past
  * it is refused with `OwnerCapError` before the pending row is written, so a
  * refusal stores nothing and records nothing. A key that already has a row
- * is never refused (`checkCaps`).
+ * is never refused (`checkCaps`), and a present one returns before the caps
+ * are read at all, so a malformed cap refuses new objects only: an unchanged
+ * `catalog import` or `diagram put` still goes through.
  */
 export async function uploadBlob(
   db: CatalogDatabase,
   store: BlobStore,
   input: UploadInput,
 ): Promise<UploadResult> {
-  const caps = ownerCaps();
   const facts =
     input.sha256 !== undefined && input.bytes !== undefined
       ? { sha256: input.sha256.toLowerCase(), bytes: input.bytes }
@@ -255,6 +301,17 @@ export async function uploadBlob(
     // full hash to the audit, which is the caller that asks for it.
     const there = await store.stat(key);
     if (there !== null && there.bytes === facts.bytes) return { ...result, uploaded: false };
+  }
+
+  // Read only now that bytes may move. A value that cannot be read is carried
+  // to `checkCaps`, which refuses a new object with it and lets a key that
+  // already has a row through.
+  let caps: OwnerCaps | OwnerCapConfigError;
+  try {
+    caps = ownerCaps();
+  } catch (error) {
+    if (!(error instanceof OwnerCapConfigError)) throw error;
+    caps = error;
   }
 
   // Pending first, committed on its own. A row that was present and whose
@@ -275,7 +332,7 @@ export async function uploadBlob(
         target: blobObject.key,
         set: { state: "pending", mime: input.mime, provider: store.provider, updatedAt: sql`now()` },
       });
-  if (caps.bytes === null && caps.uploadsPerDay === null) {
+  if (!(caps instanceof OwnerCapConfigError) && caps.bytes === null && caps.uploadsPerDay === null) {
     await pending(db);
   } else {
     await db.transaction(async (tx) => {

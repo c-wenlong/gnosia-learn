@@ -1,8 +1,12 @@
 import {
   asset,
   assetConcept,
+  assetJob,
   event,
   assetDerivation,
+  mastery,
+  readableOwners,
+  review,
   assetTopic,
   collection,
   collectionItem,
@@ -36,6 +40,7 @@ import {
 } from "../content/revisions";
 import { placePositions, PositionGapError } from "../content/positions";
 import { readSnapshots, type SnapshotRead } from "../content/snapshot";
+import { CLI_OWNER } from "../content/scope";
 import { updateSet } from "../content/upsert";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
@@ -75,6 +80,16 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * changed**, through the same revision writer the seam in `../content/` uses,
  * and every entity it deleted gets a `delete` revision holding its last state.
  * A re-index of an unchanged tree therefore appends nothing.
+ *
+ * **An import is one owner's** (phase 4 of docs/CONTENT-MIGRATION.md, D23,
+ * D24). Ids are global, so a tree's rows can share a key with rows another
+ * owner holds, and the rules above, read over the whole table, would prune,
+ * archive, re-stamp and unlink them. Every row this run writes is stamped with
+ * the importing owner; a prune, an archive or a link clear reaches only that
+ * owner's rows (a link is its parent's, D24); and a tree row that would land
+ * on another owner's row, link to an entity the owner cannot read, or delete
+ * another owner's row by cascade is refused by id before anything moves. With
+ * one owner every row is `local` and none of this changes a thing.
  *
  * One transaction per source, not one for the whole run. A source either lands
  * whole or not at all, and a manimkc checkout that cannot be read must not roll
@@ -201,6 +216,120 @@ const CONFLICT_TARGET = {
   diagram: diagram.slug,
 } as const;
 
+/** One end of a link row: the column, and the entity table it points at. */
+interface LinkEnd {
+  column: string;
+  entity: EntityName;
+}
+
+/**
+ * Where each link table's ends point, for the owner rules (D24: a link
+ * belongs to its parent's owner). `parent` is the end whose owner the link
+ * is; `far` the ends it points at, which the owner must be able to read;
+ * `ownColumn` the tables whose rows carry an `owner_id` of their own, which
+ * must be the parent's; `keys` the column sets a row is unique on, which a
+ * row this run keeps out of reach could collide with.
+ */
+const LINK_ENDS: Record<LinkName, { parent: LinkEnd; far: LinkEnd[]; ownColumn: boolean; keys: string[][] }> = {
+  topicRelation: {
+    parent: { column: "fromSlug", entity: "topic" },
+    far: [{ column: "toSlug", entity: "topic" }],
+    ownColumn: true,
+    keys: [["fromSlug", "toSlug", "kind"]],
+  },
+  manimkcTopic: { parent: { column: "topicSlug", entity: "topic" }, far: [], ownColumn: true, keys: [["path"]] },
+  collectionTag: {
+    parent: { column: "collectionId", entity: "collection" },
+    far: [{ column: "tagId", entity: "tag" }],
+    ownColumn: false,
+    keys: [["collectionId", "tagId"]],
+  },
+  assetTopic: {
+    parent: { column: "assetId", entity: "asset" },
+    far: [{ column: "topicSlug", entity: "topic" }],
+    ownColumn: false,
+    keys: [["assetId", "topicSlug"]],
+  },
+  assetConcept: {
+    parent: { column: "assetId", entity: "asset" },
+    far: [{ column: "conceptSlug", entity: "concept" }],
+    ownColumn: false,
+    keys: [["assetId", "conceptSlug"]],
+  },
+  conceptPrerequisite: {
+    parent: { column: "conceptSlug", entity: "concept" },
+    far: [{ column: "prerequisiteSlug", entity: "concept" }],
+    ownColumn: false,
+    keys: [["conceptSlug", "prerequisiteSlug", "kind"]],
+  },
+  collectionItem: {
+    parent: { column: "collectionId", entity: "collection" },
+    far: [
+      { column: "topicSlug", entity: "topic" },
+      { column: "conceptSlug", entity: "concept" },
+      { column: "assetId", entity: "asset" },
+    ],
+    ownColumn: false,
+    keys: [
+      ["collectionId", "topicSlug"],
+      ["collectionId", "conceptSlug"],
+      ["collectionId", "assetId"],
+    ],
+  },
+  assetDerivation: {
+    parent: { column: "assetId", entity: "asset" },
+    far: [{ column: "sourceAssetId", entity: "asset" }],
+    ownColumn: false,
+    keys: [["assetId", "sourceAssetId"]],
+  },
+  curriculumItemTopic: {
+    parent: { column: "curriculumItemId", entity: "curriculumItem" },
+    far: [{ column: "topicSlug", entity: "topic" }],
+    ownColumn: false,
+    keys: [["curriculumItemId", "topicSlug"]],
+  },
+  conceptCurriculumItem: {
+    parent: { column: "curriculumItemId", entity: "curriculumItem" },
+    far: [{ column: "conceptSlug", entity: "concept" }],
+    ownColumn: false,
+    keys: [["conceptSlug", "curriculumItemId"]],
+  },
+  mirror: { parent: { column: "assetId", entity: "asset" }, far: [], ownColumn: false, keys: [["assetId", "destination"]] },
+};
+
+/** Who an import writes as, and whose rows it may link to. */
+interface ImportOwner {
+  owner: string;
+  readable: readonly string[];
+}
+
+/** `column` points at a row of `entity` that `owners` hold (a null end holds nothing, so passes). */
+function endHeldBy(link: PgTable, end: LinkEnd, owners: readonly string[], nullPasses: boolean): SQL {
+  const target = TABLES[end.entity];
+  const column = columnOf(link, end.column);
+  const held = sql`exists (select 1 from ${target} where ${columnOf(target, ENTITY_KEY[end.entity])} = ${column} and ${columnOf(target, "ownerId")} in (${sql.join(
+    owners.map((owner) => sql`${owner}`),
+    sql`, `,
+  )}))`;
+  return nullPasses ? sql`(${column} is null or ${held})` : held;
+}
+
+/**
+ * The link rows of `name` that are the importing owner's to replace: the
+ * parent is the owner's (and, where the row has an owner of its own, so is
+ * the row), and every far end is one the owner can read. A row outside this,
+ * under another owner's parent, or the mixed state D24 says no writer makes
+ * and `catalog doctor` repairs, is left exactly as it is.
+ */
+function linkOwned(name: LinkName, who: ImportOwner): SQL {
+  const ends = LINK_ENDS[name];
+  const link = TABLES[name];
+  const parts = [endHeldBy(link, ends.parent, [who.owner], false)];
+  if (ends.ownColumn) parts.push(sql`${columnOf(link, "ownerId")} = ${who.owner}`);
+  for (const far of ends.far) parts.push(endHeldBy(link, far, who.readable, true));
+  return and(...parts) as SQL;
+}
+
 
 type AnyRow = Record<string, unknown>;
 
@@ -276,10 +405,19 @@ export async function writeSource(
      * is written.
      */
     conceptsFollow?: boolean;
+    /**
+     * Whose rows these are: every row is stamped with it, and only its rows
+     * are pruned, archived or unlinked (phase 4, D23). Defaults to the CLIs'
+     * owner, `local`, which every row is today.
+     */
+    owner?: string;
   } = {},
 ): Promise<SourceWrite> {
+  const who: ImportOwner = { owner: options.owner ?? CLI_OWNER, readable: [] };
+  who.readable = readableOwners(who.owner);
   assertNamespaced(indexer, rows);
   assertInScope(rows, options.scope);
+  rows = stampOwner(indexer, rows, who.owner);
 
   const startedAt = new Date();
   const written: Record<string, number> = {};
@@ -311,12 +449,16 @@ export async function writeSource(
     );
     await markSeam(tx, `import:${indexer.source}`);
 
+    // Nothing this tree produced may land on a row another owner holds, or
+    // link to one the owner cannot read. Refused by id before anything moves.
+    await assertNoForeignRows(tx, rows, who);
+
     // A topic the vocabulary dropped while concepts are still filed under it
     // cannot be deleted (`concept.topic_slug` is NOT NULL and RESTRICT since
     // 0012). With the concepts source to follow it is held, untouched, for
     // `pruneHeldTopics`; without, the run is refused before anything moves.
     if ((indexer.owns as readonly string[]).includes("topic")) {
-      const stale = await staleKeys(tx, indexer, "topic", rows);
+      const stale = await staleKeys(tx, indexer, "topic", rows, who.owner);
       const filed = stale.length === 0 ? [] : await filedTopics(tx, stale);
       if (filed.length > 0 && options.conceptsFollow !== true) throw topicsFiledError(filed);
       deferred = [...new Set(filed.map((f) => f.topic))];
@@ -329,7 +471,7 @@ export async function writeSource(
     // number and its snapshot.
     // A blob an asset already points at stays hooked up while its bytes are
     // the ones just read (`./blob-keys.ts`).
-    const placed = await keepBlobKeys(tx, await placeSparsePositions(tx, rows));
+    const placed = await keepBlobKeys(tx, await placeSparsePositions(tx, rows), who.owner);
 
     // The last state of every entity this run will delete, read before step 1
     // clears the link rows it owns, so a `delete` revision records the entity
@@ -337,7 +479,7 @@ export async function writeSource(
     const lastStates = new Map<EntityName, Map<string, SnapshotRead>>();
     for (const name of ENTITY_ORDER) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
-      const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !held.has(key));
+      const keys = (await staleKeys(tx, indexer, name, rows, who.owner)).filter((key) => name !== "topic" || !held.has(key));
       if (keys.length > 0) lastStates.set(name, await readSnapshots(tx, REVISION_TYPE[name], keys));
     }
 
@@ -345,17 +487,20 @@ export async function writeSource(
     //    were so step 4 can report the net change rather than the churn.
     const clearedLinks: Partial<Record<LinkName, number>> = {};
     for (const name of LINK_ORDER) {
-      const scope = linkScope(indexer, name, options.scope);
+      const scope = linkScope(indexer, name, options.scope, who);
       if (scope === null) continue;
       // A held topic keeps its own links, so its eventual delete revision
       // records it whole, and a failed run leaves it as it was; except a
       // manimkc path this run files under another topic, whose primary key
       // the new row needs (the path has moved, so it is no longer the held
       // topic's to record).
-      const where = held.size === 0 ? (scope ?? sql`true`) : and(scope ?? sql`true`, heldLinksKept(name, held, rows));
+      const where = held.size === 0 ? scope : and(scope, heldLinksKept(name, held, rows));
       const result = await tx.delete(TABLES[name]).where(where);
       clearedLinks[name] = result.rowCount ?? 0;
     }
+    // What the clear left is out of this owner's reach; a tree row on the
+    // same key would fail on the constraint, so it is refused by name.
+    await assertNoKeptCollisions(tx, rows);
 
     // 2. Archive the courses and items this source owns and stopped
     //    producing, before the upsert: a module that replaced an archived one
@@ -363,7 +508,7 @@ export async function writeSource(
     const archivedIds = new Map<EntityName, string[]>();
     for (const name of ARCHIVED_NOT_PRUNED) {
       const table = TABLES[name];
-      const keys = await archiveEntity(tx, indexer, name, rows);
+      const keys = await archiveEntity(tx, indexer, name, rows, who.owner);
       if (keys.length === 0) continue;
       archivedIds.set(name, keys);
       record(table, archived, keys.length);
@@ -398,6 +543,7 @@ export async function writeSource(
       const pruned = await pruneEntity(tx, indexer, name, rows, {
         tagLinksRewritten: options.tagLinksRewritten ?? false,
         held,
+        owner: who.owner,
       });
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
@@ -429,7 +575,7 @@ export async function writeSource(
     // 5b. Session logs: what each file holds beyond the entries stored. The
     //     table is append-only, so this appends or refuses; it never replaces.
     if (options.logs !== undefined) {
-      const logs = await importLogs(tx, options.logs);
+      const logs = await importLogs(tx, options.logs, who.owner);
       if (logs.problems.length > 0) {
         const problems = new IndexErrors();
         for (const problem of logs.problems) problems.add(problem);
@@ -764,7 +910,9 @@ function linkScope(
   indexer: Indexer,
   name: LinkName,
   replace: ReplaceScope | undefined,
-): SQL | undefined | null {
+  who: ImportOwner,
+): SQL | null {
+  const owned = linkOwned(name, who);
   // `mirror` is nobody's outright: rows for a destination this run could not
   // reach are not stale, they are unaudited, and deleting them would turn "I
   // did not look" into "there is nothing there". So only the named
@@ -772,13 +920,268 @@ function linkScope(
   if (name === "mirror") {
     const destinations = replace?.mirrorDestinations;
     if (destinations === undefined || destinations.length === 0) return null;
-    return inArray(mirror.destination, [...destinations]);
+    return and(inArray(mirror.destination, [...destinations]), owned) as SQL;
   }
-  if ((indexer.owns as readonly string[]).includes(name)) return undefined;
+  if ((indexer.owns as readonly string[]).includes(name)) return owned;
   const prefix = indexer.assetPrefix;
   if (prefix === undefined || !ASSET_LINKED.has(name)) return null;
   const assetId = (TABLES[name] as unknown as Record<string, unknown>)["assetId"];
-  return inNamespace(assetId, prefix);
+  return and(inNamespace(assetId, prefix), owned) as SQL;
+}
+
+/** How many ids a refusal names before it says "and N more". */
+const REFUSED_SHOWN = 25;
+
+function listed(items: readonly string[]): string {
+  const shown = items.slice(0, REFUSED_SHOWN).join(", ");
+  return items.length > REFUSED_SHOWN ? `${shown}, and ${items.length - REFUSED_SHOWN} more` : shown;
+}
+
+/** Link tables whose rows carry an `owner_id` of their own. */
+const OWNED_LINKS = (Object.keys(LINK_ENDS) as LinkName[]).filter((name) => LINK_ENDS[name].ownColumn);
+
+/**
+ * The rows with the importing owner stamped on them, entity rows and the link
+ * rows that carry an owner. An indexer that already named another owner, or a
+ * blob key under another owner's prefix, is a bug in that indexer: the key's
+ * prefix is whose quota and whose store the bytes are in (D5), so a row
+ * naming another owner's key would serve bytes that owner stored.
+ */
+function stampOwner(indexer: Indexer, rows: SourceRows, owner: string): SourceRows {
+  const out: SourceRows = { ...rows };
+  const stamp = (table: EntityName | LinkName, describe: (row: AnyRow) => string) => {
+    const given = (rows[table] ?? []) as AnyRow[];
+    if (given.length === 0) return;
+    (out as Record<string, AnyRow[]>)[table] = given.map((row) => {
+      const named = row["ownerId"];
+      if (named !== undefined && named !== owner) {
+        throw new IndexError(
+          `indexer "${indexer.source}" produced ${describe(row)} for owner "${String(named)}", and this import writes as "${owner}"`,
+        );
+      }
+      for (const column of ["blobKey", "svgBlobKey"]) {
+        const key = row[column];
+        if (typeof key === "string" && !key.startsWith(`${owner}/`)) {
+          throw new IndexError(
+            `indexer "${indexer.source}" produced ${describe(row)} naming blob ${key}, which is not under "${owner}/". ` +
+              `A row's blob is keyed by the row's owner (D5).`,
+          );
+        }
+      }
+      return { ...row, ownerId: owner };
+    });
+  };
+  for (const name of ENTITY_ORDER) stamp(name, (row) => `${getTableName(TABLES[name])} ${String(row[ENTITY_KEY[name]])}`);
+  for (const name of OWNED_LINKS) stamp(name, () => `a ${getTableName(TABLES[name])} row`);
+  return out;
+}
+
+/** The owner of each of `keys` in one entity table. */
+async function ownersOf(tx: CatalogDatabase, name: EntityName, keys: readonly string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(keys)];
+  if (unique.length === 0) return new Map();
+  const table = TABLES[name];
+  const key = columnOf(table, ENTITY_KEY[name]);
+  const found = (await tx
+    .select({ key, owner: columnOf(table, "ownerId") })
+    .from(table)
+    .where(inArray(key, unique))) as { key: string; owner: string }[];
+  return new Map(found.map((row) => [row.key, row.owner] as const));
+}
+
+/**
+ * Refuse, naming each, the tree rows that would write over or link into rows
+ * another owner holds (phase 4, D23, D24):
+ *
+ * - an entity whose id another owner already holds: the upsert would replace
+ *   their row's content, and ids are global, so the answer is another id;
+ * - a link row whose parent is another owner's: a link is its parent's, so
+ *   the tree would be adding to someone else's entity;
+ * - a link row whose far end the owner cannot read (another owner's, not the
+ *   commons): the reader would drop it, and it would say that owner's slug
+ *   exists.
+ *
+ * All of them in one sentence, before anything is written, so one run shows
+ * every collision.
+ */
+async function assertNoForeignRows(tx: CatalogDatabase, rows: SourceRows, who: ImportOwner): Promise<void> {
+  const problems: string[] = [];
+  const wanted = new Map<EntityName, Set<string>>();
+  const want = (name: EntityName, key: unknown) => {
+    if (typeof key !== "string") return;
+    let set = wanted.get(name);
+    if (set === undefined) wanted.set(name, (set = new Set()));
+    set.add(key);
+  };
+  for (const name of ENTITY_ORDER) for (const row of (rows[name] ?? []) as AnyRow[]) want(name, row[ENTITY_KEY[name]]);
+  for (const name of LINK_ORDER) {
+    const ends = LINK_ENDS[name];
+    for (const row of (rows[name] ?? []) as AnyRow[]) {
+      want(ends.parent.entity, row[ends.parent.column]);
+      for (const far of ends.far) want(far.entity, row[far.column]);
+    }
+  }
+  const owners = new Map<EntityName, Map<string, string>>();
+  for (const [name, keys] of wanted) owners.set(name, await ownersOf(tx, name, [...keys]));
+  const ownerOf = (name: EntityName, key: unknown) => (typeof key === "string" ? owners.get(name)?.get(key) : undefined);
+
+  // An entity refused on its id is named once; its own links, and links to
+  // it, say nothing more.
+  const collided = new Set<string>();
+  for (const name of ENTITY_ORDER) {
+    for (const row of (rows[name] ?? []) as AnyRow[]) {
+      const held = ownerOf(name, row[ENTITY_KEY[name]]);
+      if (held !== undefined && held !== who.owner) {
+        collided.add(`${name}:${String(row[ENTITY_KEY[name]])}`);
+        problems.push(`${getTableName(TABLES[name])} ${String(row[ENTITY_KEY[name]])} is ${held}'s`);
+      }
+    }
+  }
+  for (const name of LINK_ORDER) {
+    const ends = LINK_ENDS[name];
+    for (const row of (rows[name] ?? []) as AnyRow[]) {
+      const parent = row[ends.parent.column];
+      const touches = [ends.parent, ...ends.far].some((end) => collided.has(`${end.entity}:${String(row[end.column])}`));
+      if (touches) continue;
+      const parentOwner = ownerOf(ends.parent.entity, parent);
+      // A parent this run produces and nobody holds yet is the owner's; the
+      // entity check above already refused one another owner holds.
+      if (parentOwner !== undefined && parentOwner !== who.owner) {
+        problems.push(`${getTableName(TABLES[name])} under ${getTableName(TABLES[ends.parent.entity])} ${String(parent)}, which is ${parentOwner}'s`);
+        continue;
+      }
+      for (const far of ends.far) {
+        const farOwner = ownerOf(far.entity, row[far.column]);
+        if (farOwner !== undefined && !who.readable.includes(farOwner)) {
+          problems.push(
+            `${getTableName(TABLES[name])} from ${String(parent)} to ${getTableName(TABLES[far.entity])} ` +
+              `${String(row[far.column])}, which is ${farOwner}'s`,
+          );
+        }
+      }
+    }
+  }
+  if (problems.length === 0) return;
+  throw new IndexError(
+    `this tree would write over or link into rows another owner holds, and an import writes only ` +
+      `${who.owner}'s rows: ${listed([...new Set(problems)])}. Ids are shared across owners (D23 of ` +
+      `docs/CONTENT-MIGRATION.md), so give the entity another id, or drop the link; this source wrote nothing.`,
+  );
+}
+
+/**
+ * Refuse a tree link row whose key a row this run left alone already has: a
+ * row under another owner's parent, or the mixed state D24 leaves for
+ * `catalog doctor` to repair. The insert would otherwise fail on the
+ * constraint without saying which row or why.
+ */
+async function assertNoKeptCollisions(tx: CatalogDatabase, rows: SourceRows): Promise<void> {
+  const problems: string[] = [];
+  for (const name of LINK_ORDER) {
+    const produced = (rows[name] ?? []) as AnyRow[];
+    if (produced.length === 0) continue;
+    const table = TABLES[name];
+    for (const columns of LINK_ENDS[name].keys) {
+      const [first, ...rest] = columns as [string, ...string[]];
+      const tuples = produced.filter((row) => columns.every((c) => row[c] !== null && row[c] !== undefined));
+      if (tuples.length === 0) continue;
+      const firsts = [...new Set(tuples.map((row) => String(row[first])))];
+      const kept = (await tx
+        .select(Object.fromEntries(columns.map((c) => [c, columnOf(table, c)])))
+        .from(table)
+        .where(inArray(columnOf(table, first), firsts))) as AnyRow[];
+      if (kept.length === 0) continue;
+      const tupleKey = (row: AnyRow) => JSON.stringify(columns.map((c) => row[c]));
+      const keptKeys = new Set(kept.map(tupleKey));
+      for (const row of tuples) {
+        if (keptKeys.has(tupleKey(row))) {
+          problems.push(`${getTableName(table)} (${[first, ...rest].map((c) => String(row[c])).join(", ")})`);
+        }
+      }
+    }
+  }
+  if (problems.length === 0) return;
+  throw new IndexError(
+    `this tree produces link rows that already exist outside its owner's reach, under another owner's ` +
+      `entity or with another owner's stamp (D24; \`catalog doctor\` reports the second): ${listed([...new Set(problems)])}. ` +
+      `This source wrote nothing.`,
+  );
+}
+
+/**
+ * Refuse to prune entities whose deletion would take another owner's rows
+ * with it by cascade, naming each: a link under another owner's parent that
+ * points at one of them, a link row stamped with another owner under one of
+ * them (the mixed state D24 repairs), another owner's diagram filed under a
+ * topic, another owner's `asset_job` record of an asset, and another
+ * learner's mastery or review of a concept. The concept
+ * rule for events is `assertNoEvidence`'s, which covers every learner.
+ */
+async function assertNoForeignDependents(
+  tx: CatalogDatabase,
+  name: EntityName,
+  keys: readonly string[],
+  owner: string,
+): Promise<void> {
+  if (keys.length === 0) return;
+  const problems: string[] = [];
+  for (const link of LINK_ORDER) {
+    const ends = LINK_ENDS[link];
+    const table = TABLES[link];
+    const parentColumn = columnOf(table, ends.parent.column);
+    const theirs = sql`not ${endHeldBy(table, ends.parent, [owner], false)}`;
+    for (const far of ends.far.filter((end) => end.entity === name)) {
+      const farColumn = columnOf(table, far.column);
+      const found = (await tx
+        .select({ parent: parentColumn, far: farColumn })
+        .from(table)
+        .where(and(inArray(farColumn, [...keys]), theirs))) as { parent: string; far: string }[];
+      for (const row of found) {
+        problems.push(`${getTableName(table)} from ${row.parent} to ${row.far}`);
+      }
+    }
+    if (ends.ownColumn && ends.parent.entity === name) {
+      const found = (await tx
+        .select({ parent: parentColumn, owner: columnOf(table, "ownerId") })
+        .from(table)
+        .where(and(inArray(parentColumn, [...keys]), sql`${columnOf(table, "ownerId")} <> ${owner}`))) as {
+        parent: string;
+        owner: string;
+      }[];
+      for (const row of found) problems.push(`${getTableName(table)} under ${row.parent}, stamped ${row.owner}`);
+    }
+  }
+  if (name === "topic") {
+    const found = await tx
+      .select({ slug: diagram.slug, topic: diagram.topicSlug })
+      .from(diagram)
+      .where(and(inArray(diagram.topicSlug, [...keys]), sql`${diagram.ownerId} <> ${owner}`));
+    for (const row of found) problems.push(`diagram ${row.slug} under ${row.topic}`);
+  }
+  if (name === "asset") {
+    // `asset_job` cascades with its asset and carries its own owner: the
+    // record of which job made the file is the job owner's.
+    const found = await tx
+      .select({ asset: assetJob.assetId, job: assetJob.jobId, owner: assetJob.ownerId })
+      .from(assetJob)
+      .where(and(inArray(assetJob.assetId, [...keys]), sql`${assetJob.ownerId} <> ${owner}`));
+    for (const row of found) problems.push(`asset_job of ${row.asset} (job ${row.job}, ${row.owner}'s)`);
+  }
+  if (name === "concept") {
+    for (const table of [mastery, review]) {
+      const found = await tx
+        .select({ learner: table.learnerId, slug: table.conceptSlug })
+        .from(table)
+        .where(and(inArray(table.conceptSlug, [...keys]), sql`${table.learnerId} <> ${owner}`));
+      for (const row of found) problems.push(`${getTableName(table)} of ${row.slug} for learner ${row.learner}`);
+    }
+  }
+  if (problems.length === 0) return;
+  throw new IndexError(
+    `these ${getTableName(TABLES[name])} rows are gone from ${owner}'s tree, but deleting them would take rows ` +
+      `another owner holds with them: ${listed([...new Set(problems)])}. An import deletes only its owner's rows; put the ` +
+      `${getTableName(TABLES[name])} back, or have that owner drop the link first. This source wrote nothing.`,
+  );
 }
 
 /**
@@ -811,6 +1214,7 @@ async function staleKeys(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
+  owner: string,
 ): Promise<string[]> {
   let scope: SQL | undefined;
   if (name === "asset") {
@@ -827,7 +1231,10 @@ async function staleKeys(
   const produced = ((rows[name] ?? []) as AnyRow[]).map((row) => String(row[key]));
 
   const notProduced = produced.length === 0 ? sql`true` : notInArray(column, produced);
-  const where = scope === undefined ? notProduced : and(scope, notProduced);
+  // Only the importing owner's rows are this tree's to prune: ids are global,
+  // and a row another owner holds under the same prefix is not stale here.
+  const mine = eq(columnOf(table, "ownerId"), owner);
+  const where = scope === undefined ? and(mine, notProduced) : and(scope, mine, notProduced);
   const stale = (await tx.select({ key: column }).from(table).where(where)) as { key: string }[];
   return stale.map((row) => row.key);
 }
@@ -842,14 +1249,19 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-  context: { tagLinksRewritten: boolean; held: ReadonlySet<string> },
+  context: { tagLinksRewritten: boolean; held: ReadonlySet<string>; owner: string },
 ): Promise<string[]> {
   const { tagLinksRewritten } = context;
-  const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !context.held.has(key));
+  const keys = (await staleKeys(tx, indexer, name, rows, context.owner)).filter(
+    (key) => name !== "topic" || !context.held.has(key),
+  );
   if (keys.length === 0) return [];
 
   const table = TABLES[name];
   const column = columnOf(table, ENTITY_KEY[name]);
+  // Deleting a row cascades into whatever points at it. Rows another owner
+  // holds must not go with it, so the prune is refused naming them.
+  await assertNoForeignDependents(tx, name, keys, context.owner);
   if (name === "concept") await assertNoEvidence(tx, keys);
   // `collection_tag` is RESTRICT on `tag`, so a seam write cannot delete a tag
   // a course still wears. An import that also runs the courses source is
@@ -860,7 +1272,11 @@ async function pruneEntity(
   // nothing would put the links back, so the prune is refused by name instead.
   if (name === "tag") {
     if (tagLinksRewritten) {
-      await tx.delete(collectionTag).where(inArray(collectionTag.tagId, keys));
+      // Only the owner's courses are rewritten later in this run; another
+      // owner's course wearing the tag was refused above.
+      await tx
+        .delete(collectionTag)
+        .where(and(inArray(collectionTag.tagId, keys), endHeldBy(collectionTag, LINK_ENDS.collectionTag.parent, [context.owner], false)));
     } else {
       await assertTagsUnworn(tx, keys);
     }
@@ -893,6 +1309,7 @@ async function archiveEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
+  owner: string,
 ): Promise<string[]> {
   if (!(indexer.owns as readonly string[]).includes(name)) return [];
   const table = TABLES[name];
@@ -904,7 +1321,7 @@ async function archiveEntity(
   const updated = (await tx
     .update(table)
     .set({ archivedAt: sql`now()` } as never)
-    .where(and(notProduced, isNull(archivedColumn)))
+    .where(and(eq(columnOf(table, "ownerId"), owner), notProduced, isNull(archivedColumn)))
     .returning({ key: keyColumn })) as { key: string }[];
   return updated.map((row) => row.key).sort();
 }
@@ -998,6 +1415,7 @@ export async function pruneHeldTopics(
   db: CatalogDatabase,
   topics: readonly string[],
   by: { author: string; reason: string },
+  owner: string = CLI_OWNER,
 ): Promise<{ deleted: string[]; revisions: number }> {
   if (topics.length === 0) return { deleted: [], revisions: 0 };
   return db.transaction(async (tx) => {
@@ -1005,6 +1423,7 @@ export async function pruneHeldTopics(
     await markSeam(tx, "import:topics");
     const filed = await filedTopics(tx, [...topics]);
     if (filed.length > 0) throw topicsFiledError(filed);
+    await assertNoForeignDependents(tx, "topic", topics, owner);
     const reads = await readSnapshots(tx, "topic", topics);
     const keys = [...reads.keys()].sort();
     if (keys.length === 0) return { deleted: [], revisions: 0 };
