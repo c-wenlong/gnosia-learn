@@ -925,7 +925,20 @@ pixel-identical apart from the wordmark and a few anti-aliased pixels (at most
 16, channel difference at most 3), which differ the same way between two
 captures of one server.
 
-**Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
+**Concepts filled** where an existing note teaches what the item names, which
+only one module allows: every one of the 32 notes is filed under one of seven
+topics, and an item's concepts must sit under its module's topic, which for 55
+of the 61 modules has no note at all. `cp4283-m6-t1` (Self-attention
+mechanics) takes the four attention notes. Where a note only teaches a
+component of what the row names (`tool-calling` and `react-loop` against the
+three `cs3216-m2` rows on structured outputs, LangGraph and composing agents)
+it was left out. 4 of 137 items now name a concept (12 links), and
+`catalog doctor` lists 133 violators of `item-has-concept`. Zero is not
+reachable without new notes, which are the owner's to write, so the strict
+flip waits on them; the list of items is in the PR that filled these.
+
+**Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links
+(*measured* before the filling above, which makes it 12).
 **Tests:** an import that drops an item archives it and leaves `progress`; a
 purge refused, then allowed with the flag and recoverable from the revision;
 the course order and slug uniqueness rules as constraint errors.
@@ -940,25 +953,25 @@ the archive rules, Sonnet for the reader. **Size:** 2 to 3 PRs (*guessed*).
 **Owns:** `services/catalog/src/learn/files.ts`, `concept-note.ts`,
 `today.ts:192-201`, two indexers' import mode, the plugin's `learn` skill.
 
-- [ ] `writeConcept` (`files.ts:166`) and `appendSession` (`files.ts:213`), the
+- [x] `writeConcept` (`files.ts:166`) and `appendSession` (`files.ts:213`), the
       only two functions that write notes and logs, become row writes behind
       the same signatures. `learn map` renders to stdout or `--out`.
-- [ ] `learn concept checkout <id> --json` materialises the note to a scratch
+- [x] `learn concept checkout <id> --json` materialises the note to a scratch
       path and returns `{ id, path, revision }`; `learn concept commit <id>
       --reason` reads it back, refuses when the row has moved past `revision`,
       and writes through the seam. `learn concept edit --body-file` is the
       one-shot form.
-- [ ] `readConceptNote` (`apps/web/src/lib/concept-note.ts:60-78`) reads
+- [x] `readConceptNote` (`apps/web/src/lib/concept-note.ts:60-78`) reads
       `concept.body`; `review-queue.ts` gets checks from the same body; the
       256 KB cap stays.
-- [ ] `![[x.svg]]` embeds keep resolving through
+- [x] `![[x.svg]]` embeds keep resolving through
       `diagram:learn/assets/<name>` ids (`apps/web/src/app/(app)/learn/[concept]/page.tsx:85`),
       which D11 keeps valid.
 - [ ] The plugin: Phase 4 Close in `skills/learn/SKILL.md` says "check out,
       edit, commit" instead of "edit `learn/concepts/<id>.md` directly"; the
       `session close`, `map`, `index` sequence becomes `session close`, `map`.
       Version bump.
-- [ ] Offline: `concept add`, `check add` and `session log` stop working
+- [x] Offline: `concept add`, `check add` and `session log` stop working
       without the database (`cli.ts:156-160` chose otherwise). `status`, which
       both skills already run first and stop on, has needed the database since
       bundle 5, so a session could not start offline anyway.
@@ -1012,6 +1025,78 @@ it goes past or around the list above, and why:
   new log whole as its first, and starts a `session` row (`interrupted`, as
   0006's backfill does) for a log nothing started. It refuses a log edited
   above its end and a log whose file is gone, since the table is append-only.
+
+**Built, writers (PR 2 of the track).** `services/catalog/src/learn/files.ts`
+keeps its signatures and asks the `content_source` row which side answers;
+the row side is `content/note-rows.ts` (`writeNoteRow`, `noteText`,
+`commitNoteText`) and `content/session-logs.ts` (`appendLog`), and the CLI
+verbs are in `learn/cli.ts` and `learn/checkout.ts`. Proved by
+`test/learn-cli-rows.test.ts`: a fixture imported and both types flipped for
+real, guards armed, then add, edit, check, checkout and commit (and a moved
+base refused), a session start, observe with `--session`, log and close, the
+map and the index, with every file under `learn/` hashed before and after.
+Where it goes past or around the list above:
+
+- **A note write is two entities in one `writeContents`**: the concept with
+  its prerequisites, and its `note:` asset with the links the indexer would
+  give it, so `/library` and `catalog show` stay right with no index run. A
+  log append is one entry plus its `session:` asset, rewritten through the
+  seam, so every append leaves an asset revision.
+- **Refused on rows, where files allowed it**: a new note with no `--topic`
+  or no `--domain` (a file with neither was never indexed either), moving a
+  note to another folder or topic (the asset's id is its path and the seam
+  cannot retire the old one yet), and writing an archived concept. A new
+  note is placed one `POSITION_STEP` past the end of its topic (D22), and its
+  write runs inside Track A's `writeThrough(["topics"])`, so
+  `content/topics.yaml`'s `maps.concepts` gains it in the same transaction.
+- **The checkout copy lives outside the repository**: `$LEARN_ROOT/work/`
+  when `LEARN_ROOT` is set, a folder per checkout and database under the OS
+  temp directory otherwise, or `LEARN_WORK_DIR`, with a sidecar holding the
+  base and naming where it came from (a commit from another checkout or
+  database is refused). Checkout reads the note and its revision in one
+  snapshot, and refuses to overwrite a copy with uncommitted edits, or one
+  whose sidecar is gone, unless `--force`. `session start` writes its header
+  only onto an empty log, decided under the log's lock. Checkout and
+  commit work on files too (the base is the file's hash there, and the commit
+  re-indexes), so the plugin can move to them before the flip.
+- **`concept commit` and `concept edit --body-file` require `--reason`**;
+  every other writer defaults one from its command line (`learn check add
+  <id>: <question>`), and `--reason` overrides it. Revisions are
+  `author_kind person`, author `local`; `session close` records the session
+  on the note revisions it writes.
+- **No write-through export for these two types (D17).** The track's
+  done-when is that no file under `learn/` changes, and no other type's
+  reader parses a note or a log (course and topic validation read
+  `content/`). So `CONTENT_SOURCE=concepts=files` reads the tree as of the
+  flip; `catalog export --only concepts,sessions --out .` brings it up to
+  date on demand.
+- **`learn map` prints to stdout** (`--json` puts the document in the
+  output), and writes only to `--out`. `learn/map.md` stays in git, no longer
+  rewritten, until phase 3 removes `learn/`. `learn index` on flipped notes
+  reads nothing and reports the snapshot.
+
+**Built, readers (PR 3 of the track).** `readers/concepts.ts` and
+`readers/sessions.ts` answer from rows and say `ready`, so `catalog flip
+concepts|sessions` accepts both. In the web app, `readConceptNote` reads
+through the seam once `concepts` resolves to `db` (and through the note's
+asset row as before until then), so the workspace, the tutor, the review
+queue and `/api/concepts/<slug>` follow; Today counts check blocks through the
+seam for both sides and no longer opens files itself; the library's text
+reader takes a `note:` or `session:` asset's text from the seam when its type
+resolves to `db`, since the file is then the export as of the flip. On a
+flipped `createdb -T self_learn` copy, served by `next start` twice (the rows,
+then `CONTENT_SOURCE=concepts=files,sessions=files`), the server HTML of
+`/learn/<slug>` for `master-theorem`, `tool-calling` and `accounting-method`,
+two tutor session pages, `/review`, `/today`, `/learn`, `/learn/dot-product`
+(its `![[dot-product.svg]]` embed resolving through the `diagram:` id), and the
+library pages of a note and a log differs only in the `asOf` timestamp;
+`/api/concepts/tool-calling` differs in the raw note's frontmatter order, as
+the rows render it. A scratch session run then (start, observe with
+`--session`, checkout and commit, check add, close, map) left rows and
+revisions and no file under `learn/` changed, and the committed line showed
+on the page from rows and not from files. Not moved here: the raw file route
+`/api/assets/{id}/file` still serves a note's or a log's file; it is Track E's
+route, and phase 2 removes the files it would serve.
 
 ### Track D: diagrams
 
