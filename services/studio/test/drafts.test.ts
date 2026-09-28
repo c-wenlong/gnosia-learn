@@ -524,6 +524,22 @@ describe("what goes wrong", () => {
   });
 });
 
+describe("a shutdown between two spawns of one turn", () => {
+  it("starts no retry once draining has begun", async () => {
+    const brief = { ...bad, topic: "mesh-vpn" };
+    await fake.script([{ text: withTopic(brief) }, { text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    // The shutdown lands while the first reply is being judged.
+    catalogMock.topicAddDryRun.mockImplementation(async () => {
+      void drafts.drain();
+      return ok({ nearMatches: [] });
+    });
+    await say(record.id, "tailscale tunnels");
+    expect(await fake.argvs()).toHaveLength(1);
+    expect((await drafts.view(record.id)).error?.kind).toBe("interrupted");
+  });
+});
+
 describe("a crash between two writes", () => {
   /** What a runner that died mid-turn leaves: the given events on disk, and a record that says a turn is in flight. */
   async function leave(id: string, events: Record<string, unknown>[], record: Record<string, unknown>, spawns = 1): Promise<void> {

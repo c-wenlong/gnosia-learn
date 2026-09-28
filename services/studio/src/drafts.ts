@@ -1010,7 +1010,12 @@ export class Drafts {
       ].join("\n\n");
       outcome = await this.spawnOnce(id, turn, replayed, retry);
     }
-    if (outcome === null) return null;
+    if (outcome === null) {
+      if (this.draining) {
+        await this.write(id, () => this.recordError(id, "interrupted", "The studio stopped before the planner answered."));
+      }
+      return null;
+    }
     const { run, cost } = outcome;
 
     if (run.stopReason === "abandoned") return null;
@@ -1074,7 +1079,9 @@ export class Drafts {
     retry: boolean,
   ): Promise<{ run: PlannerOutcome; cost: { costUsd: number | null; costSource: CostSource | null } } | null> {
     const record = this.require(id);
-    if (record.state === "abandoned") return null;
+    // Every spawn asks, the retry and the C3 respawn included: a shutdown
+    // that began between two spawns of one turn must not start a paid one.
+    if (record.state === "abandoned" || this.draining) return null;
     const startedAt = new Date().toISOString();
     const marker: TurnMarker = { type: "studio-turn", turn, at: startedAt, ...(retry ? { retry: true } : {}) };
     let logChain: Promise<void> = appendFile(draftSessionLogPath(id), `${JSON.stringify(marker)}\n`, "utf8");
