@@ -168,6 +168,13 @@ describe("a conversation", () => {
     expect(catalogMock.draftUpsert).toHaveBeenCalledWith(draftJsonPath(record.id));
   });
 
+  it("makes one draft for two posts of one key that arrive together", async () => {
+    const [first, second] = await Promise.all([drafts.create({ idempotencyKey: "twice" }), drafts.create({ idempotencyKey: "twice" })]);
+    expect(second.record.id).toBe(first.record.id);
+    expect([first.created, second.created].sort()).toEqual([false, true]);
+    expect(drafts.list()).toHaveLength(1);
+  });
+
   it("returns the same draft for a repeated idempotency key", async () => {
     const first = await drafts.create({ idempotencyKey: "same" });
     const second = await drafts.create({ idempotencyKey: "same" });

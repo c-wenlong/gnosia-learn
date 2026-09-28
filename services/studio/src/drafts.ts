@@ -287,6 +287,8 @@ export class Drafts {
    */
   private readonly draws = new Map<string, { key: string; result: Promise<{ jobId: string; created: boolean }> }>();
   private draining = false;
+  /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
+  private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
 
   constructor(
     private readonly store: JobStore,
@@ -657,11 +659,24 @@ export class Drafts {
    */
   async create(input: CreateInput): Promise<{ record: DraftRecord; created: boolean }> {
     const key = input.idempotencyKey?.trim() || null;
-    if (key !== null) {
-      if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
-      const existing = [...this.records.values()].find((record) => record.idempotencyKey === key);
-      if (existing !== undefined) return { record: existing, created: false };
+    if (key === null) return this.createNew(input, null);
+    if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
+    const existing = [...this.records.values()].find((record) => record.idempotencyKey === key);
+    if (existing !== undefined) return { record: existing, created: false };
+    // Reserved before the first await: a second post of the same key while
+    // the vocabulary, the corpus or an inspect is being read gets this draft.
+    const pending = this.creating.get(key);
+    if (pending !== undefined) return { record: (await pending).record, created: false };
+    const made = this.createNew(input, key);
+    this.creating.set(key, made);
+    try {
+      return await made;
+    } finally {
+      this.creating.delete(key);
     }
+  }
+
+  private async createNew(input: CreateInput, key: string | null): Promise<{ record: DraftRecord; created: boolean }> {
     const source = input.source?.trim() || null;
     if (source !== null && !isDiagramName(source)) {
       throw new JobRefused(400, `"${source}" is not a diagram name`, { field: "source" });
