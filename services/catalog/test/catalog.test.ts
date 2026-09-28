@@ -229,12 +229,11 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
         "cs2111", "cs4263", "cp4281", "cp4282", "cp4283", "cp4284", "cp4285", "cs3216", "cs3227", "cs3249",
       ]);
       // The courses whose rows list concepts today, and the rest untouched.
-      // cp4283 and cs3216 are the rows Track B filled where an existing note
-      // fits (docs/CONTENT-MIGRATION.md, "Concepts filled").
+      // cp4283's is the row Track B filled where an existing note fits
+      // (docs/CONTENT-MIGRATION.md, "Concepts filled").
       const filled: Record<string, { items: number; withConcepts: number }> = {
         cp4283: { items: 13, withConcepts: 1 },
         cp4284: { items: 13, withConcepts: 3 },
-        cs3216: { items: 13, withConcepts: 1 },
       };
       for (const c of status.coverage) {
         const expected = filled[c.course];

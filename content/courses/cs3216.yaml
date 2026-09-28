@@ -44,9 +44,6 @@ modules:
           - Graphs, state, cycles
       - id: cs3216-m2-t3
         title: Designing with agentic AI components
-        concepts:
-          - tool-calling
-          - react-loop
         subtopics:
           - Not just using, but composing agents
     resources:
