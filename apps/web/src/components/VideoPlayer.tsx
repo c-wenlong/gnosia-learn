@@ -1,44 +1,67 @@
 "use client";
 
-import { useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   activeChapterIndex,
   formatTimecode,
+  subtitleAt,
   type TranscriptCue,
   type VideoChapter,
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
-import { chipClasses } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { useAssetFailure } from "@/components/use-asset-failure";
+import { VideoScrubber } from "@/components/VideoScrubber";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
+/** What the player reports as it plays, for a caller that records progress. */
+export type PlaybackSignal = {
+  type: "time" | "seeking" | "pause" | "ended";
+  /** Seconds into the video. */
+  time: number;
+  /** The video's length, or NaN before the browser knows it. */
+  duration: number;
+};
+
 /**
- * A narrated video with its chapters and its transcript beside it.
+ * A narrated video with its chapters on the scrub bar and its transcript
+ * beneath it.
  *
  * Presentational, and it stays that way: `src`, `poster` and the two sidecar
  * lists arrive already resolved. Nothing here queries the catalog or builds a
  * URL, so the component and the route that serves the bytes can be written
  * without either waiting on the other.
  *
- * **Native `<video controls>`, no player library.** Every browser already
- * ships a play/pause, a scrubber, volume, captions, picture-in-picture and
- * fullscreen that the keyboard and a screen reader both know, and a study
- * surface gains nothing from a second, worse copy of them. What the native
- * element does not have is chapters and a transcript, so that is what this
- * component adds and all it adds.
+ * **Its own controls, over a plain `<video>`.** The native controls cannot
+ * draw chapters into their scrub bar, and chapters as a row of chips under
+ * the picture were the part of the page that read worst. So the element plays
+ * the file and this component draws the bar (`VideoScrubber`: one stretch per
+ * chapter, a frame preview on hover), play, volume, the time and the current
+ * chapter, speed and fullscreen, over a gradient that fades while the video
+ * plays untouched. Keyboard: Space or K plays and pauses, J and L move ten
+ * seconds, M mutes, C toggles subtitles, F goes fullscreen, and the bar
+ * itself takes arrows and Page Up / Page Down for chapters.
  *
- * The layout is the library asset page's main column (hi-fi 11): the
- * picture, then the chapters as a row of chips, then the transcript in a card
- * beneath. One column at every width, because the page gives the video the
- * wide column and keeps its own rail for the asset's metadata; the transcript
- * beside the picture would take width from both.
+ * **Subtitles are the transcript.** The time-synced lines under the video are
+ * the same cues a caption track would carry, so the CC button draws the line
+ * being spoken over the picture rather than loading the `.vtt` as a second
+ * copy. The choice is remembered in this browser, as a video site does.
  *
- * **A video that fails says why.** Without an `onError` the reader got the
- * browser's own dead player, with no hint whether the file was gone, the index
- * was stale or the route was off. Now the player is replaced, at its own size,
- * by the shared Widget placeholder failure panel, which asks `statusHref` for
- * the reason. The chapters and the transcript stay: they are text the page
- * already has, and still worth reading when the picture is missing.
+ * **Layout slots.** `header` (a title), `footer` and `aside` let the library
+ * page lay the details out under the picture the way a video site does: the
+ * header, transcript and footer in a column, the aside in a rail beside them
+ * from 1024px. Without them the component is the picture and the transcript.
+ *
+ * **A video that fails says why.** The player is replaced, at its own size, by
+ * the shared failure panel, which asks `statusHref` for the reason. The
+ * transcript stays: it is text the page already has.
  */
 export function VideoPlayer({
   src,
@@ -47,21 +70,46 @@ export function VideoPlayer({
   title,
   chapters,
   transcript,
+  startAt,
+  onPlayback,
+  header,
+  footer,
+  aside,
 }: {
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
   statusHref?: string;
   /** Already resolved. Without one the browser shows the first frame instead. */
   poster?: string;
-  /** Names the player for assistive technology, and titles the chapter rail. */
+  /** Names the player for assistive technology. */
   title?: string;
-  /** Provided and empty is a video whose chapters are missing, and says so. */
+  /** Drawn into the scrub bar. Provided and empty is a video with no chapters. */
   chapters?: VideoChapter[];
   /** Provided and empty is a video with no narration, and says so. */
   transcript?: TranscriptCue[];
+  /** Where playback starts, in seconds: a resume point. */
+  startAt?: number;
+  /** Told about playback as it happens, to record progress. */
+  onPlayback?: (signal: PlaybackSignal) => void;
+  header?: ReactNode;
+  footer?: ReactNode;
+  aside?: ReactNode;
 }) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [time, setTime] = useState(0);
+  const start = startAt !== undefined && startAt > 0 ? startAt : 0;
+  const [time, setTime] = useState(start);
+  const [duration, setDuration] = useState(Number.NaN);
+  const [buffered, setBuffered] = useState(0);
+  const [paused, setPaused] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [rate, setRate] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [awake, setAwake] = useState(true);
+  const [scrubbing, setScrubbing] = useState(false);
+  const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { failure, fail, retry, attempt, observe } = useAssetFailure(src, statusHref);
   // A seek the element refused, held until it can be honoured. See `seek`.
   // It carries the load it was asked for rather than the URL: with the URL, a
@@ -71,26 +119,48 @@ export function VideoPlayer({
   const pendingSeek = useRef<{ load: number; seconds: number } | null>(null);
 
   // Playback position belongs to the file being played, so a new `src` starts
-  // over. Without this the component keeps whatever the last video was at: a
-  // soft navigation from one asset to the next reuses the mounted instance
-  // (the route renders no `key`), and the chapter rail and the transcript then
-  // highlight a position in a video nobody is watching.
+  // over (at its own resume point, when the caller gives one). Without this
+  // the component keeps whatever the last video was at: a soft navigation
+  // from one asset to the next reuses the mounted instance.
   //
-  // Done during render rather than in an effect on purpose. React re-runs this
-  // component before committing anything, so the swapped-in video is never
-  // painted with the old position; an effect would show the wrong highlight
-  // for a frame first. This is the documented way to adjust state when a prop
-  // changes, and it is the component's own job rather than the caller's: the
-  // diagram studio renders this from another route, and a fix that depends on
-  // every caller remembering a `key` is a fix that the next caller loses.
-  const [source, setSource] = useState({ src, load: 0 });
+  // Done during render rather than in an effect on purpose, so the swapped-in
+  // video is never painted with the old position. This is the documented way
+  // to adjust state when a prop changes.
+  //
+  // `resume` is the resume point still to apply to this load: there is no
+  // metadata at mount, so it waits for `loadedmetadata` like a refused seek.
+  const [source, setSource] = useState({ src, load: 0, resume: start > 0 ? start : null });
   if (source.src !== src) {
-    setSource((previous) => ({ src, load: previous.load + 1 }));
-    setTime(0);
+    setSource({ src, load: source.load + 1, resume: start > 0 ? start : null });
+    setTime(start);
+    setDuration(Number.NaN);
+    setBuffered(0);
+    setPaused(true);
+  }
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === frameRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (idle.current) clearTimeout(idle.current);
+    },
+    [],
+  );
+
+  function wake() {
+    setAwake(true);
+    if (idle.current) clearTimeout(idle.current);
+    idle.current = setTimeout(() => setAwake(false), 2500);
   }
 
   function seek(seconds: number) {
     const target = Math.max(0, seconds);
+    // The reader chose a place, so the resume point no longer applies.
+    if (source.resume !== null) setSource((s) => ({ ...s, resume: null }));
     // Optimistic, and not only for tests: a browser reports the new time on
     // the next `timeupdate`, and the highlight should move on the click.
     setTime(target);
@@ -104,19 +174,27 @@ export function VideoPlayer({
       pendingSeek.current = null;
     } catch {
       // A seek before metadata has loaded throws, and `preload="metadata"`
-      // means the first clicks land in exactly that window. Dropping it here
-      // left the reader on a chapter the video had never moved to, so the next
-      // play started from the top. Hold it and apply it at `loadedmetadata`.
+      // means the first clicks land in exactly that window. Hold it and apply
+      // it at `loadedmetadata`.
       pendingSeek.current = { load: source.load, seconds: target };
     }
   }
 
   function applyPendingSeek(video: HTMLVideoElement) {
     const pending = pendingSeek.current;
-    if (!pending) return;
+    if (!pending) {
+      if (source.resume === null) return;
+      try {
+        video.currentTime = source.resume;
+        const load = source.load;
+        setSource((s) => (s.load === load ? { ...s, resume: null } : s));
+      } catch {
+        // Still too early. The next readiness event tries again.
+      }
+      return;
+    }
     if (pending.load !== source.load) {
-      // Asked for on a load this element has already moved past. Not this
-      // one's, even when the same file has come back around.
+      // Asked for on a load this element has already moved past.
       pendingSeek.current = null;
       return;
     }
@@ -128,89 +206,442 @@ export function VideoPlayer({
     }
   }
 
+  function togglePlay() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      void video.play()?.catch(() => {
+        // Refused (autoplay policy, a source that failed). The element's own
+        // events keep `paused` honest, and a failure has its own panel.
+      });
+    } else {
+      video.pause();
+    }
+  }
+
+  function toggleMute() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    if (!video.muted && video.volume === 0) video.volume = 0.5;
+  }
+
+  function cycleRate() {
+    const video = videoRef.current;
+    if (!video) return;
+    const next = RATES[(RATES.indexOf(video.playbackRate) + 1) % RATES.length] ?? 1;
+    video.playbackRate = next;
+  }
+
+  function toggleFullscreen() {
+    const frame = frameRef.current;
+    if (!frame) return;
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void frame.requestFullscreen?.();
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // A focused button handles its own Space and Enter.
+    if (
+      (event.target as HTMLElement).closest("button, input") &&
+      (event.key === " " || event.key === "Enter")
+    ) {
+      return;
+    }
+    const video = videoRef.current;
+    switch (event.key.toLowerCase()) {
+      case " ":
+      case "k":
+        togglePlay();
+        break;
+      case "j":
+        seek((video?.currentTime ?? time) - 10);
+        break;
+      case "l":
+        seek(
+          Math.min(
+            (video?.currentTime ?? time) + 10,
+            Number.isFinite(duration) ? duration : Number.POSITIVE_INFINITY,
+          ),
+        );
+        break;
+      case "m":
+        toggleMute();
+        break;
+      case "c":
+        if (!hasSubtitles) return;
+        toggleSubtitles();
+        break;
+      case "f":
+        toggleFullscreen();
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    wake();
+  }
+
+  function report(type: PlaybackSignal["type"], video: HTMLVideoElement) {
+    onPlayback?.({ type, time: video.currentTime, duration: video.duration });
+  }
+
   const activeChapter = chapters ? activeChapterIndex(chapters, time) : -1;
+  const chapterTitle = activeChapter >= 0 ? chapters?.[activeChapter]?.title : undefined;
+  const controlsUp = paused || awake || scrubbing;
+  const hasSubtitles = transcript !== undefined && transcript.length > 0;
+  const subtitle = subtitles && transcript !== undefined ? subtitleAt(transcript, time) : null;
+
+  const player =
+    failure !== null ? (
+      <WidgetFailure
+        headline="This video did not load."
+        code={failure.code}
+        onRetry={retry}
+        className="min-h-64 w-full sm:min-h-80"
+      />
+    ) : (
+      <div
+        ref={frameRef}
+        onKeyDown={onKeyDown}
+        onPointerMove={wake}
+        onPointerLeave={() => setAwake(false)}
+        className={cx(
+          "group/player relative overflow-hidden bg-black",
+          fullscreen ? "flex items-center" : "rounded-xl",
+          !controlsUp && "cursor-none focus-within:cursor-auto",
+        )}
+      >
+        <video
+          key={attempt}
+          ref={(element) => {
+            videoRef.current = element;
+            observe(element);
+          }}
+          src={src}
+          poster={poster}
+          preload="metadata"
+          playsInline
+          aria-label={title}
+          onClick={togglePlay}
+          onDoubleClick={toggleFullscreen}
+          onTimeUpdate={(e) => {
+            setTime(e.currentTarget.currentTime);
+            report("time", e.currentTarget);
+          }}
+          onSeeking={(e) => report("seeking", e.currentTarget)}
+          onSeeked={(e) => setTime(e.currentTarget.currentTime)}
+          onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+          onProgress={(e) => setBuffered(bufferedEnd(e.currentTarget))}
+          onPlay={() => {
+            setPaused(false);
+            wake();
+          }}
+          onPause={(e) => {
+            setPaused(true);
+            report("pause", e.currentTarget);
+          }}
+          onEnded={(e) => {
+            setPaused(true);
+            report("ended", e.currentTarget);
+          }}
+          onVolumeChange={(e) => {
+            setMuted(e.currentTarget.muted);
+            setVolume(e.currentTarget.volume);
+          }}
+          onRateChange={(e) => setRate(e.currentTarget.playbackRate)}
+          onLoadedMetadata={(e) => {
+            setDuration(e.currentTarget.duration);
+            applyPendingSeek(e.currentTarget);
+          }}
+          onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
+          onError={fail}
+          className={cx(
+            "block w-full bg-black outline-none",
+            fullscreen ? "h-full object-contain" : "aspect-video max-h-[calc(100dvh-11rem)]",
+          )}
+        />
+
+        {subtitle !== null && (
+          <div
+            className={cx(
+              "pointer-events-none absolute inset-x-0 flex justify-center px-6 transition-[bottom] duration-200 motion-reduce:transition-none",
+              // A phone's picture is too short for a caption and the play
+              // button at once, and a paused video is not saying anything.
+              paused && "max-sm:hidden",
+              // Above the controls whenever they show, focus included.
+              controlsUp
+                ? "bottom-[4.25rem] sm:bottom-24"
+                : "bottom-4 group-focus-within/player:bottom-[4.25rem] sm:bottom-6 sm:group-focus-within/player:bottom-24",
+            )}
+          >
+            <p
+              data-subtitle
+              className="max-w-[min(90%,52rem)] rounded-md bg-black/75 px-2.5 py-1 text-center text-[clamp(12px,2.1vw,22px)] leading-snug text-white [box-decoration-break:clone]"
+            >
+              {subtitle}
+            </p>
+          </div>
+        )}
+
+        {paused && !scrubbing && (
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label="Play"
+            className="absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform hover:scale-105 sm:size-16 focus-visible:outline-2 focus-visible:outline-white motion-reduce:transition-none"
+          >
+            <Icon name="play" className="size-6 translate-x-0.5 sm:size-7" />
+          </button>
+        )}
+
+        <div
+          className={cx(
+            "absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/35 to-transparent px-2 pt-8 pb-1 sm:px-4 sm:pt-12 sm:pb-1.5 text-white transition-opacity duration-200 motion-reduce:transition-none",
+            controlsUp ? "opacity-100" : "opacity-0 group-focus-within/player:opacity-100",
+          )}
+        >
+          <VideoScrubber
+            src={src}
+            time={time}
+            duration={duration}
+            buffered={buffered}
+            chapters={chapters}
+            label={title ? `Seek in ${title}` : "Seek"}
+            onSeek={seek}
+            onScrub={setScrubbing}
+          />
+          <div className="flex items-center gap-1 text-[13px]">
+            <ControlButton label={paused ? "Play (k)" : "Pause (k)"} onClick={togglePlay}>
+              <Icon name={paused ? "play" : "pause"} className="size-5" />
+            </ControlButton>
+            <div className="group/volume flex items-center">
+              <ControlButton label={muted || volume === 0 ? "Unmute (m)" : "Mute (m)"} onClick={toggleMute}>
+                <Icon name={muted || volume === 0 ? "muted" : "volume"} className="size-5" />
+              </ControlButton>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={muted ? 0 : volume}
+                aria-label="Volume"
+                onChange={(e) => {
+                  const video = videoRef.current;
+                  if (!video) return;
+                  video.volume = Number(e.currentTarget.value);
+                  video.muted = video.volume === 0;
+                }}
+                className="w-0 cursor-pointer accent-white opacity-0 transition-all duration-150 group-focus-within/volume:ml-1 group-focus-within/volume:w-16 group-focus-within/volume:opacity-100 group-hover/volume:ml-1 group-hover/volume:w-16 group-hover/volume:opacity-100 motion-reduce:transition-none"
+              />
+            </div>
+            <span className="ml-1.5 shrink-0 tabular-nums">
+              {formatTimecode(time)}
+              <span className="text-white/60">
+                {" / "}
+                {Number.isFinite(duration) ? formatTimecode(duration) : "–:––"}
+              </span>
+            </span>
+            {chapterTitle !== undefined && (
+              <span data-chapter-label className="ml-2 min-w-0 truncate text-white/85">
+                <span aria-hidden className="mr-2 text-white/50">
+                  ·
+                </span>
+                {chapterTitle}
+              </span>
+            )}
+            <span className="flex-1" />
+            {hasSubtitles && (
+              <ControlButton
+                label={subtitles ? "Subtitles off (c)" : "Subtitles (c)"}
+                onClick={toggleSubtitles}
+                pressed={subtitles}
+              >
+                <span className="relative flex">
+                  <Icon name="cc" className="size-6" />
+                  <span
+                    aria-hidden
+                    className={cx(
+                      "absolute inset-x-1 -bottom-1 h-0.5 rounded-full bg-accent transition-transform motion-reduce:transition-none",
+                      subtitles ? "scale-x-100" : "scale-x-0",
+                    )}
+                  />
+                </span>
+              </ControlButton>
+            )}
+            <ControlButton label="Playback speed" onClick={cycleRate}>
+              <span className="w-9 text-center text-[12px] font-semibold tabular-nums">{rate}×</span>
+            </ControlButton>
+            <ControlButton
+              label={fullscreen ? "Exit full screen (f)" : "Full screen (f)"}
+              onClick={toggleFullscreen}
+            >
+              <Icon name={fullscreen ? "shrink" : "expand"} className="size-5" />
+            </ControlButton>
+          </div>
+        </div>
+      </div>
+    );
+
+  const transcriptPanel = transcript !== undefined && (
+    <TranscriptPanel
+      // The panel's follow-along state is playback state too: a reader who
+      // scrolled away from one video should not land on the next one with its
+      // transcript already given up on.
+      key={src}
+      cues={transcript}
+      currentTime={time}
+      onSeek={seek}
+      scrollerClassName="max-h-[26rem]"
+    />
+  );
+
+  if (header === undefined && footer === undefined && aside === undefined) {
+    return (
+      <section className="flex flex-col gap-3.5">
+        {player}
+        {transcriptPanel}
+      </section>
+    );
+  }
 
   return (
-    <section className="flex flex-col gap-3.5">
-      {failure !== null ? (
-        <WidgetFailure
-          headline="This video did not load."
-          code={failure.code}
-          onRetry={retry}
-          className="min-h-64 w-full sm:min-h-80"
-        />
-      ) : (
-        <div className="overflow-hidden rounded-xl bg-black has-[video:focus-visible]:ring-2 has-[video:focus-visible]:ring-accent has-[video:focus-visible]:ring-offset-2 has-[video:focus-visible]:ring-offset-page">
-          {/* The caption track is a separate asset row and a separate prop the
-              catalog has not been asked for yet; what this component is handed
-              is the transcript, and it renders that beneath the picture. */}
-          <video
-            key={attempt}
-            ref={(element) => {
-              videoRef.current = element;
-              observe(element);
-            }}
-            src={src}
-            poster={poster}
-            controls
-            preload="metadata"
-            playsInline
-            aria-label={title}
-            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-            onSeeked={(e) => setTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => applyPendingSeek(e.currentTarget)}
-            onCanPlay={(e) => applyPendingSeek(e.currentTarget)}
-            onError={fail}
-            className="aspect-video w-full bg-black outline-none"
-          />
+    <section className="flex flex-col gap-4">
+      {player}
+      <div
+        className={cx(
+          "grid items-start gap-x-6 gap-y-5",
+          aside !== undefined && "lg:grid-cols-[minmax(0,1fr)_360px]",
+        )}
+      >
+        <div className="flex min-w-0 flex-col gap-4">
+          {header}
+          {transcriptPanel}
+          {footer}
         </div>
-      )}
-
-      {chapters !== undefined && (
-        <nav
-          aria-label={title ? `Chapters of ${title}` : "Chapters"}
-          className="flex flex-wrap items-center gap-2"
-        >
-          <h3 className="mr-1 text-[12px] font-normal text-text3">Chapters</h3>
-          {chapters.length === 0 ? (
-            <p className="text-[12px] text-text2">No chapters for this video.</p>
-          ) : (
-            chapters.map((chapter, i) => {
-              const isActive = i === activeChapter;
-              return (
-                <button
-                  key={`${chapter.start}-${i}`}
-                  type="button"
-                  onClick={() => seek(chapter.start)}
-                  aria-current={isActive ? "true" : undefined}
-                  className={chipClasses({ active: isActive, size: "sm", className: "max-w-full" })}
-                >
-                  <span className="truncate">{chapter.title}</span>
-                  <span className={`tabular-nums ${isActive ? "" : "text-text2"}`}>
-                    {formatTimecode(chapter.start)}
-                  </span>
-                </button>
-              );
-            })
-          )}
-        </nav>
-      )}
-
-      {transcript !== undefined && (
-        <TranscriptPanel
-          // The panel's follow-along state is playback state too: a
-          // reader who scrolled away from one video should not land on
-          // the next one with its transcript already given up on. A key
-          // is right *here*, where the one caller owns the child and
-          // always passes it, and wrong at the route, where the next
-          // caller would have to remember it.
-          key={src}
-          cues={transcript}
-          currentTime={time}
-          onSeek={seek}
-          scrollerClassName="max-h-[26rem]"
-        />
-      )}
+        {aside !== undefined && <div className="flex min-w-0 flex-col gap-4">{aside}</div>}
+      </div>
     </section>
+  );
+}
+
+/*
+ * Whether subtitles are on, remembered in this browser. An external store
+ * rather than state read in an effect: the server renders them off, the
+ * client reads the stored choice after hydration, and every player on the
+ * page follows one switch. When storage is refused the switch still works for
+ * the life of the page, held in `fallback`.
+ */
+const SUBTITLES_KEY = "video:subtitles";
+const SUBTITLES_EVENT = "video:subtitles";
+let fallback = false;
+
+function readSubtitles(): boolean {
+  try {
+    const stored = window.localStorage.getItem(SUBTITLES_KEY);
+    return stored === null ? fallback : stored === "on";
+  } catch {
+    return fallback;
+  }
+}
+
+function subscribeSubtitles(onChange: () => void): () => void {
+  window.addEventListener(SUBTITLES_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(SUBTITLES_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function toggleSubtitles() {
+  fallback = !readSubtitles();
+  try {
+    window.localStorage.setItem(SUBTITLES_KEY, fallback ? "on" : "off");
+  } catch {
+    // Not remembered, still toggled.
+  }
+  window.dispatchEvent(new Event(SUBTITLES_EVENT));
+}
+
+/** The speeds the speed button steps through, in order. */
+const RATES = [1, 1.25, 1.5, 1.75, 2, 0.75];
+
+/** The end of the buffered range that holds the playhead, or of the last one. */
+function bufferedEnd(video: HTMLVideoElement): number {
+  const ranges = video.buffered;
+  if (!ranges || ranges.length === 0) return 0;
+  for (let i = 0; i < ranges.length; i += 1) {
+    if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) return ranges.end(i);
+  }
+  return ranges.end(ranges.length - 1);
+}
+
+function ControlButton({
+  label,
+  onClick,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  /** Set for a toggle, so it is announced as one. */
+  pressed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={pressed}
+      aria-label={label}
+      title={label}
+      className="flex h-9 min-w-9 items-center justify-center rounded-full text-white/90 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-white"
+    >
+      {children}
+    </button>
+  );
+}
+
+const PATHS = {
+  play: <path d="M7 4.5v15l12.5-7.5z" fill="currentColor" stroke="none" />,
+  pause: <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="currentColor" stroke="none" />,
+  volume: (
+    <>
+      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+    </>
+  ),
+  muted: (
+    <>
+      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor" />
+      <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+    </>
+  ),
+  cc: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+      <path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6" />
+    </>
+  ),
+  expand: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+  shrink: <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />,
+} satisfies Record<string, ReactNode>;
+
+function Icon({ name, className }: { name: keyof typeof PATHS; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {PATHS[name]}
+    </svg>
   );
 }

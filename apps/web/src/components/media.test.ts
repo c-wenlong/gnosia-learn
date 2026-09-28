@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   activeChapterIndex,
   activeCueIndex,
+  captionChunks,
+  chapterSegments,
   formatTimecode,
+  subtitleAt,
   type TranscriptCue,
   type VideoChapter,
 } from "./media";
@@ -71,5 +74,79 @@ describe("activeChapterIndex", () => {
     expect(activeChapterIndex(chapters, 7.99)).toBe(0);
     expect(activeChapterIndex(chapters, 8)).toBe(1);
     expect(activeChapterIndex(chapters, 100)).toBe(1);
+  });
+});
+
+describe("chapterSegments", () => {
+  const chapters = [
+    { title: "Intro", start: 0, end: 8 },
+    { title: "Body", start: 10, end: 20 },
+    { title: "Close", start: 20, end: 25 },
+  ];
+
+  it("covers the whole bar, each chapter running to the next one's start", () => {
+    expect(chapterSegments(chapters, 30)).toEqual([
+      { start: 0, end: 10, title: "Intro", chapter: 0 },
+      { start: 10, end: 20, title: "Body", chapter: 1 },
+      { start: 20, end: 30, title: "Close", chapter: 2 },
+    ]);
+  });
+
+  it("leaves an untitled lead-in before a late first chapter", () => {
+    expect(chapterSegments([{ title: "Late", start: 5, end: 9 }], 10)).toEqual([
+      { start: 0, end: 5, title: null, chapter: -1 },
+      { start: 5, end: 10, title: "Late", chapter: 0 },
+    ]);
+  });
+
+  it("is one segment with no chapters or no duration, and drops chapters past the end", () => {
+    expect(chapterSegments(undefined, 30)).toEqual([{ start: 0, end: 30, title: null, chapter: -1 }]);
+    expect(chapterSegments(chapters, Number.NaN)).toEqual([{ start: 0, end: 0, title: null, chapter: -1 }]);
+    expect(chapterSegments(chapters, 15).map((s) => s.title)).toEqual(["Intro", "Body"]);
+  });
+});
+
+describe("subtitleAt", () => {
+  const lines = [
+    { start: 0, end: 3, text: "One." },
+    { start: 5, end: 8, text: "Two." },
+  ];
+
+  it("is the line whose span holds the time, and nothing in a gap", () => {
+    expect(subtitleAt(lines, 1)).toBe("One.");
+    expect(subtitleAt(lines, 4)).toBeNull();
+    expect(subtitleAt(lines, 5)).toBe("Two.");
+    expect(subtitleAt(lines, 8)).toBeNull();
+  });
+});
+
+describe("captionChunks", () => {
+  const paragraph = {
+    start: 10,
+    end: 20,
+    text:
+      "Every coding agent is a loop around a model. The model reads the conversation, " +
+      "asks for tool calls, the harness runs them, appends the results, and sends it all back.",
+  };
+
+  it("cuts a paragraph into captions no longer than the limit, words intact", () => {
+    const chunks = captionChunks(paragraph);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) expect(chunk.text.length).toBeLessThanOrEqual(84);
+    expect(chunks.map((c) => c.text).join(" ")).toBe(paragraph.text);
+    expect(chunks[0].text).toBe("Every coding agent is a loop around a model.");
+  });
+
+  it("shares the line's time out end to end", () => {
+    const chunks = captionChunks(paragraph);
+    expect(chunks[0].start).toBe(10);
+    expect(chunks[chunks.length - 1].end).toBe(20);
+    for (let i = 1; i < chunks.length; i += 1) expect(chunks[i].start).toBe(chunks[i - 1].end);
+  });
+
+  it("leaves a short line whole, and subtitleAt follows the pieces", () => {
+    expect(captionChunks({ start: 0, end: 2, text: "Short." })).toEqual([{ start: 0, end: 2, text: "Short." }]);
+    expect(subtitleAt([paragraph], 10.1)).toBe("Every coding agent is a loop around a model.");
+    expect(subtitleAt([paragraph], 19.9)).not.toBe("Every coding agent is a loop around a model.");
   });
 });
