@@ -139,7 +139,14 @@ export function BriefForm({
       return;
     }
     const jobId = typeof result.data.jobId === "string" ? result.data.jobId : null;
-    router.push(jobId === null ? path : panelHref(path, { job: jobId, brief: null }), { scroll: false });
+    // A job sent with the conversation's draftId belongs to it and opens under
+    // its back bar. One sent without (the draft was not briefed, and the
+    // runner refuses a draftId on any other state) opens outside it, so the
+    // conversation does not claim a job it never started.
+    router.push(
+      jobId === null ? path : panelHref(path, { job: jobId, brief: null, ...(draftId === null ? { draft: null } : {}) }),
+      { scroll: false },
+    );
     router.refresh();
   };
 

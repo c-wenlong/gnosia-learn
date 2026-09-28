@@ -19,21 +19,30 @@ import type { TopicOption } from "@/data/topics";
 import {
   askAgainText,
   capFrom,
+  cardPendingTopic,
   cardStatus,
   CHECKING_BRIEF,
   composerState,
   costLabel,
   drawBlock,
+  drawKey,
   drawRefusal,
   GONE,
   isEmptyConversation,
+  jobPatch,
   lastPersonText,
   latestBriefSeq,
+  modEnterAction,
   OPENING_TURN,
+  refusalNoted,
+  sendRefusal,
   splitReply,
+  startOverStep,
   THINKING,
   threadProblem,
+  turnIndicator,
   visibleEntries,
+  type DrawRefusal,
   type CapStatus,
   type Suggestion,
   type ThreadProblem,
@@ -42,14 +51,13 @@ import {
   abandonDraft,
   drawDraft,
   getDraft,
-  idempotencyKey,
   openDraftEvents,
-  refusalReason,
+  readDailyCap,
   sendMessage,
   type DraftView,
   type TranscriptEntry,
 } from "@/lib/studio-drafts";
-import { isTerminal } from "@/lib/studio-jobs";
+import { isTerminal, type Job } from "@/lib/studio-jobs";
 import { panelHref, thumbnailHref } from "@/lib/studio-view";
 
 /**
@@ -72,6 +80,12 @@ import { panelHref, thumbnailHref } from "@/lib/studio-view";
 
 /** The polled record while a turn is in flight, for when the stream is down. */
 const POLL_IN_FLIGHT_MS = 4_000;
+/**
+ * How often focus may re-read the daily cap. `/api/health` runs `doctor`,
+ * which the runner caches for 30 seconds, and `claude --version`, so this is
+ * the cheapest rate at which each read can still be new.
+ */
+const CAP_READ_MS = 30_000;
 /** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
 const TEXT_LIMIT = 8_000;
 
@@ -111,12 +125,13 @@ export function DraftPanel({
   const [text, setText] = useState("");
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [drawing, setDrawing] = useState(false);
-  const [refused, setRefused] = useState<{ seq: number; text: string; holder: string | null } | null>(null);
+  const [refused, setRefused] = useState<(DrawRefusal & { seq: number }) | null>(null);
   const [confirmStartOver, setConfirmStartOver] = useState(false);
+  const [startOverError, setStartOverError] = useState<string | null>(null);
   const composer = useRef<HTMLTextAreaElement | null>(null);
   const thread = useRef<HTMLDivElement | null>(null);
   const focused = useRef(false);
-  const { start: startDraft, busy: starting } = useStartDraft(path);
+  const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
   const topicMap = useMemo(() => new Map(topics.map((topic) => [topic.slug, topic])), [topics]);
 
@@ -124,8 +139,19 @@ export function DraftPanel({
   /* The record                                                        */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Reads can overlap (an event, the poll, focus), and an older answer
+   * landing after a newer one would put the thread back a step. Each read
+   * takes a number, and an answer older than the last one shown is dropped.
+   */
+  const issued = useRef(0);
+  const shown = useRef(0);
   const load = useCallback(async (): Promise<DraftView | null> => {
+    issued.current += 1;
+    const ticket = issued.current;
     const result = await getDraft(draftId);
+    if (ticket < shown.current) return null;
+    shown.current = ticket;
     if (!result.ok) {
       if (result.status === 404) setStatus("gone");
       else {
@@ -182,7 +208,10 @@ export function DraftPanel({
 
   useEffect(() => {
     if (!ready) return;
-    return openDraftEvents(draftId, lastSeq.current, {
+    return openDraftEvents(draftId, () => lastSeq.current, {
+      // The browser gave up on the stream and it was opened again: whatever
+      // happened meanwhile is in the record.
+      onReopen: () => void load(),
       onEvent: (event) => {
         if (event.type === "delta") {
           setStream({ turn: event.data.turn, text: event.data.text });
@@ -195,7 +224,7 @@ export function DraftPanel({
         reload();
       },
     });
-  }, [draftId, ready, reload, refreshJobs]);
+  }, [draftId, ready, reload, refreshJobs, load]);
 
   // The record is the truth, so a turn in flight is also polled: with the
   // stream down, the reply still arrives, only without growing on screen.
@@ -206,16 +235,34 @@ export function DraftPanel({
     return () => clearInterval(every);
   }, [inFlight, load]);
 
-  // Draw's disabled reasons are re-checked when the panel regains focus: a
-  // job held elsewhere may have been accepted meanwhile.
+  // Draw's and Send's disabled reasons are re-checked when the panel regains
+  // focus: a job held elsewhere may have been accepted meanwhile, and the
+  // day's spend may have aged out.
+  const capReadAt = useRef(0);
+  const readCap = useCallback(async () => {
+    capReadAt.current = Date.now();
+    const next = capFrom(await readDailyCap());
+    if (next !== null) setCap(next);
+  }, []);
   useEffect(() => {
     const wake = () => {
       void refreshJobs();
       void load();
+      if (Date.now() - capReadAt.current >= CAP_READ_MS) void readCap();
     };
     window.addEventListener("focus", wake);
     return () => window.removeEventListener("focus", wake);
-  }, [refreshJobs, load]);
+  }, [refreshJobs, load, readCap]);
+
+  // A spent cap frees when its oldest spend leaves the 24-hour window, which
+  // the runner names; read it again then rather than waiting for a focus.
+  const freesAt = cap?.exceeded ? Date.parse(cap.oldestAgesOutAt ?? "") : Number.NaN;
+  useEffect(() => {
+    if (!Number.isFinite(freesAt)) return;
+    const wait = Math.max(1_000, Math.min(freesAt - Date.now() + 1_000, 2 ** 31 - 1));
+    const timer = setTimeout(() => void readCap(), wait);
+    return () => clearTimeout(timer);
+  }, [freesAt, readCap]);
 
   /* ---------------------------------------------------------------- */
   /* Focus and scroll                                                  */
@@ -253,14 +300,7 @@ export function DraftPanel({
       // Give the words back: a refused turn should not cost the typing.
       setText((held) => (held === "" ? body : held));
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
-      const reason = refusalReason(result.refusal);
-      setSendError(
-        result.status === 429
-          ? null
-          : reason === "in-flight"
-            ? "The planner is still answering the last message."
-            : result.refusal.error,
-      );
+      setSendError(sendRefusal(result.status, result.refusal));
       void load();
       return;
     }
@@ -278,7 +318,7 @@ export function DraftPanel({
     if (view === null || !drawIsLive || block !== null || drawing || liveSeq === null) return;
     setDrawing(true);
     setRefused(null);
-    const result = await drawDraft(draftId, idempotencyKey(`draw:${draftId}:${liveSeq}`));
+    const result = await drawDraft(draftId, drawKey(draftId, liveSeq, view.jobId));
     if (!result.ok) {
       setDrawing(false);
       setRefused({ seq: liveSeq, ...drawRefusal(result.status, result.refusal) });
@@ -287,22 +327,39 @@ export function DraftPanel({
       return;
     }
     await refreshJobs();
-    router.push(panelHref(path, { job: result.data.jobId, brief: null }), { scroll: false });
+    router.push(panelHref(path, { job: result.data.jobId, brief: null, draft: draftId }), { scroll: false });
     setDrawing(false);
     void load();
   }
 
   async function startOver() {
     setConfirmStartOver(false);
-    await abandonDraft(draftId);
+    setStartOverError(null);
+    const step = view === null ? "skip" : startOverStep(view.state);
+    if (step === "refuse") {
+      setStartOverError("A diagram from this conversation is drawing. Cancel or review it first, then start over.");
+      return;
+    }
+    if (step === "abandon") {
+      const closed = await abandonDraft(draftId);
+      if (!closed.ok) {
+        setStartOverError(`This conversation could not be closed: ${closed.refusal.error}`);
+        return;
+      }
+    }
+    // A done draft is left as it is: it drew something and stays findable.
     await startDraft();
   }
 
+  const drawReady = drawIsLive && block === null;
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // Cmd or Ctrl+Enter presses a live Draw from anywhere in the panel. The
-    // composer handles its own and marks the event, so it is not pressed twice.
+    // Cmd or Ctrl+Enter presses a live Draw from anywhere in the panel, and
+    // only while the composer is empty: words there are a correction to send,
+    // not a reason to pay for the old brief. The composer handles its own and
+    // marks the event, so nothing is pressed twice.
     if (event.defaultPrevented || event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-    if (!drawIsLive || block !== null) return;
+    if (modEnterAction(text, drawReady) !== "draw") return;
     event.preventDefault();
     void draw();
   }
@@ -326,6 +383,7 @@ export function DraftPanel({
           <Button onClick={() => void startDraft()} disabled={starting}>
             New diagram
           </Button>
+          <Failure text={startError} />
         </Empty>
       </>
     );
@@ -380,6 +438,7 @@ export function DraftPanel({
               <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
                 New diagram
               </Button>
+              <Failure text={startError} className="basis-full" />
             </div>
           )}
           <JobPanel jobId={jobId} path={path} embedded />
@@ -472,9 +531,14 @@ export function DraftPanel({
             topics={topicMap}
             block={entry.seq === liveSeq ? block : null}
             busy={drawing}
-            refusal={refused !== null && refused.seq === entry.seq ? refusalShown(refused, entries) : null}
+            refusal={
+              refused !== null && refused.seq === entry.seq
+                ? { text: refusalNoted(refused, entries) ? null : refused.text, holder: refused.holder }
+                : null
+            }
             onDraw={() => void draw()}
             path={path}
+            jobs={jobs}
           />
         ))}
 
@@ -482,7 +546,12 @@ export function DraftPanel({
           <UserMessage>{pending.text}</UserMessage>
         )}
 
-        {busy && <Streaming text={stream?.text ?? null} />}
+        {busy && (
+          <Streaming
+            text={stream?.text ?? null}
+            checking={pending === null && turnIndicator(view, stream !== null) === "checking"}
+          />
+        )}
 
         {problem !== null && !busy && (
           <Problem
@@ -526,7 +595,7 @@ export function DraftPanel({
           sendDisabled={composing.sendDisabled}
           disabledReason={composing.reason ?? undefined}
           inputRef={composer}
-          onModEnter={drawIsLive && block === null ? () => void draw() : () => void send(text)}
+          onModEnter={drawReady ? () => void draw() : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
           <Link href={panelHref(path, { brief: "" })} scroll={false} className="underline-offset-4 hover:text-text2 hover:underline">
@@ -550,6 +619,7 @@ export function DraftPanel({
             )
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
+          <Failure text={startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)} className="basis-full" />
         </div>
       </div>
     </div>
@@ -557,19 +627,6 @@ export function DraftPanel({
 }
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * A refused Draw says so under the button until the runner's own studio note
- * (E7) is in the thread; after that the card keeps only the action, so the
- * sentence is not on screen twice.
- */
-function refusalShown(
-  refused: { seq: number; text: string; holder: string | null },
-  entries: readonly TranscriptEntry[],
-): { text: string | null; holder: string | null } {
-  const noted = entries.some((entry) => entry.role === "studio" && entry.seq > refused.seq);
-  return { text: noted ? null : refused.text, holder: refused.holder };
-}
 
 function Entry({
   entry,
@@ -580,7 +637,9 @@ function Entry({
   refusal,
   onDraw,
   path,
+  jobs,
 }: {
+  jobs: readonly Job[];
   entry: TranscriptEntry;
   view: DraftView;
   topics: ReadonlyMap<string, TopicOption>;
@@ -604,13 +663,13 @@ function Entry({
   const status = entry.brief === undefined ? null : cardStatus(view, entry.seq);
   return (
     <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} />}
+      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
       {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
       {entry.brief !== undefined && status !== null && (
         <div className="mt-3">
           <ConfirmCard
             brief={entry.brief}
-            pendingTopic={entry.pendingTopic ?? (status === "live" ? view.pendingTopic : null)}
+            pendingTopic={cardPendingTopic(status, entry, view)}
             status={status}
             topics={topics}
             block={block}
@@ -618,7 +677,7 @@ function Entry({
             refusal={refusal}
             onDraw={onDraw}
             jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
-            holderHref={(holder) => panelHref(path, { job: holder })}
+            holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
           />
         </div>
       )}
@@ -626,9 +685,21 @@ function Entry({
   );
 }
 
-/** A reply being written: "The planner is thinking" until the first words arrive. */
-function Streaming({ text }: { text: string | null }) {
+/**
+ * A reply being written: "The planner is thinking" until the first words
+ * arrive, and "Checking the brief" once a reply has landed while the turn is
+ * still open, as the runner validates its brief (and may ask for a fix).
+ */
+function Streaming({ text, checking }: { text: string | null; checking: boolean }) {
   const reply = text === null ? null : splitReply(text, true);
+  if (reply === null && checking) {
+    return (
+      <p className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
+        {CHECKING_BRIEF}
+        <Dots />
+      </p>
+    );
+  }
   if (reply === null || (reply.prose === "" && !reply.checking)) {
     return (
       <TutorMessage label="Planner">
@@ -641,7 +712,7 @@ function Streaming({ text }: { text: string | null }) {
   }
   return (
     <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix="streaming-" />}
+      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix="streaming-" images="link" />}
       {reply.checking && (
         <p className="mt-3 flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
           {CHECKING_BRIEF}
@@ -734,6 +805,16 @@ function Problem({
         )}
       </div>
     </div>
+  );
+}
+
+/** Why New diagram or Start over did nothing, where the press was. */
+function Failure({ text, className }: { text: string | null; className?: string }) {
+  if (text === null) return null;
+  return (
+    <p role="alert" className={`text-[13px] text-danger ${className ?? ""}`}>
+      {text}
+    </p>
   );
 }
 

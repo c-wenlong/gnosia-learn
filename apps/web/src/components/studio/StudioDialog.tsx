@@ -55,6 +55,7 @@ export function StudioDialog({
   const ref = useRef<HTMLDialogElement | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const closing = useRef(false);
+  const pressedOnBackdrop = useRef(false);
 
   const close = useCallback(() => {
     if (closing.current) return;
@@ -98,10 +99,17 @@ export function StudioDialog({
           event.preventDefault();
           close();
         }}
+        onPointerDown={(event) => {
+          pressedOnBackdrop.current = event.target === event.currentTarget;
+        }}
         onClick={(event) => {
           // A click on the backdrop lands on the dialog element itself, since
-          // everything inside it is the panel's own content.
-          if (event.target === event.currentTarget) close();
+          // everything inside it is the panel's own content. The press has to
+          // start there too: a text selection dragged out of the thread ends
+          // on the backdrop and reports a click on the dialog.
+          const started = pressedOnBackdrop.current;
+          pressedOnBackdrop.current = false;
+          if (started && event.target === event.currentTarget) close();
         }}
         className={cx(
           "m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
