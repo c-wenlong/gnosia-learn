@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { key as blobKey, type BlobStore } from "@self-learn/blob";
 import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, type Asset } from "@self-learn/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
@@ -180,13 +180,19 @@ function contentRow(row: Asset): Record<string, unknown> {
 }
 
 /**
- * Unhook the poster of each video whose bytes an import just replaced, the
- * way the upload unhooks one when it links new bytes and cannot cut a new
- * poster (see `detach` below). Under the blob contract (0013) the import, not
- * the upload, is what links a re-render, so the upload would otherwise find
- * the video's blob present and the poster derived from it, and keep a picture
- * of the old render. Unhooked, the poster is not derived from the video, and
- * the next `catalog asset upload` cuts a new one and hooks it back up.
+ * Unhook the poster of each of `videoIds` that was cut from other bytes than
+ * the video's now, the way the upload unhooks one when it links new bytes and
+ * cannot cut a new poster (see `detach` below). Under the blob contract (0013)
+ * the import, not the upload, is what links a re-render, so the upload would
+ * otherwise find the video's blob present and the poster derived from it, and
+ * keep a picture of the old render. Unhooked, the poster is not derived from
+ * the video, and the next `catalog asset upload` cuts a new one and hooks it
+ * back up.
+ *
+ * "Cut from other bytes" is read from the revisions, not from what this run
+ * changed: the video's `blob_key` as of the poster's latest revision, against
+ * its key now. So an import that linked the new bytes and then failed before
+ * this ran is caught by the next one, whose own write changes nothing.
  * Returns the posters unhooked.
  */
 export async function unhookPosters(
@@ -195,15 +201,29 @@ export async function unhookPosters(
   options: { author: string; reason: string },
 ): Promise<string[]> {
   if (videoIds.length === 0) return [];
-  const derived = await db
-    .select({ poster: assetDerivation.assetId })
-    .from(assetDerivation)
-    .where(
-      and(
-        inArray(assetDerivation.sourceAssetId, [...videoIds]),
-        inArray(assetDerivation.assetId, videoIds.map(posterId)),
-      ),
-    );
+  const ids = sql.join(
+    videoIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const { rows: derived } = await db.execute<{ poster: string }>(sql`
+    select d.asset_id as poster
+    from asset_derivation d
+    join asset v on v.id = d.source_asset_id
+    where d.source_asset_id in (${ids})
+      and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
+      and (
+        select r.snapshot -> 'entity' ->> 'blob_key'
+        from content_revision r
+        where r.entity_type = 'asset' and r.entity_id = v.id
+          and r.id < (
+            select max(p.id) from content_revision p
+            where p.entity_type = 'asset' and p.entity_id = d.asset_id
+          )
+        order by r.id desc
+        limit 1
+      ) is distinct from v.blob_key
+    order by d.asset_id
+  `);
   if (derived.length === 0) return [];
   // Each row and the revision it was read at, in one snapshot, as the upload
   // reads its own: a write that moved a poster since is refused, not undone.

@@ -10,7 +10,7 @@ import {
   type SourceRepo,
 } from "@self-learn/schema";
 import { loadCourses } from "@self-learn/content";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -504,15 +504,15 @@ export async function runIndex(
       author,
       reason: `catalog import of ${displayPath(repoRoot)}: ${displayPath(indexer.root(context))} (${indexer.source})`,
     };
-    // Under the contract the import links a re-render's bytes itself, so the
-    // videos whose key it is about to change are read first, for their posters.
-    const rekeyed =
-      indexer.source === "manimkc" && context.blobsRequired === true ? await videoKeys(db, rows.asset ?? []) : null;
     const write = await writeSource(db, indexer, rows, notes, indexer.root(context), options);
     sources.push(write);
-    if (rekeyed !== null) {
-      const changed = [...rekeyed].filter(([id, key]) => key !== null && key !== (rows.asset ?? []).find((r) => r.id === id)?.blobKey);
-      const unhooked = await unhookPosters(db, changed.map(([id]) => id), {
+    // Under the contract the import links a re-render's bytes itself, so a
+    // poster cut from a video's earlier bytes is unhooked here, for the next
+    // upload to recut. Every video in the run is asked, not only the ones this
+    // write changed, so a run that failed between the two is repaired.
+    if (indexer.source === "manimkc" && context.blobsRequired === true) {
+      const videos = (rows.asset ?? []).filter((row) => row.kind === "video").map((row) => row.id);
+      const unhooked = await unhookPosters(db, videos, {
         author,
         reason: `catalog import of ${displayPath(repoRoot)}: a re-render replaced the video the poster was cut from`,
       });
@@ -564,14 +564,6 @@ export async function runIndex(
       deleted: sources.reduce((a, s) => a + s.totalDeleted, 0),
     },
   };
-}
-
-/** The stored blob key of each video among `rows`, before a write replaces it. */
-async function videoKeys(db: CatalogDatabase, rows: readonly { id: string; kind: string }[]): Promise<Map<string, string | null>> {
-  const ids = rows.filter((row) => row.kind === "video").map((row) => row.id);
-  if (ids.length === 0) return new Map();
-  const stored = await db.select({ id: asset.id, key: asset.blobKey }).from(asset).where(inArray(asset.id, ids));
-  return new Map(stored.map((row) => [row.id, row.key] as const));
 }
 
 /** Count the held topics' prune in the topics source's report, which is where it belongs. */

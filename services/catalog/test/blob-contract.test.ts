@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
 import { posterId, uploadAssets } from "../src/content/asset-upload";
-import { openBlobStore } from "../src/content/blob";
+import { openBlobStore, uploadBlob } from "../src/content/blob";
+import { writeContents } from "../src/content/write";
 import { REPO_ROOT } from "../src/env";
 import { applyMigrations, assertMigrated, migrateHolding, migrationStatus } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
@@ -146,9 +147,12 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     await seedWithManimkc(tree);
     manimkc = path.join(work, "manimkc");
     ({ videoFile } = await manimkcStandIn(manimkc, Buffer.from("first render")));
-    // Cuts a frame named for the video it was handed, so a re-render's poster differs.
+    // Cuts a "frame" from the file after `-i`, so a re-render's poster differs.
     ffmpeg = path.join(work, "ffmpeg");
-    await writeFile(ffmpeg, `#!/bin/sh\nfor last; do :; done\nshasum -a 256 "$last" | cut -c1-16\n`);
+    await writeFile(
+      ffmpeg,
+      `#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ "$1" = "-i" ]; then f="$2"; fi; shift; done\nshasum -a 256 "$f" | cut -c1-16\n`,
+    );
     await chmod(ffmpeg, 0o755);
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = manimkc;
@@ -201,17 +205,59 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     expect((await video())?.blobKey).toBe(`local/${sha("second render")}.mp4`);
     const poster = posterId("manimkc:out/demo/one/one.mp4");
     expect(await derivedFrom(poster)).toEqual([]);
+    const posterKey = async () => (await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey;
+    const oldPoster = await posterKey();
 
     // The next upload cuts the new render's poster and hooks it back up.
     const recut = await upload();
     expect(recut.items.find((i) => i.kind === "poster")?.action).toBe("made");
     expect(await derivedFrom(poster)).toEqual(["manimkc:out/demo/one/one.mp4"]);
+    expect(await posterKey()).not.toBe(oldPoster);
     expect((await upload()).rowsWritten).toBe(0);
 
     const again = await runImportCommand({ dir: tree, only: ["manimkc"] });
-    const manimkc = again.sources.find((s) => s.source === "manimkc");
-    expect(manimkc?.revisions).toEqual({});
-    expect(manimkc?.notes).toContain("2 file(s) in the blob store, 0 uploaded by this run");
+    const manimkcRun = again.sources.find((s) => s.source === "manimkc");
+    expect(manimkcRun?.revisions).toEqual({});
+    expect(manimkcRun?.notes).toContain("2 file(s) in the blob store, 0 uploaded by this run");
+    expect(manimkcRun?.notes.some((n) => n.includes("unhooked"))).toBe(false);
+  });
+
+  it("unhooks a stale poster an earlier import left derived, from the revisions alone", async () => {
+    const poster = posterId("manimkc:out/demo/one/one.mp4");
+    const id = "manimkc:out/demo/one/one.mp4";
+    await upload();
+    expect(await derivedFrom(poster)).toEqual([id]);
+    // A re-render whose import linked the bytes and then failed before the
+    // unhook: the video's new key committed through the seam, the poster
+    // still derived from it.
+    await writeFile(videoFile, "third render");
+    const stored = await uploadBlob(scratch.db, openBlobStore(), { ownerId: "local", file: videoFile, mime: "video/mp4", ext: "mp4" });
+    const row = await video();
+    const [latest] = await scratch.db.execute<{ id: number }>(
+      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${id}`,
+    ).then((r) => r.rows);
+    const rest: Record<string, unknown> = { ...row };
+    delete rest["createdAt"];
+    delete rest["updatedAt"];
+    await writeContents(scratch.db, [
+      {
+        type: "asset",
+        id,
+        next: { row: { ...rest, blobKey: stored.key, contentHash: stored.sha256, bytes: stored.bytes }, links: { asset_topic: [{ topicSlug: "agent-tool-use-and-reasoning-loops" }] } },
+        base: latest?.id ?? null,
+        author: "test",
+        authorKind: "import",
+        reason: "an import that died before its unhook",
+      },
+    ]);
+    expect(await derivedFrom(poster)).toEqual([id]);
+    // The next import changes no row, and still finds the poster was cut from other bytes.
+    const retry = await runImportCommand({ dir: tree, only: ["manimkc"] });
+    expect(retry.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({});
+    expect(retry.sources.find((s) => s.source === "manimkc")?.notes).toContain(
+      "1 poster(s) unhooked from a re-rendered video; the next `catalog asset upload` cuts new ones",
+    );
+    expect(await derivedFrom(poster)).toEqual([]);
   });
 });
 
