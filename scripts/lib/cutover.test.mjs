@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { compareTrees, FINAL_TAG, makeFinalTag, tagProblems } from "./cutover.mjs";
+import { compareTrees, FINAL_TAG, headOf, makeFinalTag, tagProblems } from "./cutover.mjs";
 
 // The cut-over's tag and its byte comparison, on throwaway repositories under
 // the OS temp directory: nothing here touches the checkout the tests run in.
@@ -57,6 +57,14 @@ describe("the content-files-final tag", () => {
     expect(made.tag).toBeNull();
     expect(made.problem).toMatch(/HEAD moved from .* since the tree was compared/);
     expect((await makeFinalTag(repo, { expectedHead: git(repo, "rev-parse", "HEAD") })).problem).toBeNull();
+  });
+
+  it("refuses a directory inside a checkout rather than tagging the checkout around it", async () => {
+    const inner = join(repo, "learn", "concepts");
+    expect((await tagProblems(inner)).problems.join("\n")).toMatch(/is not the top of a git checkout/);
+    expect((await makeFinalTag(inner)).tag).toBeNull();
+    expect(await headOf(inner)).toBeNull();
+    expect(() => git(repo, "rev-parse", "-q", "--verify", `refs/tags/${FINAL_TAG}`)).toThrow();
   });
 
   it("refuses when the tag exists already", async () => {

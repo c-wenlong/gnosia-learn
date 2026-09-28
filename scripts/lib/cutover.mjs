@@ -3,7 +3,7 @@
 // learn/ leave the tree, and the byte comparison of a fresh export with the
 // tree that goes into the parity report. scripts/flip-rehearsal.mjs --cutover
 // runs them; they live here so a test can run them on a throwaway repository.
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { exec } from './pg.mjs';
@@ -36,6 +36,18 @@ export async function tagProblems(repo, { remote = null } = {}) {
   const warnings = [];
   const head = await git(repo, 'rev-parse', '--verify', 'HEAD');
   if (!head.ok) return { problems: [`${repo} is not a git checkout with a commit: ${head.err}`], warnings, untracked: [], head: null };
+  // git walks up to the nearest enclosing repository, so a directory inside
+  // some other checkout answers with that checkout's HEAD. Only the top of
+  // a checkout is tagged.
+  const top = await git(repo, 'rev-parse', '--show-toplevel');
+  if (!top.ok || realpathSync(top.out) !== realpathSync(repo)) {
+    return {
+      problems: [`${repo} is not the top of a git checkout (git answers for ${top.ok ? top.out : 'none'}), so it is not tagged`],
+      warnings,
+      untracked: [],
+      head: null,
+    };
+  }
   const local = await git(repo, 'rev-parse', '-q', '--verify', `refs/tags/${FINAL_TAG}`);
   if (local.ok) problems.push(`the tag ${FINAL_TAG} already exists here, at ${local.out.slice(0, 12)}; a cut-over tags once`);
   if (remote !== null) {
@@ -61,8 +73,14 @@ export async function tagProblems(repo, { remote = null } = {}) {
   return { problems, warnings, untracked, head: head.out };
 }
 
-/** The commit `repo`'s HEAD names, or null when there is none. */
+/**
+ * The commit `repo`'s HEAD names, or null when there is none or `repo` is not
+ * the top of its own checkout: git would otherwise answer for an enclosing
+ * repository (a temp directory inside some other checkout).
+ */
 export async function headOf(repo) {
+  const top = await git(repo, 'rev-parse', '--show-toplevel');
+  if (!top.ok || realpathSync(top.out) !== realpathSync(repo)) return null;
   const head = await git(repo, 'rev-parse', '--verify', 'HEAD');
   return head.ok ? head.out : null;
 }
