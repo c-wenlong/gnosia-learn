@@ -472,6 +472,17 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
         expect(foreign.stderr).toMatch(/was checked out from \/elsewhere/);
         await writeFile(sidecar, kept, "utf8");
 
+        // A damaged opening fence is refused on the file branch too, not
+        // written with the id filled back in and the frontmatter gone.
+        const before = await readFile(note, "utf8");
+        await writeFile(checkout.path, "--\nid: beta\ntitle: Beta\n---\n\nfence damaged\n", "utf8");
+        const damaged = await learn("concept", "commit", "beta", "--reason", "damaged").catch(
+          (error: { stderr: string }) => error,
+        );
+        expect(damaged.stderr).toMatch(/work\/concepts\/beta\.md has no frontmatter that parses/);
+        expect(await readFile(note, "utf8")).toBe(before);
+        await writeFile(checkout.path, "---\nid: beta\n---\n\nedited again\n", "utf8");
+
         // The note moved under the copy: the commit is refused and the file kept.
         await writeFile(note, `${original}\nSomeone else's edit.\n`, "utf8");
         const moved = await learn("concept", "commit", "beta", "--reason", "late").catch(
