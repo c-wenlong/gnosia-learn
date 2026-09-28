@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
 
 import { type BlobStore, BlobIntegrityError, fsStore, key as blobKey } from "@self-learn/blob";
 import { blobObject } from "@self-learn/schema";
@@ -9,6 +7,8 @@ import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { blobRoot } from "../env";
+import { fileFacts } from "../index/files";
+import { assertWritable } from "./blob-owner";
 
 /**
  * Putting bytes in the blob store and saying so in `blob_object`
@@ -32,9 +32,19 @@ import { blobRoot } from "../env";
  * not authored content, and the pending row exists before any revision could.
  */
 
-/** The one place the catalog chooses a store: the `fs` adapter under `blobRoot()`, until 0.1's cloud adapter. */
-export function openBlobStore(): BlobStore {
-  return fsStore(blobRoot());
+/** A store the catalog opened, with the directory it is rooted at. */
+export type CatalogBlobStore = BlobStore & { readonly root: string };
+
+/**
+ * The one place the catalog chooses a store: the `fs` adapter under
+ * `blobRoot()` (`$SELF_LEARN_HOME/blobs`), until 0.1's cloud adapter. Every
+ * command that writes or audits blobs opens it here, so the store a command
+ * writes is the one the web app serves; a scratch run points
+ * `SELF_LEARN_HOME` somewhere else, and both follow.
+ */
+export function openBlobStore(): CatalogBlobStore {
+  const root = blobRoot();
+  return Object.assign(fsStore(root), { root });
 }
 
 export interface UploadInput {
@@ -58,13 +68,6 @@ export interface UploadResult {
   uploaded: boolean;
 }
 
-/** sha256 and length of a file, streamed. */
-export async function hashFile(file: string): Promise<{ sha256: string; bytes: number }> {
-  const hash = createHash("sha256");
-  const { size } = await stat(file);
-  await pipeline(createReadStream(file), hash);
-  return { sha256: hash.digest("hex"), bytes: size };
-}
 
 /**
  * Store one file and record it, or throw having recorded at most a `pending`
@@ -82,8 +85,12 @@ export async function uploadBlob(
   const facts =
     input.sha256 !== undefined && input.bytes !== undefined
       ? { sha256: input.sha256.toLowerCase(), bytes: input.bytes }
-      : await hashFile(input.file);
+      : await fileFacts(input.file).then((f) => ({ sha256: f.contentHash, bytes: f.bytes }));
   const key = blobKey(input.ownerId, facts.sha256, input.ext);
+  // The root names the database that writes it, and only that database
+  // writes it, so no `blob audit --fix` takes these bytes for orphans
+  // (`blob-owner.ts`).
+  if ("root" in store && typeof store.root === "string") await assertWritable(db, store.root);
   const result = { key, sha256: facts.sha256, bytes: facts.bytes, mime: input.mime };
 
   const [row] = await db.select().from(blobObject).where(eq(blobObject.key, key)).limit(1);

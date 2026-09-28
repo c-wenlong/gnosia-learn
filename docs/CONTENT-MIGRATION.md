@@ -1335,6 +1335,61 @@ keeps for an adapter with no signed URLs; the redirect path is exercised by a
 test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
+### Phase 1 review fixes, slice 1b
+
+A read-only review of the merged phase 1 found writers that could undo each
+other. **Built** (branch `p1/fixes-seam-2`), each with a test that makes the
+other write on a second connection at the moment between the first writer's
+read and its write, and fails without the fix:
+
+- **S3, lost updates.** `writeNoteRow` takes `base` with no default. The
+  `learn` verbs that rewrite a note (`concept edit`, `check add`, `session
+  close`, `concept add --force`) read it and its revision in one snapshot
+  (`readConceptForWrite`, `updateConcept` in `learn/files.ts`); `concept
+  edit` is refused when the note moved, while an appended check or session
+  link is read again and reapplied. A checkout's next base is the revision
+  its commit wrote, never a read after it. `course export` stamps
+  `# base-revision: N` on the file, and `course import` refuses a stamped
+  file the course has moved past unless `--force-base`, then moves the stamp
+  on; the tree's own file is left unstamped. `asset upload` reads each row and
+  its revision in one snapshot at the start and writes against it, so a
+  `catalog index` that rewrote the row mid-upload is reported as refused.
+  Tests: `services/catalog/test/lost-updates.test.ts`,
+  `services/catalog/test/blob-owner.test.ts`.
+- **S2.** `item purge` locks the item row `FOR UPDATE` before reading its
+  learner rows, so a tick committed mid-purge is in the revision.
+- **S9.** Every catalog failure prints the deepest `cause` too
+  (`failureText`), so migration 0012's RAISE is visible under drizzle's
+  "Failed query".
+- **S10.** `topic rename` lists every SVG under the topic as stale, refuses
+  while a studio job is running or awaiting review under the old slug (a
+  queued one still has its brief rewritten), and decides whether to write the
+  course files again under its locks. The diagram vocabulary leaves archived
+  topics out.
+- **S8.** `--blob-root` is removed from `asset upload` and `blob audit`, and
+  refused by name: rows written through it pointed at bytes the web app never
+  reads, and a copy made with `createdb -T` is `primary` too, so "refuse on a
+  primary" could not tell a scratch run from the real one.
+  `SELF_LEARN_HOME` is the one knob, and both sides read it.
+- **S6.** `<root>/.owner` names the database (its name and
+  `pg_database` oid, as the write-through names an importing database, and
+  its server's port, since two servers can hand out the same oid) that
+  first writes or `--fix`es a root; an upload and `--fix`
+  both refuse a root naming another, since each would leave that database
+  with objects it has no row for. The stale-pending delete also requires the row still be a
+  day old, and `--fix` sweeps day-old `.tmp/*.part`.
+- **Consolidated:** one blob-store factory in the catalog (`openBlobStore`),
+  one canonical JSON (`canonical`, `canonicalJson` in
+  `@self-learn/schema/shared`, used by the catalog and the studio), one file
+  hash (`fileFacts`). `LEARN_ROOT` at or inside the repository is refused for
+  checkouts, which would land in the tree.
+- **Left, and why:** the three delete-revision paths build different
+  snapshots (a purge's carries the learner rows) and already share the
+  append; `readTopicEntries` copying the export's queries, the two
+  checkout-sidecar implementations (notes and diagrams) and pruning the
+  posters of removed videos are each a refactor or a new sweep with no bug
+  behind it, left for phase 2.
+
 ## Phase 2: readers go database-only
 
 Parallel by area once every type has flipped. Four PRs (*guessed*).

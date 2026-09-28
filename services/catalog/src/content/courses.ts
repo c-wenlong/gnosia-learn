@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 import { ContentError, COURSES_DIR, courseFileName, parseCourse, type Course } from "@self-learn/content";
 import {
@@ -112,6 +112,8 @@ export interface CourseImportResult {
   deletedLinks: string[];
   /** Revisions appended, 0 for an unchanged file. */
   revisions: number;
+  /** The course's newest revision after the import, which a stamped file now carries; null on a dry run. */
+  base: number | null;
   writeThrough: WriteThroughSummary;
 }
 
@@ -691,6 +693,71 @@ async function bases(
   return out;
 }
 
+/*
+ * The base a course file was exported at (edge case 16, for course files).
+ *
+ * `course export` writes, as its first line, the newest revision among every
+ * entity the course is made of: the course, its modules and items (archived
+ * ones included) and the curated links its modules point at. Revision ids
+ * only grow, so a file stamped N is stale exactly when one of those entities
+ * has a revision above N, or when an entity the file names does (a link
+ * deleted since has its `delete` revision there). `course import` refuses a
+ * stale file unless `--force-base`, because importing it would undo whatever
+ * moved: an item archived since would come back, a concept linked since would
+ * be unlinked. A file with no stamp (the tree's own file, which the
+ * write-through keeps in step, or one written by hand) is not checked.
+ */
+
+/** The first line of an exported course file, before the number. */
+export const BASE_STAMP = "# base-revision:";
+const STAMP_LINE = /^# base-revision: (\d+|none)\b[^\n]*\n/;
+
+/** `yaml` with the stamp line in front. */
+export function stampCourse(yaml: string, base: number | null): string {
+  return (
+    `${BASE_STAMP} ${base ?? "none"} (catalog course export; course import refuses this file once the ` +
+    `course has moved past it, unless --force-base)\n${yaml}`
+  );
+}
+
+/** The stamp a file carries: a revision, null for "none", undefined when it has no stamp. */
+export function readStamp(text: string): number | null | undefined {
+  const match = STAMP_LINE.exec(text);
+  if (match === null) return undefined;
+  return match[1] === "none" ? null : Number(match[1]);
+}
+
+/** Every entity a course is made of, as `revisions.ts` keys them, plus whatever `extra` names. */
+function courseKeys(existing: Existing, courseId: string, extra: readonly [RevisionEntityType, string][] = []) {
+  return [
+    ["collection", courseId] as [RevisionEntityType, string],
+    ...existing.modules.map((m) => ["collection", m.id] as [RevisionEntityType, string]),
+    ...existing.items.map((i) => ["curriculum_item", i.id] as [RevisionEntityType, string]),
+    ...existing.memberships
+      .filter((m) => m.assetId !== null)
+      .map((m) => ["asset", m.assetId as string] as [RevisionEntityType, string]),
+    ...extra,
+  ];
+}
+
+/** The newest revision among `keys`, and every entity whose latest revision is above `after`. */
+async function newestRevision(
+  db: CatalogDatabase,
+  keys: readonly (readonly [RevisionEntityType, string])[],
+  after: number | null = null,
+): Promise<{ newest: number | null; moved: string[] }> {
+  let newest: number | null = null;
+  const moved: string[] = [];
+  for (const type of new Set(keys.map(([t]) => t))) {
+    const latest = await latestRevisions(db, type, keys.filter(([t]) => t === type).map(([, id]) => id));
+    for (const [id, revision] of latest) {
+      if (newest === null || revision.id > newest) newest = revision.id;
+      if (after === null || revision.id > after) moved.push(`${type} ${id} (revision ${revision.id})`);
+    }
+  }
+  return { newest, moved: moved.sort() };
+}
+
 /** Take every lock the plan needs, before any write, in the one global order (`revisions.ts`). */
 async function lockAll(db: CatalogDatabase, keys: readonly (readonly [RevisionEntityType, string])[]): Promise<void> {
   const unique = [...new Map(keys.map(([type, id]) => [`${type} ${id}`, [type, id] as const])).values()];
@@ -749,6 +816,8 @@ export interface CourseImportOptions {
   author?: string;
   /** Do everything but commit, and write no file. */
   dryRun?: boolean;
+  /** Import a file whose base-revision stamp is behind the course, undoing what moved since. */
+  forceBase?: boolean;
 }
 
 export async function importCourse(db: CatalogDatabase, options: CourseImportOptions): Promise<CourseImportResult> {
@@ -772,6 +841,7 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
   }
   const by = { author: options.author ?? PERSON, reason: options.reason.trim() };
   const dryRun = options.dryRun === true;
+  const stamp = readStamp(text);
 
   const run = async (tx: CatalogDatabase) => {
     // One course import at a time: the order, code and slug checks below
@@ -801,8 +871,23 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
       );
     }
 
+    // Under the locks, so nothing can move between this check and the write.
+    if (stamp !== undefined && options.forceBase !== true) {
+      const { moved } = await newestRevision(tx, courseKeys(existing, course.id, planned.touched), stamp);
+      if (moved.length > 0) {
+        throw new CourseWriteError(
+          `${options.file} was exported at ${stamp === null ? "no revision" : `revision ${stamp}`}, and course ` +
+            `"${course.id}" has moved on since: ${moved.slice(0, 10).join(", ")}` +
+            `${moved.length > 10 ? `, and ${moved.length - 10} more` : ""}. Importing it would undo that. ` +
+            `Export it again (\`catalog course export ${course.id} --out <file>\`) and reapply the edit, or pass ` +
+            `--force-base to import this file as it stands; nothing was written.`,
+        );
+      }
+    }
+
     const results: WriteContentResult[] = await writeContents(tx, planned.inputs);
     const deleted = await deleteAssets(tx, planned.orphans, planned.base, by);
+    const { newest } = await newestRevision(tx, courseKeys(await readExisting(tx, course.id), course.id, planned.touched));
 
     const changes: EntityChange[] = [
       ...results.map((r) => ({ type: r.type, id: r.id, op: r.op, revisionId: r.revisionId })),
@@ -817,6 +902,7 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
       restored: planned.restored,
       deletedLinks: deleted.map((d) => d.id),
       revisions: changes.filter((c) => c.op !== null).length,
+      base: dryRun ? null : newest,
     };
   };
 
@@ -838,6 +924,17 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
     throw new Error("a dry run returned without rolling back");
   }
   const { value, exported } = await writeThrough(db, WRITES_THROUGH, run, through);
+  // A stamped file now matches the rows up to this import's revisions, so its
+  // stamp moves on with them, as a checkout's sidecar does after a commit:
+  // editing the same file and importing it again is not a stale import. Only
+  // while the file still reads as it was read; an edit made meanwhile keeps
+  // the old stamp, and the next import says so.
+  if (stamp !== undefined && value.base !== null && value.revisions > 0) {
+    const now = await readFile(options.file, "utf8").catch(() => null);
+    if (now === text) {
+      await writeFile(options.file, stampCourse(text.replace(STAMP_LINE, ""), value.base), "utf8");
+    }
+  }
   return { ...value, writeThrough: summarise(exported) };
 }
 
@@ -848,7 +945,10 @@ export interface CourseExportResult {
   course: string;
   /** Where the file lives in the tree, repo-relative. */
   path: string;
+  /** The file as the tree holds it, with no stamp. */
   yaml: string;
+  /** The course's newest revision in the snapshot `yaml` was rendered from; `stampCourse` puts it in the file. */
+  base: number | null;
 }
 
 /**
@@ -857,6 +957,12 @@ export interface CourseExportResult {
  * `catalog export` would.
  */
 export async function exportCourse(db: CatalogDatabase, id: string): Promise<CourseExportResult> {
+  // One snapshot for the file and its base, or a write landing between the
+  // render and the revision read would stamp old text with a new base.
+  return db.transaction((tx) => exportCourseIn(tx, id), { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
+async function exportCourseIn(db: CatalogDatabase, id: string): Promise<CourseExportResult> {
   const [row] = await db.select().from(collection).where(eq(collection.id, id));
   if (row === undefined || row.kind !== "course") {
     const hint = row === undefined ? "" : ` ("${id}" is a ${row.kind}; export its course, "${row.parentId ?? ""}")`;
@@ -870,5 +976,6 @@ export async function exportCourse(db: CatalogDatabase, id: string): Promise<Cou
   const file = `${COURSES_DIR}/${courseFileName(code)}`;
   const rendered = (await renderType(db, "courses")).find((f) => f.path === file);
   if (rendered === undefined) throw new CourseWriteError(`course "${id}" rendered no ${file}`);
-  return { course: id, path: file, yaml: rendered.bytes.toString("utf8") };
+  const { newest } = await newestRevision(db, courseKeys(await readExisting(db, id), id));
+  return { course: id, path: file, yaml: rendered.bytes.toString("utf8"), base: newest };
 }

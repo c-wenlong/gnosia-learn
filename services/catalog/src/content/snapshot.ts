@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { RevisionEntityType } from "@self-learn/schema";
+import { canonical, canonicalJson, type JsonValue } from "@self-learn/schema/shared";
 import { inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -21,7 +22,7 @@ import { column, contentColumns, ENTITIES } from "./entities";
  * as it is in the row.
  */
 
-export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+export { canonical, canonicalJson, type JsonValue };
 
 export interface Snapshot {
   entity: Record<string, JsonValue>;
@@ -35,30 +36,6 @@ export interface SnapshotRead {
   archived: boolean;
 }
 
-/** A value in canonical form: sorted keys, ISO instants, no undefined. */
-export function canonical(value: unknown): JsonValue {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object") {
-    const out: Record<string, JsonValue> = {};
-    for (const key of Object.keys(value as object).sort()) {
-      const inner = (value as Record<string, unknown>)[key];
-      if (inner !== undefined) out[key] = canonical(inner);
-    }
-    return out;
-  }
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  throw new Error(`cannot put a ${typeof value} in a snapshot`);
-}
-
-/** The canonical serialisation. `JSON.stringify` of a canonical value is already stable. */
-export function canonicalJson(value: unknown): string {
-  return JSON.stringify(canonical(value));
-}
 
 export function snapshotHash(snapshot: Snapshot): string {
   return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");

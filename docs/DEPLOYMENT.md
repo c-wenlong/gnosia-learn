@@ -255,7 +255,18 @@ database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
 seconds. A rerun skips everything already `present` without reading a file,
 so an interrupted run is finished by running it again. With no ffmpeg on the
 machine the posters are skipped and the output says so; `FFMPEG_PATH` points
-at one elsewhere. `--blob-root DIR` uploads to another root, for a scratch run.
+at one elsewhere. A scratch run sets `SELF_LEARN_HOME` to a temporary folder
+for the whole run; there is no flag for another root, because the web app
+reads its root from that variable alone and a flag would write rows pointing
+at bytes it never serves.
+
+Each root names the database that writes it, in `<root>/.owner`, written by
+the first upload or the first `catalog blob audit --fix`. `--fix` deletes
+objects no row names, so it refuses a root whose marker names another
+database: a `createdb -T` copy sharing `~/.self-learn/blobs` would otherwise
+delete the primary's objects as orphans. An upload refuses such a root too,
+since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
+files a crashed upload left, once they are a day old.
 
 A later `catalog index --only manimkc` keeps every key whose bytes it hashes
 again unchanged; a re-rendered video loses its key and is served from its file
