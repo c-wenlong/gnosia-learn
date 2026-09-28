@@ -1,5 +1,7 @@
+import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { currentOwner, NoOwnerError } from "@/lib/owner";
 import { requireStudio, studioOrigin } from "@/lib/studio";
 
 /**
@@ -26,7 +28,10 @@ import { requireStudio, studioOrigin } from "@/lib/studio";
  *
  * What is forwarded: the method, the path under `/api`, the query string, and
  * the body. What is not: `Origin`, `Sec-Fetch-*`, `Cookie`, `Host` and the
- * app's own referer. The runner then sees what `curl` sends, which is what the
+ * app's own referer. What is added: the signed-in owner, in
+ * `STUDIO_OWNER_HEADER`, from the session (phase 4). Any value the page sent
+ * under that name is dropped first, so a page cannot name an owner; the runner
+ * serves only the owner it was started for and refuses anyone else. The runner then sees what `curl` sends, which is what the
  * guard is looking for — a program rather than a page.
  *
  * **And that is exactly why this route has to make the same judgement itself,
@@ -61,6 +66,8 @@ const STRIPPED = new Set([
   "sec-fetch-dest",
   "sec-fetch-user",
   "upgrade-insecure-requests",
+  // Set below from the session, never taken from the page.
+  STUDIO_OWNER_HEADER,
 ]);
 
 /**
@@ -127,6 +134,16 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
     return NextResponse.json({ error: refused, detail: null }, { status: 403 });
   }
 
+  let owner: string;
+  try {
+    owner = await currentOwner();
+  } catch (error) {
+    if (error instanceof NoOwnerError) {
+      return NextResponse.json({ error: "sign in first", detail: null }, { status: 401 });
+    }
+    throw error;
+  }
+
   const search = request.nextUrl.search;
   const target = `${studioOrigin()}/api/${segments.map(encodeURIComponent).join("/")}${search}`;
 
@@ -134,6 +151,7 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   for (const [name, value] of request.headers) {
     if (!STRIPPED.has(name.toLowerCase())) headers.set(name, value);
   }
+  headers.set(STUDIO_OWNER_HEADER, owner);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   // `check` has already refused anything that did not arrive as JSON, so this

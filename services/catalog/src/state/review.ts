@@ -9,7 +9,7 @@ import {
 } from "@self-learn/schema";
 import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
-import { ownedBy, scopedRead } from "../content/scope";
+import { ownedBy, readableFor, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { DEFAULT_PARAMS, update as bktUpdate } from "../../../../scripts/learn/lib/bkt.mjs";
 import { newCard, PASS_GRADE, review as sm2 } from "../../../../scripts/learn/lib/schedule.mjs";
@@ -182,16 +182,25 @@ export async function writeReviews(
  * CLI still uses it because it already holds the whole document. This exists
  * for the callers that do not — the web app asks "what is due" and has no
  * reason to pull every card across the wire to find out.
+ *
+ * Only cards on concepts the learner may read (phase 4): a card on another
+ * owner's concept cannot be graded (`assertReadableConcepts`), and listing it
+ * would put that concept's slug on the dashboard and in the streak's count.
  */
 export async function dueReviews(
   db: CatalogDatabase,
   options: { now?: Date; limit?: number; learnerId?: string } = {},
 ): Promise<ReviewCard[]> {
   const { now = new Date(), limit, learnerId = LOCAL_LEARNER_ID } = options;
+  const owners = await readableFor(db, learnerId);
+  const readable =
+    owners === undefined
+      ? undefined
+      : inArray(review.conceptSlug, db.select({ slug: concept.slug }).from(concept).where(ownedBy(concept.ownerId, owners)));
   const query = db
     .select()
     .from(review)
-    .where(and(eq(review.learnerId, learnerId), lte(review.due, now)))
+    .where(and(eq(review.learnerId, learnerId), lte(review.due, now), readable))
     .orderBy(asc(review.due));
   const rows = await (limit === undefined ? query : query.limit(limit));
   return rows.map(toCard);
@@ -456,7 +465,7 @@ export async function reviewQueue(
       ? []
       : // Only concepts the learner may read (phase 4): a focus naming
         // another owner's concept is dropped like one the catalog lacks.
-        await scopedRead(readableOwners(learnerId), (owners) =>
+        await scopedRead(db, readableOwners(learnerId), (owners) =>
           db
             .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
             .from(concept)
@@ -505,7 +514,7 @@ export interface ConceptSummary {
  * Scoped (phase 4), so a distractor is never another owner's concept.
  */
 export async function conceptSummaries(db: CatalogDatabase, scope: OwnerScope): Promise<ConceptSummary[]> {
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
       .from(concept)

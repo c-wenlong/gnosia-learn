@@ -5,6 +5,7 @@ import path from "node:path";
 import { canonicalJson } from "@self-learn/schema/shared";
 
 import { diagramCheckout, diagramList, diagramShow } from "./catalog";
+import { studioOwner } from "./config";
 import { readThrough } from "./content-cache";
 import { ASSETS_DIR, workDir, workPath } from "./paths";
 
@@ -167,10 +168,22 @@ export function forgetDiagramList(): void {
   recent = null;
 }
 
+/**
+ * The cache's name for this runner's list: one per owner, since the list is
+ * one owner's (the catalog is asked with `--owner`), and never the old
+ * `diagrams`, which a runner from before owners wrote from every owner's rows.
+ * An upgraded runner that finds the database down before its first read
+ * therefore has no copy to show, rather than one with somebody else's
+ * diagrams and SVG keys in it.
+ */
+function cacheName(): string {
+  return `diagrams.${studioOwner()}`;
+}
+
 /** Every diagram's row as the catalog lists it, through the cache. */
 async function summaries() {
   return readThrough<Summary[]>(
-    "diagrams",
+    cacheName(),
     async () => {
       const result = await diagramList();
       const list = (result.json as { diagrams?: unknown } | null)?.diagrams;

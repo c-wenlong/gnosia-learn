@@ -1934,6 +1934,55 @@ before, so it merged before flip day and does not depend on #152.
       a content-writing route will have to do.
 - [x] Decide per type whether ids stay global (D3). **Decided:** D23.
 
+### Phase 4 review fixes, slice 1: read leaks and unscoped write verbs
+
+A read-only review of #158 and #160, on a flipped copy seeded with a second
+owner `other` and the commons, found reads that crossed owners at the edge
+rather than at the row, and write verbs that went around the seam's owner
+check. Every fix below changes nothing the one owner there is today sees:
+with every row `local` each filter keeps every row, and on a database from
+before 0010 each read still answers unscoped.
+
+- [x] The studio lists, opens and serves only its owner's diagrams (BLOCKER).
+      **Built:** `listDiagrams`, `readDiagramDocument`, `checkoutState` and
+      `checkoutDiagram` take the owner's scope, so another owner's slug is a
+      slug with no diagram (no file, no revision number); `catalog diagram`
+      takes `--owner`. The runner serves one owner, `STUDIO_OWNER` (default
+      `local`), passes it on every diagram verb, and refuses a request the web
+      app names as another owner's (`x-self-learn-owner`, set by the app's
+      server from the session, a page's value dropped first).
+      **Departed from the brief**, which asked the runner to pass each
+      request's owner through: nothing the runner holds is per owner (one
+      queue, one checkout directory, one cached list, one agent account and
+      daily cap), so serving a second owner would put their briefs on this
+      owner's bill and their jobs in this owner's list. A second owner's studio
+      is a second runner. `services/studio/test/owner.test.ts` fails a diagram
+      verb that leaves `--owner` out; `apps/web/src/lib/studio-owner.test.ts`
+      pins the header.
+- [x] A note names no prerequisite its reader cannot open (BLOCKER).
+      **Built:** `readNoteRows` keeps a `requires:` or `assumes:` edge only
+      when its far end is readable, as `readableEdges` does for the graph.
+- [x] Learner writes name only readable curriculum items (S5).
+      **Built:** `assertReadableItems` beside `assertReadableConcepts`, used by
+      a tick, a note, a recap and the legacy import, with the sentence a
+      missing item gets; a reset clears only rows on readable items.
+- [x] The `learn` CLI's learner view reads as `cliScope()` (S6).
+      **Built:** the graph (`status`, `frontier`, `plan`), the note reads and
+      checkouts, `vault pull` and the session list; the five pinned `--json`
+      shapes did not change.
+- [x] `scopedRead` no longer fails open (S7).
+      **Built:** an `undefined_column` error reads unscoped only after
+      `ownersExist` says `asset.owner_id` is absent, and a yes is kept per
+      pool; writes ask first with `readableFor`.
+- [x] Due cards and a refused session say nothing about another owner (nits).
+      **Built:** `dueReviews` lists no card on an unreadable concept, which
+      covers `/today` and the streak; `openTutorSession`'s refusal of an id
+      another learner holds no longer says whose it is.
+- [x] The whole-database readers are listed (S11, this slice's half).
+      **Built:** `services/catalog/SCHEMA.md` "Owners", and the gotcha in
+      `AGENTS.md`: which CLI verbs read every owner on purpose, and that a
+      type still on files has no owner, so accounts need every type flipped.
+
 ### Phase 4 review fixes, slice 2: the import, the upload, the caps
 
 A read-only review of #158 and #160 on a flipped scratch copy seeded with a

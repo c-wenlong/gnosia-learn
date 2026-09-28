@@ -58,7 +58,7 @@ export type TopicTitles = Record<string, string>;
  */
 export async function topicTitles(db: CatalogDatabase, slugs: string[], scope: OwnerScope): Promise<TopicTitles> {
   if (slugs.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ slug: topic.slug, title: topic.title })
       .from(topic)

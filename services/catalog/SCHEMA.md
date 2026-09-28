@@ -726,12 +726,41 @@ row-level security, which waits for a second service to read the database:
 | Where | What it does |
 | --- | --- |
 | `dbSource(db, scope)` and the six readers in `src/content/readers/` | Keep rows whose `owner_id` is in `scope.readable`; a link only when its far end is readable too; a session log only when `session.learner_id` is |
-| The queries in `src/state/` the web app reaches (`assets.ts`, `blobs.ts`, `topics.ts`, `notes.ts`, `conceptSummaries`, `readConceptGraph`) | Take an `OwnerScope`, required, and filter the same way. `readKnowledgeBase` and `reviewQueue` derive it from the learner they already take |
+| The queries in `src/state/` the web app reaches (`assets.ts`, `blobs.ts`, `topics.ts`, `notes.ts`, `conceptSummaries`, `readConceptGraph`) | Take an `OwnerScope`, required, and filter the same way. `readKnowledgeBase`, `reviewQueue` and `dueReviews` derive it from the learner they already take |
+| `readNoteRows(db, slugs, owners)` (`src/content/note-rows.ts`) | Scoped, keeps a `requires:` or `assumes:` edge only when the concept it names is readable, as `readableEdges` does for the graph; the export's unscoped read keeps every edge |
+| A learner's write naming a curriculum item or a concept (`src/state/progress.ts`, `recap.ts`, `import.ts`, `mastery.ts`) | `assertReadableItems` and `assertReadableConcepts`: another owner's item or concept is refused with the sentence a missing one gets, so a tick is neither a foreign row nor a way to ask whether an id exists. A reset clears only rows on readable items; the legacy import reports another owner's item as unknown |
+| `catalog diagram list`, `show`, `checkout`, `commit`, `put` (`src/content/diagrams.ts`) | Take `--owner` (default `CLI_OWNER`): list and show only what that owner may read, check out another owner's slug as a slug with no diagram (no file, no revision number, and a checkout already on disk left untouched), and write as that owner. The studio passes the owner its runner serves |
+| The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-self-learn-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
+| The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
 | The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
-| `catalog export`, parity, `topic ls`, the `learn` CLI's own note reads | Read every owner, through an `owners` argument that is optional only on those internal functions |
+| `catalog export`, parity, `topic ls` | Read every owner, through an `owners` argument that is optional only on those internal functions |
 | `catalog import` (`src/index/writer.ts`, `src/index/run.ts`) | Writes as the importing owner (`CLI_OWNER`) and stamps every row it writes with it. Prunes, archives and clears links only among that owner's rows: a link is its parent's (D24), and one whose far end the owner cannot read is left for `catalog doctor`. Refuses, by id and before the source writes anything, a tree row on an id another owner holds, a link under another owner's entity or to one the owner cannot read, and a prune whose cascade would take another owner's rows (their links, their diagram under a topic, their `asset_job` record of an asset, another learner's mastery or review). Another learner's session log is neither called gone nor appended to. The cross-source lookups (`knownConcepts` and the rest) answer only for readable rows: once a source has run, what it produced plus the commons' |
 | `catalog asset upload` (`src/content/asset-upload.ts`) | Uploads the rows the CLI's owner or the commons holds, and writes each one as its own owner, so its bytes land under that owner's prefix and the seam's owner check passes. Another owner's row, and a poster whose owner is not its video's, are refused by name before a byte is read or cut |
 | `uploadBlob` (`src/content/blob.ts`) | With `SELF_LEARN_OWNER_BYTES_CAP` or `SELF_LEARN_OWNER_UPLOADS_PER_DAY` set, refuses an upload that would take its owner past either, measured from `blob_object` by the key's `<owner_id>/` prefix under a per-owner advisory lock. `catalog blob audit` prints each owner's totals |
+
+**A database from before 0010** has no `owner_id`, and holds one owner's
+rows by construction. `scopedRead` runs a scoped read there unscoped, but only
+after asking the catalog (`ownersExist`, one question to
+`information_schema`, whose yes is kept per pool): an `undefined_column`
+error on a database that has `owner_id` is the query's own bug and is thrown,
+never answered with every owner's rows. A write path asks first
+(`readableFor`), since in a transaction the failed attempt would abort the
+retry.
+
+**Whole-database readers, on purpose.** These run on the owner's machine
+against the owner's database and read every owner, so none of them may ever
+sit behind the web app's door: `catalog ls`, `search`, `path`, `revisions`,
+`topic ls`, `show` (the entity itself; the asset lists it prints are scoped to
+`CLI_OWNER`), `export`, `import` (it reads every owner to refuse a collision,
+and writes only `CLI_OWNER`'s rows, as its row above says), `parity`, `status`, `doctor`, `blob audit`,
+and the `job` verbs (`ls`, `show`, `claim`, `finish`, `accept`, `discard`).
+Everything else a CLI prints about content is scoped to `CLI_OWNER` as the
+table above says.
+
+**A type still on files has no owner.** Until `catalog flip <type>`, the web
+app reads that type from `content/` and `learn/`, and a file carries no
+`owner_id`, so every account would see the owner's files for it. Accounts
+therefore need every type flipped first; `catalog status` says which are.
 
 D23 of the plan decides, per type, which ids stay global and which types move
 to the commons. The import limit it named, a tree that pruned and re-stamped

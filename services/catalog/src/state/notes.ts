@@ -20,7 +20,7 @@ export type NotePaths = Record<string, string>;
 
 export async function notePaths(db: CatalogDatabase, slugs: readonly string[], scope: OwnerScope): Promise<NotePaths> {
   if (slugs.length === 0) return {};
-  const rows = await scopedRead(scope.readable, (owners) =>
+  const rows = await scopedRead(db, scope.readable, (owners) =>
     db
       .select({ slug: concept.slug, path: concept.path })
       .from(concept)

@@ -95,7 +95,10 @@ export async function readLogs(db: CatalogDatabase): Promise<{ id: string; markd
   return rows;
 }
 
-/** The ids of every log with an entry, sorted as file names sort. */
+/**
+ * The session ids that have a log: every learner's (the export), or one
+ * learner's own, which is what the `learn` CLI counts and lists (phase 4).
+ */
 export async function listLogIds(db: CatalogDatabase, learnerId?: string): Promise<string[]> {
   const rows =
     learnerId === undefined
