@@ -98,3 +98,31 @@ describe("a live server that refuses", () => {
     expect(ran.stderr).not.toContain("wrong");
   });
 });
+
+describe("catalog index, the old name of catalog import", () => {
+  let url: string;
+  beforeAll(async () => {
+    url = `postgres://localhost:${await deadPort()}/self_learn`;
+  });
+
+  it("says the new name once, on stderr, and then runs import", async () => {
+    // A dead port, so the import itself fails at its first query: what is
+    // pinned is the alias line, and that stdout stays the command's --json.
+    const ran = await catalog(url, "index", "--json");
+    expect(ran.code).toBe(EXIT_UNREACHABLE);
+    expect(ran.stderr.match(/catalog index is now catalog import/g)).toHaveLength(1);
+    expect(JSON.parse(ran.stdout)).toMatchObject({ ok: false, command: "index" });
+  });
+
+  it("takes no directory, since that was never its shape", async () => {
+    const ran = await catalog(url, "index", "seed");
+    expect(ran.code).toBe(2);
+    expect(ran.stderr).toContain("index takes no directory");
+  });
+
+  it("is not printed by import", async () => {
+    const ran = await catalog(url, "import", "--json");
+    expect(ran.code).toBe(EXIT_UNREACHABLE);
+    expect(ran.stderr).not.toContain("catalog index is now");
+  });
+});

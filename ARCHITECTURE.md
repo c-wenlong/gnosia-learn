@@ -238,7 +238,7 @@ through `learner-store`'s pool, and hands them to the pure
 `apps/web/src/lib/today-core.ts`. It runs `computeHabit` over the same rows
 rather than calling `loadHabit` again, so the page and the top bar agree. The
 check count beside each due review comes from the concept's note, found by the
-path `catalog index` recorded (`notePaths` in the store) rather than a path the
+path `catalog import` recorded (`notePaths` in the store) rather than a path the
 app builds under `learn/` (layering rule 6); a note it cannot read counts as a
 plain recall.
 
@@ -407,7 +407,7 @@ the rest of the document.
 Ten courses, one YAML file each under `content/courses/`, read by
 `loadCourses()` in `packages/content`. A course holds modules, a module holds
 topics, a topic holds subtopics and the module holds curated resources. The
-same function is what `catalog index` parses courses with, so the page and the
+same function is what `catalog import` parses courses with, so the page and the
 row cannot disagree about what a file means; before this there were TypeScript
 literals on one side, a private `YamlCourse` interface on the other, and a
 parity test that could only notice drift after it happened.
@@ -454,7 +454,7 @@ told to flag uncertainty for those courses.
 `content/topics.yaml`.** That file's `maps.courses` names modules, so it can
 say which concepts a module is about but not which of the module's topics each
 belongs to. The per-topic link is a note's `topics:` frontmatter, which
-`catalog index` writes to `concept_curriculum_item` and `readKnowledgeBase`
+`catalog import` writes to `concept_curriculum_item` and `readKnowledgeBase`
 returns as `KbConcept.topics`. The course path reads that link, orders a
 topic's concepts by the module topic's `maps.concepts`, and falls back to that
 list for a unit's Guidebook. The arithmetic (the bucket, the active node, the
@@ -717,7 +717,7 @@ trees, in Postgres 17. Full reasoning in
 ```
    content/topics.yaml ────┐
    content/courses/*.yaml ─┤
-   learn/concepts/*.md ────┼──► catalog index ──► Postgres ──► catalog ls / show / path / search
+   learn/concepts/*.md ────┼──► catalog import ──► Postgres ──► catalog ls / show / path / search
    learn/sessions/*.md ────┤       (indexers)      (derived)          (agents read here)
    tldrawkc list  ─────────┤
    manimkc topics --json ──┤
@@ -726,7 +726,7 @@ trees, in Postgres 17. Full reasoning in
 
 **Everything in the content half is derived.** `topic`, `concept`,
 `collection`, `curriculum_item`, `asset` and the seven link tables are rebuilt
-from files in git by `npm run catalog -- index`. Drop the database and one index
+from files in git by `npm run catalog -- import`. Drop the database and one index
 run restores it exactly. Nothing is authored in Postgres, which is why the
 indexers may delete: a row the source no longer produces is not history, it is a
 stale row, and the whole point of the catalog is that a rendered video cannot
@@ -840,7 +840,7 @@ Postgres would put a staler one in front of the agent.
    app needs live behind it too. `knowledge-base.ts` reads `concept` and its
    edges, `assets.ts` reads `asset` and the link tables. Neither writes
    anything, and the content half still has exactly one writer, which is
-   `catalog index` (rule 11). Anything that would *write* content from here is
+   `catalog import` (rule 11). Anything that would *write* content from here is
    the violation this rule is about; a query is not.
 5. **A module that reads content or reaches the database says
    `import "server-only"`.** `apps/web/src/data/courses/index.ts`, `apps/web/src/data/content.ts`
@@ -876,7 +876,7 @@ Postgres would put a staler one in front of the agent.
     page-facing evidence writes, `POST /api/review/grade`, which calls the same
     `gradeReview` that `learn review grade` does, and `POST /api/learner/observe`,
     which calls the same `recordObservation` that `learn observe` does. The only
-    writer of the content tables is `npm run catalog -- index`, and the only
+    writer of the content tables is `npm run catalog -- import`, and the only
     thing it writes from is files in git. A page that could write a derived
     table would make it a source of truth no index run could reproduce.
 12. **An indexer reads files and returns rows; it never touches a connection.**

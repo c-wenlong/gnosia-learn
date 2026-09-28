@@ -1,0 +1,60 @@
+# Shared topic vocabulary for the self-learn catalog.
+# One entry per topic. slug is permanent; everything else can change.
+# maps.manimkc entries are manimkc/topics/<path> with the topics/ prefix dropped.
+# maps.courses entries are course *module* ids (e.g. cp4284-m3), not topic-level -tN ids.
+# maps.concepts entries are learn/concepts/<domain>/<file>.md ids (the frontmatter `id`).
+
+topics:
+  # ---------------- computer-architecture ----------------
+  - slug: tomasulo-algorithm
+    title: Tomasulo's algorithm
+    domain: computer-architecture
+    summary: Reservation stations and a common data bus let instructions execute out of order while still respecting true dependencies.
+    aliases: [tomasulo, reservation stations, common data bus]
+    maps:
+      manimkc: []
+      courses: []
+      concepts: []
+
+  # ---------------- foundations ----------------
+  - slug: vector-and-linear-algebra-basics
+    title: Vectors and the dot product
+    domain: foundations
+    summary: A vector is an element of a vector space rather than its coordinates, and the dot product of two vectors measures how aligned they are.
+    aliases: [vector space, dot product, linear algebra basics]
+    maps:
+      manimkc: []
+      courses: []
+      concepts: [vector-as-a-list-of-numbers, dot-product]
+
+  # ---------------- machine-learning ----------------
+  - slug: transformer-architecture-and-training
+    title: Transformer architecture and training stages
+    domain: machine-learning
+    summary: A transformer block projects tokens into query, key and value roles, attends over them with softmax-weighted scores, and stacks with positional encoding; training runs through pretraining, fine-tuning and RLHF.
+    aliases: [self-attention, multi-head attention, positional encoding, RLHF, pretraining]
+    maps:
+      manimkc: []
+      courses: [cp4284-m1]
+      concepts: [attention-weights, multi-head-attention, positional-encoding, query-key-value-projections, self-attention, softmax, transformer-block]
+
+  # ---------------- agentic-ai ----------------
+  - slug: agent-tool-use-and-reasoning-loops
+    title: Tool use and the ReAct loop
+    domain: agentic-ai
+    summary: A model emits a structured call against a declared schema and the harness executes it; ReAct interleaves that with reasoning traces so each observation can revise the plan.
+    aliases: [ReAct, function calling, tool calling, LangGraph]
+    maps:
+      manimkc: []
+      courses: [cp4284-m3]
+      concepts: [react-loop, tool-calling]
+
+  - slug: agent-memory-and-state
+    title: Agent memory and state management
+    domain: agentic-ai
+    summary: An agent needs both a short-term working context and a longer-term store it can write to and recall from across steps or sessions.
+    aliases: [context window, long-term memory, state management]
+    maps:
+      manimkc: []
+      courses: []
+      concepts: []

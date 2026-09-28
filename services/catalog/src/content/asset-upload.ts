@@ -79,7 +79,7 @@ export interface AssetUploadOptions {
   store: BlobStore;
   /** Where the pinned manimkc CLI resolves from (the repository). */
   repoRoot: string;
-  /** The manimkc checkout the CLI reads, as `catalog index` takes it. */
+  /** The manimkc checkout the CLI reads, as `catalog import` takes it. */
   manimkcRoot: string;
   dryRun?: boolean;
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
@@ -197,7 +197,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   const posterIds = found.map((d) => posterId(`${ASSET_PREFIX.manimkc}${d.videoPath}`));
   // The rows and the revision each was read at, in one snapshot. Every write
   // below copies the row it read and changes its blob key, so it is based on
-  // that revision: a `catalog index` that rewrote the row in the minutes an
+  // that revision: a `catalog import` that rewrote the row in the minutes an
   // upload takes is refused, not overwritten with the row as it was.
   const { rows, bases } = await db.transaction(
     async (tx) => {
@@ -273,7 +273,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         row.id,
         row.kind,
         `${row.path} has changed since it was indexed (sha256 ${facts.contentHash.slice(0, 12)}, row ` +
-          `${row.contentHash?.slice(0, 12) ?? "none"}). Run \`npm run catalog -- index --only manimkc\`, then upload again.`,
+          `${row.contentHash?.slice(0, 12) ?? "none"}). Run \`npm run catalog -- import --only manimkc\`, then upload again.`,
       );
       return null;
     }
@@ -309,7 +309,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const sidecars: Planned[] = [];
     for (const p of d.sidecars) {
       const planned = plan(p);
-      if (planned === null) refuse(`${ASSET_PREFIX.manimkc}${p}`, "sidecar", `not in the catalog. Run \`npm run catalog -- index --only manimkc\` first.`);
+      if (planned === null) refuse(`${ASSET_PREFIX.manimkc}${p}`, "sidecar", `not in the catalog. Run \`npm run catalog -- import --only manimkc\` first.`);
       else sidecars.push(planned);
     }
     return { videoId, video: plan(d.videoPath), sidecars };
@@ -317,7 +317,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
 
   for (const group of groups) {
     if (group.video === null) {
-      refuse(group.videoId, "video", "not in the catalog. Run `npm run catalog -- index --only manimkc` first.");
+      refuse(group.videoId, "video", "not in the catalog. Run `npm run catalog -- import --only manimkc` first.");
       continue;
     }
     const writes: WriteContentInput[] = [];

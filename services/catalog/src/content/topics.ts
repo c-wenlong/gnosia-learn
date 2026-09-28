@@ -43,7 +43,7 @@ import { writeContent, writeContents, type WriteContentInput, type WriteContentR
  * author and a reason, and through `writeThrough`, so `content/topics.yaml`
  * is rewritten from the rows in the same transaction (D17). That is what makes
  * these verbs safe before topics flip as well as after: the file the importer
- * reads next is the file the rows would export, so the next `catalog index` is
+ * reads next is the file the rows would export, so the next `catalog import` is
  * a no-op for topics rather than a revert.
  *
  * What the database already refuses (a duplicate slug, a relation to a topic
@@ -883,7 +883,7 @@ export interface MapResult extends TopicWriteResult {
  * topic's entry no other verb writes. Once topics are flipped a hand edit of
  * that list is refused as an edited export, and the manimkc indexer refuses
  * a folder no topic maps, so without this the first new rendered topic would
- * block every `catalog index`.
+ * block every `catalog import`.
  *
  * A folder belongs to one topic (`manimkc_topic.path` is the key), so mapping
  * one another topic holds is refused, naming that topic: moving it is two
@@ -1006,7 +1006,7 @@ export async function archiveTopic(db: CatalogDatabase, slugInput: string, by: B
       "not-owned",
       `topics are still read from content/topics.yaml, which has no way to say archived: the export would ` +
         `leave "${slug}" out and the next import would delete it. Flip topics first (\`catalog flip topics\`), ` +
-        `or remove the entry from the file and run \`catalog index\`.`,
+        `or remove the entry from the file and run \`catalog import\`.`,
     );
   }
   const done = await writeThrough(db, ["topics"], async (tx) => {
@@ -1200,7 +1200,7 @@ async function renameUnder(
         `${restamp.length} diagram file(s) stamp "${from}" in their tldrawkc metadata, and diagrams are read from ` +
           `files, where only tldrawkc rewrites a stamp: ${restamp.join(", ")}. Pass --restamp-diagrams-later to ` +
           `rename anyway, then run \`npm run --silent canvas -- meta set <file> --topic ${to}\` and re-export each ` +
-          `SVG before the next \`catalog index\`, which refuses them until then.`,
+          `SVG before the next \`catalog import\`, which refuses them until then.`,
       );
     }
 
@@ -1393,7 +1393,7 @@ export async function checkConceptTopic(
       throw new TopicError(
         "invalid",
         `topics were last imported from ${imported}, not from this knowledge base (${input.root}), so the ` +
-          `vocabulary file this would rewrite is not this tree's. Import this tree first (\`catalog index\`).`,
+          `vocabulary file this would rewrite is not this tree's. Import this tree first (\`catalog import\`).`,
       );
     }
   }

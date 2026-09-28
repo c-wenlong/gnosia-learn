@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { loadCourses, loadTags, loadTopics } from "../src/index";
 import { courseYaml, makeFixture, tagsYaml, topicsYaml, type Fixture } from "./fixture";
+import { SEED } from "./seed";
 
 /**
  * Two halves.
  *
  * The first is the curriculum integrity suite that used to live in
  * `src/data/courses/index.test.ts` and assert on TypeScript literals. It now
- * asserts on the files, which is the thing that ships.
+ * asserts on the files, the seed's since phase 2.
  *
  * The second is the refusals: a duplicate id, a module pointing at a topic that
  * does not exist, `inferred` left off. None of those are worth introducing into
@@ -50,47 +51,20 @@ function mappedTree(mapped: Record<string, string[]>, concepts: string[]): strin
   return f.root;
 }
 
-describe("the real curriculum", () => {
-  const courses = loadCourses();
+/**
+ * The seed's curriculum (seed/README.md): real course data cut from the
+ * owner's with `catalog export --subset`, the tree the suites read now that
+ * `content/` goes in phase 3. The owner's full shortlist is the database's,
+ * checked by `catalog parity` on flip day rather than asserted here.
+ */
+describe("the seed's curriculum", () => {
+  const root = SEED;
+  const courses = loadCourses({ root });
 
-  it("includes the full AY2026/27 shortlist", () => {
-    expect(courses.map((c) => c.code).sort()).toEqual(
-      [
-        "CP4281",
-        "CP4282",
-        "CP4283",
-        "CP4284",
-        "CP4285",
-        "CS2111",
-        "CS3216",
-        "CS3227",
-        "CS3249",
-        "CS4263",
-      ].sort(),
-    );
-  });
-
-  it("flags inferred syllabi only for known courses", () => {
-    const inferred = courses
-      .filter((c) => c.inferred)
-      .map((c) => c.code)
-      .sort();
-    expect(inferred).toEqual(["CS2111", "CS3227", "CS4263"].sort());
-  });
-
-  it("renders in the authored order, not filename order", () => {
-    expect(courses.map((c) => c.code)).toEqual([
-      "CS2111",
-      "CS4263",
-      "CP4281",
-      "CP4282",
-      "CP4283",
-      "CP4284",
-      "CP4285",
-      "CS3216",
-      "CS3227",
-      "CS3249",
-    ]);
+  it("is the one course the seed was cut from, with its two modules", () => {
+    expect(courses.map((c) => c.code)).toEqual(["CP4284"]);
+    expect(courses[0]?.modules.map((m) => m.id)).toEqual(["cp4284-m1", "cp4284-m3"]);
+    expect(courses.filter((c) => c.inferred)).toEqual([]);
   });
 
   it("gives every course modules with unique topic ids", () => {
@@ -108,7 +82,7 @@ describe("the real curriculum", () => {
   });
 
   it("names a vocabulary topic on every module", () => {
-    const slugs = new Set(loadTopics().map((t) => t.slug));
+    const slugs = new Set(loadTopics({ root }).map((t) => t.slug));
     for (const course of courses) {
       for (const mod of course.modules) {
         expect(slugs.has(mod.topic), `${mod.id} names "${mod.topic}"`).toBe(true);
@@ -118,11 +92,13 @@ describe("the real curriculum", () => {
 
   it("lists an item's concepts under its module topic's maps.concepts", () => {
     // Enforced by the reader; asserted here so the guarantee is visible.
-    const mapped = new Map(loadTopics().map((t) => [t.slug, new Set(t.maps.concepts)]));
+    const mapped = new Map(loadTopics({ root }).map((t) => [t.slug, new Set(t.maps.concepts)]));
+    let listed = 0;
     for (const course of courses) {
       for (const mod of course.modules) {
         for (const topic of mod.topics) {
           for (const concept of topic.concepts) {
+            listed += 1;
             expect(
               mapped.get(mod.topic)?.has(concept),
               `${topic.id} lists "${concept}" under ${mod.topic}`,
@@ -131,11 +107,12 @@ describe("the real curriculum", () => {
         }
       }
     }
+    expect(listed).toBe(8);
   });
 
   it("only uses tags that content/tags.yaml defines", () => {
     // Enforced by the reader; asserted here so the guarantee is visible.
-    const known = new Set(loadTags().map((t) => t.id));
+    const known = new Set(loadTags({ root }).map((t) => t.id));
     for (const course of courses) {
       for (const tag of course.tags) {
         expect(known.has(tag), `${course.code} is tagged "${tag}"`).toBe(true);

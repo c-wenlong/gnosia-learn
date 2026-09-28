@@ -126,7 +126,7 @@ Learner state and the videos need Postgres 17 running locally (`brew install pos
 ```bash
 createdb self_learn                                 # first checkout only; a second checkout reuses it
 npm run catalog -- migrate                          # creates the tables, or brings them up to date
-npm run catalog -- index --only manimkc             # once, so the catalog knows where the renders are
+npm run catalog -- import --only manimkc             # once, so the catalog knows where the renders are
 echo ASSET_FILES_ENABLED=1 >> apps/web/.env.local   # serve videos and diagrams from disk
 ```
 
@@ -213,7 +213,7 @@ Three things that bite:
 
 - `npm run canvas` without `--silent` prints npm's own banner ahead of the tool's stdout, which breaks `--json` parsing. Same for `npm run learn`.
 - Exit 3 means the file saved but lints remain: read them and run again, or pass `--allow-lints`. Exit 2 means the snippet threw and nothing was written.
-- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog index` will take it.
+- A new `.tldr` needs `meta set --topic <slug>` (or `new --topic <slug>`) with a slug from `content/topics.yaml` before `catalog import` will take it.
 
 ## How it works
 
