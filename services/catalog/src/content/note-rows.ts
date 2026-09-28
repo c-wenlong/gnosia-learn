@@ -4,6 +4,7 @@ import { concept, conceptPrerequisite, LOCAL_LEARNER_ID } from "@self-learn/sche
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { parseFrontmatter, strayFrontmatterLines } from "../index/frontmatter";
 import { assertRenderable, notePath, readNote, renderNote, type NoteFields } from "./notes";
 import { POSITION_STEP } from "./positions";
 import { latestRevisions } from "./revisions";
@@ -297,11 +298,59 @@ export async function commitNoteText(
   db: CatalogDatabase,
   slug: string,
   text: string,
-  options: { base: number | null; reason: string; sessionId?: string },
+  options: { base: number | null; reason: string; sessionId?: string; where?: string },
 ): Promise<NoteWritten> {
+  assertFrontmatter(text, options.where ?? `the text of "${slug}"`);
   const fields = readNote(text, slug, slug);
   if (fields.slug !== slug) {
     throw new NoteWriteError(`the checkout of "${slug}" now says id: ${fields.slug}; a note cannot be renamed by editing it`);
   }
   return writeNoteRow(db, { fields, base: options.base, reason: options.reason, sessionId: options.sessionId });
+}
+
+/**
+ * Refuse a whole-note text whose frontmatter did not parse, before anything
+ * is read from it. `readNote` treats a note with no frontmatter as a body
+ * alone, which is right for a file nobody has stamped yet and wrong for an
+ * edit: a damaged `---` fence would be committed as a note whose title is its
+ * id, with no summary, tags, prerequisites or `created`, and the old values
+ * would survive only as a revision. Every note the database renders carries
+ * `id:`, so text without one is not a note that came out of it. And a block
+ * holding a line that is no `key:` and no `- item` (a heading, a paragraph) is
+ * a closing fence that broke, with the block run on to a later `---` in the
+ * body: everything before that line would be dropped from the body.
+ */
+export function assertFrontmatter(text: string, where: string): void {
+  const { data } = parseFrontmatter(text);
+  if (Object.keys(data).length === 0) {
+    throw new NoteWriteError(
+      `${where} has no frontmatter that parses (is its opening or closing --- line damaged?), so its title, ` +
+        `tags, prerequisites and created date would all be dropped. Nothing was written; restore the frontmatter ` +
+        `and commit again.`,
+    );
+  }
+  const stray = strayFrontmatterLines(text);
+  const prose = stray.filter((line) => !line.trim().startsWith("#"));
+  if (prose.length > 0) {
+    throw new NoteWriteError(
+      `${where} has a frontmatter block holding ${JSON.stringify(prose[0])}, which is not a key: line: its closing --- ` +
+        `is probably damaged, and the block runs on to a later --- in the body, which would be dropped. Nothing was ` +
+        `written; repair the closing --- and commit again.`,
+    );
+  }
+  // A `#` line the parser skips as a comment. Named for what it is rather
+  // than as a damaged fence, and still refused: the row has no place for a
+  // comment, so the database would drop it, the same reason an unknown key is
+  // refused. And a run-on block of nothing but headings would look the same.
+  if (stray.length > 0) {
+    throw new NoteWriteError(
+      `${where} has ${JSON.stringify(stray[0])} in its frontmatter. A comment there has no column in the database and ` +
+        `would be dropped (and a # heading there means the closing --- is damaged). Nothing was written; move it ` +
+        `into the body and commit again.`,
+    );
+  }
+  const id = data["id"];
+  if (id === undefined || id === null || String(id).trim() === "") {
+    throw new NoteWriteError(`${where} has frontmatter with no id:. Nothing was written; put back the id: line and commit again.`);
+  }
 }

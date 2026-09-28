@@ -1520,6 +1520,19 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       database forgets every base rather than refusing, and a push to one is
       refused. The folder defaults to `$SELF_LEARN_HOME/vault`, and one
       inside the repository is refused.
+      **Review fixes** (branch `p2/vault-fixes`): every diagram's SVG is
+      pulled from the blob store into `assets/<slug>.svg`, read-only, so the
+      `![[<slug>.svg]]` embeds resolve once `learn/assets/` is gone; a push of
+      text whose frontmatter does not parse or has no `id:` is refused by
+      file name (`commitNoteText`, so `learn concept commit` gets it too),
+      where a damaged fence used to drop the title, tags, prerequisites and
+      `created`; a note the database already holds as exactly the file is
+      taken for the push's own commit, not a `.conflict`; an id that would be
+      named like a side copy (`z.incoming`) is left out rather than wedging
+      `.vault.json`; a `.kept-` file is refused for what it is; a vault
+      inside any checkout of the repository is refused. Three tests pin the
+      mutations the review found passing: removing an edited stale file, a
+      check-then-write replace, and no manifest write after each commit.
 - [x] **Tests:** a small `seed/` tree (*guessed*: 5 topics, 2 tags, 1 course
       with 2 modules, 4 notes, 1 session, 1 diagram, no videos), produced by
       `catalog export --subset`. `services/catalog/test/catalog.test.ts`

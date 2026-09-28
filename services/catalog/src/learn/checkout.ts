@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { sha256 } from "../content/layout";
 import { commitNoteText, MovedBaseError, readNoteText, type NoteSnapshot, type Written } from "./files";
 import { workDir, workIdentity } from "./paths";
 
@@ -54,9 +54,6 @@ function copyPath(id: string): string {
 }
 const sidecarPath = (id: string) => path.join(conceptsWork(), `${id}.checkout.json`);
 
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
-}
 
 async function readSidecar(id: string): Promise<Sidecar | null> {
   try {
@@ -139,7 +136,7 @@ export async function commitConcept(id: string, options: { reason: string; sessi
       `${file} was checked out from ${sidecar.from}, not ${workIdentity()}. Check it out again from here.`,
     );
   }
-  const written = await commitNoteText(id, text, sidecar, { reason: options.reason, session: options.session });
+  const written = await commitNoteText(id, text, sidecar, { reason: options.reason, session: options.session, where: file });
 
   // The copy is now what the note holds, so the next commit is based on the
   // revision this commit wrote. Not on a fresh read: a commit from anywhere

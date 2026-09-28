@@ -70,12 +70,16 @@ npm run learn -- vault pull                 # ~/.self-learn/vault, or --out <dir
 npm run learn -- vault push --reason "tidied the proofs"
 ```
 
-`vault pull` writes each note as `concepts/<domain>/<slug>.md` and each log as
-`sessions/<id>.md`, with `.vault.json` recording what every file was based on
-(the note's revision, or how many entries the log had) and the sha256 of what
-was written. The folder defaults to `$SELF_LEARN_HOME/vault`, outside the
-repository, and one inside it is refused. Neither command overwrites an edit
-nobody pushed:
+`vault pull` writes each note as `concepts/<domain>/<slug>.md`, each log as
+`sessions/<id>.md` and each diagram's SVG as `assets/<slug>.svg`, with
+`.vault.json` recording what every file was based on (the note's revision, or
+how many entries the log had) and the sha256 of what was written. The SVGs come
+from the blob store, so the `![[<slug>.svg]]` embeds in notes and logs still
+resolve in Obsidian once `learn/assets/` is gone; they are read-only there,
+push never looks at them, and a diagram is changed in the studio or with
+`catalog diagram put`. The folder defaults to `$SELF_LEARN_HOME/vault`,
+outside the repository, and one inside this checkout or any other checkout of
+the repository is refused. Neither command overwrites an edit nobody pushed:
 
 | Case | What happens |
 | --- | --- |
@@ -86,6 +90,10 @@ nobody pushed:
 | Push, note edited, database moved | Refused; the database's version is written beside it as `<name>.conflict.md` |
 | Push, session log edited | Refused by name: a log is a record of what happened, and a correction belongs in the note it touched |
 | Push, a new file under `concepts/` | Refused: a new note needs a topic, so it is made with `concept add --topic` |
+| Push, a note whose frontmatter does not parse, or has no `id:` | Refused by file name, nothing written: a damaged `---` fence would otherwise commit the note with its title, tags, prerequisites and `created` dropped |
+| Push, a `<name>.kept-<time>.md` | Refused by name: it is an edit saved while a command was moving `<name>.md`, kept apart so neither was lost; merge it and delete it |
+| Push stopped after some commits | Each commit is recorded in `.vault.json` as it lands, and a note the database already holds as exactly this file is taken for its own commit, not a conflict |
+| Pull, an SVG under `assets/` edited | Kept and listed; delete it and pull for the database's |
 
 Settling an `.incoming` or `.conflict` copy is deleting it: merge what you
 want of it into the note first, and the note is based on that newer version
@@ -714,10 +722,12 @@ Until the flip, point a vault at `learn/`. Wikilinks, embeds, tags and the
 mermaid map all render natively. The session log is worth keeping open while a
 session runs, since it is written live. Once notes and logs are flipped there
 is no live file under `learn/`: `learn vault pull` writes them to
-`~/.self-learn/vault/` (the folder to open in Obsidian), and `learn vault push`
-writes edited notes back, as described under "Where the notes and logs live"
-above. The vault gets no `.obsidian/` from the command; the config is yours.
-Pull again to see what a session wrote; it is a snapshot, not a live sync.
+`~/.self-learn/vault/` (the folder to open in Obsidian), with every diagram's
+SVG under `assets/` so the `![[<slug>.svg]]` embeds keep resolving, and `learn
+vault push` writes edited notes back, as described under "Where the notes and
+logs live" above. The vault gets no `.obsidian/` from the command; the config
+is yours. Pull again to see what a session wrote; it is a snapshot, not a live
+sync.
 
 ---
 
