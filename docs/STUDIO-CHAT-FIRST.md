@@ -482,7 +482,7 @@ draft's `jobId` (D35). `STUDIO_TABLES` gains `draft`.
 | --- | --- |
 | `open` | A conversation with no valid brief in force |
 | `briefed` | The latest planner reply carried a brief that passed; Draw is live |
-| `drawing` | Its newest job is `queued`, `running`, `awaiting_review` or `interrupted` |
+| `drawing` | Its newest job is `queued`, `running` or `awaiting_review` |
 | `done` | Its newest job was accepted or discarded |
 | `abandoned` | A person closed it for good, or the turn cap was reached with no Draw |
 
@@ -492,19 +492,25 @@ stateDiagram-v2
     open --> briefed: valid brief
     briefed --> open: person asks for a change
     briefed --> drawing: Draw, job queued
-    drawing --> briefed: job failed or cancelled
+    drawing --> briefed: job failed, cancelled or interrupted
     drawing --> done: job accepted or discarded
     done --> open: person asks for another diagram
+    open --> drawing: Resume or Revise of its job
+    done --> drawing: Resume or Revise of its job
     open --> abandoned: Abandon, or turn cap
     briefed --> abandoned: Abandon
     done --> [*]
     abandoned --> [*]
 ```
 
-`drawing` follows the job: the runner moves the draft in the same `finish` that
-writes the job's terminal state. A failed job puts the draft back at `briefed`
-with the gate's findings as a STUDIO note, because the next useful thing is to
-talk about what went wrong.
+`drawing` follows the job: the runner moves the draft when the job's record
+takes its new state, and at start brings every draft up to its newest job,
+since the runner's own reconcile marks a job it found running `interrupted`
+before any draft is listening. A failed, cancelled or interrupted job puts the
+draft back at `briefed` with the gate's findings (or, for an interrupted one,
+the offer to resume it) as a STUDIO note, because the next useful thing is to
+talk about what went wrong. A Resume or a Revise of the job carries its draft,
+so the draft follows the new job.
 
 ### The events a draft appends
 
