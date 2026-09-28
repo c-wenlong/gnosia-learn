@@ -1,6 +1,7 @@
-import { concept } from "@self-learn/schema";
-import { inArray } from "drizzle-orm";
+import { concept, type OwnerScope } from "@self-learn/schema";
+import { and, inArray } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 
 /**
@@ -17,11 +18,13 @@ import type { CatalogDatabase } from "../db";
 /** A concept slug to its note's repo-relative path. A slug with no row is absent. */
 export type NotePaths = Record<string, string>;
 
-export async function notePaths(db: CatalogDatabase, slugs: readonly string[]): Promise<NotePaths> {
+export async function notePaths(db: CatalogDatabase, slugs: readonly string[], scope: OwnerScope): Promise<NotePaths> {
   if (slugs.length === 0) return {};
-  const rows = await db
-    .select({ slug: concept.slug, path: concept.path })
-    .from(concept)
-    .where(inArray(concept.slug, [...new Set(slugs)]));
+  const rows = await scopedRead(scope.readable, (owners) =>
+    db
+      .select({ slug: concept.slug, path: concept.path })
+      .from(concept)
+      .where(and(inArray(concept.slug, [...new Set(slugs)]), ownedBy(concept.ownerId, owners))),
+  );
   return Object.fromEntries(rows.map((row) => [row.slug, row.path]));
 }

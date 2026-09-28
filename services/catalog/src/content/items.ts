@@ -25,6 +25,7 @@ import {
 import { canonical, type JsonValue, readSnapshots, type Snapshot, snapshotHash } from "./snapshot";
 import { writeContent } from "./write";
 import { writeThrough } from "./write-through";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog item archive|restore|purge <id>`: one curriculum item's lifecycle
@@ -156,6 +157,7 @@ export async function archiveItem(db: CatalogDatabase, options: ItemOptions): Pr
     }
     const latest = (await latestRevisions(tx, "curriculum_item", [options.id])).get(options.id);
     const result = await writeContent(tx, {
+      owner: CLI_OWNER,
       type: "curriculum_item",
       id: options.id,
       next: { row: { ...row, archivedAt: new Date() } },
@@ -302,6 +304,7 @@ export async function restoreItem(db: CatalogDatabase, options: ItemOptions): Pr
     const dropped = concepts.filter((slug) => !live.has(slug));
 
     const result = await writeContent(tx, {
+      owner: CLI_OWNER,
       type: "curriculum_item",
       id: options.id,
       next: {

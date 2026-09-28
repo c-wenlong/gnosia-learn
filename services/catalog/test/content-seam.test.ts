@@ -81,12 +81,14 @@ function topicWrite(
     author: "local",
     authorKind: "person",
     reason: `set ${slug} to ${title}`,
+    owner: "local",
     ...extra,
   };
 }
 
 function tagWrite(id: string, label: string, base: number | null): WriteContentInput {
   return {
+    owner: "local",
     type: "tag",
     id,
     next: { row: { id, label } },
@@ -539,6 +541,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
       body,
     });
     const base = await writeContent(scratch.db, {
+      owner: "local",
       type: "concept",
       id: "seam-base",
       next: { row: note("seam-base", "base") },
@@ -550,6 +553,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     expect(base.changed).toBe(true);
 
     const first = await writeContent(scratch.db, {
+      owner: "local",
       type: "concept",
       id: "seam-note",
       next: {
@@ -567,6 +571,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
 
     // Only the link changes: requires becomes assumes.
     const second = await writeContent(scratch.db, {
+      owner: "local",
       type: "concept",
       id: "seam-note",
       next: {
@@ -587,6 +592,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
 
     // A body edit gets a line diff.
     const third = await writeContent(scratch.db, {
+      owner: "local",
       type: "concept",
       id: "seam-note",
       next: { row: note("seam-note", "# Title\n\nOne line.\nTwo lines.\n") },

@@ -1,6 +1,7 @@
-import { concept, LOCAL_LEARNER_ID, mastery, PREFERENCE_KEYS } from "@self-learn/schema";
-import { eq, inArray, notInArray, sql } from "drizzle-orm";
+import { concept, LOCAL_LEARNER_ID, mastery, PREFERENCE_KEYS, readableOwners } from "@self-learn/schema";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import {
   DEFAULT_PARAMS,
@@ -131,12 +132,14 @@ export async function readModel(
  * what to do about them, which "insert or update on table mastery violates
  * foreign key constraint" cannot.
  */
-async function unknownSlugs(db: CatalogDatabase, slugs: string[]): Promise<string[]> {
+async function unknownSlugs(db: CatalogDatabase, slugs: string[], owners?: readonly string[]): Promise<string[]> {
   if (slugs.length === 0) return [];
-  const known = await db
-    .select({ slug: concept.slug })
-    .from(concept)
-    .where(inArray(concept.slug, slugs));
+  const known = await scopedRead(owners, (readable) =>
+    db
+      .select({ slug: concept.slug })
+      .from(concept)
+      .where(and(inArray(concept.slug, slugs), ownedBy(concept.ownerId, readable))),
+  );
   const present = new Set(known.map((row) => row.slug));
   return slugs.filter((slug) => !present.has(slug));
 }
@@ -163,6 +166,28 @@ export async function assertKnownConcepts(
       `no concept in the catalog for ${unknown.map((s) => `"${s}"`).join(", ")}. ` +
         `A note is in the catalog once it is filed under a topic: ` +
         `\`npm run learn -- concept add --title "..." --topic <slug>\` writes and files it.`,
+    );
+  }
+}
+
+/**
+ * `assertKnownConcepts`, for evidence a learner records: only a concept the
+ * learner may read counts (phase 4), their own or the commons'. Another
+ * owner's concept is refused with the same sentence as one that does not
+ * exist, so the refusal does not say it does. `recordObservation` and
+ * `gradeReview` check this, since a request names the concept.
+ */
+export async function assertReadableConcepts(
+  db: CatalogDatabase,
+  slugs: string[],
+  learnerId: string = LOCAL_LEARNER_ID,
+): Promise<void> {
+  const unknown = await unknownSlugs(db, [...new Set(slugs)], readableOwners(learnerId));
+  if (unknown.length > 0) {
+    throw new StateError(
+      `no concept in the catalog for ${unknown.map((s) => `"${s}"`).join(", ")}. ` +
+        `A note on disk is not in the catalog until it is indexed: add it to ` +
+        `maps.concepts in content/topics.yaml, then run \`npm run learn -- index\`.`,
     );
   }
 }

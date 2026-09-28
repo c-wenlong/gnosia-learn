@@ -12,5 +12,5 @@ import type { TypeReader } from "./reader";
  */
 export const reader: TypeReader<"tags"> = {
   ready: true,
-  read: (db) => () => readTags(db),
+  read: (db, scope) => () => readTags(db, scope.readable),
 };

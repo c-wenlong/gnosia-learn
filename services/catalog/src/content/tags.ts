@@ -5,6 +5,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { POSITION_STEP } from "./positions";
 import { latestRevisions } from "./revisions";
+import { ownedBy, type Owners, CLI_OWNER } from "./scope";
 import { type By, KEBAB, type WrittenRevision } from "./topics";
 import { writeContent } from "./write";
 import { type ExportedType, writeThrough } from "./write-through";
@@ -44,11 +45,13 @@ function required(value: string | undefined, field: string): string {
 /**
  * Every tag in the order the home page renders the chips in: the same value
  * `fileSource(root).tags()` returns for the file `catalog export` writes.
+ * `owners` scopes it (phase 4); omitted, every owner's tags are read.
  */
-export async function readTags(db: CatalogDatabase): Promise<TagMeta[]> {
+export async function readTags(db: CatalogDatabase, owners?: Owners): Promise<TagMeta[]> {
   const rows = await db
     .select({ id: tag.id, label: tag.label, description: tag.description })
     .from(tag)
+    .where(ownedBy(tag.ownerId, owners))
     .orderBy(asc(tag.position), asc(tag.id));
   return rows.map((row) => ({ id: row.id, label: row.label, description: row.description ?? "" }));
 }
@@ -86,6 +89,7 @@ export async function addTag(
     }
     const [last] = await tx.select({ position: tag.position }).from(tag).orderBy(desc(tag.position)).limit(1);
     return writeContent(tx, {
+      owner: CLI_OWNER,
       type: "tag",
       id,
       op: "create",
@@ -117,7 +121,7 @@ export async function editTag(
       ...(input.label === undefined ? {} : { label: required(input.label, "--label") }),
       ...(input.description === undefined ? {} : { description: required(input.description, "--description") }),
     };
-    const result = await writeContent(tx, { type: "tag", id, next: { row: next }, base: await latestId(tx, id), ...by });
+    const result = await writeContent(tx, { owner: CLI_OWNER, type: "tag", id, next: { row: next }, base: await latestId(tx, id), ...by });
     return { result, next };
   });
   const { result, next } = done.value;

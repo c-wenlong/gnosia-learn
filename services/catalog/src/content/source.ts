@@ -1,6 +1,7 @@
 import { type ContentSource, type ContentType, METHOD_TYPES } from "@self-learn/content";
 
 import type { CatalogDatabase } from "../db";
+import type { OwnerScope } from "./scope";
 import { reader as concept } from "./readers/concepts";
 import { reader as courses } from "./readers/courses";
 import { reader as diagram } from "./readers/diagrams";
@@ -40,14 +41,20 @@ export const READERS: { readonly [M in keyof ContentSource]: TypeReader<M> } = {
   diagram,
 };
 
-export function dbSource(db: CatalogDatabase): ContentSource {
+/**
+ * The seam's database half for one owner: every method answers only from rows
+ * `scope.readable` owns. `scope` is required, not defaulted, so a caller
+ * cannot read every owner's content by leaving it out; the web app passes
+ * `ownerScope(await currentOwner())`, the CLIs `cliScope()`.
+ */
+export function dbSource(db: CatalogDatabase, scope: OwnerScope): ContentSource {
   return {
-    topics: READERS.topics.read(db),
-    tags: READERS.tags.read(db),
-    courses: READERS.courses.read(db),
-    concept: READERS.concept.read(db),
-    sessionLog: READERS.sessionLog.read(db),
-    diagram: READERS.diagram.read(db),
+    topics: READERS.topics.read(db, scope),
+    tags: READERS.tags.read(db, scope),
+    courses: READERS.courses.read(db, scope),
+    concept: READERS.concept.read(db, scope),
+    sessionLog: READERS.sessionLog.read(db, scope),
+    diagram: READERS.diagram.read(db, scope),
   };
 }
 

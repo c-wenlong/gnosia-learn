@@ -14,6 +14,10 @@ import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * Track B's database reader (docs/CONTENT-MIGRATION.md, phase 1): the courses
@@ -51,7 +55,7 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
 
   it("returns what fileSource returns for the seed, key for key and in order", async () => {
     const files = await fileSource(SEED).courses();
-    const rows = await dbSource(scratch.db).courses();
+    const rows = await dbSource(scratch.db, LOCAL).courses();
     expect(rows.length).toBe(1);
     expect(rows.reduce((n, c) => n + c.modules.length, 0)).toBe(2);
     expect(rows.reduce((n, c) => n + c.modules.reduce((m, mod) => m + mod.topics.length, 0), 0)).toBe(5);

@@ -4,6 +4,10 @@ import { applyMigrations } from "../src/migrations";
 import { notePaths } from "../src/state";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * `notePaths`: a concept slug to the repo-relative path the indexer read its
@@ -27,16 +31,16 @@ describe.skipIf(!reachable.ok)("notePaths", () => {
   });
 
   it("answers every slug it knows, keyed by slug", async () => {
-    expect(await notePaths(scratch.db, ["alpha", "gamma"])).toEqual({
+    expect(await notePaths(scratch.db, ["alpha", "gamma"], LOCAL)).toEqual({
       alpha: "learn/concepts/fixtures/alpha.md",
       gamma: "learn/concepts/fixtures/gamma.md",
     });
   });
 
   it("leaves out a slug with no concept row, and asks nothing for no slugs", async () => {
-    expect(await notePaths(scratch.db, ["alpha", "no-such-concept", "alpha"])).toEqual({
+    expect(await notePaths(scratch.db, ["alpha", "no-such-concept", "alpha"], LOCAL)).toEqual({
       alpha: "learn/concepts/fixtures/alpha.md",
     });
-    expect(await notePaths(scratch.db, [])).toEqual({});
+    expect(await notePaths(scratch.db, [], LOCAL)).toEqual({});
   });
 });

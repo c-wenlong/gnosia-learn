@@ -2,6 +2,7 @@ import { readConceptGraph, recordObservation } from "@self-learn/catalog/state";
 
 import { BadRequest, handler, optionalBoolean, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
+import { ownerScope } from "@/lib/owner";
 import { isSessionToken, OBSERVE_SOURCES, SESSION_TEXT_LIMIT, type ObserveSource } from "@/lib/session-core";
 
 /**
@@ -98,11 +99,14 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
   };
 }
 
-export const POST = handler("observe", parseObserve, async (db, input: ObserveRequest) => {
-  const graph = await readConceptGraph(db);
+export const POST = handler("observe", parseObserve, async (db, input: ObserveRequest, owner) => {
+  // Only concepts this owner may read are nodes, so evidence cannot be
+  // recorded against another owner's concept (phase 4).
+  const graph = await readConceptGraph(db, ownerScope(owner));
   const titleOf = (slug: string) => (graph.nodes.get(slug) as { title?: string } | undefined)?.title ?? slug;
 
   const recorded = await recordObservation(db, {
+    learnerId: owner,
     conceptId: input.conceptSlug,
     correct: input.correct,
     graph,

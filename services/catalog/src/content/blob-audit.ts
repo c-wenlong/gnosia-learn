@@ -6,7 +6,7 @@ import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { POSTER_PREFIX } from "./asset-upload";
-import { markBlobPending } from "./blob";
+import { markBlobPending, ownerUsage, type OwnerUsage } from "./blob";
 import {
   BlobOwnerError,
   type BlobRootOwner,
@@ -90,6 +90,13 @@ export interface BlobAuditResult {
    * served. The exit code is 1 while any remain.
    */
   outstanding: number;
+  /**
+   * What each owner (a learner id, the key's prefix; not the store's `.owner`
+   * above, which names a database) holds after this run: objects, bytes, and
+   * uploads in the last 24 hours, the two numbers the per-owner caps measure
+   * (phase 4 of docs/CONTENT-MIGRATION.md).
+   */
+  byOwner: OwnerUsage[];
 }
 
 /** The kinds that are something wrong, rather than something worth seeing. */
@@ -267,5 +274,6 @@ export async function auditBlobs(
       (PROBLEMS.has(f.kind) && f.fixed === undefined) ||
       (referenced.has(f.key) && (f.kind === "pending" || f.fixed === "marked-pending")),
   ).length;
-  return { provider: store.provider, owner, rows: rows.length, objects, fix, findings, outstanding };
+  const byOwner = await ownerUsage(db, { now: new Date(now) });
+  return { provider: store.provider, owner, rows: rows.length, objects, fix, findings, outstanding, byOwner };
 }

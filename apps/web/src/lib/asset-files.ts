@@ -20,6 +20,7 @@ import type { ContentType } from "@self-learn/content";
 import { ContentUnavailableError, contentSource } from "@/data/source";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { assetBlobStore } from "@/lib/blob-store";
+import { currentScope } from "@/lib/owner";
 
 /**
  * Turning an `asset` row into bytes a browser can play.
@@ -289,7 +290,7 @@ export async function resolveRowText(
     if (type === "concepts") {
       // A note asset is linked to exactly one concept, its own: the concepts
       // indexer and the row writer both link it so.
-      const [slug] = await conceptsForAsset(db, row.id);
+      const [slug] = await conceptsForAsset(db, row.id, await currentScope());
       const note = slug === undefined ? null : await seam.concept(slug);
       body = note === null ? null : Buffer.from(note.markdown, "utf8");
     } else if (type === "sessions") {
@@ -350,9 +351,12 @@ function uploadHint(row: AssetRef): string {
  * this, so the page and the route cannot give one asset two answers.
  */
 export async function resolveAsset(db: CatalogDatabase, id: string): Promise<AssetSourceResult> {
-  const [row] = await assetsByIds(db, [id]);
+  // Only the requesting owner's rows and the commons' (phase 4): another
+  // owner's asset is "not in the catalog", the same answer a stranger's id gets.
+  const scope = await currentScope();
+  const [row] = await assetsByIds(db, [id], scope);
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
-  const blob = (await assetBlobs(db, [row.id])).get(row.id);
+  const blob = (await assetBlobs(db, [row.id], scope)).get(row.id);
   if (blob !== undefined) return resolveBlob(blob, row.path ?? row.id);
   const text = await resolveRowText(db, row);
   if (text !== undefined) return text;
@@ -377,7 +381,11 @@ export async function servedAssets(
 ): Promise<Set<string>> {
   const out = new Set<string>();
   if (rows.length === 0) return out;
-  const blobs = await assetBlobs(db, rows.map((row) => row.id));
+  const blobs = await assetBlobs(
+    db,
+    rows.map((row) => row.id),
+    await currentScope(),
+  );
   for (const [id, blob] of blobs) if (blob.state === "present") out.add(id);
   const needsRow = rows.filter((row) => !out.has(row.id) && rowTypeFor(row.kind) !== null);
   if (needsRow.length > 0) {
@@ -401,7 +409,11 @@ export async function storedPosters(
   db: CatalogDatabase,
   rows: readonly Pick<AssetRef, "id" | "kind">[],
 ): Promise<Set<string>> {
-  return videosWithStoredPoster(db, rows.filter((row) => row.kind === "video").map((row) => row.id));
+  return videosWithStoredPoster(
+    db,
+    rows.filter((row) => row.kind === "video").map((row) => row.id),
+    await currentScope(),
+  );
 }
 
 /**
@@ -416,9 +428,11 @@ export async function storedPosters(
  * (`services/catalog/src/poster/recipe.ts`), so no picture was lost.
  */
 export async function posterSource(db: CatalogDatabase, id: string): Promise<AssetStored | AssetFileProblem> {
-  const stored = await posterBlob(db, id);
+  // The requesting owner's rows and the commons' (phase 4), as for the file.
+  const scope = await currentScope();
+  const stored = await posterBlob(db, id, scope);
   if (stored !== null) return resolveBlob(stored, id);
-  const [row] = await assetsByIds(db, [id]);
+  const [row] = await assetsByIds(db, [id], scope);
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
   if (row.kind !== "video") {
     return {

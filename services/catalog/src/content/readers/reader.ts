@@ -1,6 +1,7 @@
 import type { ContentSource, ContentType } from "@self-learn/content";
 
 import type { CatalogDatabase } from "../../db";
+import type { OwnerScope } from "../scope";
 
 /**
  * The shape every per-type database reader under `readers/` has, and the
@@ -19,8 +20,12 @@ export interface TypeReader<M extends keyof ContentSource> {
    * would fail on the refusal below.
    */
   readonly ready: boolean;
-  /** The `ContentSource` method for this type, over one connection. */
-  readonly read: (db: CatalogDatabase) => ContentSource[M];
+  /**
+   * The `ContentSource` method for this type, over one connection, answering
+   * only from rows `scope.readable` owns (phase 4): another owner's topic,
+   * note or diagram is absent, exactly as a slug nobody holds is.
+   */
+  readonly read: (db: CatalogDatabase, scope: OwnerScope) => ContentSource[M];
 }
 
 /**
@@ -41,7 +46,7 @@ export class NotMigratedError extends Error {
 }
 
 /** A `read` that refuses with `NotMigratedError`, and never touches the connection. */
-export function notMigrated(type: ContentType): (db: CatalogDatabase) => () => Promise<never> {
+export function notMigrated(type: ContentType): (db: CatalogDatabase, scope: OwnerScope) => () => Promise<never> {
   return () => async () => {
     throw new NotMigratedError(type);
   };

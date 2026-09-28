@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../../db";
 import { ASSET_PREFIX } from "../../index/source";
+import { andOwnedBy, type Owners } from "../scope";
 import type { TypeReader } from "./reader";
 
 /**
@@ -82,23 +83,28 @@ function optional(value: unknown): string | undefined {
  * the six queries see one snapshot. Separately, an import or an archive that
  * committed between two of them could hand a page a course from before it
  * and modules from after it.
+ *
+ * `owners` scopes it (phase 4): each of the six queries keeps only rows those
+ * owners hold, a link only when the entity at its far end (a tag, a concept,
+ * a resource) is theirs too. Omitted, every owner is read.
  */
-export async function readCourses(db: CatalogDatabase): Promise<Course[]> {
-  return db.transaction((tx) => readTree(tx), { isolationLevel: "repeatable read", accessMode: "read only" });
+export async function readCourses(db: CatalogDatabase, owners?: Owners): Promise<Course[]> {
+  return db.transaction((tx) => readTree(tx, owners), { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
-async function readTree(db: CatalogDatabase): Promise<Course[]> {
+async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> {
   const courses = await rows<CourseRow>(
     db,
     sql`select id, slug, title, position, metadata from collection
-        where kind = 'course' and archived_at is null order by position, id`,
+        where kind = 'course' and archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, id`,
   );
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
       db,
       sql`select t.collection_id, t.tag_id from collection_tag t
           join collection c on c.id = t.collection_id
-          where c.kind = 'course' and c.archived_at is null
+          join tag g on g.id = t.tag_id
+          where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}${andOwnedBy(sql`g.owner_id`, owners)}
           order by t.collection_id, t.position, t.tag_id`,
     ),
     (r) => r.collection_id,
@@ -108,10 +114,14 @@ async function readTree(db: CatalogDatabase): Promise<Course[]> {
       db,
       sql`select c.id, c.parent_id, c.slug, c.title, c.position,
                  (select m.topic_slug from collection_item m
-                  where m.collection_id = c.id and m.topic_slug is not null
+                  where m.collection_id = c.id and m.topic_slug is not null${
+                    owners === undefined
+                      ? sql``
+                      : sql` and exists (select 1 from topic t where t.slug = m.topic_slug${andOwnedBy(sql`t.owner_id`, owners)})`
+                  }
                   order by m.position limit 1) as topic
           from collection c
-          where c.kind = 'module' and c.archived_at is null
+          where c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
           order by c.parent_id, c.position, c.id`,
     ),
     (r) => r.parent_id,
@@ -120,7 +130,7 @@ async function readTree(db: CatalogDatabase): Promise<Course[]> {
     await rows<{ id: string; collection_id: string; title: string; subtopics: unknown }>(
       db,
       sql`select id, collection_id, title, subtopics from curriculum_item
-          where archived_at is null order by collection_id, position, id`,
+          where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id, position, id`,
     ),
     (r) => r.collection_id,
   );
@@ -129,7 +139,8 @@ async function readTree(db: CatalogDatabase): Promise<Course[]> {
       db,
       sql`select l.curriculum_item_id, l.concept_slug from concept_curriculum_item l
           join curriculum_item i on i.id = l.curriculum_item_id
-          where i.archived_at is null
+          join concept k on k.slug = l.concept_slug
+          where i.archived_at is null${andOwnedBy(sql`i.owner_id`, owners)}${andOwnedBy(sql`k.owner_id`, owners)}
           order by l.curriculum_item_id, l.position, l.concept_slug`,
     ),
     (r) => r.curriculum_item_id,
@@ -139,7 +150,7 @@ async function readTree(db: CatalogDatabase): Promise<Course[]> {
       db,
       sql`select m.collection_id, a.id, a.title, a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
-          where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})
+          where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})${andOwnedBy(sql`a.owner_id`, owners)}
           order by m.collection_id, m.position, a.id`,
     ),
     (r) => r.collection_id,
@@ -195,5 +206,5 @@ async function readTree(db: CatalogDatabase): Promise<Course[]> {
 
 export const reader: TypeReader<"courses"> = {
   ready: true,
-  read: (db) => () => readCourses(db),
+  read: (db, scope) => () => readCourses(db, scope.readable),
 };

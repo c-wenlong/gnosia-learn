@@ -12,6 +12,11 @@ const catalogDatabase = vi.hoisted(() => vi.fn());
 
 vi.mock("@/data/courses", () => ({ getCourses }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 vi.mock("@self-learn/catalog/state", () => ({
   assetsByIds: vi.fn(async () => ({})),
   dueReviews: vi.fn(async () => []),

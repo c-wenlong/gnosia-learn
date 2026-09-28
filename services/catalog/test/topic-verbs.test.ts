@@ -301,6 +301,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
       writeThrough(scratch.db, ["topics"], async (tx) => {
         const [row] = await tx.select().from(topic).where(eq(topic.slug, "beta"));
         await writeContent(tx, {
+          owner: "local",
           type: "topic",
           id: "beta",
           next: { row: { ...row, summary: "Written, then rolled back." } },
@@ -398,6 +399,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
       records: [{ typeName: "document", id: "document:document", meta: { tldrawkc: { topic: "alpha", concepts: [] } } }],
     };
     await writeContent(scratch.db, {
+      owner: "local",
       type: "diagram",
       id: "alpha-picture",
       next: { row: { slug: "alpha-picture", title: "A picture", topicSlug: "alpha", document, documentHash: "seeded" } },
@@ -406,6 +408,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
     });
     // Its `.tldr` asset, whose hash is the document's by definition.
     await writeContent(scratch.db, {
+      owner: "local",
       type: "asset",
       id: "diagram:learn/assets/alpha-picture.tldr",
       next: {

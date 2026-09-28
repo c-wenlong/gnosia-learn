@@ -13,9 +13,10 @@ import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/mani
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
-import { uploadBlob } from "./blob";
+import { OwnerCapError, uploadBlob } from "./blob";
 import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog asset upload --source manimkc`: manimkc's rendered videos and their
@@ -196,77 +197,95 @@ function contentRow(row: Asset): Record<string, unknown> {
  * now. Any other poster revision, a title edit say, is not a cut. So an
  * import that linked the new bytes and then failed before this ran is caught
  * by the next one, whose own write changes nothing.
- * Returns the posters unhooked.
+ *
+ * Which posters are stale, their rows, and the revision each was read at come
+ * from one snapshot, and each unhook is based on that revision. A `catalog
+ * asset upload` that recut and relinked a poster after the snapshot therefore
+ * fails the write's base check, and that poster is left as the upload made it
+ * and reported as `moved`, rather than having its fresh link cleared or
+ * failing the import. Detecting outside the snapshot, as this once did, let a
+ * relink landing between the two reads become the base, and the unhook then
+ * undid it.
  */
 export async function unhookPosters(
   db: CatalogDatabase,
   videoIds: readonly string[],
   options: { author: string; reason: string },
-): Promise<string[]> {
-  if (videoIds.length === 0) return [];
+): Promise<{ unhooked: string[]; moved: string[] }> {
+  if (videoIds.length === 0) return { unhooked: [], moved: [] };
   const ids = sql.join(
     videoIds.map((id) => sql`${id}`),
     sql`, `,
   );
-  const { rows: derived } = await db.execute<{ poster: string }>(sql`
-    select d.asset_id as poster
-    from asset_derivation d
-    join asset v on v.id = d.source_asset_id
-    cross join lateral (
-      select max(p.id) as id
-      from (
-        select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
-        from content_revision r
-        where r.entity_type = 'asset' and r.entity_id = d.asset_id
-      ) p
-      where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
-        and (
-          p.prev is null
-          or not coalesce(
-            p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
-            false
-          )
-          or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
-        )
-    ) cut
-    where d.source_asset_id in (${ids})
-      and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
-      and (
-        select r.snapshot -> 'entity' ->> 'blob_key'
-        from content_revision r
-        where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
-        order by r.id desc
-        limit 1
-      ) is distinct from v.blob_key
-    order by d.asset_id
-  `);
-  if (derived.length === 0) return [];
-  // Each row and the revision it was read at, in one snapshot, as the upload
-  // reads its own: a write that moved a poster since is refused, not undone.
   const { posters, bases } = await db.transaction(
     async (tx) => {
-      const ids = derived.map((d) => d.poster);
-      const latest = await latestRevisions(tx, "asset", ids);
+      const { rows: derived } = await tx.execute<{ poster: string }>(sql`
+        select d.asset_id as poster
+        from asset_derivation d
+        join asset v on v.id = d.source_asset_id
+        cross join lateral (
+          select max(p.id) as id
+          from (
+            select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
+            from content_revision r
+            where r.entity_type = 'asset' and r.entity_id = d.asset_id
+          ) p
+          where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
+            and (
+              p.prev is null
+              or not coalesce(
+                p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
+                false
+              )
+              or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
+            )
+        ) cut
+        where d.source_asset_id in (${ids})
+          and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
+          and (
+            select r.snapshot -> 'entity' ->> 'blob_key'
+            from content_revision r
+            where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
+            order by r.id desc
+            limit 1
+          ) is distinct from v.blob_key
+        order by d.asset_id
+      `);
+      if (derived.length === 0) return { posters: [], bases: new Map<string, number | null>() };
+      const stale = derived.map((d) => d.poster);
+      const latest = await latestRevisions(tx, "asset", stale);
       return {
-        posters: await tx.select().from(asset).where(inArray(asset.id, ids)),
-        bases: new Map(ids.map((id) => [id, latest.get(id)?.id ?? null] as const)),
+        posters: await tx.select().from(asset).where(inArray(asset.id, stale)),
+        bases: new Map(stale.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
-  await writeContents(
-    db,
-    posters.map((row) => ({
-      type: "asset" as const,
-      id: row.id,
-      next: { row: contentRow(row), links: { asset_derivation: [] } },
-      base: bases.get(row.id) ?? null,
-      author: options.author,
-      authorKind: "import" as const,
-      reason: options.reason,
-    })),
-  );
-  return posters.map((row) => row.id).sort();
+  const unhooked: string[] = [];
+  const moved: string[] = [];
+  // One write per poster, since a composite write refused on one stale base
+  // would roll back the others with it.
+  for (const row of [...posters].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    try {
+      await writeContents(db, [
+        {
+          owner: CLI_OWNER,
+          type: "asset" as const,
+          id: row.id,
+          next: { row: contentRow(row), links: { asset_derivation: [] } },
+          base: bases.get(row.id) ?? null,
+          author: options.author,
+          authorKind: "import" as const,
+          reason: options.reason,
+        },
+      ]);
+      unhooked.push(row.id);
+    } catch (error) {
+      if (!(error instanceof ContentWriteError) || error.code !== "stale-base") throw error;
+      moved.push(row.id);
+    }
+  }
+  return { unhooked, moved };
 }
 
 export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOptions): Promise<AssetUploadResult> {
@@ -369,14 +388,23 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       items.push({ id: row.id, kind: row.kind, action: there ? "would-link" : "would-upload", key, bytes: facts.bytes });
       return { key, changed: true };
     }
-    const done = await uploadBlob(db, store, {
-      ownerId: row.ownerId,
-      file,
-      mime: MIME[ext] as string,
-      ext,
-      sha256: facts.contentHash,
-      bytes: facts.bytes,
-    });
+    let done;
+    try {
+      done = await uploadBlob(db, store, {
+        ownerId: row.ownerId,
+        file,
+        mime: MIME[ext] as string,
+        ext,
+        sha256: facts.contentHash,
+        bytes: facts.bytes,
+      });
+    } catch (error) {
+      // Its owner's cap (phase 4): this file is refused and the run goes on,
+      // since the next file may be another owner's, or one already stored.
+      if (!(error instanceof OwnerCapError)) throw error;
+      refuse(row.id, row.kind, error.message);
+      return null;
+    }
     if (done.uploaded) {
       result.uploaded += 1;
       result.uploadedBytes += done.bytes;
@@ -409,6 +437,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const groupStart = items.length;
     const linkTo = (row: Asset, key: string) =>
       writes.push({
+        owner: CLI_OWNER,
         type: "asset",
         id: row.id,
         next: { row: { ...contentRow(row), blobKey: key } },
@@ -442,11 +471,15 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       // The bytes are stored and confirmed; only the rows are refused. A rerun
       // reads the rows as they are now and links the same keys.
       const refused = new Set(writes.map((w) => w.id));
+      // `refused` counts files, not items: a poster already refused (its cap,
+      // or no frame to cut) whose detach write this was is not counted again.
+      const counted = new Set(items.slice(groupStart).filter((i) => i.action === "refused").map((i) => i.id));
       for (const item of items.slice(groupStart)) {
         if (!refused.has(item.id) || item.action === "refused") continue;
         item.action = "refused";
         item.detail = `its row changed while this upload ran, so it was not pointed at ${item.key ?? "its blob"}. ${error.message}`;
-        result.refused += 1;
+        if (!counted.has(item.id)) result.refused += 1;
+        counted.add(item.id);
       }
     }
   }
@@ -493,6 +526,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       if (!videoChanged || existing === undefined || !derived) return null;
       items.push({ id, kind: "poster", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: { row: contentRow(existing), links: { asset_derivation: [] } },
@@ -513,14 +547,21 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
-      const done = await uploadBlob(db, store, {
-        ownerId: video.row.ownerId,
-        file,
-        mime: POSTER_CONTENT_TYPE,
-        ext: POSTER_EXTENSION.slice(1),
-        sha256,
-        bytes: frame.body.length,
-      });
+      let done;
+      try {
+        done = await uploadBlob(db, store, {
+          ownerId: video.row.ownerId,
+          file,
+          mime: POSTER_CONTENT_TYPE,
+          ext: POSTER_EXTENSION.slice(1),
+          sha256,
+          bytes: frame.body.length,
+        });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        refuse(id, "poster", error.message);
+        return detach(`its owner's cap refused the new poster: ${error.message}`);
+      }
       if (done.uploaded) {
         result.uploaded += 1;
         result.uploadedBytes += done.bytes;
@@ -528,6 +569,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "made", key: done.key, bytes: done.bytes });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: {

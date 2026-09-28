@@ -9,8 +9,8 @@ export const POST = handler(
     curriculumItemId: requireId(body, "curriculumItemId"),
     note: requireString(body, "note", MAX_NOTE_CHARS),
   }),
-  async (db, { curriculumItemId, note }) => {
-    await setNote(db, curriculumItemId, note);
+  async (db, { curriculumItemId, note }, owner) => {
+    await setNote(db, curriculumItemId, note, owner);
     return { curriculumItemId, cleared: note.trim() === "" };
   },
 );

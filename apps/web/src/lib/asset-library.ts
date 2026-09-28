@@ -27,6 +27,7 @@ import {
   compareByKindThenId,
   isCompanionKind,
 } from "@/lib/library";
+import { currentOwner, currentScope } from "@/lib/owner";
 import { parseTranscript } from "@/lib/transcript";
 
 /**
@@ -127,11 +128,14 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
  * for instead, and keeps id as the tiebreak so the result is still stable.
  */
 export async function readLibrary(): Promise<LibrarySnapshot> {
+  // The requesting owner's assets and the commons' (phase 4), resolved before
+  // the degradation below so a request with no owner fails, not reads empty.
+  const scope = await currentScope();
   try {
     const db = await catalogDatabase();
     const [rows, counts] = await Promise.all([
-      listAssets(db, { limit: LIBRARY_ROW_CAP }),
-      assetCounts(db),
+      listAssets(db, { limit: LIBRARY_ROW_CAP }, scope),
+      assetCounts(db, scope),
     ]);
     // A third statement, and it has to be third: the slugs it asks about are
     // the ones the first read returned. It is a lookup rather than a fact the
@@ -259,9 +263,10 @@ const RELATED_CAP = 12;
  * found, and where an exported SVG finds the `.tldr` it was drawn on.
  */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
+  const scope = await currentScope();
   try {
     const db = await catalogDatabase();
-    const [asset] = await listAssets(db, { ids: [id] });
+    const [asset] = await listAssets(db, { ids: [id] }, scope);
     if (asset === undefined) {
       return {
         asset: null,
@@ -280,9 +285,9 @@ export async function readAssetDetail(id: string): Promise<AssetDetail> {
     const wantsNotes = asset.path?.endsWith(".md") ?? false;
 
     const [derivations, perTopic] = await Promise.all([
-      assetDerivations(db, id),
+      assetDerivations(db, id, scope),
       // Unlimited on purpose; see the note above `RELATED_CAP`.
-      Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }))),
+      Promise.all(asset.topics.map((slug) => listAssets(db, { topicSlug: slug }, scope))),
     ]);
 
     // Its own boundary too, and for the same reason as the titles above: a
@@ -404,7 +409,7 @@ async function optionalTitles(
   rows: AssetWithTopics[],
 ): Promise<TopicTitles> {
   try {
-    return await topicTitles(db, distinctTopics(rows));
+    return await topicTitles(db, distinctTopics(rows), await currentScope());
   } catch (error) {
     warn("topic titles", error);
     return {};
@@ -417,7 +422,7 @@ async function optionalConcepts(
   ids: readonly string[],
 ): Promise<Record<string, string[]>> {
   try {
-    return await conceptsForAssets(db, ids);
+    return await conceptsForAssets(db, ids, await currentScope());
   } catch (error) {
     warn("concept links", error);
     return {};
@@ -427,7 +432,7 @@ async function optionalConcepts(
 /** The note index, or none. See `optionalTitles` for why this cannot throw. */
 async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string>> {
   try {
-    return noteIndex(await listAssets(db, { kind: "note" }));
+    return noteIndex(await listAssets(db, { kind: "note" }, await currentScope()));
   } catch (error) {
     warn("note index", error);
     return {};
@@ -645,6 +650,7 @@ export async function readSearchText(
       derivationSources(
         db,
         candidates.filter((row) => isCompanionKind(row.kind)).map((row) => row.id),
+        await currentScope(),
       ),
     ]);
     const texts = new Map<string, string>();
@@ -691,8 +697,9 @@ export function searchableText(kind: string, raw: string): string {
  * `watched` event names no concept.
  */
 export async function readLastWatched(id: string): Promise<string | null> {
+  const owner = await currentOwner();
   try {
-    const events = await readEvents(await catalogDatabase());
+    const events = await readEvents(await catalogDatabase(), owner);
     let last: string | null = null;
     for (const event of events) {
       if (event.type === "watched" && event.asset === id) last = event.at;
