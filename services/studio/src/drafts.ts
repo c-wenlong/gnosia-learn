@@ -308,7 +308,12 @@ export class Drafts {
     for (const entry of entries) {
       try {
         const record = JSON.parse(await readFile(draftJsonPath(entry), "utf8")) as DraftRecord;
-        if (record.id === entry) this.records.set(record.id, record);
+        if (record.id !== entry) continue;
+        // `append` moves `seq` in memory and the next save writes it, so a
+        // crash between the two leaves a record behind its own transcript.
+        // The transcript is the authority on what was written.
+        const seq = (await this.events(entry)).reduce((max, event) => Math.max(max, event.seq), record.seq);
+        this.records.set(record.id, { ...record, seq });
       } catch {
         // A workspace with no readable record is one that was created and
         // never written, or one a person has been poking at: nothing to serve.
@@ -327,11 +332,19 @@ export class Drafts {
     for (const record of this.records.values()) {
       if (record.inFlight === null) continue;
       const turn = record.inFlight;
-      const { lines, startedAt } = await this.linesOfTurn(record.id, turn.turn);
+      const { lines, startedAt, spawns } = await this.linesOfTurn(record.id, turn.turn);
+      const events = await this.events(record.id);
+      const replies = events.filter((event) => event.type === "reply" && event.turn === turn.turn);
+      // The runner died after the last spawn's reply was written: nothing is
+      // cut off, and a second reply would repeat it.
+      const answered = spawns > 0 && replies.length >= spawns;
+      // A brief that passed on this turn stays in force.
+      const briefed = events.some(
+        (event) => event.type === "brief" && replies.some((reply) => reply.seq === event.replySeq),
+      );
       // A spawn whose spend was already written finished before the runner
       // died; only what came after it is unaccounted for.
       const counted = record.spend.some((entry) => entry.startedAt === startedAt);
-      const text = replyText(lines);
       const cost = costFromLog(lines.join("\n"), plannerModel());
       const spend: TurnSpend = {
         turn: turn.turn,
@@ -341,24 +354,30 @@ export class Drafts {
         costSource: counted ? null : cost.source,
       };
       await this.write(record.id, async () => {
-        await this.append(record.id, {
-          type: "reply",
-          turn: turn.turn,
-          text,
-          interrupted: true,
-          costUsd: cost.usd,
-          costSource: cost.source,
-        });
+        if (!answered) {
+          await this.append(record.id, {
+            type: "reply",
+            turn: turn.turn,
+            text: replyText(lines),
+            interrupted: true,
+            costUsd: cost.usd,
+            costSource: cost.source,
+          });
+        }
         const current = this.require(record.id);
-        const nextSpend = counted ? current.spend : [...current.spend, spend];
+        const nextSpend = counted || answered ? current.spend : [...current.spend, spend];
         await this.save(record.id, {
           inFlight: null,
           spend: nextSpend,
           ...sumCost(nextSpend),
-          errorKind: "interrupted",
-          error: "The reply was cut off: the studio stopped while the planner was answering.",
-          errorField: null,
-          ...(current.state === "briefed" ? { state: "open" as const } : {}),
+          ...(answered
+            ? {}
+            : {
+                errorKind: "interrupted" as const,
+                error: "The reply was cut off: the studio stopped while the planner was answering.",
+                errorField: null,
+              }),
+          ...(current.state === "briefed" && !briefed ? { state: "open" as const } : {}),
         });
       });
       interrupted.push(record.id);
@@ -370,19 +389,24 @@ export class Drafts {
    * The raw stream lines of a turn's last spawn (the retry, when there was
    * one), from its marker to the end, and when that spawn started.
    */
-  private async linesOfTurn(id: string, turn: number): Promise<{ lines: string[]; startedAt: string | null }> {
+  private async linesOfTurn(
+    id: string,
+    turn: number,
+  ): Promise<{ lines: string[]; startedAt: string | null; spawns: number }> {
     const body = await readFile(draftSessionLogPath(id), "utf8").catch(() => "");
     const lines = body.split("\n").filter((line) => line.trim() !== "");
     let start = -1;
     let startedAt: string | null = null;
+    let spawns = 0;
     for (let i = 0; i < lines.length; i += 1) {
       const marker = safeJson(lines[i]!);
       if (marker?.type === "studio-turn" && marker.turn === turn) {
         start = i;
+        spawns += 1;
         startedAt = typeof marker.at === "string" ? marker.at : null;
       }
     }
-    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt };
+    return { lines: start === -1 ? [] : lines.slice(start + 1), startedAt, spawns };
   }
 
   /* ------------------------------------------------------------------ */
@@ -992,6 +1016,19 @@ export class Drafts {
       await this.write(id, async () => {
         await this.append(id, { type: "reply", turn, text: run.text, interrupted: true, ...cost });
         await this.recordError(id, run.stopReason === "shutdown" ? "interrupted" : "timeout", `The reply was cut off: ${why}.`);
+      });
+      return null;
+    }
+    if (run.text !== "" && (run.isError || run.exitCode !== 0)) {
+      // The session failed after saying something: whatever streamed is shown
+      // as cut off, and no brief is read out of a reply that did not finish.
+      await this.write(id, async () => {
+        await this.append(id, { type: "reply", turn, text: run.text, interrupted: true, ...cost });
+        await this.recordError(
+          id,
+          "agent",
+          run.result ?? (run.stderr || `the planner's session failed (${run.subtype ?? `exit ${run.exitCode ?? run.signal}`})`),
+        );
       });
       return null;
     }

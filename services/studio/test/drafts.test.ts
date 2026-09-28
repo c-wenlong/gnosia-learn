@@ -448,6 +448,70 @@ describe("what goes wrong", () => {
   });
 });
 
+describe("a crash between two writes", () => {
+  /** What a runner that died mid-turn leaves: the given events on disk, and a record that says a turn is in flight. */
+  async function leave(id: string, events: Record<string, unknown>[], record: Record<string, unknown>, spawns = 1): Promise<void> {
+    const body = await readFile(draftTranscriptPath(id), "utf8");
+    await writeFile(draftTranscriptPath(id), body + events.map((event) => `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`).join(""));
+    await writeFile(draftJsonPath(id), JSON.stringify({ ...drafts.get(id)!, ...record }));
+    const markers = Array.from({ length: spawns }, () => JSON.stringify({ type: "studio-turn", turn: 2, at: new Date().toISOString() }));
+    await writeFile(draftSessionLogPath(id), `${markers.join("\n")}\n`);
+  }
+
+  it("does not write a second reply for a turn whose reply is already on disk, nor reuse a seq", async () => {
+    const { record } = await drafts.create({});
+    // The reply landed; the save that would have moved `seq` and cleared the turn did not.
+    await leave(record.id, [
+      { seq: 2, type: "message", text: "hi" },
+      { seq: 3, type: "reply", turn: 2, text: "Which kind of diagram?" },
+    ], { seq: 1, turns: 1, inFlight: { turn: 2, startedAt: new Date().toISOString() } });
+    const restarted = build();
+    await restarted.load();
+    expect(restarted.get(record.id)?.seq).toBe(3);
+    await restarted.reconcile();
+    const replies = (await restarted.view(record.id)).transcript.filter((entry) => entry.role === "planner");
+    expect(replies).toEqual([expect.objectContaining({ seq: 3, text: "Which kind of diagram?" })]);
+    expect(replies[0]?.interrupted).toBeUndefined();
+    expect((await restarted.view(record.id)).inFlight).toBe(false);
+    await fake.script([{ text: "ok" }]);
+    await restarted.send(record.id, "a flow");
+    await restarted.settled(record.id);
+    const seqs = (await restarted.events(record.id)).map((event) => event.seq);
+    expect(new Set(seqs).size).toBe(seqs.length);
+    drafts = restarted;
+  });
+
+  it("keeps a brief that passed on the turn the runner died in", async () => {
+    const { record } = await drafts.create({});
+    const brief = { ...good, concepts: [], model: "sonnet" };
+    await leave(record.id, [
+      { seq: 2, type: "message", text: "draw it" },
+      { seq: 3, type: "reply", turn: 2, text: proposing(good) },
+      { seq: 4, type: "brief", replySeq: 3, brief, pendingTopic: null },
+    ], { seq: 4, turns: 1, state: "briefed", brief, inFlight: { turn: 2, startedAt: new Date().toISOString() } });
+    const restarted = build();
+    await restarted.load();
+    await restarted.reconcile();
+    expect((await restarted.view(record.id)).state).toBe("briefed");
+    drafts = restarted;
+  });
+});
+
+describe("a turn that fails after it has said something", () => {
+  it("is shown cut off, and no brief is read out of it", async () => {
+    await fake.script([{ text: proposing(good), failed: "API Error: 529 Overloaded" }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    const view = await drafts.view(record.id);
+    expect(view.state).toBe("open");
+    expect(view.brief).toBeNull();
+    expect(view.error).toMatchObject({ kind: "agent", message: "API Error: 529 Overloaded" });
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", interrupted: true });
+    // And no retry was spent on it.
+    expect(await fake.argvs()).toHaveLength(1);
+  });
+});
+
 describe("the job a draft follows", () => {
   it("goes back to briefed with the findings on a failed drawing, and to done with what was drawn on an accept", async () => {
     await fake.script([{ text: proposing(good) }]);

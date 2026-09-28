@@ -26,6 +26,8 @@ export interface FakeReply {
   mcpServers?: unknown[];
   /** Wait this long before the result, printing the deltas first. */
   hangMs?: number;
+  /** Stream this text, then end the session in an error with `failed` as its result. */
+  failed?: string;
   /** Exit like a `--resume` of a session this machine does not have: stderr, exit 1, nothing on stdout. */
   noSession?: boolean;
 }
@@ -61,11 +63,12 @@ const session = argv.includes("--resume") ? argv[argv.indexOf("--resume") + 1] :
 out({ type: "system", subtype: "init", session_id: session, tools: reply.tools || [], mcp_servers: reply.mcpServers || [], model: "claude-sonnet-5", apiKeySource: "none" });
 const usage = { input_tokens: 10, cache_creation_input_tokens: 1000, cache_read_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1000 }, output_tokens: 5 };
 const text = reply.refused ? "" : (reply.text || "");
+const failed = reply.refused || reply.failed;
 const finish = () => {
   if (text !== "") {
     out({ type: "assistant", message: { id: "msg_" + n, model: "claude-sonnet-5", role: "assistant", content: [{ type: "text", text }], usage } });
   }
-  out({ type: "result", subtype: "success", is_error: !!reply.refused, result: reply.refused || text, num_turns: 1, total_cost_usd: reply.cost === undefined ? 0.01 : reply.cost, usage });
+  out({ type: "result", subtype: failed ? "error_during_execution" : "success", is_error: !!failed, result: failed || text, num_turns: 1, total_cost_usd: reply.cost === undefined ? 0.01 : reply.cost, usage });
   process.exit(0);
 };
 out({ type: "stream_event", event: { type: "message_start", message: { id: "msg_" + n, model: "claude-sonnet-5", usage } } });
