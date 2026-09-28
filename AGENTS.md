@@ -54,6 +54,17 @@ would shadow the plugin and the two would drift apart. Edit the plugin instead.
 Architecture, primitives and the honest list of known limits are in
 [learn/README.md](learn/README.md).
 
+Once `concepts` and `sessions` are flipped, the notes and logs are rows, not
+files under `learn/`, and Obsidian reads them from a **vault**:
+`npm run learn -- vault pull` writes every note, every log and every diagram's
+SVG (under `assets/`, read-only) to `~/.self-learn/vault/`, and
+`npm run learn -- vault push --reason R` takes edited notes back, one revision
+each, refusing a note that moved in the database since the pull. Neither
+command overwrites an edit nobody pushed, and a vault inside any checkout of
+this repository is refused, since a `learn/` there is an import tree. The rules
+are in `services/catalog/src/learn/vault.ts` and
+[learn/README.md](learn/README.md), "Where the notes and logs live".
+
 ## Asset generation: tools/manimkc/
 
 `tools/manimkc/` is a git **submodule** (its own repo,

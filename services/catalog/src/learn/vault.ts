@@ -1,14 +1,16 @@
-import { createHash } from "node:crypto";
-import { constants as fsConstants, realpathSync } from "node:fs";
+import { constants as fsConstants, readFileSync, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import type { BlobStore } from "@self-learn/blob";
 import { sessionLogEntry } from "@self-learn/schema";
 import { sql } from "drizzle-orm";
 
+import { openBlobStore, readBlob } from "../content/blob";
 import { databaseIdentity } from "../content/import-root";
 import { commitNoteText, noteText, NoteWriteError, readNoteRows } from "../content/note-rows";
-import { NoteError, renderNote } from "../content/notes";
+import { NoteError, readNote, renderNote } from "../content/notes";
+import { sha256 } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import { latestRevisions } from "../content/revisions";
 import { ContentWriteError } from "../content/write";
@@ -61,6 +63,12 @@ import { repoRoot } from "./paths";
  * against, so the vault treats them as read-only: push refuses an edited log
  * by name, and a pull never overwrites one. Deleting the edited copy and
  * pulling puts the database's back.
+ *
+ * Every live diagram's SVG is pulled too, as `assets/<slug>.svg`, from the
+ * blob store, so the `![[<slug>.svg]]` embeds in notes and logs resolve in
+ * Obsidian once `learn/assets/` is gone. They are read-only: push never looks
+ * at them, and a pull replaces one only while it is what pull last wrote. A
+ * diagram is changed through the studio or `catalog diagram put`.
  */
 
 export class VaultError extends Error {
@@ -82,8 +90,8 @@ interface Pending {
 
 /** What `.vault.json` records for one file. */
 interface Entry {
-  kind: "note" | "log" | "readme";
-  /** The concept slug or the session id. */
+  kind: "note" | "log" | "readme" | "asset";
+  /** The concept slug, the session id, or the diagram slug. */
   id: string;
   /**
    * What the file is based on: a note's concept revision, a log's number of
@@ -108,6 +116,8 @@ interface Manifest {
 const MANIFEST = ".vault.json";
 const README = "README.md";
 const SIDE_COPY = /\.(incoming|conflict)\.md$/;
+/** An edit `putBack` kept beside a file it could not put back over. */
+const KEPT = /\.kept-\d+\.md$/;
 
 const README_TEXT = `# Notes vault
 
@@ -116,6 +126,7 @@ This folder is a copy of the notes and session logs in the self-learn database, 
 \`vault push\` writes your edited notes back, one revision each; a note that changed in the database since your pull is refused, with its current version left as \`<name>.conflict.md\`.
 To settle an \`.incoming\` or \`.conflict\` copy, merge what you want of it into your note, delete the copy, and push.
 Session logs are a record of what happened and are read-only here: a correction belongs in the note it touched.
+The diagrams under \`assets/\` are there for the embeds and are read-only too: a diagram is changed in the studio, never here.
 `;
 
 const LOG_REFUSAL =
@@ -142,22 +153,44 @@ export function defaultVaultDir(): string {
  * where `npm run` was typed (`INIT_CWD`), not from the repository root the
  * `learn` shim runs in. A folder inside the repository is refused: notes
  * written there are untracked files in the owner's `git status`, and a vault
- * pulled into `learn/` would be read by the next `catalog import`.
+ * pulled into `learn/` would be read by the next `catalog import`. The same
+ * goes for any other checkout of this repository (a second clone, a
+ * worktree), found by its root `package.json`, since its `learn/` is just as
+ * much an import tree.
  */
 export function resolveVaultDir(given: string | undefined): string {
   const dir =
     given === undefined || given.trim() === ""
       ? defaultVaultDir()
       : path.resolve(process.env["INIT_CWD"] ?? process.cwd(), given);
-  for (const root of new Set([REPO_ROOT, repoRoot()])) {
+  const roots = new Set([REPO_ROOT, repoRoot()]);
+  const other = checkoutAbove(real(dir));
+  if (other !== null) roots.add(other);
+  for (const root of roots) {
     if (inside(real(dir), real(root))) {
       throw new VaultError(
-        `${dir} is inside ${root}. A vault lives outside the repository: leave out --out for ${defaultVaultDir()}, ` +
-          `or name a folder elsewhere.`,
+        `${dir} is inside ${root}, a checkout of this repository. A vault lives outside every checkout: ` +
+          `leave out --out for ${defaultVaultDir()}, or name a folder elsewhere.`,
       );
     }
   }
   return dir;
+}
+
+/** The root `package.json`'s name, which every checkout of this repository carries. */
+const REPOSITORY_NAME = "self-learn";
+
+/** The nearest folder at or above `dir` whose `package.json` names this repository, or null. */
+function checkoutAbove(dir: string): string | null {
+  for (let at = dir; ; at = path.dirname(at)) {
+    try {
+      const manifest = JSON.parse(readFileSync(path.join(at, "package.json"), "utf8")) as { name?: unknown };
+      if (manifest.name === REPOSITORY_NAME) return at;
+    } catch {
+      // No package.json here, or not JSON: not a checkout, keep walking up.
+    }
+    if (path.dirname(at) === at) return null;
+  }
 }
 
 /**
@@ -186,9 +219,6 @@ function inside(child: string, parent: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
-}
 
 /** For a `.catch`: a file that is not plain becomes a value to report, anything else is thrown on. */
 function notPlain(error: unknown): NotPlainFile {
@@ -221,6 +251,12 @@ const READ_PLAIN = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsCon
  * names, as a note, and pull would judge an edit by bytes that are not in it.
  */
 async function readText(dir: string, file: string): Promise<string | null> {
+  const bytes = await readBytes(dir, file);
+  return bytes === null ? null : bytes.toString("utf8");
+}
+
+/** A vault file's bytes, by the same rules as `readText`: an SVG is judged by these. */
+async function readBytes(dir: string, file: string): Promise<Buffer | null> {
   // `O_NOFOLLOW` covers the last part of the path only: a `concepts/<domain>`
   // linked elsewhere would still be followed to a file outside the vault.
   if (!inside(real(path.dirname(file)), real(dir))) throw new NotPlainFile(file, "is in a folder that resolves outside the vault");
@@ -236,7 +272,7 @@ async function readText(dir: string, file: string): Promise<string | null> {
   }
   try {
     if (!(await handle.stat()).isFile()) throw new NotPlainFile(file);
-    return await handle.readFile("utf8");
+    return await handle.readFile();
   } finally {
     await handle.close();
   }
@@ -289,7 +325,7 @@ async function placeIfAbsent(from: string, file: string): Promise<boolean> {
  * bytes read, and one landing after it creates a new `file`, which
  * `placeIfAbsent` will not replace.
  */
-async function takeAside(dir: string, file: string): Promise<{ aside: string; text: string } | null> {
+async function takeAside(dir: string, file: string): Promise<{ aside: string; bytes: Buffer } | null> {
   const aside = asideOf(file);
   try {
     await fs.rename(file, aside);
@@ -298,8 +334,8 @@ async function takeAside(dir: string, file: string): Promise<{ aside: string; te
     throw error;
   }
   try {
-    const text = await readText(dir, aside);
-    if (text !== null) return { aside, text };
+    const bytes = await readBytes(dir, aside);
+    if (bytes !== null) return { aside, bytes };
   } catch (error) {
     // Not ours to judge: it goes back where it was, and the refusal names it.
     await putBack(aside, file);
@@ -311,7 +347,8 @@ async function takeAside(dir: string, file: string): Promise<{ aside: string; te
 /**
  * Put a file taken aside back. If something new was saved at its name in the
  * meantime, both are kept: the one taken aside as `<name>.kept-<time>.md`,
- * which a push lists, so neither edit is lost.
+ * which push refuses by name, saying which file it belongs beside, so
+ * neither edit is lost.
  */
 async function putBack(aside: string, file: string): Promise<void> {
   if (await placeIfAbsent(aside, file)) return;
@@ -325,16 +362,21 @@ async function putBack(aside: string, file: string): Promise<void> {
  * rename and judged there, put back if it is not what was expected, and the
  * new text goes in only where nothing is. Returns whether it wrote.
  */
-async function replaceIfUnchanged(dir: string, file: string, expected: string | null, text: string): Promise<boolean> {
+async function replaceIfUnchanged(
+  dir: string,
+  file: string,
+  expected: string | null,
+  text: string | Buffer,
+): Promise<boolean> {
   assertInVault(dir, file);
   await fs.mkdir(path.dirname(file), { recursive: true });
   const fresh = asideOf(file);
-  await fs.writeFile(fresh, text, "utf8");
+  await fs.writeFile(fresh, text);
   try {
     if (expected === null) return await placeIfAbsent(fresh, file);
     const taken = await takeAside(dir, file);
     if (taken === null) return false;
-    if (sha256(taken.text) !== expected) {
+    if (sha256(taken.bytes) !== expected) {
       await putBack(taken.aside, file);
       return false;
     }
@@ -353,7 +395,7 @@ async function removeIfUnchanged(dir: string, file: string, expected: string): P
   assertInVault(dir, file);
   const taken = await takeAside(dir, file);
   if (taken === null) return false;
-  if (sha256(taken.text) !== expected) {
+  if (sha256(taken.bytes) !== expected) {
     await putBack(taken.aside, file);
     return false;
   }
@@ -367,6 +409,21 @@ function segment(value: string, what: string): string {
     throw new VaultError(`${what} ${JSON.stringify(value)} cannot be a file name in the vault`);
   }
   return value;
+}
+
+/**
+ * A note or log's file name, refused when it would read as one of the vault's
+ * own: `z.incoming` would be written as `z.incoming.md`, which the manifest
+ * check takes for a side copy, and every later command would refuse the whole
+ * manifest.
+ */
+function fileName(value: string, what: string): string {
+  if (SIDE_COPY.test(`${value}.md`) || KEPT.test(`${value}.md`)) {
+    throw new VaultError(
+      `${what} ${JSON.stringify(value)} would be named like a copy the vault writes beside a file, so it was left out of the vault`,
+    );
+  }
+  return segment(value, what);
 }
 
 /** The side copy's vault-relative path: `x.md` beside `x.incoming.md`. */
@@ -403,8 +460,9 @@ async function readManifest(dir: string): Promise<Manifest | null> {
   return manifest as Manifest;
 }
 
-/** A path pull writes: `README.md`, `concepts/[<domain>/]<slug>.md`, `sessions/<id>.md`. */
-const MANAGED = /^(?:README\.md|concepts\/(?:[^/\\\0]+\/)?[^/\\\0]+\.md|sessions\/[^/\\\0]+\.md)$/;
+/** A path pull writes: `README.md`, `concepts/[<domain>/]<slug>.md`, `sessions/<id>.md`, `assets/<slug>.svg`. */
+const MANAGED =
+  /^(?:README\.md|concepts\/(?:[^/\\\0]+\/)?[^/\\\0]+\.md|sessions\/[^/\\\0]+\.md|assets\/[^/\\\0]+\.svg)$/;
 
 function validEntry(rel: string, entry: Entry): boolean {
   if (!MANAGED.test(rel) || rel.split("/").some((part) => part.startsWith(".")) || SIDE_COPY.test(rel)) return false;
@@ -412,7 +470,9 @@ function validEntry(rel: string, entry: Entry): boolean {
   if ((entry.kind === "readme") !== (rel === README)) return false;
   if (entry.kind === "log" && !rel.startsWith("sessions/")) return false;
   if (entry.kind === "note" && !rel.startsWith("concepts/")) return false;
+  if ((entry.kind === "asset") !== rel.startsWith("assets/")) return false;
   const pending = entry.pending;
+  if (entry.kind === "asset") return pending === undefined;
   return pending === undefined || pending.path === sidePath(rel, "incoming") || pending.path === sidePath(rel, "conflict");
 }
 
@@ -548,7 +608,7 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
         try {
           const folder = row.domain === null || row.domain === "" ? "" : `${segment(row.domain, "the folder")}/`;
           items.push({
-            rel: `concepts/${folder}${segment(row.slug, "the concept id")}.md`,
+            rel: `concepts/${folder}${fileName(row.slug, "the concept id")}.md`,
             kind: "note",
             id: row.slug,
             text: renderNote({ ...row, body: row.body }),
@@ -566,7 +626,7 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
       for (const log of logs) {
         try {
           items.push({
-            rel: `sessions/${segment(log.id, "the session id")}.md`,
+            rel: `sessions/${fileName(log.id, "the session id")}.md`,
             kind: "log",
             id: log.id,
             text: log.markdown,
@@ -589,6 +649,8 @@ export interface PullReport {
   vault: string;
   notes: number;
   logs: number;
+  /** Diagram SVGs under `assets/`. */
+  assets: number;
   /** Created or brought up to date. */
   written: string[];
   unchanged: string[];
@@ -599,7 +661,10 @@ export interface PullReport {
   problems: string[];
 }
 
-export async function pullVault(db: CatalogDatabase, options: { dir: string }): Promise<PullReport> {
+export async function pullVault(
+  db: CatalogDatabase,
+  options: { dir: string; store?: BlobStore },
+): Promise<PullReport> {
   await assertOwned(db, ["concepts", "sessions"]);
   const dir = options.dir;
   await fs.mkdir(dir, { recursive: true });
@@ -624,10 +689,12 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
     }
 
     const { items, problems } = await readItems(db);
+    const svgs = await readSvgs(db, problems);
     const report: PullReport = {
       vault: dir,
       notes: items.filter((item) => item.kind === "note").length,
       logs: items.filter((item) => item.kind === "log").length,
+      assets: svgs.length,
       written: [],
       unchanged: [],
       modified: [],
@@ -648,7 +715,7 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
 
     // Every stale file is read before any is removed, so one that cannot be
     // read stops the removals rather than arriving halfway through them.
-    const live = new Set(items.map((item) => item.rel));
+    const live = new Set([...items.map((item) => item.rel), ...svgs.map((svg) => svg.rel)]);
     const stale: { rel: string; entry: Entry; file: string; current: string | null }[] = [];
     for (const [rel, entry] of problems.length > 0 ? [] : Object.entries(manifest.files)) {
       if (entry.kind === "readme" || live.has(rel)) continue;
@@ -669,9 +736,18 @@ export async function pullVault(db: CatalogDatabase, options: { dir: string }): 
         report.modified.push({
           path: rel,
           incoming: null,
-          note: `the database no longer has this ${entry.kind === "log" ? "log" : "note"}; your copy is kept`,
+          note: `the database no longer has this ${STALE_NAME[entry.kind]}; your copy is kept`,
         });
       }
+    }
+
+    // After the removals, so a store that cannot be read costs these SVGs
+    // and not the tidying of every other file.
+    let store: BlobStore | undefined = options.store;
+    for (const svg of svgs) {
+      await pullSvg(dir, manifest, svg, () => (store ??= openBlobStore()), report).catch((error: unknown) => {
+        report.problems.push(error instanceof NotPlainFile ? error.message : `${svg.rel}: ${(error as Error).message}`);
+      });
     }
 
     manifest.pulledAt = new Date().toISOString();
@@ -735,6 +811,76 @@ async function pullItem(dir: string, manifest: Manifest, item: Item, report: Pul
   );
 }
 
+const STALE_NAME: Record<Entry["kind"], string> = { note: "note", log: "log", readme: "file", asset: "diagram" };
+
+/** A live diagram's SVG, as the vault holds it. */
+interface Svg {
+  rel: string;
+  slug: string;
+  key: string;
+  sha256: string;
+}
+
+/** Every live diagram with an SVG in the blob store, by the key and hash its row names. */
+async function readSvgs(db: CatalogDatabase, problems: string[]): Promise<Svg[]> {
+  const { rows } = await db.execute<{ slug: string; key: string; sha256: string }>(sql`
+    select d.slug, d.svg_blob_key as key, b.sha256
+    from diagram d join blob_object b on b.key = d.svg_blob_key
+    where d.archived_at is null
+    order by d.slug collate "C"
+  `);
+  const svgs: Svg[] = [];
+  for (const row of rows) {
+    try {
+      svgs.push({ rel: `assets/${segment(row.slug, "the diagram slug")}.svg`, slug: row.slug, key: row.key, sha256: row.sha256 });
+    } catch (error) {
+      if (!(error instanceof VaultError)) throw error;
+      problems.push(error.message);
+    }
+  }
+  return svgs;
+}
+
+/**
+ * One SVG, read-only: written when absent or still what pull last wrote,
+ * and never over a copy somebody changed. The bytes come from the blob store
+ * only when the file needs them.
+ */
+async function pullSvg(
+  dir: string,
+  manifest: Manifest,
+  svg: Svg,
+  store: () => BlobStore,
+  report: PullReport,
+): Promise<void> {
+  const file = path.join(dir, svg.rel);
+  const current = await readBytes(dir, file);
+  const clean: Entry = { kind: "asset", id: svg.slug, base: null, hash: svg.sha256 };
+  if (current !== null && sha256(current) === svg.sha256) {
+    manifest.files[svg.rel] = clean;
+    report.unchanged.push(svg.rel);
+    return;
+  }
+  const known = manifest.files[svg.rel];
+  const expected = current === null ? null : known?.hash === sha256(current) ? known.hash : undefined;
+  if (expected === undefined) {
+    manifest.files[svg.rel] = known ?? { kind: "asset", id: svg.slug, base: null, hash: null };
+    report.modified.push({
+      path: svg.rel,
+      incoming: null,
+      note: "an SVG is read-only in the vault and this one was changed here, so it is kept; delete it and pull for the database's",
+    });
+    return;
+  }
+  const bytes = await readBlob(store(), svg.key, svg.sha256);
+  if (await replaceIfUnchanged(dir, file, expected, bytes)) {
+    manifest.files[svg.rel] = clean;
+    report.written.push(svg.rel);
+    return;
+  }
+  report.modified.push({ path: svg.rel, incoming: null, note: "changed while the pull ran; pull again" });
+}
+
 /** The README, written like any other file: never over an edit. */
 async function pullReadme(dir: string, manifest: Manifest, problems: string[]): Promise<void> {
   const file = path.join(dir, README);
@@ -790,7 +936,8 @@ export async function pushVault(
     const report: PushReport = { vault: dir, pushed: [], refused: [], unchanged: [] };
 
     for (const [rel, entry] of Object.entries(manifest.files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-      if (entry.kind === "readme") continue;
+      // The README and the SVGs are the vault's own, never content to push.
+      if (entry.kind === "readme" || entry.kind === "asset") continue;
       const current = await readText(dir, path.join(dir, rel)).catch(notPlain);
       if (current instanceof NotPlainFile) {
         report.refused.push({ path: rel, reason: current.message });
@@ -824,6 +971,16 @@ export async function pushVault(
     }
 
     for (const rel of await untracked(dir, manifest)) {
+      if (KEPT.test(rel)) {
+        const original = rel.replace(KEPT, ".md");
+        report.refused.push({
+          path: rel,
+          reason:
+            `${rel} is an edit saved to ${original} while a vault command was moving that file, kept apart so ` +
+            `neither version was lost. Merge what you want of it into ${original}, then delete it.`,
+        });
+        continue;
+      }
       report.refused.push({
         path: rel,
         reason: rel.startsWith("sessions/")
@@ -864,7 +1021,7 @@ async function pushNote(
     return;
   }
   try {
-    const written = await commitNoteText(db, entry.id, text, { base: entry.base, reason });
+    const written = await commitNoteText(db, entry.id, text, { base: entry.base, reason, where: path.join(dir, rel) });
     // The file as it stands is now what the note holds, whatever the rows
     // normalise in their rendering; the next pull rewrites it to that
     // rendering, since the file is then unedited against this hash.
@@ -877,6 +1034,15 @@ async function pushNote(
       const now = await noteText(db, entry.id);
       if (now === null) {
         report.refused.push({ path: rel, reason: `${entry.id} is no longer a live note in the database.` });
+        return;
+      }
+      if (now.text === rendered(text, rel, entry.id)) {
+        // The database already holds exactly this file: a push that committed
+        // it and stopped before recording that. Nothing to merge, so it is
+        // recorded now rather than handed back as a conflict with itself.
+        entry.base = now.revision;
+        entry.hash = sha256(text);
+        report.unchanged.push(rel);
         return;
       }
       const side = await writeSide(dir, entry, rel, "conflict", now.text, now.revision);
@@ -896,6 +1062,15 @@ async function pushNote(
       return;
     }
     throw error;
+  }
+}
+
+/** The file as the row would render it, or null when it does not parse as a note. */
+function rendered(text: string, rel: string, id: string): string | null {
+  try {
+    return renderNote(readNote(text, rel, id));
+  } catch {
+    return null;
   }
 }
 

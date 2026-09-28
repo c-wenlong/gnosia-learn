@@ -6,17 +6,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { concept, contentRevision } from "@self-learn/schema";
-import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import fsPromises from "node:fs/promises";
 
+import { concept, contentRevision, session, sessionLogEntry } from "@self-learn/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { openBlobStore } from "../src/content/blob";
+import { putDiagram } from "../src/content/diagrams";
 import { flip } from "../src/content/flip";
+import { commitNoteText } from "../src/content/note-rows";
 import { databaseIdentity } from "../src/content/import-root";
 import { conceptsIndexer } from "../src/index/concepts";
+import { diagramsIndexer } from "../src/index/diagrams";
 import { sessionsIndexer } from "../src/index/sessions";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
 import { writeSource } from "../src/index/writer";
+import { pullVault, pushVault } from "../src/learn/vault";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
@@ -41,6 +48,7 @@ interface PullReport {
   vault: string;
   notes: number;
   logs: number;
+  assets: number;
   written: string[];
   unchanged: string[];
   modified: { path: string; incoming: string | null; note?: string }[];
@@ -58,10 +66,30 @@ interface Manifest {
   files: Record<string, { kind: string; id: string; base: number | null; hash: string | null; pending?: { path: string } }>;
 }
 
+/** A minimal tldraw document stamped with topic `alpha`, as `canvas new` writes one. */
+function diagramDocument(): string {
+  return JSON.stringify({
+    tldrawFileFormatVersion: 1,
+    schema: { schemaVersion: 2 },
+    records: [
+      { typeName: "shape", id: "shape:s0", type: "geo", x: 0, y: 0, props: { w: 100, h: 50 } },
+      {
+        typeName: "document",
+        id: "document:document",
+        gridSize: 10,
+        name: "",
+        meta: { tldrawkc: { kc: 1, topic: "alpha", title: "Alpha map", concepts: ["alpha"], created: "2026-09-28T00:00:00.000Z" } },
+      },
+      { typeName: "page", id: "page:page", name: "Page 1", index: "a1", meta: {} },
+    ],
+  });
+}
+
 describe.skipIf(!reachable.ok)("learn vault", () => {
   let scratch: Scratch;
   let fixture: Fixture;
   const vaults: string[] = [];
+  const savedHome = process.env["SELF_LEARN_HOME"];
 
   function learn(...args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
     return execFileAsync(process.execPath, ["--import", "tsx", ENTRY, ...args], {
@@ -106,6 +134,8 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
   const body = async (slug: string) => (await scratch.db.select().from(concept).where(eq(concept.slug, slug)))[0]?.body;
 
   beforeAll(async () => {
+    // The blob store the SVGs are pulled from, for this process and the CLI it runs.
+    process.env["SELF_LEARN_HOME"] = await newVault();
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db);
     fixture = await makeFixture();
@@ -119,7 +149,9 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
 
     const context = await fixture.context({ knownConcepts: async () => new Set(["alpha", "beta", "gamma", "delta"]) });
     const database = await databaseIdentity(scratch.db);
-    for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer, sessionsIndexer]) {
+    // Diagrams too, though the tree holds none: a diagram put writes through
+    // to the tree diagrams were last imported from, so one test can add one.
+    for (const indexer of [topicsIndexer, tagsIndexer, conceptsIndexer, sessionsIndexer, diagramsIndexer]) {
       const { rows, logs } = await indexer.read(context);
       await writeSource(scratch.db, indexer, rows, [], indexer.root(context), {
         logs,
@@ -135,6 +167,8 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     await scratch?.drop();
     await fixture?.cleanup();
     for (const vault of vaults) await rm(vault, { recursive: true, force: true });
+    if (savedHome === undefined) delete process.env["SELF_LEARN_HOME"];
+    else process.env["SELF_LEARN_HOME"] = savedHome;
   });
 
   it("pulls into an empty folder and pushes nothing back when nothing was edited", async () => {
@@ -154,7 +188,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
       note({ id: "beta", title: "Beta", requires: ["alpha"], body: "# Beta\n\nSee [[alpha]]." }),
     );
     expect(await read(vault, "sessions/2026-01-01-old.md")).toBe(LOG);
-    expect((await read(vault, "README.md")).split("\n").filter((line) => line !== "" && !line.startsWith("#"))).toHaveLength(5);
+    expect((await read(vault, "README.md")).split("\n").filter((line) => line !== "" && !line.startsWith("#"))).toHaveLength(6);
     expect(await exists(vault, ".obsidian")).toBe(false);
     const recorded = await manifest(vault);
     expect(recorded.files["concepts/fixtures/beta.md"]).toMatchObject({ kind: "note", id: "beta" });
@@ -444,7 +478,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
   it("refuses a vault inside the repository", async () => {
     const result = await learn("vault", "pull", "--out", path.join(HERE, "..", "..", "..", "learn", "vault"));
     expect(result.code).toBe(1);
-    expect(result.stderr).toMatch(/A vault lives outside the repository/);
+    expect(result.stderr).toMatch(/A vault lives outside every checkout/);
   }, 60_000);
 
   it("refuses a push into another database, before writing anything", async () => {
@@ -468,6 +502,207 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     expect((await manifest(vault)).database).toBe(await databaseIdentity(scratch.db));
     const entries = await readdir(path.join(vault, "concepts/fixtures"));
     expect(entries).toContain("alpha.incoming.md");
+  }, 60_000);
+  it("keeps an edited file of a note the database no longer has, and removes an unedited one", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const recorded = await manifest(vault);
+    const hash = createHash("sha256").update("gone\n").digest("hex");
+    const unedited = "concepts/fixtures/gone-clean.md";
+    const edited = "concepts/fixtures/gone-edited.md";
+    await writeFile(path.join(vault, unedited), "gone\n");
+    await writeFile(path.join(vault, edited), "gone, and then edited here\n");
+    recorded.files[unedited] = { kind: "note", id: "gone-clean", base: 1, hash };
+    recorded.files[edited] = { kind: "note", id: "gone-edited", base: 1, hash };
+    await writeFile(path.join(vault, ".vault.json"), JSON.stringify(recorded, null, 2));
+
+    const pulled = await pull(vault);
+    expect(pulled.removed).toEqual([unedited]);
+    expect(pulled.modified).toEqual([
+      { path: edited, incoming: null, note: expect.stringMatching(/no longer has this note; your copy is kept/) },
+    ]);
+    expect(await exists(vault, unedited)).toBe(false);
+    expect(await read(vault, edited)).toBe("gone, and then edited here\n");
+  }, 60_000);
+
+  it("never overwrites a save that lands while a pull is replacing the file", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const rel = "concepts/fixtures/beta.md";
+    const target = path.join(vault, rel);
+    expect((await learn("concept", "edit", "beta", "--summary", "Moved while the vault was closed.")).code).toBe(0);
+    const saved = `${await read(vault, rel)}\nsaved in Obsidian mid-pull\n`;
+
+    // The save lands the moment the pull first writes anything for this file:
+    // after any check it made, before its new text is in place.
+    const writeFileOriginal = fsPromises.writeFile;
+    let fired = false;
+    const spy = vi.spyOn(fsPromises, "writeFile").mockImplementation(async (file, data, options) => {
+      const name = typeof file === "string" ? file : "";
+      if (!fired && path.dirname(name) === path.dirname(target) && (name === target || path.basename(name).startsWith(".beta.md."))) {
+        fired = true;
+        await writeFileOriginal(target, saved);
+      }
+      return writeFileOriginal(file, data, options);
+    });
+    let report;
+    try {
+      report = await pullVault(scratch.db, { dir: vault });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fired).toBe(true);
+    expect(await read(vault, rel)).toBe(saved);
+    expect(report.written).not.toContain(rel);
+    expect(report.modified).toEqual([{ path: rel, incoming: null, note: "changed while the pull ran; pull again" }]);
+  }, 60_000);
+
+  it("records each commit as it lands, so a push stopped halfway knows what it already wrote", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const first = "concepts/fixtures/alpha.md";
+    const second = "concepts/fixtures/beta.md";
+    const firstText = `${await read(vault, first)}\nfirst of two\n`;
+    await writeFile(path.join(vault, first), firstText);
+    await writeFile(path.join(vault, second), `${await read(vault, second)}\nsecond of two\n`);
+
+    // The second note cannot be read, which stops the push after the first commit.
+    const openOriginal = fsPromises.open;
+    const spy = vi.spyOn(fsPromises, "open").mockImplementation(async (file, flags, mode) => {
+      if (file === path.join(vault, second)) throw Object.assign(new Error("EIO: the disk went away"), { code: "EIO" });
+      return openOriginal(file, flags, mode);
+    });
+    try {
+      await expect(pushVault(scratch.db, { dir: vault })).rejects.toThrow("the disk went away");
+    } finally {
+      spy.mockRestore();
+    }
+    const [latest] = await scratch.db
+      .select({ id: contentRevision.id })
+      .from(contentRevision)
+      .where(and(eq(contentRevision.entityType, "concept"), eq(contentRevision.entityId, "alpha")))
+      .orderBy(sql`${contentRevision.id} desc`)
+      .limit(1);
+    expect((await manifest(vault)).files[first]).toMatchObject({
+      base: latest?.id,
+      hash: createHash("sha256").update(firstText).digest("hex"),
+    });
+
+    const again = await push(vault);
+    expect(again).toMatchObject({ refused: [], code: 0 });
+    expect(again.pushed.map((file) => file.path)).toEqual([second]);
+    expect(again.unchanged).toContain(first);
+  }, 60_000);
+
+  it("takes a note the database already holds as this very file for its own commit, not a conflict", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const rel = "concepts/other/delta.md";
+    const text = `${await read(vault, rel)}\ncommitted, then the push stopped\n`;
+    await writeFile(path.join(vault, rel), text);
+    // A push that committed this and stopped before writing .vault.json.
+    const base = (await manifest(vault)).files[rel]?.base ?? null;
+    const written = await commitNoteText(scratch.db, "delta", text, { base, reason: "the push that stopped" });
+
+    const pushed = await push(vault);
+    expect(pushed).toMatchObject({ pushed: [], refused: [], code: 0 });
+    expect(pushed.unchanged).toContain(rel);
+    expect(await exists(vault, "concepts/other/delta.conflict.md")).toBe(false);
+    expect((await manifest(vault)).files[rel]?.base).toBe(written.revision);
+  }, 60_000);
+
+  it("refuses a note whose frontmatter fence is damaged, by file, and writes nothing", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const rel = "concepts/fixtures/gamma.md";
+    const damaged = (await read(vault, rel)).replace(/^---\n/, "--\n");
+    await writeFile(path.join(vault, rel), damaged);
+    const before = await revisions("gamma");
+
+    const pushed = await push(vault);
+    expect(pushed.code).toBe(1);
+    expect(pushed.refused).toEqual([
+      { path: rel, reason: expect.stringMatching(/gamma\.md has no frontmatter that parses/) },
+    ]);
+    expect(pushed.refused[0]?.reason).toContain(path.join(vault, rel));
+    expect(await revisions("gamma")).toBe(before);
+
+    // Frontmatter with no id: is refused the same way.
+    await writeFile(path.join(vault, rel), (await read(vault, rel)).replace(/^--\n/, "---\n").replace(/^id: .*\n/m, ""));
+    expect((await push(vault)).refused[0]?.reason).toMatch(/has frontmatter with no id:/);
+    expect(await revisions("gamma")).toBe(before);
+  }, 60_000);
+
+  it("names a kept edit for what it is, rather than as a new note", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    const kept = "concepts/fixtures/alpha.kept-1700000000000.md";
+    await writeFile(path.join(vault, kept), "an edit saved while a pull moved alpha.md\n");
+    const pushed = await push(vault);
+    expect(pushed.refused).toEqual([
+      { path: kept, reason: expect.stringMatching(/is an edit saved to concepts\/fixtures\/alpha\.md while a vault command/) },
+    ]);
+  }, 60_000);
+
+  it("refuses a vault inside another checkout of this repository", async () => {
+    const other = await newVault();
+    await writeFile(path.join(other, "package.json"), JSON.stringify({ name: "self-learn", private: true }));
+    const result = await learn("vault", "pull", "--out", path.join(other, "learn", "vault"));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/is inside .*, a checkout of this repository/);
+    expect(await readdir(other)).toEqual(["package.json"]);
+  }, 60_000);
+
+  it("pulls each diagram's SVG into assets/, read-only, and push leaves it alone", async () => {
+    const work = await newVault();
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><title>alpha</title></svg>';
+    await writeFile(path.join(work, "alpha-map.tldr"), diagramDocument());
+    await writeFile(path.join(work, "alpha-map.svg"), svg);
+    await putDiagram(scratch.db, openBlobStore(), {
+      slug: "alpha-map",
+      tldr: path.join(work, "alpha-map.tldr"),
+      svg: path.join(work, "alpha-map.svg"),
+      reason: "a diagram for the vault test",
+      author: "local",
+      authorKind: "person",
+    });
+
+    const vault = await newVault();
+    const pulled = await pull(vault);
+    expect(pulled).toMatchObject({ assets: 1, problems: [] });
+    expect(pulled.written).toContain("assets/alpha-map.svg");
+    expect(await read(vault, "assets/alpha-map.svg")).toBe(svg);
+    expect((await manifest(vault)).files["assets/alpha-map.svg"]).toMatchObject({ kind: "asset", id: "alpha-map" });
+    expect((await pull(vault)).unchanged).toContain("assets/alpha-map.svg");
+
+    // Edited here: never pushed, never overwritten, and said so.
+    await writeFile(path.join(vault, "assets/alpha-map.svg"), `${svg}\n<!-- mine -->\n`);
+    const pushed = await push(vault);
+    expect(pushed).toMatchObject({ pushed: [], refused: [], code: 0 });
+    expect(pushed.unchanged).not.toContain("assets/alpha-map.svg");
+    const again = await pull(vault);
+    expect(again.modified).toEqual([
+      { path: "assets/alpha-map.svg", incoming: null, note: expect.stringMatching(/read-only in the vault/) },
+    ]);
+    expect(await read(vault, "assets/alpha-map.svg")).toBe(`${svg}\n<!-- mine -->\n`);
+    // Deleted, it comes back from the store.
+    await rm(path.join(vault, "assets/alpha-map.svg"));
+    expect((await pull(vault)).written).toEqual(["assets/alpha-map.svg"]);
+  }, 60_000);
+
+  // Last: a session log cannot be deleted, so this one stays in the database.
+  it("leaves out a log whose id would read as a side copy, and the manifest stays readable", async () => {
+    await scratch.db.insert(session).values({ id: "z.incoming", kind: "tutor", learnerId: "local" });
+    await scratch.db.insert(sessionLogEntry).values({ sessionId: "z.incoming", seq: 1, markdown: "# z\n" });
+    const vault = await newVault();
+    for (let run = 0; run < 2; run += 1) {
+      const result = await learn("vault", "pull", "--out", vault, "--json");
+      expect(result.stderr).toBe("");
+      const report = JSON.parse(result.stdout) as PullReport;
+      expect(report.problems).toEqual([expect.stringMatching(/"z\.incoming" would be named like a copy the vault writes/)]);
+    }
+    expect(await exists(vault, "sessions/z.incoming.md")).toBe(false);
+    expect((await manifest(vault)).files["sessions/z.incoming.md"]).toBeUndefined();
   }, 60_000);
 });
 

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -6,6 +5,7 @@ import {
   parseFrontmatter,
   stringifyFrontmatter,
 } from "../../../../scripts/learn/lib/markdown.mjs";
+import { sha256 } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import {
   commitNoteText as commitRows,
@@ -563,7 +563,7 @@ export async function commitNoteText(
   id: string,
   text: string,
   base: Pick<NoteSnapshot, "revision" | "hash" | "owner">,
-  options: { reason: string; session?: string },
+  options: { reason: string; session?: string; where?: string },
 ): Promise<Written> {
   const db = await rowsFor("concepts", true);
   const owner = db === null ? "files" : "db";
@@ -575,7 +575,12 @@ export async function commitNoteText(
   }
   if (db !== null) {
     try {
-      const written = await commitRows(db, id, text, { base: base.revision, reason: options.reason, sessionId: options.session });
+      const written = await commitRows(db, id, text, {
+        base: base.revision,
+        reason: options.reason,
+        sessionId: options.session,
+        ...(options.where === undefined ? {} : { where: options.where }),
+      });
       return {
         path: path.join(repoRoot(), written.path),
         revision: written.revision,
@@ -606,6 +611,3 @@ export async function commitNoteText(
   return { path: note.path, revision: null, changed: true, hash: sha256(text) };
 }
 
-function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
-}

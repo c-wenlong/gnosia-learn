@@ -1762,7 +1762,7 @@ commands.vault = async ({ positionals, values }, session) => {
     if (report.problems.length > 0) process.exitCode = 1;
     if (values.json) return out(report, true);
     const lines = [
-      `Pulled ${report.notes} notes and ${report.logs} logs into ${report.vault}`,
+      `Pulled ${report.notes} notes, ${report.logs} logs and ${report.assets} diagram SVGs into ${report.vault}`,
       `  written ${report.written.length} · unchanged ${report.unchanged.length} · removed ${report.removed.length}`,
     ];
     if (report.modified.length > 0) {
@@ -1852,9 +1852,10 @@ commands.help = async () => {
                                    unless --author-kind says otherwise. Draw in
                                    the path checkout prints, then commit --reason.
   vault pull [--out <dir>]       the notes and session logs as a folder for
-                                   Obsidian (default ~/.self-learn/vault); a
-                                   file edited there is never overwritten, the
-                                   database's version lands beside it as
+                                   Obsidian (default ~/.self-learn/vault), with
+                                   each diagram's SVG under assets/ (read-only);
+                                   a file edited there is never overwritten,
+                                   the database's version lands beside it as
                                    <name>.incoming.md
   vault push [--out <dir>] [--reason R]
                                  writes edited notes back, one revision each;
