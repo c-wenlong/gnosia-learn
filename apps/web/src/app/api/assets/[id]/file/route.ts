@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 
 import {
-  assetFilesEnabled,
   blobStoreProblem,
-  FILES_OFF,
   isRangeRefusal,
   openBlob,
-  openRange,
   parseRange,
   resolveAsset,
   webStreamFrom,
@@ -22,18 +19,17 @@ import { withLearnerStore } from "@/lib/learner-store";
  * `GET /api/assets/<encodeURIComponent(asset.id)>/file`: the bytes of one
  * indexed asset.
  *
- * The catalog has held rows for 30 videos, 69 sidecars and a pair of diagrams
- * with nothing able to play or show one: the videos are under manimkc's data
- * root, outside this repository, and the diagrams are in `learn/assets/`,
- * outside `apps/web/public/`. Next serves neither, so this is the one door
- * from a row to its file.
+ * The catalog holds rows for the videos, their sidecars and posters, the
+ * diagrams, the notes and the session logs, and none of their bytes is under
+ * `apps/web/public/`: they are objects in the blob store or text in the
+ * database. So this is the one door from a row to its bytes.
  *
  * **The URL carries an id, never a path.** Asset ids look like
  * `manimkc:out/algorithms/cs3230-assignment-1/cs3230_a1.mp4`, so they hold
  * colons and slashes and arrive percent-encoded in one dynamic segment; Next
  * decodes the segment into `params.id`. That string is used as a primary key
- * and nothing else. Every filesystem decision is made from the row that comes
- * back, and the reasoning for each of them is in `@/lib/asset-files`.
+ * and nothing else. Every decision is made from the row that comes back, and
+ * the reasoning for each of them is in `@/lib/asset-files`.
  *
  * **Headers, and why these.**
  *
@@ -44,7 +40,7 @@ import { withLearnerStore } from "@/lib/learner-store";
  * | `Content-Security-Policy` | see `ASSET_CSP` below | An SVG is a document, and one served from this origin could run script with this origin's storage. The sandbox drops it into an opaque origin with scripts off, which costs a video nothing. |
  * | `Content-Disposition` | `inline; filename="…"` | The point is a `<video>` and an `<img>`; `attachment` would break both. The filename is a sanitised basename so a saved file is named after itself. |
  * | `Accept-Ranges` | `bytes` | Without it a player will not offer a scrub bar at all. |
- * | `Cache-Control` | `private, no-store` | A re-render overwrites the same path, and the reason to open one of these is to look at the newest one. |
+ * | `Cache-Control` | `private, no-store` | A re-render or a commit gives the same id new bytes, and the reason to open one of these is to look at the newest one. |
  *
  * `attachment` was the other way to make an SVG safe, and it is the wrong
  * trade here: browsers honour it on a navigation, which is the case that
@@ -52,27 +48,20 @@ import { withLearnerStore } from "@/lib/learner-store";
  * of them. The sandbox closes the same hole and leaves the embed working.
  *
  * **Two places the bytes can be, asked in order** (docs/CONTENT-MIGRATION.md,
- * Track E). An asset whose row names a `blob_key` is served from the blob
- * store: redirected to a signed URL when the store can mint one (a cloud store,
- * so a large video never streams through a function, edge case 10), streamed
- * through here with the same Range handling when it cannot (the laptop's `fs`
- * store). The redirect carries the store's URL and nothing of the asset's
- * path. A `pending` blob, or one the store has lost, is a 404 `not-uploaded`,
- * never a fall back to the file, which may have been re-rendered since.
+ * Tracks C, D and E). An asset whose row names a `blob_key` is served from
+ * the blob store: redirected to a signed URL when the store can mint one (a
+ * cloud store, so a large video never streams through a function, edge case
+ * 10), streamed through here with the same Range handling when it cannot (the
+ * laptop's `fs` store). The redirect carries the store's URL and nothing of
+ * the asset's path. A `pending` blob, or one the store has lost, is a 404
+ * `not-uploaded`.
  *
- * **Then the row, once the database owns the type** (Tracks C and D). A note,
- * a session log or a `.tldr` whose type has been flipped is served from its
- * row: after the flip the file is at best the export as of the flip, so
- * serving it would show a note without its latest commit and answer 404 for a
- * log started since. Only a row with no key and no row text reads the legacy
- * file under its data root.
- *
- * **The legacy file is off unless a machine opts in.** `ASSET_FILES_ENABLED`,
- * the shape `STUDIO_ENABLED` uses in decision D11 of
- * docs/TLDRAWKC-INTEGRATION.md, gates that branch and nothing else: a blob is
- * served whatever it says. With the switch off and the catalog unreachable the
- * answer is still `files-off`, since without the catalog there is no blob to
- * serve either, so a deployment with neither answers exactly as it did.
+ * **Then the row**: a note, a session log or a `.tldr` is served from the
+ * database, with the same headers and Range handling. Nothing is read off
+ * this server's disk: the legacy file branch and `ASSET_FILES_ENABLED`, which
+ * gated it, went in phase 2, so a row with neither a blob nor row text is a
+ * 404 `not-uploaded`, and a note whose type this database has not flipped is
+ * a 503 `not-flipped`.
  *
  * **Every refusal carries a `code`** from `@/lib/asset-problems` beside its
  * prose `detail`. The detail is for a person reading the raw response and may
@@ -146,11 +135,6 @@ export async function GET(
   try {
     resolved = await withLearnerStore((db) => resolveAsset(db, id));
   } catch (error) {
-    // Not "forbidden" when the switch is off: without the catalog there is no
-    // blob to serve and the legacy branch is off, so on a deployment with
-    // neither this route does not exist, and saying so in a second set of
-    // words would only invite someone to look for the switch.
-    if (!assetFilesEnabled()) return problem(FILES_OFF);
     // The lookup is a read, and a read that cannot reach the database
     // degrades and says so (ARCHITECTURE.md rule 14). There is no degraded
     // version of a video, so what it degrades to is an honest 503.
@@ -168,36 +152,7 @@ export async function GET(
 
   if (resolved.ok === false) return problem(resolved);
   if (resolved.source === "blob") return serveBlob(request, resolved);
-  if (resolved.source === "row") return serveRow(request, resolved);
-
-  const headers = baseHeaders(resolved);
-  const range = parseRange(request.headers.get("range"), resolved.bytes);
-
-  if (range.kind === "unsatisfiable") {
-    // 416 carries the file's real length so the player can correct itself and
-    // ask again, which is the only thing that makes this recoverable.
-    return new Response(null, {
-      status: 416,
-      headers: { ...headers, "Content-Range": `bytes */${resolved.bytes}` },
-    });
-  }
-
-  if (range.kind === "partial") {
-    const { start, end } = range;
-    return new Response(openRange(resolved.file, start, end), {
-      status: 206,
-      headers: {
-        ...headers,
-        "Content-Range": `bytes ${start}-${end}/${resolved.bytes}`,
-        "Content-Length": String(end - start + 1),
-      },
-    });
-  }
-
-  return new Response(openRange(resolved.file), {
-    status: 200,
-    headers: { ...headers, "Content-Length": String(resolved.bytes) },
-  });
+  return serveRow(request, resolved);
 }
 
 function problem(p: AssetFileProblem): Response {
@@ -206,7 +161,7 @@ function problem(p: AssetFileProblem): Response {
 
 /**
  * A stored object: a redirect when the store signs URLs, else the bytes, with
- * the Range answers the file branch gives.
+ * the Range answers `parseRange` decides.
  *
  * The redirect is a 302 with `no-store`, so every play asks this route again
  * and gets a URL with a fresh hour on it, and the browser sends its Range
@@ -266,7 +221,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
 }
 
 /**
- * Row text, held whole: the same headers and Range answers as a file, sliced
+ * Row text, held whole: the same headers and Range answers as a blob, sliced
  * from the buffer. A note or a log is a few kilobytes and a `.tldr` tens, so
  * nothing is gained by streaming what the database already handed over.
  */

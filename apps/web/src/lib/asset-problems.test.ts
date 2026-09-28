@@ -6,7 +6,6 @@ import {
   ROUTE_PROBLEM_CODES,
   isAssetProblemCode,
   probeAssetProblem,
-  problemForAccess,
   problemFromStatus,
 } from "./asset-problems";
 
@@ -43,13 +42,12 @@ describe("the problem table", () => {
   });
 
   it("gives the fixable states a command to type", () => {
-    expect(ASSET_PROBLEMS["files-off"].fix).toEqual({ kind: "env", text: "ASSET_FILES_ENABLED=1" });
-    expect(ASSET_PROBLEMS["manimkc-stale"].fix?.text).toBe("npm run catalog -- index --only manimkc");
-    expect(ASSET_PROBLEMS["manimkc-unindexed"].fix?.text).toBe(
-      "npm run catalog -- index --only manimkc",
-    );
-    expect(ASSET_PROBLEMS["file-missing"].fix?.text).toBe("npm run catalog -- index");
+    expect(ASSET_PROBLEMS["not-uploaded"].fix).toEqual({
+      kind: "command",
+      text: "npm run catalog -- asset upload --source manimkc",
+    });
     expect(ASSET_PROBLEMS["not-in-catalog"].fix?.text).toBe("npm run catalog -- index");
+    expect(ASSET_PROBLEMS["not-flipped"].fix?.text).toContain("npm run catalog -- flip");
   });
 
   it("offers Try again only where asking again could change the answer", () => {
@@ -58,7 +56,6 @@ describe("the problem table", () => {
       [
         "blob-store-unavailable",
         "catalog-unreachable",
-        "poster-not-made",
         "server-unreachable",
         "undecodable",
         "unknown",
@@ -71,15 +68,6 @@ describe("the problem table", () => {
     for (const other of ["", "missing", 404, null, undefined, {}]) {
       expect(isAssetProblemCode(other)).toBe(false);
     }
-  });
-});
-
-describe("problemForAccess", () => {
-  it("maps each page-wide access answer to its code", () => {
-    expect(problemForAccess("off")).toBe("files-off");
-    expect(problemForAccess("unindexed")).toBe("manimkc-unindexed");
-    expect(problemForAccess("stale")).toBe("manimkc-stale");
-    expect(problemForAccess("unknown")).toBe("catalog-unreachable");
   });
 });
 
@@ -103,8 +91,8 @@ describe("problemFromStatus", () => {
 
 describe("probeAssetProblem", () => {
   it("asks the status route, uncached, and returns its code", async () => {
-    const { impl, asked } = answering({ ok: false, code: "file-missing" }, 404);
-    expect(await probeAssetProblem("/api/assets/x/status", impl)).toBe("file-missing");
+    const { impl, asked } = answering({ ok: false, code: "not-uploaded" }, 404);
+    expect(await probeAssetProblem("/api/assets/x/status", impl)).toBe("not-uploaded");
     expect(asked).toHaveLength(1);
     expect(asked[0].url).toBe("/api/assets/x/status");
     expect(asked[0].init?.cache).toBe("no-store");

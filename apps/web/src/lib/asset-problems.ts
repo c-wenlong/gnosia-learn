@@ -3,9 +3,10 @@
  *
  * **The problem this solves.** A browser's `onError` on an `<img>` or a
  * `<video>` carries no status and no body. The asset routes always knew the
- * reason (a deleted file, a manimkc index older than the asset route, the
- * route switched off), but the component that failed could only say "did not
- * load". Those need three different things done about them, so this module is
+ * reason (an upload that never finished, a type the database does not own
+ * yet, a catalog that did not answer), but the component that failed could
+ * only say "did not load". Those need different things done about them, so
+ * this module is
  * the shared vocabulary: the routes emit a code, the status route reports one
  * without sending any bytes, and every surface maps the code to the same
  * sentence and the same next step.
@@ -29,19 +30,12 @@
  * does not recognise.
  */
 export const ROUTE_PROBLEM_CODES = [
-  "files-off",
   "catalog-unreachable",
   "not-in-catalog",
   "no-file",
-  "manimkc-unindexed",
-  "manimkc-stale",
-  "file-missing",
-  "refused",
+  "not-flipped",
   "unsupported-type",
   "not-a-video",
-  "no-ffmpeg",
-  "poster-failed",
-  "poster-not-made",
   "not-uploaded",
   "blob-store-unavailable",
 ] as const;
@@ -72,20 +66,12 @@ export interface AssetProblem {
 }
 
 const INDEX = { kind: "command", text: "npm run catalog -- index" } as const;
-const INDEX_MANIMKC = { kind: "command", text: "npm run catalog -- index --only manimkc" } as const;
 
 /**
  * The words, once. A `Record` over the union, so a code added above without a
  * sentence here is a type error rather than a blank panel.
  */
 export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = {
-  "files-off": {
-    label: "Asset files are switched off",
-    reason:
-      "This server does not serve asset files. That is the default, since production has none of them.",
-    fix: { kind: "env", text: "ASSET_FILES_ENABLED=1" },
-    retry: false,
-  },
   "catalog-unreachable": {
     label: "The catalog did not answer",
     reason:
@@ -100,37 +86,19 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
     fix: INDEX,
     retry: false,
   },
+  // A note, a log or a diagram's document whose type this database has not
+  // flipped: the app reads the database only, and the server log names the
+  // `catalog flip` that is missing.
+  "not-flipped": {
+    label: "Not in the database yet",
+    reason:
+      "This kind of content is still owned by the files on this database, and the app reads the database only.",
+    fix: { kind: "note", text: "Run npm run catalog -- flip for its type; the server log names the type." },
+    retry: false,
+  },
   "no-file": {
     label: "A web link, not a file",
     reason: "This entry is a link to a page on the web, so there is no file to show here.",
-    retry: false,
-  },
-  "manimkc-unindexed": {
-    label: "manimkc not indexed here",
-    reason:
-      "manimkc has never been indexed on this machine, so nothing records the folder its videos are rendered into.",
-    fix: INDEX_MANIMKC,
-    retry: false,
-  },
-  "manimkc-stale": {
-    label: "manimkc index out of date",
-    reason:
-      "The manimkc index is older than the asset route and does not record where the videos live. The video is probably still there.",
-    fix: INDEX_MANIMKC,
-    retry: false,
-  },
-  "file-missing": {
-    label: "File deleted or moved",
-    reason:
-      "The catalog lists this file, but it is no longer on disk. It was deleted or moved after the last index.",
-    fix: INDEX,
-    retry: false,
-  },
-  refused: {
-    label: "Location refused",
-    reason:
-      "The server refused to read it, because its recorded location points outside the folders assets may come from.",
-    fix: INDEX,
     retry: false,
   },
   "unsupported-type": {
@@ -143,36 +111,14 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
     reason: "Only a video has a preview frame, and this is not one.",
     retry: false,
   },
-  "no-ffmpeg": {
-    label: "ffmpeg not installed",
-    reason: "ffmpeg is not installed on the server, so no preview frame can be cut from the video.",
-    fix: { kind: "note", text: "Install ffmpeg, or set FFMPEG_PATH to where it is." },
-    retry: false,
-  },
-  "poster-failed": {
-    label: "No frame could be cut",
-    reason:
-      "ffmpeg ran at every point it tries and found no frame in this video. The file may be damaged.",
-    fix: { kind: "note", text: "Open the video to see whether it plays." },
-    retry: false,
-  },
-  // Not a verdict: nothing has recorded a failure for this video, so either no
-  // preview has been attempted yet or the last attempt was cut short.
-  "poster-not-made": {
-    label: "Preview not made yet",
-    reason:
-      "No preview frame has been made for this video yet, or the last attempt was cut short. Asking again will try once more.",
-    fix: { kind: "note", text: "Reload the page to try again." },
-    retry: true,
-  },
-  // The row points at the blob store and the store cannot hand the bytes over:
-  // an upload that never confirmed, or an object `catalog blob audit` found
-  // gone. The legacy file is not tried, so the answer names the store.
+  // No stored copy the server can hand over: never uploaded, an upload that
+  // never confirmed, or an object `catalog blob audit` found gone. The server
+  // reads no files off its disk, so the store is the only place to look.
   "not-uploaded": {
     label: "Not in the blob store",
     reason:
-      "The catalog says this file is kept in the blob store, but its upload never finished or the store no longer has it.",
-    fix: { kind: "command", text: "npm run catalog -- blob audit" },
+      "The blob store has no finished copy of this file: it was never uploaded, the upload never finished, or the store has lost it.",
+    fix: { kind: "command", text: "npm run catalog -- asset upload --source manimkc" },
     retry: false,
   },
   "blob-store-unavailable": {
@@ -208,27 +154,6 @@ export function isAssetProblemCode(value: unknown): value is AssetProblemCode {
 }
 
 /**
- * The four `FileAccess` reasons the server decides before render, as codes.
- *
- * `unknown` there means "could not check the manimkc index", which is the
- * catalog failing to answer, not a reason this page does not recognise.
- */
-export function problemForAccess(
-  reason: "off" | "unindexed" | "stale" | "unknown",
-): RouteProblemCode {
-  switch (reason) {
-    case "off":
-      return "files-off";
-    case "unindexed":
-      return "manimkc-unindexed";
-    case "stale":
-      return "manimkc-stale";
-    case "unknown":
-      return "catalog-unreachable";
-  }
-}
-
-/**
  * What the status route answered, as a code.
  *
  * `ok: true` after an element already failed is its own answer: the server
@@ -249,9 +174,8 @@ export function problemFromStatus(body: unknown): AssetProblemCode {
  * **Why a status route and not the file itself.** A `HEAD` on the file route
  * gets a status and no body, so it loses the code; a `GET` risks downloading a
  * whole 10 MB video when the first failure was transient and the second
- * attempt succeeds; and either one, pointed at the poster route, can start an
- * ffmpeg. The status route runs the same resolver and sends a few bytes of
- * JSON, so the probe costs one small round trip and never any file.
+ * attempt succeeds. The status route runs the same resolver and sends a few
+ * bytes of JSON, so the probe costs one small round trip and never any file.
  *
  * Without a status URL (a plain markdown image pointing somewhere else) there
  * is nobody to ask, and the answer is `unknown`. A rejected fetch is

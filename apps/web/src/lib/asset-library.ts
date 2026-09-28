@@ -1,13 +1,11 @@
 import "server-only";
 
-import { readFile } from "node:fs/promises";
 import { connection } from "next/server";
 import {
   assetCounts,
   assetDerivations,
   conceptsForAssets,
   derivationSources,
-  indexedRoot,
   listAssets,
   readEvents,
   topicTitles,
@@ -19,7 +17,7 @@ import {
   type CatalogDatabase,
 } from "@self-learn/catalog/state";
 
-import { assetFilesEnabled, openBlob, resolveAsset, servedWithoutFiles, storedPosters } from "@/lib/asset-files";
+import { openBlob, resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -36,8 +34,8 @@ import { parseTranscript } from "@/lib/transcript";
  * `@/lib/learner-store`.
  *
  * **Server only**, and `import "server-only"` enforces it: everything here ends
- * at a Postgres pool or at `node:fs`, and a `"use client"` import would compile
- * and ship both to the browser. The pages are server components; the cards and
+ * at a Postgres pool or the blob store, and a `"use client"` import would
+ * compile and ship both to the browser. The pages are server components; the cards and
  * players they render take resolved props.
  *
  * **Nothing runs at build time.** Both entry points call `connection()` first,
@@ -50,13 +48,12 @@ import { parseTranscript } from "@/lib/transcript";
  * are not the same thing. Nothing here writes, so there is no counterpart rule
  * about writes failing loudly; the library is a view.
  *
- * **The files are a third state, on top of those two.** A row can be perfectly
- * readable while its bytes are unreachable, and on a fresh clone that is the
- * normal case rather than an error: `ASSET_FILES_ENABLED` is unset, and even
- * with it set a manimkc index that predates the asset route records no data
- * root to resolve `out/…` against. `fileAccess()` answers that separately from
- * `reachable`, so the pages can show real titles, real topics and real sizes
- * while saying plainly that they cannot play the video yet.
+ * **The bytes are a third state, on top of those two.** A row can be perfectly
+ * readable while its bytes are not served: a video `catalog asset upload` has
+ * not stored yet has a row and no blob. `readAssetAccess()` answers that per
+ * row, separately from `reachable`, so the pages can show real titles, real
+ * topics and real sizes while saying plainly that they cannot play the video
+ * yet.
  */
 
 /**
@@ -338,191 +335,60 @@ export async function loadAssetDetail(id: string): Promise<AssetDetail> {
 }
 
 /**
- * Whether this deployment can hand over an asset's bytes, and if not, why.
+ * Which rows' bytes the asset routes can hand over, decided per row.
  *
- * Three answers, and the difference between the last two is the difference
- * between a switch and a re-index. The library shows all three as a state
- * rather than as an error, because "off" is what a fresh clone looks like: the
- * route is documented off by default in `.env.example`, production has none of
- * these files, and a page that responded with dead players and broken images
- * would be describing a problem the reader does not have.
+ * Since phase 2 there is nothing deployment-wide to say: the server reads no
+ * files off its disk (the `ASSET_FILES_ENABLED` switch and the manimkc data
+ * root it used to check are gone), so an asset is served exactly when its
+ * bytes are a `present` blob or a row the database owns, which is what
+ * `resolveAsset` decides for the route.
  */
-export type FileAccess =
-  | { ok: true }
-  | {
-      ok: false;
-      /**
-       * `off` is the switch; `unindexed` and `stale` are the manimkc data root;
-       * `unknown` is the check itself having failed.
-       */
-      reason: "off" | "unindexed" | "stale" | "unknown";
-      headline: string;
-      detail: string;
-      /** The exact thing to run or set. Rendered as a command, so it is one line. */
-      fix: string;
-    };
-
-const FILES_OFF: FileAccess = {
-  ok: false,
-  reason: "off",
-  headline: "This deployment does not serve asset files.",
-  detail:
-    "The library can still say what the catalog holds: every title, topic, size and path below is real. " +
-    "What it does not serve is a file kept only on this machine's disk, so those videos and diagrams will not " +
-    "play or draw. Anything uploaded to the blob store, and any note, log or diagram the database owns, is " +
-    "shown whatever this says. Off is the default: production carries the course files and nothing else, " +
-    "and a render lives on a laptop.",
-  fix: "ASSET_FILES_ENABLED=1",
-};
-
-/**
- * The two deployment-wide answers, plus the rows that need neither.
- *
- * `served` is the per-row half (S5 of the phase 1 review): an asset whose
- * bytes are a `present` blob, or a row the database owns, is served whatever
- * the switch says and wherever manimkc was indexed, exactly as `resolveAsset`
- * decides it for the route. Without it a page with the switch off drew a
- * placeholder for a video the route would have played.
- */
-export interface FileAccessMap {
-  selfLearn: FileAccess;
-  manimkc: FileAccess;
+export interface AssetAccess {
   served: ReadonlySet<string>;
   /**
    * The videos with a stored poster. Kept apart from `served`: a video whose
-   * bytes are in the store plays with the switch off, and its card still has
-   * no picture unless a poster was stored too, since cutting one reads the
-   * file.
+   * bytes are in the store plays, and its card still has no picture unless a
+   * poster was stored too.
    */
   posters: ReadonlySet<string>;
 }
 
-/**
- * The legacy files are answered for the whole page rather than per card,
- * because both failures are properties of the deployment and of the index,
- * never of one row: if one manimkc video cannot be resolved from its data root
- * then none of the thirty can, and thirty copies of the same explanation is
- * not a better page than one. The rows passed in get the per-row answer on
- * top, `served`, since a blob or a row owned by the database needs neither.
- *
- * `self-learn` files (the diagrams, the notes, the session logs) resolve
- * against the repository, which is always there, so the switch is the only
- * thing that can stop them. manimkc's resolve against a data root recorded on
- * `index_run.metadata.outRoot` at index time, which is why the second and third
- * answers exist. `@/lib/asset-files` has the full reasoning for why that value
- * cannot be read out of `$MANIMKC_HOME` here.
- */
-export async function readFileAccess(
-  rows: readonly Pick<AssetRef, "id" | "kind">[] = [],
-): Promise<FileAccessMap> {
-  const { served, posters } = await readServed(rows);
-  return { ...(await readRepoAccess()), served, posters };
-}
+const NO_ACCESS: AssetAccess = { served: new Set(), posters: new Set() };
 
 /**
  * The rows among these whose bytes come from the store or the database. A
- * failure here is an empty set, which is what the page drew before the store
- * existed: placeholders where the switch is off, never a picture that cannot
+ * failure here is an empty set: placeholders, never a picture that cannot
  * load.
  */
-async function readServed(
-  rows: readonly Pick<AssetRef, "id" | "kind">[],
-): Promise<{ served: ReadonlySet<string>; posters: ReadonlySet<string> }> {
-  if (rows.length === 0) return { served: new Set(), posters: new Set() };
+export async function readAssetAccess(rows: readonly Pick<AssetRef, "id" | "kind">[] = []): Promise<AssetAccess> {
+  if (rows.length === 0) return NO_ACCESS;
   try {
     const db = await catalogDatabase();
-    const [served, posters] = await Promise.all([servedWithoutFiles(db, rows), storedPosters(db, rows)]);
+    const [served, posters] = await Promise.all([servedAssets(db, rows), storedPosters(db, rows)]);
     return { served, posters };
   } catch (error) {
     warn("stored assets", error);
-    return { served: new Set(), posters: new Set() };
+    return NO_ACCESS;
   }
 }
 
-async function readRepoAccess(): Promise<{ selfLearn: FileAccess; manimkc: FileAccess }> {
-  if (!assetFilesEnabled()) return { selfLearn: FILES_OFF, manimkc: FILES_OFF };
-
-  let run: Awaited<ReturnType<typeof indexedRoot>>;
-  try {
-    run = await indexedRoot(await catalogDatabase(), "manimkc");
-  } catch (error) {
-    warn("manimkc index root", error);
-    // Not `{ ok: true }`. This read is separate from the one that fetches the
-    // rows, so a failure here can land while the rows come back fine — and
-    // then a page that treated "could not check" as "available" would render a
-    // player pointing at a URL the file route is about to refuse. Unknown
-    // fails closed, and says which question went unanswered rather than
-    // claiming the index is missing, which it has no evidence of.
-    return {
-      selfLearn: { ok: true },
-      manimkc: {
-        ok: false,
-        reason: "unknown",
-        headline: "Could not check where manimkc's files are.",
-        detail:
-          "The rows below are real; what could not be read is the index run that records the directory " +
-          "their out/… paths resolve against. Nothing is known to be wrong with the files themselves.",
-        fix: "npm run catalog -- status",
-      },
-    };
-  }
-
-  if (run === null) {
-    return {
-      selfLearn: { ok: true },
-      manimkc: {
-        ok: false,
-        reason: "unindexed",
-        headline: "No manimkc index on this machine.",
-        detail:
-          "Nothing records where the rendered videos are, so their rows are here and their files cannot be found. " +
-          "Every video below is real; one index run is what connects it to its bytes.",
-        fix: "npm run catalog -- index --only manimkc",
-      },
-    };
-  }
-  if (run.dataRoot === null) {
-    return {
-      selfLearn: { ok: true },
-      manimkc: {
-        ok: false,
-        reason: "stale",
-        headline: "The manimkc index predates the asset route.",
-        detail:
-          "These rows were indexed before a run recorded manimkc's data root, so their out/… paths have no base " +
-          "to resolve against. The files are not missing; nothing knows which directory to look in.",
-        fix: "npm run catalog -- index --only manimkc",
-      },
-    };
-  }
-  return { selfLearn: { ok: true }, manimkc: { ok: true } };
-}
-
-/** As `readFileAccess`, with the marker that keeps it out of the build. */
-export async function loadFileAccess(
-  rows: readonly Pick<AssetRef, "id" | "kind">[] = [],
-): Promise<FileAccessMap> {
+/** As `readAssetAccess`, with the marker that keeps it out of the build. */
+export async function loadAssetAccess(rows: readonly Pick<AssetRef, "id" | "kind">[] = []): Promise<AssetAccess> {
   await connection();
-  return readFileAccess(rows);
+  return readAssetAccess(rows);
 }
 
 /**
- * Whether a row's picture can be asked for: its bytes are served without the
- * disk (`served`), or its repo's deployment-wide answer is yes.
+ * The rows among these that name bytes nobody can serve yet: a file-shaped
+ * path (a link has none) and no stored copy. For the grid's one notice, which
+ * says how many and what to run, instead of a card per row explaining the
+ * same thing.
  */
-export function servable(
-  row: Pick<AssetWithTopics, "id" | "sourceRepo">,
-  access: FileAccessMap,
-): boolean {
-  return access.served.has(row.id) || accessFor(access, row.sourceRepo).ok;
-}
-
-/** Which of the two verdicts above applies to a row, by the source it came from. */
-export function accessFor(
-  access: { selfLearn: FileAccess; manimkc: FileAccess },
-  sourceRepo: string,
-): FileAccess {
-  return sourceRepo === "manimkc" ? access.manimkc : access.selfLearn;
+export function unservedRows<T extends Pick<AssetWithTopics, "id" | "path">>(
+  rows: readonly T[],
+  access: AssetAccess,
+): T[] {
+  return rows.filter((row) => row.path !== null && !access.served.has(row.id));
 }
 
 /**
@@ -596,25 +462,17 @@ function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
  * A diagram is already an image, so it is served as itself, and so is a
  * stored poster in the companion rail. A video is not, and an `<img>` pointed
  * at an `.mp4` decodes nothing; `/poster` serves the still the upload stored
- * for it, or cuts one out of it. Everything else has no picture to show and
- * says so.
+ * for it. Everything else has no picture to show and says so.
  *
- * Both depend on the file route being able to answer for that row: a blob in
- * the store or a row the database owns always can, and a legacy file can when
- * its repo's deployment-wide answer is yes (the switch is on, and manimkc's
- * index records its data root). When it cannot, the placeholder is the
- * correct output, not a broken image.
+ * Each depends on the route being able to answer for that row, which `access`
+ * says per row. When it cannot, the placeholder is the correct output, not a
+ * broken image.
  */
-export function thumbnailFor(
-  row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
-  access: FileAccessMap,
-): string | null {
-  // A video's picture is its poster, which is stored or cut from the file:
-  // the video's own bytes being stored says nothing about either.
-  if (row.kind === "video") {
-    return access.posters.has(row.id) || accessFor(access, row.sourceRepo).ok ? assetPosterHref(row.id) : null;
-  }
-  if (!servable(row, access)) return null;
+export function thumbnailFor(row: Pick<AssetWithTopics, "id" | "kind">, access: AssetAccess): string | null {
+  // A video's picture is its stored poster: the video's own bytes being
+  // stored says nothing about whether a poster was.
+  if (row.kind === "video") return access.posters.has(row.id) ? assetPosterHref(row.id) : null;
+  if (!access.served.has(row.id)) return null;
   if (row.kind === "diagram_svg" || row.kind === "poster") return assetFileHref(row.id);
   return null;
 }
@@ -622,12 +480,9 @@ export function thumbnailFor(
 /**
  * Where a card asks why its thumbnail failed, beside `thumbnailFor` so the two
  * cannot disagree about which route the picture came from: the file route for
- * a diagram, the poster route (with its own ffmpeg refusals) for a video.
+ * a diagram, the poster route for a video.
  */
-export function thumbnailStatusFor(
-  row: Pick<AssetWithTopics, "id" | "kind" | "sourceRepo">,
-  access: FileAccessMap,
-): string | undefined {
+export function thumbnailStatusFor(row: Pick<AssetWithTopics, "id" | "kind">, access: AssetAccess): string | undefined {
   if (thumbnailFor(row, access) === null) return undefined;
   return assetStatusHref(row.id, row.kind === "video" ? "poster" : "file");
 }
@@ -637,18 +492,17 @@ export function thumbnailStatusFor(
  * before anything renders. `null` means the file resolves.
  *
  * The detail page calls this for the asset it shows and for every picture its
- * note embeds, so a file that is already gone, a name the catalog has no row
- * for, or a stale manimkc index renders the failure panel straight away rather
- * than a player or an `<img>` that fails and then has to ask why. It is the
- * same `resolveAsset` the route runs, so the page and the route cannot give
- * one file two different answers: a blob the store holds is `null` whatever
- * the switch says, and a legacy file with the switch off is `files-off`. Only what nobody could know before the
- * browser tried is left to the client's probe.
+ * note embeds, so a video that was never uploaded, a name the catalog has no
+ * row for, or a note whose type is not flipped renders the failure panel
+ * straight away rather than a player or an `<img>` that fails and then has to
+ * ask why. It is the same `resolveAsset` the route runs, so the page and the
+ * route cannot give one asset two different answers. Only what nobody could
+ * know before the browser tried is left to the client's probe.
  *
  * A handful of ids per page (one asset, a few embeds), each a primary-key
- * lookup and a `realpath`. The grid does not call this: thirty-odd resolutions
- * on every render to save a probe on the rare card whose picture fails is the
- * wrong trade, and the grid already says the deployment-wide answers once.
+ * lookup and a store `stat`. The grid does not call this: thirty-odd
+ * resolutions on every render to save a probe on the rare card whose picture
+ * fails is the wrong trade, and the grid already counts what is not uploaded.
  */
 export async function readFileProblems(
   ids: readonly string[],
@@ -662,11 +516,8 @@ export async function readFileProblems(
       out.set(id, resolved.ok ? null : resolved.code);
     }
   } catch (error) {
-    // With the switch off and no catalog there is no blob to find and the
-    // file branch is off, so the route says `files-off`, and so does this.
-    const code = assetFilesEnabled() ? "catalog-unreachable" : "files-off";
-    if (code === "catalog-unreachable") warn("file problems", error);
-    for (const id of ids) if (!out.has(id)) out.set(id, code);
+    warn("file problems", error);
+    for (const id of ids) if (!out.has(id)) out.set(id, "catalog-unreachable");
   }
   return out;
 }
@@ -681,22 +532,16 @@ export async function readFileProblems(
  * passed down, and the panel arrives populated.
  *
  * `resolveAsset` in `@/lib/asset-files` does the resolving, which is not an
- * implementation detail being reused for convenience: it is the module that
- * holds every containment
- * check the asset route makes — the id is a primary key and never a path, the
- * stored path is proved to be inside its source root before and after symlinks
- * resolve, and the extension has to be on a closed list. A page that read
- * `path.join(root, row.path)` itself would be a second, weaker copy of that.
+ * implementation detail being reused for convenience: it holds every rule the
+ * asset route keeps (the id is a primary key and never a path, the extension
+ * has to be on a closed list), so a page cannot read what the route would
+ * refuse. A blob is read from the store, a note, a log or a `.tldr` from its
+ * row.
  *
- * A blob is read from the store, a note, a log or a `.tldr` the database owns
- * from its row, and a legacy file only with the switch on, because a
- * deployment that says it does not serve those files should not read them
- * either.
- *
- * Null means "no text to show", for every reason there is: the switch is off,
- * the row has no file, the file is gone, it is larger than the cap. The callers
- * all render the same thing for all of them — the file's metadata and a link —
- * so distinguishing them here would produce a difference nothing acts on.
+ * Null means "no text to show", for every reason there is: the row has no
+ * file, nothing was uploaded, it is larger than the cap. The callers all
+ * render the same thing for all of them (the file's metadata and a link), so
+ * distinguishing them here would produce a difference nothing acts on.
  */
 export async function readAssetText(
   db: CatalogDatabase,
@@ -707,28 +552,31 @@ export async function readAssetText(
 }
 
 /**
- * `readAssetText`, saying whether a null was the switch: a legacy file this
- * deployment does not read. Search counts only those as matched by name for
- * that reason; a file over the cap or gone is not the switch's doing.
+ * The codes that mean "this text exists and this server cannot read it yet":
+ * a sidecar never uploaded, a note whose type is not flipped. Search counts
+ * those as matched by name only, and says so; a file over the cap, or a row
+ * with nothing behind it, is passed over as search always has.
  */
+const NOT_READABLE_YET: ReadonlySet<RouteProblemCode> = new Set(["not-uploaded", "not-flipped"]);
+
+/** `readAssetText`, saying whether a null was one of `NOT_READABLE_YET`. */
 async function readAssetTextFor(
   db: CatalogDatabase,
   id: string,
   limit: number,
-): Promise<{ text: string | null; filesOff: boolean }> {
+): Promise<{ text: string | null; unreadable: boolean }> {
   try {
     const resolved = await resolveAsset(db, id);
-    if (resolved.ok === false) return { text: null, filesOff: resolved.code === "files-off" };
-    if (resolved.bytes > limit) return { text: null, filesOff: false };
-    if (resolved.source === "row") return { text: resolved.body.toString("utf8"), filesOff: false };
-    if (resolved.source === "file") return { text: await readFile(resolved.file, "utf8"), filesOff: false };
+    if (resolved.ok === false) return { text: null, unreadable: NOT_READABLE_YET.has(resolved.code) };
+    if (resolved.bytes > limit) return { text: null, unreadable: false };
+    if (resolved.source === "row") return { text: resolved.body.toString("utf8"), unreadable: false };
     const read = await openBlob(resolved.key);
     const chunks: Buffer[] = [];
     for await (const chunk of read.body) chunks.push(chunk as Buffer);
-    return { text: Buffer.concat(chunks).toString("utf8"), filesOff: false };
+    return { text: Buffer.concat(chunks).toString("utf8"), unreadable: false };
   } catch (error) {
     warn(`asset text ${id}`, error);
-    return { text: null, filesOff: false };
+    return { text: null, unreadable: false };
   }
 }
 
@@ -746,16 +594,17 @@ export interface SearchText {
   /** Lowercased body per asset id, for the rows whose words could be read. */
   texts: Map<string, string>;
   /**
-   * How many notes and transcripts were searched by name only because this
-   * deployment does not read their files (the switch is off and they are
-   * neither stored nor rows). The page says so when it is more than none.
+   * How many notes and transcripts were searched by name only because their
+   * text is not readable yet (never uploaded, or a type not flipped). The
+   * page says so when it is more than none.
    */
   skipped: number;
   /** `asset_derivation` upward for the companion rows among them. */
   sources: Record<string, string[]>;
   /**
-   * False when no text was read at all: the files are off, or the catalog
-   * could not be asked. The page says the search covered titles only.
+   * False when no text could be read at all: every candidate is unreadable
+   * yet, or the catalog could not be asked. The page says the search covered
+   * titles only.
    */
   searchedText: boolean;
 }
@@ -766,10 +615,8 @@ const NO_TEXT: SearchText = { texts: new Map(), sources: {}, skipped: 0, searche
  * The words of every note and transcript, for one search.
  *
  * Read per request, through `readAssetText`, so it inherits every rule that
- * function has: the same per-row answer as the file route (with the switch off
- * a legacy file is not read, a row or a blob is), the
- * same containment checks, and the same `TEXT_PREVIEW_BYTES` cap, over which a
- * file is searched by name alone. A transcript is parsed and searched by what
+ * function has: the same per-row answer as the file route, and the same
+ * `TEXT_PREVIEW_BYTES` cap, over which a file is searched by name alone. A transcript is parsed and searched by what
  * was said and its chapter titles, not by its JSON keys; one that does not
  * parse is searched as raw text rather than skipped.
  *
@@ -791,8 +638,8 @@ export async function readSearchText(
     const [bodies, sources] = await Promise.all([
       Promise.all(
         candidates.map(async (row) => {
-          const { text: raw, filesOff } = await readAssetTextFor(db, row.id, TEXT_PREVIEW_BYTES);
-          return [row.id, raw === null ? null : searchableText(row.kind, raw), filesOff] as const;
+          const { text: raw, unreadable } = await readAssetTextFor(db, row.id, TEXT_PREVIEW_BYTES);
+          return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
         }),
       ),
       derivationSources(
@@ -802,12 +649,11 @@ export async function readSearchText(
     ]);
     const texts = new Map<string, string>();
     for (const [id, text] of bodies) if (text !== null) texts.set(id, text);
-    // With the switch off a note the database owns is still read, so text was
-    // searched when any came back; none at all is "titles only", and some is
-    // a partial search the page names. Only a null the switch caused counts:
-    // a file gone or over the cap is passed over, as search always has.
-    const skipped = bodies.filter(([, , filesOff]) => filesOff).length;
-    return { texts, sources, skipped, searchedText: assetFilesEnabled() || texts.size > 0 };
+    // Every candidate unreadable is "titles only"; some is a partial search
+    // the page names. A null for any other reason (over the cap, nothing
+    // behind the row) is passed over, as search always has.
+    const skipped = bodies.filter(([, , unreadable]) => unreadable).length;
+    return { texts, sources, skipped, searchedText: skipped < candidates.length };
   } catch (error) {
     warn("search text", error);
     return NO_TEXT;

@@ -23,6 +23,7 @@
 //   --headed     show the browser instead of running headless
 //
 // Environment:
+//   E2E_TEMPLATE_DB=<name>  the database to copy (default self_learn); every content type must be flipped
 //   PG_BIN=<dir>            the Postgres binaries (default /opt/homebrew/opt/postgresql@17/bin)
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
@@ -55,7 +56,10 @@ if (flags.size > 0) {
 /** Values the server is started with. Test values only; nothing real is typed anywhere. */
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
-const TEMPLATE_DB = 'self_learn';
+// The database copied. `self_learn` by default; E2E_TEMPLATE_DB names another,
+// such as a scratch copy flipped for a rehearsal, since the app reads content
+// from the database only and an unflipped template fails every content page.
+const TEMPLATE_DB = process.env.E2E_TEMPLATE_DB || 'self_learn';
 // The pid and the start time, so a later run that happens to get the same pid
 // can never collide with (or drop) a copy an earlier run kept with --keep-db.
 const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
@@ -313,7 +317,6 @@ async function startServer(port) {
     DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
-    ASSET_FILES_ENABLED: '1',
     // The copy is throwaway, and may have been made from a database marked
     // `copy`; this is the flag that says writing to it is intended.
     CATALOG_COPY_OK: '1',

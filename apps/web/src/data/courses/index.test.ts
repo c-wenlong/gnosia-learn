@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   findTopic,
   getAllTopicIds,
@@ -11,6 +11,13 @@ import {
   totalTopicCount,
 } from "@/data/courses";
 import { getTags, tagFor, tagsFor } from "@/data/content";
+
+// The app reads courses from the database only; this suite tests logic over
+// real course data, so it reads the export tree instead (`@/test/content-files`).
+vi.mock("@/data/source", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/source")>()),
+  contentSource: (await import("@/test/content-files")).fileContentSource,
+}));
 
 /**
  * What is left of this module once the course literals moved to

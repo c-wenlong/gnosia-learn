@@ -45,6 +45,11 @@ vi.mock("@self-learn/catalog/state", () => ({
   conceptsForAssets: async () => {
     throw new Error("concept links unavailable");
   },
+  // For search: a transcript row with nothing stored behind it.
+  assetsByIds: async (_db: unknown, ids: string[]) =>
+    ids.map((id) => ({ id, kind: "transcript", path: "out/x/y.transcript.json", sourceRepo: "manimkc" })),
+  assetBlobs: async () => new Map(),
+  derivationSources: async () => ({}),
 }));
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
@@ -110,19 +115,14 @@ describe("the words search reads", () => {
     expect(searchableText("note", "# Dot Product\n\nA projection.")).toBe("# dot product\n\na projection.");
   });
 
-  it("reads nothing, and says so, when this deployment does not serve files", async () => {
-    const previous = process.env.ASSET_FILES_ENABLED;
-    delete process.env.ASSET_FILES_ENABLED;
-    try {
-      const out = await readSearchText(
-        [{ ...rows[0]!, id: "note:a.md", kind: "note", path: "learn/a.md", createdAt: "" }],
-        ["dot"],
-      );
-      expect(out.searchedText).toBe(false);
-      expect(out.texts.size).toBe(0);
-    } finally {
-      if (previous !== undefined) process.env.ASSET_FILES_ENABLED = previous;
-    }
+  it("reads nothing, and says so, when no transcript here has a stored copy", async () => {
+    const out = await readSearchText(
+      [{ ...rows[0]!, id: "manimkc:out/x/y.transcript.json", kind: "transcript", path: "out/x/y.transcript.json", createdAt: "" }],
+      ["dot"],
+    );
+    expect(out.searchedText).toBe(false);
+    expect(out.skipped).toBe(1);
+    expect(out.texts.size).toBe(0);
   });
 
   it("reads nothing for an empty query", async () => {

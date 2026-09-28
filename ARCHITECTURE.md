@@ -68,7 +68,7 @@ another repo.
 | --- | --- |
 | `apps/web/src/app/` | Routes, the root layout and metadata, and the two agent API handlers |
 | `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), checklists, recaps, the concept graph |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to its bytes, safely: the blob store first, then a file on disk), `blob-store.ts` (the store the routes read), `asset-posters.ts` (a stored poster, or a frame out of a video, cached and bounded), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | `providers.ts` (the provider cascade), `prompt.ts`, `objectives.ts`, `summary.ts`, `lookup.ts` |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, files unless a type resolves to the database |
@@ -168,7 +168,7 @@ says which pages are on the new design and which phase replaces the rest.
 | `GET /api/review/due` | `api/review/due/route.ts` | The due cards as the review page renders them (`?concept=` first), with the next due instant |
 | `POST /api/review/grade` | `api/review/grade/route.ts` | One rating (0 Again to 3 Easy) recorded as `learn review grade` records it |
 | `GET /api/assets/[id]/file` | `api/assets/[id]/file/route.ts` | The bytes of one indexed asset: a video, a diagram, a transcript |
-| `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | One still frame from a video asset, as a JPEG |
+| `GET /api/assets/[id]/poster` | `api/assets/[id]/poster/route.ts` | The still frame `catalog asset upload` stored for a video, as a JPEG |
 | `GET /api/assets/[id]/status` | `api/assets/[id]/status/route.ts` | Why the file or poster route would refuse an asset, as a code, without sending it |
 | `GET /api/learner/today` | `api/learner/today/route.ts` | The Today dashboard as JSON, the same `TodayModel` the page renders; degrades to `reachable: false` |
 | `GET /api/learner/export` | `api/learner/export/route.ts` | The learner snapshot, every preference row and the whole event log as a JSON download; a 503 when the database is down |
@@ -176,56 +176,35 @@ says which pages are on the new design and which phase replaces the rest.
 | `POST /api/learner/observe` | `api/learner/observe/route.ts` | One graded session answer recorded as `learn observe` records it (`recordObservation`): the event, the mastery with propagation, the card. The first answer opens the session |
 | `POST /api/learner/session/close` | `api/learner/session/close/route.ts` | Close a session: one `session-close` event and the row to `closed`, once |
 
-The asset route is the one place the app reads a file the deployment does not
-contain. A video sits under manimkc's data root and a diagram under
-`learn/assets/`, so neither is servable by Next, and the URL carries an asset
-id rather than a path: the id is a primary key, the row's `path` is joined onto
-a root chosen by the row's own `source_repo`, and the result is proved to be
-inside that root before and after symlinks are resolved. That file branch is
-off unless `ASSET_FILES_ENABLED` is set, the shape decision D11 in
-[docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) uses for the
-studio, because production has none of these files. The reasoning for each
-header it sets is in `apps/web/src/lib/asset-files.ts`.
+The asset route is the one door from an `asset` row to its bytes, and it
+reads no file off the disk. The URL carries an asset id rather than a path:
+the id is a primary key, and what the row names decides where the bytes come
+from. A row with a `blob_key` is served from the blob store
+([docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md), Track E). A store
+that signs URLs gets a 302 to one, good for an hour and never cached, so a
+cloud store's bytes never stream through a function; the laptop's `fs` store
+signs nothing, so the route streams it with the same Range answers. A
+`pending` blob, or one the store has lost, is a 404 `not-uploaded`.
+`catalog asset upload` is what fills the store and sets the keys, and
+`catalog blob audit` is what checks the two agree. The reasoning for each
+header the route sets is in `apps/web/src/lib/asset-files.ts`.
 
-A row that names a `blob_key` never reaches that branch: `resolveAsset` serves
-it from the blob store first ([docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md),
-Track E), whatever the switch says. A store that signs URLs gets a 302 to one,
-good for an hour and never cached, so a cloud store's bytes never stream
-through a function; the laptop's `fs` store signs nothing, so the route streams
-it with the same Range answers. A `pending` blob, or one the store has lost, is
-a 404 `not-uploaded`, never a quiet fall back to a file that may have been
-re-rendered since. `catalog asset upload` is what fills the store and sets the
-keys, and `catalog blob audit` is what checks the two agree.
+Otherwise a `note`, `session` or `diagram_source` asset is served from its
+row, through the same reader seam the pages use: the note as its row renders
+it, the log as its entries concatenated, the `.tldr` as its canonical
+document. A row with neither is `not-uploaded`, and a note, log or `.tldr`
+whose type this database has not flipped is a 503 `not-flipped`. Until phase 2
+a third branch read the file itself, under the repository or manimkc's data
+root, behind `ASSET_FILES_ENABLED`; it went with the switch, since the files
+are an export now and phase 3 deletes them.
 
-After the blob store comes the row: once the database owns notes, session logs
-or diagrams, a `note`, `session` or `diagram_source` asset is served from its
-row (the note as its row renders it, the log as its entries concatenated, the
-`.tldr` as its canonical document), also whatever the switch says, since the
-file under `learn/` is at best the export as of the flip.
-
-The poster route asks for the stored poster first: `catalog asset upload` cuts
-one per video on the laptop, with the recipe in
-`services/catalog/src/poster/recipe.ts`, and records it as a `poster` asset
-derived from the video, served like any blob with its sha256 as the tag. For a
-video with none it is the file resolver's second reader, on the same gate, and
-it resolves nothing itself: it hands the id to `resolveAssetFile` and refuses
-anything that does not come back a video. manimkc writes no thumbnail, so
-without a stored one the frame is extracted here, fifteen seconds
-in rather than at the start, because frame 0 of a narrated render is a fade-in
-and three seconds in is a title card the card already prints as text. One
-ffmpeg per video, never per request: the result is cached under the system temp
-root, outside the repository where no git operation can reach it, bounded by
-bytes and by count and written through a rename so a half-made poster cannot be
-served. A machine with no ffmpeg is an ordinary 503 that names the variable to
-set, and the card keeps the placeholder it already had. A video ffmpeg finds
-no frame in is recorded, never inferred: only when every offset exits cleanly
-with nothing does a `<key>.fail` marker go beside where the poster would be,
-written through the same rename, pruned under the same bounds and believed for
-an hour, and only by the ffmpeg binary that wrote it (its path, size and mtime
-are in the marker), so fixing or replacing ffmpeg clears every verdict at once. A timeout, a spawn error or a killed process records nothing, so an
-empty cache reads as "not made yet" and a retry, never as a broken video.
-`apps/web/src/lib/asset-posters.ts` carries the frame, format, cache and
-concurrency reasoning.
+The poster route serves the poster `catalog asset upload` stored: one frame
+per video, cut on the laptop with the recipe in
+`services/catalog/src/poster/recipe.ts`, recorded as a `poster` asset derived
+from the video, and served like any blob with its sha256 as the tag. A video
+with no stored poster is a 404 `not-uploaded`, and its card keeps the
+placeholder: nothing cuts a frame at request time any more, because that read
+the video's file off the disk.
 
 The session route renders on demand, like every page: it used to declare
 `generateStaticParams()` over every course and module pair, and that went when
@@ -237,10 +216,9 @@ knowledge base, the event log, the preferences, the due queue and the snapshot,
 through `learner-store`'s pool, and hands them to the pure
 `apps/web/src/lib/today-core.ts`. It runs `computeHabit` over the same rows
 rather than calling `loadHabit` again, so the page and the top bar agree. The
-check count beside each due review comes from the concept's note, found by the
-path `catalog index` recorded (`notePaths` in the store) rather than a path the
-app builds under `learn/` (layering rule 6); a note it cannot read counts as a
-plain recall.
+check count beside each due review comes from the concept's note, read through
+the content seam from `concept.body`; a note it cannot read counts as a plain
+recall.
 
 **The shell.** `AppShell` is a server component: a 64px top bar (the
 wordmark, the five destinations Today, Courses, Learn, Library and Review,
@@ -274,7 +252,7 @@ page of what it belongs to.
 
 **Search, concepts and watching.** `?q=` is searched on the server, over every
 row's title, filename and URL and over the words of each note and transcript,
-read through `readAssetText` with its switch and byte cap; a line inside a
+read through `readAssetText` with its byte cap; a line inside a
 transcript finds the transcript's video through `derivationSources`. The limits
 are in [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md). The
 concept chip on a card and the asset page's Explains card come from
@@ -283,13 +261,13 @@ base for the mastery dot. Mark watched appends a `watched` event through
 `POST /api/learner/watched`: it counts as a study day for the streak and is
 never evidence, since both replays read only `observation` and `review`.
 
-**Both pages treat unavailable files as a state.** `ASSET_FILES_ENABLED` unset,
-manimkc never indexed here, and a manimkc index older than the run that recorded
-its data root are three different answers with three different fixes, and the
-first is what a fresh clone and production both look like. Nothing renders a
-dead player or a broken image in any of them. Each is decided per row, through
-the route's own resolver: an asset in the blob store or a row the database owns
-shows whatever the switch says, and only a legacy file waits on it.
+**Both pages treat unserved bytes as a state, per row.** An asset whose bytes
+are a `present` blob or a row the database owns draws; one with nothing stored
+shows its placeholder, and the grid says once how many rows in the view have
+no stored copy and names `catalog asset upload`. Nothing renders a dead player
+or a broken image. The page asks the route's own resolver (`resolveAsset`,
+batched as `servedAssets` for a grid), so the page and the route cannot give
+one asset two answers.
 
 `apps/web/src/lib/transcript.ts` parses the sidecars, defensively: a malformed
 one costs the transcript panel and leaves the video playing. Its cues are read
@@ -301,9 +279,9 @@ which to read.
 `onError` carries no status and no body, so every refusal the file and poster
 routes make carries a machine-readable `code` (`@/lib/asset-problems`), and
 `/api/assets/[id]/status` reports that code in a few bytes of JSON without
-reading the file or starting ffmpeg. The detail page decides everything it can
-before render with `readFileProblems`: the switch, the manimkc index, a file
-already gone, an embed whose name no row has. Those render the failure panel on
+reading the bytes. The detail page decides everything it can before render
+with `readFileProblems`: nothing uploaded, a type not flipped, an embed whose
+name no row has. Those render the failure panel on
 the server with no probe. Only a failure nobody could predict (a card's
 thumbnail, a file that is served but will not decode) costs the browser one
 probe, after `onError` and never before. Every surface renders the same
@@ -404,13 +382,13 @@ the rest of the document.
 
 ## The course data model
 
-Ten courses, one YAML file each under `content/courses/`, read by
-`loadCourses()` in `packages/content`. A course holds modules, a module holds
-topics, a topic holds subtopics and the module holds curated resources. The
-same function is what `catalog index` parses courses with, so the page and the
-row cannot disagree about what a file means; before this there were TypeScript
-literals on one side, a private `YamlCourse` interface on the other, and a
-parity test that could only notice drift after it happened.
+Ten courses, `collection` and `curriculum_item` rows since the courses flip,
+exported as one YAML file each under `content/courses/`. A course holds
+modules, a module holds topics, a topic holds subtopics and the module holds
+curated resources. `loadCourses()` in `packages/content` is what `catalog
+import` parses a course file with, and the catalog's courses reader returns
+what that parser returns for the database's own export, so the page and the
+file cannot disagree about what a course means.
 
 `apps/web/src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
 `getCourses()` (async, wrapped in React's `cache()` so a render reads once),
@@ -421,20 +399,18 @@ helpers under `lib/` stay synchronous. `apps/web/src/data/content.ts`
 (`getTags()`) and `apps/web/src/data/topics.ts` (`getTopics()`) are the same
 shape over the themes and the vocabulary.
 
-**Through the reader seam.** None of the three calls a parser. They ask
-`contentSource()` in `apps/web/src/data/source.ts`, which hands back
-`selectSource` over `fileSource(REPO_ROOT)` and, for any type that resolves to
-it, the catalog's `dbSource`. Every type resolves to files today; the plan in
-[docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) moves them into
-Postgres one track at a time, and this is the one place in the app that
-changes when it does. The file source keeps its last parse until a file it
-read changes, so a per-request read costs a `stat` per file rather than a YAML
-parse, and a course file edited while the server runs shows on the next
-request.
+**Through the reader seam, from the database only.** None of the three calls
+a parser. They ask `contentSource()` in `apps/web/src/data/source.ts`, which
+hands back `selectSource` over the catalog's `dbSource` and no file reader
+(phase 2 of [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md)). A type
+whose `content_source` row does not say `db` is refused with an error naming
+`catalog flip <type>`, and a database that does not answer is refused too;
+`app/(app)/error.tsx` renders either inside the shell, and the server log says
+which. The rows are read once per request, so a flip shows on the next one.
 
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
 reaches either of them fail the build with the import chain printed, rather
-than shipping a YAML parser and every course file to the browser. So client
+than shipping a Postgres driver to the browser. So client
 components take what they need as props: the course page resolves the course,
 each topic's mastery and each module's assets and hands them to `CoursePath`;
 the session page resolves the course, module and topic for `AgentSession`; the
@@ -672,21 +648,22 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/lib/progress.test.ts` | Counting completed topics per module and course |
 | `apps/web/src/lib/course-path.test.ts` | The course path: a topic's concepts and its bucket, the active node, the lock rule, the labels and links |
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
-| `apps/web/src/app/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
+| `apps/web/src/app/(app)/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
 | `apps/web/src/app/api/review/routes.test.ts` | The review routes: the origin guard, the rating range, a rating landing in the log on SM-2's scale, the due list with its focus and intervals |
 | `apps/web/src/lib/review-core.test.ts`, `review-queue.test.ts` | A review card's options (deterministic, the answer among them), check versus recall, and the interval and date wording |
 | `services/catalog/test/review-grade.test.ts` | `gradeReview`, `reviewQueue` and the rating mapping: the grade moved out of the CLI unchanged, and a web grade replays exactly |
-| `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, containment, the closed content-type list. No database, so it is a gate everywhere |
-| `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route end to end: a 200, a 206, a 416, the four refusals, a stale index, the production gate |
+| `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, header-safe filenames, the closed content-type list, the byte-counted stream. No database, so it is a gate everywhere |
+| `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route's refusals and headers: a video on disk under the recorded data root still answers `not-uploaded`, the SVG sandbox, a 416 on an empty object, an id never joined onto a path, an undeclared extension |
+| `apps/web/src/app/api/assets/asset-rows.test.ts` | Notes, logs and `.tldr`s served from rows on a flipped database, and `not-flipped` by name when a row or `CONTENT_SOURCE` says files |
+| `apps/web/src/data/source.test.ts` | The content seam once per request, a type not flipped refused naming `catalog flip`, an unreachable database refused rather than read from files |
 | `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
 | `apps/web/src/lib/asset-problems.test.ts` | The reason table (no paths, no em dashes, a fix per fixable code) and the probe's mapping of every answer |
 | `apps/web/src/components/asset-failure.test.ts`, `NoteProse.island.test.ts` | Each asset surface falling back to the shared panel with its reason, and a note without pictures rendering no client island |
-| `apps/web/src/app/api/assets/asset-blob.test.ts` | The asset routes from the blob store with the file switch off: a 200, a 206, a 416, a `pending` blob and a lost object as `not-uploaded`, the legacy branch still gated, a stored poster with its 304, a stored transcript read for the page |
+| `apps/web/src/app/api/assets/asset-blob.test.ts` | The asset routes from the blob store: a 200, a 206, a 416, a `pending` blob, a lost object and a video never uploaded as `not-uploaded`, a stored poster with its 304 and none cut for a video without one, a stored transcript read for the page |
 | `apps/web/src/app/api/assets/asset-blob-redirect.test.ts` | A store that signs URLs: the 302 carries the store's URL and no path, lives an hour, and a Range request at it returns 206 |
-| `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes fall back to the file instead of answering `catalog-unreachable` |
+| `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes answer `not-uploaded` instead of `catalog-unreachable` |
 | `services/catalog/test/asset-upload.test.ts` | `catalog asset upload` and `catalog blob audit`: every row pointed at bytes equal to its `content_hash`, a rerun that does nothing, a pending upload finished, a re-render refused, a re-index keeping its keys, and each audit finding with what `--fix` does |
-| `apps/web/src/app/api/assets/asset-poster.test.ts` | The poster route, against a fake ffmpeg that counts its own runs: a hit, a second hit from cache, a 304, a non-video, no ffmpeg, the gate, and a burst of ten sharing one process |
 | `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
 | `packages/content/test/courses.test.ts` | Curriculum invariants (the shortlist, unique ids, which syllabi are inferred) and every refusal the reader makes |
 | `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |

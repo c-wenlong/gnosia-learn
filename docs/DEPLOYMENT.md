@@ -28,12 +28,13 @@ deployment check on every PR is red while lint, typecheck, test and build are
 green. That is the expected state between merging the re-layout and flipping
 the switch, not a regression to debug.
 
-The second setting is not optional. The app reads `content/*.yaml` at request
-time and imports three workspace packages, all of which sit above `apps/web/`;
-without it the build cannot see them at all.
-`outputFileTracingRoot` in `apps/web/next.config.ts` is the matching half on
-this side: it widens the file trace from `apps/web/` to the repository root, so
-those files are carried into the deployment.
+The second setting is not optional. The app imports three workspace packages,
+all of which sit above `apps/web/`; without it the build cannot see them at
+all. `outputFileTracingRoot` in `apps/web/next.config.ts` is the matching half
+on this side: it widens the file trace from `apps/web/` to the repository
+root, so those packages are carried into the deployment. No content file is:
+since phase 2 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) the app reads
+courses, topics, notes and diagrams from the database only.
 
 `apps/web/vercel.json` names the framework and one override:
 `installCommand: cd ../.. && npm ci`. Without it Vercel runs `npm ci` inside
@@ -169,8 +170,15 @@ broken one, and two things make it survivable:
 - Every read degrades. A page renders with an empty learner snapshot and says
   the database is unreachable rather than failing; a write comes back 503 with
   `STORE_UNAVAILABLE` and the UI shows "not saved". Nothing is lost, because
-  nothing was there to lose — but nothing new is recorded either, so the
+  nothing was there to lose, but nothing new is recorded either, so the
   production app is read-only until this is set.
+- Content is the exception, since phase 2: the courses, topics and notes are
+  rows, so a page that shows them renders the shell with a panel saying its
+  content could not be read (`app/(app)/error.tsx`), where it used to fall
+  back to the files. The landing page and sign-in read no content and are
+  unaffected. That is edge case 20 of the plan, the one availability property
+  the move to the database gives up, and it lasts until the cloud database
+  exists.
 
 **Setting it is also the moment the learner routes become writable by anyone.**
 `/api/learner/*` has no account to authenticate: the only check is the same
@@ -249,8 +257,8 @@ uploads it (`pending` row, put, `head`, `present`), cuts a poster per video
 with ffmpeg and uploads that too, then points each asset row at its blob with
 one revision each. When a video's bytes changed and no new poster can be cut
 (no ffmpeg, or ffmpeg found no frame), its old poster is unhooked from it in the
-same write, so the page cuts a frame from the file rather than showing the old
-render, until a later upload makes a new one. Measured on 2026-09-28 against a copy of the local
+same write, so the card shows its placeholder rather than the old render,
+until a later upload makes a new one. Measured on 2026-09-28 against a copy of the local
 database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
 seconds. A rerun skips everything already `present` without reading a file,
 so an interrupted run is finished by running it again. With no ffmpeg on the
@@ -269,23 +277,24 @@ since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/
 files a crashed upload left, once they are a day old.
 
 A later `catalog index --only manimkc` keeps every key whose bytes it hashes
-again unchanged; a re-rendered video loses its key and is served from its file
+again unchanged; a re-rendered video loses its key and answers `not-uploaded`
 until the next upload.
 
 ### Serving from it
 
-`/api/assets/{id}/file` and `/api/assets/{id}/poster` ask the store first
-whenever the row names a blob, and `ASSET_FILES_ENABLED` gates only the legacy
-branch that reads a file from disk. With the `fs` store the route streams the
-object with Range support; a cloud store's signed URL (an hour) would be a
-302 instead, so a video never streams through a Vercel function (edge case 10
-of the plan). An asset whose blob is `pending`, or whose object the store has
-lost, answers 404 with the code `not-uploaded`. A database not yet migrated
-to 0010 has no blob columns, and the routes then serve the legacy file exactly
-as before, with one warning in the server log saying to migrate. A note, a
-session log or a `.tldr` whose type the database owns is served from its row,
-also whatever the switch says. The pages decide per row the same way, so with
-the switch unset a stored video plays and a stored diagram draws.
+`/api/assets/{id}/file` and `/api/assets/{id}/poster` serve an asset from the
+store when its row names a blob, and a note, a session log or a `.tldr` from
+its row. There is no third place: since phase 2 of
+[CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#phase-2-readers-go-database-only)
+the app reads no file off the disk, and the `ASSET_FILES_ENABLED` switch that
+gated the old file branch is gone (a value left in `apps/web/.env.local` is
+ignored). With the `fs` store the route streams the object with Range
+support; a cloud store's signed URL (an hour) would be a 302 instead, so a
+video never streams through a Vercel function (edge case 10 of the plan). An
+asset with no blob, a blob that is `pending`, or an object the store has lost
+answers 404 with the code `not-uploaded`; the poster route serves only a
+stored poster. The pages decide per row the same way, and the library counts
+what is not uploaded in one notice that names the upload command.
 
 ### Checking it
 

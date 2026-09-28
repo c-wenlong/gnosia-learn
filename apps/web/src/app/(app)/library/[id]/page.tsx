@@ -187,8 +187,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // sends a failure panel rather than a player that is certain to fail. Asked
   // of this row through the route's own `resolveAsset`, so the page and the
   // route give one answer: a blob in the store, or a note, log or `.tldr` the
-  // database owns, is servable whatever `ASSET_FILES_ENABLED` says, and only a
-  // legacy file waits on the switch and on manimkc's index.
+  // database owns, is servable, and anything else is `not-uploaded`.
   const fileProblem: RouteProblemCode | null =
     asset.kind === "link" ? null : ((await readFileProblems([asset.id])).get(asset.id) ?? null);
   const servable = asset.kind !== "link" && fileProblem === null;
@@ -202,8 +201,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   // its contents instead of nothing; `resolveAsset`'s closed extension list is
   // what refuses a binary, and `readAssetText` refuses anything over the
   // preview cap. A null lands on `UnreadableFile`, which says so. A note or a
-  // log the database owns is read from its row, never from the file, which is
-  // at best the export as of the flip.
+  // log is read from its row.
   const rendered = ["video", "diagram_svg", "link"];
   const text =
     servable && !rendered.includes(asset.kind) ? await withCatalog((db) => readAssetText(db, asset.id)) : null;
@@ -653,21 +651,19 @@ function CueList({
 }
 
 /**
- * This deployment serves files, and this one did not come back.
+ * The route said this asset is servable, and its text did not come back.
  *
- * A different fact from the three `FileAccess` states, which are all about the
- * deployment: those say nothing can be served, this says everything else can
- * and this one file could not. `readAssetText` deliberately collapses the
- * reasons (gone from disk, unreadable, an extension the route refuses, larger
- * than the preview cap) because the reader's next move is the same for all of
- * them, so the card lists them rather than guessing between them. The raw
- * link stays, since it is the one way to find out which it was.
+ * `readAssetText` deliberately collapses the reasons (an object the store
+ * lost since the check, an extension the route refuses, larger than the
+ * preview cap) because the reader's next move is the same for all of them,
+ * so the card lists them rather than guessing between them. The raw link
+ * stays, since it is the one way to find out which it was.
  */
 function UnreadableFile({ path, href }: { path: string | null; href: string }) {
   return (
     <Notice
       title={path === null ? "This row names no file." : "This file could not be read."}
-      command="npm run catalog -- index"
+      command={path === null ? "npm run catalog -- index" : "npm run catalog -- blob audit"}
       className="border-dashed"
     >
       {path === null ? (
@@ -678,10 +674,10 @@ function UnreadableFile({ path, href }: { path: string | null; href: string }) {
       ) : (
         <>
           <p>
-            The row is real and this deployment does serve asset files, so this is about the file
-            itself: it may have moved since the catalog last indexed it, be larger than the page
-            reads in one go, or be a kind of file this page does not show. Re-indexing corrects a
-            path that changed.
+            The row is real and its bytes are stored, so this is about the file itself: the store
+            may have lost it since the page checked, it may be larger than the page reads in one
+            go, or it may be a kind of file this page does not show. A blob audit finds a lost
+            object.
           </p>
           <p className="mt-2 font-mono text-[12px] break-all text-text3">{path}</p>
           <p className="mt-2">

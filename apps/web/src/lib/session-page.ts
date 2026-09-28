@@ -3,7 +3,7 @@ import "server-only";
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@self-learn/catalog/state";
 
 import { resolveProviders } from "@/lib/agent/providers";
-import { readFileProblems } from "@/lib/asset-library";
+import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
@@ -33,7 +33,8 @@ import {
 /** What the teach step's widget slot shows. */
 export type TeachAsset =
   | { kind: "diagram"; id: string; title: string; src: string; statusHref: string }
-  | { kind: "video"; id: string; title: string; src: string; statusHref: string; poster: string }
+  /** `poster` only when the upload stored one: nothing cuts a frame at request time. */
+  | { kind: "video"; id: string; title: string; src: string; statusHref: string; poster: string | null }
   /** There is an asset, and the server already knows its file will not load. */
   | { kind: "failed"; title: string; code: RouteProblemCode }
   | { kind: "none" };
@@ -58,8 +59,8 @@ export interface SessionPageData {
 /**
  * The teach step's picture: the concept's first exported diagram, else its
  * first video, from `assetsForConcept` (the workspace already holds them).
- * Decided on the server the way the library decides it, so a switched-off file
- * route or a missing file is a sentence, never a broken image.
+ * Decided on the server the way the library decides it, so a video nobody
+ * uploaded is a sentence, never a broken image.
  */
 async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
   const pick =
@@ -67,21 +68,23 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
   if (pick === null) return { kind: "none" };
 
   const title = pick.title ?? pick.path?.split("/").pop() ?? pick.id;
-  // Per row, through the route's own resolver: a blob in the store plays with
-  // the switch off, and a legacy file with it off is `files-off`.
+  // Per row, through the route's own resolver: a blob in the store plays, and
+  // a row with no stored copy is `not-uploaded`.
   const problem = (await readFileProblems([pick.id])).get(pick.id) ?? null;
   if (problem !== null) return { kind: "failed", title, code: problem };
 
-  return pick.kind === "video"
-    ? {
-        kind: "video",
-        id: pick.id,
-        title,
-        src: assetFileHref(pick.id),
-        statusHref: assetStatusHref(pick.id),
-        poster: assetPosterHref(pick.id),
-      }
-    : { kind: "diagram", id: pick.id, title, src: assetFileHref(pick.id), statusHref: assetStatusHref(pick.id) };
+  if (pick.kind === "video") {
+    const { posters } = await readAssetAccess([pick]);
+    return {
+      kind: "video",
+      id: pick.id,
+      title,
+      src: assetFileHref(pick.id),
+      statusHref: assetStatusHref(pick.id),
+      poster: posters.has(pick.id) ? assetPosterHref(pick.id) : null,
+    };
+  }
+  return { kind: "diagram", id: pick.id, title, src: assetFileHref(pick.id), statusHref: assetStatusHref(pick.id) };
 }
 
 /**

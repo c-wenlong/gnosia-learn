@@ -8,10 +8,10 @@ import type { Course, Module, Topic } from "@/lib/types";
 /**
  * The app's view of the courses.
  *
- * Ten TypeScript files used to live here and a parity test kept them in step
- * with the YAML. Now there is one representation, read by one parser that the
- * catalog indexer also uses, so "what does this course file mean" has a single
- * answer.
+ * Read from the `collection` and `curriculum_item` rows through the content
+ * seam, database only since phase 2 (`@/data/source`): a course that is not
+ * flipped, or a database that does not answer, throws, and the page's error
+ * boundary says so.
  *
  * **Async, and once per request.** The list used to be a module-level
  * constant, read once per process. That cannot be served from Postgres, so it
@@ -21,10 +21,9 @@ import type { Course, Module, Topic } from "@/lib/types";
  * that need every course take it as an argument, so nothing under `lib/` has
  * to be async to use them.
  *
- * **Server only.** Reading content touches the filesystem or the database, and
- * `server-only` makes a `"use client"` module that reaches it fail at build
- * time rather than shipping a YAML parser and every course file to the
- * browser. Client components take the course, module and topic they need as
+ * **Server only.** Reading content reaches the database, and `server-only`
+ * makes a `"use client"` module that reaches it fail at build time rather
+ * than shipping a Postgres driver to the browser. Client components take the course, module and topic they need as
  * props; the pure helpers they still want are in `@/lib/curriculum`.
  */
 export const getCourses = cache(async (): Promise<Course[]> => contentSource().courses());

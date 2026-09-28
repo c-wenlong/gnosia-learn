@@ -30,14 +30,12 @@ import {
  * and diagrams (S4 and S5 of the phase 1 review, docs/CONTENT-MIGRATION.md).
  *
  * A fixture tree is imported into a scratch database and `concepts`,
- * `sessions` and `diagrams` are flipped for real. `ASSET_FILES_ENABLED` is off
- * for the whole file, and none of these rows has a file under this checkout
- * (the legacy branch resolves `self-learn` paths against the repository, not
- * the fixture), so a 200 can only have come from a row or the blob store.
- * Before the fix a note came back as its tree file as of the flip, a log
- * started after the flip was 404 `file-missing`, a `.tldr` was
- * `unsupported-type`, and every page said "files off" for an SVG the route
- * served from the store.
+ * `sessions` and `diagrams` are flipped for real. The routes read no file off
+ * the disk since phase 2, so a 200 can only have come from a row or the blob
+ * store, and a row with neither is `not-uploaded`. Before S4 a note came back
+ * as its tree file as of the flip, a log started after the flip was 404, a
+ * `.tldr` was `unsupported-type`, and every page said "files off" for an SVG
+ * the route served from the store.
  */
 
 // The routes call the handlers directly, outside the request scope Next sets
@@ -54,10 +52,10 @@ const NOTE_ID = "note:learn/concepts/testing/base.md";
 const TLDR_ID = "diagram:learn/assets/first-diagram.tldr";
 const SVG_ID = "diagram:learn/assets/first-diagram.svg";
 const OLD_LOG_ID = "session:learn/sessions/2026-01-01-old.md";
-const LEGACY_ID = "manimkc:out/testing/legacy/legacy.mp4";
+const UNUPLOADED_ID = "manimkc:out/testing/legacy/legacy.mp4";
 const STORED_ID = "manimkc:out/testing/stored/stored.mp4";
 const BARE_ID = "manimkc:out/testing/bare/bare.mp4";
-const LEGACY_TRANSCRIPT_ID = "manimkc:out/testing/legacy/legacy.transcript.json";
+const UNUPLOADED_TRANSCRIPT_ID = "manimkc:out/testing/legacy/legacy.transcript.json";
 
 const OLD_LOG =
   "---\ntitle: Old\ndate: 2026-01-01T00:00:00.000Z\ngoal: base\ntype: learning-session\n---\n\n# Old\n\n> Live log.\n- [[base]] once\n\n";
@@ -110,7 +108,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "MANIMKC_ROOT", "ASSET_FILES_ENABLED", "CONTENT_SOURCE"]) {
+    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "MANIMKC_ROOT", "CONTENT_SOURCE"]) {
       saved[key] = process.env[key];
     }
     scratch = await createScratchDatabase();
@@ -119,7 +117,6 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;
     process.env.MANIMKC_ROOT = path.join(tmpdir(), "asset-rows-no-manimkc");
-    delete process.env.ASSET_FILES_ENABLED;
     delete process.env.CONTENT_SOURCE;
 
     fixture = await makeFixture();
@@ -146,8 +143,10 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     await fixture.write("learn/assets/first-diagram.svg", SVG);
 
     await runImportCommand({ dir: fixture.root });
-    // A render the store never took: the one row here that needs the disk.
-    // Written before the flips, which arm the guard against direct writes.
+    // A render whose upload never finished: the rows here with nothing to
+    // serve, named by a `pending` blob (the phase 2 contract migration
+    // forbids a video or a sidecar with no key at all). Written before the
+    // flips, which arm the guard against direct writes.
     // Two videos in the store, only one with a stored poster, as an upload
     // that ran without ffmpeg leaves them. Rows only: the thumbnail decision
     // reads the table, and the card asks the route for the bytes.
@@ -160,7 +159,15 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       state: "present",
       confirmedAt: new Date(),
     });
-    await scratch.db.insert(blobObject).values([present("a"), present("b"), present("c")]);
+    const pending = (n: string, ext: string) => ({
+      ...present(n),
+      key: `local/${n.repeat(64)}.${ext}`,
+      state: "pending",
+      confirmedAt: null,
+    });
+    await scratch.db
+      .insert(blobObject)
+      .values([present("a"), present("b"), present("c"), pending("d", "mp4"), pending("e", "json")]);
     const video = (id: string, file: string, blobKey: string | null, kind = "video") => ({
       id,
       kind,
@@ -173,8 +180,13 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       blobKey,
     });
     await scratch.db.insert(asset).values([
-      video(LEGACY_ID, "out/testing/legacy/legacy.mp4", null),
-      video(LEGACY_TRANSCRIPT_ID, "out/testing/legacy/legacy.transcript.json", null, "transcript"),
+      video(UNUPLOADED_ID, "out/testing/legacy/legacy.mp4", `local/${"d".repeat(64)}.mp4`),
+      video(
+        UNUPLOADED_TRANSCRIPT_ID,
+        "out/testing/legacy/legacy.transcript.json",
+        `local/${"e".repeat(64)}.json`,
+        "transcript",
+      ),
       video(STORED_ID, "out/testing/stored/stored.mp4", `local/${"a".repeat(64)}.mp4`),
       video(BARE_ID, "out/testing/bare/bare.mp4", `local/${"b".repeat(64)}.mp4`),
       { ...video(`poster:${STORED_ID}`, "", `local/${"c".repeat(64)}.jpg`, "poster"), path: null },
@@ -244,51 +256,76 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(documentBytes(JSON.parse(documentOf())));
   });
 
-  it("serves the SVG from the blob store with the switch off", async () => {
+  it("serves the SVG from the blob store", async () => {
     const response = await call(FILE, "file", SVG_ID);
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(SVG);
   });
 
-  it("says ok on the status route for every row-backed asset, and files-off for the one on disk", async () => {
+  it("says ok on the status route for every row-backed asset, and not-uploaded for the one with nothing stored", async () => {
     for (const id of [NOTE_ID, TLDR_ID, SVG_ID, OLD_LOG_ID]) {
       const response = await call(STATUS, "status", id);
       expect({ id, status: response.status }).toEqual({ id, status: 200 });
     }
-    const legacy = await call(STATUS, "status", LEGACY_ID);
+    const legacy = await call(STATUS, "status", UNUPLOADED_ID);
     expect(legacy.status).toBe(404);
-    expect(((await legacy.json()) as { code: string }).code).toBe("files-off");
+    expect(((await legacy.json()) as { code: string }).code).toBe("not-uploaded");
   });
 
-  it("reads the files again when CONTENT_SOURCE points the type back at them", async () => {
+  it("refuses a note by name when CONTENT_SOURCE points its type at files, and reads no file", async () => {
     process.env.CONTENT_SOURCE = "concepts=files";
     try {
       const response = await call(FILE, "file", NOTE_ID);
-      // The legacy branch, which the switch gates.
-      expect(response.status).toBe(404);
-      expect(((await response.json()) as { code: string }).code).toBe("files-off");
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { code: string; detail: string };
+      expect(body.code).toBe("not-flipped");
+      expect(body.detail).toContain("CONTENT_SOURCE sends concepts to files");
+      const status = await call(STATUS, "status", NOTE_ID);
+      expect(await status.json()).toEqual({ ok: false, code: "not-flipped" });
+      expect((await library.readFileProblems([NOTE_ID])).get(NOTE_ID)).toBe("not-flipped");
     } finally {
       delete process.env.CONTENT_SOURCE;
     }
   });
 
-  it("decides the pages' answers per row, so a stored or row-backed asset is not 'files off'", async () => {
-    const problems = await library.readFileProblems([NOTE_ID, TLDR_ID, SVG_ID, LEGACY_ID]);
+  it("refuses a log by name when its content_source row says files", async () => {
+    // A database where sessions were never flipped, as the app sees it: the
+    // row decides, and the app has no file reader to fall back on.
+    process.env.CONTENT_SOURCE = "";
+    const [before] = (
+      await scratch.pool.query<{ source: string }>("select source from content_source where type = 'sessions'")
+    ).rows;
+    await scratch.pool.query("update content_source set source = 'files' where type = 'sessions'");
+    try {
+      const response = await call(FILE, "file", OLD_LOG_ID);
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { code: string; detail: string };
+      expect(body.code).toBe("not-flipped");
+      expect(body.detail).toContain("still says files");
+      expect(body.detail).toContain("npm run catalog -- flip sessions");
+    } finally {
+      await scratch.pool.query("update content_source set source = $1 where type = 'sessions'", [before?.source]);
+      delete process.env.CONTENT_SOURCE;
+    }
+  });
+
+  it("decides the pages' answers per row: stored or row-backed is served, nothing stored is not", async () => {
+    const problems = await library.readFileProblems([NOTE_ID, TLDR_ID, SVG_ID, UNUPLOADED_ID]);
     expect(Object.fromEntries(problems)).toEqual({
       [NOTE_ID]: null,
       [TLDR_ID]: null,
       [SVG_ID]: null,
-      [LEGACY_ID]: "files-off",
+      [UNUPLOADED_ID]: "not-uploaded",
     });
 
     const rows = [
-      { id: SVG_ID, kind: "diagram_svg", sourceRepo: "self-learn" },
-      { id: NOTE_ID, kind: "note", sourceRepo: "self-learn" },
-      { id: LEGACY_ID, kind: "video", sourceRepo: "manimkc" },
+      { id: SVG_ID, kind: "diagram_svg", path: "learn/assets/first-diagram.svg" },
+      { id: NOTE_ID, kind: "note", path: "learn/concepts/testing/base.md" },
+      { id: UNUPLOADED_ID, kind: "video", path: "out/testing/legacy/legacy.mp4" },
     ];
-    const access = await library.readFileAccess(rows);
-    expect(access.selfLearn.ok).toBe(false);
+    const access = await library.readAssetAccess(rows);
     expect([...access.served].sort()).toEqual([NOTE_ID, SVG_ID].sort());
+    expect(library.unservedRows(rows, access).map((row) => row.id)).toEqual([UNUPLOADED_ID]);
     expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
     expect(library.thumbnailFor(rows[2]!, access)).toBeNull();
   });
@@ -298,15 +335,15 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       { id: STORED_ID, kind: "video", sourceRepo: "manimkc" },
       { id: BARE_ID, kind: "video", sourceRepo: "manimkc" },
     ];
-    const access = await library.readFileAccess(rows);
+    const access = await library.readAssetAccess(rows);
     // Both play: their bytes are in the store.
     expect([...access.served].sort()).toEqual([BARE_ID, STORED_ID].sort());
     expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
-    // No stored poster, and cutting one reads the file the switch keeps off.
+    // No stored poster, and nothing cuts one at request time any more.
     expect(library.thumbnailFor(rows[1]!, access)).toBeNull();
   });
 
-  it("searches a row-backed note's words with the switch off, and counts the transcript it could not read", async () => {
+  it("searches a row-backed note's words, and counts the transcript nobody uploaded", async () => {
     const at = (id: string, kind: string, file: string) => ({
       id,
       kind,
@@ -321,8 +358,8 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     const out = await library.readSearchText(
       [
         at(NOTE_ID, "note", "learn/concepts/testing/base.md"),
-        at(LEGACY_TRANSCRIPT_ID, "transcript", "out/testing/legacy/legacy.transcript.json"),
-        // Unreadable for a reason that is not the switch: not counted.
+        at(UNUPLOADED_TRANSCRIPT_ID, "transcript", "out/testing/legacy/legacy.transcript.json"),
+        // No row at all: passed over, not counted as unreadable.
         at("manimkc:out/testing/gone.transcript.json", "transcript", "out/testing/gone.transcript.json"),
       ],
       ["line"],
@@ -332,9 +369,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(out.skipped).toBe(1);
   });
 
-  it("reads a row-backed note's text for the library page with the switch off", async () => {
+  it("reads a row-backed note's text for the library page", async () => {
     const text = await library.readAssetText(scratch.db, NOTE_ID);
     expect(text).toContain("A line only the row has.");
-    expect(await library.readAssetText(scratch.db, LEGACY_ID)).toBeNull();
+    expect(await library.readAssetText(scratch.db, UNUPLOADED_ID)).toBeNull();
   });
 });

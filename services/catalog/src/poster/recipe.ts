@@ -1,20 +1,14 @@
 /**
- * The poster recipe: which frame, how big, encoded how. One copy, shared by the
- * two things that make a poster, so a card cannot show one picture from the
- * blob store and a different one from the legacy path:
+ * The poster recipe: which frame, how big, encoded how. `catalog asset upload`
+ * makes a poster once per video on the laptop with it and stores it as a blob
+ * (docs/CONTENT-MIGRATION.md, Track E), and the web app serves that blob.
  *
- * - `catalog asset upload`, which makes a poster once per video on the laptop
- *   and stores it as a blob (docs/CONTENT-MIGRATION.md, Track E);
- * - the web app's `/api/assets/{id}/poster` fallback for a video that has not
- *   been uploaded yet (`apps/web/src/lib/asset-posters.ts`), which re-exports
- *   these and keeps its own cache and bounds.
- *
- * Pure: no spawn, no filesystem. The web app takes it through
- * `@self-learn/catalog/state`, the package's one door.
+ * Pure: no spawn, no filesystem. The web app takes `POSTER_CONTENT_TYPE`
+ * through `@self-learn/catalog/state`, the package's one door.
  *
  * The reasoning for each value is beside it. They were chosen for the web
- * route's fallback and moved here unchanged when the upload started making
- * posters too.
+ * route's old request-time fallback, which phase 2 removed, and moved here
+ * unchanged when the upload started making posters.
  */
 
 /**
@@ -77,8 +71,7 @@ export const POSTER_EXTENSION = ".jpg";
  *
  * Nothing here is a string that was concatenated from anything a request chose:
  * the offset, the width and the quality are the constants above, and `file` is
- * what `resolveAssetFile` proved to be inside its root, or the file the
- * upload command is about to store. It is passed as its own
+ * the file the upload command is about to store. It is passed as its own
  * element of the array, so a filename containing a space, a quote or a
  * semicolon is one argument either way.
  *

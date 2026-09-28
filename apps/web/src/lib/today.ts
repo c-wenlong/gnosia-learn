@@ -184,11 +184,10 @@ function placeOf(
 
 /**
  * How many check blocks each concept's note holds, read through the content
- * seam: `concept.body` once the database owns the notes, the note file until
- * then (Track C of docs/CONTENT-MIGRATION.md). A note that cannot be read (a
- * deployment without `learn/`, a slug with no note) counts as none, which the
- * row prints as "recall": the card is still due, it just has nothing stored
- * to ask.
+ * seam from `concept.body` (Track C of docs/CONTENT-MIGRATION.md). A note that
+ * cannot be read (the database is down, concepts are not flipped, a slug with
+ * no note) counts as none, which the row prints as "recall": the card is
+ * still due, it just has nothing stored to ask.
  */
 async function checkCounts(slugs: string[]): Promise<Record<string, number>> {
   if (slugs.length === 0) return {};
