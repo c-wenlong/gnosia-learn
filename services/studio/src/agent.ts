@@ -430,6 +430,15 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   its own snippets and the document it is drawing. The candidate directory
  *   and not the workspace: the workspace root holds the runner's records.
  * - `--max-turns` capped server side regardless of the brief.
+ * - `--strict-mcp-config` with an empty `--mcp-config` seals the session from
+ *   this machine's own MCP servers, `claude_desktop_config.json` included.
+ *   Measured (docs/STUDIO-CHAT-FIRST.md, D34, open question 4): without it, a
+ *   spawn on this machine loaded this account's claude.ai connectors anyway —
+ *   Gmail, Slack, Drive, Calendar, Docs, 90 tools and about 69,500 tokens of
+ *   definitions on every request, a Gmail send tool among them, guarded only by
+ *   `--permission-prompts none`, which refuses a *call* but does not stop the
+ *   definitions riding the request. `--setting-sources ""` alone does not close
+ *   this: connectors are not a setting source.
  */
 export async function startAgent(options: AgentOptions): Promise<AgentRun> {
   const settingsInput: SettingsInput = {
@@ -455,6 +464,9 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     "",
     "--permission-prompts",
     "none",
+    "--strict-mcp-config",
+    "--mcp-config",
+    '{"mcpServers":{}}',
     "--add-dir",
     scratchDir(options.jobId),
     "--add-dir",
