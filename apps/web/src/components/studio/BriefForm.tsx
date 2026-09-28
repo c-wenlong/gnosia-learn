@@ -15,6 +15,7 @@ import {
   emptyDraft,
   refusalReport,
   slugFromTitle,
+  type Brief,
   type BriefDraft,
   type RefusalReport,
 } from "@/lib/studio-jobs";
@@ -47,15 +48,25 @@ export function BriefForm({
   from,
   /** The diagram this form was opened beside, used as the default slug. */
   suggested,
+  /** A brief to start from: the conversation's latest, for "Fill the brief myself". */
+  initial,
+  /** The conversation the job belongs to, sent as `draftId` beside the brief. */
+  draftId = null,
+  /** Inside the studio's panel, whose header already names it and closes it. */
+  embedded = false,
 }: {
   path: string;
   topics: TopicOption[];
   from: string;
   suggested?: { slug: string; title: string | null; topic: string | null } | undefined;
+  initial?: Brief | undefined;
+  draftId?: string | null;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const { post } = useStudioJobs();
   const [draft, setDraft] = useState<BriefDraft>(() => {
+    if (initial !== undefined) return draftFromBrief(initial);
     const base = emptyDraft();
     if (suggested === undefined) return base;
     // Opened from a diagram's own screen: extending that diagram is the likely
@@ -114,7 +125,7 @@ export function BriefForm({
     // appears out of nowhere ten minutes later.
     await askToNotify();
     const brief = draftToBrief(draft, `studio-ui:${draft.topic}:${draft.slug}:${Date.now()}`);
-    const result = await post("/studio/api/jobs", brief);
+    const result = await post("/studio/api/jobs", draftId === null ? brief : { ...brief, draftId });
     setBusy(false);
     if (!result.ok) {
       const detail = result.data.detail as { field?: unknown } | null;
@@ -128,12 +139,31 @@ export function BriefForm({
       return;
     }
     const jobId = typeof result.data.jobId === "string" ? result.data.jobId : null;
-    router.push(jobId === null ? path : panelHref(path, { job: jobId, brief: null }), { scroll: false });
+    // A job sent with the conversation's draftId belongs to it and opens under
+    // its back bar. One sent without (the draft was not briefed, and the
+    // runner refuses a draftId on any other state) opens outside it, so the
+    // conversation does not claim a job it never started.
+    router.push(
+      jobId === null ? path : panelHref(path, { job: jobId, brief: null, ...(draftId === null ? { draft: null } : {}) }),
+      { scroll: false },
+    );
     router.refresh();
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3">
+    <div
+      className={
+        embedded
+          ? "flex flex-col px-5 pb-5 pt-2"
+          : "flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--surface-raised)] p-3"
+      }
+    >
+      {embedded ? (
+        <p className="mt-2 text-xs text-[var(--muted)]">
+          The form the planner fills for you. An agent draws it in its own workspace, and nothing in
+          the catalog changes until somebody accepts it.
+        </p>
+      ) : (
       <div className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <PanelHeading>New diagram</PanelHeading>
@@ -150,6 +180,7 @@ export function BriefForm({
           Close
         </Link>
       </div>
+      )}
 
       <Field label="Intent" required error={touched ? errors.intent : undefined}>
         <textarea

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Button as KitButton } from "@/components/ui/Button";
 import {
   canvasHref,
   displayTitle,
@@ -85,19 +86,44 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
   );
 }
 
+/**
+ * One diagram's panel inside the studio's dialog: the same content as the
+ * inspector, with Open canvas pinned at the foot (docs/STUDIO-CHAT-FIRST.md,
+ * "The plus card and the panel"). Extend joins it in phase 2.
+ */
+export function DiagramPanelBody({ diagram, jobs, path }: { diagram: Diagram; jobs: JobRow[]; path: string }) {
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <SelectedDiagram diagram={diagram} jobs={jobs} path={path} embedded />
+      </div>
+      <div className="flex shrink-0 items-center gap-3 border-t border-hair px-5 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+        <KitButton href={canvasHref(diagram.name)}>Open canvas</KitButton>
+        <span className="min-w-0 text-[12px] text-text3">Edit it by hand on a live tldraw canvas.</span>
+      </div>
+    </>
+  );
+}
+
 function SelectedDiagram({
   diagram,
   jobs,
   path,
+  embedded = false,
 }: {
   diagram: Diagram;
   jobs: JobRow[];
   path: string;
+  embedded?: boolean;
 }) {
   const pill = freshness(diagram.svgState);
   return (
     <>
-      <div className="mb-3 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[#f7f6f3]">
+      <div
+        className={`mb-3 flex items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[#f7f6f3] ${
+          embedded ? "h-72 max-h-[40dvh]" : "aspect-[4/3]"
+        }`}
+      >
         {diagram.svg.exists ? (
           /* Same as the grid tile: the runner streams a file from outside the
              app's tree, and an SVG is not a format the optimiser would resize. */
@@ -112,7 +138,7 @@ function SelectedDiagram({
         )}
       </div>
 
-      <h2 className="text-sm font-medium">{displayTitle(diagram)}</h2>
+      {!embedded && <h2 className="text-sm font-medium">{displayTitle(diagram)}</h2>}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {diagram.topic === null ? (
           <Chip tone="warn">No topic</Chip>
@@ -184,9 +210,11 @@ function SelectedDiagram({
       <div className="mt-4">
         <PanelHeading>Verbs</PanelHeading>
         <div className="flex flex-wrap gap-1.5">
-          <ButtonLink href={canvasHref(diagram.name)} filled>
-            Open canvas
-          </ButtonLink>
+          {!embedded && (
+            <ButtonLink href={canvasHref(diagram.name)} filled>
+              Open canvas
+            </ButtonLink>
+          )}
           <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
           <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
           <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
@@ -201,12 +229,7 @@ function SelectedDiagram({
       <div className="mt-5">
         <PanelHeading>Jobs</PanelHeading>
         {jobs.length === 0 ? (
-          <>
-            <p className="text-xs text-[var(--muted)]">no jobs for this diagram</p>
-            <div className="mt-2">
-              <ButtonLink href={panelHref(path, { brief: "", job: null })}>New job</ButtonLink>
-            </div>
-          </>
+          <p className="text-xs text-[var(--muted)]">no jobs for this diagram</p>
         ) : (
           <ul className="space-y-1">
             {jobs.map((job) => (
@@ -214,7 +237,7 @@ function SelectedDiagram({
                 {/* Each row opens that job in this panel: the history is a way
                     back into a job, not a list of dates. */}
                 <Link
-                  href={panelHref(path, { job: job.jobId, brief: null })}
+                  href={panelHref(path, { job: job.jobId, brief: null, selected: embedded ? null : undefined })}
                   scroll={false}
                   className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-[var(--surface-hover)]"
                 >
