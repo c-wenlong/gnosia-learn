@@ -837,28 +837,91 @@ PRs (*guessed*).
 **Owns:** `services/catalog/src/content/courses.ts`, the `course` and `item`
 commands, the courses indexer's import mode.
 
-- [ ] `catalog course import <file.yaml> --reason`: parses with
+- [x] `catalog course import <file.yaml> --reason`: parses with
       `packages/content`'s course parser (every rule in its section 7 of the
       inventory, `packages/content/src/courses.ts:136-357`), validates
       references against rows instead of other files, and writes the diff
       through the seam. An item the file no longer lists is archived and
       reported by id, never deleted.
-- [ ] `catalog course export <id>` writes the one YAML file to edit.
-- [ ] `catalog item archive|restore|purge`. `purge` refuses while `progress`
+- [x] `catalog course export <id>` writes the one YAML file to edit.
+- [x] `catalog item archive|restore|purge`. `purge` refuses while `progress`
       or `recap` rows name the item unless `--with-learner-data` is passed, and
       then snapshots those rows into the revision before deleting.
-- [ ] Readers filter `archived_at is null`; an archived item with a learner's
+- [x] Readers filter `archived_at is null`; an archived item with a learner's
       tick leaves the course path and stays in the Settings export. The
       catalog's own `status`, `ls` and `show` and the progress, note and
       recap writes do since the phase 0 review; the web app's course readers
       are this track's `readers/courses.ts`.
-- [ ] The web app's course readers switch to `dbSource`.
+- [x] The web app's course readers switch to `dbSource`.
 - [ ] The nine courses with no concept on any item get their concepts, as
       content work the owner scheduled into this track on 2026-09-27: one
       export, edit, import per course, each a revision with a reason, with
       `catalog status` showing the distance to zero. When it reaches zero,
       `catalog flip courses --strict` arms the rule (D21), so phase 3 does not
       have to waive it.
+
+**Built** (the writers) in `services/catalog/src/content/courses.ts` and
+`items.ts`, with `parseCourse`, the one-file half of the course parser, in
+`packages/content`. Where it goes past or around the list above, and why:
+
+- **The writers write through (D17) from day one, not from the flip**, with
+  Track A's shared `write-through.ts`: a course write refuses unless the
+  course files (and `topics.yaml`, which lists each module under its topic)
+  are what the database would export, rewrites the ones it changed from the
+  rows in the same transaction, and records the export hash. While courses
+  are on files that is what keeps the next `catalog index` from undoing the
+  write; after the flip it is D17. Track B added one option to it,
+  `exempt`: the file `course import` was handed may differ from the database,
+  because it is the edit being imported, so editing
+  `content/courses/cs2111.yaml` in place and importing it works.
+- **The rows are the indexer's rows**, column for column and placed with the
+  same sparse positions, so importing an unchanged file writes no revision and
+  a `catalog index` after an import writes none either.
+- **An archived row keeps its links.** The indexer drops them (it replaces its
+  link tables whole); the seam does not, and `item restore` of an item the
+  indexer archived takes its concept links from its last live revision.
+- **A curated link no module lists any more is deleted**, with a `delete`
+  revision, as the indexer prunes it. It carries no learner data.
+- **`purge` refuses a live item**: archive first, so deleting is always the
+  second of two steps. The learner rows go into the `delete` revision's
+  snapshot as `links.progress` and `links.recap`, and `item restore` of a
+  purged item rebuilds the row, its links and those rows from it.
+- **Course order is unique by the seam's check, not a constraint.** A unique
+  index on live courses' `position` would be a migration, and D10 keeps
+  phase 1 free of them; every course write goes through `course import`,
+  which refuses a taken order by name. Slug uniqueness is the existing partial
+  index, and the import names a clash before the index would. Course imports
+  take one advisory lock before their checks, which run inside the write's
+  transaction, so two imports of different courses cannot both pass the
+  order and code checks against the old rows.
+- **`item archive` locks the item's module before the item**, in the global
+  lock order, so two archives cannot each leave the other item live and
+  together empty the module.
+- **`--dry-run`** runs the whole write and rolls it back, for the planner.
+
+**Built** (the reader) in `services/catalog/src/content/readers/courses.ts`,
+`ready: true`: six queries, each ordered the way the export orders its list,
+returning the `Course[]` `fileSource` returns key for key, since the pages hand
+courses to client components and React serialises props in key order.
+`test/courses-reader.test.ts` holds it to `JSON.stringify` equality with
+`fileSource` on the real tree. On a `createdb -T self_learn` copy, migrated
+and imported, `catalog flip courses` passes parity and arms the six guards,
+`--strict` is refused with 134 violators, and 76 routes (Today, the Courses
+grid, Learn, Library, Settings, the ten course pages, and the 61 module
+routes, which redirect to their course page) answer the same under
+`CONTENT_SOURCE=courses=files` and `=db`; with no variable the row alone
+chooses `db`. `scripts/e2e.mjs` pointed at that copy passes 12 of 12. Where it
+departs from "byte-identical server HTML": two responses of one page from one
+server already differ byte for byte, because the RSC rows inside
+`self.__next_f.push` stream in the order their promises settle and each row's
+id is its place in that order, and the learner snapshot carries its read time
+(`asOf`). So the check is the markup outside `<script>` byte for byte, plus the
+flight rows as a sorted multiset with row ids, references to them and `asOf`
+blanked; a one-word change to one item's title in the database fails it on
+the two pages that show that item. `shots.mjs` at 1440, light and dark, is
+pixel-identical apart from the wordmark and a few anti-aliased pixels (at most
+16, channel difference at most 3), which differ the same way between two
+captures of one server.
 
 **Parity:** 10 courses, 61 modules, 137 items, 68 links, 8 concept links.
 **Tests:** an import that drops an item archives it and leaves `progress`; a
