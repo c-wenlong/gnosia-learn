@@ -324,6 +324,20 @@ Rules of engagement:
   pill by comparing file modification times instead. An open canvas sends a
   heartbeat, and a mirror nobody has asked about for `STUDIO_MIRROR_IDLE_MS`
   (15 minutes by default) is closed.
+- **The planner is a second `claude -p`, with no tools at all.** A draft
+  (`services/studio/src/drafts.ts`, the `draft` table, `/api/drafts`) is one
+  conversation, disk first under `$STUDIO_HOME/drafts/<id>/`, mirrored with
+  `catalog draft upsert --owner`. Each person turn spawns the planner from
+  `services/studio/src/planner.ts` with `--tools ""`, `--strict-mcp-config`
+  and an empty `--mcp-config`, `--safe-mode`, `--disable-slash-commands`,
+  `--setting-sources ""` plus a deny-everything `--settings` file, and
+  `--permission-prompts none`; `test/planner.test.ts` pins every one, and a
+  turn whose `system/init` lists any tool or MCP server is stopped. Its
+  vocabulary, corpus and extend target are data blocks in its system prompt,
+  never files it reads. Its turns count against `STUDIO_DAILY_USD`, each
+  dated at its own end. Its tests use `test/fake-claude.ts`, a stand-in
+  binary, and never the API. The design is
+  [`docs/STUDIO-CHAT-FIRST.md`](docs/STUDIO-CHAT-FIRST.md).
 - Read [`docs/TLDRAWKC-INTEGRATION.md`](docs/TLDRAWKC-INTEGRATION.md) for the
   design this section is shortened from: the schema, the runner's full
   constraints, the gate, and the edge cases behind each rule above.

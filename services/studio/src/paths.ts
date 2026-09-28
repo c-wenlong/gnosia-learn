@@ -236,3 +236,47 @@ export function rejectedDir(jobId: string): string {
 export function mermaidPath(jobId: string): string {
   return path.join(scratchDir(jobId), "source.mmd");
 }
+
+/* -------------------------------------------------------------------------- */
+/* Drafts (docs/STUDIO-CHAT-FIRST.md)                                         */
+/* -------------------------------------------------------------------------- */
+
+/** One planner conversation's workspace: `$STUDIO_HOME/drafts/<id>/`, and the planner's working directory. */
+export function draftDir(draftId: string): string {
+  return path.join(studioHome(), "drafts", draftId);
+}
+
+/** The record, written before anything else about a draft (rule 7). */
+export function draftJsonPath(draftId: string): string {
+  return path.join(draftDir(draftId), "draft.json");
+}
+
+/** Every event the conversation had, one JSON object a line. */
+export function draftTranscriptPath(draftId: string): string {
+  return path.join(draftDir(draftId), "transcript.ndjson");
+}
+
+/** The transcript as the catalog records it, relative to `$STUDIO_HOME`. */
+export function draftTranscriptRef(draftId: string): string {
+  return path.posix.join("drafts", draftId, "transcript.ndjson");
+}
+
+/** Every raw stream line of every planner turn: the cost record the reconcile pass replays. */
+export function draftSessionLogPath(draftId: string): string {
+  return path.join(draftDir(draftId), "session.ndjson");
+}
+
+/** The planner's whole system prompt, written once at creation for a person to read. */
+export function plannerSystemPath(draftId: string): string {
+  return path.join(draftDir(draftId), "planner-system.md");
+}
+
+/** The deny-everything settings file every planner turn is spawned with. */
+export function plannerSettingsPath(draftId: string): string {
+  return path.join(draftDir(draftId), "planner-settings.json");
+}
+
+/** The planner's `TMPDIR`, inside its own workspace, as a job's is. */
+export function draftTmpDir(draftId: string): string {
+  return path.join(draftDir(draftId), "tmp");
+}

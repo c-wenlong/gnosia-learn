@@ -289,6 +289,65 @@ export function diagramPut(input: DiagramPutInput): Promise<CatalogResult> {
   ]);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Drafts (docs/STUDIO-CHAT-FIRST.md)                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `catalog draft upsert --file <draft.json>`: the row mirrored from the disk
+ * record, which the runner has already written (rule 7).
+ */
+export function draftUpsert(file: string): Promise<CatalogResult> {
+  return catalog(["draft", "upsert", "--file", file, ...owned()], 60_000);
+}
+
+/** A topic the planner proposed, as `catalog topic add` takes it. */
+export interface TopicProposal {
+  slug: string;
+  title: string;
+  domain: string;
+  summary: string | null;
+  aliases: string[];
+  relations: { kind: string; to: string }[];
+}
+
+/**
+ * The flags for `topic add`, every value in `--flag=value` form, so a title
+ * the planner wrote that happens to begin with `--` is a title and never an
+ * option. No shell is involved, so nothing else in a value is special.
+ */
+function topicFlags(entry: TopicProposal): string[] {
+  return [
+    `--slug=${entry.slug}`,
+    `--title=${entry.title}`,
+    `--domain=${entry.domain}`,
+    ...(entry.summary === null || entry.summary === "" ? [] : [`--summary=${entry.summary}`]),
+    ...entry.aliases.map((alias) => `--alias=${alias}`),
+    ...entry.relations.map((relation) => `--relate=${relation.kind}:${relation.to}`),
+  ];
+}
+
+/**
+ * `catalog topic add --dry-run`: whether the planner's proposed topic would be
+ * accepted, and which existing topics look like it. Writes nothing.
+ *
+ * No `--owner`: the topic verbs write as the catalog CLI's own owner and take
+ * no such flag (a topic is filed by `catalog topic add` alone, D16 of
+ * docs/CONTENT-MIGRATION.md).
+ */
+export function topicAddDryRun(entry: TopicProposal): Promise<CatalogResult> {
+  return catalog(["topic", "add", ...topicFlags(entry), "--dry-run"], 60_000);
+}
+
+/**
+ * `catalog topic add`: the Draw press on a brief whose topic the planner
+ * proposed. The person pressed the button, so they are the author, and the
+ * reason names the draft the topic came out of.
+ */
+export function topicAdd(entry: TopicProposal, reason: string): Promise<CatalogResult> {
+  return catalog(["topic", "add", ...topicFlags(entry), `--reason=${reason}`, `--author=${studioOwner()}`], 60_000);
+}
+
 export function jobDiscard(jobId: string): Promise<CatalogResult> {
   return catalog(["job", "discard", "--job", jobId, ...owned()]);
 }

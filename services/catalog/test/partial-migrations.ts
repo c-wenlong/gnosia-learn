@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -36,4 +37,29 @@ export async function partialMigrations(count = 2): Promise<string> {
     "utf8",
   );
   return folder;
+}
+
+/** Every migration tag in the journal, in order. */
+export function journalTags(): string[] {
+  const journal = JSON.parse(readFileSync(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8")) as {
+    entries: { tag: string }[];
+  };
+  return journal.entries.map((entry) => entry.tag);
+}
+
+/**
+ * The tags after `tag`, for a suite that stops a scratch database at an old
+ * migration and asserts what is still pending: the migrations added since are
+ * pending too, and a list written out by hand would break on every new one.
+ */
+export function tagsAfter(tag: string): string[] {
+  const tags = journalTags();
+  const at = tags.indexOf(tag);
+  if (at === -1) throw new Error(`no migration ${tag} in the journal`);
+  return tags.slice(at + 1);
+}
+
+/** The newest migration, which a fully migrated database has as its head. */
+export function latestTag(): string {
+  return journalTags().at(-1)!;
 }
