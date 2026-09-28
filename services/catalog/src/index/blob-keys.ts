@@ -22,7 +22,7 @@ import type { SourceRows } from "./source";
  * Read under the writer's type locks, before the upsert, so nothing can move
  * the stored key between this read and the write that carries it forward.
  */
-export async function keepBlobKeys(tx: CatalogDatabase, rows: SourceRows): Promise<SourceRows> {
+export async function keepBlobKeys(tx: CatalogDatabase, rows: SourceRows, owner: string): Promise<SourceRows> {
   const given = rows.asset ?? [];
   const open = given.filter((row) => row.blobKey === undefined && typeof row.contentHash === "string");
   if (open.length === 0) return rows;
@@ -43,7 +43,12 @@ export async function keepBlobKeys(tx: CatalogDatabase, rows: SourceRows): Promi
   const kept: NewAsset[] = given.map((row) => {
     if (row.blobKey !== undefined) return row;
     const blob = byId.get(row.id);
-    return blob !== undefined && blob.sha256 === row.contentHash ? { ...row, blobKey: blob.key } : row;
+    // Only a key under the row's own owner: the prefix is whose store and
+    // whose quota the bytes are in (D5), so a key another owner uploaded is
+    // not carried onto this row, and the next upload stores its own copy.
+    return blob !== undefined && blob.sha256 === row.contentHash && blob.key.startsWith(`${owner}/`)
+      ? { ...row, blobKey: blob.key }
+      : row;
   });
   return { ...rows, asset: kept };
 }

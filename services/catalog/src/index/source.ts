@@ -58,6 +58,13 @@ export interface IndexContext {
    * in first and `catalog asset upload` stores the bytes.
    */
   blobsRequired?: boolean;
+  /**
+   * Whose rows the run writes (phase 4, D23): a source that names an owner
+   * itself (a diagram's row, a blob key's prefix) names this one. Absent
+   * means the CLIs' owner, `local`; the writer stamps it on every row either
+   * way.
+   */
+  owner?: string;
   /** `content/topics.yaml`, loaded once and shared by every source. */
   vocabulary: Vocabulary;
   /**
