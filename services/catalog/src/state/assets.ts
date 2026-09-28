@@ -4,11 +4,15 @@ import {
   assetDerivation,
   assetTopic,
   collectionItem,
+  concept,
   indexRun,
   type IndexSource,
+  type OwnerScope,
+  topic,
 } from "@self-learn/schema";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
+import { andOwnedBy, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 
 /**
@@ -36,6 +40,14 @@ import type { CatalogDatabase } from "../db";
  *
  * The CLI now calls these too, so `catalog show` and a page cannot end up
  * disagreeing about what an asset row is.
+ *
+ * **Scoped by owner** (phase 4 of docs/CONTENT-MIGRATION.md). Every query
+ * takes an `OwnerScope`, required, and keeps only assets `scope.readable`
+ * owns; an answer naming concepts keeps only concepts they own too. Asset ids
+ * are global (D3), so without this a second owner's video would sit in the
+ * first owner's library. The web app passes `ownerScope(currentOwner())`, the
+ * CLI `cliScope()`. On a database from before 0010, which has no `owner_id`
+ * and so one owner, each reads unscoped (`scopedRead`), as it did before.
  */
 
 /** An asset as everything other than `catalog show <asset-id>` needs it. */
@@ -86,13 +98,15 @@ export function byKind(rows: AssetRef[]): Record<string, AssetRef[]> {
  * Ordered by kind then id: stable across runs, and it groups the players next
  * to the players without the caller sorting anything.
  */
-export async function assetsForTopic(db: CatalogDatabase, slug: string): Promise<AssetRef[]> {
-  return db
-    .select(ASSET_COLUMNS)
-    .from(assetTopic)
-    .innerJoin(asset, eq(asset.id, assetTopic.assetId))
-    .where(eq(assetTopic.topicSlug, slug))
-    .orderBy(asc(asset.kind), asc(asset.id));
+export async function assetsForTopic(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
+  return scopedRead(scope.readable, (owners) =>
+    db
+      .select(ASSET_COLUMNS)
+      .from(assetTopic)
+      .innerJoin(asset, eq(asset.id, assetTopic.assetId))
+      .where(and(eq(assetTopic.topicSlug, slug), ownedBy(asset.ownerId, owners)))
+      .orderBy(asc(asset.kind), asc(asset.id)),
+  );
 }
 
 /**
@@ -100,13 +114,15 @@ export async function assetsForTopic(db: CatalogDatabase, slug: string): Promise
  * enrichment under the topic link, so a topic with assets can have concepts
  * with none, and the empty array is the normal answer rather than a gap.
  */
-export async function assetsForConcept(db: CatalogDatabase, slug: string): Promise<AssetRef[]> {
-  return db
-    .select(ASSET_COLUMNS)
-    .from(assetConcept)
-    .innerJoin(asset, eq(asset.id, assetConcept.assetId))
-    .where(eq(assetConcept.conceptSlug, slug))
-    .orderBy(asc(asset.kind), asc(asset.id));
+export async function assetsForConcept(db: CatalogDatabase, slug: string, scope: OwnerScope): Promise<AssetRef[]> {
+  return scopedRead(scope.readable, (owners) =>
+    db
+      .select(ASSET_COLUMNS)
+      .from(assetConcept)
+      .innerJoin(asset, eq(asset.id, assetConcept.assetId))
+      .where(and(eq(assetConcept.conceptSlug, slug), ownedBy(asset.ownerId, owners)))
+      .orderBy(asc(asset.kind), asc(asset.id)),
+  );
 }
 
 /**
@@ -127,22 +143,29 @@ export async function assetsForConcept(db: CatalogDatabase, slug: string): Promi
 export async function conceptsForAssets(
   db: CatalogDatabase,
   ids: readonly string[],
+  scope: OwnerScope,
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await db
-    .select({ assetId: assetConcept.assetId, conceptSlug: assetConcept.conceptSlug })
-    .from(assetConcept)
-    .where(inArray(assetConcept.assetId, wanted))
-    .orderBy(asc(assetConcept.assetId), asc(assetConcept.conceptSlug));
+  const rows = await scopedRead(scope.readable, (owners) =>
+    db
+      .select({ assetId: assetConcept.assetId, conceptSlug: assetConcept.conceptSlug })
+      .from(assetConcept)
+      .innerJoin(asset, eq(asset.id, assetConcept.assetId))
+      .innerJoin(concept, eq(concept.slug, assetConcept.conceptSlug))
+      .where(
+        and(inArray(assetConcept.assetId, wanted), ownedBy(asset.ownerId, owners), ownedBy(concept.ownerId, owners)),
+      )
+      .orderBy(asc(assetConcept.assetId), asc(assetConcept.conceptSlug)),
+  );
   const out: Record<string, string[]> = {};
   for (const row of rows) (out[row.assetId] ??= []).push(row.conceptSlug);
   return out;
 }
 
 /** The concepts one asset explains, sorted by slug. Empty when it is linked to none. */
-export async function conceptsForAsset(db: CatalogDatabase, id: string): Promise<string[]> {
-  return (await conceptsForAssets(db, [id]))[id] ?? [];
+export async function conceptsForAsset(db: CatalogDatabase, id: string, scope: OwnerScope): Promise<string[]> {
+  return (await conceptsForAssets(db, [id], scope))[id] ?? [];
 }
 
 /**
@@ -180,26 +203,29 @@ export async function conceptsForAsset(db: CatalogDatabase, id: string): Promise
  * instead of restating it as an `ORDER BY` over a set operation, where
  * Postgres only accepts output column names.
  */
-export async function assetsForCollection(db: CatalogDatabase, id: string): Promise<AssetRef[]> {
-  const [viaTopic, viaConcept, direct] = await Promise.all([
+export async function assetsForCollection(db: CatalogDatabase, id: string, scope: OwnerScope): Promise<AssetRef[]> {
+  const [viaTopic, viaConcept, direct] = await scopedRead(scope.readable, (owners) => {
+    const mine = ownedBy(asset.ownerId, owners);
+    return Promise.all([
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
       .innerJoin(assetTopic, eq(assetTopic.topicSlug, collectionItem.topicSlug))
       .innerJoin(asset, eq(asset.id, assetTopic.assetId))
-      .where(eq(collectionItem.collectionId, id)),
+      .where(and(eq(collectionItem.collectionId, id), mine)),
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
       .innerJoin(assetConcept, eq(assetConcept.conceptSlug, collectionItem.conceptSlug))
       .innerJoin(asset, eq(asset.id, assetConcept.assetId))
-      .where(eq(collectionItem.collectionId, id)),
+      .where(and(eq(collectionItem.collectionId, id), mine)),
     db
       .select(ASSET_COLUMNS)
       .from(collectionItem)
       .innerJoin(asset, eq(asset.id, collectionItem.assetId))
-      .where(eq(collectionItem.collectionId, id)),
-  ]);
+      .where(and(eq(collectionItem.collectionId, id), mine)),
+    ]);
+  });
 
   const merged = new Map<string, AssetRef>();
   for (const row of [...viaTopic, ...viaConcept, ...direct]) merged.set(row.id, row);
@@ -229,9 +255,15 @@ function byKindThenId(a: AssetRef, b: AssetRef): number {
  * empty list short-circuits rather than issuing `where id in ()`, which
  * Postgres accepts and which costs a round trip to learn nothing.
  */
-export async function assetsByIds(db: CatalogDatabase, ids: string[]): Promise<AssetRef[]> {
+export async function assetsByIds(db: CatalogDatabase, ids: string[], scope: OwnerScope): Promise<AssetRef[]> {
   if (ids.length === 0) return [];
-  return db.select(ASSET_COLUMNS).from(asset).where(inArray(asset.id, ids)).orderBy(asc(asset.id));
+  return scopedRead(scope.readable, (owners) =>
+    db
+      .select(ASSET_COLUMNS)
+      .from(asset)
+      .where(and(inArray(asset.id, ids), ownedBy(asset.ownerId, owners)))
+      .orderBy(asc(asset.id)),
+  );
 }
 
 /** Both directions of `asset_derivation` for one asset, in one answer. */
@@ -273,7 +305,10 @@ export interface AssetDerivations {
 export async function assetDerivations(
   db: CatalogDatabase,
   id: string,
+  scope: OwnerScope,
 ): Promise<AssetDerivations> {
+  // Nothing about an asset the reader cannot open, not even what hangs off it.
+  if ((await assetsByIds(db, [id], scope)).length === 0) return { sources: [], derived: [] };
   const [sourceIds, derivedIds] = await Promise.all([
     db
       .select({ id: assetDerivation.sourceAssetId })
@@ -289,10 +324,12 @@ export async function assetDerivations(
     assetsByIds(
       db,
       sourceIds.map((r) => r.id),
+      scope,
     ),
     assetsByIds(
       db,
       derivedIds.map((r) => r.id),
+      scope,
     ),
   ]);
   return { sources, derived };
@@ -312,14 +349,18 @@ export async function assetDerivations(
 export async function derivationSources(
   db: CatalogDatabase,
   ids: readonly string[],
+  scope: OwnerScope,
 ): Promise<Record<string, string[]>> {
   const wanted = [...new Set(ids)];
   if (wanted.length === 0) return {};
-  const rows = await db
-    .select({ assetId: assetDerivation.assetId, sourceId: assetDerivation.sourceAssetId })
-    .from(assetDerivation)
-    .where(inArray(assetDerivation.assetId, wanted))
-    .orderBy(asc(assetDerivation.assetId), asc(assetDerivation.sourceAssetId));
+  const rows = await scopedRead(scope.readable, (owners) =>
+    db
+      .select({ assetId: assetDerivation.assetId, sourceId: assetDerivation.sourceAssetId })
+      .from(assetDerivation)
+      .innerJoin(asset, eq(asset.id, assetDerivation.sourceAssetId))
+      .where(and(inArray(assetDerivation.assetId, wanted), ownedBy(asset.ownerId, owners)))
+      .orderBy(asc(assetDerivation.assetId), asc(assetDerivation.sourceAssetId)),
+  );
   const out: Record<string, string[]> = {};
   for (const row of rows) (out[row.assetId] ??= []).push(row.sourceId);
   return out;
@@ -458,14 +499,21 @@ export interface ListAssetsOptions {
  */
 export async function listAssets(
   db: CatalogDatabase,
-  options: ListAssetsOptions = {},
+  options: ListAssetsOptions,
+  scope: OwnerScope,
 ): Promise<AssetWithTopics[]> {
-  const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
   // An `ids: []` asks for nothing, and `where id in ()` is not how Postgres
   // spells that. Short-circuiting also saves the round trip, the same way
   // `assetsByIds` does.
-  if (ids !== undefined && ids.length === 0) return [];
+  if (options.ids !== undefined && options.ids.length === 0) return [];
+  return scopedRead(scope.readable, (owners) => listScoped(db, options, owners));
+}
+
+/** `listAssets` for one set of owners, or every owner on a database from before 0010. */
+async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owners: Owners): Promise<AssetWithTopics[]> {
+  const { kind, topicSlug, sourceRepo, ids, limit, offset } = options;
   const conditions = [
+    ownedBy(asset.ownerId, owners),
     kind === undefined ? undefined : eq(asset.kind, kind),
     sourceRepo === undefined ? undefined : eq(asset.sourceRepo, sourceRepo),
     ids === undefined ? undefined : inArray(asset.id, ids),
@@ -481,10 +529,15 @@ export async function listAssets(
     .select({
       ...ASSET_COLUMNS,
       createdAt: asset.createdAt,
+      // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
         select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug}), '{}')
         from ${assetTopic}
-        where ${assetTopic.assetId} = ${asset.id}
+        where ${assetTopic.assetId} = ${asset.id}${
+          owners === undefined
+            ? sql``
+            : sql` and exists (select 1 from ${topic} where ${topic.slug} = ${assetTopic.topicSlug}${andOwnedBy(sql`${topic.ownerId}`, owners)})`
+        }
       )`,
     })
     .from(asset)
@@ -523,6 +576,13 @@ export interface AssetKindCount {
  * contract `byKind` already keeps, so a chip never claims a count of zero for
  * something the catalog does not have and never lies about one it does.
  */
-export async function assetCounts(db: CatalogDatabase): Promise<AssetKindCount[]> {
-  return db.select({ kind: asset.kind, count: count() }).from(asset).groupBy(asset.kind).orderBy(asc(asset.kind));
+export async function assetCounts(db: CatalogDatabase, scope: OwnerScope): Promise<AssetKindCount[]> {
+  return scopedRead(scope.readable, (owners) =>
+    db
+      .select({ kind: asset.kind, count: count() })
+      .from(asset)
+      .where(ownedBy(asset.ownerId, owners))
+      .groupBy(asset.kind)
+      .orderBy(asc(asset.kind)),
+  );
 }

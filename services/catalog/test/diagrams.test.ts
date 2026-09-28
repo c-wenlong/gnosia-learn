@@ -33,6 +33,10 @@ import { lockEntity } from "../src/content/revisions";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * Diagrams in the database (Track D of docs/CONTENT-MIGRATION.md): the import
@@ -218,10 +222,10 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
   });
 
   it("reads a diagram back through the seam exactly as the file source reads it", async () => {
-    const fromRows = await dbSource(scratch.db).diagram("first-diagram");
+    const fromRows = await dbSource(scratch.db, LOCAL).diagram("first-diagram");
     const fromFiles = await fileSource(fixture.root).diagram("first-diagram");
     expect(fromRows).toEqual(fromFiles);
-    expect(await dbSource(scratch.db).diagram("no-such-diagram")).toBeNull();
+    expect(await dbSource(scratch.db, LOCAL).diagram("no-such-diagram")).toBeNull();
   });
 
   it("writes zero revisions and uploads nothing on a second import", async () => {

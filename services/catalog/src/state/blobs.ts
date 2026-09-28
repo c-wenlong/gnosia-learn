@@ -1,6 +1,8 @@
-import { asset, assetDerivation, blobObject } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, type OwnerScope } from "@self-learn/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
+import { ownedBy } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "./errors";
 
@@ -49,6 +51,14 @@ export interface AssetBlob {
   sha256: string;
 }
 
+/**
+ * The video a poster is derived from, joined under its own name: a poster is
+ * served for a video id, so both the poster and the video it stands for must
+ * be readable (phase 4). A readable poster of another owner's video would
+ * otherwise answer for a video the reader cannot open.
+ */
+const video = alias(asset, "video");
+
 const COLUMNS = {
   assetId: asset.id,
   key: blobObject.key,
@@ -59,7 +69,11 @@ const COLUMNS = {
 } as const;
 
 /** The blob behind each of these assets, keyed by asset id. An asset with no `blob_key` is absent. */
-export async function assetBlobs(db: CatalogDatabase, ids: readonly string[]): Promise<Map<string, AssetBlob>> {
+export async function assetBlobs(
+  db: CatalogDatabase,
+  ids: readonly string[],
+  scope: OwnerScope,
+): Promise<Map<string, AssetBlob>> {
   if (ids.length === 0) return new Map();
   const rows = await orNoBlobs(
     () =>
@@ -67,7 +81,7 @@ export async function assetBlobs(db: CatalogDatabase, ids: readonly string[]): P
         .select(COLUMNS)
         .from(asset)
         .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
-        .where(inArray(asset.id, [...ids])),
+        .where(and(inArray(asset.id, [...ids]), ownedBy(asset.ownerId, scope.readable))),
     [],
   );
   return new Map(rows.map((row) => [row.assetId, row] as const));
@@ -79,7 +93,11 @@ export async function assetBlobs(db: CatalogDatabase, ids: readonly string[]): P
  * stored can still have no poster (the upload ran without ffmpeg), and its
  * card must not ask the poster route for one the route would have to cut.
  */
-export async function videosWithStoredPoster(db: CatalogDatabase, videoIds: readonly string[]): Promise<Set<string>> {
+export async function videosWithStoredPoster(
+  db: CatalogDatabase,
+  videoIds: readonly string[],
+  scope: OwnerScope,
+): Promise<Set<string>> {
   if (videoIds.length === 0) return new Set();
   const rows = await orNoBlobs(
     () =>
@@ -87,12 +105,15 @@ export async function videosWithStoredPoster(db: CatalogDatabase, videoIds: read
         .select({ videoId: assetDerivation.sourceAssetId })
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
+        .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
         .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
         .where(
           and(
             inArray(assetDerivation.sourceAssetId, [...videoIds]),
             eq(asset.kind, "poster"),
             eq(blobObject.state, "present"),
+            ownedBy(asset.ownerId, scope.readable),
+            ownedBy(video.ownerId, scope.readable),
           ),
         ),
     [],
@@ -106,15 +127,23 @@ export async function videosWithStoredPoster(db: CatalogDatabase, videoIds: read
  * `catalog asset upload` has run, and then the web app's ffmpeg fallback is
  * the answer.
  */
-export async function posterBlob(db: CatalogDatabase, videoId: string): Promise<AssetBlob | null> {
+export async function posterBlob(db: CatalogDatabase, videoId: string, scope: OwnerScope): Promise<AssetBlob | null> {
   const [row] = await orNoBlobs(
     () =>
       db
         .select(COLUMNS)
         .from(assetDerivation)
         .innerJoin(asset, eq(asset.id, assetDerivation.assetId))
+        .innerJoin(video, eq(video.id, assetDerivation.sourceAssetId))
         .innerJoin(blobObject, eq(blobObject.key, asset.blobKey))
-        .where(and(eq(assetDerivation.sourceAssetId, videoId), eq(asset.kind, "poster")))
+        .where(
+          and(
+            eq(assetDerivation.sourceAssetId, videoId),
+            eq(asset.kind, "poster"),
+            ownedBy(asset.ownerId, scope.readable),
+            ownedBy(video.ownerId, scope.readable),
+          ),
+        )
         .orderBy(asset.id)
         .limit(1),
     [],

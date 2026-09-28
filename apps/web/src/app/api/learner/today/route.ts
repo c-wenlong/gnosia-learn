@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
-import { LEARNER_RATE_LIMIT } from "@/lib/learner-api";
+import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
 import { readToday } from "@/lib/today";
 
 /**
@@ -19,6 +19,9 @@ import { readToday } from "@/lib/today";
 export async function GET(req: Request): Promise<NextResponse> {
   const limited = enforceRateLimit(req, "learner:today", LEARNER_RATE_LIMIT);
   if (limited !== null) return limited;
+  // A 401 for a request with no owner, before the read that would need one.
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
   const today = await readToday();
   return NextResponse.json({ ok: true, today }, { headers: { "Cache-Control": "no-store" } });
 }

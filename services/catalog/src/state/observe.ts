@@ -12,7 +12,7 @@ import { gradeFromOutcome, newCard, review as sm2 } from "../../../../scripts/le
 import { StateError } from "./errors";
 import { appendEvent, toRecord } from "./events";
 import { withLearnerLock } from "./learner";
-import { assertKnownConcepts, ensureEntry, propagateCorrect, readModel, writeModel } from "./mastery";
+import { assertReadableConcepts, ensureEntry, propagateCorrect, readModel, writeModel } from "./mastery";
 import { readCards, readReviews, upsertReview, type ReviewCard } from "./review";
 import { endSession } from "./sessions";
 
@@ -162,8 +162,9 @@ export async function recordObservation(
   }
   // Every state table names the concept through a foreign key, so evidence
   // about a slug the catalog has never seen has nowhere to go. Checked first
-  // so the message says what to do rather than naming a constraint.
-  await assertKnownConcepts(db, [id]);
+  // so the message says what to do rather than naming a constraint. Only a
+  // concept this learner may read (phase 4).
+  await assertReadableConcepts(db, [id], learnerId);
 
   // One clock for the whole write. The card's `now`, the model's `lastSeen`
   // and the event's `at` were three separate `new Date()` calls once, which

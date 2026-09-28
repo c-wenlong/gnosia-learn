@@ -63,8 +63,8 @@ export const POST = handler(
     const validate = WRITABLE[key as keyof typeof WRITABLE];
     return { key, value: validate(body.value) };
   },
-  async (db, { key, value }) => {
-    await writePreference(db, key, value);
+  async (db, { key, value }, owner) => {
+    await writePreference(db, key, value, owner);
     return { key };
   },
 );

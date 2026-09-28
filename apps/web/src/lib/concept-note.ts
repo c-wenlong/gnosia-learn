@@ -7,6 +7,7 @@ import { contentSource } from "@/data/source";
 import { resolveAssetFile } from "@/lib/asset-files";
 import { parseConceptNote, type ConceptCheck, type ConceptFrontmatter } from "@/lib/concept-note-core";
 import { catalogDatabase } from "@/lib/learner-store";
+import { currentScope } from "@/lib/owner";
 
 /**
  * A concept's note file, read on the server.
@@ -52,7 +53,7 @@ export const NOTE_READ_LIMIT = 256 * 1024;
  * first, otherwise the one concept note linked to this slug.
  */
 export async function findNoteAsset(db: CatalogDatabase, slug: string) {
-  const rows = await assetsForConcept(db, slug);
+  const rows = await assetsForConcept(db, slug, await currentScope());
   const notes = rows.filter((row) => row.kind === "note" && row.path !== null && row.path.startsWith("learn/concepts/"));
   return notes.find((row) => row.path?.endsWith(`/${slug}.md`)) ?? (notes.length === 1 ? notes[0] : null);
 }

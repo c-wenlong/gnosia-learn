@@ -37,6 +37,7 @@ import {
   type AssetFileProblem,
   type AssetStored,
 } from "@/lib/asset-files";
+import { currentScope } from "@/lib/owner";
 
 /**
  * A still frame from a video asset, for the library's cards.
@@ -857,7 +858,7 @@ export async function posterSource(
   id: string,
   env: Record<string, string | undefined> = process.env,
 ): Promise<AssetStored | PosterTargetResult> {
-  const stored = await posterBlob(db, id);
+  const stored = await posterBlob(db, id, await currentScope());
   if (stored !== null) return resolveBlob(stored, id);
   if (!assetFilesEnabled(env)) return FILES_OFF;
   return posterTarget(db, id);

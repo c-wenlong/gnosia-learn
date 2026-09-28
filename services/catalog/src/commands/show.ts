@@ -16,6 +16,7 @@ import {
 } from "@self-learn/schema";
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
+import { cliScope } from "../content/scope";
 import { withDatabase } from "../db";
 import {
   assetDerivations,
@@ -236,7 +237,7 @@ async function showTopic(db: Db, slug: string): Promise<ShowTopic | null> {
     archived: found.archivedAt !== null,
     concepts,
     curriculumItems: items,
-    assets: byKind(await assetsForTopic(db, slug)),
+    assets: byKind(await assetsForTopic(db, slug, cliScope())),
   };
 }
 
@@ -310,7 +311,7 @@ async function showConcept(db: Db, slug: string): Promise<ShowConcept | null> {
             correct: belief.correct,
             lastSeen: belief.lastSeen?.toISOString() ?? null,
           },
-    assets: byKind(await assetsForConcept(db, slug)),
+    assets: byKind(await assetsForConcept(db, slug, cliScope())),
   };
 }
 
@@ -342,7 +343,7 @@ async function showCollection(db: Db, id: string): Promise<ShowCollection | null
       .limit(1)
   )[0];
 
-  const assets = await assetsForCollection(db, id);
+  const assets = await assetsForCollection(db, id, cliScope());
 
   return {
     type: "collection",
@@ -415,7 +416,7 @@ async function showAsset(db: Db, id: string): Promise<ShowAsset | null> {
   // than from four statements written out here: the web app may import that
   // module and may not import this one, and one implementation is what stops
   // `catalog show` and a page disagreeing about what an asset was made from.
-  const derivations = await assetDerivations(db, id);
+  const derivations = await assetDerivations(db, id, cliScope());
 
   const mirrors = await db
     .select({
