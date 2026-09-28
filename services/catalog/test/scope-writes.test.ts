@@ -182,11 +182,14 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
     const rows = await scratch.db.select().from(topicRelation).where(eq(topicRelation.fromSlug, "alpha"));
     expect(new Set(rows.map((row) => row.ownerId))).toEqual(new Set([LOCAL_LEARNER_ID]));
     expect(rows).toHaveLength(3);
-    // The mapping is still mixed until doctor --fix restamps it.
+    // The mapping is still mixed until doctor --fix restamps it, and until
+    // then doctor fails: D24 is an invariant the seam keeps.
     expect((await linkOwners(scratch.db)).mixed.map((row) => row.table)).toEqual(["manimkc_topic"]);
+    expect((await doctor(scratch.db, "scratch")).ok).toBe(false);
     const report = await doctor(scratch.db, "scratch", { fix: true });
     expect(report.links.restamped).toEqual(["alpha"]);
     expect(report.links.mixed).toEqual([]);
+    expect(report.ok).toBe(true);
     const [mapping] = await scratch.db.select().from(manimkcTopic).where(eq(manimkcTopic.path, "one/other-folder"));
     expect(mapping?.ownerId).toBe(LOCAL_LEARNER_ID);
   });
@@ -229,6 +232,36 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
       "concept.topic_slug base other-topic",
     );
     await scratch.db.execute(sql`update concept set topic_slug = 'alpha' where slug = 'base'`);
+
+    // A carried-over link is that link, not any link to the same row: a
+    // relation of another kind to a topic the owner cannot read is new.
+    await scratch.db.insert(topicRelation).values({ fromSlug: "beta", toSlug: "other-topic", kind: "precedes", position: 9 });
+    const [betaRow] = await scratch.db.select().from(topic).where(eq(topic.slug, "beta"));
+    const betaBase = async () =>
+      (
+        await scratch.db
+          .select({ id: contentRevision.id })
+          .from(contentRevision)
+          .where(and(eq(contentRevision.entityType, "topic"), eq(contentRevision.entityId, "beta")))
+          .orderBy(sql`seq desc`)
+          .limit(1)
+      )[0]?.id ?? null;
+    const relations = await scratch.db.select().from(topicRelation).where(eq(topicRelation.fromSlug, "beta"));
+    const kept = relations.map((r, i) => ({ toSlug: r.toSlug, kind: r.kind, position: i + 1 }));
+    const writeBeta = async (links: Record<string, unknown>[]) =>
+      writeContent(scratch.db, {
+        owner: LOCAL_LEARNER_ID,
+        type: "topic",
+        id: "beta",
+        base: await betaBase(),
+        next: { row: { ...betaRow, ownerId: undefined }, links: { topic_relation: links } },
+        ...by,
+      });
+    await expect(writeBeta([...kept, { toSlug: "other-topic", kind: "broader", position: kept.length + 1 }])).rejects.toMatchObject({
+      code: "foreign-owner",
+    });
+    await expect(writeBeta(kept)).resolves.toBeDefined();
+    await scratch.db.delete(topicRelation).where(eq(topicRelation.toSlug, "other-topic"));
   });
 
   it("deletes through the seam only what the owner holds", async () => {
@@ -317,6 +350,23 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
     );
     await scratch.db.insert(diagram).values({ slug: "their-diagram", ownerId: OTHER, topicSlug: "other-topic", document: { records: [] }, documentHash: "a".repeat(64) });
     await expect(runEnqueue({ brief: brief("k-3", "learn/assets/their-diagram.tldr"), repoRoot: dir })).rejects.toBeInstanceOf(JobError);
+
+    // Nor may a job hang off another learner's session, or revise another owner's job.
+    await scratch.db.insert(session).values({ id: "their-studio-session", kind: "studio", learnerId: OTHER, state: "running" });
+    await expect(
+      runEnqueue({ brief: { ...brief("k-4", "learn/assets/y.tldr"), session: "their-studio-session" }, repoRoot: dir }),
+    ).rejects.toThrow(/no session "their-studio-session"/);
+    await expect(runClaim({ jobId: id, sessionId: "their-studio-session" })).rejects.toThrow(/no session/);
+    const theirJob = await runEnqueue({ brief: brief("k-5", "learn/assets/theirs.tldr", "shared-topic"), repoRoot: dir, owner: OTHER });
+    await expect(
+      runEnqueue({ brief: { ...brief("k-6", "learn/assets/z.tldr"), parentJob: theirJob.job.id }, repoRoot: dir }),
+    ).rejects.toThrow(`no job "${theirJob.job.id}" to revise`);
+    // And a revision of the owner's job by another owner is not listed as its child.
+    await expect(
+      runEnqueue({ brief: { ...brief("k-7", "learn/assets/w.tldr", "shared-topic"), parentJob: id }, repoRoot: dir, owner: OTHER }),
+    ).rejects.toThrow(`no job "${id}" to revise`);
+    await scratch.db.update(job).set({ parentJobId: id }).where(eq(job.id, theirJob.job.id));
+    expect((await runShow(id)).children).toEqual([]);
 
     // The owner's own verbs are unchanged.
     await expect(runFinish({ jobId: id, state: "cancelled" })).resolves.toMatchObject({ to: "cancelled" });

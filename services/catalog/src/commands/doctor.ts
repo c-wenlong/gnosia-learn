@@ -26,9 +26,11 @@ import { migrationStatus } from "../migrations";
  * primary.
  *
  * Exit 0 unless the database contradicts itself: an armed rule with a
- * violator (a row written while it was disarmed) or a trigger the migration
- * should have created and did not. A disarmed rule with violators is the
- * expected state until its type flips, and is reported, not failed.
+ * violator (a row written while it was disarmed), a trigger the migration
+ * should have created and did not, or a link whose owner is not its parent's
+ * (D24, which `--fix` repairs). A disarmed rule with violators is the
+ * expected state until its type flips, and is reported, not failed; so is a
+ * link to a row its owner cannot read.
  */
 
 const SAMPLE = 50;
@@ -261,7 +263,11 @@ export async function doctor(
     writeGuards,
     links: { ...links, restamped },
     violations: violations + links.mixed.length + links.unreadable.length,
-    ok: !contradicted && !missingGuard,
+    // A mixed row contradicts D24, which the seam enforces for every write,
+    // as an armed rule's violator contradicts that rule; `--fix` repairs it.
+    // A link to an unreadable row is reported and does not fail: the seam
+    // carries one over on purpose, and removing it is a person's decision.
+    ok: !contradicted && !missingGuard && links.mixed.length === 0,
   };
 }
 

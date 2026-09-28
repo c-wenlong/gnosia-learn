@@ -404,6 +404,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     if (existing !== undefined) {
       return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(existing) };
     }
+    await assertOwnReferences(db, { sessionId: row.sessionId ?? null, parentJobId: row.parentJobId ?? null }, owner, scoped);
     if (scoped) await assertDrawable(db, row, owner);
     try {
       const [inserted] = await db
@@ -467,6 +468,39 @@ async function assertDrawable(db: CatalogDatabase, row: NewJob, owner: string): 
       `${row.targetPath} names a diagram this owner cannot draw on: slugs are shared across owners ` +
         `(D23 of docs/CONTENT-MIGRATION.md), so choose another name.`,
     );
+  }
+}
+
+/**
+ * The session a job hangs off and the job it revises have to be the owner's
+ * too (phase 4): another learner's session reads as a missing one, and so
+ * does another owner's job, with the sentences their foreign keys would give.
+ * Otherwise `job show` would print that session's kind, state and start, and
+ * the parent's `job show` would list the child.
+ */
+async function assertOwnReferences(
+  db: CatalogDatabase,
+  refs: { sessionId: string | null; parentJobId: string | null },
+  owner: string,
+  scoped: boolean,
+): Promise<void> {
+  if (refs.sessionId !== null) {
+    const [held] = await db
+      .select({ learnerId: sessionTable.learnerId })
+      .from(sessionTable)
+      .where(eq(sessionTable.id, refs.sessionId))
+      .limit(1);
+    if (held !== undefined && held.learnerId !== owner) {
+      throw new JobError(`no session "${refs.sessionId}". Start one before pointing a job at it.`);
+    }
+  }
+  if (refs.parentJobId !== null && scoped) {
+    const [parent] = await db
+      .select({ ownerId: jobTable.ownerId })
+      .from(jobTable)
+      .where(eq(jobTable.id, refs.parentJobId))
+      .limit(1);
+    if (parent !== undefined && parent.ownerId !== owner) throw new JobError(`no job "${refs.parentJobId}" to revise.`);
   }
 }
 
@@ -562,6 +596,7 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
   const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) => {
     const mine = await ownedJobs(db, owner);
+    await assertOwnReferences(db, { sessionId: options.sessionId ?? null, parentJobId: null }, owner, mine !== undefined);
     const assignments = {
       state: "running" as const,
       startedAt: sql`now()`,
@@ -916,15 +951,17 @@ export async function runShow(jobId: string, owner: string = CLI_OWNER): Promise
         : await db
             .select()
             .from(sessionTable)
-            .where(eq(sessionTable.id, row.sessionId))
+            .where(and(eq(sessionTable.id, row.sessionId), eq(sessionTable.learnerId, owner)))
             .limit(1);
 
     const outputs = await jobOutputs(db, jobId);
 
+    // The owner's own revisions only: another owner's job naming this one as
+    // its parent is theirs to list.
     const children = await db
       .select({ id: jobTable.id })
       .from(jobTable)
-      .where(eq(jobTable.parentJobId, jobId))
+      .where(and(eq(jobTable.parentJobId, jobId), await ownedJobs(db, owner)))
       .orderBy(asc(jobTable.requestedAt));
 
     const session = sessionRows[0];

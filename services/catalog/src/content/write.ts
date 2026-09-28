@@ -443,12 +443,17 @@ export async function deleteContent(
  * such a link, and its own reader could never follow it. The commons is
  * readable to everyone, so a link to it is fine.
  *
- * Only what the write adds is judged. A far end the entity already points at
- * is carried over, so a link a mixed state left behind (the phase 4 review
+ * Only what the write adds is judged. A link the entity already has, the
+ * same link and not merely one to the same row (a relation of another kind
+ * to that topic is a new link), is carried over, as is a reference its row
+ * already makes, so a link a mixed state left behind (the phase 4 review
  * seeded several) neither locks the owner out of their own entity nor is
  * dropped behind their back; `catalog doctor` reports it. A far end that
  * names nothing is left to the foreign key, which says so in its own words.
  */
+/** Columns of a link row that say where it sits or who stamped it, not what it is. */
+const LINK_PLACE = new Set(["position", "topicPosition", "ownerId", "createdAt", "updatedAt", "id"]);
+
 async function assertReadableFarEnds(tx: CatalogDatabase, input: WriteContentInput): Promise<void> {
   const spec = ENTITIES[input.type];
   const wanted = new Map<RevisionEntityType, Set<string>>();
@@ -478,9 +483,15 @@ async function assertReadableFarEnds(tx: CatalogDatabase, input: WriteContentInp
       .select()
       .from(linkSpec.table)
       .where(eq(column(linkSpec.table, linkSpec.parent), input.id))) as Record<string, unknown>[];
-    for (const end of ends) {
-      const had = new Set(current.map((row) => row[end.column]));
-      for (const row of rows) if (!had.has(row[end.column])) want(end.target, row[end.column]);
+    // A link's identity is its content without its place in the list or
+    // its stamps: the keys the writer gave, less position and owner.
+    const identity = (row: Record<string, unknown>, keys: readonly string[]) =>
+      JSON.stringify(keys.map((key) => row[key] ?? null));
+    for (const row of rows) {
+      const keys = Object.keys(row).filter((key) => !LINK_PLACE.has(key)).sort();
+      const had = current.some((existing) => identity(existing, keys) === identity(row, keys));
+      if (had) continue;
+      for (const end of ends) want(end.target, row[end.column]);
     }
   }
 

@@ -1988,7 +1988,7 @@ before 0010 each read still answers unscoped.
       **Built:** the topic writers no longer carry a link row's `owner_id`,
       so the seam stamps every relation and mapping with its topic's owner
       and a list holding a mixed row is repaired by the next write, not
-      refused; `catalog doctor` reports mixed rows and `doctor --fix`
+      refused; `catalog doctor` fails on mixed rows and `doctor --fix`
       restamps them through the seam. `course import` deletes the links a
       file stops naming through the seam (`deleteContent`, which refuses
       `foreign-owner`), and only the importer's own: another owner's link
@@ -1998,8 +1998,10 @@ before 0010 each read still answers unscoped.
       and names the owner in its where clauses, so another owner's job is
       "no job"; `enqueue` stamps the owner, refuses a key another owner used
       without handing their job back, and refuses a topic the owner cannot
-      read or a slug another owner's diagram holds. `diagram put --job`
-      finds only the writer's own job. `ensureSession` refuses an id another
+      read or a slug another owner's diagram holds; a job's session and the
+      job it revises must be the owner's too, and `job show` lists only the
+      owner's revisions of it. `diagram put --job` finds only the writer's
+      own job. `ensureSession` refuses an id another
       learner holds instead of adopting it, and `endSession` moves only the
       learner's own. The studio passes its owner on every job and session
       verb.
