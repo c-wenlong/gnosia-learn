@@ -636,6 +636,21 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     expect(report.rules.find((r) => r.name === "module-has-item")?.state).toBe("armed");
   });
 
+  it("takes a waiver off the record when a later strict flip arms the rule", async () => {
+    // The flip above waived item-has-concept. Arming it again must clear that
+    // waiver too: on the owner's database the record stayed, and doctor read
+    // the rule as armed and waived at once.
+    const result = await runFlip({ type: "courses", strict: true, readers: READERS });
+    expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
+    expect(result.waivers).toEqual([]);
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.rules.find((r) => r.name === "item-has-concept")).toMatchObject({
+      state: "armed",
+      violators: 0,
+      waived: null,
+    });
+  });
+
   it("records no tree for an owned type when a later owned type refuses the import", async () => {
     // Tags and courses are both owned here, and tags is checked first. A
     // refused import used to have recorded the refused tree as tags' root
