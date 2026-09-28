@@ -637,9 +637,11 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
   });
 
   it("takes a waiver off the record when a later strict flip arms the rule", async () => {
-    // Waive first, in this test, so a run of it alone still covers the removal.
-    // Arming the rule again must clear the waiver: on the owner's database the
-    // record stayed, and doctor read the rule as armed and waived at once.
+    // Waive here, not in the test before, so the removal is exercised whatever
+    // that test did. (The whole block is one story on `out`, which the first
+    // export writes, so no test in it runs alone.) Arming the rule again must
+    // clear the waiver: on the owner's database the record stayed, and doctor
+    // read the rule as armed and waived at once.
     await runFlip({
       type: "courses",
       strict: true,
