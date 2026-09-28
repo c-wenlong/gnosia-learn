@@ -115,7 +115,7 @@ export async function readConceptGraph(
   scope: OwnerScope,
 ): Promise<{ nodes: Map<string, unknown> }> {
   const [concepts, prerequisites] = await Promise.all([
-    scopedRead(scope.readable, (owners) =>
+    scopedRead(db, scope.readable, (owners) =>
       db
         .select({ slug: concept.slug, title: concept.title, summary: concept.summary })
         .from(concept)
@@ -178,12 +178,12 @@ export async function readKnowledgeBase(
   // concepts they may see are their own and the commons' (phase 4).
   const readable = readableOwners(learnerId);
   const [concepts, allPrerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
-    scopedRead(readable, (owners) =>
+    scopedRead(db, readable, (owners) =>
       db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(concept.slug)),
     ),
     db.select().from(conceptPrerequisite),
     // Links to items the reader may read, so `topics` names no other owner's item.
-    scopedRead(readable, (owners) =>
+    scopedRead(db, readable, (owners) =>
       db
         .select({
           conceptSlug: conceptCurriculumItem.conceptSlug,

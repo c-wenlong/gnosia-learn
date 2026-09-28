@@ -1,7 +1,8 @@
-import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, readableOwners, type OwnerScope } from "@self-learn/schema";
 import { inArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
+import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 
 /**
@@ -73,15 +74,38 @@ export function andOwnedBy(column: SQL, owners: Owners): SQL {
 /** Said once per process, like the blob store's own pre-0010 notice. */
 let warnedUnowned = false;
 
-/** Postgres's `undefined_column`, raised about `owner_id` itself. */
-function beforeOwners(error: unknown): boolean {
-  if (sqlstate(error) !== "42703") return false;
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
-    if (current.message.includes("owner_id")) return true;
-    current = current.cause;
-  }
-  return false;
+/**
+ * Whether a database has `owner_id`, per pool (or per transaction handle,
+ * which has no pool of its own to key on). Only a yes is kept: a column is
+ * never dropped, so once a database has it every later read is filtered, and
+ * a no is asked again, so a database migrated while this process runs is
+ * filtered from its next read on.
+ */
+const hasOwners = new WeakMap<object, true>();
+
+function cacheKey(db: CatalogDatabase): object {
+  const client = (db as { $client?: unknown }).$client;
+  return typeof client === "object" && client !== null ? client : db;
+}
+
+/**
+ * Does this database have `owner_id` (migration 0010)? Asked of the catalog
+ * itself, `asset.owner_id` in the schema the connection reads, rather than
+ * guessed from an error message: drizzle wraps a failed query in an error
+ * whose message is the whole SQL, so any query that named `owner_id` and failed
+ * on some other column looked like a database from before 0010.
+ */
+export async function ownersExist(db: CatalogDatabase): Promise<boolean> {
+  const key = cacheKey(db);
+  if (hasOwners.has(key)) return true;
+  const { rows } = await db.execute<{ present: boolean }>(sql`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = current_schema() and table_name = 'asset' and column_name = 'owner_id'
+    ) as present`);
+  const present = rows[0]?.present === true;
+  if (present) hasOwners.set(key, true);
+  return present;
 }
 
 /**
@@ -91,16 +115,33 @@ function beforeOwners(error: unknown): boolean {
  * flip day migrates it, while the web app's asset and concept reads have
  * worked against it all along. A database with no `owner_id` column holds one
  * owner's rows by construction, so there the read is run again unscoped, which
- * is the answer it gave before scoping existed. Only that error is taken this
- * way: `undefined_column`, naming `owner_id`. Any database that has the column
- * is filtered, so a second owner, who can only exist after 0010, is never read
- * through this.
+ * is the answer it gave before scoping existed.
+ *
+ * Only when the catalog says so: an `undefined_column` error is followed by
+ * one question to `information_schema` (`ownersExist`), and the read is run
+ * unscoped only when `asset.owner_id` is not there. On a database that has it,
+ * the error is the caller's bug and is thrown, never answered with every
+ * owner's rows, and after the first such answer the question is not asked
+ * again. A second owner can only exist after 0010, so is never read through
+ * this.
  */
-export async function scopedRead<T>(owners: Owners, read: (owners: Owners) => Promise<T>): Promise<T> {
+export async function scopedRead<T>(
+  db: CatalogDatabase,
+  owners: Owners,
+  read: (owners: Owners) => Promise<T>,
+): Promise<T> {
   try {
     return await read(owners);
   } catch (error) {
-    if (owners === undefined || !beforeOwners(error)) throw error;
+    if (owners === undefined || sqlstate(error) !== "42703") throw error;
+    if (hasOwners.has(cacheKey(db))) throw error;
+    let present: boolean;
+    try {
+      present = await ownersExist(db);
+    } catch {
+      throw error;
+    }
+    if (present) throw error;
     if (!warnedUnowned) {
       warnedUnowned = true;
       console.warn(
@@ -110,4 +151,15 @@ export async function scopedRead<T>(owners: Owners, read: (owners: Owners) => Pr
     }
     return read(undefined);
   }
+}
+
+/**
+ * What a learner may read, for a query about to run inside a write: their
+ * own rows and the commons', or undefined (every row) on a database from
+ * before 0010, which has one owner. Asked up front rather than by retrying
+ * as `scopedRead` does, because in a transaction the failed first attempt
+ * would abort the transaction the retry needs.
+ */
+export async function readableFor(db: CatalogDatabase, learnerId: string): Promise<Owners> {
+  return (await ownersExist(db)) ? readableOwners(learnerId) : undefined;
 }

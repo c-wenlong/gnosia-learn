@@ -9,8 +9,9 @@ import {
   type KnowledgeSource,
   type ThemeMode,
 } from "@self-learn/schema";
-import { inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 
+import { ownedBy, readableFor } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "./learner";
 import { readPreference, writePreference } from "./preference";
@@ -77,13 +78,17 @@ function asSource(value: unknown): KnowledgeSource {
   return value === "manual" ? "manual" : (RECAP_SOURCES[0] as KnowledgeSource);
 }
 
-/** Which of these ids the catalog actually has. */
-async function knownItems(db: CatalogDatabase, ids: string[]): Promise<Set<string>> {
+/**
+ * Which of these ids the catalog has and the learner may read (phase 4): an
+ * item of another owner's is reported unknown and imports nothing, as one the
+ * catalog lacks does.
+ */
+async function knownItems(db: CatalogDatabase, ids: string[], learnerId: string): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await db
     .select({ id: curriculumItem.id })
     .from(curriculumItem)
-    .where(inArray(curriculumItem.id, ids));
+    .where(and(inArray(curriculumItem.id, ids), ownedBy(curriculumItem.ownerId, await readableFor(db, learnerId))));
   return new Set(rows.map((row) => row.id));
 }
 
@@ -102,7 +107,7 @@ export async function importLegacyState(
   const referenced = [
     ...new Set([...Object.keys(completed), ...Object.keys(notes), ...Object.keys(knowledge)]),
   ];
-  const known = await knownItems(db, referenced);
+  const known = await knownItems(db, referenced, learnerId);
   const unknownItems = referenced.filter((id) => !known.has(id)).sort();
 
   const result: ImportResult = {

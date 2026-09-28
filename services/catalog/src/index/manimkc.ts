@@ -206,9 +206,12 @@ export const manimkcIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.manimkc,
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired }) => {
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired, owner }) => {
     const report = await readTopicsReport(toolsRoot ?? repoRoot, manimkcRoot);
-    return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug, { store: blobsRequired === true });
+    return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug, {
+      store: blobsRequired === true,
+      ...(owner === undefined ? {} : { owner }),
+    });
   },
 };
 
@@ -228,8 +231,9 @@ export async function buildRows(
   manimkcRoot: string,
   byManimkcPath: ReadonlyMap<string, string>,
   bySlug: ReadonlyMap<string, unknown>,
-  options: { store?: boolean } = {},
+  options: { store?: boolean; owner?: string } = {},
 ): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string }; blobs: SourceBlob[] }> {
+  const owner = options.owner ?? LOCAL_LEARNER_ID;
   const assets: NewAsset[] = [];
   const assetTopics: NewAssetTopic[] = [];
   const derivations: NewAssetDerivation[] = [];
@@ -250,13 +254,13 @@ export async function buildRows(
     const ext = path.extname(file).slice(1).toLowerCase();
     blobs.push({
       file,
-      ownerId: LOCAL_LEARNER_ID,
+      ownerId: owner,
       mime: MANIMKC_MIME[ext] ?? "application/octet-stream",
       ext,
       sha256: row.contentHash,
       bytes: row.bytes,
     });
-    return { ...row, blobKey: blobKey(LOCAL_LEARNER_ID, row.contentHash, ext) };
+    return { ...row, blobKey: blobKey(owner, row.contentHash, ext) };
   };
 
   for (const entry of report.topics) {
