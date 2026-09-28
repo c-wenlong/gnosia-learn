@@ -198,6 +198,22 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(again.items.map((i) => i.action)).toEqual(["present", "present", "present", "present"]);
   });
 
+  it("refuses each file its owner's cap refuses, and goes on with the rest (phase 4)", async () => {
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "2";
+    try {
+      const result = await uploadAssets(scratch.db, options());
+      expect(result.uploaded).toBe(2);
+      expect(result.refused).toBe(2);
+      const refused = result.items.filter((i) => i.action === "refused");
+      expect(refused).toHaveLength(2);
+      for (const item of refused) expect(item.detail).toContain("SELF_LEARN_OWNER_UPLOADS_PER_DAY");
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
+  });
+
   it("finishes an upload an earlier run left pending (edge case 5)", async () => {
     const key = blobKey("local", sha256(VIDEO), "mp4");
     await scratch.db.insert(blobObject).values({
