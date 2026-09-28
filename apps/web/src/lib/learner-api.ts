@@ -3,6 +3,7 @@ import type { CatalogDatabase } from "@self-learn/catalog/state";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { isBadRequest, withLearnerStore } from "@/lib/learner-store";
+import { currentOwner, NoOwnerError } from "@/lib/owner";
 
 /**
  * The shared shape of every `/api/learner/*` handler.
@@ -29,6 +30,12 @@ import { isBadRequest, withLearnerStore } from "@/lib/learner-store";
  * the caller's fault. An unreachable database is a 503 with a code the UI
  * turns into "not saved: database unreachable", because an optimistic tick
  * that silently never persisted is worse than an error.
+ *
+ * **Whose row.** Every write is the signed-in owner's (`currentOwner()`,
+ * phase 4 of docs/CONTENT-MIGRATION.md), resolved once per request before the
+ * body is read and handed to the write, which passes it to the catalog as
+ * `learnerId`. A request with no owner is a 401, the proxy's own answer, and
+ * never reaches the database.
  */
 
 /**
@@ -48,6 +55,21 @@ export const MAX_NOTE_CHARS = 20_000;
 export const MAX_ID_CHARS = 128;
 
 export class BadRequest extends Error {}
+
+/** The proxy's answer to a request with no session, for one that got past it. */
+export function unauthenticated(): NextResponse {
+  return NextResponse.json({ error: "UNAUTHENTICATED", signIn: "/sign-in" }, { status: 401 });
+}
+
+/** The signed-in owner, or the 401 to answer with when the request has none. */
+export async function requestOwner(): Promise<string | NextResponse> {
+  try {
+    return await currentOwner();
+  } catch (error) {
+    if (error instanceof NoOwnerError) return unauthenticated();
+    throw error;
+  }
+}
 
 export function badRequest(message: string): NextResponse {
   return NextResponse.json({ ok: false, error: message, code: "BAD_REQUEST" }, { status: 400 });
@@ -90,13 +112,16 @@ async function readBody(req: Request): Promise<unknown> {
 export function handler<T>(
   bucket: string,
   parse: (body: Record<string, unknown>) => T,
-  write: (db: CatalogDatabase, input: T) => Promise<unknown>,
+  write: (db: CatalogDatabase, input: T, owner: string) => Promise<unknown>,
 ): (req: Request) => Promise<NextResponse> {
   return async (req: Request) => {
     const origin = enforceSameOrigin(req);
     if (origin !== null) return origin;
     const limited = enforceRateLimit(req, `learner:${bucket}`, LEARNER_RATE_LIMIT);
     if (limited !== null) return limited;
+
+    const owner = await requestOwner();
+    if (owner instanceof NextResponse) return owner;
 
     let input: T;
     try {
@@ -111,7 +136,7 @@ export function handler<T>(
     }
 
     try {
-      const result = await withLearnerStore((db) => write(db, input));
+      const result = await withLearnerStore((db) => write(db, input, owner));
       return NextResponse.json({ ok: true, result });
     } catch (error) {
       // A StateError is the payload naming something the catalog does not

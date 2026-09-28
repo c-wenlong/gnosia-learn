@@ -13,9 +13,10 @@ import { MANIMKC_MIME, readTopicsReport, type TopicsReport } from "../index/mani
 import { ASSET_PREFIX } from "../index/source";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
-import { uploadBlob } from "./blob";
+import { OwnerCapError, uploadBlob } from "./blob";
 import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
+import { CLI_OWNER } from "./scope";
 
 /**
  * `catalog asset upload --source manimkc`: manimkc's rendered videos and their
@@ -268,6 +269,7 @@ export async function unhookPosters(
     try {
       await writeContents(db, [
         {
+          owner: CLI_OWNER,
           type: "asset" as const,
           id: row.id,
           next: { row: contentRow(row), links: { asset_derivation: [] } },
@@ -386,14 +388,23 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       items.push({ id: row.id, kind: row.kind, action: there ? "would-link" : "would-upload", key, bytes: facts.bytes });
       return { key, changed: true };
     }
-    const done = await uploadBlob(db, store, {
-      ownerId: row.ownerId,
-      file,
-      mime: MIME[ext] as string,
-      ext,
-      sha256: facts.contentHash,
-      bytes: facts.bytes,
-    });
+    let done;
+    try {
+      done = await uploadBlob(db, store, {
+        ownerId: row.ownerId,
+        file,
+        mime: MIME[ext] as string,
+        ext,
+        sha256: facts.contentHash,
+        bytes: facts.bytes,
+      });
+    } catch (error) {
+      // Its owner's cap (phase 4): this file is refused and the run goes on,
+      // since the next file may be another owner's, or one already stored.
+      if (!(error instanceof OwnerCapError)) throw error;
+      refuse(row.id, row.kind, error.message);
+      return null;
+    }
     if (done.uploaded) {
       result.uploaded += 1;
       result.uploadedBytes += done.bytes;
@@ -426,6 +437,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const groupStart = items.length;
     const linkTo = (row: Asset, key: string) =>
       writes.push({
+        owner: CLI_OWNER,
         type: "asset",
         id: row.id,
         next: { row: { ...contentRow(row), blobKey: key } },
@@ -459,11 +471,15 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       // The bytes are stored and confirmed; only the rows are refused. A rerun
       // reads the rows as they are now and links the same keys.
       const refused = new Set(writes.map((w) => w.id));
+      // `refused` counts files, not items: a poster already refused (its cap,
+      // or no frame to cut) whose detach write this was is not counted again.
+      const counted = new Set(items.slice(groupStart).filter((i) => i.action === "refused").map((i) => i.id));
       for (const item of items.slice(groupStart)) {
         if (!refused.has(item.id) || item.action === "refused") continue;
         item.action = "refused";
         item.detail = `its row changed while this upload ran, so it was not pointed at ${item.key ?? "its blob"}. ${error.message}`;
-        result.refused += 1;
+        if (!counted.has(item.id)) result.refused += 1;
+        counted.add(item.id);
       }
     }
   }
@@ -510,6 +526,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       if (!videoChanged || existing === undefined || !derived) return null;
       items.push({ id, kind: "poster", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: { row: contentRow(existing), links: { asset_derivation: [] } },
@@ -530,14 +547,21 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
-      const done = await uploadBlob(db, store, {
-        ownerId: video.row.ownerId,
-        file,
-        mime: POSTER_CONTENT_TYPE,
-        ext: POSTER_EXTENSION.slice(1),
-        sha256,
-        bytes: frame.body.length,
-      });
+      let done;
+      try {
+        done = await uploadBlob(db, store, {
+          ownerId: video.row.ownerId,
+          file,
+          mime: POSTER_CONTENT_TYPE,
+          ext: POSTER_EXTENSION.slice(1),
+          sha256,
+          bytes: frame.body.length,
+        });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        refuse(id, "poster", error.message);
+        return detach(`its owner's cap refused the new poster: ${error.message}`);
+      }
       if (done.uploaded) {
         result.uploaded += 1;
         result.uploadedBytes += done.bytes;
@@ -545,6 +569,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "made", key: done.key, bytes: done.bytes });
       return {
+        owner: CLI_OWNER,
         type: "asset",
         id,
         next: {

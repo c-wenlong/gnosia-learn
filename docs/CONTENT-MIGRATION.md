@@ -1842,20 +1842,97 @@ runs the same on the seed tree and holds the refusals, and
 
 ## Phase 4: tenancy
 
-After accounts exist; accounts themselves are out of scope.
+After accounts exist; accounts themselves are out of scope. The plumbing
+below was built ahead of them, on 2026-09-28, as a behaviour-preserving
+change: with one owner every read and write resolves to `local`, exactly as
+before, so it merged before flip day and does not depend on #152.
 
-- [ ] `owner_id` comes from the signed-in session instead of `'local'`, through
+- [x] `owner_id` comes from the signed-in session instead of `'local'`, through
       the same `learnerId` parameter every state function already accepts
       (`services/catalog/src/state/*.ts`) and the content writers gain in
       phase 0.
-- [ ] App-level scoping first: every content query takes an owner and a list
+      **Built:** `apps/web/src/lib/owner.ts`. `currentOwner()` resolves the
+      owner from the signed-in session, once per render; today the
+      single-owner cookie maps to `local`, and accounts plug in here and
+      nowhere else. A request with no valid session gets `NoOwnerError`,
+      never `local`, and the `/api/learner/*` handler answers it with the
+      proxy's own 401 before the body is read. Every web read and write that
+      used to omit `learnerId` passes the owner explicitly, and
+      `apps/web/src/lib/owner-calls.test.ts` fails the build of one that
+      does not: it finds every owner-bearing function in the catalog's own
+      declarations, so a function added to `@self-learn/catalog/state` later
+      is covered the day it lands. `readableOwners(owner)` is `[owner,
+      commons]`, and `COMMONS_OWNER`, `readableOwners`, `ownerScope` and the
+      `OwnerScope` type live in `@self-learn/schema/shared`, so the web app
+      and the catalog share one definition. The `commons` learner row is
+      created on its first write by the seam, the way `local`'s is created on
+      first use (`ensureLearner`), rather than by a migration or at app start:
+      no read needs the row, and a web app that inserted it at start would be
+      writing to whichever database it was pointed at.
+- [x] App-level scoping first: every content query takes an owner and a list
       of readable owners (the owner plus a shared `commons` owner). Row-level
       security later, once a second service reads the database.
-- [ ] Blob keys already carry the owner; per-owner caps on bytes stored and
+      **Built:** `dbSource(db, scope)` takes an `OwnerScope`, required, and
+      each of the six readers under `services/catalog/src/content/readers/`
+      keeps only rows `scope.readable` owns; a link is kept only when the
+      entity at its far end is readable too (a relation to another owner's
+      topic, a course's tag, an item's concept), and a session log belongs to
+      its session's learner. The queries the web app reaches through
+      `@self-learn/catalog/state` (`assetsForTopic`, `assetsForConcept`,
+      `assetsByIds`, `listAssets`, `assetCounts`, `assetDerivations`,
+      `conceptsForAsset(s)`, `derivationSources`, `assetsForCollection`,
+      `assetBlobs`, `posterBlob`, `videosWithStoredPoster`, `topicTitles`,
+      `notePaths`, `conceptSummaries`, `readConceptGraph`) take the scope as a
+      required argument, and `readKnowledgeBase` and `reviewQueue` derive it
+      from the learner they already take. The write seam stamps
+      `owner_id = owner` (`WriteContentInput.owner`, required) and refuses,
+      as `foreign-owner`, a write naming an id another owner holds, since ids
+      are global (D23); the CLIs write as `CLI_OWNER`
+      (`services/catalog/src/content/scope.ts`). The operator's
+      whole-database tools (`catalog export`, parity, `topic ls`, the `learn`
+      CLI's note reads) still read every owner, through an optional `owners`
+      that nothing behind the web app's door exposes.
+      `services/catalog/test/tenancy.test.ts` seeds a second owner with one
+      of everything and the commons with a topic and a concept, and shows
+      `local` reads exactly what it read before plus the commons, the second
+      owner reads its own rows plus the commons, and the seam refuses a
+      takeover; with the filter disabled five of its cases fail. Greptile's
+      review of #158 added the boundaries a link crosses: evidence
+      (`recordObservation`, `gradeReview`) is refused for a concept the
+      learner cannot read (`assertReadableConcepts`), with the sentence a
+      missing concept gets; the knowledge base drops a prerequisite, a
+      curriculum item and a topic chip another owner holds; a stored poster
+      answers only when the video it stands for is readable; and the seam
+      stamps its owner on `topic_relation` and `manimkc_topic` rows too.
+- [x] Blob keys already carry the owner; per-owner caps on bytes stored and
       on uploads per day, checked in `upload()`.
+      **Built:** `uploadBlob` in `services/catalog/src/content/blob.ts` reads
+      `SELF_LEARN_OWNER_BYTES_CAP` and `SELF_LEARN_OWNER_UPLOADS_PER_DAY`
+      (unset, the default, is no cap, and then nothing is measured). With a cap
+      set it measures the owner from `blob_object` by the key's `<owner_id>/`
+      prefix, under an advisory lock per owner in the transaction that writes
+      the pending row, so two uploads at once cannot both fit under a cap only
+      one fits; a refusal (`OwnerCapError`) stores and records nothing, and
+      `catalog asset upload` records it as that file's refusal and goes on
+      with the rest. Only a new object is measured: a key that already has a
+      row (asked under the lock, since an audit may have deleted a stale one
+      meanwhile) is already counted, so a rerun or putting back an object the
+      store lost is never refused, even under a cap lowered below what the
+      owner holds. The day is rolling, as the studio's spend cap.
+      A value that is not a whole number refuses every upload with the
+      variable named, rather than dropping the cap the way `STUDIO_DAILY_USD`
+      does: an upload is a command a person watches, and a quota that a typo
+      turns off is the failure that matters here. No migration: `blob_object`
+      already holds the key, the size and `created_at`, so a cap table would
+      only duplicate them. `catalog blob audit` prints each owner's objects,
+      bytes and uploads in the last 24 hours, and the caps in force.
+      `services/catalog/test/blob-caps.test.ts`.
 - [ ] `app_web` gains content writes, now that a route can know who is
       writing; the web editor lands here.
-- [ ] Decide per type whether ids stay global (D3).
+      **Not built, on purpose:** the gate exists (`currentOwner()`, and the
+      seam's `owner`), the role and the editor do not. DEPLOYMENT.md says what
+      a content-writing route will have to do.
+- [x] Decide per type whether ids stay global (D3). **Decided:** D23.
 
 ## Dependencies and parallel work
 
@@ -2204,6 +2281,44 @@ would then leave no history at all); renumbering silently when a gap closes
 (it is a revision of every row it moves, so it is a decision, not a side
 effect).
 
+### D23. Ids stay global; shared types move to the commons, authored types stay per owner
+
+**Verdict**, per type, decided 2026-09-28 in phase 4:
+
+| Type | Ids | Owner | Why |
+| --- | --- | --- | --- |
+| Topics, relations, manimkc mappings | global | `commons`, once a second owner exists | The vocabulary is what every course, concept, diagram and job validates against (`concept.topic_slug`, `diagram.topic_slug`, `job.topic_slug`, a module's topic row, all foreign keys). A vocabulary per owner would fork the catalog at its root, and the planner's near-duplicate check (D14) only works over one list |
+| Tags | global | `commons`, likewise | Eight curated themes over the shared courses; nothing about them is personal |
+| Courses, modules, curriculum items, course links | global | `commons`, likewise | The curriculum is shared; what is personal about a course, the ticks and recaps, is already per learner (`progress`, `recap`). A tenant's own course would be a new id, not a copy |
+| Concept notes | global slug, for now | per owner | Two people's notes on `dot-product` are different notes (open question 7). Re-key to `(owner_id, slug)` only if a second tenant actually collides; the export and import path is how that re-key would be done |
+| Session logs | generated ids | per learner (`session.learner_id`) | Already unique and already owned |
+| Diagrams | global slug, for now | per owner | As concept notes: a drawing is its author's |
+| Assets | global | follow their entity: course links the commons, `note:`, `session:` and `diagram:` assets their owner, the manimkc library the operator's (the commons once shared) | An asset is a pointer at something else's bytes or text; its owner is that thing's |
+| Blobs | content addressed | the key's prefix | D5 |
+
+**What the decision needs today, and all that was built:** reads filter by
+`owner_id in (owner, commons)`, and the write seam stamps the owner and
+refuses a write naming an id another owner holds (`foreign-owner`), so a
+collision on a global slug is an error the second tenant sees rather than a
+silent takeover of the first owner's row. Nothing is re-keyed and nothing is
+moved to the commons: every row is `local` today, and moving the shared types
+is one `update ... set owner_id = 'commons'` per table on the day a second
+owner is created, which changes nothing `local` reads, since `local`
+reads the commons. **Why:** re-keying every table to `(owner_id, slug)` changes
+every foreign key and query before a second tenant exists (D3's reason, which
+still holds), and the collision it would prevent can now only surface as a
+refusal. **Rejected:** composite keys now; a vocabulary per owner; moving the
+shared types to the commons today, which would make every CLI write of a topic
+a `foreign-owner` refusal until the CLI learned to write as the commons.
+
+**A limit this leaves, named so the accounts PR starts from it:** `catalog
+import`, `export`, `flip` and parity are the operator's whole-database tools
+and assume one owner. An import prunes or archives rows its tree no longer
+produces whoever owns them, and its upsert would stamp a colliding row
+`local`. Before a second owner's first row exists, the import has to be
+restricted to the importing owner's rows (its stale keys, its link clearing and
+its conflicts), or refuse while any row belongs to another owner.
+
 ## Decided by the owner
 
 Answered on 2026-09-27, the day the plan merged.
@@ -2259,7 +2374,7 @@ Answered on 2026-09-27, the day the plan merged.
    each phase 1 worktree its own database. The homeserver is ruled out by D2,
    since Vercel would reach the primary over a tunnel. Confirm `pg_trgm` and
    `vector` are offered before choosing.
-7. **Per-owner namespaces.** D3 keeps ids global. Concept notes are the type
+7. **Per-owner namespaces.** Decided in D23 (phase 4). D3 keeps ids global. Concept notes are the type
    most likely to need per-owner slugs, since two people's notes on
    `dot-product` are different notes. **Recommendation:** decide in phase 4
    with a real second tenant; the export and import path is how a re-key would

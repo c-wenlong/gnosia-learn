@@ -15,6 +15,7 @@ import type { CatalogDatabase } from "../db";
 import { extractWikilinks, parseFrontmatter, readText } from "../index/frontmatter";
 import { latestRevisions, lockEntity } from "./revisions";
 import { writeContent } from "./write";
+import { CLI_OWNER } from "./scope";
 
 /**
  * Session logs as rows (Track C, D20 of docs/CONTENT-MIGRATION.md).
@@ -221,6 +222,7 @@ async function writeLogAsset(
   const assetId = found.asset.id;
   const latest = (await latestRevisions(db, "asset", [assetId])).get(assetId);
   await writeContent(db, {
+    owner: CLI_OWNER,
     type: "asset",
     id: assetId,
     next: {

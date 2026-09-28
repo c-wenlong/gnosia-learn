@@ -8,6 +8,7 @@ import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import { readConceptNote } from "@/lib/concept-note";
 import { buildConceptWorkspace, type ConceptPlace, type ConceptWorkspace } from "@/lib/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
+import { currentOwner, ownerScope } from "@/lib/owner";
 import type { Course } from "@/lib/types";
 
 /**
@@ -57,7 +58,8 @@ export function courseSlugsOf(courses: readonly Course[], topicIds: readonly str
 
 /** The read without the request marker, for a route handler or a test. */
 export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspaceRead> {
-  const { kb, reachable } = await readKb();
+  const owner = await currentOwner();
+  const { kb, reachable } = await readKb(owner);
   if (!reachable) return { state: "unreachable", message: "The catalog database could not be reached." };
   const concept = kb.concepts.find((c) => c.id === slug);
   if (concept === undefined) return { state: "not-found" };
@@ -66,9 +68,9 @@ export async function readConceptWorkspace(slug: string): Promise<ConceptWorkspa
     const db = await catalogDatabase();
     const [note, events, reviews, assets, courses] = await Promise.all([
       readConceptNote(slug),
-      readEvents(db),
-      readReviews(db),
-      assetsForConcept(db, slug),
+      readEvents(db, owner),
+      readReviews(db, owner),
+      assetsForConcept(db, slug, ownerScope(owner)),
       getCourses(),
     ]);
     const workspace = buildConceptWorkspace({

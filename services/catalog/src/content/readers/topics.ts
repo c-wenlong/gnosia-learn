@@ -13,9 +13,10 @@ import type { TypeReader } from "./reader";
  * topics by position, `relations` from `topic_relation`, `maps.manimkc` from
  * `manimkc_topic`, `maps.concepts` from live concepts' `topic_slug` and
  * `maps.courses` from live modules' topic rows. `test/topic-readers.test.ts`
- * holds the two equal.
+ * holds the two equal. Scoped to `scope.readable`: a topic, a relation, a
+ * mapping or a filed concept another owner holds is left out.
  */
 export const reader: TypeReader<"topics"> = {
   ready: true,
-  read: (db) => () => readTopicEntries(db),
+  read: (db, scope) => () => readTopicEntries(db, scope.readable),
 };

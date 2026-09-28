@@ -5,6 +5,7 @@ import { dueReviews, readEvents, readPreferences } from "@self-learn/catalog/sta
 
 import { computeHabit, emptyHabit, type Habit } from "@/lib/habit-core";
 import { catalogDatabase } from "@/lib/learner-store";
+import { currentOwner } from "@/lib/owner";
 
 /**
  * The streak and the daily target the top bar shows on every page, read from
@@ -38,12 +39,14 @@ export function habitTimeZone(env: Record<string, string | undefined> = process.
 /** The read without the request marker, for a route handler or a test. */
 export async function readHabit(now: Date = new Date()): Promise<Habit> {
   const timeZone = habitTimeZone();
+  // Whose streak, resolved outside the degradation (phase 4).
+  const owner = await currentOwner();
   try {
     const db = await catalogDatabase();
     const [events, preferences, due] = await Promise.all([
-      readEvents(db),
-      readPreferences(db),
-      dueReviews(db, { now }),
+      readEvents(db, owner),
+      readPreferences(db, owner),
+      dueReviews(db, { now, learnerId: owner }),
     ]);
     return computeHabit({ events, preferences, dueReviews: due.length, now, timeZone });
   } catch (error) {

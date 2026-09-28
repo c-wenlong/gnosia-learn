@@ -210,6 +210,21 @@ deployment domain, and the app falls back to `http://localhost:3000` locally.
 Set it only if you want social preview images to resolve against a specific
 canonical origin.
 
+### The role Vercel connects as, and whose rows a request touches
+
+D19 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#d19-vercel-connects-with-a-role-that-cannot-write-content):
+when the cloud database arrives, Vercel connects as `app_web`, which has
+`SELECT` on the content tables and writes on the state tables only. That has
+not changed. What phase 4 added is the owner every request acts as:
+`currentOwner()` in `apps/web/src/lib/owner.ts` resolves it from the signed-in
+session (today the owner's cookie, which is `local`), every read passes it to
+the catalog, and every `/api/learner/*` write is made as that learner or
+answered with a 401 before the database is asked. So a content-writing route,
+when the web editor brings one, is gated on `currentOwner()` being resolved and
+passes it to the write seam as `owner`, which stamps the row and refuses one
+another owner holds. Until that editor exists no Vercel function writes content,
+and `app_web` gets no content writes before it does.
+
 ## The blob store
 
 Videos, their posters and sidecars, and diagram SVGs are moving out of the
@@ -304,6 +319,18 @@ deletes a row or an object that anything references. It exits 1 while the
 table and the store disagree or while any asset points at a `pending` blob,
 including one `--fix` just sent back, so a clean exit means every stored asset
 serves.
+
+It also prints each owner's totals (objects, bytes, and new objects in the
+last 24 hours, grouped by the key's `<owner_id>/` prefix) and the per-owner
+caps in force. Two variables set them, both unset by default, which is no cap:
+`SELF_LEARN_OWNER_BYTES_CAP` (bytes one owner may store) and
+`SELF_LEARN_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
+rolling 24 hours). Every upload checks them before a byte moves and refuses,
+storing and recording nothing, a new object that would take its owner past
+either; `asset upload` lists it as refused and carries on. A key that already
+has a row is never refused, so a rerun can always put back an object the
+store lost. Set them in `services/catalog/.env`
+beside `SELF_LEARN_HOME`, since the catalog CLI is what uploads.
 
 ## Deploying from the command line
 

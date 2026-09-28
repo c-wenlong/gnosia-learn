@@ -1,6 +1,15 @@
-import { concept, event, LOCAL_LEARNER_ID, review, SCHEDULE_LIMITS } from "@self-learn/schema";
+import {
+  concept,
+  event,
+  LOCAL_LEARNER_ID,
+  type OwnerScope,
+  readableOwners,
+  review,
+  SCHEDULE_LIMITS,
+} from "@self-learn/schema";
 import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { DEFAULT_PARAMS, update as bktUpdate } from "../../../../scripts/learn/lib/bkt.mjs";
 import { newCard, PASS_GRADE, review as sm2 } from "../../../../scripts/learn/lib/schedule.mjs";
@@ -8,7 +17,7 @@ import { StateError } from "./errors";
 import { appendEvent } from "./events";
 import { domainOf } from "./knowledge-base";
 import { ensureLearner, withLearnerLock } from "./learner";
-import { assertKnownConcepts, ensureEntry, readModel, writeModel } from "./mastery";
+import { assertReadableConcepts, ensureEntry, readModel, writeModel } from "./mastery";
 
 /**
  * `learn/state/reviews.json` as the `review` table.
@@ -333,7 +342,7 @@ export async function gradeReview(
   if (!Number.isFinite(grade) || grade < 0 || grade > 5) {
     throw new StateError(`grade must be between 0 and 5; got ${grade}.`);
   }
-  await assertKnownConcepts(db, [conceptId]);
+  await assertReadableConcepts(db, [conceptId], learnerId);
   const at = now.toISOString();
   const passed = grade >= PASS_GRADE;
 
@@ -445,17 +454,21 @@ export async function reviewQueue(
   const rows =
     slugs.length === 0
       ? []
-      : await db
-          .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
-          .from(concept)
-          .where(inArray(concept.slug, slugs));
+      : // Only concepts the learner may read (phase 4): a focus naming
+        // another owner's concept is dropped like one the catalog lacks.
+        await scopedRead(readableOwners(learnerId), (owners) =>
+          db
+            .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
+            .from(concept)
+            .where(and(inArray(concept.slug, slugs), ownedBy(concept.ownerId, owners))),
+        );
   const bySlug = new Map(rows.map((row) => [row.slug, row]));
 
   const items: ReviewQueueItem[] = [];
   for (const entry of cards) {
     const row = bySlug.get(entry.conceptId);
     // A due card whose concept left the catalog cannot be graded either
-    // (`assertKnownConcepts`), so showing it would be a button that 400s.
+    // (`assertReadableConcepts`), so showing it would be a button that 400s.
     if (row === undefined) continue;
     const card = "card" in entry ? null : entry;
     items.push({
@@ -489,12 +502,16 @@ export interface ConceptSummary {
  * Every concept's one-line summary. A review session draws the wrong options
  * of a multiple-choice card from these when the queue itself is too short to
  * supply them, so it is one narrow query rather than the whole knowledge base.
+ * Scoped (phase 4), so a distractor is never another owner's concept.
  */
-export async function conceptSummaries(db: CatalogDatabase): Promise<ConceptSummary[]> {
-  const rows = await db
-    .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
-    .from(concept)
-    .orderBy(asc(concept.slug));
+export async function conceptSummaries(db: CatalogDatabase, scope: OwnerScope): Promise<ConceptSummary[]> {
+  const rows = await scopedRead(scope.readable, (owners) =>
+    db
+      .select({ slug: concept.slug, title: concept.title, summary: concept.summary, path: concept.path })
+      .from(concept)
+      .where(ownedBy(concept.ownerId, owners))
+      .orderBy(asc(concept.slug)),
+  );
   return rows.map((row) => ({
     conceptId: row.slug,
     title: row.title,

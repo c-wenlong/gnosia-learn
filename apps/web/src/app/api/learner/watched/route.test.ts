@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyMigrations } from "../../../../../../../services/catalog/src/migrations";
 import {
@@ -11,6 +11,12 @@ import {
   seedAssets,
   seedContent,
 } from "../../../../../../../services/catalog/test/state-fixture";
+
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 
 /**
  * `POST /api/learner/watched`, against a scratch database.
