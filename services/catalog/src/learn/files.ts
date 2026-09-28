@@ -8,6 +8,7 @@ import {
 import { sha256 } from "../content/layout";
 import { readContentSources } from "../content/ownership";
 import {
+  assertFrontmatter,
   commitNoteText as commitRows,
   noteRevision,
   noteText,
@@ -565,6 +566,9 @@ export async function commitNoteText(
   base: Pick<NoteSnapshot, "revision" | "hash" | "owner">,
   options: { reason: string; session?: string; where?: string },
 ): Promise<Written> {
+  // Before either branch: the file branch below would otherwise substitute
+  // the id a damaged block lost and write the note without its frontmatter.
+  assertFrontmatter(text, options.where ?? `the text of "${id}"`);
   const db = await rowsFor("concepts", true);
   const owner = db === null ? "files" : "db";
   if (owner !== base.owner) {

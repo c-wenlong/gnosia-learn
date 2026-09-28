@@ -664,6 +664,17 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     expect(pushed.refused[0]?.reason).toContain(path.join(vault, rel));
     expect(await revisions("gamma")).toBe(before);
 
+    // A broken closing fence runs the block on to a later --- in the body,
+    // which would drop everything before it: refused by the line it met.
+    const runOn = (await read(vault, rel))
+      .replace(/^--\n/, "---\n")
+      .replace(/\n---\n/, "\n--\n")
+      .concat("\n---\n\nafter a rule\n");
+    await writeFile(path.join(vault, rel), runOn);
+    expect((await push(vault)).refused[0]?.reason).toMatch(/is not a key: line: its closing --- is probably damaged/);
+    expect(await revisions("gamma")).toBe(before);
+    await writeFile(path.join(vault, rel), damaged);
+
     // Frontmatter with no id: is refused the same way.
     await writeFile(path.join(vault, rel), (await read(vault, rel)).replace(/^--\n/, "---\n").replace(/^id: .*\n/m, ""));
     expect((await push(vault)).refused[0]?.reason).toMatch(/has frontmatter with no id:/);
@@ -725,6 +736,56 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     // Deleted, it comes back from the store.
     await rm(path.join(vault, "assets/alpha-map.svg"));
     expect((await pull(vault)).written).toEqual(["assets/alpha-map.svg"]);
+
+    // A new SVG in the database, and two saves racing the pull that replaces
+    // the old one: one lands just before the pull moves the file aside, one
+    // just after. Both are kept; the second where it was saved.
+    const newer = svg.replace("<title>alpha</title>", "<title>alpha, redrawn</title>");
+    await writeFile(path.join(work, "alpha-map.svg"), newer);
+    await writeFile(path.join(work, "alpha-map.tldr"), diagramDocument().replace("Alpha map", "Alpha map, redrawn"));
+    await putDiagram(scratch.db, openBlobStore(), {
+      slug: "alpha-map",
+      tldr: path.join(work, "alpha-map.tldr"),
+      svg: path.join(work, "alpha-map.svg"),
+      reason: "redrawn",
+      author: "local",
+      authorKind: "person",
+    });
+    const target = path.join(vault, "assets/alpha-map.svg");
+    const renameOriginal = fsPromises.rename;
+    const spy = vi.spyOn(fsPromises, "rename").mockImplementation(async (from, to) => {
+      if (from !== target) return renameOriginal(from, to);
+      await fsPromises.writeFile(target, "<svg>first save</svg>");
+      await renameOriginal(from, to);
+      await fsPromises.writeFile(target, "<svg>second save</svg>");
+    });
+    try {
+      await pullVault(scratch.db, { dir: vault });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await read(vault, "assets/alpha-map.svg")).toBe("<svg>second save</svg>");
+    const kept = (await readdir(path.join(vault, "assets"))).filter((name) => /^alpha-map\.kept-\d+\.svg$/.test(name));
+    expect(kept).toHaveLength(1);
+    expect(await read(vault, `assets/${kept[0]}`)).toBe("<svg>first save</svg>");
+  }, 60_000);
+
+  it("removes an unedited SVG whose diagram is gone, judged by its bytes", async () => {
+    const vault = await newVault();
+    await pull(vault);
+    // Not valid UTF-8, as an SVG's bytes need not be.
+    const bytes = Buffer.from([0x3c, 0x73, 0x76, 0x67, 0xff, 0xfe, 0x3e]);
+    await writeFile(path.join(vault, "assets/old-diagram.svg"), bytes);
+    const recorded = await manifest(vault);
+    recorded.files["assets/old-diagram.svg"] = {
+      kind: "asset",
+      id: "old-diagram",
+      base: null,
+      hash: createHash("sha256").update(bytes).digest("hex"),
+    };
+    await writeFile(path.join(vault, ".vault.json"), JSON.stringify(recorded, null, 2));
+    expect((await pull(vault)).removed).toEqual(["assets/old-diagram.svg"]);
+    expect(await exists(vault, "assets/old-diagram.svg")).toBe(false);
   }, 60_000);
 
   // Last: a session log cannot be deleted, so this one stays in the database.

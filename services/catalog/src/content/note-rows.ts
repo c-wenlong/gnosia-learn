@@ -4,7 +4,7 @@ import { concept, conceptPrerequisite, LOCAL_LEARNER_ID } from "@self-learn/sche
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { parseFrontmatter } from "../index/frontmatter";
+import { parseFrontmatter, strayFrontmatterLines } from "../index/frontmatter";
 import { assertRenderable, notePath, readNote, renderNote, type NoteFields } from "./notes";
 import { POSITION_STEP } from "./positions";
 import { latestRevisions } from "./revisions";
@@ -315,15 +315,26 @@ export async function commitNoteText(
  * edit: a damaged `---` fence would be committed as a note whose title is its
  * id, with no summary, tags, prerequisites or `created`, and the old values
  * would survive only as a revision. Every note the database renders carries
- * `id:`, so text without one is not a note that came out of it.
+ * `id:`, so text without one is not a note that came out of it. And a block
+ * holding a line that is no `key:` and no `- item` (a heading, a paragraph) is
+ * a closing fence that broke, with the block run on to a later `---` in the
+ * body: everything before that line would be dropped from the body.
  */
-function assertFrontmatter(text: string, where: string): void {
+export function assertFrontmatter(text: string, where: string): void {
   const { data } = parseFrontmatter(text);
   if (Object.keys(data).length === 0) {
     throw new NoteWriteError(
       `${where} has no frontmatter that parses (is its opening or closing --- line damaged?), so its title, ` +
         `tags, prerequisites and created date would all be dropped. Nothing was written; restore the frontmatter ` +
         `and commit again.`,
+    );
+  }
+  const stray = strayFrontmatterLines(text);
+  if (stray.length > 0) {
+    throw new NoteWriteError(
+      `${where} has a frontmatter block holding ${JSON.stringify(stray[0])}, which is not a key: line: its closing --- ` +
+        `is probably damaged, and the block runs on to a later --- in the body, which would be dropped. Nothing was ` +
+        `written; repair the closing --- and commit again.`,
     );
   }
   const id = data["id"];

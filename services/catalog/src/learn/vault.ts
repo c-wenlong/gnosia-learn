@@ -117,7 +117,7 @@ const MANIFEST = ".vault.json";
 const README = "README.md";
 const SIDE_COPY = /\.(incoming|conflict)\.md$/;
 /** An edit `putBack` kept beside a file it could not put back over. */
-const KEPT = /\.kept-\d+\.md$/;
+const KEPT = /\.kept-\d+(?:-\d+)?\.md$/;
 
 const README_TEXT = `# Notes vault
 
@@ -352,7 +352,14 @@ async function takeAside(dir: string, file: string): Promise<{ aside: string; by
  */
 async function putBack(aside: string, file: string): Promise<void> {
   if (await placeIfAbsent(aside, file)) return;
-  await fs.rename(aside, file.replace(/\.md$/, `.kept-${Date.now()}.md`));
+  // Beside it under a name of its own, whatever the extension, and never over
+  // anything already there: a rename would replace the save it is making room for.
+  const extension = path.extname(file);
+  const stem = file.slice(0, file.length - extension.length);
+  for (let attempt = 0; ; attempt += 1) {
+    const kept = `${stem}.kept-${Date.now()}${attempt === 0 ? "" : `-${attempt}`}${extension}`;
+    if (await placeIfAbsent(aside, kept)) return;
+  }
 }
 
 /**
@@ -716,11 +723,12 @@ export async function pullVault(
     // Every stale file is read before any is removed, so one that cannot be
     // read stops the removals rather than arriving halfway through them.
     const live = new Set([...items.map((item) => item.rel), ...svgs.map((svg) => svg.rel)]);
-    const stale: { rel: string; entry: Entry; file: string; current: string | null }[] = [];
+    // Read as bytes, since an SVG's recorded hash is of its bytes.
+    const stale: { rel: string; entry: Entry; file: string; current: Buffer | null }[] = [];
     for (const [rel, entry] of problems.length > 0 ? [] : Object.entries(manifest.files)) {
       if (entry.kind === "readme" || live.has(rel)) continue;
       const file = path.join(dir, rel);
-      const current = await readText(dir, file).catch(notPlain);
+      const current = await readBytes(dir, file).catch(notPlain);
       if (current instanceof NotPlainFile) {
         problems.push(current.message);
         continue;

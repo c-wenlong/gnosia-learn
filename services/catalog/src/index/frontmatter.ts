@@ -90,6 +90,21 @@ export function parseFrontmatter(text: string): ParsedDocument {
   return { data, body: text.slice(match[0].length) };
 }
 
+/**
+ * The lines of the frontmatter block that are neither blank, nor a `key:`
+ * line, nor a `- item` under one: what `parseFrontmatter` passes over in
+ * silence. For a writer that must not take a damaged block at its word: with
+ * the closing `---` broken, the block runs on to the next `---` in the body,
+ * and every body line in between is one of these.
+ */
+export function strayFrontmatterLines(text: string): string[] {
+  const match = FRONTMATTER_RE.exec(text);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "" && !PAIR_RE.test(line) && !BLOCK_ITEM_RE.test(line));
+}
+
 /** One `key:` line of a frontmatter block as written, before any value is parsed. */
 export interface RawEntry {
   key: string;
