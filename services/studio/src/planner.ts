@@ -297,7 +297,6 @@ export const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 export const PLANNER_MAX_TURNS = 2;
 
 export interface PlannerArgvInput {
-  prompt: string;
   systemPrompt: string;
   settingsFile: string;
   sessionId: string;
@@ -326,11 +325,17 @@ export interface PlannerArgvInput {
  * - `--system-prompt`: replaced, not appended, with the draft's own prompt.
  * - `--session-id` on the first turn and `--resume` after, with the id minted
  *   and persisted before the first spawn.
+ *
+ * **No prompt.** The person's text goes to the CLI on stdin (`startPlanner`),
+ * never into this list. As a positional it was parsed as options whenever it
+ * began with a dash: `--debug-file=<path>` wrote a file anywhere, a markdown
+ * bullet list failed as an unknown option, and `--resume=<id>` or
+ * `--output-format=text` changed the session. Nothing a person types can be a
+ * flag when it is not in argv at all.
  */
 export function plannerArgv(input: PlannerArgvInput): string[] {
   return [
     "-p",
-    input.prompt,
     "--system-prompt",
     input.systemPrompt,
     "--tools",
@@ -396,6 +401,8 @@ export interface PlannerOutcome {
 
 export interface PlannerOptions {
   argv: string[];
+  /** What the planner is told this turn, written to its stdin. Never argv (see `plannerArgv`). */
+  prompt: string;
   cwd: string;
   auth: AgentAuth;
   tmp: string;
@@ -574,9 +581,14 @@ export function startPlanner(options: PlannerOptions): PlannerRun {
   const child = spawn(CLAUDE_BIN, options.argv, {
     cwd: options.cwd,
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
     env: agentEnv(process.env, options.auth, options.tmp),
   });
+  // The prompt as data on stdin, read by `-p` when no positional is given.
+  // A process that dies before reading it raises EPIPE here, which the
+  // outcome already reports; it is not a second failure.
+  child.stdin?.on("error", () => undefined);
+  child.stdin?.end(options.prompt, "utf8");
   return new PlannerRun(child, options);
 }
 

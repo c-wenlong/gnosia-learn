@@ -1034,7 +1034,6 @@ export class Drafts {
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
     }
     const argv = plannerArgv({
-      prompt,
       systemPrompt,
       settingsFile: plannerSettingsPath(id),
       sessionId: record.plannerSessionId,
@@ -1045,6 +1044,7 @@ export class Drafts {
     this.live.set(id, live);
     const run = startPlanner({
       argv,
+      prompt,
       cwd: draftDir(id),
       auth: agentAuth(),
       tmp: draftTmpDir(id),

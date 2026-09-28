@@ -28,7 +28,6 @@ import { testVocabulary } from "./vocabulary";
 
 const argvOf = (resume = false) =>
   plannerArgv({
-    prompt: "Show how the tailscale vpn tunnels work across devices in the tailscale network.",
     systemPrompt: "SYSTEM",
     settingsFile: "/abs/drafts/d/planner-settings.json",
     sessionId: "11111111-2222-4333-8444-555555555555",
@@ -68,12 +67,23 @@ describe("the planner's argv", () => {
     for (const flag of ["--allowedTools", "--allowed-tools", "--add-dir", "--dangerously-skip-permissions"]) {
       expect(argv).not.toContain(flag);
     }
-    // No argument but the prompt and the system prompt is a tool's name.
-    const values = argv.filter((_, i) => i !== 1 && argv[i - 1] !== "--system-prompt");
+    // No argument but the system prompt is a tool's name.
+    const values = argv.filter((_, i) => argv[i - 1] !== "--system-prompt");
     for (const tool of ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"]) expect(values).not.toContain(tool);
     const settings = plannerSettings();
     expect(settings.permissions.allow).toEqual([]);
     for (const tool of ["Bash", "Read", "Edit", "WebFetch", "WebSearch"]) expect(settings.permissions.deny).toContain(tool);
+  });
+
+  it("carries no prompt: the person's text goes on stdin, so it can never be read as a flag", () => {
+    const argv = argvOf();
+    expect(argv[0]).toBe("-p");
+    // Every other element is a flag or the value of the flag before it.
+    const valued = new Set(["--system-prompt", "--tools", "--mcp-config", "--setting-sources", "--settings", "--permission-prompts", "--max-turns", "--output-format", "--model", "--session-id", "--resume"]);
+    for (let i = 1; i < argv.length; i += 1) {
+      expect(argv[i]!.startsWith("--"), `argv[${i}] ${argv[i]}`).toBe(true);
+      if (valued.has(argv[i]!)) i += 1;
+    }
   });
 
   it("starts a session with its minted id and resumes it after", () => {

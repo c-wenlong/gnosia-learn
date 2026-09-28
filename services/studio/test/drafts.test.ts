@@ -174,6 +174,27 @@ describe("a conversation", () => {
   });
 });
 
+describe("what a person types", () => {
+  it("reaches the planner as text on stdin, never as argv, however it starts", async () => {
+    const texts = [
+      "--debug-file=/tmp/studio-planner-pwned.log",
+      "- a bullet\n- another bullet",
+      "-p --resume=11111111-2222-4333-8444-555555555555 --output-format=text",
+    ];
+    await fake.script([{ text: "Noted. What should the diagram make clear?" }]);
+    const { record } = await drafts.create({});
+    for (const text of texts) await say(record.id, text);
+    const view = await drafts.view(record.id);
+    // Every turn produced a reply: none of them was refused as an unknown option.
+    expect(view.error).toBeNull();
+    expect(view.transcript.filter((entry) => entry.role === "planner")).toHaveLength(3);
+    expect(await fake.prompts()).toEqual(texts);
+    for (const argv of await fake.argvs()) {
+      for (const text of texts) expect(argv.some((arg) => arg.includes(text.slice(0, 12)))).toBe(false);
+    }
+  });
+});
+
 describe("the brief's one retry", () => {
   it("resumes the planner once with the field and the sentence, and the retry takes the reply's place", async () => {
     await fake.script([{ text: proposing(bad) }, { text: proposing(good) }]);
@@ -181,7 +202,7 @@ describe("the brief's one retry", () => {
     await say(record.id, "draw the congestion window");
     const argvs = await fake.argvs();
     expect(argvs).toHaveLength(2);
-    const retryPrompt = argvs[1]![1]!;
+    const retryPrompt = (await fake.prompts())[1]!;
     expect(retryPrompt).toContain("-----BEGIN STUDIO-----");
     expect(retryPrompt).toContain('relations[0].to: "Relay" is not one of the elements');
 
@@ -385,8 +406,9 @@ describe("what goes wrong", () => {
     const argvs = await fake.argvs();
     expect(argvs).toHaveLength(2);
     expect(argvs[1]).toContain("--session-id");
-    expect(argvs[1]![1]).toContain("-----BEGIN CONVERSATION-----");
-    expect(argvs[1]![1]).toContain("person: one");
+    const prompts = await fake.prompts();
+    expect(prompts[1]).toContain("-----BEGIN CONVERSATION-----");
+    expect(prompts[1]).toContain("person: one");
     expect(drafts.get(record.id)!.plannerSessionId).not.toBe(before);
     const view = await drafts.view(record.id);
     expect(view.transcript.at(-1)).toMatchObject({ role: "planner", text: "carried on" });
@@ -465,7 +487,7 @@ describe("the job a draft follows", () => {
 
     await fake.script([{ text: "Another one? Which?" }]);
     await say(record.id, "another diagram please");
-    expect((await fake.argvs())[0]![1]).toContain("-----BEGIN STUDIO-----");
+    expect((await fake.prompts())[0]).toContain("-----BEGIN STUDIO-----");
     expect(drafts.get(record.id)?.state).toBe("open");
   });
 });
