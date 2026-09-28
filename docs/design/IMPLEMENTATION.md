@@ -587,7 +587,7 @@ in that session.
 | Library grid | fixed 300px cards | an auto-fill grid, 280px minimum | four across at 1392px and one on a phone |
 | Library search | DESIGN.md's API table proposed a search endpoint | the page's own `?q=`, searched on the server during render; no JSON endpoint | the library is the only caller today; phase 1c's Learn search can lift `searchHits` and `readSearchText` behind a route when it needs one |
 | Asset page eyebrow | "RENDERED 2026-09-12" | "INDEXED" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
-| Asset page Mark watched | on a video | on every asset, reading "Mark read" for anything that is not a video | one `watched` event kind either way; watching a video and reading a note are both study |
+| Asset page Mark watched | on a video | "Mark read" on anything that is not a video; a video has no button and records itself | one `watched` event kind either way; a video appends it once 90% of it has played (`POST /api/learner/playback`), since a button asked the reader to report something the player already knew |
 | Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
 | Asset page Explains | always two rows | "No concept is linked to this asset yet." when there are none; "not started" in place of p(L) for a concept with no evidence | a prior is not a measurement |
 | Asset page Derived from | one line of filenames | "Derived from" for the sources and "Companion files" for what was made from it, each a list of links | the rows the old page showed, restyled |

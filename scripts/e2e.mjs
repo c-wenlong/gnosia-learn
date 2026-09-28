@@ -29,7 +29,7 @@
 //   --headed     show the browser instead of running headless
 //   --copy       copy self_learn (or E2E_TEMPLATE_DB) rather than build from
 //                seed/. Built from the seed, which has no videos (D7), the
-//                Mark watched step is skipped and says so, and the blob store
+//                video step is skipped and says so, and the blob store
 //                is a temp directory.
 //   --seed       the default; accepted so an older command line still runs.
 //
@@ -645,8 +645,8 @@ async function run() {
     }
   });
 
-  if (SEED) skip('library: first video, Mark watched', 'the seed has no videos (D7)');
-  else await step('library: first video, Mark watched', page, async () => {
+  if (SEED) skip('library: first video plays and saves its place', 'the seed has no videos (D7)');
+  else await step('library: first video plays and saves its place', page, async () => {
     await go('/library');
     // The Type menu: open it, pick Video from the listbox, and the URL is the filter.
     await clickHydrated(page, page.getByRole('group', { name: 'Filter by kind and course' }).getByRole('button', { name: /^Type:/ }));
@@ -654,8 +654,21 @@ async function run() {
     await page.waitForURL(/\/library\?(.*&)?kind=video/);
     await page.getByRole('list', { name: 'Assets' }).getByRole('link').first().click();
     await page.waitForURL(/\/library\/[^/?]+$/);
-    await clickHydrated(page, main.getByRole('button', { name: 'Mark watched' }));
-    await main.getByRole('button', { name: 'Marked watched' }).waitFor();
+    // No button to press: the player saves its own place. Play a moment,
+    // pause, and the pause is a save the route has to accept.
+    // The save that carries what played, not any request to the route.
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/learner/playback') &&
+        response.request().method() === 'POST' &&
+        (response.request().postDataJSON()?.ranges?.length ?? 0) > 0,
+    );
+    await clickHydrated(page, main.getByRole('button', { name: 'Play (k)' }));
+    await main.getByRole('button', { name: 'Pause (k)' }).waitFor();
+    await page.waitForTimeout(1500);
+    await main.getByRole('button', { name: 'Pause (k)' }).click();
+    const response = await saved;
+    assert(response.ok(), `the playback save answered ${response.status()}`);
   });
 
   await step('settings: change the daily target, see Saved', page, async () => {
