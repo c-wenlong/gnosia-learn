@@ -92,6 +92,10 @@ Usage: npm run catalog -- <command> [options]
 
 Commands:
   migrate                  Apply every outstanding migration. Idempotent.
+                           A contract migration the data is not ready for
+                           (0013 before \`asset upload\`) is held with
+                           everything after it, and the reason printed;
+                           every other command runs on such a database.
   status                   Row counts, the migration head, when each source
                            was last indexed, and mirror coverage per
                            destination.

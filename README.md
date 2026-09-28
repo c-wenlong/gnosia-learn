@@ -99,7 +99,7 @@ submodules carry their own lockfiles and toolchains.
 The catalog is the join the three trees never had: one `topic` vocabulary every
 asset points at, typed link tables with foreign keys at both ends, and an
 append-only `event` log the learner state is replayed from. `npm run catalog --
-index` fills it from `content/`, `learn/` and `manimkc topics --json`, and
+import` fills it from `content/`, `learn/` and `manimkc topics --json`, and
 agents read it back in layers with `ls`, `show`, `path` and `search`, every one
 of them `--json` and bounded. The design is in
 [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md), the content it indexes
@@ -293,7 +293,7 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | `npm run e2e` | Headless smoke test of a production build against a throwaway database copy. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
-| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `index`, `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
+| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
 
 Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
 

@@ -12,6 +12,7 @@ import {
 } from "@self-learn/schema";
 
 import type { CatalogDatabase } from "../src/db";
+import { storedBlob } from "./stored-blob";
 
 /**
  * The smallest content half a state test needs.
@@ -160,6 +161,7 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         title: "Alpha, animated",
         bytes: 1024,
         sourceRepo: "manimkc",
+        blobKey: await storedBlob(db, ASSETS.video, "mp4"),
       },
       {
         id: ASSETS.diagram,
@@ -167,12 +169,14 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         path: "learn/assets/alpha.svg",
         title: "Alpha, drawn",
         sourceRepo: "tldrawkc",
+        blobKey: await storedBlob(db, ASSETS.diagram, "svg"),
       },
       {
         id: ASSETS.transcript,
         kind: "transcript",
         path: "out/fixtures/alpha/alpha.vtt",
         sourceRepo: "manimkc",
+        blobKey: await storedBlob(db, ASSETS.transcript, "vtt"),
       },
       {
         id: ASSETS.link,

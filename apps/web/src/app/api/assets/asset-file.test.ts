@@ -11,7 +11,7 @@ import { asset, blobObject, indexRun } from "@self-learn/schema";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
+import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
@@ -38,8 +38,6 @@ import {
  * proved on.
  */
 
-/** 0000 through 0012: the schema before the phase 2 contract migration. */
-const THROUGH_0012 = 13;
 
 const reachable = await probe();
 
@@ -139,7 +137,7 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     await writeFile(path.join(dataRoot, "out", "algorithms", "demo", "demo.mp4"), VIDEO);
 
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db, { folder: await partialMigrations(THROUGH_0012) });
+    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = path.join(base, "home");
     // The value that used to turn the legacy branch on. Nothing reads it now.

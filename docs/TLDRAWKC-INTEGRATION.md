@@ -175,8 +175,9 @@ What this deliberately leaves alone:
   [`packages/schema/src/shared.ts`](../packages/schema/src/shared.ts) would put
   rows in the log that no reader reads.
 - **manimkc's SQLite job index stays where it is.** See D5.
-- **No migration is edited.** `SCHEMA.md` already gives the reason: drizzle keys
-  applied migrations by the sha256 of the file.
+- **No migration is edited.** `SCHEMA.md` already gives the reason: the
+  catalog reads a migration as applied by the sha256 of its file, and drizzle
+  never applies it again.
 
 ### New and changed tables
 

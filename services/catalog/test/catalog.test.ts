@@ -35,6 +35,7 @@ import { REPO_ROOT } from "../src/env";
 import { applyMigrations } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { storedBlob } from "./stored-blob";
 
 /**
  * The whole thing, against the seed tree, once.
@@ -571,10 +572,11 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   });
 
   it("counts each status per destination, and dates the audit", async () => {
+    const blob = (id: string) => storedBlob(scratch.db, id);
     await scratch.db.insert(asset).values([
-      { id: VIDEO, kind: "video", path: "out/a/one/one.mp4", sourceRepo: "manimkc" },
-      { id: "manimkc:out/a/two/two.mp4", kind: "video", path: "out/a/two/two.mp4", sourceRepo: "manimkc" },
-      { id: "manimkc:out/a/one/one.vtt", kind: "captions", path: "out/a/one/one.vtt", sourceRepo: "manimkc" },
+      { id: VIDEO, kind: "video", path: "out/a/one/one.mp4", sourceRepo: "manimkc", blobKey: await blob(VIDEO) },
+      { id: "manimkc:out/a/two/two.mp4", kind: "video", path: "out/a/two/two.mp4", sourceRepo: "manimkc", blobKey: await blob("two") },
+      { id: "manimkc:out/a/one/one.vtt", kind: "captions", path: "out/a/one/one.vtt", sourceRepo: "manimkc", blobKey: await blob("vtt") },
     ]);
     await scratch.db.insert(mirror).values([
       { assetId: VIDEO, destination: "drive", root: "/mnt/drive", status: "present", compared: "sha256", bytes: 10, mtime: checked, checkedAt: checked },

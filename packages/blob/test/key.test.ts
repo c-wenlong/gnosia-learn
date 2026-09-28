@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { BLOB_KEY_PATTERN } from "@self-learn/schema";
+
 import { BlobKeyError, isKey, key, parseKey } from "../src/index";
 
 const HASH = "a".repeat(62) + "0f";
@@ -54,11 +56,12 @@ describe("parseKey", () => {
 });
 
 describe("the database's blob_object_key_check", () => {
-  // Copied from migration 0010 as Postgres runs it (`~` is a POSIX regex, and
-  // this one reads the same in JavaScript). The package is the stricter of
-  // the two; this holds it inside the check, so every key it makes can have
-  // a row.
-  const DATABASE_KEY = /^[^/]+\/[0-9a-f]{64}([.][a-z0-9]+)?$/;
+  // The check 0013 puts on blob_object.key is built from BLOB_KEY_PATTERN
+  // (packages/schema/src/content.ts), and `~` is a POSIX regex that reads the
+  // same in JavaScript. Held here against key() and isKey() themselves, so
+  // the package and the database cannot drift apart unnoticed: every key the
+  // package makes can have a row, and nothing else can.
+  const DATABASE_KEY = new RegExp(BLOB_KEY_PATTERN);
   const hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
   it("accepts every key the package builds", () => {
@@ -75,10 +78,22 @@ describe("the database's blob_object_key_check", () => {
     }
   });
 
-  it("is looser than the package on the shapes a later contract migration should refuse", () => {
-    for (const loose of [`../${hash}.bin`, `Local/${hash}.bin`, `local/${hash}`, `local/${hash}.${"a".repeat(17)}`]) {
-      expect(DATABASE_KEY.test(loose), loose).toBe(true);
-      expect(isKey(loose), loose).toBe(false);
+  it("refuses every shape the package refuses", () => {
+    for (const bad of [
+      `../${hash}.bin`,
+      `Local/${hash}.bin`,
+      `local/${hash}`,
+      `local/${hash}.${"a".repeat(17)}`,
+      `${"x".repeat(65)}/${hash}.bin`,
+      `-lead/${hash}.bin`,
+      `local/${hash.toUpperCase()}.bin`,
+      `local/${hash}.BIN`,
+      `local/x/${hash}.bin`,
+      `/local/${hash}.bin`,
+      `local/${hash}.tar.gz`,
+    ]) {
+      expect(isKey(bad), bad).toBe(false);
+      expect(DATABASE_KEY.test(bad), bad).toBe(false);
     }
   });
 });

@@ -32,7 +32,7 @@ import { ContentWriteError, writeContent, writeContents, type WriteContentInput 
 import { connect, connectionOptions } from "../src/db";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
-import { applyMigrations, migrationStatus } from "../src/migrations";
+import { applyMigrations, migrateHolding, migrationStatus } from "../src/migrations";
 import { partialMigrations } from "./partial-migrations";
 import {
   createScratchDatabase,
@@ -240,9 +240,13 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       const copy = connect({ url: url.toString(), copyOk: true });
       try {
         const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
-        await applyMigrations(copy.db);
+        // Holding the contract migration (0013) back while the owner's
+        // videos are not uploaded: its guard would otherwise roll the whole
+        // run back. Everything before it applies either way.
+        const held = await migrateHolding(copy.db);
         const status = await migrationStatus(copy.db);
-        expect(status.pending).toEqual([]);
+        expect(status.pending).toEqual(held.map((h) => h.tag));
+        expect(held.map((h) => h.tag)).toEqual(held.length === 0 ? [] : ["0013_asset_blob_contract"]);
         const after = await copy.db.execute<{ n: number; owned: number }>(
           sql`select count(*)::int as n, count(*) filter (where owner_id = 'local')::int as owned from topic`,
         );

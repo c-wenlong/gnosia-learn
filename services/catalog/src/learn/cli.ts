@@ -82,6 +82,7 @@ import { runIndex } from "../index/run";
 import {
   assertMigrated,
   EXIT_MIGRATIONS_OUTSTANDING,
+  heldMigrations,
   migrationStatus,
   MigrationsOutstanding,
 } from "../migrations";
@@ -362,6 +363,7 @@ commands.init = async (_parsed, session) => {
   const db = await session.db();
   await ensureLearner(db);
   const status = await migrationStatus(db);
+  const held = await heldMigrations(db, { status });
 
   out(
     [
@@ -372,9 +374,14 @@ commands.init = async (_parsed, session) => {
       ``,
       `State lives in ${redactUrl(databaseUrl())}:`,
       `  event · mastery · review  (was learn/state/*.json)`,
-      status.pending.length > 0
-        ? `  ${status.pending.length} migration(s) outstanding — run: npm run catalog -- migrate`
-        : `  migrations up to date at ${status.head ?? "(none)"}`,
+      ...(held !== null
+        ? [
+            `  at ${status.head}; held until the data is ready (catalog migrate applies it then):`,
+            ...held.map((h) => `    ${h.tag}: ${h.reason}`),
+          ]
+        : status.pending.length > 0
+          ? [`  ${status.pending.length} migration(s) outstanding — run: npm run catalog -- migrate`]
+          : [`  migrations up to date at ${status.head ?? "(none)"}`]),
       ``,
       `Next: npm run learn -- concept add --title "…" --requires …`,
     ].join("\n"),
@@ -1641,6 +1648,9 @@ commands.doctor = async ({ values }, session) => {
 
   if (db !== null) {
     const migrations = await migrationStatus(db);
+    // A held contract migration adds no column, so every check below still
+    // runs; saying "run migrate" there would only hold it again.
+    const held = await heldMigrations(db, { status: migrations });
     if (migrations.head === null) {
       problems.push({
         severity: "error",
@@ -1649,7 +1659,7 @@ commands.doctor = async ({ values }, session) => {
           `${redactUrl(databaseUrl())} has no migrations applied. ` +
           `Run: npm run catalog -- migrate`,
       });
-    } else if (migrations.pending.length > 0) {
+    } else if (migrations.pending.length > 0 && held === null) {
       problems.push({
         severity: "error",
         kind: "database-behind",
@@ -1659,6 +1669,15 @@ commands.doctor = async ({ values }, session) => {
           `Run: npm run catalog -- migrate`,
       });
     } else {
+      for (const h of held ?? []) {
+        problems.push({
+          severity: "warn",
+          kind: "migration-held",
+          message:
+            `${redactUrl(databaseUrl())} is at ${migrations.head}; ${h.tag} is held until the data is ready ` +
+            `(catalog migrate applies it then): ${h.reason}`,
+        });
+      }
       model = await readModel(db);
       const known = new Set(Object.keys(model.concepts));
       // The mirror image of the old "stale model entry" check. Mastery for a
@@ -1762,7 +1781,7 @@ commands.vault = async ({ positionals, values }, session) => {
     if (report.problems.length > 0) process.exitCode = 1;
     if (values.json) return out(report, true);
     const lines = [
-      `Pulled ${report.notes} notes and ${report.logs} logs into ${report.vault}`,
+      `Pulled ${report.notes} notes, ${report.logs} logs and ${report.assets} diagram SVGs into ${report.vault}`,
       `  written ${report.written.length} · unchanged ${report.unchanged.length} · removed ${report.removed.length}`,
     ];
     if (report.modified.length > 0) {
@@ -1852,9 +1871,10 @@ commands.help = async () => {
                                    unless --author-kind says otherwise. Draw in
                                    the path checkout prints, then commit --reason.
   vault pull [--out <dir>]       the notes and session logs as a folder for
-                                   Obsidian (default ~/.self-learn/vault); a
-                                   file edited there is never overwritten, the
-                                   database's version lands beside it as
+                                   Obsidian (default ~/.self-learn/vault), with
+                                   each diagram's SVG under assets/ (read-only);
+                                   a file edited there is never overwritten,
+                                   the database's version lands beside it as
                                    <name>.incoming.md
   vault push [--out <dir>] [--reason R]
                                  writes edited notes back, one revision each;

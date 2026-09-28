@@ -24,6 +24,7 @@ import {
   SQLSTATE,
   sqlstate,
 } from "./scratch-database";
+import { storedBlob } from "./stored-blob";
 
 // Decided once, at load, so the suite can name its reason in the title instead
 // of failing on a machine with no Postgres.
@@ -103,6 +104,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
         kind: "video",
         path: "out/algorithms/master-theorem/main.mp4",
         sourceRepo: "manimkc",
+        blobKey: await storedBlob(scratch.db, "master-theorem", "mp4"),
       });
     }, 30_000);
 

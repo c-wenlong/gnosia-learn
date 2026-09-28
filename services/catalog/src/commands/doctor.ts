@@ -7,6 +7,7 @@ import {
   WRITE_GUARDED_TABLES,
   writeGuardName,
 } from "../content/rules";
+import { BLOB_CONTRACT_MIGRATION, blobContractDistance, blobContractInForce } from "../content/blob-contract";
 import { type CatalogDatabase, withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 import { migrationStatus } from "../migrations";
@@ -69,6 +70,16 @@ export interface DoctorResult {
   conceptsWithoutTopic: string[];
   /** Whether `concept.topic_slug` is `NOT NULL` here yet, which 0012 makes it. */
   conceptTopicRequired: boolean;
+  /**
+   * Phase 2's contract (migration 0013): the assets of a stored kind with no
+   * blob, and the blob keys the package would not make. Migration 0013
+   * refuses, and `catalog migrate` holds it back, until both are empty.
+   */
+  blobContract: {
+    inForce: boolean;
+    unstored: { id: string; kind: string }[];
+    unkeyed: string[];
+  };
   /** Write-seam guards (D4), armed per table by `catalog flip`. */
   writeGuards: Record<string, boolean | null>;
   violations: number;
@@ -94,6 +105,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     conceptlessCourses: [],
     conceptsWithoutTopic: [],
     conceptTopicRequired: false,
+    blobContract: { inForce: false, unstored: [], unkeyed: [] },
     writeGuards: {},
     violations: 0,
     ok: false,
@@ -177,12 +189,18 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
     `)
   ).rows;
 
+  const blobContract = { inForce: await blobContractInForce(db), ...(await blobContractDistance(db)) };
+
   const writeGuards: Record<string, boolean | null> = {};
   for (const table of WRITE_GUARDED_TABLES) {
     writeGuards[table] = states.get(writeGuardName(table)) ?? null;
   }
 
-  const violations = rules.reduce((a, rule) => a + rule.violators, 0) + orphans.rows.length;
+  const violations =
+    rules.reduce((a, rule) => a + rule.violators, 0) +
+    orphans.rows.length +
+    blobContract.unstored.length +
+    blobContract.unkeyed.length;
   const contradicted = rules.some(
     (rule) => rule.state === "missing" || (rule.state === "armed" && rule.violators > 0),
   );
@@ -199,6 +217,7 @@ export async function doctor(db: CatalogDatabase, database: string): Promise<Doc
       .map((row) => row.course),
     conceptsWithoutTopic: orphans.rows.map((row) => row.slug),
     conceptTopicRequired: topicColumn?.nullable === "NO",
+    blobContract,
     writeGuards,
     violations,
     ok: !contradicted && !missingGuard,
@@ -258,6 +277,21 @@ export function formatDoctor(result: DoctorResult): string {
           ? " (migration 0012 makes concept.topic_slug NOT NULL; nothing stands in its way)"
           : " (migration 0012, which makes concept.topic_slug NOT NULL, refuses until this is none)"),
   );
+  const contract = result.blobContract;
+  const distance = contract.unstored.length + contract.unkeyed.length;
+  lines.push(
+    `stored assets with no blob: ${contract.unstored.length === 0 ? "none" : contract.unstored.length}` +
+      `; blob keys the package would not make: ${contract.unkeyed.length === 0 ? "none" : contract.unkeyed.length}` +
+      (contract.inForce
+        ? ` (${BLOB_CONTRACT_MIGRATION} is in force)`
+        : distance === 0
+          ? ` (${BLOB_CONTRACT_MIGRATION} requires both to be none; nothing stands in its way)`
+          : ` (${BLOB_CONTRACT_MIGRATION}, which requires a blob behind every video, sidecar, poster and diagram SVG, ` +
+            `is held until both are none: run catalog import, then catalog asset upload --source manimkc)`),
+  );
+  for (const row of contract.unstored.slice(0, SAMPLE)) lines.push(`  ${row.id} (${row.kind})`);
+  if (contract.unstored.length > SAMPLE) lines.push(`  and ${contract.unstored.length - SAMPLE} more (--json lists all)`);
+  for (const key of contract.unkeyed.slice(0, SAMPLE)) lines.push(`  key ${key}`);
   const armed = Object.entries(result.writeGuards).filter(([, on]) => on === true).map(([t]) => t);
   const missing = Object.entries(result.writeGuards).filter(([, on]) => on === null).map(([t]) => t);
   lines.push(`write guards armed: ${armed.length === 0 ? "none" : armed.join(", ")}`);

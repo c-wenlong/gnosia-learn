@@ -54,6 +54,17 @@ would shadow the plugin and the two would drift apart. Edit the plugin instead.
 Architecture, primitives and the honest list of known limits are in
 [learn/README.md](learn/README.md).
 
+Once `concepts` and `sessions` are flipped, the notes and logs are rows, not
+files under `learn/`, and Obsidian reads them from a **vault**:
+`npm run learn -- vault pull` writes every note, every log and every diagram's
+SVG (under `assets/`, read-only) to `~/.self-learn/vault/`, and
+`npm run learn -- vault push --reason R` takes edited notes back, one revision
+each, refusing a note that moved in the database since the pull. Neither
+command overwrites an edit nobody pushed, and a vault inside any checkout of
+this repository is refused, since a `learn/` there is an import tree. The rules
+are in `services/catalog/src/learn/vault.ts` and
+[learn/README.md](learn/README.md), "Where the notes and logs live".
+
 ## Asset generation: tools/manimkc/
 
 `tools/manimkc/` is a git **submodule** (its own repo,
@@ -540,10 +551,10 @@ not have to be worked out again.
   `content/` and `learn/`, which phase 3 removes. A database of your own to
   look at is `createdb`, `migrate`, then
   `MANIMKC_ROOT=/nonexistent npm run catalog -- import seed`.
-- **`catalog import` is the name; `catalog import` is the alias.** With no
+- **`catalog import` is the name; `catalog index` is the alias.** With no
   directory `import` reads the repository, which is all `index` did; `index`
   still runs it and prints the new name once on stderr, so a `--json` reader
-  is unaffected. The web app and the studio still name `catalog import` in a
+  is unaffected. The web app and the studio still name `catalog index` in a
   few messages; both work.
 - **Flip day is a script, and rehearsing it is one command.**
   `node scripts/flip-rehearsal.mjs --tree-from <checkout>` copies `self_learn`
@@ -552,12 +563,34 @@ not have to be worked out again.
   checks parity again, uploads manimkc's renders twice into a temp blob store,
   audits it, and drops the copy (`--keep` leaves it). Point `MANIMKC_ROOT` and
   `TLDRAWKC_ROOT` at a checkout with the submodules when the worktree has none.
-  `--real --database <name>` runs the same steps against that database in
-  place; it asks for the name to be typed on a terminal and has no `--yes`, so
-  it is the owner's to run, never an agent's.
+  Two steps guard the database: the first is a `pg_dump -Fc` backup checked to
+  list the learner tables, and the first import runs on a throwaway copy and
+  fails if it would remove any row (a tree without the owner's untracked
+  files prunes their rows, and deletions cascade). `--real --database <name>
+  --checkout <dir>` runs the same steps against that database in place, from
+  the checkout the script sits in only, with no tracked edits under
+  `content/` or `learn/`, with the backup at
+  `~/<name>-preflip-<time>.dump`; it asks for the name to be typed on a
+  terminal and has no `--yes`, so it is the owner's to run, never an agent's.
+- **`catalog migrate` can exit 0 without reaching the head, on purpose.**
+  Migration `0013` requires a blob behind every video, sidecar, poster and
+  diagram SVG, and on a database whose renders were never uploaded its guard
+  would raise and roll the whole run back. So `migrate` applies everything
+  before it, holds it with the reason (`held` in `--json`, one line each in
+  text), and the other commands run anyway; `catalog doctor` lists what is in
+  the way. After `catalog import` and `catalog asset upload --source manimkc`
+  a second `migrate` applies it. From then on the manimkc import stores each
+  file itself, and a test fixture that writes a stored-kind asset needs a blob
+  (`services/catalog/test/stored-blob.ts`), or a scratch database stopped at
+  0012 (`partialMigrations(BEFORE_BLOB_CONTRACT)`) when the upload before the
+  contract is what it tests.
 - **Never edit a migration under `services/catalog/drizzle/` once it has been
-  applied.** drizzle keys applied migrations by the sha256 of the file, so an
-  edit makes it look unapplied on every database that already ran it. Change
+  applied.** drizzle applies by the journal's timestamp (`when`), running
+  every entry newer than the last one recorded, and never compares a hash; the
+  catalog's own status (`migrationStatus`) compares each file's sha256 with
+  the hashes drizzle recorded. So an edited applied file shows as pending
+  forever while drizzle skips it on every run, and `catalog migrate` now
+  refuses with `MigrationSkipped` naming it rather than report success. Change
   `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`.
 - **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
@@ -628,9 +661,10 @@ not have to be worked out again.
   it into exit 3 for unreachable, which is what the studio's D16 degrade keys
   on. A regex over the text is how the studio once refused every job with the
   database down.
-- **Never edit an applied migration, including its comments.** drizzle keys
-  migrations by the sha256 of the whole file, so rewording a comment in
-  `services/catalog/drizzle/*.sql` makes it look unapplied and
+- **Never edit an applied migration, including its comments.** The catalog
+  reads a migration as applied by the sha256 of the whole file (drizzle itself
+  goes by timestamp and skips it), so rewording a comment in
+  `services/catalog/drizzle/*.sql` makes it pending forever and
   `npm run learn -- doctor` starts reporting the database as behind. Bundle 5
   did this to itself once, tidying a comment in 0004. Corrections go in
   `SCHEMA.md` or in the schema source, never in the SQL.
