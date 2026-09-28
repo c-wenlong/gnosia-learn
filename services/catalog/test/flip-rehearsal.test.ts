@@ -479,6 +479,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
         "cut-over: flip courses --strict",
         "cut-over: flip diagrams --strict",
         "cut-over: doctor",
+        "cut-over: parity before the tag",
         "cut-over: tag content-files-final",
       ]);
       const step = (stepName: string) => report.steps.find((s) => s.name === stepName)?.result ?? {};

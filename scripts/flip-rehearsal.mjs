@@ -81,14 +81,18 @@
 //   export (the flips held, and nobody edited the files since);
 //   export everything into a temp directory, then parity of the database
 //   against the tree, saved with a byte comparison of that export and the
-//   tree to ~/<database>-cutover-<UTC>.parity.json, for the PR body;
+//   tree to ~/<database>-cutover-<UTC>.parity.json, for the PR body; a
+//   mismatch or a file the export writes in other bytes stops the run;
 //   decide the waivers: doctor, and for each completeness rule with
 //   violators, item-has-concept may be waived with a reason typed on the
 //   terminal (an empty one is refused), and any other rule stops the run;
 //   flip every type --strict, the waiver passed to courses;
 //   doctor, which must report every rule armed or waived;
-//   git tag content-files-final on HEAD, refused if the tag exists or a
-//   tracked file under content/ or learn/ differs from HEAD. Never pushed.
+//   parity once more, with HEAD still the commit compared, since a write
+//   during the strict flips would leave the tag older than the database;
+//   git tag content-files-final on that commit, refused if the tag exists, a
+//   tracked file under content/ or learn/ differs from HEAD, or HEAD moved.
+//   Never pushed.
 // It ends by printing the commands that follow: push the tag, then merge the
 // cut-over PR. --real --cutover refuses unless every type is flipped already,
 // with the same guards as --real (named database, --checkout, a terminal, the
@@ -108,7 +112,7 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { CONTENT_FOLDERS, compareTrees, FINAL_TAG, makeFinalTag, tagProblems } from './lib/cutover.mjs';
+import { CONTENT_FOLDERS, compareTrees, FINAL_TAG, headOf, makeFinalTag, tagProblems } from './lib/cutover.mjs';
 import { FLIP_GROUPS, FLIP_ORDER } from './lib/flip-order.mjs';
 import { copyDatabase, exec, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
 
@@ -329,6 +333,10 @@ function cutoverProcedure(tree, own, state) {
         return json.ok === true ? null : 'doctor reports the database inconsistent';
       },
     },
+    // Parity once more, last: a write that landed during the strict flips
+    // (a session logged, a note committed) would leave the tag holding files
+    // older than the database.
+    { name: 'cut-over: parity before the tag', command: `catalog parity ${tree}; HEAD unchanged`, action: own.parityAgain },
     { name: `cut-over: tag ${FINAL_TAG}`, command: `git tag ${FINAL_TAG}`, action: own.tag },
   ];
 }
@@ -653,6 +661,8 @@ async function main(argv) {
     rulesByType: {},
     exportDir: null,
     parityReport: null,
+    /** The commit the tree was compared at, which the tag must be on. */
+    head: null,
     tag: null,
     untracked: [],
   };
@@ -795,6 +805,21 @@ async function main(argv) {
     },
   };
 
+  /**
+   * A rehearsal's tree as a git repository with one commit, so the tag and
+   * its checks run on it as they do on the checkout. Null when it is one.
+   */
+  const rehearsalRepository = async () => {
+    if ((await headOf(tree)) !== null) return null;
+    const git = (...args) =>
+      exec('git', ['-C', tree, '-c', 'user.name=flip-rehearsal', '-c', 'user.email=flip-rehearsal@localhost', '-c', 'commit.gpgsign=false', ...args]);
+    for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'flip-rehearsal: the tree at the cut-over']]) {
+      const ran = await git(...args);
+      if (ran.status !== 0) return `git ${args[0]} in the rehearsal's tree failed: ${ran.stderr.trim()}`;
+    }
+    return null;
+  };
+
   const cutoverOwn = {
     backUp: backUp('precutover'),
     importIntoCopy: own.importIntoCopy,
@@ -813,6 +838,14 @@ async function main(argv) {
      * quotes.
      */
     parityReport: async () => {
+      // A rehearsal's tree is a temp copy: made a repository here, as the
+      // checkout is, so the commit compared is the commit the tag checks.
+      if (!real) {
+        const problem = await rehearsalRepository();
+        if (problem !== null) return { problem, result: null };
+      }
+      state.head = await headOf(tree);
+      if (state.head === null) return { problem: `${tree} has no commit to compare and tag`, result: null };
       const { json, failed } = await catalog(['parity', tree], env, { exits: [0, 1] });
       if (failed !== null) return { problem: failed, result: json };
       const bytes = compareTrees(state.exportDir, tree);
@@ -840,18 +873,43 @@ async function main(argv) {
           result: saved,
         };
       }
-      const differ = bytes.differ.length + bytes.onlyInExport.length;
+      // The tag is to hold exactly what the database would export. Parity is
+      // clean here, so a byte difference is formatting (a comment, a key
+      // order), and the fix is the same export into the tree, committed.
+      const differ = [...bytes.differ, ...bytes.onlyInExport];
+      if (differ.length > 0) {
+        return {
+          problem:
+            `${differ.length} file(s) the database exports differ in bytes from ${tree} (${differ.slice(0, 10).join(', ')}); ` +
+            `report ${file}. Parity is clean, so the difference is formatting: export into the tree ` +
+            `(catalog export --out ${tree}), commit, and run again, so the tag holds the export itself.`,
+          result: saved,
+        };
+      }
       return {
         problem: null,
         result: { ...saved, path: file },
         gist: `${counts}; 0 mismatches; ${bytes.identical} of ${bytes.compared} exported files identical in the tree; report ${file}`,
-        warning:
-          differ === 0
-            ? null
-            : `${differ} file(s) an export writes differ in bytes from the tree (${[...bytes.differ, ...bytes.onlyInExport]
-                .slice(0, 10)
-                .join(', ')}); parity is clean, so the difference is formatting, and the tag keeps the tree's bytes`,
       };
+    },
+
+    /** Parity again, and the same commit, right before the tag. */
+    parityAgain: async () => {
+      const { json, failed } = await catalog(['parity', tree], env, { exits: [0, 1] });
+      if (failed !== null) return { problem: failed, result: json };
+      if (!json.clean) {
+        return {
+          problem:
+            `${json.mismatches} parity mismatch(es) since the first comparison: the database was written during the ` +
+            'cut-over. Nothing is tagged; export into the tree, commit, and run again.',
+          result: json,
+        };
+      }
+      const head = await headOf(tree);
+      if (head !== state.head) {
+        return { problem: `HEAD moved from ${state.head} to ${head} during the cut-over; nothing is tagged`, result: json };
+      }
+      return { problem: null, result: json, gist: `0 mismatches; HEAD still ${head.slice(0, 12)}` };
     },
 
     /**
@@ -917,17 +975,7 @@ async function main(argv) {
     },
 
     tag: async () => {
-      if (!real) {
-        // A rehearsal's tree is a temp copy: make it a repository, as the
-        // checkout is, so the tag is made (and its checks run) on it.
-        const git = (...args) =>
-          exec('git', ['-C', tree, '-c', 'user.name=flip-rehearsal', '-c', 'user.email=flip-rehearsal@localhost', '-c', 'commit.gpgsign=false', ...args]);
-        for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'flip-rehearsal: the tree at the cut-over']]) {
-          const ran = await git(...args);
-          if (ran.status !== 0) return { problem: `git ${args[0]} in the rehearsal's tree failed: ${ran.stderr.trim()}`, result: null };
-        }
-      }
-      const made = await makeFinalTag(tree);
+      const made = await makeFinalTag(tree, { expectedHead: state.head });
       state.untracked = made.untracked;
       if (made.problem !== null) return { problem: made.problem, result: made };
       state.tag = made.tag;

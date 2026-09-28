@@ -1797,8 +1797,10 @@ or `learn/` differs from `HEAD`. Its steps, each checked before the next:
 4. `catalog export --out <temp dir>`, then `catalog parity <tree>`. The
    parity result and a byte comparison of that export with the tree are
    saved to `~/<name>-cutover-<UTC time>.parity.json`, the report the PR body
-   quotes. A mismatch stops the run and says how to catch the tree up: export
-   into it, commit, run again (the database may have moved on since flip day).
+   quotes. A parity mismatch, or a file the export writes in other bytes than
+   the tree holds, stops the run and says how to catch the tree up: export
+   into it, commit, run again (the database may have moved on since flip day),
+   so the tag holds the export itself.
 5. `catalog doctor`, and a decision per completeness rule: a clean rule is
    armed by the strict flips; `item-has-concept` with violators is waived
    with a reason typed on the terminal, an empty one refused; any other rule
@@ -1807,7 +1809,11 @@ or `learn/` differs from `HEAD`. Its steps, each checked before the next:
    so it lands on `content_source` beside the flip.
 7. `catalog doctor`, whose new `unsettled` list (rules neither armed nor
    waived) must be empty.
-8. `git tag content-files-final` on `HEAD`, checked again first, never pushed.
+8. `catalog parity <tree>` once more, with `HEAD` still the commit compared
+   in step 4: a write during the strict flips (a session logged) would
+   otherwise leave the tag holding files older than the database.
+9. `git tag content-files-final` on that commit, checked again first (and
+   refused if `HEAD` moved), never pushed.
 
 It ends by printing what the operator does next, in order: push the tag, merge
 the cut-over PR (`gh pr merge p3/cutover --squash --delete-branch`), pull. The
@@ -1823,7 +1829,7 @@ rehearsal's temp store and a flipped template's are elsewhere: after flip day,
 restore the pre-flip dump into a new database and rehearse from that.
 
 Measured 2026-09-28, a rehearsal of `self_learn` (at 0009) with the main
-checkout's tree, the untracked tailscale diagram included: 39 of 39 steps.
+checkout's tree, the untracked tailscale diagram included: 40 of 40 steps.
 Flip day's 23 as before; then the cut-over's backup (347 KB, data for 34
 tables), a migrate with nothing to do, the imports skipping all six types and
 removing nothing, parity clean (86 topics, 8 tags, 10 courses, 32 notes, 3

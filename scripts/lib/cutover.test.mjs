@@ -48,6 +48,17 @@ describe("the content-files-final tag", () => {
     expect(git(repo, "rev-parse", `${FINAL_TAG}^{commit}`)).toBe(git(repo, "rev-parse", "HEAD"));
   });
 
+  it("refuses a HEAD other than the commit the cut-over compared", async () => {
+    const compared = git(repo, "rev-parse", "HEAD");
+    put(repo, "learn/concepts/a/two.md", "two\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "landed in between");
+    const made = await makeFinalTag(repo, { expectedHead: compared });
+    expect(made.tag).toBeNull();
+    expect(made.problem).toMatch(/HEAD moved from .* since the tree was compared/);
+    expect((await makeFinalTag(repo, { expectedHead: git(repo, "rev-parse", "HEAD") })).problem).toBeNull();
+  });
+
   it("refuses when the tag exists already", async () => {
     git(repo, "tag", FINAL_TAG);
     const made = await makeFinalTag(repo);

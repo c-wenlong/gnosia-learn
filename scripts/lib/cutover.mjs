@@ -61,13 +61,29 @@ export async function tagProblems(repo, { remote = null } = {}) {
   return { problems, warnings, untracked, head: head.out };
 }
 
+/** The commit `repo`'s HEAD names, or null when there is none. */
+export async function headOf(repo) {
+  const head = await git(repo, 'rev-parse', '--verify', 'HEAD');
+  return head.ok ? head.out : null;
+}
+
 /**
  * Tag HEAD with FINAL_TAG after checking `tagProblems` once more; never
  * pushed. A lightweight tag, as the plan names it: it points at the commit,
  * and every file under content/ and learn/ stays one `git show` away.
+ *
+ * `expectedHead` is the commit whose files the cut-over compared with the
+ * database. A HEAD that moved since (a commit landed in between) holds files
+ * nothing compared, so it is refused rather than tagged.
  */
-export async function makeFinalTag(repo) {
+export async function makeFinalTag(repo, { expectedHead = null } = {}) {
   const state = await tagProblems(repo);
+  if (expectedHead !== null && state.head !== null && state.head !== expectedHead) {
+    state.problems.push(
+      `HEAD moved from ${expectedHead.slice(0, 12)} to ${state.head.slice(0, 12)} since the tree was compared with the ` +
+        'database, so the tag would hold files nothing compared; run the cut-over again',
+    );
+  }
   if (state.problems.length > 0) return { problem: state.problems.join('; '), tag: null, untracked: state.untracked };
   const made = await git(repo, 'tag', FINAL_TAG, state.head);
   if (!made.ok) return { problem: `git tag ${FINAL_TAG} failed: ${made.err}`, tag: null, untracked: state.untracked };
