@@ -57,8 +57,8 @@ The owner's ten concerns, and the section of this document that answers each.
 
 Concern 9 has one qualification, stated rather than hidden: the planner decides
 when it has enough, which is when Draw appears, but a person presses it. D29 is
-why, and open question 1 is where the owner can reverse it, either for every
-draft or only when the person has said "just draw it".
+why, and the owner confirmed it on 2026-09-29 (open question 1): every drawing
+starts with a press, "just draw it" included.
 
 ## Why the form had to go
 
@@ -325,7 +325,7 @@ brief:
 | --- | --- | --- |
 | `VOCABULARY` | topic: `slug \| title \| domain \| aliases \| summary`, then its relations as `kind -> slug` and its concept ids | `catalog topic ls --json`, which the runner already reads and caches for `/api/vocabulary` |
 | `CORPUS` | diagram: `slug \| title \| topic \| N shapes` | The owner's diagram list, which the runner already reads through `catalog diagram` for `GET /api/diagrams` |
-| `EXTENDING` | only on an extend draft: the title, topic and concepts, each text-bearing shape's label, each binding as `from -> to (label)`, capped at 200 lines | `canvas inspect --json` over the diagram's checkout (`$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout` when there is none), run by the runner at draft creation |
+| `EXTENDING` | only on an extend draft: the title, topic and concepts, each text-bearing shape's label, each binding as `from -> to (label)`, capped at 200 lines | `canvas inspect --json` over the diagram's checkout (`$STUDIO_HOME/work/<slug>.tldr`), run by the runner at draft creation right after `ensureCheckout` in `runner.ts`, the same call an extend job makes before drawing: it brings the checkout up to the latest revision unless it holds uncommitted edits. So the planner and the job read the same file, and the draft records the revision it summarised (C11) |
 
 How the prompt answers three of the concerns. Concern 3: intent alone is
 enough, because "What you must end up knowing" is the planner's checklist, not
@@ -779,9 +779,9 @@ eighty cents is spent on it. The prompt makes the glance the only thing asked:
 it proposes as soon as it could guess every field, never asks a fourth question
 in a row, and fills every gap itself on "just draw it".
 
-**Rejected, pending the owner:** drawing automatically once the planner judges
-the context sufficient, which answers concern 9 literally and makes every
-misunderstanding a paid one; open question 1. Also rejected: loosening the gate
+**Rejected, and confirmed by the owner on 2026-09-29:** drawing automatically
+once the planner judges the context sufficient, which answers concern 9
+literally and makes every misunderstanding a paid one; open question 1. Also rejected: loosening the gate
 so a looser brief would pass.
 
 ### D30. The drawing agent carries the full tldraw manual
