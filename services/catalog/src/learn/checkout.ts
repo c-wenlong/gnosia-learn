@@ -22,9 +22,10 @@ import { workDir, workIdentity } from "./paths";
  * The folder is `workDir()`: under `$LEARN_ROOT/work/` when that is set, a
  * folder per checkout and database under the OS temp directory otherwise,
  * never inside the repository. The sidecar names that checkout and database,
- * and a commit from anywhere else is refused. Phase 2's
- * `learn vault pull|push` does the same for a whole folder and reuses
- * `readNoteText` and `commitNoteText` underneath, not these files.
+ * and a commit from anywhere else is refused. `learn vault pull|push`
+ * (`vault.ts`) does the same for a whole folder, on the row pair these call
+ * underneath (`noteText` and `commitNoteText` in `content/note-rows.ts`),
+ * with `.vault.json` in place of the sidecars.
  */
 
 export class CheckoutError extends Error {
