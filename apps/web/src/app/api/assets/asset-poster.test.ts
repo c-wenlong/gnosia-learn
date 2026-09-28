@@ -8,6 +8,7 @@ import { asset, indexRun } from "@self-learn/schema";
 import { POSTER_FAILURE_TTL_MS, resolveFfmpeg } from "@/lib/asset-posters";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
+import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
@@ -145,7 +146,9 @@ describe.skipIf(!reachable.ok)("asset poster route", () => {
     );
 
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db);
+    // At 0012: these rows carry a path and no blob, which the contract (0013)
+    // forbids; p2/readers-db-only rewrites the suite for the contract.
+    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     process.env.DATABASE_URL = scratch.url;
     process.env.ASSET_FILES_ENABLED = "1";
     process.env.ASSET_POSTER_CACHE_DIR = cacheDir;

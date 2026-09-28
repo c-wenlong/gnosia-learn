@@ -3,12 +3,13 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import type { NewAsset, NewAssetDerivation, NewAssetTopic } from "@self-learn/schema";
+import { key as blobKey } from "@self-learn/blob";
+import { LOCAL_LEARNER_ID, type NewAsset, type NewAssetDerivation, type NewAssetTopic } from "@self-learn/schema";
 
 import { MANIMKC_DIR, MANIMKC_ROOT_ENV, resolveManimkcRoot } from "../env";
 import { IndexError, IndexErrors } from "./errors";
 import { fileFacts } from "./files";
-import { ASSET_PREFIX, type Indexer, type SourceRows } from "./source";
+import { ASSET_PREFIX, type Indexer, type SourceBlob, type SourceRows } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";
 
 /**
@@ -66,6 +67,13 @@ import { VOCABULARY_FILE } from "./vocabulary";
  */
 
 const run = promisify(execFile);
+
+/** Media types for manimkc's files, by extension: the ones this source and `catalog asset upload` store. */
+export const MANIMKC_MIME: Readonly<Record<string, string>> = {
+  mp4: "video/mp4",
+  json: "application/json",
+  vtt: "text/vtt",
+};
 
 /** Relative to the manimkc root. Same path in the submodule and in any checkout. */
 export const MANIMKC_CLI = path.join("tools", "cli", "manimkc");
@@ -198,9 +206,9 @@ export const manimkcIndexer: Indexer = {
   assetPrefix: ASSET_PREFIX.manimkc,
   root: ({ manimkcRoot }) => manimkcRoot,
 
-  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary }) => {
+  read: async ({ repoRoot, toolsRoot, manimkcRoot, vocabulary, blobsRequired }) => {
     const report = await readTopicsReport(toolsRoot ?? repoRoot, manimkcRoot);
-    return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug);
+    return buildRows(report, manimkcRoot, vocabulary.byManimkcPath, vocabulary.bySlug, { store: blobsRequired === true });
   },
 };
 
@@ -208,13 +216,20 @@ export const manimkcIndexer: Indexer = {
  * The pure half: a report plus the vocabulary lookups become rows. Separated
  * from the subprocess so the indexer's behaviour is testable against a captured
  * report, which is also how it was built before bundle 2 merged.
+ *
+ * `store`: the database is under phase 2's contract, so every file is also
+ * returned as a blob for the runner to store first, and its row names the
+ * content-addressed key those bytes land under (a re-render lands under a new
+ * one). Before the contract the rows name no blob and `catalog asset upload`
+ * stores the bytes later, which is flip day's order.
  */
 export async function buildRows(
   report: TopicsReport,
   manimkcRoot: string,
   byManimkcPath: ReadonlyMap<string, string>,
   bySlug: ReadonlyMap<string, unknown>,
-): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string } }> {
+  options: { store?: boolean } = {},
+): Promise<{ rows: SourceRows; notes: string[]; metadata: { outRoot: string }; blobs: SourceBlob[] }> {
   const assets: NewAsset[] = [];
   const assetTopics: NewAssetTopic[] = [];
   const derivations: NewAssetDerivation[] = [];
@@ -228,6 +243,21 @@ export async function buildRows(
 
   let videos = 0;
   let sidecars = 0;
+  const blobs: SourceBlob[] = [];
+  /** The row as given, or with its blob named and the file queued to store, under the contract. */
+  const stored = (row: NewAsset, file: string): NewAsset => {
+    if (options.store !== true || typeof row.contentHash !== "string" || typeof row.bytes !== "number") return row;
+    const ext = path.extname(file).slice(1).toLowerCase();
+    blobs.push({
+      file,
+      ownerId: LOCAL_LEARNER_ID,
+      mime: MANIMKC_MIME[ext] ?? "application/octet-stream",
+      ext,
+      sha256: row.contentHash,
+      bytes: row.bytes,
+    });
+    return { ...row, blobKey: blobKey(LOCAL_LEARNER_ID, row.contentHash, ext) };
+  };
 
   for (const entry of report.topics) {
     const topicPath = str(entry.path);
@@ -271,9 +301,10 @@ export async function buildRows(
       if (videoPath === null) continue;
 
       const videoId = `${ASSET_PREFIX.manimkc}${videoPath}`;
-      const facts = await fileFacts(path.join(outRoot, videoPath));
+      const videoFile = path.join(outRoot, videoPath);
+      const facts = await fileFacts(videoFile);
       const sectionName = str(section.section);
-      assets.push({
+      assets.push(stored({
         id: videoId,
         kind: "video",
         path: videoPath,
@@ -285,7 +316,7 @@ export async function buildRows(
         // rides along in the title rather than only in the path.
         title: title === null ? videoPath : sectionName === null ? title : `${title} (${sectionName})`,
         sourceRepo: "manimkc",
-      });
+      }, videoFile));
       assetTopics.push({ assetId: videoId, topicSlug: slug });
       videos += 1;
 
@@ -295,8 +326,9 @@ export async function buildRows(
         const sidecarPath = str(sidecar.path);
         if (sidecarPath === null) continue;
         const sidecarId = `${ASSET_PREFIX.manimkc}${sidecarPath}`;
-        const sidecarFacts = await fileFacts(path.join(outRoot, sidecarPath));
-        assets.push({
+        const sidecarFile = path.join(outRoot, sidecarPath);
+        const sidecarFacts = await fileFacts(sidecarFile);
+        assets.push(stored({
           id: sidecarId,
           kind,
           path: sidecarPath,
@@ -305,7 +337,7 @@ export async function buildRows(
           bytes: sidecarFacts.bytes,
           title: title === null ? sidecarPath : `${title} (${name})`,
           sourceRepo: "manimkc",
-        });
+        }, sidecarFile));
         assetTopics.push({ assetId: sidecarId, topicSlug: slug });
         // The sidecar came out of the video's narration. This edge is what
         // bundle 6's drift check reads to spot a transcript left behind by a
@@ -360,5 +392,6 @@ export async function buildRows(
     // `apps/web/src/app/api/assets/[id]/file/route.ts`, which joins it onto
     // `asset.path`, exactly as the indexer does above when it hashes the file.
     metadata: { outRoot },
+    blobs,
   };
 }

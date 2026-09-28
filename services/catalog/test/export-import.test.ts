@@ -579,7 +579,7 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     try {
       const before = await latestSnapshots(scratch);
       await expect(runImportCommand({ dir: out })).rejects.toThrow(
-        /content\/tags\.yaml: the database owns tags.*Edited since the last export: content\/tags\.yaml/s,
+        /content\/tags\.yaml: the database owns tags.*Changed since the last export: content\/tags\.yaml \(edited\)/s,
       );
       expect(await latestSnapshots(scratch)).toEqual(before);
     } finally {
@@ -635,6 +635,29 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     });
     expect(report.rules.find((r) => r.name === "module-has-item")?.state).toBe("armed");
   });
+
+  it("records no tree for an owned type when a later owned type refuses the import", async () => {
+    // Tags and courses are both owned here, and tags is checked first. A
+    // refused import used to have recorded the refused tree as tags' root
+    // already, so the next write-through went to a tree nobody imported.
+    const rootOf = async () =>
+      (await scratch.db.execute<{ root: string | null }>(sql`select metadata->>'root' as root from index_run where source = 'tags'`))
+        .rows[0]?.root;
+    await runExport({ out });
+    await runImportCommand({ dir: out });
+    const before = await rootOf();
+    const edited = await tempDir("refused-root");
+    try {
+      await cp(out, edited, { recursive: true });
+      await rm(path.join(edited, "content/courses/xx1000.yaml"));
+      await expect(runImportCommand({ dir: edited })).rejects.toThrow(
+        /the database owns courses.*Changed since the last export: content\/courses\/xx1000\.yaml \(deleted\)/s,
+      );
+      expect(await rootOf()).toBe(before);
+    } finally {
+      await rm(edited, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe.skipIf(!reachable.ok)("a tag gone from tags.yaml while the database owns courses", () => {
