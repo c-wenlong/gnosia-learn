@@ -158,8 +158,7 @@ export const topic = pgTable(
 /**
  * One authored note under `learn/concepts/<domain>/`. A concept is the only
  * thing that carries mastery and prerequisites; it is optional enrichment
- * *under* a topic, which is why `topicSlug` is nullable for now, though every
- * note resolves through `maps.concepts` today.
+ * *under* a topic, and every concept is filed under exactly one.
  */
 export const concept = pgTable(
   "concept",
@@ -167,10 +166,19 @@ export const concept = pgTable(
     slug: text("slug").primaryKey(),
     title: text("title").notNull(),
     summary: text("summary"),
-    topicSlug: text("topic_slug").references(() => topic.slug, {
-      onDelete: "set null",
-      onUpdate: "cascade",
-    }),
+    /**
+     * `NOT NULL` since Track C's contract migration (`0012`): every concept is
+     * filed under a topic, which the indexer has refused to leave undone since
+     * bundle 4. `RESTRICT` rather than the `SET NULL` it replaced, which could
+     * only produce the null the column no longer allows: a topic that still
+     * has concepts cannot be deleted, it is archived or renamed.
+     */
+    topicSlug: text("topic_slug")
+      .notNull()
+      .references(() => topic.slug, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
     /** Repo-relative path of the note, e.g. `learn/concepts/algorithms/master-theorem.md`. */
     path: text("path").notNull(),
     /**

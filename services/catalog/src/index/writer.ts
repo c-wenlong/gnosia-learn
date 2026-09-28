@@ -20,7 +20,7 @@ import {
   topic,
   topicRelation,
 } from "@self-learn/schema";
-import { and, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
 import {
@@ -106,6 +106,8 @@ export interface SourceWrite {
    * per SQL table name. Only `collection` and `curriculum_item` are archived.
    */
   archived: Record<string, number>;
+  /** Topics the vocabulary dropped that were held, untouched, because concepts were still filed under them. */
+  deferred?: string[];
   /** Which, capped like `deletedKeys`: an archive hides a row a learner may have ticked. */
   archivedKeys: string[];
   /** `import` revisions appended, per entity type. An unchanged tree appends none. */
@@ -259,6 +261,16 @@ export async function writeSource(
     tagLinksRewritten?: boolean;
     /** Session logs to append, for the sessions source (`importLogs`). */
     logs?: readonly ImportedLog[];
+    /**
+     * The concepts source runs later in the same import. A topic the
+     * vocabulary dropped while concepts are still filed under it is then
+     * held: left exactly as it is, row and links, and named in `deferred`,
+     * since that source is about to move or prune those concepts;
+     * `runIndex` then prunes it with `pruneHeldTopics`. False when nothing
+     * will move them, and then the drop is refused by name before anything
+     * is written.
+     */
+    conceptsFollow?: boolean;
   } = {},
 ): Promise<SourceWrite> {
   assertNamespaced(indexer, rows);
@@ -271,6 +283,7 @@ export async function writeSource(
   const archived: Record<string, number> = {};
   const archivedKeys: string[] = [];
   const revisions: Record<string, number> = {};
+  let deferred: string[] = [];
 
   const record = (table: PgTable, into: Record<string, number>, count: number) => {
     if (count > 0) into[getTableName(table)] = (into[getTableName(table)] ?? 0) + count;
@@ -293,6 +306,18 @@ export async function writeSource(
     );
     await markSeam(tx, `import:${indexer.source}`);
 
+    // A topic the vocabulary dropped while concepts are still filed under it
+    // cannot be deleted (`concept.topic_slug` is NOT NULL and RESTRICT since
+    // 0012). With the concepts source to follow it is held, untouched, for
+    // `pruneHeldTopics`; without, the run is refused before anything moves.
+    if ((indexer.owns as readonly string[]).includes("topic")) {
+      const stale = await staleKeys(tx, indexer, "topic", rows);
+      const filed = stale.length === 0 ? [] : await filedTopics(tx, stale);
+      if (filed.length > 0 && options.conceptsFollow !== true) throw topicsFiledError(filed);
+      deferred = [...new Set(filed.map((f) => f.topic))];
+    }
+    const held = new Set(deferred);
+
     // Sparse positions (D22): the indexers hand over each list's order as a
     // rank, and the stored numbers are placed here, under the locks, against
     // what the rows hold now, so a row whose place did not change keeps its
@@ -307,7 +332,7 @@ export async function writeSource(
     const lastStates = new Map<EntityName, Map<string, SnapshotRead>>();
     for (const name of ENTITY_ORDER) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
-      const keys = await staleKeys(tx, indexer, name, rows);
+      const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !held.has(key));
       if (keys.length > 0) lastStates.set(name, await readSnapshots(tx, REVISION_TYPE[name], keys));
     }
 
@@ -317,7 +342,13 @@ export async function writeSource(
     for (const name of LINK_ORDER) {
       const scope = linkScope(indexer, name, options.scope);
       if (scope === null) continue;
-      const result = await tx.delete(TABLES[name]).where(scope ?? sql`true`);
+      // A held topic keeps its own links, so its eventual delete revision
+      // records it whole, and a failed run leaves it as it was; except a
+      // manimkc path this run files under another topic, whose primary key
+      // the new row needs (the path has moved, so it is no longer the held
+      // topic's to record).
+      const where = held.size === 0 ? (scope ?? sql`true`) : and(scope ?? sql`true`, heldLinksKept(name, held, rows));
+      const result = await tx.delete(TABLES[name]).where(where);
       clearedLinks[name] = result.rowCount ?? 0;
     }
 
@@ -359,7 +390,10 @@ export async function writeSource(
     for (const name of [...ENTITY_ORDER].reverse()) {
       if (ARCHIVED_NOT_PRUNED.has(name)) continue;
       const table = TABLES[name];
-      const pruned = await pruneEntity(tx, indexer, name, rows, options.tagLinksRewritten ?? false);
+      const pruned = await pruneEntity(tx, indexer, name, rows, {
+        tagLinksRewritten: options.tagLinksRewritten ?? false,
+        held,
+      });
       if (pruned.length === 0) continue;
       const before = lastStates.get(name);
       prunedReads.set(
@@ -449,6 +483,7 @@ export async function writeSource(
     totalDeleted: sum(deleted),
     archived,
     archivedKeys,
+    ...(deferred.length > 0 ? { deferred } : {}),
     revisions,
   };
 }
@@ -802,9 +837,10 @@ async function pruneEntity(
   indexer: Indexer,
   name: EntityName,
   rows: SourceRows,
-  tagLinksRewritten: boolean,
+  context: { tagLinksRewritten: boolean; held: ReadonlySet<string> },
 ): Promise<string[]> {
-  const keys = await staleKeys(tx, indexer, name, rows);
+  const { tagLinksRewritten } = context;
+  const keys = (await staleKeys(tx, indexer, name, rows)).filter((key) => name !== "topic" || !context.held.has(key));
   if (keys.length === 0) return [];
 
   const table = TABLES[name];
@@ -909,6 +945,87 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
  * source is not running to rewrite the links: the database owns courses, and
  * silently dropping a tag from one would be an edit nobody made.
  */
+/**
+ * The concepts filed under topics the vocabulary dropped.
+ *
+ * `concept.topic_slug` is `NOT NULL` and `RESTRICT` since migration 0012, so
+ * deleting such a topic would fail on the constraint. The topics source runs
+ * before the concepts source, so an edit that moves those concepts to another
+ * topic, or removes their notes, in the same breath reaches the prune first.
+ * When the concepts source follows in the same import, the topic is held for
+ * that source to empty and `runIndex` prunes it with `pruneHeldTopics`;
+ * otherwise the drop is refused by name, archived concepts included, since the
+ * constraint binds them too.
+ */
+async function filedTopics(tx: CatalogDatabase, topics: string[]): Promise<{ topic: string; slug: string }[]> {
+  return tx
+    .select({ topic: concept.topicSlug, slug: concept.slug })
+    .from(concept)
+    .where(inArray(concept.topicSlug, topics))
+    .orderBy(concept.topicSlug, concept.slug);
+}
+
+/**
+ * The link rows a held topic keeps through the topics pass, as a condition
+ * for the rows the pass may clear: its outgoing relations, and its manimkc
+ * paths other than any this run files under a surviving topic.
+ */
+function heldLinksKept(name: LinkName, held: ReadonlySet<string>, rows: SourceRows): SQL | undefined {
+  const topics = [...held];
+  if (name === "topicRelation") return notInArray(topicRelation.fromSlug, topics);
+  if (name === "manimkcTopic") {
+    const moved = (rows.manimkcTopic ?? []).map((row) => row.path);
+    const keep = and(inArray(manimkcTopic.topicSlug, topics), moved.length === 0 ? sql`true` : notInArray(manimkcTopic.path, moved));
+    return sql`not (${keep})`;
+  }
+  return undefined;
+}
+
+/**
+ * Delete the topics the topics source held, now that the concepts source has
+ * moved or pruned what was filed under them: the step that source's own prune
+ * would have taken. One transaction under the topic lock, a `delete` revision
+ * each from the state the held topic kept, and the topics run's `deleted`
+ * count brought up to date. A topic that still has a concept (the edit moved
+ * it nowhere) is refused by name, and nothing is deleted.
+ */
+export async function pruneHeldTopics(
+  db: CatalogDatabase,
+  topics: readonly string[],
+  by: { author: string; reason: string },
+): Promise<{ deleted: string[]; revisions: number }> {
+  if (topics.length === 0) return { deleted: [], revisions: 0 };
+  return db.transaction(async (tx) => {
+    await lockTypes(tx, ["topic"]);
+    await markSeam(tx, "import:topics");
+    const filed = await filedTopics(tx, [...topics]);
+    if (filed.length > 0) throw topicsFiledError(filed);
+    const reads = await readSnapshots(tx, "topic", topics);
+    const keys = [...reads.keys()].sort();
+    if (keys.length === 0) return { deleted: [], revisions: 0 };
+    // Its own links first, which the topics pass kept for this revision:
+    // `topic_relation` is RESTRICT on its topics and would refuse the delete.
+    await tx.delete(topicRelation).where(inArray(topicRelation.fromSlug, keys));
+    await tx.delete(manimkcTopic).where(inArray(manimkcTopic.topicSlug, keys));
+    await tx.delete(topic).where(inArray(topic.slug, keys));
+    const revisions = await recordDeletes(tx, "topic", reads, by);
+    await tx
+      .update(indexRun)
+      .set({ deleted: sql`${indexRun.deleted} + ${keys.length}`, updatedAt: sql`now()` })
+      .where(eq(indexRun.source, "topics"));
+    return { deleted: keys, revisions };
+  });
+}
+
+function topicsFiledError(filed: readonly { topic: string; slug: string }[]): IndexError {
+  return new IndexError(
+    `content/topics.yaml no longer lists topics that concepts are still filed under: ` +
+      `${filed.map((f) => `${f.topic} (${f.slug})`).join(", ")}. Every concept needs a topic, and ` +
+      `this import will not move them (the concepts source is not part of it, or has already run). ` +
+      `List each under its new topic's maps.concepts, or remove its note, and index again.`,
+  );
+}
+
 async function assertTagsUnworn(tx: CatalogDatabase, tags: string[]): Promise<void> {
   const worn = await tx
     .select({ tag: collectionTag.tagId, course: collectionTag.collectionId })
