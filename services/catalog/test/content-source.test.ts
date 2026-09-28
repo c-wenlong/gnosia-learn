@@ -64,6 +64,8 @@ describe("dbSource", () => {
     expect([...DB_READERS].sort()).toEqual(ready.sort());
     // Track A's two, since docs/CONTENT-MIGRATION.md Track A.
     expect(DB_READERS.has("topics") && DB_READERS.has("tags")).toBe(true);
+    // Track B's (test/courses-reader.test.ts).
+    expect(DB_READERS.has("courses")).toBe(true);
   });
 
   it("derives the readable types from each reader's own flag", () => {
