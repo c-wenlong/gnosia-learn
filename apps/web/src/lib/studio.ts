@@ -21,14 +21,12 @@ import type { Comparison } from "@/lib/studio-compare";
  * means this deployment has no studio, and "there is a studio here and you may
  * not have it" is a different and untrue statement.
  *
- * **A separate variable from `ASSET_FILES_ENABLED`.** The library's file route
- * is a read-only byte server for indexed assets; this starts paid agent
- * sessions. One variable would mean turning on file downloads turned on an
- * agent runner, so they stay two — and the studio never borrows
- * `/api/assets/{id}/file`, because that route also requires the asset to be
- * *indexed*, and the diagram the studio most needs to show is the untopiced one
- * the indexer refuses by name. Studio thumbnails come from the runner instead,
- * through `/studio/api/diagrams/{name}/svg`, behind this one gate.
+ * **Its own variable, and the only one the studio needs.** It starts paid
+ * agent sessions, so nothing else turning on may turn it on. The studio never
+ * borrows the library's `/api/assets/{id}/file` either: that route serves an
+ * asset row's blob, and a diagram the studio is drawing has no row until it is
+ * accepted. Studio thumbnails come from the runner instead, through
+ * `/studio/api/diagrams/{name}/svg`, behind this one gate.
  */
 
 export const STUDIO_ENV = "STUDIO_ENABLED";

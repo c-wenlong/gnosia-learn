@@ -197,11 +197,11 @@ Rules of engagement:
 
 - Run it with `npm run studio` from the repository root; it binds
   `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
-  `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone,
-  not on `ASSET_FILES_ENABLED`: from the browser they are served from
+  `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone:
+  from the browser they are served from
   `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
-  behind the `/studio/api/*` rewrite), deliberately not from
-  `/api/assets/{id}/file`, which a second switch gates. The runner streams the
+  behind the `/studio/api/*` rewrite), deliberately not from the library's
+  `/api/assets/{id}/file`, which serves asset rows. The runner streams the
   blob the diagram's row names, by the key in its (cached) diagram list, so a
   tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
@@ -222,10 +222,27 @@ Rules of engagement:
   stop a shell redirect, `tee`, or a command substitution from writing
   anywhere in the tree. Read and write rules in
   `services/studio/src/settings.ts` are absolute paths resolved from
-  `REPO_ROOT` at spawn time, not relative ones, because manimkc already
-  shipped the bug where a relative rule stops matching the moment its data
-  root moves.
-- A job writes only to `learn/assets/.candidates/`, and since Track D of
+  `REPO_ROOT` and `STUDIO_HOME` at spawn time, not relative ones, because
+  manimkc already shipped the bug where a relative rule stops matching the
+  moment its data root moves. `REPO_ROOT` in `services/studio/src/paths.ts` is
+  where that code sits (two levels above `services/studio/`, as
+  `services/catalog/src/env.ts` finds its own), because the studio needs a
+  root for code, not content; `STUDIO_REPO_ROOT` overrides it for the tests.
+- The studio reads the topic vocabulary only through
+  `npm run --silent catalog -- topic ls --json`, and opens no database
+  connection of its own. Every good read is cached in
+  `$STUDIO_HOME/cache/topics.json`; with the catalog down a brief is checked
+  against that copy, `/api/health` reports `vocabulary.stale` with its
+  `readAt`, and `/api/vocabulary` serves it, which is where the web studio
+  screens take their topics from so they still work with Postgres down.
+- A job writes only to its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`
+  (`<slug>.tldr` and `.svg`), never into the tree. The permission file allows
+  those two files and denies every other job's workspace and the rest of
+  `STUDIO_HOME`. `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
+  relative to `STUDIO_HOME`, and the catalog refuses any other value. A job
+  recorded before the move still names `learn/assets/.candidates/<slug>`, which
+  the runner resolves against the repository, so it can be accepted, discarded
+  or resumed. And since Track D of
   [`docs/CONTENT-MIGRATION.md`](docs/CONTENT-MIGRATION.md) Accept lands nothing
   in the tree: it is `catalog diagram put --job`, the diagram as rows and its
   SVG as a blob, with the job's starting revision as the base, so a commit that
@@ -234,7 +251,7 @@ Rules of engagement:
   `.tldr` and `.svg` through into the tree diagrams were last imported from
   (D17), so the next `catalog index` does not undo it, and Accept names those
   two files with the `git add` line to run. With Postgres down Accept refuses
-  and the candidate waits. `indexed: false` after
+  and the candidate waits in the job workspace. `indexed: false` after
   an accept means the diagram landed and the job row did not record it;
   Reindex finishes it.
 - Every `canvas` verb and the mirror run on the diagram's checkout,

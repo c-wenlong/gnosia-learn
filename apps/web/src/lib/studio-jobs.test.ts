@@ -50,7 +50,7 @@ function job(over: Partial<Job> = {}): Job {
     title: "Dot product",
     topic: "vector-and-linear-algebra-basics",
     target: "learn/assets/dot-product.tldr",
-    candidate: "learn/assets/.candidates/dot-product.tldr",
+    candidate: "/Users/you/.studio/jobs/job-1/candidate/dot-product.tldr",
     attempt: 1,
     turns: null,
     costUsd: null,
@@ -82,7 +82,7 @@ function gate(over: Partial<GateResult> = {}): GateResult {
     findings: [],
     shapes: 44,
     lints: 0,
-    svg: { path: "learn/assets/.candidates/dot-product.svg", bytes: 213_000 },
+    svg: { path: "/Users/you/.studio/jobs/job-1/candidate/dot-product.svg", bytes: 213_000 },
     exportFailed: false,
     checkedAt: at(200),
     ...over,
@@ -489,8 +489,9 @@ describe("the brief a form fills in", () => {
     expect(draft.relations).toEqual([{ from: "one", to: "one", label: "" }]);
   });
 
-  it("names the candidate path the result will be written to", () => {
-    expect(candidatePathFor("dot-product")).toBe("learn/assets/.candidates/dot-product.tldr");
+  it("names the job's own workspace as where the result will be written, not the repository", () => {
+    expect(candidatePathFor("dot-product")).toBe("$STUDIO_HOME/jobs/<job>/candidate/dot-product.tldr");
+    expect(candidatePathFor("dot-product")).not.toContain("learn/assets");
     expect(candidatePathFor("")).toContain("<slug>");
   });
 

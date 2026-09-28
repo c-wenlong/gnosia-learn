@@ -266,6 +266,12 @@ async function handle(
     return send(response, 200, await health(store, runner));
   }
 
+  /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
+  if (segments[1] === "vocabulary" && segments.length === 2) {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/vocabulary does`);
+    return vocabularyRoute(response);
+  }
+
   /* /api/diagrams — the corpus the browser screen lists. */
   if (segments[1] === "diagrams") {
     return diagrams(request, response, segments, method, mirrors);
@@ -290,6 +296,7 @@ async function handle(
         "/api/diagrams/{name}/svg",
         "/api/diagrams/{name}/export|verify|inspect",
         "/api/mirrors",
+        "/api/vocabulary",
         "/api/health",
       ],
     });
@@ -485,9 +492,24 @@ async function postJob(
     return fail(response, 400, "the request body is not JSON", (error as Error).message);
   }
 
+  // Read apart from the validation, because failing to read it is not the
+  // brief's fault: with the catalog down and no cached copy (D13), nothing can
+  // say whether a topic exists, and that is a 503 rather than a bad request.
+  let vocabulary: Awaited<ReturnType<typeof loadVocabulary>>;
+  try {
+    vocabulary = await loadVocabulary();
+  } catch (error) {
+    return fail(
+      response,
+      503,
+      `the topic list cannot be read and there is no cached copy, so a brief cannot be checked: ${(error as Error).message}`,
+      { readAt: null, stale: true },
+    );
+  }
+
   let brief: ValidBrief;
   try {
-    brief = validateBrief(body, await loadVocabulary());
+    brief = validateBrief(body, vocabulary);
   } catch (error) {
     if (error instanceof BriefError) {
       return fail(response, 400, error.message, { field: error.field });
@@ -1066,6 +1088,36 @@ function events(
     clearInterval(keepAlive);
     unsubscribe();
   });
+}
+
+/**
+ * The vocabulary, for the web studio's chips and brief form.
+ *
+ * The web app reads content from the database only, so with Postgres down its
+ * own topic read throws, and U3 says the studio still browses and draws. This
+ * is the same read a brief is checked against, with the same D13 cache behind
+ * it, so the form offers exactly the topics a submit will accept, and the
+ * copy it shows carries `stale` and `readAt` like `/api/health` does. With no
+ * copy at all it answers 503 with the reason, and the screen falls back to
+ * slugs.
+ */
+async function vocabularyRoute(response: ServerResponse): Promise<void> {
+  try {
+    const read = await loadVocabulary();
+    return send(response, 200, {
+      topics: read.entries,
+      readAt: read.readAt,
+      stale: read.stale,
+      ...(read.staleReason === undefined ? {} : { error: read.staleReason }),
+    });
+  } catch (error) {
+    return fail(
+      response,
+      503,
+      `the catalog could not list the topics and there is no cached copy: ${(error as Error).message}`,
+      { readAt: null, stale: true },
+    );
+  }
 }
 
 /** What is and is not working right now. */

@@ -10,7 +10,6 @@ import {
   candidateSvgPath,
   targetPath,
   targetSvgPath,
-  CANDIDATES_DIR,
 } from "../src/paths";
 import type { JobRecord } from "../src/store";
 import { fixtureDocument } from "./fixture-document";
@@ -50,12 +49,19 @@ const { accept, discard, reindex } = await import("../src/review");
 const { JobStore } = await import("../src/store");
 
 const SLUG = "studio-recovery-fixture";
-const files = {
-  candidate: absolute(candidatePath(SLUG)),
-  candidateSvg: absolute(candidateSvgPath(SLUG)),
-  target: absolute(targetPath(SLUG)),
-  targetSvg: absolute(targetSvgPath(SLUG)),
-};
+/**
+ * The four files a test looks at. The candidates are in the job's workspace
+ * under this test's `STUDIO_HOME`, so they are named once it is set.
+ */
+function filesNow() {
+  return {
+    candidate: candidatePath("job-recovery", SLUG),
+    candidateSvg: candidateSvgPath("job-recovery", SLUG),
+    target: absolute(targetPath(SLUG)),
+    targetSvg: absolute(targetSvgPath(SLUG)),
+  };
+}
+let files = filesNow();
 
 const exists = async (file: string): Promise<boolean> =>
   (await stat(file).catch(() => null)) !== null;
@@ -85,8 +91,8 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
     },
     targetPath: targetPath(SLUG),
     targetSvgPath: targetSvgPath(SLUG),
-    candidatePath: candidatePath(SLUG),
-    candidateSvgPath: candidateSvgPath(SLUG),
+    candidatePath: candidatePath("job-recovery", SLUG),
+    candidateSvgPath: candidateSvgPath("job-recovery", SLUG),
     topic: "vector-and-linear-algebra-basics",
     slug: SLUG,
     attempt: 1,
@@ -113,7 +119,7 @@ function record(over: Partial<JobRecord> = {}): JobRecord {
       findings: [],
       shapes: 12,
       lints: 0,
-      svg: { path: candidateSvgPath(SLUG), bytes: 2048 },
+      svg: { path: candidateSvgPath("job-recovery", SLUG), bytes: 2048 },
       exportFailed: false,
       checkedAt: new Date().toISOString(),
     },
@@ -157,7 +163,8 @@ beforeEach(async () => {
     return { ok: true, json: { revision: diagram.revision, changed: true }, error: null, offline: false };
   });
   catalogMock.diagramCheckout.mockResolvedValue({ ok: true, json: { exists: true, revision: 4, note: "checked out" }, error: null, offline: false });
-  await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
+  files = filesNow();
+  await mkdir(path.dirname(files.candidate), { recursive: true });
   await writeFile(files.candidate, fixtureDocument(), "utf8");
   await writeFile(files.candidateSvg, "<svg/>", "utf8");
 });

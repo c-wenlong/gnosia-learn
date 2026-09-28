@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { createHash } from "node:crypto";
@@ -26,9 +26,12 @@ import { checkoutRevision, documentHashOf, ensureCheckout } from "./diagrams";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
+  candidateDir,
   candidatePath,
+  candidateRef,
   sessionLogPath,
   candidateSvgPath,
+  isLegacyCandidate,
   jobDir,
   mermaidPath,
   rejectedDir,
@@ -39,9 +42,14 @@ import {
   workDir,
   workPath,
   workSvgPath,
-  CANDIDATES_DIR,
 } from "./paths";
-import { buildPrompt, buildResumePrompt, buildRetryPrompt, buildRevisePrompt } from "./prompt";
+import {
+  buildPrompt,
+  buildResumePrompt,
+  buildRetryPrompt,
+  buildRevisePrompt,
+  type CandidateFiles,
+} from "./prompt";
 import { dirtyFiles } from "./review";
 import type { GateResult, JobRecord, JobStore } from "./store";
 
@@ -199,12 +207,12 @@ export class Runner {
     for (const record of this.store.list()) {
       if (record.state !== "running") continue;
       swept.push(...(await sweepOrphans(record.id)));
-      // What is at the candidate path right now, so a later Resume can tell
-      // this job's half-finished work from a *different* job's leftovers. The
-      // path is per slug, not per job, and an interrupted job releases the
-      // target's lease — so another job can write that same path before anyone
-      // presses Resume. Without the hash, resuming would pick up whatever was
-      // there and offer it for review as this job's output.
+      // What is at the candidate path right now, so a later Resume adopts
+      // exactly this job's half-finished work. The path is in this job's own
+      // workspace, so no other job writes it; a record from before candidates
+      // moved there names the shared per-slug path, where an interrupted job
+      // holds no lease and a later job can write the same file before anyone
+      // presses Resume. The hash is what tells the two apart in either case.
       const candidateHash = await sha256(absolute(record.candidatePath));
       // The one cost that cannot be read live, because the process that would
       // have read it is the process that died. `session.ndjson` is the
@@ -356,8 +364,10 @@ export class Runner {
       brief,
       targetPath: target,
       targetSvgPath: targetSvgPath(brief.slug),
-      candidatePath: candidatePath(brief.slug),
-      candidateSvgPath: candidateSvgPath(brief.slug),
+      // In the job's own workspace (`paths.ts` says why), absolute because
+      // every canvas verb, the gate and the permission file take it as is.
+      candidatePath: candidatePath(id, brief.slug),
+      candidateSvgPath: candidateSvgPath(id, brief.slug),
       topic: brief.topic,
       slug: brief.slug,
       attempt: 0,
@@ -400,7 +410,8 @@ export class Runner {
           kind: "diagram",
           topic: brief.topic,
           target,
-          candidate: record.candidatePath,
+          // Relative to STUDIO_HOME, the form the catalog derives and checks.
+          candidate: candidateRef(id, brief.slug),
           idempotencyKey: brief.idempotencyKey,
           brief,
         },
@@ -604,6 +615,16 @@ export class Runner {
       sessionId,
       agentSessionId,
       attempt: 0,
+      // A job queued before candidates moved into the job workspace still
+      // names `learn/assets/.candidates/<slug>`. Nothing has been drawn for a
+      // queued job, so it simply draws in its own workspace like any other,
+      // and the permission file, the prompt and the gate all agree on where.
+      ...(isLegacyCandidate(entry.record.candidatePath)
+        ? {
+            candidatePath: candidatePath(id, entry.record.slug),
+            candidateSvgPath: candidateSvgPath(id, entry.record.slug),
+          }
+        : {}),
     });
     await this.store.emit(id, { type: "phase", phase: "reading", note: "reading the brief", state: "running" });
 
@@ -637,7 +658,7 @@ export class Runner {
 
     const dirtyBefore = new Set(await dirtyFiles());
 
-    await mkdir(absolute(CANDIDATES_DIR), { recursive: true });
+    await mkdir(candidateDir(id), { recursive: true });
     await mkdir(scratchDir(id), { recursive: true });
 
     /* The before half of the comparison, and the only moment it can be read.
@@ -670,18 +691,15 @@ export class Runner {
     //
     // **Except when the candidate is the work being resumed.** A resume of an
     // interrupted job re-derives `extend` from the target existing, and copying
-    // the committed file over the candidate would then delete the partial
-    // drawing the reconcile pass deliberately left on disk — a resume that
-    // begins by destroying what it is resuming. Caught in review on this PR;
-    // the phase's own testing never hit it, because every job it ran had no
-    // committed target and so resumed as `new`.
+    // the committed file over the candidate would then replace the partial
+    // drawing the reconcile pass deliberately left on disk: a resume that
+    // begins by destroying what it is resuming. Caught in review on the PR
+    // that added resume.
     //
-    // Whether the candidate on disk *is* the preserved work is a question with
-    // an answer, and asking it is the difference between resuming a job and
-    // adopting whatever happens to be at that path: the reconcile pass hashed
-    // the candidate when it wrote `interrupted`, so a byte-for-byte match is
-    // this job's own half-drawn document and anything else is somebody's.
-    const resumedWork = await this.holdsResumedWork(record);
+    // The parent drew in its own workspace, so its work is first copied into
+    // this job's (`adoptParentWork`), and only a copy that is byte for byte
+    // what the reconcile pass hashed counts as the work being resumed.
+    const resumedWork = await this.adoptParentWork(record);
     let unchangedHash: string | null = null;
     if (record.brief.mode === "extend") {
       if (!resumedWork) {
@@ -714,6 +732,7 @@ export class Runner {
       // same reasoning that moved the gate's freshness check to the parent's
       // start. The other five gate steps still judge the artifact.
     }
+    const files: CandidateFiles = { tldr: record.candidatePath, svg: record.candidateSvgPath };
     const hasMermaid = record.brief.mermaid !== undefined;
     if (hasMermaid) {
       await writeFile(mermaidPath(id), record.brief.mermaid ?? "", "utf8");
@@ -759,15 +778,15 @@ export class Runner {
       const started = startedSession;
       const prompt =
         findings.length > 0
-          ? buildRetryPrompt(findings, record.slug)
+          ? buildRetryPrompt(findings, files)
           : resumeFromParent
             ? record.changes !== null
-              ? buildRevisePrompt(record.changes, record.slug)
+              ? buildRevisePrompt(record.changes, files)
               : // A parent with no change request is a resume: the job this one
                 // continues was interrupted rather than reviewed, so there is
                 // nothing different to ask for and the whole brief is already
                 // in the transcript being resumed.
-                buildResumePrompt(record.slug)
+                buildResumePrompt(files)
             : buildPrompt({ jobId: id, brief: record.brief, hasMermaid });
       startedSession = true;
 
@@ -930,7 +949,7 @@ export class Runner {
     }
 
     /* The A4 backstop. A zero exit and a clean gate still do not entitle a job
-     * to have written anything outside the candidates directory. */
+     * to have written anything in the tree: its candidate is in its workspace. */
     const dirtyAfter = await dirtyFiles();
     const stray = dirtyAfter.filter((file) => !dirtyBefore.has(file));
     if (stray.length > 0) {
@@ -952,9 +971,8 @@ export class Runner {
       // Whatever sits at the candidate path moves where a person can look at
       // it, as on the gate's exhaustion path below: an earlier attempt's
       // partial, the runner's own copy in `extend` mode, or a resumed job's
-      // preserved drawing. Left at the per-slug path, that last one is the
-      // only copy of the work and the next job for the slug writes over it.
-      // Caught in review on this PR.
+      // preserved drawing, so a failed job's workspace says plainly that it
+      // holds no candidate for review.
       await this.moveToRejected(record);
       await this.finish(entry, "failed", {
         errorKind: "agent",
@@ -1113,23 +1131,47 @@ export class Runner {
   }
 
   /**
-   * Is the candidate on disk the work this job is resuming?
+   * Bring the parent's drawing into this job's workspace, and say whether it is
+   * the work this job is resuming.
    *
-   * Three things have to hold, and the third is the one the first version of
-   * this missed. It has to be a resume — a parent, and no change request. The
-   * parent has to have recorded a candidate when it was interrupted. And the
-   * bytes have to still match: the path is `learn/assets/.candidates/<slug>`,
-   * which is per slug rather than per job, and an interrupted job holds no
-   * lease on its target, so a later job for the same slug can write that path
-   * and leave its own file behind. Adopting it would mean resuming one job and
-   * offering another's artifact for review under its name.
+   * Every job draws in its own workspace, so a revision or a resume starts
+   * with an empty candidate unless its parent's is copied across. Two cases:
+   *
+   * - **A resume** (a parent, no change request) adopts the parent's candidate
+   *   only when its bytes still match the hash the reconcile pass took when it
+   *   wrote `interrupted`. In its own workspace nobody else writes that file,
+   *   but a record from before candidates moved names the shared per-slug path
+   *   under `learn/assets/.candidates/`, which a later job for the same slug
+   *   could have written; adopting that would offer another job's artifact for
+   *   review under this one's name. True means the gate treats it as resumed.
+   * - **A revision of a `new` drawing** takes whatever the parent left, which
+   *   is what "the same file" meant when the path was per slug: a revise after
+   *   a timeout or a cancel continues the partial drawing. It is not resumed
+   *   work, so the gate still wants this job to have drawn something. A
+   *   revision in `extend` mode is handed the committed diagram instead, below.
+   *
+   * The copy keeps the parent's modification time, so the gate's freshness
+   * check reads the drawing's age and not the moment of the copy.
    */
-  private async holdsResumedWork(record: JobRecord): Promise<boolean> {
-    if (record.parentJobId === null || record.changes !== null) return false;
+  private async adoptParentWork(record: JobRecord): Promise<boolean> {
+    if (record.parentJobId === null) return false;
     const parent = this.store.get(record.parentJobId);
-    const expected = parent?.candidateHash ?? null;
-    if (expected === null) return false;
-    return (await sha256(absolute(record.candidatePath))) === expected;
+    if (parent === undefined) return false;
+    const resume = record.changes === null;
+    if (!resume && record.brief.mode !== "new") return false;
+    const from = absolute(parent.candidatePath);
+    if (resume) {
+      const expected = parent.candidateHash ?? null;
+      if (expected === null || (await sha256(from)) !== expected) return false;
+    } else if ((await stat(from).catch(() => null)) === null) {
+      return false;
+    }
+    await copyKeepingTime(from, absolute(record.candidatePath));
+    const svg = absolute(parent.candidateSvgPath);
+    if ((await stat(svg).catch(() => null)) !== null) {
+      await copyKeepingTime(svg, absolute(record.candidateSvgPath));
+    }
+    return resume;
   }
 
   private async finish(
@@ -1179,7 +1221,10 @@ export class Runner {
       jobId: id,
       state,
       ...(record.phase === null ? {} : { phase: record.phase }),
-      candidatePath: record.candidatePath,
+      // The form the catalog records: relative to STUDIO_HOME, never this
+      // machine's absolute path. A record still on the old per-slug path sends
+      // nothing, and the row keeps what it had.
+      ...(isLegacyCandidate(record.candidatePath) ? {} : { candidatePath: candidateRef(id, record.slug) }),
       ...(record.gate === null ? {} : { gateFile }),
       exitCode: record.exitCode,
       turns: record.turns,
@@ -1334,6 +1379,14 @@ export class Runner {
   }
 }
 
+/** `copyFile`, then the source's times onto the copy. See `adoptParentWork`. */
+async function copyKeepingTime(from: string, to: string): Promise<void> {
+  await mkdir(path.dirname(to), { recursive: true });
+  await copyFile(from, to);
+  const facts = await stat(from);
+  await utimes(to, facts.atime, facts.mtime);
+}
+
 async function sha256(file: string): Promise<string | null> {
   try {
     return createHash("sha256").update(await readFile(file)).digest("hex");
@@ -1447,15 +1500,15 @@ export function noteFor(record: JobRecord): string {
         : `${PHASE_NOTES[record.phase ?? "drawing"] ?? "working"}, attempt ${record.attempt}`;
     case "awaiting_review":
       return (
-        `the candidate is written and checked, and nothing under learn/assets/ has changed. ` +
+        `the candidate is written and checked in the job's workspace, and nothing has landed. ` +
         (record.gate?.exportFailed === true
           ? "The document saved and the export did not, which accept will redo."
           : `${record.gate?.shapes ?? "?"} shapes, ${record.gate?.lints ?? 0} lints.`)
       );
     case "accepted":
-      return `accepted: ${record.written.join(" and ")} are in learn/assets/, uncommitted. Committing is yours.`;
+      return `accepted: ${record.written.join(" and ")} landed in the database.`;
     case "discarded":
-      return "discarded: the candidate is deleted and nothing under learn/assets/ ever changed";
+      return "discarded: the candidate is deleted and nothing ever landed";
     case "failed":
       return `failed: ${record.error ?? "no reason recorded"}`;
     case "cancelled":

@@ -566,9 +566,9 @@ export function canvasHref(name: string): string {
 /**
  * The thumbnail's `src`, through the studio's own proxy.
  *
- * Not `/api/assets/{id}/file`: that route is gated on `ASSET_FILES_ENABLED` as
- * well as on the asset being indexed, and an untopiced diagram is refused by
- * the indexer *by name*, so the tile that matters most would be the blank one.
+ * Not `/api/assets/{id}/file`: that route serves an asset row, and the runner's
+ * route streams the diagram's own SVG blob behind the studio's one gate, so a
+ * tile never depends on a second flag or on the library's rows.
  */
 export function thumbnailHref(name: string): string {
   return `/studio/api/diagrams/${encodeURIComponent(name)}/svg`;

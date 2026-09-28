@@ -1,9 +1,21 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { BASH_ALLOW, buildSettings } from "../src/settings";
-import { absolute, candidatePath, candidateSvgPath, scratchDir, targetPath, workDir } from "../src/paths";
+import { cacheDir } from "../src/content-cache";
+import {
+  absolute,
+  candidateDir,
+  candidatePath,
+  candidateSvgPath,
+  jobDir,
+  scratchDir,
+  targetPath,
+  workDir,
+} from "../src/paths";
 
 /**
  * The settings file is the boundary, so these are the tests that matter most in
@@ -12,6 +24,21 @@ import { absolute, candidatePath, candidateSvgPath, scratchDir, targetPath, work
  * matching when a root moved, and a deny on a parent that quietly took the
  * allow with it.
  */
+
+// A STUDIO_HOME of this file's own, holding what a runner's holds: this job,
+// another job, the checkouts, the cache, and something added later.
+const home = mkdtempSync(path.join(tmpdir(), "studio-settings-"));
+process.env.STUDIO_HOME = home;
+for (const dir of ["jobs/job-1/candidate", "jobs/job-other/candidate", "work", "cache", "state"]) {
+  mkdirSync(path.join(home, dir), { recursive: true });
+}
+// A tree that still holds the old per-slug directory, in the test's own
+// repository root (a temp farm, see vitest.setup.ts), never the checkout.
+mkdirSync(absolute("learn/assets/.candidates"), { recursive: true });
+afterAll(() => {
+  delete process.env.STUDIO_HOME;
+  rmSync(home, { recursive: true, force: true });
+});
 
 const settings = buildSettings({ jobId: "job-1", slug: "dot-product" });
 const allow = settings.permissions.allow;
@@ -82,9 +109,9 @@ describe("the Bash rules are an allowlist", () => {
 
 describe("every path rule is absolute and derived at runtime", () => {
   it("writes file rules as Edit, because a Write path rule is never consulted", () => {
-    const candidate = absolute(candidatePath("dot-product"));
+    const candidate = candidatePath("job-1", "dot-product");
     expect(allow).toContain(`Edit(/${candidate})`);
-    expect(allow).toContain(`Edit(/${absolute(candidateSvgPath("dot-product"))})`);
+    expect(allow).toContain(`Edit(/${candidateSvgPath("job-1", "dot-product")})`);
     expect(allow.some((rule) => rule.startsWith("Write("))).toBe(false);
   });
 
@@ -137,16 +164,14 @@ describe("the committed corpus is out of reach", () => {
     // The glob is there too, but a `*` that behaves differently from what was
     // assumed would silently open the whole directory. An enumerated path
     // cannot.
-    const committed = deny.filter(
-      (rule) => rule.includes("/learn/assets/") && !rule.includes(".candidates"),
-    );
+    const committed = deny.filter((rule) => rule.includes("/learn/assets/") && !rule.includes("*"));
     expect(committed.length).toBeGreaterThan(0);
   });
 
   it("does not deny a parent of the candidate, which would take the allow with it", () => {
     // Deny always beats allow, so a deny on `learn/assets/**` would refuse the
     // job its own output while looking stricter.
-    const candidate = absolute(candidatePath("dot-product"));
+    const candidate = candidatePath("job-1", "dot-product");
     for (const rule of deny) {
       const match = /^[A-Za-z]+\(\/(.+?)(\/\*\*)?\)$/.exec(rule);
       if (match === null) continue;
@@ -162,6 +187,47 @@ describe("the committed corpus is out of reach", () => {
     const scratch = scratchDir("job-1");
     expect(deny.some((rule) => rule.includes(`${scratch}/**`))).toBe(false);
     expect(allow).toContain(`Edit(/${scratch}/**)`);
+  });
+});
+
+describe("the candidate lives in the job's own workspace", () => {
+  it("allows exactly this job's two candidate files, read and edit, and not their directory", () => {
+    const tldr = candidatePath("job-1", "dot-product");
+    const svg = candidateSvgPath("job-1", "dot-product");
+    expect(path.dirname(tldr)).toBe(path.join(jobDir("job-1"), "candidate"));
+    for (const file of [tldr, svg]) {
+      expect(allow).toContain(`Edit(/${file})`);
+      expect(allow).toContain(`Read(/${file})`);
+    }
+    expect(allow.some((rule) => rule.includes(`${candidateDir("job-1")}/**`))).toBe(false);
+    // Nothing under learn/ is writable any more.
+    expect(allow.some((rule) => rule.includes("/learn/assets"))).toBe(false);
+  });
+
+  it("denies another job's workspace, its candidate included", () => {
+    const other = jobDir("job-other");
+    expect(deny).toContain(`Read(/${other}/**)`);
+    expect(deny).toContain(`Edit(/${other}/**)`);
+    expect(allow.some((rule) => rule.includes(other))).toBe(false);
+    // And the same rule from the other side: job-other's file allows are not job-1's.
+    const theirs = buildSettings({ jobId: "job-other", slug: "dot-product" });
+    expect(theirs.permissions.allow).toContain(`Edit(/${candidatePath("job-other", "dot-product")})`);
+    expect(theirs.permissions.deny).toContain(`Edit(/${jobDir("job-1")}/**)`);
+  });
+
+  it("denies the rest of STUDIO_HOME: the checkouts, the cache, and anything added later", () => {
+    expect(deny).toContain(`Read(/${workDir()}/**)`);
+    expect(deny).toContain(`Read(/${cacheDir()}/**)`);
+    expect(deny).toContain(`Edit(/${cacheDir()}/**)`);
+    expect(deny).toContain(`Read(/${path.join(home, "state")}/**)`);
+    // But never the jobs directory as a whole, which would take this job's own with it.
+    expect(deny.some((rule) => rule.includes(`${path.join(home, "jobs")}/**`))).toBe(false);
+  });
+
+  it("denies a leftover learn/assets/.candidates as a whole, since no job writes there", () => {
+    const legacy = absolute("learn/assets/.candidates");
+    expect(deny).toContain(`Read(/${legacy}/**)`);
+    expect(deny).toContain(`Edit(/${legacy}/**)`);
   });
 });
 
