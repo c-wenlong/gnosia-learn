@@ -258,8 +258,14 @@ course file, like `cp4284-m1-t1`; the flag lists the new id under that row's
 because the row's module names the topic the note must be mapped to. Passing
 both with a topic that is not the module's is refused before anything is
 written, since the course reader would refuse the file that resulted. The edit
-is textual, locked, and read back through the real reader before it is kept,
-until courses move into the database.
+is textual, locked, and read back through the real reader before it is kept.
+Once the database owns the notes, the edited file then goes in through
+`catalog course import`, which writes the row's link as a revision with the
+command's reason and rewrites the file as the database exports it. A dry run of
+that import comes first, before the note is written, and refuses when any
+course file or `topics.yaml` is not what the database holds, or when the row's
+own file holds an edit nobody imported, since the import would take that edit
+in under this command's reason.
 
 ```bash
 npm run learn -- concept add --title "Tokenization pipelines" --domain transformers \

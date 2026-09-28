@@ -15,7 +15,6 @@ import { exportHash, readTypeFiles } from "../src/content/layout";
 import { recordExport } from "../src/content/ownership";
 import { conceptsIndexer } from "../src/index/concepts";
 import { coursesIndexer } from "../src/index/courses";
-import { runIndex } from "../src/index/run";
 import { tagsIndexer } from "../src/index/tags";
 import { sessionsIndexer } from "../src/index/sessions";
 import { topicsIndexer } from "../src/index/topics";
@@ -157,37 +156,28 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     );
   });
 
-  it("refuses a listing on rows before writing anything when the notes are not the recorded export", async () => {
-    await scratch.db.execute(sql`update content_source set export_hash = 'stale' where type = 'concepts'`);
-    const runs = async () =>
-      (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from index_run`)).rows[0]?.n;
-    const before = await runs();
+  it("refuses a listing before writing anything when the course file holds an edit not imported", async () => {
+    const course = path.join(fixture.root, "content/courses/xx1000.yaml");
+    const original = await readFile(course, "utf8");
+    const revisions = async () =>
+      (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n;
+    const before = await revisions();
+    await writeFile(course, original.replace("title: First item", "title: An edited item"));
     try {
       expect(await refused("concept", "add", "--title", "Zeta", "--domain", "fixtures", "--item", "xx1000-m1-t1")).toMatch(
-        /nothing was written: .*the database owns concepts/s,
+        /nothing was written: content\/courses\/xx1000\.yaml holds edits the database has not imported \(curriculum_item xx1000-m1-t1\)/,
       );
       expect(await row("zeta")).toBeUndefined();
-      // The check reads; it is not an index run, so it leaves no row of one.
-      expect(await runs()).toBe(before);
+      // The check is a dry run: it appends no revision.
+      expect(await revisions()).toBe(before);
       // And a note that already exists is refused before the check is asked.
       expect(await refused("concept", "add", "--title", "Gamma", "--item", "xx1000-m1-t1")).toMatch(/already exists/);
     } finally {
-      await recordExport(scratch.db, "concepts", exportHash(await readTypeFiles(fixture.root, "concepts")));
+      await writeFile(course, original);
     }
   });
 
-  it("lists a new note on a course row, and the courses source links it", async () => {
-    const added = await json("concept", "add", "--title", "Epsilon", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-    expect(added).toMatchObject({ id: "epsilon", topic: "alpha", item: "xx1000-m1-t1", indexed: true });
-    const { rows } = await scratch.db.execute<{ concept_slug: string }>(
-      sql`select concept_slug from concept_curriculum_item where curriculum_item_id = 'xx1000-m1-t1'`,
-    );
-    expect(rows.map((r) => r.concept_slug)).toEqual(["epsilon"]);
-  });
-
-  it("names what is missing when an unrelated course file stops the courses source after the write", async () => {
-    // A module no topic's maps.courses names: the course reader accepts it,
-    // the courses source does not, and it is in a file this command never touched.
+  it("refuses a listing before writing anything when another course file is not what the database holds", async () => {
     const stray = "content/courses/yy2000.yaml";
     await fixture.write(
       stray,
@@ -198,40 +188,34 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
         "        title: First item", "        subtopics: []", "    resources: []", "capstone: Build something", "",
       ].join("\n"),
     );
-    const links = async () =>
-      (
-        await scratch.db.execute<{ concept_slug: string }>(
-          sql`select concept_slug from concept_curriculum_item where curriculum_item_id = 'xx1000-m1-t1' order by position`,
-        )
-      ).rows.map((r) => r.concept_slug);
     try {
-      const message = await refused("concept", "add", "--title", "Eta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the row's link to it is not in the catalog yet, and the index run stopped/);
-      expect(message).toMatch(/yy2000-m1/);
-      expect(message).toMatch(/catalog -- index --only courses/);
-      expect(await row("eta")).toMatchObject({ topicSlug: "alpha" });
-      expect(await links()).not.toContain("eta");
+      expect(await refused("concept", "add", "--title", "Eta", "--domain", "fixtures", "--item", "xx1000-m1-t1")).toMatch(
+        /nothing was written: .*yy2000\.yaml/s,
+      );
+      expect(await row("eta")).toBeUndefined();
     } finally {
       await rm(path.join(fixture.root, stray));
     }
-    // The recovery the message names is enough: the listing is in the file.
-    await runIndex(scratch.db, { only: ["courses"], repoRoot: fixture.root, manimkcRoot: path.join(fixture.root, "none") });
-    expect(await links()).toContain("eta");
-  }, 60_000);
+  });
 
-  it("says the link is in when a source after courses is what stopped the run", async () => {
-    // Diagrams run after courses and commit on their own, so a bad diagram
-    // stops the run with the courses source's link already written.
-    const bad = "learn/assets/broken.tldr";
-    await fixture.write(bad, "not a tldraw document");
-    try {
-      const message = await refused("concept", "add", "--title", "Theta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-      expect(message).toMatch(/listed on xx1000-m1-t1, and the row links to it, and the index run stopped/);
-      expect(message).toMatch(/broken\.tldr/);
-    } finally {
-      await rm(path.join(fixture.root, bad));
-    }
-  }, 60_000);
+  it("lists a new note on a course row through course import, which links it and writes the file back", async () => {
+    const added = await json("concept", "add", "--title", "Epsilon", "--domain", "fixtures", "--item", "xx1000-m1-t1");
+    expect(added).toMatchObject({ id: "epsilon", topic: "alpha", item: "xx1000-m1-t1", indexed: true });
+    const { rows } = await scratch.db.execute<{ concept_slug: string }>(
+      sql`select concept_slug from concept_curriculum_item where curriculum_item_id = 'xx1000-m1-t1'`,
+    );
+    expect(rows.map((r) => r.concept_slug)).toEqual(["epsilon"]);
+    const [revision] = await scratch.db
+      .select()
+      .from(contentRevision)
+      .where(and(eq(contentRevision.entityType, "curriculum_item"), eq(contentRevision.entityId, "xx1000-m1-t1")))
+      .orderBy(desc(contentRevision.id))
+      .limit(1);
+    expect(revision).toMatchObject({ reason: "learn concept add epsilon --item xx1000-m1-t1" });
+    // The course file is the database's export again, listing included.
+    const [exported] = (await renderType(scratch.db, "courses")).filter((f) => f.path === "content/courses/xx1000.yaml");
+    expect(await readFile(path.join(fixture.root, "content/courses/xx1000.yaml"), "utf8")).toBe(exported?.bytes.toString("utf8"));
+  });
 
   it("refuses a new note with no topic, and a move to another folder", async () => {
     expect(await refused("concept", "add", "--title", "Loose", "--domain", "fixtures")).toMatch(/a new note needs a topic/);

@@ -2,9 +2,12 @@
 
 Course content is data, not code. One YAML file per course under
 `content/courses/`, read by `loadCourses()` in
-[packages/content](../packages/content/src/courses.ts) — the same function the
-web app and `catalog index` both go through, so a course file means one thing
-everywhere.
+[packages/content](../packages/content/src/courses.ts), the same parser the web
+app, `catalog index` and `catalog course import` all go through, so a course
+file means one thing everywhere. The courses are moving into Postgres
+([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), Track B); until the
+`courses` type is flipped the files are the truth, and after it they are the
+database's export, written back by every course write.
 
 ## Where the course data lives
 
@@ -23,24 +26,92 @@ page load of a running server, with no restart.
 
 ## Adding or changing a course
 
-1. Write or edit `content/courses/<code>.yaml`, named after the course code in
-   lowercase. The reader refuses a file whose name and `code:` disagree.
+A course moves through the database one file at a time
+(docs/CONTENT-MIGRATION.md, Track B). The loop is export, edit, import, and
+every import is a revision with a reason, which is what the commit message
+used to say:
+
+```bash
+npm run catalog -- course export cs2111 --out /tmp/cs2111.yaml   # or edit content/courses/cs2111.yaml in place
+$EDITOR /tmp/cs2111.yaml
+npm run catalog -- course import /tmp/cs2111.yaml --reason "cs2111-m2-t1 teaches self-attention" --dry-run
+npm run catalog -- course import /tmp/cs2111.yaml --reason "cs2111-m2-t1 teaches self-attention"
+npm run catalog -- history curriculum_item cs2111-m2-t1          # what changed, who, why
+```
+
+`course import` reads the file with the same parser the web app uses, then
+checks what it points at against the database rather than against other
+files: every module topic, tag and concept must exist, each item's concepts
+must be filed under its module's topic, and no id may already belong to
+another course. Every refusal is listed at once, and nothing is written
+unless all of them pass. Then it writes the difference through the one write
+seam: one revision per module, item or link whose content moved, none for
+anything already as the file says, so importing an unchanged file writes
+nothing. `--dry-run` does the whole write and rolls it back, to see what would
+change.
+
+In the same transaction, the course's file, and `content/topics.yaml` when a
+module was added, dropped or moved to another topic, are rewritten in the tree
+the courses were imported from (D17), so the files and the database never
+disagree. A course file or `topics.yaml` there that holds edits the database
+has not imported is never overwritten: the import refuses and names it. The
+file being imported is the exception, since it is the edit. The check compares
+bytes, so a file whose content matches but whose formatting does not (quoting,
+spacing, a comment) is refused too. The files in this repository are
+byte-for-byte the export's own. A tree written by hand is brought to that form
+once, in this order so no edit is lost: `npm run catalog -- index` reads
+every edit in, in the course files and `topics.yaml` alike (a type the
+database already owns refuses an edited file by name instead), then
+`npm run catalog -- export --only courses,topics --out <the tree>` rewrites
+the same content in the export's form. Exporting first would overwrite an
+edit the database had not read yet.
+
+When writing the file itself:
+
+1. Name it after the course code in lowercase (`content/courses/<code>.yaml`).
+   The directory reader refuses a file whose name and `code:` disagree.
 2. Give it an `order:`. That is the order the Courses page renders them in,
-   and it has to be unique across the shortlist. Sorting by filename is not
+   and it has to be unique across the live courses. Sorting by filename is not
    the reading order, which is why the key is authored rather than derived.
 3. Point each module's `topic:` at a slug from `content/topics.yaml`. It is a
-   lookup key, not free text: add or rename a topic there, never here. If the
-   module is new, also add its id to that topic's `maps.courses`. `catalog
-   index` refuses to run when the two files disagree in either direction.
+   lookup key, not free text: add or rename a topic there, never here. An
+   import writes the module into that topic's `maps.courses` itself; while
+   courses are still read from files, `catalog index` refuses to run when the
+   two files disagree in either direction.
 4. Use an existing entry from `content/tags.yaml` before inventing a theme;
    tags are how related courses find each other.
-5. Run `npm test`. `packages/content/test/courses.test.ts` checks the
+5. List each item's concept notes under `concepts:`, in teaching order. Every
+   item needs at least one before `catalog flip courses --strict` can arm the
+   rule that says so; `npm run catalog -- doctor` lists every item still
+   without one.
+6. Run `npm test`. `packages/content/test/courses.test.ts` checks the
    curriculum integrity: the shortlist is complete, topic ids are unique across
    every file, `inferred` is set only on the courses that are genuinely
    inferred, every module names a real topic, every tag resolves.
-6. Run `npm run catalog -- index --only courses` to refresh the database from
-   the edited files. Without it the catalog keeps serving the last indexed
-   state, and nothing says so.
+
+`catalog index --only courses` still reads every course file into the database
+while the courses type is on files. Once it is flipped, `catalog index` skips
+the course files while they are the database's own export and refuses them,
+naming the file, when someone edited one by hand: use `course import` instead.
+
+## Dropping an item or a module
+
+Nothing a course file stops listing is deleted (D12). `course import` archives
+a module or item the course held and the file no longer lists, and reports it
+by id. It leaves the course path and the export, and every learner's tick,
+note and recap on it stays in `progress` and `recap`, which the Settings export
+still carries. A file that lists it again restores it. Only a curated link
+that no module points at any more is deleted, since nothing is recorded
+against a link.
+
+The item verbs do the same one item at a time, each with a reason:
+
+| Command | What it does |
+| --- | --- |
+| `catalog item archive <id> --reason ...` | Takes the item off its course path. Refuses a module's last live item: a module needs at least one |
+| `catalog item restore <id> --reason ...` | Puts an archived item back, with the concept links it had when it was last live. Also undoes a purge, learner rows included |
+| `catalog item purge <id> --reason ...` | Deletes an archived item. Refuses while any `progress` or `recap` row names it |
+| `catalog item purge <id> --with-learner-data --reason ...` | Copies those rows into the purge's revision, then deletes them with the item |
 
 ## What the reader refuses
 
@@ -70,11 +141,13 @@ them instead of the first.
 
 **Topic ids are permanent.** Every learner's progress, notes and recaps are
 rows keyed by topic id in `progress` and `recap`, and nothing migrates them for
-you. Renaming `cs2111-m1-t1` does not orphan those rows quietly — it deletes
-them: `curriculum_item` is the parent of both tables with `ON DELETE CASCADE`,
-so the next `catalog index` prunes the old id and the tick and the recap go
-with it. Keep the `<course>-m<N>-t<N>` shape, and add new topics at the end of
-a module rather than renumbering.
+you. Renaming `cs2111-m1-t1` does not rename those rows: the import archives
+the old id, with the learner's tick and recap still on it, and creates the new
+one empty. Both tables are `RESTRICT` on `curriculum_item`, so no import or
+index run can take them away; only `catalog item purge --with-learner-data`
+deletes them, and it keeps a copy in its revision. Keep the
+`<course>-m<N>-t<N>` shape, and add new topics at the end of a module rather
+than renumbering.
 
 The same applies to concept links. A topic id also appears in the `topics:`
 frontmatter of concept notes under `learn/concepts/`, which is how the
