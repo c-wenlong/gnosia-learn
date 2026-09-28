@@ -12,7 +12,7 @@ import { writeSource } from "../src/index/writer";
 import { runIndex } from "../src/index/run";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
-import { partialMigrations } from "./partial-migrations";
+import { partialMigrations, tagsAfter } from "./partial-migrations";
 import { createScratchDatabase, probe, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
 
 /**
@@ -48,7 +48,7 @@ describe.skipIf(!reachable.ok)("concept.topic_slug NOT NULL", () => {
 
   it("is reported by doctor before the migration, archived rows included", async () => {
     const report = await doctor(scratch.db, "scratch");
-    expect(report.migrations.pending).toEqual(["0012_concept_topic_not_null", "0013_asset_blob_contract"]);
+    expect(report.migrations.pending).toEqual(["0012_concept_topic_not_null", ...tagsAfter("0012_concept_topic_not_null")]);
     expect(report.conceptsWithoutTopic).toEqual(["gone", "loose"]);
     expect(report.conceptTopicRequired).toBe(false);
   });

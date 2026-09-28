@@ -18,6 +18,7 @@ import {
   type NewJob,
   readableOwners,
   diagram as diagramTable,
+  draft as draftTable,
   session as sessionTable,
   topic as topicTable,
 } from "@self-learn/schema";
@@ -86,6 +87,8 @@ export interface JobSummary {
   phase: string | null;
   session: string | null;
   parentJob: string | null;
+  /** The studio chat that asked for it (D35 of docs/STUDIO-CHAT-FIRST.md), or null. */
+  draft: string | null;
   topic: string;
   targetPath: string;
   candidatePath: string | null;
@@ -188,6 +191,7 @@ export function summarise(row: Job): JobSummary {
     phase: row.phase,
     session: row.sessionId,
     parentJob: row.parentJobId,
+    draft: row.draftId,
     topic: row.topicSlug,
     targetPath: row.targetPath,
     candidatePath: row.candidatePath,
@@ -237,6 +241,8 @@ export interface BriefDocument {
   idempotencyKey?: string;
   session?: string;
   parentJob?: string;
+  /** The draft whose Draw press this is, when a chat asked for it. */
+  draft?: string;
   brief?: Record<string, unknown>;
 }
 
@@ -405,6 +411,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     kind: kind as JobKind,
     sessionId: document.session?.trim() || null,
     parentJobId: document.parentJob?.trim() || null,
+    draftId: document.draft?.trim() || null,
     state: "queued",
     topicSlug,
     targetPath,
@@ -427,7 +434,12 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
     if (existing !== undefined) {
       return { ok: true as const, command: "enqueue" as const, created: false, job: summarise(existing) };
     }
-    await assertOwnReferences(db, { sessionId: row.sessionId ?? null, parentJobId: row.parentJobId ?? null }, owner, scoped);
+    await assertOwnReferences(
+      db,
+      { sessionId: row.sessionId ?? null, parentJobId: row.parentJobId ?? null, draftId: row.draftId ?? null },
+      owner,
+      scoped,
+    );
     if (scoped) await assertDrawable(db, row, owner);
     try {
       const [inserted] = await db
@@ -503,7 +515,7 @@ async function assertDrawable(db: CatalogDatabase, row: NewJob, owner: string): 
  */
 async function assertOwnReferences(
   db: CatalogDatabase,
-  refs: { sessionId: string | null; parentJobId: string | null },
+  refs: { sessionId: string | null; parentJobId: string | null; draftId?: string | null },
   owner: string,
   scoped: boolean,
 ): Promise<void> {
@@ -525,6 +537,21 @@ async function assertOwnReferences(
       .limit(1);
     if (parent !== undefined && parent.ownerId !== owner) throw new JobError(`no job "${refs.parentJobId}" to revise.`);
   }
+  // A draft is one owner's (0014 came after 0010, so it always has the
+  // column); another owner's reads as a missing one, with the foreign key's
+  // sentence, so no job of theirs can hang off it.
+  if (refs.draftId !== undefined && refs.draftId !== null) {
+    const [held] = await db
+      .select({ ownerId: draftTable.ownerId })
+      .from(draftTable)
+      .where(eq(draftTable.id, refs.draftId))
+      .limit(1);
+    if (held === undefined || held.ownerId !== owner) throw noDraft(refs.draftId);
+  }
+}
+
+function noDraft(id: string): JobError {
+  return new JobError(`no draft "${id}". Record it with \`catalog draft upsert\` before a job names it.`);
 }
 
 function noTopic(slug: string): JobError {
@@ -594,6 +621,9 @@ async function explainEnqueue(
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_session_id_session_id_fk") {
     return new JobError(`no session "${row.sessionId}". Start one before pointing a job at it.`);
+  }
+  if (code === SQLSTATE.foreignKeyViolation && constraint === "job_draft_id_draft_id_fk") {
+    return noDraft(row.draftId ?? "(none)");
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_parent_job_id_job_id_fk") {
     return new JobError(`no job "${row.parentJobId}" to revise.`);

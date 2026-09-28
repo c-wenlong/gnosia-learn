@@ -50,8 +50,8 @@ function catalogCalls(): { fn: string; args: string }[] {
 }
 
 describe("the runner's catalog calls", () => {
-  it("name the owner on every diagram, job and session verb", () => {
-    const owning = catalogCalls().filter((call) => /^\[\s*"(diagram|job|session)"/.test(call.args));
+  it("name the owner on every diagram, draft, job and session verb", () => {
+    const owning = catalogCalls().filter((call) => /^\[\s*"(diagram|draft|job|session)"/.test(call.args));
     expect(owning.map((call) => call.fn).sort()).toEqual(
       [
         "diagramCheckout",
@@ -59,6 +59,7 @@ describe("the runner's catalog calls", () => {
         "diagramList",
         "diagramPut",
         "diagramShow",
+        "draftUpsert",
         "jobAccept",
         "jobClaim",
         "jobDiscard",

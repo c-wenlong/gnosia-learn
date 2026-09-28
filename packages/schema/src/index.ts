@@ -46,7 +46,7 @@ import {
   recap,
   review,
 } from "./state";
-import { assetJob, job, session } from "./studio";
+import { assetJob, draft, job, session } from "./studio";
 
 /**
  * Every table, in dependency order: a parent always precedes anything that
@@ -83,6 +83,7 @@ export const tables = {
   progress,
   recap,
   preference,
+  draft,
   job,
   assetJob,
   contentRevision,
@@ -140,7 +141,7 @@ export const OPERATIONAL_TABLES = [
  * half and about a different subject, so `catalog status` counts it apart
  * rather than letting a render failure inflate the learner's row count.
  */
-export const STUDIO_TABLES = ["session", "job", "assetJob"] as const satisfies readonly TableName[];
+export const STUDIO_TABLES = ["session", "draft", "job", "assetJob"] as const satisfies readonly TableName[];
 
 export const STATE_TABLES = [
   "learner",
@@ -155,6 +156,8 @@ export const STATE_TABLES = [
 /* Row and insert types, inferred from the tables above. These are the shapes
  * every consumer should use; hand-written interfaces would drift. */
 
+export type Draft = typeof draft.$inferSelect;
+export type NewDraft = typeof draft.$inferInsert;
 export type Topic = typeof topic.$inferSelect;
 export type NewTopic = typeof topic.$inferInsert;
 export type Concept = typeof concept.$inferSelect;

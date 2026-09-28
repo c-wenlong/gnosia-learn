@@ -267,12 +267,15 @@ prompt.
 - If nothing fits, say so plainly. Never stretch a topic that is about
   something else. Propose a new topic instead: in the same message as the
   brief, a fenced block tagged `topic` holding one JSON object with `slug`,
-  `title`, `domain` (one of the domains in the VOCABULARY block), `summary`,
-  `aliases`, and `relations` (a list of `{"kind": ..., "to": ...}`, where
-  `to` is an existing slug and `kind` is one of the relation kinds the
-  VOCABULARY block uses). Give the brief that slug as its topic, and say in
-  one line where the new topic sits. You cannot create it: the person's press
-  of the Draw button does.
+  `title`, `domain`, `summary`, `aliases`, and `relations` (a list of
+  `{"kind": ..., "to": ...}`, where `to` is an existing slug and `kind` is
+  one of the relation kinds the VOCABULARY block uses). Give the brief that
+  slug as its topic, and say in one line where the new topic sits. You cannot
+  create it: the person's press of the Draw button does.
+- A new topic's `domain` is one of the domains in the VOCABULARY block
+  whenever one fits. Only when none does, name a new domain, lower-case words
+  joined by single hyphens, and say in one line that it is new. Never stretch
+  a domain that is about something else.
 - `concepts` holds only ids listed under the chosen topic, or is empty.
 
 # The brief
@@ -479,7 +482,7 @@ draft's `jobId` (D35). `STUDIO_TABLES` gains `draft`.
 | --- | --- |
 | `open` | A conversation with no valid brief in force |
 | `briefed` | The latest planner reply carried a brief that passed; Draw is live |
-| `drawing` | Its newest job is `queued`, `running`, `awaiting_review` or `interrupted` |
+| `drawing` | Its newest job is `queued`, `running` or `awaiting_review` |
 | `done` | Its newest job was accepted or discarded |
 | `abandoned` | A person closed it for good, or the turn cap was reached with no Draw |
 
@@ -489,19 +492,25 @@ stateDiagram-v2
     open --> briefed: valid brief
     briefed --> open: person asks for a change
     briefed --> drawing: Draw, job queued
-    drawing --> briefed: job failed or cancelled
+    drawing --> briefed: job failed, cancelled or interrupted
     drawing --> done: job accepted or discarded
     done --> open: person asks for another diagram
+    open --> drawing: Resume or Revise of its job
+    done --> drawing: Resume or Revise of its job
     open --> abandoned: Abandon, or turn cap
     briefed --> abandoned: Abandon
     done --> [*]
     abandoned --> [*]
 ```
 
-`drawing` follows the job: the runner moves the draft in the same `finish` that
-writes the job's terminal state. A failed job puts the draft back at `briefed`
-with the gate's findings as a STUDIO note, because the next useful thing is to
-talk about what went wrong.
+`drawing` follows the job: the runner moves the draft when the job's record
+takes its new state, and at start brings every draft up to its newest job,
+since the runner's own reconcile marks a job it found running `interrupted`
+before any draft is listening. A failed, cancelled or interrupted job puts the
+draft back at `briefed` with the gate's findings (or, for an interrupted one,
+the offer to resume it) as a STUDIO note, because the next useful thing is to
+talk about what went wrong. A Resume or a Revise of the job carries its draft,
+so the draft follows the new job.
 
 ### The events a draft appends
 
@@ -724,6 +733,7 @@ C for the chat and planner, M for the manual.
 | C13 | The daily cap is crossed in the middle of a conversation | The turn in flight finishes. The next message is 429. A brief already proposed can still be drawn only when the window allows a job |
 | C14 | Messages arrive while the draft is `drawing` | 409 with "wait for the drawing, or cancel it". Talking about the next diagram while this one draws is an open question |
 | C15 | The claude.ai connectors load into a spawn anyway | `--strict-mcp-config` is what prevents it; a test asserts the init event's `tools` is empty for the planner, and the runner fails the turn with `agent` if it is not |
+| C16 | A runner serving an owner other than `local` meets a brief on a proposed topic | `catalog topic add` writes as the catalog CLI's owner, `local`, and takes no `--owner` yet, so the topic would be filed under the wrong owner. The Draw press refuses before any write with 409 `topic-owner` and a STUDIO note saying so; a brief whose topic already exists draws as usual. Lifted when the topic verbs take `--owner` |
 | M1 | The tldrawkc build changes between two attempts of one job | The session's recorded system prompt is reused on resume, so every attempt of a job reads the manual it started with. `manualHash` on the job says which |
 | M2 | `api --json` names a lint rule the static table does not | The manual carries the generated name with "no fix recorded", `/api/health` reports `manual: stale`, and a test fails in the suite |
 | M3 | A worked snippet stops passing against a new tldrawkc | The snippet test fails. Until it is fixed the manual still ships the snippet, because a slightly wrong example beats none, and `/api/health` says which |
@@ -1024,18 +1034,18 @@ started, `[x]` done.
 Two PRs: 1a is the runner and the catalog (everything up to the routes), 1b is
 the web app. 1b builds against the API table above and lands after 1a.
 
-- [ ] Migration: `draft` (with `owner_id` and `kind`), `job.draft_id`, their
+- [x] Migration: `draft` (with `owner_id` and `kind`), `job.draft_id`, their
       indexes and `CHECK`s; `STUDIO_TABLES` gains `draft`; `catalog draft`
       verbs to upsert and show one, mirroring `catalog job`, each taking
       `--owner`
-- [ ] `services/studio/src/planner.ts`: the spawn with every flag in the
+- [x] `services/studio/src/planner.ts`: the spawn with every flag in the
       planner table, the system prompt assembly with its three blocks, the turn
       loop, the brief extraction and the one automatic retry
-- [ ] `services/studio/src/drafts.ts`: the disk record, the transcript, the
+- [x] `services/studio/src/drafts.ts`: the disk record, the transcript, the
       reconcile pass for an interrupted turn, the turn cap
-- [ ] Per-turn spend entries in `spendWindow`; `/api/health` counts them
-- [ ] The draft routes, and `draftId` on `POST /api/jobs`
-- [ ] A proposed topic: the `topic` block parsed, `catalog topic add
+- [x] Per-turn spend entries in `spendWindow`; `/api/health` counts them
+- [x] The draft routes, and `draftId` on `POST /api/jobs`
+- [x] A proposed topic: the `topic` block parsed, `catalog topic add
       --dry-run --json` run on it, stored as `pending_topic`, and created by
       `catalog topic add` on the Draw press before the enqueue
 - [ ] `Composer` extracted from `TutorChat` into `components/ui/`, and
