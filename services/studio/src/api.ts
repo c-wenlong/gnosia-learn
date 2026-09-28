@@ -515,10 +515,10 @@ async function handle(
     }
 
     case "POST revise":
-      return revise(request, response, runner, record);
+      return revise(request, response, runner, record, drafts);
 
     case "POST resume":
-      return resume(response, runner, record);
+      return resume(response, runner, record, drafts);
 
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`);
@@ -607,6 +607,22 @@ async function postJob(
 }
 
 /**
+ * The draft a Revise or a Resume carries: the parent job's, while that
+ * conversation is still there and open to it. The new job is then the draft's
+ * newest, and the draft follows it.
+ */
+function carriedDraft(record: JobRecord, drafts: Drafts | undefined): string | null {
+  const id = record.draftId ?? null;
+  if (id === null || drafts === undefined) return null;
+  const draft = drafts.get(id);
+  return draft === undefined || draft.state === "abandoned" ? null : id;
+}
+
+async function followedBy(drafts: Drafts | undefined, job: JobRecord): Promise<void> {
+  if (drafts !== undefined && job.draftId !== null && job.draftId !== undefined) await drafts.markDrawing(job.draftId, job.id);
+}
+
+/**
  * `revise` makes a new job that resumes the old one's agent session.
  *
  * Not a transition on the old row, because there is no edge back to `queued`
@@ -630,6 +646,7 @@ async function revise(
   response: ServerResponse,
   runner: Runner,
   record: JobRecord,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   let body: { changes?: unknown };
   try {
@@ -661,7 +678,9 @@ async function revise(
         idempotencyKey: `${record.idempotencyKey}:revise:${Date.now()}`,
       },
       { jobId: record.id, agentSessionId: record.agentSessionId, changes },
+      { draftId: carriedDraft(record, drafts) },
     );
+    await followedBy(drafts, next);
     return send(response, 201, {
       jobId: next.id,
       state: next.state,
@@ -705,6 +724,7 @@ async function resume(
   response: ServerResponse,
   runner: Runner,
   record: JobRecord,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   if (record.state !== "interrupted") {
     return fail(
@@ -736,7 +756,9 @@ async function resume(
         idempotencyKey: `${record.idempotencyKey}:resume:${record.finishedAt ?? record.id}`,
       },
       { jobId: record.id, agentSessionId: record.agentSessionId, changes: null },
+      { draftId: carriedDraft(record, drafts) },
     );
+    await followedBy(drafts, next);
     return send(response, 201, {
       jobId: next.id,
       state: next.state,

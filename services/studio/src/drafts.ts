@@ -133,6 +133,8 @@ export interface DraftRecord {
   spend: TurnSpend[];
   /** Every job this draft started, oldest first. The last is the draft's `jobId` (D35). */
   jobIds: string[];
+  /** The last job verdict this draft acted on, so no verdict is acted on twice. */
+  followed?: { jobId: string; state: string } | null;
   catalogErrors: string[];
   createdAt: string;
   updatedAt: string;
@@ -1254,16 +1256,28 @@ export class Drafts {
     }
   }
 
-  /** A job was queued for this draft: it is drawing now. */
+  /**
+   * A job was queued for this draft: it is drawing now. Also the Resume and
+   * Revise of a draft's job, which carry its draft.
+   *
+   * The job can already be over by the time this runs: `runner.enqueue`
+   * starts it, and a spawn that fails or a cancel can finish it before the
+   * draft records its id, when `onJobState` still ignores it as not the
+   * draft's newest. So once the id is recorded, the job's state as it is now
+   * is applied too.
+   */
   async markDrawing(id: string, jobId: string): Promise<void> {
     await this.write(id, async () => {
       const record = this.require(id);
-      if (record.jobIds.includes(jobId)) return;
-      await this.append(id, { type: "draw", jobId });
-      await this.save(id, {
-        state: canTransition(DRAFT_TRANSITIONS, record.state, "drawing") ? "drawing" : record.state,
-        jobIds: [...record.jobIds, jobId],
-      });
+      if (!record.jobIds.includes(jobId)) {
+        await this.append(id, { type: "draw", jobId });
+        await this.save(id, {
+          state: canTransition(DRAFT_TRANSITIONS, record.state, "drawing") ? "drawing" : record.state,
+          jobIds: [...record.jobIds, jobId],
+        });
+      }
+      const job = this.store.get(jobId);
+      if (job !== undefined) await this.applyJob(id, job);
     });
   }
 
@@ -1272,40 +1286,75 @@ export class Drafts {
   /* ------------------------------------------------------------------ */
 
   /**
-   * `drawing` follows the job. A failed or cancelled drawing puts the draft
-   * back at `briefed` with what went wrong as a STUDIO note, because the next
-   * useful thing is to talk about it; an accepted or discarded one is `done`,
-   * and an accept tells the planner the diagram now exists and what was drawn.
+   * After a start: bring every draft up to its jobs, which the runner's own
+   * reconcile has already moved (a job it found running is `interrupted`)
+   * before any draft was listening. A job that names a draft the draft never
+   * recorded (the runner died between the enqueue and `markDrawing`) is
+   * recorded now, and the newest job's state is applied.
+   */
+  async syncFromJobs(): Promise<void> {
+    for (const record of [...this.records.values()]) {
+      const jobs = this.store
+        .list()
+        .filter((job) => job.draftId === record.id)
+        .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+      if (jobs.length === 0) continue;
+      await this.write(record.id, async () => {
+        const current = this.require(record.id);
+        const missing = jobs.filter((job) => !current.jobIds.includes(job.id)).map((job) => job.id);
+        if (missing.length > 0) await this.save(record.id, { jobIds: [...current.jobIds, ...missing] });
+        const newest = this.store.get(this.require(record.id).jobIds.at(-1) ?? "");
+        if (newest === undefined) return;
+        const now = this.require(record.id);
+        if (ACTIVE_JOB.includes(newest.state) && now.state !== "drawing" && canTransition(DRAFT_TRANSITIONS, now.state, "drawing")) {
+          await this.save(record.id, { state: "drawing" });
+        }
+        await this.applyJob(record.id, newest);
+      });
+    }
+  }
+
+  /**
+   * `drawing` follows the job. A failed, cancelled or interrupted drawing puts
+   * the draft back at `briefed` with what went wrong as a STUDIO note, because
+   * the next useful thing is to talk about it (an interrupted one can still be
+   * resumed from the job, which moves the draft back to `drawing`); an
+   * accepted or discarded one is `done`, and an accept tells the planner the
+   * diagram now exists and what was drawn.
    */
   private async onJobState(job: JobRecord, from: string): Promise<void> {
-    const id = job.draftId;
-    if (id === null || id === undefined) return;
-    const record = this.records.get(id);
-    if (record === undefined || record.jobIds.at(-1) !== job.id) return;
     void from;
-    const verdicts = ["failed", "cancelled", "accepted", "discarded"];
-    if (!verdicts.includes(job.state)) return;
-    await this.write(id, async () => {
-      await this.append(id, { type: "job", jobId: job.id, state: job.state });
-      const current = this.require(id);
-      if (job.state === "failed" || job.state === "cancelled") {
-        const findings = job.gate?.findings ?? [];
-        await this.note(
-          id,
-          `The drawing of ${job.slug} ${job.state === "failed" ? "failed" : "was cancelled"}: ` +
-            `${findings.length > 0 ? findings.join(" ") : (job.error ?? "no reason recorded")} ` +
-            `The brief is unchanged; say what to change, or press Draw again.`,
-        );
-        if (current.state === "drawing") await this.save(id, { state: "briefed" });
-        return;
-      }
-      if (job.state === "accepted") {
-        await this.note(id, acceptedNote(job));
-      } else {
-        await this.note(id, `The drawing of ${job.slug} was discarded; nothing landed.`);
-      }
-      if (current.state === "drawing") await this.save(id, { state: "done" });
-    });
+    const id = job.draftId;
+    if (id === null || id === undefined || !this.records.has(id)) return;
+    await this.write(id, () => this.applyJob(id, job));
+  }
+
+  /** Act on a job's state, once per verdict, if it is the draft's newest job. Call inside `write`. */
+  private async applyJob(id: string, job: JobRecord): Promise<void> {
+    const current = this.require(id);
+    if (current.jobIds.at(-1) !== job.id || !JOB_VERDICTS.includes(job.state)) return;
+    if (current.followed?.jobId === job.id && current.followed.state === job.state) return;
+    await this.append(id, { type: "job", jobId: job.id, state: job.state });
+    const followed = { jobId: job.id, state: job.state };
+    if (job.state === "failed" || job.state === "cancelled" || job.state === "interrupted") {
+      const findings = job.gate?.findings ?? [];
+      const what =
+        job.state === "failed" ? "failed" : job.state === "cancelled" ? "was cancelled" : "was interrupted: the studio stopped while it ran";
+      await this.note(
+        id,
+        `The drawing of ${job.slug} ${what}. ` +
+          (job.state === "interrupted"
+            ? "Resume it from the job, or press Draw again."
+            : `${findings.length > 0 ? findings.join(" ") : (job.error ?? "no reason recorded")} ` +
+              `The brief is unchanged; say what to change, or press Draw again.`),
+      );
+      const now = this.require(id);
+      await this.save(id, { followed, ...(now.state === "drawing" ? { state: "briefed" as const } : {}) });
+      return;
+    }
+    await this.note(id, job.state === "accepted" ? acceptedNote(job) : `The drawing of ${job.slug} was discarded; nothing landed.`);
+    const now = this.require(id);
+    await this.save(id, { followed, ...(now.state === "drawing" ? { state: "done" as const } : {}) });
   }
 
   /* ------------------------------------------------------------------ */
@@ -1344,6 +1393,12 @@ export class Drafts {
 /* -------------------------------------------------------------------------- */
 /* Pure helpers                                                               */
 /* -------------------------------------------------------------------------- */
+
+/** Job states a draft acts on: the verdicts, and a job the runner died under. */
+const JOB_VERDICTS: readonly string[] = ["failed", "cancelled", "interrupted", "accepted", "discarded"];
+
+/** Job states that hold the draft at `drawing`. */
+const ACTIVE_JOB: readonly string[] = ["queued", "running", "awaiting_review"];
 
 function safeJson(line: string): Record<string, unknown> | null {
   try {

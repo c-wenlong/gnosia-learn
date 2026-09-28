@@ -7,6 +7,8 @@ import path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
+import { candidatePath, candidateSvgPath, targetPath, targetSvgPath } from "../src/paths";
+import type { JobRecord } from "../src/store";
 import { topicListAnswer } from "./vocabulary";
 import { until } from "./wait";
 
@@ -69,6 +71,7 @@ let server: Server;
 let base: string;
 let drafts: InstanceType<typeof Drafts>;
 let runner: InstanceType<typeof Runner>;
+let store: InstanceType<typeof JobStore>;
 
 const post = (route: string, body: unknown) =>
   fetch(`${base}${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -85,7 +88,7 @@ beforeEach(async () => {
     fn.mockReset().mockResolvedValue(ok());
   }
   canvasMock.doctor.mockReset().mockResolvedValue({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
-  const store = new JobStore();
+  store = new JobStore();
   runner = new Runner(store);
   drafts = new Drafts(store, runner);
   runner.extraSpend = () => drafts.spendEntries();
@@ -214,5 +217,65 @@ describe("the draft routes", () => {
     expect(health.plannerTurnsLast24h).toBe(1);
     expect(health.plannerCostLast24h).toBeCloseTo(0.03, 6);
     expect(health.costLast24h).toBeCloseTo(0.03, 6);
+  });
+});
+
+describe("resume and revise carry the draft", () => {
+  it("a resumed interrupted job is the draft's newest, and the draft follows it", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await drafts.settled(draftId);
+
+    // The draft's job, as the runner's reconcile leaves it after a restart.
+    const jobId = "job-interrupted";
+    const at = new Date().toISOString();
+    await store.create({
+      id: jobId,
+      kind: "diagram",
+      state: "interrupted",
+      phase: "drawing",
+      brief: { ...good, concepts: [], model: "sonnet", idempotencyKey: "parent-key" },
+      targetPath: targetPath(good.slug),
+      targetSvgPath: targetSvgPath(good.slug),
+      candidatePath: candidatePath(jobId, good.slug),
+      candidateSvgPath: candidateSvgPath(jobId, good.slug),
+      topic: good.topic,
+      slug: good.slug,
+      attempt: 1,
+      sessionId: `studio-${jobId}`,
+      agentSessionId: "77777777-7777-4777-8777-777777777777",
+      parentJobId: null,
+      draftId,
+      changes: null,
+      idempotencyKey: "parent-key",
+      targetHashBefore: null,
+      requestedAt: at,
+      startedAt: at,
+      finishedAt: at,
+      reviewedAt: null,
+      heartbeatAt: null,
+      cancelRequestedAt: null,
+      exitCode: null,
+      turns: null,
+      costUsd: null,
+      costSource: null,
+      gate: null,
+      errorKind: "interrupted",
+      error: "the runner died while this job was running",
+      written: [],
+      indexed: false,
+      catalogErrors: [],
+    } as JobRecord);
+    await drafts.markDrawing(draftId, jobId);
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)?.state).toBe("briefed");
+
+    const resumed = await post(`/api/jobs/${jobId}/resume`, {});
+    expect(resumed.status).toBe(201);
+    const next = ((await resumed.json()) as { jobId: string }).jobId;
+    expect(store.get(next)?.draftId).toBe(draftId);
+    expect(drafts.get(draftId)).toMatchObject({ state: "drawing", jobIds: [jobId, next] });
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the resumed job never reached its agent");
   });
 });

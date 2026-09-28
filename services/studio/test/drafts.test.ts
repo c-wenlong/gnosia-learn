@@ -491,3 +491,75 @@ describe("the job a draft follows", () => {
     expect(drafts.get(record.id)?.state).toBe("open");
   });
 });
+
+describe("following the job when the draft was not listening", () => {
+  const jobFor = (id: string, draftId: string, state: string) => ({
+    id,
+    state,
+    slug: "tcp-congestion-window",
+    topic: "tcp-congestion-control",
+    draftId,
+    brief: { ...good, model: "sonnet" },
+    gate: null,
+    error: null,
+    requestedAt: new Date().toISOString(),
+  });
+
+  it("applies a job that finished before the draft recorded its id", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    runner.enqueue.mockImplementationOnce(async () => {
+      // The spawn failed at once: terminal before `draw` gets its answer.
+      await mkdir(path.join(process.env.STUDIO_HOME!, "jobs", "job-fast", "scratch"), { recursive: true });
+      await store.create(jobFor("job-fast", record.id, "running") as never);
+      await store.update("job-fast", { state: "failed", error: "the agent never started" });
+      return { record: store.get("job-fast"), created: true, jobsAhead: 0 };
+    });
+    await drafts.draw(record.id, "p");
+    await drafts.settled(record.id);
+    const view = await drafts.view(record.id);
+    expect(view.state).toBe("briefed");
+    expect(view.transcript.at(-1)?.text).toContain("the agent never started");
+    // Acted on once, not once from the listener and again from the re-check.
+    expect(view.transcript.filter((entry) => entry.role === "studio")).toHaveLength(1);
+  });
+
+  it("brings a drawing draft to briefed on start when the runner found its job running and marked it interrupted", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    const { jobId } = await drafts.draw(record.id, "p");
+    expect(drafts.get(record.id)?.state).toBe("drawing");
+    await drafts.settled(record.id);
+
+    // A restart: the runner's reconcile writes `interrupted` before any draft listens.
+    await mkdir(path.join(process.env.STUDIO_HOME!, "jobs", jobId, "scratch"), { recursive: true });
+    const restartedStore = new JobStore();
+    await restartedStore.create(jobFor(jobId, record.id, "interrupted") as never);
+    store = restartedStore;
+    const restarted = build();
+    await restarted.load();
+    await restarted.syncFromJobs();
+    await restarted.settled(record.id);
+    const view = await restarted.view(record.id);
+    expect(view.state).toBe("briefed");
+    expect(view.transcript.at(-1)?.text).toMatch(/was interrupted[\s\S]*Resume it from the job/);
+    drafts = restarted;
+  });
+
+  it("records a job the draft never heard of, when the runner died between the enqueue and markDrawing", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    await mkdir(path.join(process.env.STUDIO_HOME!, "jobs", "job-lost", "scratch"), { recursive: true });
+    await store.create(jobFor("job-lost", record.id, "running") as never);
+    const restarted = build();
+    await restarted.load();
+    await restarted.syncFromJobs();
+    await restarted.settled(record.id);
+    expect(restarted.get(record.id)).toMatchObject({ state: "drawing", jobIds: ["job-lost"] });
+    await restarted.drain();
+  });
+});
+

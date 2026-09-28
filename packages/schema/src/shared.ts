@@ -453,10 +453,13 @@ export type DraftErrorKind = (typeof DRAFT_ERROR_KINDS)[number];
  * transition, so neither state lists itself.
  */
 export const DRAFT_TRANSITIONS: Readonly<Record<DraftState, readonly DraftState[]>> = {
-  open: ["briefed", "abandoned"],
+  // `open -> drawing` and `done -> drawing` are a Resume or a Revise from the
+  // job panel, which carry the job's draft: the conversation follows the new
+  // job whatever it was doing when the button was pressed.
+  open: ["briefed", "drawing", "abandoned"],
   briefed: ["open", "drawing", "abandoned"],
   drawing: ["briefed", "done"],
-  done: ["open"],
+  done: ["open", "drawing"],
   abandoned: [],
 };
 

@@ -47,6 +47,9 @@ async function main(): Promise<void> {
   if (cut.length > 0) {
     process.stdout.write(`marked ${cut.length} planner turn${cut.length === 1 ? "" : "s"} cut off: ${cut.join(", ")}\n`);
   }
+  // The runner's reconcile ran before any draft was listening, so each draft
+  // is brought up to its newest job here, an interrupted one included.
+  await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
 
   const mirrors = new Mirrors();
