@@ -12,9 +12,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
-import { posterId, uploadAssets } from "../src/content/asset-upload";
+import { posterId, unhookPosters, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
+import { latestRevisions, lockEntity } from "../src/content/revisions";
 import { writeContents } from "../src/content/write";
+import { connect } from "../src/db";
 import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
 import {
   applyMigrations,
@@ -340,6 +342,73 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
       "1 poster(s) unhooked from a re-rendered video; the next `catalog asset upload` cuts new ones",
     );
     expect(await derivedFrom(poster)).toEqual([]);
+  });
+
+  it("leaves a poster an upload relinked after the import's snapshot as the upload made it, and does not fail", async () => {
+    const id = "manimkc:out/demo/one/one.mp4";
+    const poster = posterId(id);
+    // A hooked poster, then a re-render linked without the unhook, so the
+    // poster is stale by the revisions.
+    await upload();
+    expect(await derivedFrom(poster)).toEqual([id]);
+    await writeFile(videoFile, "fifth render");
+    const stored = await uploadBlob(scratch.db, openBlobStore(), { ownerId: "local", file: videoFile, mime: "video/mp4", ext: "mp4" });
+    const base = async (entity: string) => (await latestRevisions(scratch.db, "asset", [entity])).get(entity)?.id ?? null;
+    const rest: Record<string, unknown> = { ...(await video()) };
+    delete rest["createdAt"];
+    delete rest["updatedAt"];
+    await writeContents(scratch.db, [
+      {
+        type: "asset",
+        id,
+        next: { row: { ...rest, blobKey: stored.key, contentHash: stored.sha256, bytes: stored.bytes }, links: { asset_topic: [{ topicSlug: "agent-tool-use-and-reasoning-loops" }] } },
+        base: await base(id),
+        author: "test",
+        authorKind: "import",
+        reason: "a re-render linked, its unhook not yet run",
+      },
+    ]);
+    const recut = await storedBlob(scratch.db, "a poster recut from the fifth render", "jpg");
+
+    // An upload that recuts the poster holds its lock; the unhook reads its
+    // snapshot, then waits on that lock; the upload commits its relink; the
+    // unhook's write, based on the snapshot, is then refused.
+    const other = connect({ url: scratch.url, max: 2 });
+    try {
+      let unhooking: ReturnType<typeof unhookPosters> | undefined;
+      await other.db.transaction(async (tx) => {
+        await lockEntity(tx, "asset", poster);
+        unhooking = unhookPosters(scratch.db, [id], { author: "test", reason: "an import racing an upload" });
+        for (let tries = 0; ; tries += 1) {
+          const { rows } = await other.db.execute<{ waiting: number }>(
+            sql`select count(*)::int as waiting from pg_locks where locktype = 'advisory' and not granted`,
+          );
+          if ((rows[0]?.waiting ?? 0) > 0) break;
+          if (tries > 200) throw new Error("the unhook never waited on the poster's lock");
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        const [row] = await tx.select().from(asset).where(eq(asset.id, poster));
+        const posterRest: Record<string, unknown> = { ...row };
+        delete posterRest["createdAt"];
+        delete posterRest["updatedAt"];
+        await writeContents(tx, [
+          {
+            type: "asset",
+            id: poster,
+            next: { row: { ...posterRest, blobKey: recut }, links: { asset_derivation: [{ sourceAssetId: id }] } },
+            base: (await latestRevisions(tx, "asset", [poster])).get(poster)?.id ?? null,
+            author: "test",
+            authorKind: "import",
+            reason: "an upload recutting the poster from the fifth render",
+          },
+        ]);
+      });
+      expect(await unhooking).toEqual({ unhooked: [], moved: [poster] });
+    } finally {
+      await other.close();
+    }
+    expect(await derivedFrom(poster)).toEqual([id]);
+    expect((await scratch.db.select().from(asset).where(eq(asset.id, poster)))[0]?.blobKey).toBe(recut);
   });
 });
 
