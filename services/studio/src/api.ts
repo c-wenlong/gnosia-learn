@@ -543,15 +543,31 @@ async function postJob(
   const draftId = typeof (body as { draftId?: unknown } | null)?.draftId === "string"
     ? ((body as { draftId: string }).draftId.trim() || null)
     : null;
+  let release: () => void = () => undefined;
   if (draftId !== null) {
     if (drafts === undefined) return fail(response, 404, `no draft ${draftId}`);
     try {
-      drafts.assertDrawable(draftId);
+      // Held until the job is recorded on the draft, as a Draw press is.
+      release = drafts.claimForJob(draftId);
     } catch (error) {
       if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
       throw error;
     }
   }
+  try {
+    await enqueueChecked(response, body, runner, drafts, draftId);
+  } finally {
+    release();
+  }
+}
+
+async function enqueueChecked(
+  response: ServerResponse,
+  body: unknown,
+  runner: Runner,
+  drafts: Drafts | undefined,
+  draftId: string | null,
+): Promise<void> {
 
   // Read apart from the validation, because failing to read it is not the
   // brief's fault: with the catalog down and no cached copy (D13), nothing can

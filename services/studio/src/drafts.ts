@@ -278,6 +278,14 @@ export class Drafts {
   private readonly live = new Map<string, { turn: number; text: string }>();
   /** Mirrors in flight, and whether another write arrived while one ran. */
   private readonly mirroring = new Map<string, { again: boolean; done: Promise<void> }>();
+  /**
+   * The Draw press in progress on each draft, with its key. Held from the
+   * press to the job being recorded, so neither a planner turn nor a second
+   * press can run beside it: a turn could otherwise move the draft while the
+   * topic, the doctor and the enqueue are awaited, and a second press would
+   * create the topic twice and queue a second job.
+   */
+  private readonly draws = new Map<string, { key: string; result: Promise<{ jobId: string; created: boolean }> }>();
   private draining = false;
 
   constructor(
@@ -789,6 +797,11 @@ export class Drafts {
     if (record.inFlight !== null || this.turnsInFlight.has(id)) {
       throw new JobRefused(409, "the planner is still answering the last message", { reason: "in-flight" });
     }
+    if (this.draws.has(id)) {
+      throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+        reason: "draw-in-progress",
+      });
+    }
     if (record.state === "drawing") {
       throw new JobRefused(409, "a drawing from this conversation is in progress: wait for the drawing, or cancel it", {
         reason: "drawing",
@@ -931,9 +944,12 @@ export class Drafts {
       return;
     }
     if (verdict.kind !== "valid") return;
+    if (record.state === "done") await this.save(id, { state: "open" });
     await this.append(id, { type: "brief", replySeq, brief: verdict.brief, pendingTopic: verdict.pendingTopic });
     await this.save(id, {
-      state: "briefed",
+      // A drawing in flight keeps the draft at `drawing`; the new brief is
+      // what the next Draw draws once that job is over.
+      state: record.state === "drawing" ? "drawing" : "briefed",
       brief: verdict.brief,
       briefAt: new Date().toISOString(),
       pendingTopic: verdict.pendingTopic,
@@ -1143,29 +1159,22 @@ export class Drafts {
     if (key === null) throw new JobRefused(400, `"idempotencyKey" is required: it is what makes a second press safe`, { field: "idempotencyKey" });
     if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
     const jobKey = `draft:${id}:${key}`;
-    // A repeated press answers with the job the first one made.
+    // A repeated press answers with the job the first one made, whether that
+    // press is over or still running.
     const repeated = this.store.byIdempotencyKey(jobKey);
     if (repeated !== undefined && repeated.draftId === id) return { jobId: repeated.id, created: false };
+    const pressing = this.draws.get(id);
+    if (pressing !== undefined) {
+      if (pressing.key !== jobKey) {
+        throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+          reason: "draw-in-progress",
+        });
+      }
+      const first = await pressing.result;
+      return { jobId: first.jobId, created: false };
+    }
     if (record.inFlight !== null || this.turnsInFlight.has(id)) {
       throw new JobRefused(409, "the planner is still answering; Draw once its reply is in", { reason: "in-flight" });
-    }
-    if (record.state === "briefed" && record.pendingTopic !== null && studioOwner() !== LOCAL_LEARNER_ID) {
-      // C16: `catalog topic add` writes as the catalog CLI's owner, `local`,
-      // and takes no `--owner` yet, so another owner's topic would be filed
-      // under `local`. Refused before anything is written; a brief on a topic
-      // that exists still draws.
-      const refusal = new JobRefused(
-        409,
-        `this studio serves an owner other than "${LOCAL_LEARNER_ID}", and a new topic can only be created ` +
-          `as "${LOCAL_LEARNER_ID}" until \`catalog topic add\` takes an owner. Nothing was written. Ask the planner ` +
-          `for a brief under a topic that exists, or add "${record.pendingTopic.entry.slug}" by hand.`,
-        { reason: "topic-owner", topic: record.pendingTopic.entry.slug },
-      );
-      await this.write(id, async () => {
-        await this.append(id, { type: "draw", refused: { status: refusal.status, error: refusal.message, detail: refusal.detail } });
-        await this.note(id, `Draw was refused: ${refusal.message}`);
-      });
-      throw refusal;
     }
     if (record.state !== "briefed" || record.brief === null) {
       throw new JobRefused(
@@ -1176,6 +1185,18 @@ export class Drafts {
         { reason: "not-briefed", state: record.state },
       );
     }
+    // Registered before the first await, so a turn or a second press in the
+    // same tick sees it.
+    const result = this.pressDraw(id, jobKey);
+    this.draws.set(id, { key: jobKey, result });
+    try {
+      return await result;
+    } finally {
+      this.draws.delete(id);
+    }
+  }
+
+  private async pressDraw(id: string, jobKey: string): Promise<{ jobId: string; created: boolean }> {
     try {
       return await this.drawBriefed(id, jobKey);
     } catch (error) {
@@ -1192,9 +1213,29 @@ export class Drafts {
   private async drawBriefed(id: string, jobKey: string): Promise<{ jobId: string; created: boolean }> {
     const record = this.require(id);
     const brief = record.brief!;
+    const pending = record.pendingTopic;
 
-    // A8, as `POST /api/jobs` refuses it, and before the topic is created:
-    // a press that can only fail should leave the vocabulary as it found it.
+    if (pending !== null && studioOwner() !== LOCAL_LEARNER_ID) {
+      // C16: `catalog topic add` writes as the catalog CLI's owner, `local`,
+      // and takes no `--owner` yet, so another owner's topic would be filed
+      // under `local`. Refused before anything is written; a brief on a topic
+      // that exists still draws.
+      throw new JobRefused(
+        409,
+        `this studio serves an owner other than "${LOCAL_LEARNER_ID}", and a new topic can only be created ` +
+          `as "${LOCAL_LEARNER_ID}" until \`catalog topic add\` takes an owner. Nothing was written. Ask the planner ` +
+          `for a brief under a topic that exists, or add "${pending.entry.slug}" by hand.`,
+        { reason: "topic-owner", topic: pending.entry.slug },
+      );
+    }
+
+    // Everything the enqueue would refuse on is asked first, so a press that
+    // can only fail leaves no topic behind: the doctor (A8), the brief against
+    // the vocabulary (widened with a proposed topic, in memory), the lease,
+    // the mode against what exists, and the cap. The enqueue asks again, and
+    // the catalog can still refuse in a race with another process taking the
+    // target; a topic created just before that refusal stays, and the next
+    // press draws under it.
     const checked = await doctor();
     if (checked.code !== 0) {
       throw new JobRefused(503, "tldrawkc cannot run on this machine, so nothing was queued", {
@@ -1202,28 +1243,44 @@ export class Drafts {
         fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
       });
     }
-
-    if (record.pendingTopic !== null) await this.createTopic(id, record.pendingTopic);
-
-    let vocabulary: Vocabulary;
-    try {
-      vocabulary = await loadVocabulary();
-    } catch (error) {
-      throw vocabularyDown(error);
-    }
     // C8: a flowchart the person pasted rides along, never through the planner.
     const mermaid = await this.latestMermaid(id);
-    let valid: ValidBrief;
-    try {
-      valid = validateBrief({ ...brief, ...(mermaid === null ? {} : { mermaid }), idempotencyKey: jobKey }, vocabulary);
-    } catch (error) {
-      if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
-      throw error;
-    }
+    const posted = { ...brief, ...(mermaid === null ? {} : { mermaid }), idempotencyKey: jobKey };
+    const check = async (widen: PendingTopic | null): Promise<ValidBrief> => {
+      let vocabulary: Vocabulary;
+      try {
+        vocabulary = await loadVocabulary();
+      } catch (error) {
+        throw vocabularyDown(error);
+      }
+      if (widen !== null && !vocabulary.topics.has(widen.entry.slug)) {
+        vocabulary = {
+          ...vocabulary,
+          topics: new Map([...vocabulary.topics, [widen.entry.slug, { title: widen.entry.title, concepts: [] }]]),
+        };
+      }
+      try {
+        return validateBrief(posted, vocabulary);
+      } catch (error) {
+        if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
+        throw error;
+      }
+    };
+    await check(pending);
+    await this.runner.admit(brief);
 
-    // The row the job's `draft_id` names has to be there first.
+    if (pending !== null) await this.createTopic(id, pending);
+    const valid = await check(null);
+
+    // The row the job's `draft_id` names has to be there first. A mirror that
+    // failed while Postgres was down left no row, and nothing since may have
+    // asked for another, so this one is fresh rather than awaited.
     await this.chains.get(id);
     await this.mirrored(id);
+    const row = await draftUpsert(draftJsonPath(id)).catch(
+      (error: unknown): CatalogResult => ({ ok: false, json: null, error: (error as Error).message, offline: true }),
+    );
+    if (!row.ok) await this.noteCatalogError(id, row.error ?? "catalog draft upsert failed");
 
     const { record: job, created } = await this.runner.enqueue(valid, undefined, { draftId: id });
     await this.markDrawing(id, job.id);
@@ -1280,10 +1337,12 @@ export class Drafts {
   }
 
   /**
-   * Refuse a `POST /api/jobs` naming this draft unless the draft could draw:
-   * it exists and is `briefed`.
+   * A `POST /api/jobs` naming this draft: refused unless the draft could draw
+   * (it exists, it is `briefed`, and no turn or press is running on it), and
+   * then held as a press would be until `release` is called, so nothing can
+   * move the draft while that job is queued.
    */
-  assertDrawable(id: string): void {
+  claimForJob(id: string): () => void {
     const record = this.require(id);
     if (record.state !== "briefed") {
       throw new JobRefused(409, `draft ${id} is ${record.state}, and only a briefed draft can start a job`, {
@@ -1291,6 +1350,21 @@ export class Drafts {
         state: record.state,
       });
     }
+    if (record.inFlight !== null || this.turnsInFlight.has(id)) {
+      throw new JobRefused(409, "the planner is still answering on this draft", { reason: "in-flight" });
+    }
+    if (this.draws.has(id)) {
+      throw new JobRefused(409, "Draw was just pressed on this conversation", { reason: "draw-in-progress" });
+    }
+    let release: () => void = () => undefined;
+    const held = new Promise<{ jobId: string; created: boolean }>((resolve) => {
+      release = () => resolve({ jobId: "", created: false });
+    });
+    this.draws.set(id, { key: `job-route:${randomUUID()}`, result: held });
+    return () => {
+      release();
+      this.draws.delete(id);
+    };
   }
 
   /**

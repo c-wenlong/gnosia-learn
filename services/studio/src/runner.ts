@@ -308,24 +308,20 @@ export class Runner {
   }
 
   /**
-   * Record the job on disk, then in Postgres, then wake the queue.
+   * Every refusal `enqueue` makes about a brief before it writes anything: the
+   * lease another job holds on the target, the mode against what the catalog
+   * (or, with it down, the checkout) says exists, and the daily cap. Returns
+   * what the job starts from.
    *
-   * That order is rule 7, and the refusals are checked in the order that costs
-   * least: an idempotency key that already exists returns its job, a target
-   * another job is holding is a 409 naming the holder, and only then does the
-   * catalog get asked — where the same two rules are enforced again by a unique
-   * index that does not depend on this process being the only one.
+   * Public so a caller about to do something that cannot be undone first (the
+   * Draw press creating a proposed topic) can ask the same questions first.
+   * `enqueue` asks them again, and the catalog's own lease can still refuse a
+   * job that passed here, if another process takes the target in between:
+   * that is a race these checks narrow and do not close.
    */
-  async enqueue(
-    brief: ValidBrief,
-    parent?: ParentJob,
-    options: { draftId?: string | null } = {},
-  ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
-    const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
-    if (existing !== undefined) {
-      return { record: existing, created: false, jobsAhead: this.queued().length };
-    }
-
+  async admit(
+    brief: Pick<ValidBrief, "slug" | "mode">,
+  ): Promise<{ exists: boolean; revision: number | null | undefined; hash: string | null }> {
     const target = targetPath(brief.slug);
     const holder = this.store.activeOn(target);
     if (holder !== undefined) {
@@ -362,6 +358,30 @@ export class Runner {
     // model, the turn cap, three attempts, the ceiling, and the recorded
     // figure — all still fire where they already did, and none of them moved.
     this.assertUnderCap();
+    return base;
+  }
+
+  /**
+   * Record the job on disk, then in Postgres, then wake the queue.
+   *
+   * That order is rule 7, and the refusals are checked in the order that costs
+   * least: an idempotency key that already exists returns its job, a target
+   * another job is holding is a 409 naming the holder, and only then does the
+   * catalog get asked — where the same two rules are enforced again by a unique
+   * index that does not depend on this process being the only one.
+   */
+  async enqueue(
+    brief: ValidBrief,
+    parent?: ParentJob,
+    options: { draftId?: string | null } = {},
+  ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
+    const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
+    if (existing !== undefined) {
+      return { record: existing, created: false, jobsAhead: this.queued().length };
+    }
+
+    const target = targetPath(brief.slug);
+    const base = await this.admit(brief);
 
     const id = randomUUID();
     const record: JobRecord = {

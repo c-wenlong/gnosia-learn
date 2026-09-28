@@ -70,6 +70,7 @@ let store: InstanceType<typeof JobStore>;
 let drafts: DraftsT;
 let runner: {
   enqueue: ReturnType<typeof vi.fn>;
+  admit: ReturnType<typeof vi.fn>;
   assertUnderCap: ReturnType<typeof vi.fn>;
   canvasOpen: () => boolean;
 };
@@ -107,6 +108,7 @@ beforeEach(async () => {
       };
       return { record, created: true, jobsAhead: 0 };
     }),
+    admit: vi.fn(async () => ({ exists: false, revision: null, hash: null })),
     assertUnderCap: vi.fn(),
     canvasOpen: () => false,
   };
@@ -333,6 +335,80 @@ describe("a proposed topic", () => {
     const view = await drafts.view(record.id);
     expect(view.state).toBe("briefed");
     expect(view.transcript.at(-1)).toMatchObject({ role: "studio", text: expect.stringContaining("no such domain") });
+  });
+});
+
+describe("a Draw press", () => {
+  it("holds the draft: no turn beside it, one topic and one job for two presses of one key, and 409 for another key", async () => {
+    await fake.script([{ text: withTopic({ ...good, topic: "mesh-vpn" }) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "tailscale tunnels");
+    catalogMock.topicAdd.mockImplementation(async () => {
+      catalogMock.topicList.mockResolvedValue(
+        topicListAnswer([...TOPICS, { ...newTopic, maps: { manimkc: [], courses: [], concepts: [] }, incoming: [] }]),
+      );
+      return ok();
+    });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    runner.enqueue.mockImplementationOnce(async (valid: { idempotencyKey: string }) => {
+      await gate;
+      return { record: { id: "job-held", state: "queued", draftId: record.id, idempotencyKey: valid.idempotencyKey }, created: true, jobsAhead: 0 };
+    });
+    const first = drafts.draw(record.id, "press");
+    const second = drafts.draw(record.id, "press");
+    await expect(drafts.draw(record.id, "another")).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
+    await expect(drafts.send(record.id, "wait, change it")).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
+    release();
+    expect(await first).toEqual({ jobId: "job-held", created: true });
+    expect(await second).toEqual({ jobId: "job-held", created: false });
+    expect(catalogMock.topicAdd).toHaveBeenCalledTimes(1);
+    expect(runner.enqueue).toHaveBeenCalledTimes(1);
+    expect(drafts.get(record.id)?.state).toBe("drawing");
+  });
+
+  it("is not undone by a turn that was already running when a Resume moved the draft to drawing", async () => {
+    await fake.script([{ text: proposing(good), hangMs: 300 }]);
+    const { record } = await drafts.create({});
+    await drafts.send(record.id, "draw it");
+    // A Resume from the job panel lands while the planner is still answering.
+    await drafts.markDrawing(record.id, "job-resumed");
+    expect(drafts.get(record.id)?.state).toBe("drawing");
+    await drafts.settled(record.id);
+    const after = drafts.get(record.id)!;
+    expect(after.state).toBe("drawing");
+    expect(after.brief?.slug).toBe("tcp-congestion-window");
+  });
+
+  it("asks everything the enqueue would refuse on before it creates a topic", async () => {
+    await fake.script([{ text: withTopic({ ...good, topic: "mesh-vpn" }) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "tailscale tunnels");
+    runner.admit.mockRejectedValueOnce(new JobRefused(409, "learn/assets/tcp-congestion-window.tldr is already held by job j", { holder: "j" }));
+    await expect(drafts.draw(record.id, "p")).rejects.toMatchObject({ status: 409, detail: { holder: "j" } });
+    expect(catalogMock.topicAdd).not.toHaveBeenCalled();
+    expect(runner.enqueue).not.toHaveBeenCalled();
+    expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
+  });
+
+  it("writes the draft's row just before the job names it, so an outage earlier in the talk cannot refuse the Draw", async () => {
+    let rowExists = false;
+    catalogMock.draftUpsert.mockImplementation(async () => ({ ok: false, json: null, error: "unreachable", offline: true }));
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    // Postgres is back; nothing has asked for a mirror since.
+    catalogMock.draftUpsert.mockImplementation(async () => {
+      rowExists = true;
+      return ok();
+    });
+    runner.enqueue.mockImplementationOnce(async () => {
+      expect(rowExists).toBe(true);
+      return { record: { id: "job-row", state: "queued", draftId: record.id }, created: true, jobsAhead: 0 };
+    });
+    await expect(drafts.draw(record.id, "p")).resolves.toEqual({ jobId: "job-row", created: true });
   });
 });
 

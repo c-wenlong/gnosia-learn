@@ -208,6 +208,19 @@ describe("the draft routes", () => {
     expect((await post(`/api/drafts/${draftId}/messages`, { text: "hi" })).status).toBe(409);
   });
 
+  it("refuses a job naming a draft while its planner is answering", async () => {
+    await fake.script([{ text: proposing(good) }, { text: "still thinking", hangMs: 500 }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)?.state).toBe("briefed");
+    await post(`/api/drafts/${draftId}/messages`, { text: "one more thing" });
+    const job = await post("/api/jobs", { ...good, idempotencyKey: "j2", draftId });
+    expect(job.status).toBe(409);
+    expect(await job.json()).toMatchObject({ detail: { reason: "in-flight" } });
+    await drafts.settled(draftId);
+  });
+
   it("counts the planner's turns in health", async () => {
     await fake.script([{ text: "which one?", cost: 0.03 }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
