@@ -654,7 +654,7 @@ to store first and names the content-addressed key on the row
 (`IndexContext.blobsRequired`, set when `asset_stored_blob_check` exists). A
 re-render then lands under its own key in the same import.
 
-Because deletions cascade, `index` prints the keys it removed rather than a
+Because deletions cascade, `import` prints the keys it removed rather than a
 count.
 
 **Courses and their items are archived, not pruned** (D12, since 0010). A
@@ -662,7 +662,7 @@ module or checklist row the course files stop listing gets `archived_at`, and
 listing it again clears it, because the upsert's SET clause takes every column
 from the insert and `archived_at` defaults to null. Archiving runs before the
 upsert, so a module that replaces an archived one can reuse its slug:
-`collection_parent_slug_key` covers only live rows. `index` prints the archived
+`collection_parent_slug_key` covers only live rows. `import` prints the archived
 keys beside the deleted ones.
 
 An archived row is kept for the learner rows under it and is on no page, so
@@ -996,8 +996,12 @@ npm run catalog -- migrate
 npm test
 ```
 
-Never edit an applied migration. drizzle keys them by the sha256 of the file, so
-an edit makes the migration look unapplied everywhere it has already run.
+Never edit an applied migration. drizzle applies by the journal's timestamp
+and never compares a hash, while `catalog migrate`, `status` and `doctor` read
+a migration as applied by the sha256 of its file, so an edit makes it pending
+forever everywhere it has already run, and one drizzle will not apply again.
+`catalog migrate` refuses such a file by name (`MigrationSkipped` in
+`src/migrations.ts`) rather than report it applied.
 
 ## Still open
 
@@ -1023,8 +1027,13 @@ an edit makes the migration look unapplied everywhere it has already run.
   the upload 0013 waits on. drizzle applies in order, so a migration added
   after 0013 waits behind it on any database still holding it; until every
   database has applied 0013, such a migration must be one `catalog import` and
-  `catalog asset upload` can run without. The flip-day script's last two steps are `doctor`
-  (nothing in the way) and `migrate` (0013 applied).
+  `catalog asset upload` can run without; `test/blob-contract.test.ts` fails
+  while any journal entry follows a registered contract migration, and phase 3
+  takes 0013 out of `CONTRACT_MIGRATIONS` once the owner's database has it.
+  While 0013 is held, `catalog status`, `learn init` and `learn doctor` say it
+  is held and why (`heldMigrations`) instead of "run migrate", which would only
+  hold it again. The flip-day script's last two steps are `doctor` (nothing in
+  the way) and `migrate` (0013 applied).
 
 - **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its
   foreign key is `ON DELETE RESTRICT` instead of the `SET NULL` that could

@@ -593,6 +593,9 @@ async function ownedSkips(
   selected: readonly Indexer[],
 ): Promise<Map<IndexSource, { source: IndexSource; reason: string }>> {
   const out = new Map<IndexSource, { source: IndexSource; reason: string }>();
+  // Recorded only once every owned type has been checked: a later type's
+  // refusal refuses the whole import, which must then have written nothing.
+  const roots: Parameters<typeof recordRoot>[1][] = [];
   const rows = await readContentSources(db);
   for (const indexer of selected) {
     const type = CONTENT_TYPE[indexer.source];
@@ -625,11 +628,12 @@ async function ownedSkips(
       // This tree is where the type's files are now, for this database: a
       // copy imported from an export folder writes through to that folder,
       // not to the tree its template was imported from.
-      await recordRoot(db, type, root);
+      roots.push(type);
       continue;
     }
     throw new IndexError(await editedExport(db, type, root, files, row.exportHash === null));
   }
+  for (const type of roots) await recordRoot(db, type, root);
   if (out.has("manimkc") && !out.has("mirrors") && selected.some((i) => i.source === "mirrors")) {
     out.set("mirrors", {
       source: "mirrors",
@@ -655,12 +659,19 @@ async function editedExport(
     const expected = new Map((await renderType(db, type)).map((f) => [f.path, f.bytes]));
     const paths = new Set([...expected.keys(), ...files.map((f) => f.path)]);
     const actual = new Map(files.map((f) => [f.path, f.bytes]));
-    const same = (p: string) => {
+    // A file the export would write and the tree lacks was deleted, one the
+    // tree has and the export would not write was added: neither is an edit.
+    const change = (p: string): string | null => {
       const want = expected.get(p);
       const got = actual.get(p);
-      return want !== undefined && got !== undefined && want.equals(got);
+      if (want === undefined) return `${p} (added)`;
+      if (got === undefined) return `${p} (deleted)`;
+      return want.equals(got) ? null : `${p} (edited)`;
     };
-    differing = [...paths].filter((p) => !same(p)).sort();
+    differing = [...paths]
+      .sort()
+      .map(change)
+      .filter((c): c is string => c !== null);
   } catch {
     differing = [];
   }
@@ -675,7 +686,7 @@ async function editedExport(
   }
   return (
     head +
-    (differing.length === 0 ? "" : `Edited since the last export${which}. `) +
+    (differing.length === 0 ? "" : `Changed since the last export${which}. `) +
     `Apply the change through the catalog's ${type} command, which records who made it and why, ` +
     `then \`catalog export --only ${type} --out ${root}\` rewrites these files; or discard the edit.`
   );

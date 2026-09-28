@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
@@ -9,11 +11,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
+import { runStatus } from "../src/commands/status";
 import { posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
 import { writeContents } from "../src/content/write";
-import { REPO_ROOT } from "../src/env";
-import { applyMigrations, assertMigrated, migrateHolding, migrationStatus } from "../src/migrations";
+import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
+import {
+  applyMigrations,
+  assertMigrated,
+  heldMigrations,
+  isContractMigration,
+  journalTags,
+  migrateHolding,
+  MigrationSkipped,
+  migrationStatus,
+} from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, SQLSTATE, sqlMessage, sqlstate, type Scratch } from "./scratch-database";
@@ -34,6 +46,23 @@ import { storedBlob } from "./stored-blob";
 
 const reachable = await probe();
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const execFileAsync = promisify(execFile);
+
+describe("a registered contract migration", () => {
+  it("is the journal's last entry, since anything after it waits while a database holds it", async () => {
+    const tags = await journalTags();
+    const contracts = tags.filter(isContractMigration);
+    expect(contracts.length).toBeGreaterThan(0);
+    for (const tag of contracts) {
+      // A migration generated after a registered contract is held behind it on
+      // every database that has not applied the contract yet, including ones
+      // `catalog import` and `catalog asset upload` must still run on. Take
+      // the contract out of CONTRACT_MIGRATIONS (src/migrations.ts) once
+      // every database has applied it, then add the new one.
+      expect(tags.slice(tags.indexOf(tag) + 1), `migrations after the contract ${tag}`).toEqual([]);
+    }
+  });
+});
 
 describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
   let scratch: Scratch;
@@ -89,7 +118,41 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
       },
     ]);
     await expect(assertMigrated(scratch.db)).resolves.toBeUndefined();
+    expect(await heldMigrations(scratch.db)).toEqual(held);
   });
+
+  it("is reported as held, with the reason, by catalog status, learn init and learn doctor", async () => {
+    const saved = process.env["DATABASE_URL"];
+    process.env["DATABASE_URL"] = scratch.url;
+    const root = await mkdtemp(path.join(tmpdir(), "catalog-held-learn-"));
+    try {
+      const status = await runStatus();
+      expect(status.migrations.held.map((h) => h.tag)).toEqual(["0013_asset_blob_contract"]);
+      // 0013 adds no table, so the counts are read rather than "run migrate".
+      expect(status.rows["asset"]).toBe(1);
+
+      const learn = (...args: string[]) =>
+        execFileAsync(process.execPath, ["--import", "tsx", path.join(SERVICE_ROOT, "src", "learn", "cli.ts"), ...args], {
+          env: { ...process.env, LEARN_ROOT: root, DATABASE_URL: scratch.url },
+        }).catch((error: { stdout: string }) => error);
+      const init = await learn("init");
+      expect(init.stdout).toMatch(/0013_asset_blob_contract: 1 asset\(s\) of a stored kind have no blob/);
+      expect(init.stdout).not.toContain("run: npm run catalog -- migrate");
+
+      const report = JSON.parse((await learn("doctor", "--json")).stdout) as {
+        problems: { severity: string; kind: string; message: string }[];
+      };
+      expect(report.problems.map((p) => p.kind)).not.toContain("database-behind");
+      expect(report.problems.find((p) => p.kind === "migration-held")).toMatchObject({
+        severity: "warn",
+        message: expect.stringContaining("0013_asset_blob_contract is held until the data is ready"),
+      });
+    } finally {
+      if (saved === undefined) delete process.env["DATABASE_URL"];
+      else process.env["DATABASE_URL"] = saved;
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("raises naming every bad key once the assets are stored", async () => {
     const key = await storedBlob(scratch.db, "one", "mp4");
@@ -308,7 +371,38 @@ describe.skipIf(!reachable.ok)("a migration queued behind a held contract", () =
     const held = await migrateHolding(scratch.db, { folder });
     expect(held.map((h) => h.tag)).toEqual(["0013_asset_blob_contract", "0014_later"]);
     expect(held[1]?.reason).toBe("waits for 0013_asset_blob_contract, which is held");
-    // assertMigrated reads the real folder, where 0013 is the first outstanding.
-    await expect(assertMigrated(scratch.db)).resolves.toBeUndefined();
+    expect(await heldMigrations(scratch.db, { folder })).toEqual(held);
+    await expect(assertMigrated(scratch.db, { folder })).resolves.toBeUndefined();
   });
+});
+
+describe.skipIf(!reachable.ok)("a contract migration edited after it was applied", () => {
+  let scratch: Scratch;
+  let folder: string;
+
+  beforeAll(async () => {
+    scratch = await createScratchDatabase();
+    await applyMigrations(scratch.db);
+    // The real folder with 0013's file changed by one comment: drizzle still
+    // skips it by timestamp, and its hash now matches nothing applied.
+    folder = await partialMigrations(BEFORE_BLOB_CONTRACT + 1);
+    const file = path.join(folder, "0013_asset_blob_contract.sql");
+    await writeFile(file, `${await readFile(file, "utf8")}\n-- tidied\n`);
+  }, 60_000);
+
+  afterAll(async () => {
+    await scratch?.drop();
+    if (folder !== undefined) await rm(folder, { recursive: true, force: true });
+  });
+
+  it("is refused by name instead of looping", async () => {
+    expect((await migrationStatus(scratch.db, { folder })).pending).toEqual(["0013_asset_blob_contract"]);
+    const refused = await migrateHolding(scratch.db, { folder }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(refused).toBeInstanceOf(MigrationSkipped);
+    expect((refused as MigrationSkipped).tags).toEqual(["0013_asset_blob_contract"]);
+    expect((refused as Error).message).toMatch(/edited after it was applied/);
+  }, 20_000);
 });

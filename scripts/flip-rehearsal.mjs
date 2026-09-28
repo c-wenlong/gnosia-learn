@@ -2,7 +2,7 @@
 // rows, in the order docs/CONTENT-MIGRATION.md gives it, run against a copy.
 //
 // usage: node scripts/flip-rehearsal.mjs [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]
-//        node scripts/flip-rehearsal.mjs --real --database DB
+//        node scripts/flip-rehearsal.mjs --real --database DB --checkout DIR
 //
 // A rehearsal (the default):
 //   1. `createdb -T <from> <copy>` (pg_dump into an empty database when the
@@ -19,26 +19,50 @@
 //      --keep.
 //
 // The procedure (PROCEDURE below, the same list for both modes):
-//   migrate; doctor; import the tree; parity;
+//   back up the database (pg_dump -Fc, checked to list the learner tables);
+//   migrate; doctor;
+//   import the tree into a throwaway copy of the database, which must remove
+//   nothing; import the tree, which must remove nothing; parity;
 //   flip topics, flip tags, export topics,tags;
 //   flip concepts, flip sessions, export concepts,sessions;
 //   flip courses (not --strict: 133 items still name no concept), export courses;
-//   flip diagrams, export diagrams;
+//   flip diagrams, export diagrams (FLIP_GROUPS in lib/flip-order.mjs);
 //   import the tree again (every content type skipped as its own export); parity;
-//   asset upload --source manimkc, twice (the second stores and writes nothing);
+//   asset upload --source manimkc, which must refuse nothing, twice (the
+//   second stores and writes nothing);
 //   blob audit;
 //   doctor (nothing stands in the contract's way) and migrate again, which
 //   applies the contract migration (0013) the first migrate held back.
-// Each step runs the catalog CLI with --json and is checked, and the first
-// step that fails its check stops the run.
+// Each step is checked, and the first step that fails its check stops the run.
 //
-// --real is phase 3's cut-over: the same procedure against the named database
-// itself, importing and exporting this checkout's own tree (so the exports'
-// rewrites land in the working tree, to commit), with the blob store the
-// environment names (~/.self-learn/blobs unless SELF_LEARN_HOME says
-// otherwise) and without CATALOG_COPY_OK. It refuses unless --database names
-// the database, and then asks for the name to be typed again on a terminal. It
-// has no --yes: an agent or a script cannot answer it, on purpose.
+// Why an import must remove nothing: a removal is the catalog agreeing that
+// something is gone, and deletions cascade. A tree missing a note or a diagram
+// the database has (a worktree or a clone without the owner's untracked
+// files) would delete those rows and whatever learner rows hang off them. The
+// throwaway copy finds that before the database itself is touched; the check
+// on the real import is the second line.
+//
+// --real is flip day itself: the same procedure against the named database in
+// place, the flip that lets the readers go database-only. It imports and
+// exports this checkout's own tree (so the exports' rewrites land in the
+// working tree, to commit), uses the blob store the environment names, and
+// runs without CATALOG_COPY_OK. It refuses unless --database names the
+// database and --checkout names the checkout this script is in, shows `git
+// status` of content/ and learn/, and asks for the name to be typed on a
+// terminal. It has no --yes: an agent or a script cannot answer it, on purpose.
+//
+// Its first step writes ~/<database>-preflip-<UTC time>.dump, and nothing else
+// runs unless that file is there, is not empty, and lists the data of `event`,
+// `mastery` and `review`. Everything after it is forward-only (migrations,
+// flips, and once the readers are database-only CONTENT_SOURCE=files is no way
+// back), and the learner state lives in this database alone, so that file is
+// the way back. The summary prints it, and the commands that restore it.
+//
+// Signals: every child runs in its own process group. A SIGINT, SIGTERM or
+// SIGHUP to this script is forwarded to the catalog command in flight (and to
+// the backup's pg_dump), and the run stops once that has exited; a createdb or
+// a copy's dump is left to finish and its database is then dropped. A second
+// signal sends SIGKILL.
 //
 // Environment: DATABASE_URL (its host and credentials are kept; its database
 // name is replaced), PG_BIN (default /opt/homebrew/opt/postgresql@17/bin),
@@ -47,30 +71,52 @@
 //
 // Exit codes: 0 every step passed, 1 a step failed, 2 the invocation or a
 // prerequisite was wrong, 130 interrupted.
-import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { FLIP_GROUPS } from './lib/flip-order.mjs';
+import { copyDatabase, exec, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
-const PG_BIN = process.env.PG_BIN ?? '/opt/homebrew/opt/postgresql@17/bin';
 const USAGE =
   'usage: node scripts/flip-rehearsal.mjs [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]\n' +
-  '       node scripts/flip-rehearsal.mjs --real --database DB';
+  '       node scripts/flip-rehearsal.mjs --real --database DB --checkout DIR';
+
+/** The learner state: a backup whose archive does not list these tables' data is no backup. */
+const LEARNER_TABLES = ['event', 'mastery', 'review'];
 
 /** Why the invocation cannot run, exit 2. */
 class Refusal extends Error {}
 
+/** Stopped by a signal before anything ran, exit 130. */
+class Interrupted extends Refusal {}
+
+/** A removal is the one thing flip day's imports must never do; see the header. */
+function removesNothing(json) {
+  if (json.totals?.deleted === 0) return null;
+  const keys = (json.sources ?? []).flatMap((s) => s.deletedKeys ?? []);
+  return (
+    `the import removed ${json.totals?.deleted} row(s), and a removal cascades into whatever hangs off them` +
+    (keys.length === 0 ? '' : `: ${keys.slice(0, 20).join(', ')}${keys.length > 20 ? ', ...' : ''}`) +
+    '. Is the tree missing files the database has?'
+  );
+}
+
 /**
- * Flip day's steps, in order. `check` reads the command's --json and returns
- * null when the step did what flip day needs, else a sentence saying what it
- * did instead. A command's own non-zero exit fails its step before `check`.
+ * Flip day's steps, in order. A catalog step runs the CLI with `args` and
+ * --json; `check` reads the JSON and returns null when the step did what flip
+ * day needs, else a sentence saying what it did instead, and `warn` returns a
+ * sentence worth printing that does not stop the run. A command's own non-zero
+ * exit fails its step before `check`. A step with `action` is the script's
+ * own (the backup, the import into a throwaway copy) and returns
+ * `{ result, problem, gist }` itself.
  */
-function procedure(tree) {
+function procedure(tree, own) {
   const exported = (types) => (json) => {
     const unrecorded = (json.types ?? []).filter((t) => !t.recorded).map((t) => t.type);
     return unrecorded.length === 0
@@ -80,46 +126,71 @@ function procedure(tree) {
   const flipped = (json) =>
     json.export?.recorded === true ? null : 'the flip recorded no export hash (is this database marked copy?)';
   const clean = (json) => (json.clean === true ? null : `${json.mismatches} parity mismatch(es)`);
+  const refusedNothing = (json) => {
+    if (json.refused === 0) return null;
+    const refused = (json.items ?? []).filter((i) => i.action === 'refused');
+    return (
+      `${json.refused} file(s) refused, so their rows have no blob and the contract migration would stay held: ` +
+      refused
+        .slice(0, 10)
+        .map((i) => `${i.id} (${i.detail ?? 'no detail'})`)
+        .join('; ')
+    );
+  };
+  const upload = ['asset', 'upload', '--source', 'manimkc', '--reason', 'flip day: manimkc renders into the blob store'];
+  const flips = FLIP_GROUPS.flatMap((group) => {
+    const named = group.join(', ');
+    return [
+      ...group.map((type) => ({
+        name: `flip ${type}`,
+        args: ['flip', type],
+        check: flipped,
+      })),
+      {
+        name: `export ${named}`,
+        args: ['export', '--only', group.join(','), '--out', tree],
+        check: exported(group.length === 1 ? named : group.join(' and ')),
+      },
+    ];
+  });
   return [
+    { name: 'back up the database', command: 'pg_dump -Fc', action: own.backUp },
     { name: 'migrate', args: ['migrate'] },
     { name: 'doctor', args: ['doctor'] },
-    { name: 'import the tree', args: ['import', tree] },
+    { name: 'import into a throwaway copy', command: `createdb -T; catalog import ${tree}`, action: own.importIntoCopy },
+    { name: 'import the tree', args: ['import', tree], check: removesNothing },
     { name: 'parity', args: ['parity', tree], check: clean },
-    { name: 'flip topics', args: ['flip', 'topics'], check: flipped },
-    { name: 'flip tags', args: ['flip', 'tags'], check: flipped },
-    { name: 'export topics, tags', args: ['export', '--only', 'topics,tags', '--out', tree], check: exported('topics and tags') },
-    { name: 'flip concepts', args: ['flip', 'concepts'], check: flipped },
-    { name: 'flip sessions', args: ['flip', 'sessions'], check: flipped },
-    {
-      name: 'export concepts, sessions',
-      args: ['export', '--only', 'concepts,sessions', '--out', tree],
-      check: exported('concepts and sessions'),
-    },
-    // Not --strict: the item-has-concept rule has violators until the owner
-    // writes the notes the other courses need (Track B), and phase 3 arms or
-    // waives it.
-    { name: 'flip courses', args: ['flip', 'courses'], check: flipped },
-    { name: 'export courses', args: ['export', '--only', 'courses', '--out', tree], check: exported('courses') },
-    { name: 'flip diagrams', args: ['flip', 'diagrams'], check: flipped },
-    { name: 'export diagrams', args: ['export', '--only', 'diagrams', '--out', tree], check: exported('diagrams') },
+    // Courses flip without --strict: the item-has-concept rule has violators
+    // until the owner writes the notes the other courses need (Track B), and
+    // phase 3 arms or waives it.
+    ...flips,
     {
       name: 'import the tree again',
       args: ['import', tree],
       check: (json) => {
         const skipped = new Set((json.skipped ?? []).map((s) => s.source));
         const read = ['topics', 'tags', 'concepts', 'courses', 'diagrams', 'sessions'].filter((t) => !skipped.has(t));
-        return read.length === 0 ? null : `the import read ${read.join(', ')} from files after the flips`;
+        return read.length === 0 ? removesNothing(json) : `the import read ${read.join(', ')} from files after the flips`;
       },
     },
     { name: 'parity again', args: ['parity', tree], check: clean },
-    { name: 'asset upload', args: ['asset', 'upload', '--source', 'manimkc', '--reason', 'flip day: manimkc renders into the blob store'] },
+    {
+      name: 'asset upload',
+      args: upload,
+      check: refusedNothing,
+      // Posters are thumbnails, not the videos: without ffmpeg the upload
+      // stores every render and says it made no poster, and the web app
+      // shows no thumbnail until a later upload with ffmpeg makes them.
+      warn: (json) => (json.postersSkipped === null ? null : `no posters were made: ${json.postersSkipped}`),
+    },
     {
       name: 'asset upload again',
-      args: ['asset', 'upload', '--source', 'manimkc', '--reason', 'flip day: manimkc renders into the blob store'],
+      args: upload,
       check: (json) =>
-        json.uploaded === 0 && json.rowsWritten === 0
+        refusedNothing(json) ??
+        (json.uploaded === 0 && json.rowsWritten === 0
           ? null
-          : `the second upload stored ${json.uploaded} object(s) and wrote ${json.rowsWritten} row(s); it should do neither`,
+          : `the second upload stored ${json.uploaded} object(s) and wrote ${json.rowsWritten} row(s); it should do neither`),
     },
     { name: 'blob audit', args: ['blob', 'audit'] },
     // The contract (0013): a blob behind every video, sidecar, poster and
@@ -172,8 +243,7 @@ function gist(step, json) {
     case 'asset':
       return (
         `${json.counts.videos} videos, ${json.counts.sidecars} sidecars, ${json.counts.posters} posters; ` +
-        `${json.uploaded} uploaded, ${json.rowsWritten} rows written, ${json.refused} refused` +
-        (json.postersSkipped === null ? '' : `; posters skipped: ${json.postersSkipped}`)
+        `${json.uploaded} uploaded, ${json.rowsWritten} rows written, ${json.refused} refused`
       );
     case 'blob':
       return `${json.rows} rows, ${json.objects} objects, ${json.findings.length} findings, ${json.outstanding} outstanding`;
@@ -195,6 +265,7 @@ function options(argv) {
         json: { type: 'boolean', default: false },
         real: { type: 'boolean', default: false },
         database: { type: 'string' },
+        checkout: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     }).values;
@@ -212,8 +283,18 @@ function options(argv) {
     if (parsed.database === undefined || parsed.database.trim() === '') {
       throw new Refusal('--real needs --database <name>: the database it changes is never a default.');
     }
-  } else if (parsed.database !== undefined) {
-    throw new Refusal('--database goes with --real. A rehearsal copies --from (default self_learn) instead.');
+    if (parsed.checkout === undefined || parsed.checkout.trim() === '') {
+      throw new Refusal(
+        `--real needs --checkout <dir>, the checkout whose content/ and learn/ it imports and exports into. ` +
+          `It must be the one this script is in, ${ROOT}.`,
+      );
+    }
+  } else {
+    for (const flag of ['database', 'checkout']) {
+      if (parsed[flag] !== undefined) {
+        throw new Refusal(`--${flag} goes with --real. A rehearsal copies --from (default self_learn) instead.`);
+      }
+    }
   }
   return parsed;
 }
@@ -231,79 +312,91 @@ function redact(url) {
   return parsed.toString();
 }
 
-function run(command, args, { env = process.env, input } = {}) {
-  return new Promise((done) => {
-    const child = spawn(command, args, { cwd: ROOT, env, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => (stdout += chunk));
-    child.stderr.on('data', (chunk) => (stderr += chunk));
-    child.once('error', (error) => done({ status: null, stdout, stderr: `${stderr}${error.message}` }));
-    child.once('close', (status) => done({ status, stdout, stderr }));
-    if (input !== undefined) child.stdin.end(input);
-  });
-}
-
-const pg = (tool, args, env) => run(join(PG_BIN, tool), args, { env });
-
-/** The same server's maintenance connection details, for createdb and dropdb. */
-function pgEnv() {
-  const url = new URL(process.env.DATABASE_URL ?? 'postgres://localhost:5432/self_learn');
-  const env = { ...process.env };
-  if (url.hostname !== '') env.PGHOST = decodeURIComponent(url.hostname);
-  if (url.port !== '') env.PGPORT = url.port;
-  if (url.username !== '') env.PGUSER = decodeURIComponent(url.username);
-  if (url.password !== '') env.PGPASSWORD = decodeURIComponent(url.password);
-  return env;
+/** A UTC time a file name can carry: 20260928T064512Z. */
+function fileStamp(date = new Date()) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 }
 
 /**
- * `createdb -T`, or `pg_dump | psql` into an empty database when the template
- * has sessions open. `created` is called the moment `to` exists, before any
- * copying into it, so a failed or interrupted dump still leaves the copy for
- * the cleanup to drop.
+ * --real's checkout, confirmed: the directory the operator named must be the
+ * one this script sits in, since that is the tree it imports and exports into.
+ * A copy of the script in a worktree or a clone would otherwise import a tree
+ * without the owner's untracked files, and prune their rows.
  */
-async function copyDatabase(from, to, created) {
-  const env = pgEnv();
-  const made = await pg('createdb', ['-T', from, to], env);
-  if (made.status === 0) {
-    created();
-    return 'createdb -T';
+function confirmedCheckout(named) {
+  const given = resolve(named.replace(/^~(?=$|\/)/, homedir()));
+  if (!existsSync(given)) throw new Refusal(`--checkout ${named} does not exist.`);
+  if (realpathSync(given) !== realpathSync(ROOT)) {
+    throw new Refusal(
+      `--checkout ${realpathSync(given)} is not the checkout this script is in, ${realpathSync(ROOT)}. ` +
+        '--real imports and exports the tree beside the script: run the script from the checkout you mean.',
+    );
   }
-  if (!/being accessed by other users/.test(made.stderr)) {
-    throw new Error(`createdb -T ${from} ${to} failed: ${made.stderr.trim()}`);
+  return realpathSync(ROOT);
+}
+
+/** What `git` says about the checkout, for the confirmation. Read-only. */
+async function describeCheckout(root) {
+  const git = async (...args) => {
+    const ran = await exec('git', ['-C', root, ...args]);
+    return ran.status === 0 ? ran.stdout.trimEnd() : null;
+  };
+  const branch = await git('rev-parse', '--abbrev-ref', 'HEAD');
+  const head = await git('rev-parse', '--short', 'HEAD');
+  const gitDir = await git('rev-parse', '--path-format=absolute', '--git-dir');
+  const common = await git('rev-parse', '--path-format=absolute', '--git-common-dir');
+  const status = await git('status', '--porcelain', '--untracked-files=all', '--', 'content', 'learn');
+  return {
+    branch,
+    head,
+    worktreeOf: gitDir !== null && common !== null && gitDir !== common ? dirname(common) : null,
+    status: status === null ? null : status.split('\n').filter((line) => line !== ''),
+  };
+}
+
+/**
+ * The blob store's root as the catalog resolves it, asked of the blob package
+ * itself rather than guessed here, so the line the operator confirms is the
+ * directory the uploads will write to (and a SELF_LEARN_HOME the package
+ * refuses is refused before anything runs).
+ */
+async function blobRoot(env) {
+  const ran = await exec(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '--eval',
+      "const { defaultBlobRoot } = await import('@self-learn/blob'); process.stdout.write(defaultBlobRoot());",
+    ],
+    { env, cwd: ROOT },
+  );
+  if (ran.status !== 0 || ran.stdout === '') {
+    throw new Refusal(`could not resolve the blob store from SELF_LEARN_HOME: ${ran.stderr.trim().split('\n').at(-1)}`);
   }
-  const empty = await pg('createdb', [to], env);
-  if (empty.status !== 0) throw new Error(`createdb ${to} failed: ${empty.stderr.trim()}`);
-  created();
-  const dumped = await new Promise((done) => {
-    const dump = spawn(join(PG_BIN, 'pg_dump'), ['--no-owner', from], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-    const load = spawn(join(PG_BIN, 'psql'), ['-q', '-v', 'ON_ERROR_STOP=1', '-d', to], { env, stdio: ['pipe', 'ignore', 'pipe'] });
-    let stderr = '';
-    for (const child of [dump, load]) child.stderr.on('data', (chunk) => (stderr += chunk));
-    load.stdin.on('error', () => {});
-    dump.stdout.pipe(load.stdin);
-    const exited = (child) => new Promise((ok) => child.once('close', ok));
-    void Promise.all([exited(dump), exited(load)]).then(([a, b]) => done({ ok: a === 0 && b === 0, stderr }));
-  });
-  if (!dumped.ok) throw new Error(`copying ${from} into ${to} with pg_dump failed: ${dumped.stderr.trim()}`);
-  return 'pg_dump (the template had sessions open)';
+  return ran.stdout;
 }
 
 /** The operator types the database's name on a terminal, or nothing runs. */
-async function confirm(name, lines) {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Refusal(
-      '--real asks for the database name to be typed on a terminal, and this process has none. ' +
-        'Run it yourself, in a terminal; nothing else may confirm it.',
-    );
-  }
+async function confirm(name, lines, signal) {
   process.stdout.write(`${lines.join('\n')}\n\n`);
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  // In a terminal's raw mode Ctrl-C and Ctrl-D reach readline, not the
+  // process: either is a no.
+  const declined = new Promise((_, reject) => {
+    prompt.once('SIGINT', () => reject(new Interrupted('Interrupted at the confirmation. Nothing was run.')));
+    prompt.once('close', () => reject(new Refusal('No name was typed. Nothing was run.')));
+    signal.addEventListener('abort', () => reject(new Interrupted('Interrupted at the confirmation. Nothing was run.')));
+  });
   try {
-    const typed = await prompt.question(`Type the database name (${name}) to run flip day against it: `);
+    const typed = await Promise.race([
+      prompt.question(`Type the database name (${name}) to run flip day against it: `),
+      declined,
+    ]);
     if (typed.trim() !== name) throw new Refusal(`"${typed.trim()}" is not ${name}. Nothing was run.`);
   } finally {
+    prompt.removeAllListeners('close');
     prompt.close();
   }
 }
@@ -323,60 +416,202 @@ async function main(argv) {
   const from = opts.from ?? 'self_learn';
   const database = real ? opts.database.trim() : (opts.name ?? `self_learn_rehearsal_${stamp}`);
   if (!real && database === from) throw new Refusal(`--name ${database} is the template; a rehearsal never runs on its template.`);
-  for (const tool of ['createdb', 'dropdb', 'pg_dump', 'psql']) {
-    if (!real && !existsSync(join(PG_BIN, tool))) throw new Refusal(`${tool} not found in ${PG_BIN}; set PG_BIN.`);
+  const checkout = real ? confirmedCheckout(opts.checkout) : null;
+  if (real && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+    throw new Refusal(
+      '--real asks for the database name to be typed on a terminal, and this process has none. ' +
+        'Run it yourself, in a terminal; nothing else may confirm it.',
+    );
+  }
+  for (const tool of ['createdb', 'dropdb', 'pg_dump', 'pg_restore', 'psql']) {
+    if (!existsSync(join(PG_BIN, tool))) throw new Refusal(`${tool} not found in ${PG_BIN}; set PG_BIN.`);
   }
 
   const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'self-learn-flip-rehearsal-')));
-  const tree = real ? ROOT : join(scratch, 'tree');
-  const home = real ? (process.env.SELF_LEARN_HOME ?? '(default: ~/.self-learn)') : join(scratch, 'home');
+  const tree = real ? checkout : join(scratch, 'tree');
   const url = urlFor(database);
   const env = { ...process.env, DATABASE_URL: url };
   if (real) delete env.CATALOG_COPY_OK;
-  else Object.assign(env, { CATALOG_COPY_OK: '1', SELF_LEARN_HOME: home });
+  else Object.assign(env, { CATALOG_COPY_OK: '1', SELF_LEARN_HOME: join(scratch, 'home') });
+  // The server the catalog commands reach, for the client tools.
+  const maintenance = pgEnv(url);
+  const backupFile = join(real ? homedir() : scratch, `${database}-preflip-${fileStamp()}.dump`);
+  const restore =
+    `${join(PG_BIN, 'dropdb')} --force ${database} && ${join(PG_BIN, 'createdb')} ${database} && ` +
+    `${join(PG_BIN, 'pg_restore')} --no-owner --exit-on-error -d ${database} ${backupFile}`;
 
   const report = {
     mode: real ? 'real' : 'rehearsal',
     database: redact(url),
     template: real ? null : from,
     tree,
-    blobHome: home,
+    checkout: null,
+    blobRoot: null,
     copy: real ? null : { name: database, method: null, kept: opts.keep, dropped: false },
+    backup: null,
     steps: [],
+    warnings: 0,
+    interrupted: false,
     ok: false,
   };
 
-  let made = false;
-  /** The copy in flight, so an interrupt drops it only once createdb or the dump has let go. */
-  let copying = null;
-  const cleanup = async () => {
-    if (copying !== null) await copying.catch(() => {});
-    if (real || !made || opts.keep) return;
-    const drop = await pg('dropdb', ['--if-exists', '--force', database], pgEnv());
-    report.copy.dropped = drop.status === 0;
-    if (drop.status !== 0) say(`could not drop ${database}: ${drop.stderr.trim()}`);
+  // --- Stopping. -----------------------------------------------------------
+  /** Children a signal is forwarded to: the catalog commands and the backup. */
+  const forwarded = new Set();
+  const forwardTo = (child) => {
+    forwarded.add(child);
+    child.once('close', () => forwarded.delete(child));
   };
-  let interrupted = false;
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.on(signal, () => {
-      if (interrupted) return;
-      interrupted = true;
-      process.stderr.write(`\nflip-rehearsal: ${signal}, stopping\n`);
-      void cleanup().finally(() => {
-        if (scratch !== null && !opts.keep) rmSync(scratch, { recursive: true, force: true });
-        process.exit(130);
-      });
-    });
-  }
+  const stopping = new AbortController();
+  let signals = 0;
+  const onSignal = (signal) => {
+    signals += 1;
+    report.interrupted = true;
+    stopping.abort();
+    const sent = signals === 1 ? 'SIGTERM' : 'SIGKILL';
+    process.stderr.write(`\nflip-rehearsal: ${signal}, stopping${forwarded.size > 0 ? ` (${sent} to the command in flight)` : ''}\n`);
+    for (const child of forwarded) {
+      try {
+        process.kill(-child.pid, sent);
+      } catch {
+        /* already gone */
+      }
+    }
+  };
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, onSignal);
 
+  /** Copies this run made and has not dropped yet, by name. */
+  const made = new Set();
+  const drop = async (name) => {
+    const dropped = await pgTool('dropdb', ['--if-exists', '--force', name], { env: maintenance });
+    if (dropped.status === 0) made.delete(name);
+    else say(`could not drop ${name}: ${dropped.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${name}`);
+    return dropped.status === 0;
+  };
+
+  // --- The script's own steps. ---------------------------------------------
+  const catalog = async (args, stepEnv) => {
+    const ran = await exec(process.execPath, ['--import', 'tsx', CLI, ...args, '--json'], {
+      env: stepEnv,
+      cwd: ROOT,
+      onSpawn: forwardTo,
+    });
+    let json = null;
+    try {
+      json = JSON.parse(ran.stdout);
+    } catch {
+      json = null;
+    }
+    const failed =
+      ran.status !== 0
+        ? ran.signal !== null
+          ? `stopped by ${ran.signal}`
+          : `exit ${ran.status}: ${(ran.stderr.trim() || (json?.error ?? ran.stdout.trim())).slice(-1200)}`
+        : json === null
+          ? `printed no JSON: ${ran.stdout.trim().slice(-400)}`
+          : null;
+    return { json, failed };
+  };
+
+  const own = {
+    /**
+     * pg_dump -Fc of the database before anything changes it, then
+     * `pg_restore --list` of the file: an archive that will not list, or
+     * lists no data for the learner tables, is no way back.
+     */
+    backUp: async () => {
+      if (existsSync(backupFile)) {
+        return { problem: `${backupFile} already exists, and a backup is never written over`, result: null };
+      }
+      const dumped = await pgTool('pg_dump', ['-Fc', '-f', backupFile, '-d', database], { env: maintenance, onSpawn: forwardTo });
+      if (dumped.status !== 0) {
+        return { problem: `pg_dump failed${dumped.signal ? ` (${dumped.signal})` : ''}: ${dumped.stderr.trim().slice(-600)}`, result: null };
+      }
+      const bytes = existsSync(backupFile) ? statSync(backupFile).size : 0;
+      if (bytes === 0) return { problem: `pg_dump exited 0 and ${backupFile} is empty`, result: null };
+      const listed = await pgTool('pg_restore', ['--list', backupFile], { env: maintenance });
+      if (listed.status !== 0) return { problem: `pg_restore --list cannot read ${backupFile}: ${listed.stderr.trim()}`, result: null };
+      const tables = [
+        ...new Set(
+          listed.stdout
+            .split('\n')
+            .map((line) => / TABLE DATA public (\S+) /.exec(line)?.[1])
+            .filter((table) => table !== undefined),
+        ),
+      ].sort();
+      const missing = LEARNER_TABLES.filter((table) => !tables.includes(table));
+      if (missing.length > 0) {
+        return {
+          problem: `${backupFile} lists no data for ${missing.join(', ')}, so it would not bring the learner state back`,
+          result: { path: backupFile, bytes, tables },
+        };
+      }
+      report.backup = { path: backupFile, bytes, tables: tables.length, restore };
+      return {
+        problem: null,
+        result: report.backup,
+        gist: `${backupFile}, ${bytes} bytes, data for ${tables.length} tables (${LEARNER_TABLES.join(', ')} among them)`,
+      };
+    },
+
+    /**
+     * The first import, run on a throwaway copy of the database as it is now:
+     * the one step whose damage (a removal, and its cascade) the backup
+     * would otherwise be the only way to undo.
+     */
+    importIntoCopy: async () => {
+      const name = `self_learn_preflight_${stamp}`;
+      const home = mkdtempSync(join(tmpdir(), 'self-learn-flip-preflight-'));
+      try {
+        await copyDatabase(database, name, { env: maintenance, created: () => made.add(name) });
+        if (report.interrupted) return { problem: 'interrupted', result: null };
+        const { json, failed } = await catalog(['import', tree], {
+          ...env,
+          DATABASE_URL: urlFor(name),
+          CATALOG_COPY_OK: '1',
+          SELF_LEARN_HOME: home,
+        });
+        const problem = failed ?? removesNothing(json);
+        return {
+          problem: problem === null ? null : `on a copy, before touching ${database}: ${problem}`,
+          result: json,
+          gist: problem === null ? `${json.totals.written} rows written, 0 removed, on ${name}; dropped` : undefined,
+        };
+      } finally {
+        if (made.has(name)) await drop(name);
+        rmSync(home, { recursive: true, force: true });
+      }
+    },
+  };
+
+  // --- The run. ------------------------------------------------------------
   try {
+    report.blobRoot = await blobRoot(env);
+    const steps = procedure(tree, own);
     if (real) {
-      await confirm(database, [
-        `flip day against ${redact(url)}, in place.`,
-        `tree        ${tree} (this checkout: its exports rewrite files here, to commit)`,
-        `blob store  ${home}`,
-        `steps       ${procedure(tree).map((s) => s.name).join('; ')}`,
-      ]);
+      const git = await describeCheckout(checkout);
+      report.checkout = { path: checkout, ...git };
+      const status =
+        git.status === null
+          ? ['            (git status failed)']
+          : git.status.length === 0
+            ? ['            clean']
+            : git.status.map((line) => `            ${line}`);
+      await confirm(
+        database,
+        [
+          `flip day against ${redact(url)}, in place.`,
+          `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
+            (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
+          '            imported from, and exported into: the exports rewrite files here, to commit',
+          'content/ and learn/ against HEAD (these are what gets imported):',
+          ...status,
+          `blob store  ${report.blobRoot}`,
+          `backup      ${backupFile} (pg_dump -Fc, before anything else; restore: ${restore})`,
+          `steps       ${steps.map((s) => s.name).join('; ')}`,
+        ],
+        stopping.signal,
+      );
     } else {
       const source = resolve(opts['tree-from'] ?? ROOT);
       for (const folder of ['content', 'learn']) {
@@ -387,52 +622,67 @@ async function main(argv) {
           filter: (file) => !file.includes(`${join('learn', 'assets', '.candidates')}`),
         });
       }
-      copying = copyDatabase(from, database, () => {
-        made = true;
-      });
-      report.copy.method = await copying;
-      copying = null;
-      say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${home}`);
+      report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
+      say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${report.blobRoot}`);
     }
 
-    for (const step of procedure(tree)) {
-      if (interrupted) break;
+    for (const step of steps) {
+      if (report.interrupted) break;
       const started = Date.now();
-      const ran = await run(process.execPath, ['--import', 'tsx', CLI, ...step.args, '--json'], { env });
-      let json = null;
+      let outcome;
       try {
-        json = JSON.parse(ran.stdout);
-      } catch {
-        json = null;
+        if (step.action !== undefined) {
+          outcome = await step.action();
+        } else {
+          const { json, failed } = await catalog(step.args, env);
+          const problem = failed ?? step.check?.(json) ?? null;
+          outcome = { result: json, problem, gist: problem === null ? gist(step, json) : undefined };
+          if (problem === null) outcome.warning = step.warn?.(json) ?? null;
+        }
+      } catch (error) {
+        // A copy that could not be made, a tool that would not start: the
+        // step failed, and the summary below still says where that leaves
+        // the database.
+        outcome = { result: null, problem: error?.message ?? String(error) };
       }
-      const problem =
-        ran.status !== 0
-          ? `exit ${ran.status}: ${(ran.stderr.trim() || (json?.error ?? ran.stdout.trim())).slice(-1200)}`
-          : json === null
-            ? `printed no JSON: ${ran.stdout.trim().slice(-400)}`
-            : (step.check?.(json) ?? null);
       const entry = {
         name: step.name,
-        command: `catalog ${step.args.join(' ')}`,
-        ok: problem === null,
+        command: step.args === undefined ? step.command : `catalog ${step.args.join(' ')}`,
+        ok: outcome.problem === null,
         ms: Date.now() - started,
-        gist: problem === null ? gist(step, json) : problem,
-        result: json,
+        gist: outcome.problem ?? outcome.gist ?? '',
+        warning: outcome.warning ?? null,
+        result: outcome.result,
       };
       report.steps.push(entry);
-      say(`${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name.padEnd(26)} ${entry.gist}`);
+      say(`${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name.padEnd(28)} ${entry.gist}`);
+      if (entry.warning !== null) {
+        report.warnings += 1;
+        say(`warn  ${''.padEnd(28)} ${entry.warning}`);
+      }
       if (!entry.ok) break;
     }
-    report.ok = report.steps.length === procedure(tree).length && report.steps.every((s) => s.ok);
+    report.ok = !report.interrupted && report.steps.length === steps.length && report.steps.every((s) => s.ok);
   } finally {
-    await cleanup();
+    for (const name of [...made]) {
+      if (name === database && opts.keep) continue;
+      const dropped = await drop(name);
+      if (name === database) report.copy.dropped = dropped;
+    }
     if (scratch !== null && !opts.keep) rmSync(scratch, { recursive: true, force: true });
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.off(signal, onSignal);
   }
 
+  const total = procedure(tree, own).length;
   if (opts.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else {
     say('');
-    say(`${report.ok ? 'flip day passed' : 'flip day stopped'}: ${report.steps.filter((s) => s.ok).length} of ${procedure(tree).length} steps`);
+    const passed = report.steps.filter((s) => s.ok).length;
+    say(
+      `${report.ok ? 'flip day passed' : report.interrupted ? 'flip day interrupted' : 'flip day stopped'}: ` +
+        `${passed} of ${total} steps` +
+        (report.warnings > 0 ? `, ${report.warnings} warning(s)` : ''),
+    );
     if (!real) {
       say(
         opts.keep
@@ -441,9 +691,16 @@ async function main(argv) {
       );
     } else if (report.ok) {
       say('the exports rewrote files in this checkout: `git status content learn` lists them, to commit');
+      say(`the backup from before step 1 is ${backupFile}; keep it until the app has been checked on the flipped database`);
+    } else if (report.backup !== null) {
+      say(`${database} may be part-way through flip day. The backup from before step 1 is ${backupFile}.`);
+      say(`To put the database back as it was: ${restore}`);
+      say('and `git checkout -- content learn` for any file an export rewrote.');
+    } else {
+      say(`nothing was changed: the run stopped before the backup, and every other step waits for it.`);
     }
   }
-  return report.ok ? 0 : 1;
+  return report.interrupted ? 130 : report.ok ? 0 : 1;
 }
 
 try {
@@ -451,7 +708,7 @@ try {
 } catch (error) {
   if (error instanceof Refusal) {
     process.stderr.write(`flip-rehearsal: ${error.message}\n`);
-    process.exitCode = 2;
+    process.exitCode = error instanceof Interrupted ? 130 : 2;
   } else {
     process.stderr.write(`flip-rehearsal: ${error?.stack ?? error}\n`);
     process.exitCode = 1;

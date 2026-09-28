@@ -48,10 +48,14 @@ export async function journalTags(folder = MIGRATIONS_FOLDER): Promise<string[]>
 }
 
 /**
- * drizzle keys applied migrations by the sha256 of the SQL file's bytes, not by
- * name, so this recomputes those hashes to turn the journal back into names.
- * Recomputing rather than trusting the order also catches an edited migration:
- * its hash no longer matches anything applied, so it shows up as pending.
+ * drizzle records each applied migration as the sha256 of its SQL file's bytes
+ * and the journal timestamp (`when`) it was generated with, never its name, so
+ * this recomputes those hashes to turn the table back into names. That is the
+ * catalog's own reading, and it differs from drizzle's: drizzle decides what to
+ * apply by timestamp alone, running every entry whose `when` is after the last
+ * recorded `created_at`, and never looks at a hash again. So an applied file
+ * that was edited shows up here as pending, and drizzle skips it forever;
+ * `applyThrough` refuses rather than report that as applied.
  */
 async function hashesByTag(folder: string, tags: string[]): Promise<Map<string, string>> {
   const pairs = await Promise.all(
@@ -102,7 +106,8 @@ export async function migrationStatus(
 
 /**
  * Applies every outstanding migration. Idempotent: drizzle skips what it has
- * already recorded, so a second run is a no-op rather than an error.
+ * already recorded, so a second run is a no-op rather than an error. It does
+ * not check that the run left nothing pending; `migrateHolding` does.
  */
 export async function applyMigrations(
   db: CatalogDatabase,
@@ -128,6 +133,11 @@ export async function applyMigrations(
  * upload that 0013 waits on, rather than roll the whole run back when 0013's
  * guard raises. A migration after a held one waits with it: drizzle applies in
  * order and never goes back for a skipped one.
+ *
+ * So a registered contract migration must be the last entry in the journal,
+ * and `test/blob-contract.test.ts` fails when one is not. Once every database
+ * has applied it, its entry comes out of this table (a phase 3 checklist line
+ * in docs/CONTENT-MIGRATION.md), and migrations can follow it again.
  */
 const CONTRACT_MIGRATIONS: Readonly<Record<string, (db: CatalogDatabase) => Promise<string | null>>> = {
   [BLOB_CONTRACT_MIGRATION]: async (db) => describeDistance(await blobContractDistance(db)),
@@ -141,6 +151,29 @@ export function isContractMigration(tag: string): boolean {
 export interface HeldMigration {
   tag: string;
   reason: string;
+}
+
+/**
+ * A migration drizzle was asked to apply and skipped. drizzle applies by
+ * journal timestamp and the catalog reads pending by hash (`hashesByTag`), so
+ * a file whose hash matches nothing applied but whose timestamp is not after
+ * the last applied one is skipped by every run while every status calls it
+ * pending. Before this was thrown, `catalog migrate` looped forever on a held
+ * contract migration edited after it was applied: each pass applied it, found
+ * it still pending, and applied it again.
+ */
+export class MigrationSkipped extends Error {
+  readonly tags: readonly string[];
+  constructor(tags: readonly string[]) {
+    super(
+      `drizzle did not apply ${tags.join(", ")}: each file's sha256 matches no applied migration, and its ` +
+        `journal timestamp is not after the last one applied, so drizzle skips it on every run. Either the ` +
+        `file was edited after it was applied (restore it from git: \`git log -p -- services/catalog/drizzle/\`), ` +
+        `or it was generated with an older timestamp than a migration already applied here (regenerate it).`,
+    );
+    this.name = "MigrationSkipped";
+    this.tags = tags;
+  }
 }
 
 /**
@@ -161,46 +194,87 @@ async function firstMigrations(count: number, folder: string): Promise<string> {
 }
 
 /**
+ * One drizzle run over the journal's first `count` entries (all of them when
+ * `count` is omitted), then a check that it applied every one of them: throws
+ * {@link MigrationSkipped} naming any still pending.
+ */
+async function applyThrough(
+  db: CatalogDatabase,
+  tags: readonly string[],
+  options: { folder?: string; migrationsSchema?: string },
+  count?: number,
+): Promise<void> {
+  const folder = options.folder ?? MIGRATIONS_FOLDER;
+  if (count === undefined) {
+    await applyMigrations(db, options);
+  } else {
+    const partial = await firstMigrations(count, folder);
+    try {
+      await applyMigrations(db, { ...options, folder: partial });
+    } finally {
+      await rm(partial, { recursive: true, force: true });
+    }
+  }
+  const wanted = new Set(count === undefined ? tags : tags.slice(0, count));
+  const skipped = (await migrationStatus(db, options)).pending.filter((tag) => wanted.has(tag));
+  if (skipped.length > 0) throw new MigrationSkipped(skipped);
+}
+
+/**
  * `catalog migrate`: every outstanding migration, except a contract
  * migration whose data is not ready and everything after it. Each run up to
  * a contract migration is its own drizzle run, so a guard that raises there
- * cannot roll back the migrations before it.
+ * cannot roll back the migrations before it. Every run is checked to have
+ * applied what it was given (`applyThrough`), which is what ends the loop.
  */
 export async function migrateHolding(
   db: CatalogDatabase,
   options: { folder?: string; migrationsSchema?: string } = {},
 ): Promise<HeldMigration[]> {
-  const folder = options.folder ?? MIGRATIONS_FOLDER;
-  const tags = await journalTags(folder);
+  const tags = await journalTags(options.folder ?? MIGRATIONS_FOLDER);
   for (;;) {
     const { pending } = await migrationStatus(db, options);
     const contract = pending.find(isContractMigration);
     if (contract === undefined) {
-      if (pending.length > 0) await applyMigrations(db, options);
+      if (pending.length > 0) await applyThrough(db, tags, options);
       return [];
     }
     const before = tags.indexOf(contract);
-    if (pending.some((tag) => tags.indexOf(tag) < before)) {
-      const partial = await firstMigrations(before, folder);
-      try {
-        await applyMigrations(db, { ...options, folder: partial });
-      } finally {
-        await rm(partial, { recursive: true, force: true });
-      }
-    }
+    if (pending.some((tag) => tags.indexOf(tag) < before)) await applyThrough(db, tags, options, before);
     const reason = await CONTRACT_MIGRATIONS[contract]?.(db);
-    if (reason !== null && reason !== undefined) {
-      return pending
-        .filter((tag) => tags.indexOf(tag) >= before)
-        .map((tag) => ({ tag, reason: tag === contract ? reason : `waits for ${contract}, which is held` }));
-    }
-    const upTo = await firstMigrations(before + 1, folder);
-    try {
-      await applyMigrations(db, { ...options, folder: upTo });
-    } finally {
-      await rm(upTo, { recursive: true, force: true });
-    }
+    if (reason !== null && reason !== undefined) return holding(pending, tags, contract, reason);
+    // Applies the contract, so the next pass finds the next one or none.
+    await applyThrough(db, tags, options, before + 1);
   }
+}
+
+function holding(pending: readonly string[], tags: readonly string[], contract: string, reason: string): HeldMigration[] {
+  const before = tags.indexOf(contract);
+  return pending
+    .filter((tag) => tags.indexOf(tag) >= before)
+    .map((tag) => ({ tag, reason: tag === contract ? reason : `waits for ${contract}, which is held` }));
+}
+
+/**
+ * What `catalog migrate` would hold on this database now, read without
+ * applying anything: the outstanding migrations, each with its reason, when
+ * the first of them is a contract migration whose data is not ready. Null when
+ * nothing is outstanding, when an ordinary migration is first (the database is
+ * behind, and `migrate` is the remedy), or when the contract's data is ready
+ * (`migrate` applies it). `catalog status`, `learn init` and `learn doctor`
+ * read it so they say what is held and why, instead of telling a database
+ * `migrate` would only hold again to run `migrate`.
+ */
+export async function heldMigrations(
+  db: CatalogDatabase,
+  options: { folder?: string; migrationsSchema?: string; status?: MigrationStatus } = {},
+): Promise<HeldMigration[] | null> {
+  const status = options.status ?? (await migrationStatus(db, options));
+  const first = status.pending[0];
+  if (first === undefined || !isContractMigration(first)) return null;
+  const reason = await CONTRACT_MIGRATIONS[first]?.(db);
+  if (reason === null || reason === undefined) return null;
+  return holding(status.pending, await journalTags(options.folder ?? MIGRATIONS_FOLDER), first, reason);
 }
 
 /**
@@ -243,8 +317,11 @@ export class MigrationsOutstanding extends Error {
  * one those commands must not need, which is the rule for adding one while a
  * database anywhere still holds 0013 (SCHEMA.md, "Still open").
  */
-export async function assertMigrated(db: CatalogDatabase): Promise<void> {
-  const status = await migrationStatus(db);
+export async function assertMigrated(
+  db: CatalogDatabase,
+  options: { folder?: string; migrationsSchema?: string } = {},
+): Promise<void> {
+  const status = await migrationStatus(db, options);
   const first = status.pending[0];
   if (first !== undefined && !isContractMigration(first)) {
     throw new MigrationsOutstanding(status.pending);
