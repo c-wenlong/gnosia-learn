@@ -210,6 +210,21 @@ deployment domain, and the app falls back to `http://localhost:3000` locally.
 Set it only if you want social preview images to resolve against a specific
 canonical origin.
 
+### The role Vercel connects as, and whose rows a request touches
+
+D19 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#d19-vercel-connects-with-a-role-that-cannot-write-content):
+when the cloud database arrives, Vercel connects as `app_web`, which has
+`SELECT` on the content tables and writes on the state tables only. That has
+not changed. What phase 4 added is the owner every request acts as:
+`currentOwner()` in `apps/web/src/lib/owner.ts` resolves it from the signed-in
+session (today the owner's cookie, which is `local`), every read passes it to
+the catalog, and every `/api/learner/*` write is made as that learner or
+answered with a 401 before the database is asked. So a content-writing route,
+when the web editor brings one, is gated on `currentOwner()` being resolved and
+passes it to the write seam as `owner`, which stamps the row and refuses one
+another owner holds. Until that editor exists no Vercel function writes content,
+and `app_web` gets no content writes before it does.
+
 ## The blob store
 
 Videos, their posters and sidecars, and diagram SVGs are moving out of the

@@ -4,9 +4,12 @@ import {
   conceptPrerequisite,
   indexRun,
   LOCAL_LEARNER_ID,
+  type OwnerScope,
+  readableOwners,
 } from "@self-learn/schema";
 import { asc, eq } from "drizzle-orm";
 
+import { ownedBy, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 import { masteryLabel } from "../../../../scripts/learn/lib/bkt.mjs";
 import { buildGraph, frontier, masteryOf, summarize } from "../../../../scripts/learn/lib/graph.mjs";
@@ -102,10 +105,21 @@ export function domainOf(path: string | null): string | null {
  * from a page propagates along the edges the frontier on every page is
  * computed from. The two can differ only between editing a note's `requires:`
  * and the next `learn index`, and a rebuild replays either way.
+ *
+ * Scoped (phase 4): only concepts `scope.readable` owns are nodes, so a page
+ * cannot record evidence against another owner's concept.
  */
-export async function readConceptGraph(db: CatalogDatabase): Promise<{ nodes: Map<string, unknown> }> {
+export async function readConceptGraph(
+  db: CatalogDatabase,
+  scope: OwnerScope,
+): Promise<{ nodes: Map<string, unknown> }> {
   const [concepts, prerequisites] = await Promise.all([
-    db.select({ slug: concept.slug, title: concept.title, summary: concept.summary }).from(concept),
+    scopedRead(scope.readable, (owners) =>
+      db
+        .select({ slug: concept.slug, title: concept.title, summary: concept.summary })
+        .from(concept)
+        .where(ownedBy(concept.ownerId, owners)),
+    ),
     db.select().from(conceptPrerequisite),
   ]);
   return graphOf(concepts, prerequisites);
@@ -145,8 +159,13 @@ export async function readKnowledgeBase(
   db: CatalogDatabase,
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<KnowledgeBase> {
+  // The learner is the owner (`owner_id` references `learner`), so the
+  // concepts they may see are their own and the commons' (phase 4).
+  const readable = readableOwners(learnerId);
   const [concepts, prerequisites, curriculumLinks, model, reviews, runs] = await Promise.all([
-    db.select().from(concept).orderBy(asc(concept.slug)),
+    scopedRead(readable, (owners) =>
+      db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(concept.slug)),
+    ),
     db.select().from(conceptPrerequisite),
     db.select().from(conceptCurriculumItem).orderBy(asc(conceptCurriculumItem.curriculumItemId)),
     readModel(db, learnerId),

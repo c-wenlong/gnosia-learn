@@ -736,6 +736,18 @@ not have to be worked out again.
   suite that needs a tree to write into takes a temp one, the way `LEARN_ROOT`
   and `STUDIO_HOME` already do; one that imports the seed and then writes
   copies it to a temp directory first.
+- **Never call a state or content function without an owner.** Ids are
+  global and every content row carries `owner_id`, so the owner filter is the
+  only thing keeping one owner's notes off another's pages (phase 4 of
+  `docs/CONTENT-MIGRATION.md`, D23). In `apps/web` the owner is
+  `currentOwner()` from `apps/web/src/lib/owner.ts`, passed as `learnerId` to a
+  state function and as `ownerScope(owner)` to a content read; the
+  `learnerId = 'local'` defaults in `services/catalog/src/state/*.ts` exist for
+  the `learn` CLI, which runs on the owner's machine with no session.
+  `apps/web/src/lib/owner-calls.test.ts` fails a web call that leaves the owner
+  to a default, and `dbSource`, the asset queries and the write seam's `owner`
+  are required parameters, so the compiler refuses the rest. A request with no
+  session gets `NoOwnerError`, never `local`: a fallback there would be a hole.
 - **A studio job reaching a terminal state does not mean the runner has
   finished writing it.** `Runner.finish` in `services/studio/src/runner.ts`
   does five things in order: put the new state in the store's in-memory map,

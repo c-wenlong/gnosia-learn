@@ -7,6 +7,7 @@ import type { CatalogDatabase } from "../db";
 import { parseFrontmatter, strayFrontmatterLines } from "../index/frontmatter";
 import { assertRenderable, notePath, readNote, renderNote, type NoteFields } from "./notes";
 import { POSITION_STEP } from "./positions";
+import { ownedBy, type Owners, CLI_OWNER } from "./scope";
 import { latestRevisions } from "./revisions";
 import { writeContents } from "./write";
 
@@ -34,10 +35,17 @@ function strings(value: unknown): string[] {
 /**
  * Live notes (archived ones are left out, as a reader hides them), all of
  * them or the slugs named, sorted by path, the order an export writes them in.
+ * `owners` scopes it (phase 4): another owner's note is absent, as a slug
+ * nobody holds is. Omitted, every owner's notes are read (the export, the
+ * `learn` CLI).
  */
-export async function readNoteRows(db: CatalogDatabase, slugs?: readonly string[]): Promise<NoteRow[]> {
+export async function readNoteRows(
+  db: CatalogDatabase,
+  slugs?: readonly string[],
+  owners?: Owners,
+): Promise<NoteRow[]> {
   if (slugs !== undefined && slugs.length === 0) return [];
-  const live = isNull(concept.archivedAt);
+  const live = and(isNull(concept.archivedAt), ownedBy(concept.ownerId, owners));
   const rows = await db
     .select()
     .from(concept)
@@ -185,6 +193,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
   };
   const [written] = await writeContents(db, [
     {
+      owner: CLI_OWNER,
       type: "concept",
       id: slug,
       next: {
@@ -208,6 +217,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
       ...by,
     },
     {
+      owner: CLI_OWNER,
       type: "asset",
       id: assetId,
       next: {

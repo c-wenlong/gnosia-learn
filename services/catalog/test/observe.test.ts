@@ -22,6 +22,10 @@ import {
 import { replayReviews } from "../src/learn/replay";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { fixtureGraph, seedContent } from "./state-fixture";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * `recordObservation`, the observe write moved out of the `learn` CLI so the
@@ -68,7 +72,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   beforeEach(reset);
 
   it("builds the same graph from the catalog that the notes give the CLI", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     const requires = (id: string) => (graph.nodes.get(id) as { requires: string[] } | undefined)?.requires;
     expect([...graph.nodes.keys()].sort()).toEqual(["alpha", "beta", "gamma"]);
     expect(requires("alpha")).toEqual([]);
@@ -77,7 +81,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("appends the event, moves p(L), propagates and schedules, on one clock", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     const result = await recordObservation(scratch.db, {
       conceptId: "gamma",
       correct: true,
@@ -144,7 +148,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
     const fromCatalog = await recordObservation(scratch.db, {
       conceptId: "gamma",
       correct: true,
-      graph: await readConceptGraph(scratch.db),
+      graph: await readConceptGraph(scratch.db, LOCAL),
       now: NOW,
       schedule: false,
     });
@@ -160,7 +164,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("gives a probe no learning step and no opportunity, and a teach answer both", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     const probe = await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, now: NOW });
     expect(probe.pLAfter).toBe(bktUpdate(0.25, true, { params: DEFAULT_PARAMS, opportunity: false }));
     const teach = await recordObservation(scratch.db, {
@@ -179,7 +183,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("does not propagate a wrong answer, and reschedules an existing card without creating one", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     const first = await recordObservation(scratch.db, { conceptId: "beta", correct: false, graph, now: NOW });
     expect(first.propagated).toEqual([]);
     expect(first.cardCreated).toBe(true);
@@ -215,7 +219,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("records a request id once: a retry answers with the first write", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     const first = await recordObservation(scratch.db, {
       conceptId: "gamma",
       correct: true,
@@ -256,7 +260,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("serialises concurrent answers, so neither is lost from the projection", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     await Promise.all(
       [0, 1, 2, 3].map((i) =>
         recordObservation(scratch.db, { conceptId: "alpha", correct: i % 2 === 0, graph, now: later(i) }),
@@ -271,7 +275,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
   });
 
   it("writes events both replays reproduce: the mastery and the schedule", async () => {
-    const graph = await readConceptGraph(scratch.db);
+    const graph = await readConceptGraph(scratch.db, LOCAL);
     await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, now: NOW });
     await recordObservation(scratch.db, { conceptId: "gamma", correct: false, graph, source: "teach", now: later(30) });
     await recordObservation(scratch.db, { conceptId: "gamma", correct: true, graph, source: "teach", now: later(90) });
@@ -425,7 +429,7 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
     });
 
     it("closes once, with what was answered, and a replayed close writes nothing", async () => {
-      const graph = await readConceptGraph(scratch.db);
+      const graph = await readConceptGraph(scratch.db, LOCAL);
       await openTutorSession(scratch.db, { id: "s-web", title: "Gamma", goal: "gamma", now: NOW });
       await recordObservation(scratch.db, { conceptId: "gamma", correct: false, graph, session: "s-web", now: later(1) });
       await recordObservation(scratch.db, {

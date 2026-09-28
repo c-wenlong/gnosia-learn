@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 import { DB_READERS } from "../src/content/flip";
 import { dbSource, NotMigratedError, READERS, readyTypes } from "../src/content/source";
 import type { CatalogDatabase } from "../src/db";
+import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+
+/** Who these reads are for: the one owner there is today (phase 4 scoping). */
+const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
 /**
  * The database half of the reader seam: the methods no track has filled in
@@ -25,7 +29,7 @@ const db = new Proxy({} as CatalogDatabase, {
 });
 
 describe("dbSource", () => {
-  const source = dbSource(db);
+  const source = dbSource(db, LOCAL);
   const calls: Record<keyof ContentSource, () => Promise<unknown>> = {
     topics: () => source.topics(),
     tags: () => source.tags(),

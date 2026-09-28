@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
+
 /**
  * The library's optional reads, and the property that they are optional.
  *

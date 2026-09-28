@@ -1,6 +1,7 @@
 import {
   AUTHOR_KINDS,
   type AuthorKind,
+  COMMONS_OWNER,
   REVISION_OPS,
   type RevisionEntityType,
   type RevisionOp,
@@ -8,6 +9,7 @@ import {
 import { eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { ensureLearner } from "../state/learner";
 import { column, ENTITIES, isEntityType } from "./entities";
 import {
   appendRevisions,
@@ -34,9 +36,17 @@ import { updateSet } from "./upsert";
  *    and reapplies);
  * 2. sets `self_learn.revision_id`, which the per-table guard triggers check
  *    once a type flips (D4);
- * 3. upserts the entity, and replaces any owned links the caller supplied;
+ * 3. upserts the entity, stamped with `owner_id = owner`, and replaces any
+ *    owned links the caller supplied;
  * 4. reads the entity back and appends a `content_revision` with the next
  *    `seq`, the previous revision's id, the snapshot and its hash.
+ *
+ * **The owner** (phase 4 of docs/CONTENT-MIGRATION.md). Every write names
+ * whose content it is, and the row is stamped with it. Ids are global (D3,
+ * D23), so an upsert naming a slug another owner already holds would
+ * otherwise take their row over; the seam refuses that instead, with
+ * `foreign-owner`, before anything is written. With one owner every row is
+ * `local` and every CLI writes as `CLI_OWNER`, so nothing is refused today.
  *
  * A write that leaves the snapshot exactly as the latest revision has it
  * appends nothing, touches nothing, and says so: the writes run in a savepoint
@@ -56,7 +66,7 @@ class Unchanged extends Error {}
 
 export class ContentWriteError extends Error {
   constructor(
-    readonly code: "empty-reason" | "empty-author" | "stale-base" | "invalid" | "key-mismatch",
+    readonly code: "empty-reason" | "empty-author" | "empty-owner" | "foreign-owner" | "stale-base" | "invalid" | "key-mismatch",
     message: string,
   ) {
     super(message);
@@ -81,6 +91,14 @@ export interface WriteContentInput {
   next: ContentNext;
   /** The revision the writer started from, or null for "this has no revision yet". */
   base: number | null;
+  /**
+   * Whose content this is: the learner id stamped on the row's `owner_id`.
+   * Required, never defaulted, so a writer cannot leave it to the column's
+   * `'local'` by forgetting it. The CLIs pass `CLI_OWNER` (`./scope.ts`); a
+   * web route would pass `currentOwner()`. A row another owner holds is
+   * refused (`foreign-owner`).
+   */
+  owner: string;
   author: string;
   authorKind: AuthorKind;
   reason: string;
@@ -184,6 +202,17 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
   }
 
   const before = (await readSnapshots(tx, input.type, [input.id])).get(input.id);
+  if (before !== undefined && before.ownerId !== input.owner) {
+    throw new ContentWriteError(
+      "foreign-owner",
+      `${input.type} "${input.id}" belongs to ${before.ownerId}, and this write is for ${input.owner}. ` +
+        `Ids are shared across owners (D23 of docs/CONTENT-MIGRATION.md), so writing it would take ` +
+        `their row over; nothing was written. Choose another id.`,
+    );
+  }
+  // The commons owner is reserved and has no learner row until its first
+  // write, the way `local` had none until its first observation.
+  if (input.owner === COMMONS_OWNER) await ensureLearner(tx, COMMONS_OWNER);
   const [revisionId] = await reserveRevisionIds(tx, 1);
   if (revisionId === undefined) throw new Error("could not reserve a revision id");
   await markSeam(tx, String(revisionId));
@@ -251,7 +280,7 @@ async function writeRows(db: CatalogDatabase, input: WriteContentInput): Promise
   const spec = ENTITIES[input.type];
   await db
     .insert(spec.table)
-    .values(input.next.row as never)
+    .values({ ...input.next.row, ownerId: input.owner } as never)
     .onConflictDoUpdate({ target: column(spec.table, spec.key), set: updateSet(spec.table) });
 
   for (const [name, rows] of Object.entries(input.next.links ?? {})) {
@@ -286,6 +315,9 @@ function validate(input: WriteContentInput): void {
   if (typeof input.author !== "string" || input.author.trim() === "") {
     throw new ContentWriteError("empty-author", "a content write needs an author");
   }
+  if (typeof input.owner !== "string" || input.owner.trim() === "") {
+    throw new ContentWriteError("empty-owner", "a content write needs an owner: whose content this is");
+  }
   if (!(AUTHOR_KINDS as readonly string[]).includes(input.authorKind)) {
     throw new ContentWriteError("invalid", `author kind "${input.authorKind}" is not one of ${AUTHOR_KINDS.join(", ")}`);
   }
@@ -293,6 +325,14 @@ function validate(input: WriteContentInput): void {
     throw new ContentWriteError("invalid", `op "${input.op}" is not one of ${REVISION_OPS.join(", ")}`);
   }
   const spec = ENTITIES[input.type];
+  const stated = input.next.row["ownerId"];
+  if (stated !== undefined && stated !== input.owner) {
+    throw new ContentWriteError(
+      "invalid",
+      `the row says its owner is ${JSON.stringify(stated)}, but the write is for ${input.owner}. ` +
+        `The seam stamps the owner; a row should not name another one.`,
+    );
+  }
   const key = input.next.row[spec.key];
   if (key !== input.id) {
     throw new ContentWriteError(

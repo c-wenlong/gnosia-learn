@@ -6,6 +6,7 @@ import { connection } from "next/server";
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { readFileAccess, thumbnailFor, thumbnailStatusFor, withCatalog, type FileAccessMap } from "@/lib/asset-library";
 import { assetHref, compareByKindThenId, isCompanionKind, libraryHref } from "@/lib/library";
+import { currentScope } from "@/lib/owner";
 
 /**
  * The assets a course path shows per module: the count on each unit's
@@ -60,7 +61,8 @@ export const RAIL_ASSET_LIMIT = 3;
 export async function loadCourseAssets(topicSlugs: readonly string[]): Promise<CourseAssets> {
   await connection();
   const slugs = [...new Set(topicSlugs)];
-  const rows = await withCatalog((db) => Promise.all(slugs.map((slug) => assetsForTopic(db, slug))));
+  const scope = await currentScope();
+  const rows = await withCatalog((db) => Promise.all(slugs.map((slug) => assetsForTopic(db, slug, scope))));
   if (rows === null) return { reachable: false, byTopic: {} };
 
   const shown = slugs.map((_, i) =>

@@ -11,6 +11,8 @@ import {
 } from "@self-learn/catalog/state";
 import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
 
+import { currentOwner } from "@/lib/owner";
+
 /**
  * The web app's door to the learner state store.
  *
@@ -94,10 +96,13 @@ export interface Snapshot {
  * Split out because `connection()` throws outside a request scope, which is
  * every context that is not a render: a route handler, and a test. The
  * degradation is the interesting part and this is the function that has it.
+ * `owner` is whose state (`currentOwner()`); it is resolved by the caller,
+ * outside the degradation, so a request with no owner fails rather than
+ * reading as an empty learner.
  */
-export async function readSnapshot(): Promise<Snapshot> {
+export async function readSnapshot(owner: string): Promise<Snapshot> {
   try {
-    return { state: await readLearnerSnapshot(await database()), reachable: true };
+    return { state: await readLearnerSnapshot(await database(), owner), reachable: true };
   } catch (error) {
     warn("learner snapshot", error);
     return { state: emptyLearnerState(), reachable: false };
@@ -107,7 +112,7 @@ export async function readSnapshot(): Promise<Snapshot> {
 /** The learner's whole state, or an empty one when the database is down. */
 export async function loadLearnerSnapshot(): Promise<Snapshot> {
   await connection();
-  return readSnapshot();
+  return readSnapshot(await currentOwner());
 }
 
 export interface KnowledgeBaseSnapshot {
@@ -115,10 +120,10 @@ export interface KnowledgeBaseSnapshot {
   reachable: boolean;
 }
 
-/** As `readSnapshot`, for the concept graph. */
-export async function readKb(): Promise<KnowledgeBaseSnapshot> {
+/** As `readSnapshot`, for the concept graph: the owner's mastery over the concepts they may read. */
+export async function readKb(owner: string): Promise<KnowledgeBaseSnapshot> {
   try {
-    return { kb: await readKnowledgeBase(await database()), reachable: true };
+    return { kb: await readKnowledgeBase(await database(), owner), reachable: true };
   } catch (error) {
     warn("knowledge base", error);
     return { kb: EMPTY_KNOWLEDGE_BASE, reachable: false };
@@ -128,7 +133,7 @@ export async function readKb(): Promise<KnowledgeBaseSnapshot> {
 /** The concept graph with mastery and schedule, or an empty one. */
 export async function loadKnowledgeBase(): Promise<KnowledgeBaseSnapshot> {
   await connection();
-  return readKb();
+  return readKb(await currentOwner());
 }
 
 /**

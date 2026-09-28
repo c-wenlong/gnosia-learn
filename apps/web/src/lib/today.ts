@@ -21,6 +21,7 @@ import { computeHabit, dayKey, emptyHabit } from "@/lib/habit-core";
 import { habitTimeZone } from "@/lib/habit";
 import { catalogDatabase } from "@/lib/learner-store";
 import { bucketOf } from "@/lib/mastery-bucket";
+import { currentOwner, currentScope } from "@/lib/owner";
 import {
   activityRows,
   countCheckBlocks,
@@ -56,11 +57,14 @@ const COURSE_ROWS = 4;
 
 export async function readToday(now: Date = new Date()): Promise<TodayModel> {
   const timeZone = habitTimeZone();
+  // Whose dashboard, resolved before the degradation below: a request with
+  // no owner fails rather than reading as an empty learner (phase 4).
+  const owner = await currentOwner();
   let db: CatalogDatabase;
   let rows: Awaited<ReturnType<typeof readAll>>;
   try {
     db = await catalogDatabase();
-    rows = await readAll(db, now);
+    rows = await readAll(db, now, owner);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`today: dashboard unavailable, ${message}`);
@@ -135,17 +139,17 @@ export async function loadToday(): Promise<TodayModel> {
   return readToday();
 }
 
-async function readAll(db: CatalogDatabase, now: Date) {
+async function readAll(db: CatalogDatabase, now: Date, owner: string) {
   // The courses are read with the rows rather than after them because they
   // will be rows too (docs/CONTENT-MIGRATION.md, track B), and a course read
   // that fails has to degrade like the others: the empty dashboard, not a
   // thrown render.
   const [kb, events, preferences, due, snapshot, courses] = await Promise.all([
-    readKnowledgeBase(db),
-    readEvents(db),
-    readPreferences(db),
-    dueReviews(db, { now }),
-    readLearnerSnapshot(db),
+    readKnowledgeBase(db, owner),
+    readEvents(db, owner),
+    readPreferences(db, owner),
+    dueReviews(db, { now, learnerId: owner }),
+    readLearnerSnapshot(db, owner),
     getCourses(),
   ]);
   return { kb, events, preferences, due, snapshot, courses };
@@ -218,7 +222,7 @@ async function assetTitles(db: CatalogDatabase, events: readonly { type: string;
   ];
   if (ids.length === 0) return {};
   try {
-    const rows = await assetsByIds(db, ids);
+    const rows = await assetsByIds(db, ids, await currentScope());
     return Object.fromEntries(rows.filter((r) => r.title !== null).map((r) => [r.id, r.title as string]));
   } catch {
     return {};
