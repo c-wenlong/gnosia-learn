@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { composerHeight, composerKey } from "./composer-keys";
+import { composerHeight, composerKey, modEnterTarget } from "./composer-keys";
 
 const key = (over: Partial<Parameters<typeof composerKey>[0]> = {}) =>
   composerKey({ key: "Enter", shiftKey: false, metaKey: false, ctrlKey: false, ...over });
@@ -14,6 +14,19 @@ describe("composerKey", () => {
   });
   it("leaves Enter to an input method that is composing", () => expect(key({ isComposing: true })).toBe("none"));
   it("ignores every other key", () => expect(key({ key: "a" })).toBe("none"));
+  it("leaves Safari's IME commit alone: keyCode 229 with isComposing already false", () => {
+    expect(key({ isComposing: false, keyCode: 229 })).toBe("none");
+    expect(key({ keyCode: 13 })).toBe("send");
+  });
+});
+
+describe("modEnterTarget", () => {
+  it("goes to the caller only from an empty field", () => {
+    expect(modEnterTarget("", true)).toBe("mod");
+    expect(modEnterTarget("  \n", true)).toBe("mod");
+    expect(modEnterTarget("use the other topic", true)).toBe("send");
+  });
+  it("sends when the caller has no use for it", () => expect(modEnterTarget("", false)).toBe("send"));
 });
 
 describe("composerHeight", () => {

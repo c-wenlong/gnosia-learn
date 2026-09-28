@@ -4,7 +4,7 @@ import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, typ
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { composerHeight, composerKey, COMPOSER_MAX_ROWS } from "./composer-keys";
+import { composerHeight, composerKey, COMPOSER_MAX_ROWS, modEnterTarget } from "./composer-keys";
 
 /**
  * Kit composer: the chat input the concept tutor and the studio's planner
@@ -16,9 +16,9 @@ import { composerHeight, composerKey, COMPOSER_MAX_ROWS } from "./composer-keys"
  * flattens into one line in an `<input>`. At one line it measures exactly
  * what the input did, so the tutor does not change.
  *
- * Enter sends and Shift+Enter is a new line (`composer-keys.ts`). Cmd or Ctrl+Enter
- * goes to `onModEnter` when the caller has a use for it, the studio's Draw,
- * and sends otherwise.
+ * Enter sends and Shift+Enter is a new line (`composer-keys.ts`). Cmd or
+ * Ctrl+Enter goes to `onModEnter` from an empty field when the caller has a
+ * use for it, the studio's Draw, and sends otherwise.
  *
  * A client component, like `FilterMenu`: it measures itself on every change.
  */
@@ -95,13 +95,15 @@ export function Composer({
       ctrlKey: event.ctrlKey,
       altKey: event.altKey,
       isComposing: event.nativeEvent.isComposing,
+      keyCode: event.nativeEvent.keyCode,
     });
     if (meaning === "send") {
       event.preventDefault();
       submit();
     } else if (meaning === "mod-send") {
       event.preventDefault();
-      if (onModEnter !== undefined) onModEnter();
+      // `submit` refuses a blocked send, Cmd+Enter included.
+      if (modEnterTarget(value, onModEnter !== undefined) === "mod") onModEnter?.();
       else submit();
     }
   }

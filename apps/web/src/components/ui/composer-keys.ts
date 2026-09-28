@@ -32,7 +32,9 @@ export type ComposerKey = "send" | "mod-send" | "newline" | "none";
  *
  * A key pressed while an input method is composing (Japanese, Chinese,
  * Korean) belongs to the IME: Enter there confirms a word, and sending on it
- * would post half a sentence.
+ * would post half a sentence. Safari reports the Enter that commits a word
+ * with `isComposing` already false and `keyCode` 229, the code every browser
+ * gives a key the IME took, so 229 counts as composing too.
  */
 export function composerKey(event: {
   key: string;
@@ -41,9 +43,20 @@ export function composerKey(event: {
   ctrlKey: boolean;
   altKey?: boolean;
   isComposing?: boolean;
+  keyCode?: number;
 }): ComposerKey {
-  if (event.key !== "Enter" || event.isComposing === true) return "none";
+  if (event.key !== "Enter" || event.isComposing === true || event.keyCode === 229) return "none";
   if (event.metaKey || event.ctrlKey) return "mod-send";
   if (event.shiftKey || event.altKey === true) return "newline";
   return "send";
+}
+
+/**
+ * Where Cmd or Ctrl+Enter goes: to the caller's `onModEnter` (the studio's
+ * Draw) only from an empty field. Words in the field are sent instead, so a
+ * correction typed under a brief is not turned into a paid drawing of the old
+ * one, and the send takes the same checks a plain Enter does.
+ */
+export function modEnterTarget(value: string, hasModEnter: boolean): "mod" | "send" {
+  return hasModEnter && value.trim() === "" ? "mod" : "send";
 }
