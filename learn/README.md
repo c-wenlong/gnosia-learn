@@ -60,7 +60,41 @@ npm run learn -- concept commit attention-weights --reason "close: what the sess
 
 The commit is refused, with both revisions named, when the note changed after
 the checkout; check it out again and reapply. `concept edit <id> --body-file F
---reason R` replaces the body in one step. The rules a note's row keeps are in
+--reason R` replaces the body in one step.
+
+To read and edit every note at once, in Obsidian, pull the vault:
+
+```bash
+npm run learn -- vault pull                 # ~/.self-learn/vault, or --out <dir>
+# edit notes in Obsidian
+npm run learn -- vault push --reason "tidied the proofs"
+```
+
+`vault pull` writes each note as `concepts/<domain>/<slug>.md` and each log as
+`sessions/<id>.md`, with `.vault.json` recording what every file was based on
+(the note's revision, or how many entries the log had) and the sha256 of what
+was written. The folder defaults to `$SELF_LEARN_HOME/vault`, outside the
+repository, and one inside it is refused. Neither command overwrites an edit
+nobody pushed:
+
+| Case | What happens |
+| --- | --- |
+| Pull, file unedited | Replaced by the database's version |
+| Pull, file edited, database unchanged since | Kept, listed as edited |
+| Pull, file edited, database moved | Kept; the database's version is written beside it as `<name>.incoming.md` |
+| Push, note edited, database unchanged since | Committed through the write seam against the recorded revision: one concept revision (and one for its `note:` asset) |
+| Push, note edited, database moved | Refused; the database's version is written beside it as `<name>.conflict.md` |
+| Push, session log edited | Refused by name: a log is a record of what happened, and a correction belongs in the note it touched |
+| Push, a new file under `concepts/` | Refused: a new note needs a topic, so it is made with `concept add --topic` |
+
+Settling an `.incoming` or `.conflict` copy is deleting it: merge what you
+want of it into the note first, and the note is based on that newer version
+from then on, so the next push commits it. A copy you wrote in yourself is
+never replaced. An edited log goes back to the database's by deleting it and
+pulling. Neither command runs without `catalog flip concepts` and `catalog flip
+sessions` (pull needs both, push needs concepts); before them `learn/` is the
+vault. A vault pulled from another database (a `createdb -T` copy counts)
+refuses to push until a pull adopts the new one. The rules a note's row keeps are in
 [services/catalog/SCHEMA.md](../services/catalog/SCHEMA.md): values, not
 frontmatter layout, and no frontmatter key beyond the eight a note uses.
 
@@ -217,6 +251,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `status` | Where you are: counts, due reviews, frontier |
 | `concept add\|edit\|list\|show` | Define and inspect concepts; `add --topic <slug>` files the new note under a vocabulary topic and indexes it; `edit` changes edges without touching the note body, or replaces the body with `--body-file F --reason R` |
 | `concept checkout\|commit` | Edit a whole note: a copy outside the repository, written back with `--reason`, refused if the note moved |
+| `vault pull\|push [--out D]` | Every note and log as a folder for Obsidian, and edited notes written back, one revision each; never overwrites an unpushed edit |
 | `check add\|list` | Verification questions stored in the note |
 | `probe [--goal]` | What to ask next, by information gain |
 | `observe --concept --correct` | **The RL step.** Record one answer |
@@ -672,12 +707,14 @@ diagrams. This is a real constraint of the harness, not a style choice.
 
 ### Using it with Obsidian
 
-Point a vault at `learn/`. Wikilinks, embeds, tags and the mermaid map all
-render natively. The session log is worth keeping open while a session runs —
-it is written live. Once a type is flipped the vault shows the last export, not
-what the database holds: `catalog export --out <dir>` refreshes a read-only
-copy, and `learn vault pull|push` (phase 2 of the migration) will make it
-two-way again.
+Until the flip, point a vault at `learn/`. Wikilinks, embeds, tags and the
+mermaid map all render natively. The session log is worth keeping open while a
+session runs, since it is written live. Once notes and logs are flipped there
+is no live file under `learn/`: `learn vault pull` writes them to
+`~/.self-learn/vault/` (the folder to open in Obsidian), and `learn vault push`
+writes edited notes back, as described under "Where the notes and logs live"
+above. The vault gets no `.obsidian/` from the command; the config is yours.
+Pull again to see what a session wrote; it is a snapshot, not a live sync.
 
 ---
 
