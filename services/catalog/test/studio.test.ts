@@ -153,11 +153,13 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
   });
 
   describe("enqueue", () => {
-    it("queues a job and derives the candidate path from the target", async () => {
+    it("queues a job and derives the candidate path from its id and target", async () => {
       const result = await enqueue({ target: "learn/assets/queued.tldr" });
       expect(result.created).toBe(true);
       expect(result.job.state).toBe("queued");
-      expect(result.job.candidatePath).toBe("learn/assets/.candidates/queued.tldr");
+      // The job's own workspace, relative to the runner's STUDIO_HOME: nothing
+      // under learn/ and no machine path in the row.
+      expect(result.job.candidatePath).toBe(`jobs/${result.job.id}/candidate/queued.tldr`);
       expect(result.job.attempt).toBe(0);
     });
 
@@ -218,26 +220,53 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       expect(result.job.targetHashBefore).toMatch(/^[0-9a-f]{64}$/);
     });
 
-    it("refuses a candidate outside the candidates directory", async () => {
-      expect(() => briefCandidate("learn/assets/x.tldr", "learn/assets/x.tldr")).toThrow(
-        /only directory a job may write to/,
-      );
-      expect(() => briefCandidate("/tmp/x.tldr", "learn/assets/x.tldr")).toThrow(
-        /repo-relative/,
-      );
+    it("refuses any candidate but the job's own workspace path", async () => {
+      const own = "jobs/job-1/candidate/x.tldr";
+      expect(briefCandidate(own, "job-1", "learn/assets/x.tldr")).toBe(own);
+      // The old convention is refused by name, so a stale brief says what moved.
       expect(() =>
-        briefCandidate("learn/assets/.candidates/x.svg", "learn/assets/x.tldr"),
-      ).toThrow(/does not end in \.tldr/);
+        briefCandidate("learn/assets/.candidates/x.tldr", "job-1", "learn/assets/x.tldr"),
+      ).toThrow(/not this job's candidate.*jobs\/job-1\/candidate\/x\.tldr/);
+      // Another job's workspace, the target itself, and the SVG are all refused.
+      expect(() => briefCandidate("jobs/job-2/candidate/x.tldr", "job-1", "learn/assets/x.tldr")).toThrow(
+        /not this job's candidate/,
+      );
+      expect(() => briefCandidate("learn/assets/x.tldr", "job-1", "learn/assets/x.tldr")).toThrow(
+        /not this job's candidate/,
+      );
+      expect(() => briefCandidate("jobs/job-1/candidate/x.svg", "job-1", "learn/assets/x.tldr")).toThrow(
+        /not this job's candidate/,
+      );
+      // Absolute, even when it ends in the right place: the catalog cannot tell
+      // a runner's STUDIO_HOME from any other directory.
+      expect(() =>
+        briefCandidate("/Users/someone/.studio/jobs/job-1/candidate/x.tldr", "job-1", "learn/assets/x.tldr"),
+      ).toThrow(/absolute/);
       await expect(
         enqueue({ target: "learn/assets/bad-candidate.tldr", candidate: "../escape.tldr" }),
-      ).rejects.toThrow(/repo-relative/);
+      ).rejects.toThrow(/not this job's candidate/);
+    });
+
+    it("accepts a brief that names its own candidate", async () => {
+      const result = await enqueue({
+        id: "named-job",
+        target: "learn/assets/named.tldr",
+        candidate: "jobs/named-job/candidate/named.tldr",
+      });
+      expect(result.job.candidatePath).toBe("jobs/named-job/candidate/named.tldr");
+    });
+
+    it("refuses an id that is not one path segment, since it names the job's workspace", async () => {
+      for (const id of ["../escape", "a/b", ".hidden", "x".repeat(65)]) {
+        await expect(enqueue({ id, target: "learn/assets/odd-id.tldr" })).rejects.toThrow(/is not a job id/);
+      }
     });
 
     it("refuses a target outside learn/assets, or one that is not a .tldr", () => {
       expect(() => briefTarget("learn/assets/deep/x.tldr")).toThrow(/directly inside/);
       expect(() => briefTarget("../outside.tldr")).toThrow(/repo-relative/);
       expect(() => briefTarget("learn/assets/x.svg")).toThrow(/not a \.tldr/);
-      expect(candidateFor("learn/assets/x.tldr")).toBe("learn/assets/.candidates/x.tldr");
+      expect(candidateFor("job-1", "learn/assets/x.tldr")).toBe("jobs/job-1/candidate/x.tldr");
     });
   });
 
@@ -314,7 +343,7 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
       await expect(runAccept({ jobId: "ghost" })).rejects.toThrow(/no job "ghost"/);
     });
 
-    it("refuses a candidate override on finish that leaves the staging directory", async () => {
+    it("refuses a candidate override on finish that leaves the job's workspace", async () => {
       const queued = await enqueue({ target: "learn/assets/finish-candidate.tldr" });
       await runClaim({ jobId: queued.job.id });
       await expect(
@@ -323,7 +352,13 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
           state: "awaiting_review",
           candidatePath: "learn/assets/finish-candidate.tldr",
         }),
-      ).rejects.toThrow(/only directory a job may write to/);
+      ).rejects.toThrow(/not this job's candidate/);
+      const finished = await runFinish({
+        jobId: queued.job.id,
+        state: "awaiting_review",
+        candidatePath: `jobs/${queued.job.id}/candidate/finish-candidate.tldr`,
+      });
+      expect(finished.job.candidatePath).toBe(`jobs/${queued.job.id}/candidate/finish-candidate.tldr`);
     });
 
     it("records the cost and the exit code a failed run reports", async () => {

@@ -26,7 +26,7 @@ process.env.STUDIO_CLAUDE_BIN = FAKE;
 
 const { AGENT_AUTH_ENV, agentEnv, startAgent } = await import("../src/agent");
 const { agentAuth, agentAuthReport } = await import("../src/config");
-const { tmpDir } = await import("../src/paths");
+const { candidateDir, jobDir, scratchDir, tmpDir } = await import("../src/paths");
 
 const API_ERROR =
   "API Error: 400 This API key is not scoped to a workspace, so this request must include " +
@@ -49,6 +49,7 @@ out({
   configDir: process.env.CLAUDE_CONFIG_DIR ?? null,
   tmpdir: process.env.TMPDIR ?? null,
   marker: process.env.STUDIO_AGENT_TEST_MARKER ?? null,
+  addDirs: process.argv.filter((_, i, argv) => argv[i - 1] === "--add-dir"),
 });
 out({ type: "system", subtype: "init", model: "claude-sonnet-test", apiKeySource: key ? "ANTHROPIC_API_KEY" : "none" });
 if (key) {
@@ -117,6 +118,14 @@ async function runFake(jobId: string, auth?: "login" | "env") {
   const env = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
   return { outcome, env, inits, lines };
 }
+
+describe("the agent's working directories", () => {
+  it("are its scratch and its candidate directory, and not the workspace that holds the runner's records", async () => {
+    const { env } = await runFake("job-dirs");
+    expect(env.addDirs).toEqual([scratchDir("job-dirs"), candidateDir("job-dirs")]);
+    expect(env.addDirs).not.toContain(jobDir("job-dirs"));
+  });
+});
 
 describe("the agent's environment", () => {
   it("strips the shell's key by default, so the CLI falls back to the login", async () => {

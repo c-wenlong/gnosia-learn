@@ -111,7 +111,6 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
 
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;
-    delete process.env.ASSET_FILES_ENABLED;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
 

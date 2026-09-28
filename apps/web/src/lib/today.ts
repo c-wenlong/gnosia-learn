@@ -13,7 +13,7 @@ import {
 } from "@self-learn/catalog/state";
 
 import { getCourses } from "@/data/courses";
-import { contentSource } from "@/data/source";
+import { ContentUnavailableError, contentSource } from "@/data/source";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";
 import type { Course } from "@/lib/types";
 import { itemStanding } from "@/lib/course-path";
@@ -66,6 +66,11 @@ export async function readToday(now: Date = new Date()): Promise<TodayModel> {
     db = await catalogDatabase();
     rows = await readAll(db, now, owner);
   } catch (error) {
+    // A courses type that is not flipped is not an outage. The database
+    // answered, so the shell shows no banner, and the empty dashboard would
+    // read as a learner with no courses; the error boundary names the flip
+    // instead, as it does on every other page.
+    if (error instanceof ContentUnavailableError && error.reason === "not-flipped") throw error;
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`today: dashboard unavailable, ${message}`);
     return emptyToday(now, timeZone);
@@ -140,10 +145,11 @@ export async function loadToday(): Promise<TodayModel> {
 }
 
 async function readAll(db: CatalogDatabase, now: Date, owner: string) {
-  // The courses are read with the rows rather than after them because they
-  // will be rows too (docs/CONTENT-MIGRATION.md, track B), and a course read
-  // that fails has to degrade like the others: the empty dashboard, not a
-  // thrown render.
+  // The courses are read with the rows because they are rows (track B of
+  // docs/CONTENT-MIGRATION.md), and a course read that fails because the
+  // database is down degrades like the others: the empty dashboard, not a
+  // thrown render. One refused because courses are not flipped is rethrown by
+  // `readToday`.
   const [kb, events, preferences, due, snapshot, courses] = await Promise.all([
     readKnowledgeBase(db, owner),
     readEvents(db, owner),
@@ -188,11 +194,10 @@ function placeOf(
 
 /**
  * How many check blocks each concept's note holds, read through the content
- * seam: `concept.body` once the database owns the notes, the note file until
- * then (Track C of docs/CONTENT-MIGRATION.md). A note that cannot be read (a
- * deployment without `learn/`, a slug with no note) counts as none, which the
- * row prints as "recall": the card is still due, it just has nothing stored
- * to ask.
+ * seam from `concept.body` (Track C of docs/CONTENT-MIGRATION.md). A note that
+ * cannot be read (the database is down, concepts are not flipped, a slug with
+ * no note) counts as none, which the row prints as "recall": the card is
+ * still due, it just has nothing stored to ask.
  */
 async function checkCounts(slugs: string[]): Promise<Record<string, number>> {
   if (slugs.length === 0) return {};

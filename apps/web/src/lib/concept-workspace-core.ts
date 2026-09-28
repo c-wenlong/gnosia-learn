@@ -59,7 +59,7 @@ export interface WorkspaceCheck extends ConceptCheck {
 
 export type WorkspaceNote =
   | { available: true; path: string; source: string }
-  | { available: false; code: "no-note" | "file-missing" | "unreachable"; message: string };
+  | { available: false; code: "no-note" | "too-large" | "not-flipped" | "unreachable"; message: string };
 
 export interface ConceptWorkspace {
   slug: string;

@@ -8,10 +8,10 @@ import { contentSource } from "@/data/source";
 /**
  * The app's view of the shared topic vocabulary.
  *
- * Through the content seam, which reads `content/topics.yaml` until track A
- * moves topics into Postgres. Until then this keeps the property U3 relies on:
- * the studio's topic chips need no database, and a topic title is the label on
- * a chip, which is not a good enough reason to make a screen depend on one.
+ * Through the content seam, which reads the `topic` rows (the database only,
+ * since phase 2), so with Postgres down this throws. The studio's screens
+ * keep U3 by not depending on it: a topic title is the label on a chip, and
+ * they fall back to the slug.
  *
  * Server only, like every other reader here, and once per request, like
  * `getCourses`. The three views below are pure over the list a page already

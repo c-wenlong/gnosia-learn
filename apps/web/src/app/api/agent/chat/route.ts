@@ -5,7 +5,7 @@ import {
   enforceRateLimit,
   enforceSameOrigin,
 } from "@/lib/agent/guard";
-import { getCourses } from "@/data/courses";
+import { readCoursesOr503 } from "@/lib/agent/courses";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 import { buildAgentSessionContext, buildConceptSessionContext, type CitationSource } from "@/lib/agent/prompt";
 import { isConceptSlug, toConceptPromptInput } from "@/lib/concept-workspace-core";
@@ -125,7 +125,9 @@ export async function POST(req: Request) {
   const rateLimited = enforceRateLimit(req, "chat", CHAT_RATE_LIMIT);
   if (rateLimited) return rateLimited;
 
-  const found = findTopicBySlugs(await getCourses(), courseSlug, moduleSlug, topicId);
+  const read = await readCoursesOr503();
+  if ("response" in read) return read.response;
+  const found = findTopicBySlugs(read.courses, courseSlug, moduleSlug, topicId);
   if (!found) {
     return NextResponse.json({ error: "Topic not found" }, { status: 404 });
   }

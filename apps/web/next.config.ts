@@ -12,40 +12,26 @@ const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 
 const nextConfig: NextConfig = {
   /**
-   * The app is one workspace in a monorepo, and the files it reads at runtime
-   * are not.
+   * The app is one workspace in a monorepo, and the workspace packages it
+   * imports are not inside it.
    *
    * Tracing starts at the directory holding this file, so without this every
-   * path outside `apps/web/` — `content/`, the workspace packages under
-   * `packages/` and `services/` — is out of scope and silently dropped from
-   * the deployed bundle.
-   */
-  outputFileTracingRoot: repoRoot,
-
-  /**
-   * Course data is read from `content/` at runtime, not imported.
+   * path outside `apps/web/` (the workspace packages under `packages/` and
+   * `services/`) is out of scope and silently dropped from the deployed
+   * bundle.
    *
-   * File tracing follows `import` statements, and
-   * `readFileSync(path.join(root, …))` is not one, so without this the
-   * deployed bundle ships without the course files and every page that reads a
-   * course fails in production while the build looks fine.
-   *
-   * The concept notes are the same case. `/review` reads each due note's check
-   * blocks at request time (through the catalog's note asset and
-   * `resolveAssetFile`), and a deployment without the files would quietly ask
-   * every check card as summary recall instead.
-   *
-   * The pattern is resolved from this directory, not from the tracing root
-   * above, which is why it starts with `../../`.
+   * There is no `outputFileTracingIncludes` beside it any more: the app used
+   * to read `content/**\/*.yaml` and the concept notes from disk at request
+   * time, which tracing cannot follow, and since phase 2 of
+   * docs/CONTENT-MIGRATION.md it reads every piece of authored content from
+   * the database instead. Nothing the app serves is a file in the tree.
    *
    * Neither `@self-learn/content` nor `@self-learn/catalog` needs a
    * `transpilePackages` entry, even though both ship raw TypeScript with no
    * build step: Turbopack transpiles workspace packages on its own. Verified
    * by removing the entry and building.
    */
-  outputFileTracingIncludes: {
-    "/*": ["../../content/**/*.yaml", "../../learn/concepts/**/*.md"],
-  },
+  outputFileTracingRoot: repoRoot,
 
   /**
    * `pg` reaches the learner state, and it is a Node driver: it resolves its

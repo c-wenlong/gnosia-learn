@@ -7,9 +7,9 @@ import { REPO_ROOT } from "./paths";
  * Running a command and reading its answer.
  *
  * Both tools the runner drives are CLIs with a `--json` mode, and both are run
- * from the repository root: `learn/assets/` is repo-relative, so is
- * `content/topics.yaml`, and `npm run` only resolves the workspace scripts from
- * there. manimkc's `run_claude` does the same with `cwd=ROOT`.
+ * from the repository root, because `npm run` only resolves the workspace
+ * scripts (`canvas`, `catalog`) from there. manimkc's `run_claude` does the
+ * same with `cwd=ROOT`.
  *
  * The exit code is kept and returned rather than turned into an exception.
  * tldrawkc's 3 (lints remain, the document was saved) and 4 (the save worked,

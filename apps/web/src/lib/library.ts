@@ -254,9 +254,8 @@ export function assetFileHref(id: string): string {
  * call site that forgets to encode it, and the route answers 404 for every
  * video in the catalog while looking like it works for none of them.
  *
- * It is a URL and nothing more. Whether a frame can actually be extracted
- * depends on `ASSET_FILES_ENABLED` and on ffmpeg being installed, and neither
- * is a question a pure string function can answer; the route says so per
+ * It is a URL and nothing more. Whether a poster was stored for the video is
+ * not a question a pure string function can answer; the route says so per
  * request and a card that gets no image shows the placeholder it always had.
  * Only a `video` asset has one — every other kind is a 404 — so a caller that
  * points an `<img>` at this for a note is asking for a broken image.

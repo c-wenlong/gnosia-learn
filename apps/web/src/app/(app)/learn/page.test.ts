@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EMPTY_KNOWLEDGE_BASE } from "@/lib/kb/types";
 
+// The app reads courses from the database only; this suite tests logic over
+// real course data, so it reads the export tree instead (`@/test/content-files`).
+vi.mock("@/data/source", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/data/source")>()),
+  contentSource: (await import("@/test/content-files")).fileContentSource,
+}));
+
 /**
  * `/learn` renders when the database is unreachable, and says which kind of
  * empty it is.

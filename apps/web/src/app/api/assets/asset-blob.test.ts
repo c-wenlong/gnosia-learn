@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { fsStore, key as blobKey } from "@self-learn/blob";
 import { asset, assetDerivation, blobObject } from "@self-learn/schema";
@@ -29,10 +29,9 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
  * `signedUrl` is null. The redirect path, which a cloud store takes, is in
  * `asset-blob-redirect.test.ts` with a store that signs local URLs.
  *
- * `ASSET_FILES_ENABLED` is off for this whole file, on purpose: it gates the
- * legacy file branch only, and a blob is served whatever it says. No legacy
- * file exists for any of these rows either, so a 200 can only have come from
- * the store.
+ * No file exists for any of these rows on disk, and the routes read none
+ * since phase 2 took the legacy file branch out, so a 200 can only have come
+ * from the store.
  */
 
 const reachable = await probe();
@@ -45,7 +44,7 @@ const VIDEO_ID = "manimkc:out/algorithms/demo/demo.mp4";
 const POSTER_ID = `poster:${VIDEO_ID}`;
 const PENDING_ID = "manimkc:out/algorithms/demo/pending.mp4";
 const LOST_ID = "manimkc:out/algorithms/demo/lost.mp4";
-const LEGACY_ID = "manimkc:out/algorithms/demo/legacy.mp4";
+const SVG_ID = "tldrawkc:learn/assets/demo-diagram.svg";
 const ORIGIN = "http://localhost:3000";
 
 type Handler = (
@@ -98,13 +97,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    // At 0012: these rows carry a path and no blob, which the contract (0013)
-    // forbids; p2/readers-db-only rewrites the suite for the contract.
+    // At 0012: the diagram SVG with no blob, whose not-uploaded hint this
+    // checks, is a row the contract (0013) forbids. Every other row here
+    // carries a blob and would pass it.
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;
-    delete process.env.ASSET_FILES_ENABLED;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
@@ -131,7 +130,17 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       video(VIDEO_ID, "out/algorithms/demo/demo.mp4", videoKey, VIDEO),
       video(PENDING_ID, "out/algorithms/demo/pending.mp4", pendingKey, pendingBytes),
       video(LOST_ID, "out/algorithms/demo/lost.mp4", lostKey, lostBytes),
-      video(LEGACY_ID, "out/algorithms/demo/legacy.mp4", null, VIDEO),
+      {
+        id: SVG_ID,
+        kind: "diagram_svg",
+        path: "learn/assets/demo-diagram.svg",
+        url: null,
+        contentHash: sha256(Buffer.from("<svg/>")),
+        bytes: 6,
+        title: "Demo diagram",
+        sourceRepo: "self-learn",
+        blobKey: null,
+      },
       {
         id: POSTER_ID,
         kind: "poster",
@@ -153,11 +162,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     delete process.env.SELF_LEARN_HOME;
   });
 
-  beforeEach(() => {
-    delete process.env.ASSET_FILES_ENABLED;
-  });
-
-  it("streams a stored video whole, with the player's headers, while the file switch is off", async () => {
+  it("streams a stored video whole, with the player's headers", async () => {
     const response = await call(FILE, "file", VIDEO_ID);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("video/mp4");
@@ -194,8 +199,16 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(response.headers.get("content-range")).toBe(`bytes */${VIDEO.length}`);
   });
 
-  it("answers a pending blob with 404 not-uploaded, not a 500 and not the legacy file", async () => {
-    process.env.ASSET_FILES_ENABLED = "1";
+  it("names the diagram writer, not the manimkc upload, for a diagram SVG with no stored copy", async () => {
+    const response = await call(FILE, "file", SVG_ID);
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { code?: string; detail?: string };
+    expect(body.code).toBe("not-uploaded");
+    expect(body.detail).toContain("catalog -- diagram put --slug demo-diagram");
+    expect(body.detail).not.toContain("manimkc");
+  });
+
+  it("answers a pending blob with 404 not-uploaded, not a 500", async () => {
     const response = await call(FILE, "file", PENDING_ID);
     expect(response.status).toBe(404);
     expect(await codeOf(response)).toBe("not-uploaded");
@@ -210,19 +223,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(await codeOf(response)).toBe("not-uploaded");
   });
 
-  it("still gates the legacy branch on the switch", async () => {
-    const response = await call(FILE, "file", LEGACY_ID);
-    expect(response.status).toBe(404);
-    expect(await codeOf(response)).toBe("files-off");
-  });
-
   it("reports a stored asset as fine to the page and the status route alike", async () => {
     expect(await (await call(STATUS, "status", VIDEO_ID)).json()).toEqual({ ok: true });
-    const problems = await library.readFileProblems([VIDEO_ID, PENDING_ID, LEGACY_ID]);
+    const problems = await library.readFileProblems([VIDEO_ID, PENDING_ID, LOST_ID]);
     expect(Object.fromEntries(problems)).toEqual({
       [VIDEO_ID]: null,
       [PENDING_ID]: "not-uploaded",
-      [LEGACY_ID]: "files-off",
+      [LOST_ID]: "not-uploaded",
     });
   });
 
@@ -253,10 +260,23 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(Buffer.from(await response.arrayBuffer()).equals(JPEG)).toBe(true);
   });
 
-  it("falls back to the switch for a video with no stored poster", async () => {
-    const response = await call(POSTER, "poster", LEGACY_ID);
+  it("answers not-uploaded for a video with no stored poster, and cuts none", async () => {
+    const response = await call(POSTER, "poster", PENDING_ID);
     expect(response.status).toBe(404);
-    expect(await codeOf(response)).toBe("files-off");
+    expect(await codeOf(response)).toBe("not-uploaded");
+    expect(await (await call(STATUS, "status?for=poster", PENDING_ID)).json()).toEqual({
+      ok: false,
+      code: "not-uploaded",
+    });
+  });
+
+  it("answers not-a-video for a poster of anything else, and not-in-catalog for no row", async () => {
+    const notVideo = await call(POSTER, "poster", POSTER_ID);
+    expect(notVideo.status).toBe(404);
+    expect(await codeOf(notVideo)).toBe("not-a-video");
+    const none = await call(POSTER, "poster", "manimkc:out/nothing.mp4");
+    expect(none.status).toBe(404);
+    expect(await codeOf(none)).toBe("not-in-catalog");
   });
 
   it("answers blob-store-unavailable when SELF_LEARN_HOME cannot be a store", async () => {

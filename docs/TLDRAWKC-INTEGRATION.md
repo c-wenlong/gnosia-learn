@@ -25,14 +25,15 @@ same loop driven from a terminal and stays the way a diagram gets drawn inside a
 
 **How it works, in one paragraph.** A person fills in a brief. The runner queues
 it as a `job` row, spawns a headless Claude Code session with a permission file
-that lets it write exactly two paths under `learn/assets/.candidates/`, and
-watches its stdout. The agent draws through `npm run --silent canvas`, the same
-CLI the skill uses. When it exits, the runner checks the work itself with
-`inspect`, `export` and `verify` rather than believing the agent, and the job
-stops at `awaiting_review`. Nothing under `learn/assets/` has changed yet. The
-person compares before and after and presses Accept, which renames the candidate
-into place, re-exports the SVG and writes one `asset_job` row through the
-catalog. Committing is still the person's job.
+that lets it write exactly two paths in its own workspace,
+`$STUDIO_HOME/jobs/<id>/candidate/`, and watches its stdout. The agent draws
+through `npm run --silent canvas`, the same CLI the skill uses. When it exits,
+the runner checks the work itself with `inspect`, `export` and `verify` rather
+than believing the agent, and the job stops at `awaiting_review`. Nothing has
+landed yet, and nothing in the working tree has changed at all. The person
+compares before and after and presses Accept, which stores the candidate as the
+diagram with `catalog diagram put --job` (Track D of
+[CONTENT-MIGRATION.md](CONTENT-MIGRATION.md)). There is nothing to commit.
 
 ## Read order
 
@@ -80,9 +81,9 @@ flowchart TB
     subgraph agent["headless claude -p"]
         CL["snippets, draw-look-fix"]
     end
-    subgraph files["the working tree"]
-        CAND["learn/assets/.candidates/"]
-        COMM["learn/assets/"]
+    subgraph files["STUDIO_HOME, outside the working tree"]
+        CAND["jobs/id/candidate/"]
+        COMM["work/ checkouts"]
     end
     CAT[("postgres<br/>diagram, asset, asset_job, job<br/>plus the SVG blob")]
     TK["tools/tldrawkc<br/>npm run --silent canvas"]
@@ -109,9 +110,10 @@ test where a grep test is possible, a named reviewer check where it is not.
 1. **The UI never spawns an agent, never opens a browser, and never writes a
    file.** Everything it does is an HTTP call to `services/studio/`. A React
    component importing `node:child_process` is a failing test.
-2. **The runner is the only thing that writes outside the candidates folder.**
-   The agent's permission file allows exactly the two candidate paths and the
-   job scratch directory. The single write outside them is the accept rename,
+2. **The runner is the only thing that writes outside a job's workspace.**
+   The agent's permission file allows exactly the two candidate paths in
+   `$STUDIO_HOME/jobs/<id>/candidate/` and the job scratch directory. The one
+   write outside them that lands anything is Accept's `catalog diagram put`,
    and it happens after a person pressed Accept.
 3. **The runner never runs a mutating git command.** It reads
    `git status --porcelain` as a backstop check and nothing else. No `add`, no
@@ -119,12 +121,16 @@ test where a grep test is possible, a named reviewer check where it is not.
 4. **The agent's word is never enough.** Every claim about the output is
    re-established by the runner's own subprocess calls before a job leaves
    `running`.
-5. **Every path the studio computes is repo-relative and resolved through one
-   module.** `services/studio/src/paths.ts`, the same discipline
-   `tools/tldrawkc/src/lib/paths.ts` keeps. The repo root comes from
-   [`apps/web/src/data/repo-root.ts`](../apps/web/src/data/repo-root.ts)'s rule,
-   walking up to the directory holding `content/courses`, because the studio
-   does not run from the repo root either.
+5. **Every path the studio computes is resolved through one module.**
+   `services/studio/src/paths.ts`, the same discipline
+   `tools/tldrawkc/src/lib/paths.ts` keeps. The repo root is where that code
+   sits, two levels above `services/studio/`, as `services/catalog/src/env.ts`
+   finds its own: what the studio needs a root for is code (the directory
+   `npm run canvas` and `npm run catalog` run from, the agent's working
+   directory, the `.git` it may not edit), not content, which lives in the
+   database. It used to walk up to the directory holding `content/courses`,
+   which phase 3 of the migration deletes. The job workspaces, the checkouts
+   and the cache are under `studioHome()`, which `STUDIO_HOME` moves.
 6. **Nothing in the studio writes an `asset` row itself.** It calls
    `catalog diagram put --job`, the catalog's one diagram writer, which goes
    through the content write seam. There is one implementation of what a
@@ -182,10 +188,16 @@ What this deliberately leaves alone:
 | `asset_job` | New | `asset_id` PK FK, `job_id` PK FK, `content_hash` (what the job wrote), `bytes`, `written_at` |
 | `event` | Changed | `session_id` becomes a foreign key to `session(id)`, `ON DELETE RESTRICT ON UPDATE CASCADE`. The column, its type and its index are unchanged |
 
-`target_path` is the committed path the job intends to land on, which is also
-the lease key. `candidate_path` is where the job actually writes, under
-`learn/assets/.candidates/`. Until a person accepts, `target_path` names a file
-the job has never opened. D2 is where that split comes from.
+`target_path` is the diagram's logical name, `learn/assets/<slug>.tldr`, which
+is also the lease key. `candidate_path` is where the job actually writes, in its
+own workspace: `jobs/<id>/candidate/<slug>.tldr`, stored relative to the
+runner's `STUDIO_HOME`. Relative because the database moves to the cloud at
+go-live and an absolute path would carry this machine's home directory into it,
+and because `STUDIO_HOME` can move. The catalog derives the same string from
+the job's id and target, and refuses any other (`briefCandidate` in
+`services/catalog/src/commands/job.ts`). Rows from before phase 2 of the
+migration keep `learn/assets/.candidates/<slug>.tldr` as history. D2 is where
+the split comes from.
 
 Indexes beyond the primary keys, following the rule in `SCHEMA.md` that every
 foreign key column gets one: `session(kind, state)`, `session(started_at)`,
@@ -428,8 +440,8 @@ rather than to guess.
 | Field | Required | What it feeds |
 | --- | --- | --- |
 | `intent` | yes | One or two sentences on what the diagram has to make clear. The prompt's opening, and what the person reads back when judging the result |
-| `topic` | yes | `meta.tldrawkc.topic`, and `job.topic_slug`. Must already exist in [`content/topics.yaml`](../content/topics.yaml) |
-| `slug` | yes | The paths: `learn/assets/<slug>.tldr` is `target_path`, `learn/assets/.candidates/<slug>.tldr` is `candidate_path` |
+| `topic` | yes | `meta.tldrawkc.topic`, and `job.topic_slug`. Must already exist in the catalog's vocabulary (`catalog topic ls`) |
+| `slug` | yes | The paths: `learn/assets/<slug>.tldr` is `target_path`, `jobs/<id>/candidate/<slug>.tldr` under `STUDIO_HOME` is `candidate_path` |
 | `title` | yes | `meta.tldrawkc.title`, the `<title>` an `export --svg` stamps, and the card label |
 | `mode` | yes | `new` or `extend`. `new` refuses an existing target, `extend` refuses a missing one. The agent never decides this, and neither does a revision: `revise` re-derives it from what is on disk, because accepting a `new` job puts a file at the target path and re-posting the parent's own brief would then be refused |
 | `elements` | yes | Ordered `{ label, note }`. The things that must appear. The agent's checklist and half the gate |
@@ -448,18 +460,28 @@ rather than to guess.
 
 Each with the reason it exists.
 
-- **Working directory is the repo root.** `learn/assets/` is repo-relative,
-  `content/topics.yaml` is repo-relative, and `npm run --silent canvas` only
-  resolves from there. manimkc's `agent.run_claude` does the same with
-  `cwd=ROOT`.
+- **Working directory is the repo root.** `npm run --silent canvas` and
+  `npm run --silent catalog` only resolve the workspace scripts from there.
+  manimkc's `agent.run_claude` does the same with `cwd=ROOT`.
 - **A per-job `--settings` file, written into the job workspace.** This is the
   primary control, not the prompt. Allow exactly
-  `learn/assets/.candidates/<slug>.tldr`,
-  `learn/assets/.candidates/<slug>.svg` and the job scratch directory, and let
-  everything else fall through to a refusal. Permission rules fail an injected
-  instruction; prompt wording only discourages it. Note that
-  `learn/assets/<slug>.tldr` is denied, so the agent cannot reach the committed
-  file at all.
+  `$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr`, the `.svg` beside it and the
+  job scratch directory, and let everything else fall through to a refusal.
+  Permission rules fail an injected instruction; prompt wording only
+  discourages it. Everything else under `STUDIO_HOME` is denied: every other
+  job's workspace, the checkouts under `work/`, the cache, and any directory
+  added there later, walked by name so that no deny sits on a parent of the
+  job's own files. A job queued after the settings are written is in no walk,
+  so the other jobs are also denied by globs, one per character of this job's
+  id: `jobs/<first i characters>[<every other id character>]*/**` matches every
+  id that differs at character `i`, and no deny can say "every job but mine"
+  more directly, because deny beats allow and the CLI's gitignore matcher has
+  no negated class (`[!x]` means `!` or `x`). Checked against the CLI (2.1.274):
+  a later job's `job.json` was read without the globs and refused with them,
+  while the agent's own scratch and candidate stayed readable. Any diagram file still under `learn/assets/`, a leftover
+  `.candidates/` included, is denied too. The candidate directory and the
+  scratch directory are the agent's two `--add-dir` working directories, and
+  the workspace root, which holds the runner's records, is not.
   **Three corrections phase 1 found by checking the CLI rather than assuming
   it**, each of which silently removes the boundary if it is got wrong. A file
   write is matched against `Edit(path)` rules and never `Write(path)`: the CLI
@@ -506,7 +528,7 @@ Each with the reason it exists.
   that reaches inside a substitution.
 - **The residual hole, named rather than hidden.** `canvas run <file> --code
   <snippet>` takes an output path as an argument, so even the allowlist lets the
-  agent write a `.tldr` or a `.png` outside the candidates directory. Three
+  agent write a `.tldr` or a `.png` outside its candidate directory. Three
   things sit on that and none of them is airtight: the prompt names the
   candidate path and nothing else, `--settings` denies `Write` and `Edit` so the
   snippet file itself has to live in the scratch directory, and the backstop
@@ -582,7 +604,8 @@ The runner's own checks, in this order, after the agent exits:
    than the brief did, because a good diagram explains itself, and a binding
    counts in either direction, because an arrow the wrong way round is a picture
    worth reviewing rather than a paid retry.
-4. The metadata names a topic, and that topic is in `content/topics.yaml`.
+4. The metadata names a topic, and that topic is in the catalog's vocabulary,
+   read through `catalog topic ls` and its D13 cache like the brief's own check.
 5. `canvas -- export <candidate> --svg <candidate-svg>` runs. Exit 4 means the
    document saved and the export did not, which is recorded and not fatal.
 6. `canvas -- verify <candidate-svg> --json` exits 0, when step 5 produced a
@@ -658,6 +681,17 @@ appears in the transcript and in the narration, never as a job state. D4 is the
 mapping.
 
 ### Accept and discard
+
+**Since phase 2 of the migration** the candidate is in the job's own
+workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, so a resume or a revision
+copies its parent's drawing into its own workspace before the agent starts
+(keeping the file's modification time, so the gate's freshness check reads the
+drawing's age), and nothing a job does touches the working tree. A job record
+from before the move names `learn/assets/.candidates/<slug>` repo-relative;
+the runner resolves it against the repository wherever it is used, so it is
+accepted, discarded or resumed from where it was written, and one still queued
+is re-pointed at its own workspace before anything is drawn: nothing was
+drawn yet, so there is no file to move, only the record's two paths.
 
 **Since Track D** the steps are: the base check (the diagram's latest revision
 against the one the job recorded at enqueue, asked of the catalog), the export,
@@ -945,7 +979,9 @@ Set topic action. That is not decoration: `diagrams.ts` refuses such a file by
 name.
 
 Topic filter chips are the topics that appear in the directory, not the whole of
-`content/topics.yaml`, grouped by domain in an overflow popover past six.
+the vocabulary, grouped by domain in an overflow popover past six. Titles and
+domains come from the runner's `/api/vocabulary`, the same list a brief is
+checked against, so the chips keep their words with Postgres down (U3).
 `No topic` is always the last chip and always shown, because its absence is the
 thing worth noticing. Chips are multi-select, OR within themselves, and the
 active set goes in the query string.
@@ -1015,9 +1051,10 @@ it names. A `warn` severity is styled muted, an `error` severity warning, becaus
 New job replaces the right panel's contents with a form. Never a modal: the
 canvas or the grid stays visible behind it, which is the thing the brief is
 about. The fields are the brief table above, in that order, with `intent` as a
-six-row textarea autogrowing to twelve and `topic` as a combobox over
-`content/topics.yaml` grouped by domain. At the bottom, Start, and beside it a
-muted line naming the candidate path the result will be written to.
+six-row textarea autogrowing to twelve and `topic` as a combobox over the
+runner's `/api/vocabulary` grouped by domain. At the bottom, Start, and beside
+it a muted line saying the job draws in its own workspace,
+`$STUDIO_HOME/jobs/<job>/candidate/<slug>.tldr`.
 
 Required is exactly the brief table's required column. Everything else has a
 defensible default.
@@ -1197,7 +1234,7 @@ raised it: S schema, A API and runner, U interface.
 | A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
 | A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again. The job ceiling and a person's Cancel share one mechanism — kill the process group, wait, sweep — and must not share a verdict: only a job somebody stopped is `cancelled`, and "stopped on request" written over a timeout hides the one number that needs raising | Runner timers |
 | A3 | The agent exits zero but wrote nothing, or wrote something that fails `verify` | The gate, in the five steps listed above. Any failure is fed back as a resume prompt carrying the specific finding, three attempts total, then `failed` with the findings and the partials moved to `jobs/<id>/rejected/` | The gate |
-| A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Write` and `Edit` on exactly the two candidate paths and the scratch directory, so the committed file is not reachable through either. `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` against the candidates directory at the end; anything else dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
+| A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Edit` on exactly the two candidate paths in the job's workspace and the scratch directory, so no diagram is reachable through it. `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` before and after the agent; a job writes nothing in the working tree, so anything newly dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
 | A5 | A prompt injected through a brief field or a pasted mermaid source | The person submitting is not the threat; a note or a flowchart pasted from somewhere else is. Brief fields enter the prompt inside a delimited block labelled as data. Mermaid never enters the prompt: it is written to the scratch directory and lifted with `from-mermaid --source <path>`, which is a parser rather than a model. Slug fields are pattern-checked and free-text fields length-capped. The settings file is the backstop, so an injected command fails on a permission rule rather than on judgment | Prompt assembly; `from-mermaid`; the settings file |
 | A6 | Two jobs on one file, or a job on a file open in a mirror | The lease in S3 covers the first. For the second, the studio closes the mirror when a job starts on that file and reopens it when the job ends, so the common case never reaches a refusal. It matters less than it did under D2: the job writes a candidate, so only accept collides. Accept on a file with an open mirror closes the mirror first, because Cmd+S PUTs the document as the tab last loaded it and a human save landing after the rename would silently revert it | `POST /api/mirrors`; accept step 3 |
 | A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
@@ -1209,7 +1246,7 @@ raised it: S schema, A API and runner, U interface.
 | A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
 | U1 | The assets directory is empty | One centred card, 420px: the directory path, `no .tldr files here yet`, a New diagram button, and one muted line saying a diagram needs a topic from `content/topics.yaml` before the indexer will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
-| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D), the topics through the content reader seam (with the last good read cached the same way; `/api/health` reports `vocabulary.stale` and its `readAt`), and the jobs from disk. An amber banner in the existing `StoreBanner` position says the catalog is unreachable and that browsing and drawing still work. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits, because a diagram lands in the database (edge case 1 of the migration plan). The concept picker falls back to the cached vocabulary | Accept; `GET /api/health` |
+| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.json`; `/api/health` reports `vocabulary.stale`, its `readAt` and the reason (from the last read any route made when it is younger than `STUDIO_VOCABULARY_STATUS_MS`, 30 seconds by default, so a page render does not spawn a `topic ls` each time), and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
 | U4 | tldrawkc is not built | The studio runs `doctor` once on entry and, on failure, replaces the whole content region with one card: the failing checks as doctor reported them, the two commands, and a Recheck button. Nothing else renders, because a grid that half-works is worse than a page that says what is wrong | Studio entry; A8 covers the API side |
 | U5 | `dist/page` is stale | A banner, and everything still runs. That is how `doctor` treats it: a stale bundle still works | Studio entry |
 | U6 | A `.tldr` will not parse | It is absent from the grid and listed under Errors in the panel with its file name and message, which is the only place it is visible | `list --json` errors |
@@ -1261,19 +1298,30 @@ Reindex or runs the CLI's own full index.
 
 ### D2. A job writes a candidate; accept renames it into place
 
-**Amended by Track D.** Candidates are still files in
-`learn/assets/.candidates/` (phase 2 of the migration moves them into the job
-workspace), but Accept no longer renames them: it puts them into the database
-and deletes them. `job.target_path` keeps its value, `learn/assets/<slug>.tldr`,
+**Amended by phase 2 of the migration.** The candidates moved out of the tree
+into the job's own workspace, `$STUDIO_HOME/jobs/<id>/candidate/<slug>.tldr`
+and `.svg`. The two reasons `learn/assets/.candidates/` was right both went
+with Track D: no indexer reads `learn/assets/` once diagrams are rows, and
+Accept no longer renames, so there is no atomic rename to keep on one
+filesystem. Per job rather than per slug, so no two jobs ever share a path and
+a resume no longer has to hash the file to tell its own work from a later
+job's. In a `candidate/` directory of its own rather than the workspace root,
+so the agent is given its two files as a working directory without the
+runner's records beside them. `job.candidate_path` records it relative to
+`STUDIO_HOME` (see the schema section).
+
+**Amended by Track D.** Candidates were still files in
+`learn/assets/.candidates/` after Track D, but Accept no longer renames them: it
+puts them into the database and deletes them. `job.target_path` keeps its value, `learn/assets/<slug>.tldr`,
 as the logical name and the lease key (D11 of the migration plan). The file a
 job extends and the mirror edits is the diagram's checkout,
 `$STUDIO_HOME/work/<slug>.tldr`, written by `catalog diagram checkout`.
 
-**Verdict:** the agent's only writable artifact paths are
-`learn/assets/.candidates/<slug>.tldr` and `.svg`. Nothing under
-`learn/assets/` changes until a person presses Accept. `job.target_path` is the
-committed path the job intends to land on and is the lease key;
-`job.candidate_path` is where it writes.
+**Verdict (as first written, before both amendments):** the agent's only
+writable artifact paths are `learn/assets/.candidates/<slug>.tldr` and `.svg`.
+Nothing under `learn/assets/` changes until a person presses Accept.
+`job.target_path` is the committed path the job intends to land on and is the
+lease key; `job.candidate_path` is where it writes.
 
 **Why:** it makes Accept, Discard and Cancel real operations rather than
 cosmetic ones, and a cancelled or crashed job cannot damage a file that is
@@ -1350,7 +1398,9 @@ write carries its author, its reason and its job in `content_revision`, which
 database only through an explicit Commit (`catalog diagram commit`), refused
 when the diagram moved since the checkout. The runner still runs no mutating
 git command, and `git status --porcelain` stays the backstop for anything a job
-writes into the tree, which is now nothing at all.
+writes into the tree, which is now nothing at all: since phase 2 of the
+migration even the candidate is outside it, in the job's workspace, so the
+backstop has no directory to ignore.
 
 **Verdict:** Accept lands both files in `learn/assets/` as working-tree changes
 and stops. The panel shows the two paths and the `git add` line. The runner runs
@@ -1475,9 +1525,10 @@ program ran this". It is also the only form that can read `STUDIO_ENABLED` at
 request time, since `rewrites()` is evaluated when the config loads — so one
 build serves both the deployed encyclopedia and a local studio.
 
-*`ASSET_FILES_ENABLED` is a second variable and the studio does not touch it.*
-That flag did not exist when this decision was written; it now gates
-`/api/assets/{id}/file`. Borrowing that route for studio thumbnails would have
+*`ASSET_FILES_ENABLED` was a second variable and the studio did not touch it.*
+That flag did not exist when this decision was written; it gated
+`/api/assets/{id}/file`'s file branch until phase 2 of
+[CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) removed both. Borrowing that route for studio thumbnails would have
 made the studio depend on two flags — and worse, that route also requires the
 asset to be **indexed**, and an untopiced `.tldr` has no asset row at all. The
 blank tile would land on exactly the diagram the studio exists to show. So
@@ -1771,7 +1822,9 @@ Goal: a brief in, a reviewed candidate out, driven by curl. No UI.
       calls — with every review action serialised per job
 - [x] The HTTP API on `127.0.0.1:7250`: every route in the table above, the SSE
       stream, `/api/health`, and the `reindex` the accept note names
-- [x] `learn/assets/.candidates/` added to `.gitignore`
+- [x] `learn/assets/.candidates/` added to `.gitignore` (kept after phase 2 of
+      the migration moved candidates into the job workspace, for any job
+      recorded before the move)
 - [x] Tests: the state machine, the gate against a fixture candidate, the
       settings file contents (the Bash allowlist is an allowlist, and `cp`,
       `tee`, a redirect and every file-reading command are absent from it), the
