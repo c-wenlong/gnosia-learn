@@ -32,7 +32,7 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
  * The `--real` switch is tested only for its refusals. It runs flip day
  * against the owner's database in place, and nothing here may. Its two
  * safeguards run in a rehearsal too, so they are tested here on the copy: the
- * backup (restored into a fresh database and read back) and the import into a
+ * backup (its printed restore run as printed, then read back) and the import into a
  * throwaway copy that refuses a tree which would remove rows.
  */
 
@@ -210,7 +210,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
 
   it("runs every flip-day step on a copy of the template, and its backup restores the template as it was", async () => {
     const name = `${template.name}_rehearsal`;
-    const restored = `${template.name}_restored`;
     // --keep, so the backup is still there to restore; the test drops what it kept.
     const ran = await rehearse(["--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--json"], {
       MANIMKC_ROOT: manimkc,
@@ -290,14 +289,24 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       // The backup is the copy as it was before step 1, and restores as it.
       expect(report.backup).toMatchObject({ path: expect.stringMatching(new RegExp(`${name}-preflip-\\d{8}T\\d{6}Z\\.dump$`)) });
       expect(report.backup?.bytes).toBeGreaterThan(0);
-      // The restore names the server it was taken from: the tools do not read DATABASE_URL.
+      // The printed restore names the server and user on every command, since
+      // the tools never read DATABASE_URL; and run as printed, with only the
+      // password left in the environment, it puts the flipped copy back as it
+      // was before step 1. That is the owner's way back from a failed --real.
       const server = new URL(url(name));
-      expect(report.backup?.restore).toContain(`dropdb${server.hostname === "" ? "" : ` -h ${server.hostname}`}`);
-      expect(report.backup?.restore).toMatch(new RegExp(`pg_restore .*--exit-on-error -d ${name} .*\\.dump$`));
-      const env = pgToolEnv();
-      await execFileAsync(path.join(PG_BIN, "createdb"), [restored], { env });
-      await execFileAsync(path.join(PG_BIN, "pg_restore"), ["--no-owner", "--exit-on-error", "-d", restored, report.backup?.path ?? ""], { env });
-      const back = new pg.Client({ connectionString: url(restored) });
+      const flags = [
+        ...(server.hostname === "" ? [] : [`-h ${decodeURIComponent(server.hostname)}`]),
+        ...(server.port === "" ? [] : [`-p ${server.port}`]),
+        ...(server.username === "" ? [] : [`-U ${decodeURIComponent(server.username)}`]),
+      ].join(" ");
+      const commands = (report.backup?.restore ?? "").split(" && ");
+      expect(commands.map((c) => path.basename(c.split(" ")[0] ?? ""))).toEqual(["dropdb", "createdb", "pg_restore"]);
+      for (const command of commands) expect(command, command).toContain(`${flags} `);
+      expect(commands[2]).toMatch(new RegExp(`-d ${name} \\S+\\.dump$`));
+      const onlyPassword = pgToolEnv();
+      for (const key of ["PGHOST", "PGPORT", "PGUSER", "PGDATABASE"]) delete onlyPassword[key];
+      await execFileAsync("/bin/sh", ["-c", report.backup?.restore ?? "false"], { env: onlyPassword });
+      const back = new pg.Client({ connectionString: url(name) });
       await back.connect();
       try {
         const counts = await back.query<{ migrations: number; assets: number; topics: number }>(
@@ -320,9 +329,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       expect(applied.rows[0]?.n).toBe(10);
     } finally {
       const env = pgToolEnv();
-      for (const database of [name, restored]) {
-        await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", database], { env });
-      }
+      await execFileAsync(path.join(PG_BIN, "dropdb"), ["--if-exists", "--force", name], { env });
       await rm(path.dirname(report.tree), { recursive: true, force: true });
     }
   }, 240_000);
