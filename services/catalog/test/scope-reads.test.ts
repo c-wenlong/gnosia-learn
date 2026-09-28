@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -160,6 +160,20 @@ describe.skipIf(!reachable.ok)("reads that crossed owners", () => {
     expect(out).toMatchObject({ exists: false, revision: null });
     expect(await stat(path.join(work, "other-diagram.tldr")).catch(() => null)).toBeNull();
     expect((await checkoutState(scratch.db, "other-diagram", work, THEIRS)).latest).not.toBeNull();
+
+    // A clean checkout of that slug already on disk (from before owners were
+    // scoped) is left exactly as it is, not cleared as if the diagram were gone.
+    const kept = path.join(work, "kept");
+    await mkdir(kept, { recursive: true });
+    await writeFile(path.join(kept, "other-diagram.tldr"), "{}");
+    await writeFile(path.join(kept, "other-diagram.svg"), "<svg/>");
+    const record = { slug: "other-diagram", revision: 1, documentHash: null, fileHash: null, svgHash: null, checkedOutAt: "" };
+    await writeFile(path.join(kept, "other-diagram.checkout.json"), JSON.stringify(record));
+    const left = await checkoutDiagram(scratch.db, store, "other-diagram", kept, LOCAL);
+    expect(left).toMatchObject({ exists: false, written: false });
+    expect(await readFile(path.join(kept, "other-diagram.tldr"), "utf8")).toBe("{}");
+    expect(await readFile(path.join(kept, "other-diagram.svg"), "utf8")).toBe("<svg/>");
+    expect(JSON.parse(await readFile(path.join(kept, "other-diagram.checkout.json"), "utf8"))).toEqual(record);
   });
 
   it("refuses a learner's tick, note and recap on an item they cannot read, as on a missing one", async () => {

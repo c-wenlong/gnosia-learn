@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { ownerRefusal } from "../src/api";
 import { studioOwner } from "../src/config";
+import { cachePath } from "../src/content-cache";
 
 /**
  * The studio and owners (phase 4 of docs/CONTENT-MIGRATION.md).
@@ -80,6 +81,16 @@ describe("the owner the runner serves", () => {
       const refusal = ownerRefusal(request({ [STUDIO_OWNER_HEADER]: named }), "local");
       expect(refusal).not.toBeNull();
       expect(refusal).not.toMatch(/\blocal\b|\bother\b/);
+    }
+  });
+});
+
+describe("the cached diagram list", () => {
+  it("is one file per owner, and no name leaves the cache directory", () => {
+    expect(path.basename(cachePath("diagrams.local"))).toBe("diagrams.local.json");
+    expect(path.basename(cachePath("diagrams.some-one_2"))).toBe("diagrams.some-one_2.json");
+    for (const name of ["diagrams.", "diagrams./x", "diagrams...", "diagrams.a.b", "../diagrams", "diagrams.a/b"]) {
+      expect(() => cachePath(name)).toThrow();
     }
   });
 });

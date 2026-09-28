@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { canonicalJson, LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
+import { canonicalJson } from "@self-learn/schema/shared";
 
 import { diagramCheckout, diagramList, diagramShow } from "./catalog";
 import { studioOwner } from "./config";
@@ -169,14 +169,15 @@ export function forgetDiagramList(): void {
 }
 
 /**
- * The cache's name for this runner's list. The list is one owner's (the
- * catalog is asked with `--owner`), so a runner started for another owner
- * must not answer from it while the database is down. `local` keeps the name
- * it has always had, so the copy an upgrade finds is still used.
+ * The cache's name for this runner's list: one per owner, since the list is
+ * one owner's (the catalog is asked with `--owner`), and never the old
+ * `diagrams`, which a runner from before owners wrote from every owner's rows.
+ * An upgraded runner that finds the database down before its first read
+ * therefore has no copy to show, rather than one with somebody else's
+ * diagrams and SVG keys in it.
  */
 function cacheName(): string {
-  const owner = studioOwner();
-  return owner === LOCAL_LEARNER_ID ? "diagrams" : `diagrams.${owner}`;
+  return `diagrams.${studioOwner()}`;
 }
 
 /** Every diagram's row as the catalog lists it, through the cache. */

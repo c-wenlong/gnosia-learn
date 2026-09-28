@@ -990,6 +990,24 @@ export async function checkoutDiagram(
   scope: OwnerScope,
   options: { force?: boolean } = {},
 ): Promise<CheckoutResult> {
+  // Another owner's slug answers as a slug with no diagram, and touches
+  // nothing: no record is written (a commit could only be refused), and a
+  // checkout already on disk, from before owners were scoped, is left as it
+  // is rather than cleared as if the diagram were gone.
+  const [held] = await db.select({ ownerId: diagram.ownerId }).from(diagram).where(eq(diagram.slug, slug)).limit(1);
+  if (held !== undefined && !scope.readable.includes(held.ownerId)) {
+    const paths = checkoutPaths(slug, dir);
+    return {
+      ok: true,
+      slug,
+      path: paths.tldr,
+      svgPath: null,
+      revision: null,
+      exists: false,
+      written: false,
+      note: `${slug} is not a diagram this owner can check out`,
+    };
+  }
   const state = await checkoutState(db, slug, dir, scope);
   const { paths } = state;
   if (state.dirty && options.force !== true) {
