@@ -11,7 +11,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { posterId, uploadAssets, type AssetUploadOptions } from "../src/content/asset-upload";
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { keepBlobKeys } from "../src/index/blob-keys";
-import type { TopicsReport } from "../src/index/manimkc";
+import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
+import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -301,6 +302,37 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       expect(dropped?.blobKey).toBeUndefined();
       // A row that names its blob itself (a diagram import) is left as given.
       expect(explicit?.blobKey).toBeNull();
+    });
+
+    // The carry-forward through the writer the indexer really uses (S13 of
+    // the phase 1 review): upload, then the manimkc import writes its rows
+    // back over the uploaded ones, and every key whose bytes it hashed again
+    // survives. Before `keepBlobKeys` this set every blob_key back to null.
+    it("keeps every key through an upload followed by the manimkc import, and drops only a re-rendered one", async () => {
+      await scratch.db.execute(
+        sql`insert into topic (slug, title, domain) values ('demo-topic', 'Demo', 'testing') on conflict do nothing`,
+      );
+      await uploadAssets(scratch.db, options());
+      const before = new Map(
+        (await scratch.db.select({ id: asset.id, key: asset.blobKey }).from(asset)).map((r) => [r.id, r.key] as const),
+      );
+      expect([VIDEO_ID, TRANSCRIPT_ID, VTT_ID].every((id) => before.get(id) != null)).toBe(true);
+
+      const importOnce = async () => {
+        const built = await buildRows(report(), outRoot, new Map([["algorithms/demo", "demo-topic"]]), new Map([["demo-topic", {}]]));
+        await writeSource(scratch.db, manimkcIndexer, built.rows, built.notes, outRoot, { metadata: built.metadata });
+      };
+      await importOnce();
+      for (const id of [VIDEO_ID, TRANSCRIPT_ID, VTT_ID, posterId(VIDEO_ID)]) {
+        expect((await assetRow(id))?.blobKey, id).toBe(before.get(id));
+      }
+
+      // A re-render of the transcript, then the import: that key alone goes.
+      await writeFile(path.join(outRoot, TRANSCRIPT_PATH), '{"cues":[{"re":"rendered"}]}');
+      await importOnce();
+      expect((await assetRow(TRANSCRIPT_ID))?.blobKey).toBeNull();
+      expect((await assetRow(VIDEO_ID))?.blobKey).toBe(before.get(VIDEO_ID));
+      expect((await assetRow(VTT_ID))?.blobKey).toBe(before.get(VTT_ID));
     });
   });
 

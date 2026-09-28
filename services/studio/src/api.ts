@@ -379,7 +379,10 @@ async function handle(
       return send(response, 200, {
         jobId: id,
         state: store.get(id)?.state ?? "accepted",
+        // What the accept wrote into the tree (nothing once the database
+        // owns diagrams), and what landed in the database.
         written: result.written,
+        landed: result.landed ?? [],
         indexed: result.indexed,
         mirrorClosed: result.mirrorClosed ?? false,
         note: result.note,
@@ -406,6 +409,7 @@ async function handle(
         jobId: id,
         state: store.get(id)?.state ?? "accepted",
         written: result.written,
+        landed: result.landed ?? [],
         indexed: result.indexed,
         note: result.note,
       });

@@ -1,9 +1,12 @@
 # Moving authored content into the database
 
-**Status: built through phase 0, 2026-09-28; phase 1 not started.** Phase 0
+**Status: built through phase 1, 2026-09-28; phase 2 not started.** Phase 0
 merged as PRs #126 to #129, and the fixes a read-only review of it asked for
-as #130 and #131; each step below says what was built under
-**Built**, and a box is ticked only for what exists. Approved 2026-09-27, when
+as #130 and #131. Phase 1's five tracks merged as PRs #132 to #145, and a
+read-only review of them asked for the fixes listed under
+[Phase 1 review fixes](#phase-1-review-fixes). Each step below says what was
+built under **Built**, and a box is ticked only for what exists. No type is
+flipped on the owner's database yet: every flip so far ran on a scratch copy. Approved 2026-09-27, when
 the owner answered the open questions (see
 [Decided by the owner](#decided-by-the-owner)): everything stays local for
 now, so the cloud database and the cloud blob adapter are deferred to a
@@ -682,9 +685,11 @@ dead port.
 
 Each track ends with a flip PR: `catalog parity --only <type>` clean, then
 `catalog flip <type>` writes the `content_source` row, and from that commit the
-database owns the type. Until phase 2, each writer also rewrites that type's
-export file in the working tree after a successful write (D17), so readers of
-other types that still parse files stay consistent.
+database owns the type. Until phase 3, the topic, tag and course writers also
+rewrite that type's export file in the working tree after a successful write
+(D17, as amended), so readers of other types that still parse files stay
+consistent; the note, log and diagram writers do not, once their type is
+flipped.
 
 Every track's done-when includes the same three lines, stated once here:
 counts and content hashes equal between files and rows; `shots.mjs` screenshots
@@ -1151,9 +1156,11 @@ list and SVG route (`services/studio/src/review.ts`, `diagrams.ts`,
       rows with their existing `diagram:` ids and the derivation, and appends
       the revision, in one transaction after the upload is `present`.
 - [x] Studio Accept (`review.ts:218-227`) calls `diagram put` instead of the two
-      renames and `assert-output`. Candidates stay files in the job workspace;
-      the runner still writes nothing tracked, and now there is nothing
-      tracked to write.
+      renames and `assert-output`. Candidates stay files where the agent
+      writes them, `learn/assets/.candidates/` (a dot directory no import
+      reads; moving them into the job workspace is phase 2's studio item).
+      Before `catalog flip diagrams` the put writes the two files through
+      into the tree (D17); after it, Accept writes nothing tracked.
 - [x] `catalog diagram checkout <slug>` materialises the document to a temp
       `.tldr` under `$STUDIO_HOME/work/`; the mirror (`canvas serve`) and every
       `canvas` verb run on that file, since every verb takes a path. Saving
@@ -1253,8 +1260,9 @@ around the list above, and why:
 **Parity:** 3 diagrams (2 tracked, 1 untracked), document hashes, SVG bytes.
 **Tests:** Accept writes a row and a blob and no file; an interrupted upload
 leaves a `pending` row and no asset change; the list matches the old
-`canvas list` fields for the same documents; `vitest.setup.ts`'s tracked-tree
-check retargets (edge case 11). **Docs:**
+`canvas list` fields for the same documents. (`vitest.setup.ts`'s tracked-tree
+check retargeting, edge case 11, is phase 2's, with the seed tree it
+retargets to.) **Docs:**
 [TLDRAWKC-INTEGRATION.md](TLDRAWKC-INTEGRATION.md) write path, D2, D6 and U3
 amended. **Done when:** a studio job from chat to Accept lands a diagram that
 the concept page embeds from the blob store, with `git status` clean. **Tier:**
@@ -1365,6 +1373,43 @@ keeps for an adapter with no signed URLs; the redirect path is exercised by a
 test adapter whose `signedUrl` returns a local URL. **Tier:** Sonnet for the upload command, Opus for the route and the
 signing. **Size:** 2 to 3 PRs (*guessed*).
 
+## Phase 1 review fixes
+
+A read-only review of the merged phase 1 found these; three branches fixed
+them at once. B2 to B4, S7 and S11 (`p1/fixes-seam`, #147) carry **Built**
+notes in the tracks they touch; the other two are below.
+
+### Phase 1 review fixes, the web slice
+
+Routes, `concept add --item`, tests that could not fail, output and docs
+(#146 and `p1/fixes-web-2`):
+
+- [x] S4: `/api/assets/{id}/file` serves row text for a type the database
+      owns (see Track E's review-fix note).
+- [x] S5: pages decide servability per row (Track E).
+- [x] S1: `learn concept add --item` lists through `catalog course import`
+      whenever the database owns courses or concepts, so the link is a row
+      and the next `catalog index` goes through; a refusal names
+      `catalog course import <file>`, never `catalog export --only courses`,
+      which would drop the listing. `test/concept-item-mixed.test.ts` holds
+      both mixed states.
+- [x] S13: Accept through the real CLI on a database that owns diagrams
+      (`services/studio/test/accept-db.test.ts`: a row, a blob, the job
+      accepted, and no file under the sandbox tree); an upload followed by
+      the manimkc import through the writer keeps every key and drops only a
+      re-rendered one (`test/asset-upload.test.ts`); each destructive branch
+      of `blob audit --fix`, and each of its guards
+      (`test/blob-audit-fix.test.ts`; the `.owner` marker has its own tests).
+- [x] Output: `learn session start --json` and `session log --json` answer
+      `path: null` once the database owns sessions (the key stays; the plugin
+      reads only the id); Accept's `written` lists the files it wrote, with
+      the logical names that landed in the database under `landed`.
+- [x] S12: D17 amended (above).
+- [x] Docs: this status line; TLDRAWKC-INTEGRATION.md's catalog layer and
+      rule 6; the catalog's usage text; AGENTS.md on Accept before the flip,
+      `concept add --topic` on rows and `learn map`; CURRICULUM.md's concept
+      links; Track D's candidates and edge case 11.
+
 ### Phase 1 review fixes, slice 1b
 
 A read-only review of the merged phase 1 found writers that could undo each
@@ -1432,15 +1477,18 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
 - [ ] **Studio:** reads through the seam with its cache only; the repo-root
       walk in `services/studio/src/paths.ts:24-37` goes, and so does the
       `learn/assets/.candidates` convention in favour of the job workspace.
+      `vitest.setup.ts`'s tracked-tree check moves to the seed's assets
+      (edge case 11), with the Tests item below.
       The web app's studio screen shows D13's "stale since" banner from the
       runner's `health.vocabulary` (`stale`, `readAt`), which exists since 0.6
       and which nothing in `apps/web` reads yet.
 - [ ] **Catalog:** `catalog index` becomes `catalog import`, with `index`
       kept as an alias that prints the new name. The indexers keep their
       parsers and refusal rules as the import format's validator. The
-      write-through export of D17 keeps running until phase 3, so
-      `CONTENT_SOURCE=files` never reads an export older than the last
-      write.
+      write-through export of D17 keeps running until phase 3 for topics,
+      tags and courses, so `CONTENT_SOURCE=files` never reads a vocabulary or
+      course export older than the last write; for notes, logs and diagrams
+      it reads the export as of the last `catalog export`.
 - [ ] **Vault:** `learn vault pull [--out <dir>]` (default
       `~/.self-learn/vault/`) writes every note and session log as markdown
       with a `.vault.json` recording each file's base revision and hash;
@@ -1782,14 +1830,26 @@ first); a `proposed` topic state (a filter in every reader); D39's paste path.
 
 ### D17. Writers export their type while any reader still reads files
 
-**Verdict:** from a type's flip until the phase 3 cut-over, its writer
-rewrites that type's export file after each write. **Why:** `loadCourses` validates against
-`topics.yaml` while courses are on files
-(`packages/content/src/courses.ts:203-209`), so a topic created in the
-database must reach the file or the next course import refuses. **Rejected:**
-deleting a type's files at its flip (cross-type validation breaks); leaving
-them stale (hand edits vanish, edge case 12); stopping the export in phase 2,
-which would make the files rollback silently older than the database.
+**Verdict:** until the phase 3 cut-over, the topic, tag and course writers
+rewrite their type's export files after each write (from day one, not from
+the flip: Tracks A and B found a write before the flip would otherwise be
+undone by the next import). The note, session log and diagram writers do not
+once their type is flipped: after the concepts and sessions flips there is no
+live file under `learn/` for a note or a log, and the vault (phase 2,
+`learn vault pull`) is how a person reads notes and logs during and after a
+session. **Why:** `loadCourses` validates against `topics.yaml` while courses
+are on files (`packages/content/src/courses.ts:203-209`), so a topic created
+in the database must reach the file or the next course import refuses; no
+other type's reader parses a note, a log or a `.tldr`, so exporting those
+would only keep files nothing reads. **Rejected:** deleting a type's files at
+its flip (cross-type validation breaks); leaving the vocabulary and course
+files stale (hand edits vanish, edge case 12); a live log file after the
+sessions flip, which Track C's done-when (no file under `learn/` changes) and
+the D20 append-only table rule out. **Amended** 2026-09-28 after the phase 1
+review (S12), as the coordinator's default pending the owner: it said every
+writer exports until phase 3, which Tracks C and D did not do. The plugin's
+`skills/learn/SKILL.md` still says "the learner has this file open" of the
+session log, and changes in its next version bump.
 
 ### D18. The database records which types it owns
 
