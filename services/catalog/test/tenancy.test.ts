@@ -260,6 +260,8 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
       { id: POSTER, kind: "poster", sourceRepo: "self-learn", blobKey: key("local", "b", "jpg") },
     ]);
     await db.insert(assetDerivation).values({ assetId: POSTER, sourceAssetId: VIDEO });
+    // The owner's poster, filed under B's topic as well as nothing else.
+    await db.insert(assetTopic).values({ assetId: POSTER, topicSlug: B_TOPIC });
   }, 120_000);
 
   afterAll(async () => {
@@ -282,6 +284,11 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
     // B can open the video but not the owner's poster of it.
     expect(await posterBlob(scratch.db, VIDEO, TENANT)).toBeNull();
     expect((await assetDerivations(scratch.db, VIDEO, TENANT)).derived).toEqual([]);
+  });
+
+  it("shows no chip for another owner's topic on the owner's own asset", async () => {
+    const [poster] = await listAssets(scratch.db, { ids: [POSTER] }, LOCAL);
+    expect(poster?.topics).toEqual([]);
   });
 
   it("refuses evidence about another owner's concept as if it did not exist", async () => {

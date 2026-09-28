@@ -2,6 +2,7 @@ import {
   concept,
   conceptCurriculumItem,
   conceptPrerequisite,
+  curriculumItem,
   indexRun,
   LOCAL_LEARNER_ID,
   type OwnerScope,
@@ -181,7 +182,19 @@ export async function readKnowledgeBase(
       db.select().from(concept).where(ownedBy(concept.ownerId, owners)).orderBy(asc(concept.slug)),
     ),
     db.select().from(conceptPrerequisite),
-    db.select().from(conceptCurriculumItem).orderBy(asc(conceptCurriculumItem.curriculumItemId)),
+    // Links to items the reader may read, so `topics` names no other owner's item.
+    scopedRead(readable, (owners) =>
+      db
+        .select({
+          conceptSlug: conceptCurriculumItem.conceptSlug,
+          curriculumItemId: conceptCurriculumItem.curriculumItemId,
+          position: conceptCurriculumItem.position,
+        })
+        .from(conceptCurriculumItem)
+        .innerJoin(curriculumItem, eq(curriculumItem.id, conceptCurriculumItem.curriculumItemId))
+        .where(ownedBy(curriculumItem.ownerId, owners))
+        .orderBy(asc(conceptCurriculumItem.curriculumItemId)),
+    ),
     readModel(db, learnerId),
     readReviews(db, learnerId),
     db.select().from(indexRun).where(eq(indexRun.source, "concepts")).limit(1),

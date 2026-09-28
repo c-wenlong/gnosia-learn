@@ -8,10 +8,11 @@ import {
   indexRun,
   type IndexSource,
   type OwnerScope,
+  topic,
 } from "@self-learn/schema";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
-import { ownedBy, type Owners, scopedRead } from "../content/scope";
+import { andOwnedBy, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
 
 /**
@@ -528,10 +529,15 @@ async function listScoped(db: CatalogDatabase, options: ListAssetsOptions, owner
     .select({
       ...ASSET_COLUMNS,
       createdAt: asset.createdAt,
+      // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
         select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug}), '{}')
         from ${assetTopic}
-        where ${assetTopic.assetId} = ${asset.id}
+        where ${assetTopic.assetId} = ${asset.id}${
+          owners === undefined
+            ? sql``
+            : sql` and exists (select 1 from ${topic} where ${topic.slug} = ${assetTopic.topicSlug}${andOwnedBy(sql`${topic.ownerId}`, owners)})`
+        }
       )`,
     })
     .from(asset)
