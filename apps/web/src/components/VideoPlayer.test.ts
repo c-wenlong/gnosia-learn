@@ -174,6 +174,29 @@ describe("VideoPlayer", () => {
     expect(el.currentTime).toBe(21);
   });
 
+  it("puts the transcript and the caller's sections in one tabbed card", () => {
+    const host = mount(
+      createElement(VideoPlayer, {
+        src: "/v.mp4",
+        transcript,
+        header: createElement("h1", null, "Title"),
+        tabs: [{ id: "details", label: "Details", content: createElement("p", null, "The row.") }],
+      }),
+    );
+    const tabs = [...host.querySelectorAll('[role="tab"]')] as HTMLButtonElement[];
+    expect(tabs.map((t) => t.textContent)).toEqual(["Transcript", "Details"]);
+    const panels = [...host.querySelectorAll('[role="tabpanel"]')] as HTMLElement[];
+    expect(panels.map((p) => p.hidden)).toEqual([false, true]);
+    // Inside the tab the transcript has no heading of its own.
+    expect(host.querySelector("h3")).toBeNull();
+
+    press(tabs[0], "ArrowRight");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(panels.map((p) => p.hidden)).toEqual([true, false]);
+    // Hidden, not unmounted: the transcript keeps following playback.
+    expect(host.querySelector('ol[aria-label="Transcript"]')).not.toBeNull();
+  });
+
   it("reports playback to a caller that records it", () => {
     const signals: string[] = [];
     const host = mount(

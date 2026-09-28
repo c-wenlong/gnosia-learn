@@ -13,6 +13,7 @@ import { formatTimecode, type VideoChapter } from "@/components/media";
 import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import type { TabItem } from "@/components/ui/Tabs";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Placeholder } from "@/components/ui/Placeholder";
@@ -52,9 +53,9 @@ import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/tra
  *
  * **A video is laid out like a video site's watch page.** The picture takes
  * the whole width at the top, and everything else sits under it: the title
- * and a line of facts, then the transcript in the main column and Explains,
- * Related and the companion files in a rail beside it from 1024px. Chapters
- * are drawn into the scrub bar rather than listed. There is no "Mark watched"
+ * and a line of facts, then one card whose tabs are Transcript, Explains,
+ * Related, Files and Details, so the sections do not pile up as separate
+ * cards. Chapters are drawn into the scrub bar rather than listed. There is no "Mark watched"
  * button: `LibraryVideo` saves the position and the stretches that played,
  * resumes there on the next visit, and appends the `watched` event itself
  * once most of the video has played.
@@ -295,6 +296,51 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     </>
   );
 
+  const relatedList = neighbours.length > 0 && (
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-3">
+        {neighbours.map((row) => (
+          <RelatedRow key={row.id} asset={row} />
+        ))}
+      </ul>
+      {asset.topics.length === 1 && asset.topics[0] !== undefined && (
+        <CardAction href={libraryHref({ topic: asset.topics[0] })} className="self-start">
+          See all under this topic
+        </CardAction>
+      )}
+    </div>
+  );
+
+  const familyCount = derivations.sources.length + derivations.derived.length;
+  const filesList = familyCount > 0 && (
+    <div className="flex max-w-2xl flex-col gap-4">
+      {derivations.sources.length > 0 && (
+        <FamilyGroup title="Derived from" rows={derivations.sources} />
+      )}
+      {derivations.derived.length > 0 && (
+        <FamilyGroup title="Companion files" rows={derivations.derived} />
+      )}
+      <p className="text-[12px] leading-relaxed text-text3">
+        Kept out of the library&rsquo;s default view so they do not bury what they accompany.
+        Each one has a page of its own.
+      </p>
+    </div>
+  );
+
+  // The video page's sections after the transcript, as tabs of one card
+  // rather than a pile of cards. An empty Related or Files tab is left out;
+  // Explains stays, since "no concept yet" is worth knowing.
+  const videoTabs: TabItem[] = [
+    { id: "explains", label: "Explains", count: explained.length, content: <ExplainsList concepts={explained} /> },
+    ...(relatedList ? [{ id: "related", label: "Related", count: neighbours.length, content: relatedList }] : []),
+    ...(filesList ? [{ id: "files", label: "Files", count: familyCount, content: filesList }] : []),
+    {
+      id: "details",
+      label: "Details",
+      content: <CatalogFacts asset={asset} titles={titles} className="max-w-3xl" />,
+    },
+  ];
+
   const addToNote =
     firstConcept === undefined ? null : (
       <Button
@@ -324,6 +370,8 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
     return (
       <div data-layout="app">
         <LibraryVideo
+          // Its playback state is this asset's: a new asset starts over.
+          key={asset.id}
           assetId={asset.id}
           src={fileHref}
           statusHref={statusHref}
@@ -336,7 +384,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           // "Video" is what the page already shows, so the facts start after it.
           meta={eyebrow.split(" · ").slice(1).join(" · ")}
           actions={addToNote ?? undefined}
-          footer={
+          notes={
             <>
               {sidecars?.state === "none" && (
                 <Aside>No transcript or chapter sidecar is indexed beside this render.</Aside>
@@ -354,10 +402,9 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                   had no usable timecode or text and were left out.
                 </Aside>
               )}
-              <CatalogRow asset={asset} titles={titles} />
             </>
           }
-          aside={rail}
+          tabs={videoTabs}
         />
       </div>
     );
@@ -460,9 +507,18 @@ function Aside({ children }: { children: ReactNode }) {
  * were a measurement.
  */
 function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
-  const first = concepts[0];
   return (
     <Card title="Explains">
+      <ExplainsList concepts={concepts} />
+    </Card>
+  );
+}
+
+/** Explains without its card, for the video page's tab of the same name. */
+function ExplainsList({ concepts }: { concepts: ExplainedConcept[] }) {
+  const first = concepts[0];
+  return (
+    <div className="flex flex-col gap-3">
       {concepts.length === 0 ? (
         <p className="text-[14px] text-text2">No concept is linked to this asset yet.</p>
       ) : (
@@ -493,7 +549,7 @@ function Explains({ concepts }: { concepts: ExplainedConcept[] }) {
           Open workspace
         </Button>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -548,6 +604,20 @@ function FamilyRow({ asset }: { asset: AssetRef }) {
   );
 }
 
+/** A titled list of sources or companions, for the video page's Files tab. */
+function FamilyGroup({ title, rows }: { title: string; rows: AssetRef[] }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-[12px] font-bold tracking-[0.05em] text-text3 uppercase">{title}</h3>
+      <ul className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <FamilyRow key={row.id} asset={row} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /**
  * The row as the catalog holds it, folded away under the asset: the id, the
  * path, the source, the size and the topic slugs. A reader here is checking
@@ -571,30 +641,45 @@ function CatalogRow({ asset, titles }: { asset: AssetWithTopics; titles: Record<
         </svg>
         Catalog row
       </summary>
-      <dl className="flex flex-col gap-2 px-5 pb-5">
-        <Fact label="Id">
-          <span className="font-mono text-[12px]">{asset.id}</span>
-        </Fact>
-        <Fact label={asset.path === null ? "URL" : "Path"}>
-          <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>
-        </Fact>
-        <Fact label="Source">{asset.sourceRepo}</Fact>
-        <Fact label="Bytes">{asset.bytes === null ? "unknown" : asset.bytes.toLocaleString("en")}</Fact>
-        <Fact label="Topics">
-          {asset.topics.length === 0 ? (
-            "none"
-          ) : (
-            <span className="flex flex-wrap gap-1.5">
-              {asset.topics.map((slug) => (
-                <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={titles[slug] ?? slug}>
-                  <span className="font-mono">{slug}</span>
-                </Chip>
-              ))}
-            </span>
-          )}
-        </Fact>
-      </dl>
+      <CatalogFacts asset={asset} titles={titles} className="px-5 pb-5" />
     </details>
+  );
+}
+
+/** The row's identifiers, as a list: the video page's Details tab, and the folded card. */
+function CatalogFacts({
+  asset,
+  titles,
+  className,
+}: {
+  asset: AssetWithTopics;
+  titles: Record<string, string>;
+  className?: string;
+}) {
+  return (
+    <dl className={cx("flex flex-col gap-2", className)}>
+      <Fact label="Id">
+        <span className="font-mono text-[12px]">{asset.id}</span>
+      </Fact>
+      <Fact label={asset.path === null ? "URL" : "Path"}>
+        <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>
+      </Fact>
+      <Fact label="Source">{asset.sourceRepo}</Fact>
+      <Fact label="Bytes">{asset.bytes === null ? "unknown" : asset.bytes.toLocaleString("en")}</Fact>
+      <Fact label="Topics">
+        {asset.topics.length === 0 ? (
+          "none"
+        ) : (
+          <span className="flex flex-wrap gap-1.5">
+            {asset.topics.map((slug) => (
+              <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={titles[slug] ?? slug}>
+                <span className="font-mono">{slug}</span>
+              </Chip>
+            ))}
+          </span>
+        )}
+      </Fact>
+    </dl>
   );
 }
 

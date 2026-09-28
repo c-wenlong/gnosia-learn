@@ -3,6 +3,7 @@ import {
   assetsByIds,
   readPreference,
   StateError,
+  withLearnerLock,
   writePreference,
 } from "@self-learn/catalog/state";
 
@@ -33,7 +34,10 @@ import {
  *
  * `ranges` are the stretches that played since the last save, in seconds. The
  * route merges them into what is stored rather than trusting the browser's
- * total, so two tabs or a lost save cost at most the stretch they carried.
+ * total. The read, the event and the write run under the learner's row lock
+ * (`withLearnerLock`), so a periodic save racing a pause or a page-exit
+ * beacon is merged rather than overwritten, and only one of them can be the
+ * save that crosses the threshold.
  */
 export const POST = handler(
   "playback",
@@ -60,13 +64,15 @@ export const POST = handler(
     if (row.kind !== "video") throw new StateError(`"${row.id}" is a ${row.kind}, not a video`);
 
     const key = playbackKey(row.id);
-    const stored = parsePlayback(await readPreference(db, key, owner));
-    const { playback, crossed } = applySave(stored, save, new Date().toISOString());
-    // The event first: if the preference write then fails, the next save
-    // finds no `watchedAt` and appends again, which is a duplicate day of
-    // study at worst. The other order could lose the event for good.
-    if (crossed) await appendEvent(db, { type: "watched", asset: row.id, kind: row.kind }, owner);
-    await writePreference(db, key, playback, owner);
+    const { playback, crossed } = await withLearnerLock(db, owner, async (tx) => {
+      const stored = parsePlayback(await readPreference(tx, key, owner));
+      const next = applySave(stored, save, new Date().toISOString());
+      // One transaction: the event and the stored `watchedAt` land together
+      // or not at all.
+      if (next.crossed) await appendEvent(tx, { type: "watched", asset: row.id, kind: row.kind }, owner);
+      await writePreference(tx, key, next.playback, owner);
+      return next;
+    });
     return {
       assetId: row.id,
       coverage: coverage(playback.ranges, playback.duration),

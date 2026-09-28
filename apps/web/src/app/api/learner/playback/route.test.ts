@@ -95,6 +95,17 @@ describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
     expect(events[0]).toMatchObject({ type: "watched", asset: ASSETS.video, kind: "video" });
   });
 
+  it("merges two saves in flight together, and appends one event when both cross", async () => {
+    await call({ assetId: ASSETS.video, position: 80, duration: 100, ranges: [[0, 80]] });
+    await Promise.all([
+      call({ assetId: ASSETS.video, position: 90, duration: 100, ranges: [[80, 90]] }),
+      call({ assetId: ASSETS.video, position: 95, duration: 100, ranges: [[80, 95]] }),
+    ]);
+    const stored = (await state.readPreference(scratch.db, `playback:${ASSETS.video}`)) as { ranges: number[][] };
+    expect(stored.ranges).toEqual([[0, 95]]);
+    expect(await state.readEvents(scratch.db)).toHaveLength(1);
+  });
+
   it("does not count a scrub to the end as watching", async () => {
     await call({ assetId: ASSETS.video, position: 99, duration: 100, ranges: [[0, 3], [97, 99]] });
     expect(await state.readEvents(scratch.db)).toEqual([]);

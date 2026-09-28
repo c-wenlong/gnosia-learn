@@ -17,6 +17,7 @@ import {
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { cx } from "@/components/ui/classes";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { VideoScrubber } from "@/components/VideoScrubber";
 import { WidgetFailure } from "@/components/WidgetFailure";
@@ -46,7 +47,8 @@ export type PlaybackSignal = {
  * chapter, a frame preview on hover), play, volume, the time and the current
  * chapter, speed and fullscreen, over a gradient that fades while the video
  * plays untouched. Keyboard: Space or K plays and pauses, J and L move ten
- * seconds, M mutes, C toggles subtitles, F goes fullscreen, and the bar
+ * seconds, M mutes, C toggles subtitles, I pops the picture out (where the
+ * browser has picture-in-picture), F goes fullscreen, and the bar
  * itself takes arrows and Page Up / Page Down for chapters.
  *
  * **Subtitles are the transcript.** The time-synced lines under the video are
@@ -54,10 +56,11 @@ export type PlaybackSignal = {
  * being spoken over the picture rather than loading the `.vtt` as a second
  * copy. The choice is remembered in this browser, as a video site does.
  *
- * **Layout slots.** `header` (a title), `footer` and `aside` let the library
- * page lay the details out under the picture the way a video site does: the
- * header, transcript and footer in a column, the aside in a rail beside them
- * from 1024px. Without them the component is the picture and the transcript.
+ * **Layout slots.** `header` (a title) and `tabs` let the library page lay
+ * the details out under the picture the way a video site does: the header,
+ * then one card whose tabs are the transcript followed by the caller's own
+ * sections, so they do not pile up as a stack of cards. Without them the
+ * component is the picture and the transcript.
  *
  * **A video that fails says why.** The player is replaced, at its own size, by
  * the shared failure panel, which asks `statusHref` for the reason. The
@@ -73,8 +76,7 @@ export function VideoPlayer({
   startAt,
   onPlayback,
   header,
-  footer,
-  aside,
+  tabs,
 }: {
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
@@ -92,8 +94,8 @@ export function VideoPlayer({
   /** Told about playback as it happens, to record progress. */
   onPlayback?: (signal: PlaybackSignal) => void;
   header?: ReactNode;
-  footer?: ReactNode;
-  aside?: ReactNode;
+  /** Sections after the transcript in the tabbed card under the header. */
+  tabs?: TabItem[];
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -109,6 +111,8 @@ export function VideoPlayer({
   const [awake, setAwake] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
+  // Off on the server, so the first client render matches it.
+  const canPip = useSyncExternalStore(noSubscription, pipSupported, () => false);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { failure, fail, retry, attempt, observe } = useAssetFailure(src, statusHref);
   // A seek the element refused, held until it can be honoured. See `seek`.
@@ -233,6 +237,13 @@ export function VideoPlayer({
     video.playbackRate = next;
   }
 
+  function togglePip() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (document.pictureInPictureElement) void document.exitPictureInPicture?.().catch(() => undefined);
+    else void video.requestPictureInPicture?.().catch(() => undefined);
+  }
+
   function toggleFullscreen() {
     const frame = frameRef.current;
     if (!frame) return;
@@ -275,6 +286,10 @@ export function VideoPlayer({
         break;
       case "f":
         toggleFullscreen();
+        break;
+      case "i":
+        if (!canPip) return;
+        togglePip();
         break;
       default:
         return;
@@ -473,6 +488,11 @@ export function VideoPlayer({
             <ControlButton label="Playback speed" onClick={cycleRate}>
               <span className="w-9 text-center text-[12px] font-semibold tabular-nums">{rate}×</span>
             </ControlButton>
+            {canPip && (
+              <ControlButton label="Picture in picture (i)" onClick={togglePip}>
+                <Icon name="pip" className="size-5" />
+              </ControlButton>
+            )}
             <ControlButton
               label={fullscreen ? "Exit full screen (f)" : "Full screen (f)"}
               onClick={toggleFullscreen}
@@ -484,44 +504,42 @@ export function VideoPlayer({
       </div>
     );
 
-  const transcriptPanel = transcript !== undefined && (
-    <TranscriptPanel
-      // The panel's follow-along state is playback state too: a reader who
-      // scrolled away from one video should not land on the next one with its
-      // transcript already given up on.
-      key={src}
-      cues={transcript}
-      currentTime={time}
-      onSeek={seek}
-      scrollerClassName="max-h-[26rem]"
-    />
-  );
+  const transcriptPanel = (bare: boolean) =>
+    transcript !== undefined && (
+      <TranscriptPanel
+        // The panel's follow-along state is playback state too: a reader who
+        // scrolled away from one video should not land on the next one with
+        // its transcript already given up on.
+        key={src}
+        cues={transcript}
+        currentTime={time}
+        onSeek={seek}
+        bare={bare}
+        scrollerClassName="max-h-[26rem]"
+      />
+    );
 
-  if (header === undefined && footer === undefined && aside === undefined) {
+  if (header === undefined && tabs === undefined) {
     return (
       <section className="flex flex-col gap-3.5">
         {player}
-        {transcriptPanel}
+        {transcriptPanel(false)}
       </section>
     );
   }
 
+  const items: TabItem[] = [
+    ...(transcript !== undefined
+      ? [{ id: "transcript", label: "Transcript", content: transcriptPanel(true) }]
+      : []),
+    ...(tabs ?? []),
+  ];
+
   return (
     <section className="flex flex-col gap-4">
       {player}
-      <div
-        className={cx(
-          "grid items-start gap-x-6 gap-y-5",
-          aside !== undefined && "lg:grid-cols-[minmax(0,1fr)_360px]",
-        )}
-      >
-        <div className="flex min-w-0 flex-col gap-4">
-          {header}
-          {transcriptPanel}
-          {footer}
-        </div>
-        {aside !== undefined && <div className="flex min-w-0 flex-col gap-4">{aside}</div>}
-      </div>
+      {header}
+      {items.length > 0 && <Tabs items={items} label={title ? `About ${title}` : "About this video"} />}
     </section>
   );
 }
@@ -563,6 +581,14 @@ function toggleSubtitles() {
     // Not remembered, still toggled.
   }
   window.dispatchEvent(new Event(SUBTITLES_EVENT));
+}
+
+function noSubscription(): () => void {
+  return () => undefined;
+}
+
+function pipSupported(): boolean {
+  return typeof document !== "undefined" && document.pictureInPictureEnabled === true;
 }
 
 /** The speeds the speed button steps through, in order. */
@@ -623,6 +649,12 @@ const PATHS = {
     <>
       <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
       <path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6" />
+    </>
+  ),
+  pip: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <rect x="12" y="11.5" width="6.5" height="5" rx="1" fill="currentColor" />
     </>
   ),
   expand: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,

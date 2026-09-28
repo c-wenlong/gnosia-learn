@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { TranscriptCue, VideoChapter } from "@/components/media";
+import type { TabItem } from "@/components/ui/Tabs";
 import { VideoPlayer, type PlaybackSignal } from "@/components/VideoPlayer";
-import { coverage, resumeAt, type Playback, type Range } from "@/lib/playback";
+import { coverage, MAX_RANGES, mergeRanges, resumeAt, type Playback, type Range } from "@/lib/playback";
 
 /** Save at most this often while a video plays, in milliseconds. */
 const SAVE_EVERY_MS = 15_000;
@@ -26,7 +27,13 @@ const ENDPOINT = "/api/learner/playback";
  * visit starts where this one stopped.
  *
  * The status beside the title is the route's answer, so it says what was
- * stored rather than what this tab hopes was.
+ * stored rather than what this tab hopes was. A save the route did not accept
+ * puts its ranges back, so the next save carries them again; a beacon cannot
+ * report back, which is why it is kept for the page being left.
+ *
+ * Its state belongs to one asset, so the page renders it with `key` set to
+ * the asset id: a client navigation from one video to the next starts over
+ * rather than carrying the first video's resume point and progress.
  */
 export function LibraryVideo({
   assetId,
@@ -40,8 +47,8 @@ export function LibraryVideo({
   heading,
   meta,
   actions,
-  footer,
-  aside,
+  notes,
+  tabs,
 }: {
   assetId: string;
   src: string;
@@ -56,8 +63,9 @@ export function LibraryVideo({
   /** The line under the title: kind, source, size. */
   meta: string;
   actions?: ReactNode;
-  footer?: ReactNode;
-  aside?: ReactNode;
+  /** Quiet lines under the facts: a sidecar that could not be read, say. */
+  notes?: ReactNode;
+  tabs?: TabItem[];
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(() => ({
@@ -88,11 +96,12 @@ export function LibraryVideo({
       if (!(s.duration > 0)) return;
       // The stretch still playing is sent too, and carried on from here, so a
       // save in the middle of playback loses nothing and repeats nothing.
-      const ranges = [...s.ranges];
+      const pending: Range[] = [...s.ranges];
       if (s.open !== null && s.last > s.open) {
-        ranges.push([s.open, s.last]);
+        pending.push([s.open, s.last]);
         s.open = s.last;
       }
+      const ranges = mergeRanges(pending).slice(-MAX_RANGES);
       if (ranges.length === 0 && Math.abs(s.last - s.sentPosition) < 1) return;
       s.ranges = [];
       s.sentAt = Date.now();
@@ -103,13 +112,24 @@ export function LibraryVideo({
         navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "application/json" }));
         return;
       }
+      // Put this save's ranges back for the next one to carry.
+      const requeue = () => {
+        s.ranges.push(...ranges);
+        s.sentPosition = -1;
+      };
       fetch(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
         keepalive: true,
       })
-        .then((response) => (response.ok ? response.json() : null))
+        .then((response) => {
+          if (response.ok) return response.json();
+          // Worth another try only when the server or the network was the
+          // trouble. A 400 names this save as wrong, and would be again.
+          if (response.status >= 500 || response.status === 429) requeue();
+          return null;
+        })
         .then((payload: { result?: { coverage: number; watchedAt: string | null; crossed: boolean } } | null) => {
           const result = payload?.result;
           if (!result) return;
@@ -118,10 +138,7 @@ export function LibraryVideo({
           // root layout, which a client navigation keeps mounted.
           if (result.crossed) router.refresh();
         })
-        .catch(() => {
-          // A lost save costs the stretch it carried; the next one still
-          // carries the position, and nothing else depends on this one.
-        });
+        .catch(requeue);
     },
     [assetId, router],
   );
@@ -209,10 +226,10 @@ export function LibraryVideo({
             </p>
             {actions !== undefined && <div className="ml-auto flex gap-2">{actions}</div>}
           </div>
+          {notes}
         </div>
       }
-      footer={footer}
-      aside={aside}
+      tabs={tabs}
     />
   );
 }
