@@ -8,6 +8,7 @@ import {
   derivationSources,
   listAssets,
   readEvents,
+  readPreference,
   topicTitles,
   type AssetDerivations,
   type AssetKindCount,
@@ -28,6 +29,7 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope } from "@/lib/owner";
+import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
 
 /**
@@ -715,6 +717,22 @@ export async function readLastWatched(id: string): Promise<string | null> {
 export async function loadLastWatched(id: string): Promise<string | null> {
   await connection();
   return readLastWatched(id);
+}
+
+/**
+ * Where the learner is in this video and what of it they have watched, or
+ * null for a first visit (or a store that could not be read, which costs the
+ * resume point and nothing else).
+ */
+export async function loadPlayback(id: string): Promise<Playback | null> {
+  await connection();
+  const owner = await currentOwner();
+  try {
+    return parsePlayback(await readPreference(await catalogDatabase(), playbackKey(id), owner));
+  } catch (error) {
+    warn("playback", error);
+    return null;
+  }
 }
 
 /** The pool, for a caller that already has a request scope and needs one more read. */

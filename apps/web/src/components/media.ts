@@ -117,3 +117,107 @@ export function activeChapterIndex(
 ): number {
   return currentIndex(chapters, time);
 }
+
+/** One stretch of the scrub bar: a chapter, or the untitled lead-in before the first. */
+export interface BarSegment {
+  start: number;
+  end: number;
+  /** The chapter's title, or null for a stretch no chapter covers. */
+  title: string | null;
+  /** The chapter's index in the list it came from, or -1. */
+  chapter: number;
+}
+
+/**
+ * The scrub bar cut into chapters, the way YouTube draws it: every second of
+ * `[0, duration]` in exactly one segment, in order.
+ *
+ * Each chapter runs from its own start to the next chapter's start (or the
+ * end), so the narration gaps `currentIndex` already tolerates never show as
+ * holes in the bar. A chapter that starts past the end is dropped, and a first
+ * chapter that starts late leaves an untitled lead-in rather than stretching
+ * backwards. With no chapters, or no known duration, the bar is one segment.
+ */
+export function chapterSegments(
+  chapters: readonly VideoChapter[] | undefined,
+  duration: number,
+): BarSegment[] {
+  const length = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const starts = (chapters ?? [])
+    .map((chapter, index) => ({ chapter, index }))
+    .filter(({ chapter }) => Number.isFinite(chapter.start) && chapter.start < length)
+    .sort((a, b) => a.chapter.start - b.chapter.start);
+  if (length === 0 || starts.length === 0) {
+    return [{ start: 0, end: length, title: null, chapter: -1 }];
+  }
+  const out: BarSegment[] = [];
+  const first = Math.max(0, starts[0].chapter.start);
+  if (first > 0) out.push({ start: 0, end: first, title: null, chapter: -1 });
+  starts.forEach(({ chapter, index }, i) => {
+    const start = Math.max(0, chapter.start);
+    const end = i + 1 < starts.length ? Math.max(0, starts[i + 1].chapter.start) : length;
+    if (end > start) out.push({ start, end, title: chapter.title, chapter: index });
+  });
+  return out;
+}
+
+/** The longest caption shown at once, in characters: about two lines. */
+export const CAPTION_CHARS = 84;
+
+/**
+ * A spoken line cut into captions of at most `maxChars`, each with its share
+ * of the line's time.
+ *
+ * manimkc's transcript cues are whole narrated paragraphs, which as one
+ * caption would cover a third of the picture. So the words are packed into
+ * captions greedily, closing a caption early at the end of a sentence or
+ * clause once it is half full, and the line's span is shared out by length:
+ * narration runs at a steady pace, so characters are a fair clock.
+ */
+export function captionChunks(cue: TranscriptCue, maxChars = CAPTION_CHARS): TranscriptCue[] {
+  const words = cue.text.split(/\s+/).filter(Boolean);
+  const texts: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current === "" ? word : `${current} ${word}`;
+    if (next.length > maxChars && current !== "") {
+      texts.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+    if (/[.!?;:,]$/.test(word) && current.length >= maxChars / 2) {
+      texts.push(current);
+      current = "";
+    }
+  }
+  if (current !== "") texts.push(current);
+
+  const total = texts.reduce((sum, text) => sum + text.length, 0);
+  const span = cue.end - cue.start;
+  let at = cue.start;
+  return texts.map((text, i) => {
+    const end = i === texts.length - 1 ? cue.end : at + (span * text.length) / total;
+    const chunk = { start: at, end, text };
+    at = end;
+    return chunk;
+  });
+}
+
+/**
+ * The caption to show at `time`, or null between lines.
+ *
+ * Unlike `activeCueIndex`, this is the cue whose span contains `time`: a
+ * caption that stays up through a pause in the narration reads as the video
+ * still talking. When two cues overlap, the later start wins. The cue is then
+ * cut by `captionChunks` and the piece being spoken is returned.
+ */
+export function subtitleAt(cues: readonly TranscriptCue[], time: number): string | null {
+  let best: TranscriptCue | null = null;
+  for (const cue of cues) {
+    if (cue.start <= time && time < cue.end && (best === null || cue.start >= best.start)) best = cue;
+  }
+  if (best === null) return null;
+  const chunks = captionChunks(best);
+  return (chunks.find((chunk) => time < chunk.end) ?? chunks[chunks.length - 1])?.text ?? null;
+}
