@@ -12,7 +12,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "./learner";
-import { assertKnownItems, type WriteOptions } from "./progress";
+import { assertReadableItems, type WriteOptions } from "./progress";
 
 /**
  * The durable "what I learnt" record, one row per curriculum item.
@@ -84,7 +84,7 @@ export async function upsertRecap(
   options: { learnerId?: string; countSession?: boolean; sessions?: number } & WriteOptions = {},
 ): Promise<TopicKnowledge | null> {
   const { learnerId = LOCAL_LEARNER_ID, countSession = true, sessions: floor } = options;
-  await assertKnownItems(db, [curriculumItemId], options);
+  await assertReadableItems(db, [curriculumItemId], learnerId, options);
 
   if (isEmptyRecap(input)) {
     await clearRecap(db, curriculumItemId, learnerId);

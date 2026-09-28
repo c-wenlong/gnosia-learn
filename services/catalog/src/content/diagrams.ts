@@ -11,6 +11,7 @@ import {
   diagram,
   job as jobTable,
   LOCAL_LEARNER_ID,
+  readableOwners,
   topic,
   type AuthorKind,
 } from "@self-learn/schema";
@@ -24,6 +25,7 @@ import { fileFacts } from "../index/files";
 import { ASSET_PREFIX } from "../index/source";
 import { metaFromDocument, type DiagramMeta } from "../index/tldr";
 import { readBlob, uploadBlob } from "./blob";
+import { andOwnedBy, ownedBy, type Owners, type OwnerScope } from "./scope";
 import { ownRoot } from "./import-root";
 import { DIAGRAM_SLUG, diagramPaths, documentBytes, documentProblem, sha256 } from "./diagram-document";
 import { latestRevisions, lockEntity } from "./revisions";
@@ -107,11 +109,20 @@ export function parseDocument(text: string, where: string): Record<string, unkno
  * `resolveSubject` checks a stamp against, so `put` refuses exactly what the
  * import refuses, with the same sentences.
  */
-async function databaseVocabulary(db: CatalogDatabase) {
+async function databaseVocabulary(db: CatalogDatabase, owner: string) {
   // Live topics only: an archived topic is out of the vocabulary the export
   // writes and the import checks against, so a put may not file under it.
-  const topics = await db.select({ slug: topic.slug }).from(topic).where(isNull(topic.archivedAt));
-  const concepts = await db.select({ slug: concept.slug, topicSlug: concept.topicSlug }).from(concept);
+  // Only what the writer may read (phase 4): another owner's topic or concept
+  // is refused with the sentence a missing one gets, rather than filed under.
+  const owners = readableOwners(owner);
+  const topics = await db
+    .select({ slug: topic.slug })
+    .from(topic)
+    .where(and(isNull(topic.archivedAt), ownedBy(topic.ownerId, owners)));
+  const concepts = await db
+    .select({ slug: concept.slug, topicSlug: concept.topicSlug })
+    .from(concept)
+    .where(ownedBy(concept.ownerId, owners));
   return {
     known: new Set(concepts.map((c) => c.slug)),
     vocabulary: {
@@ -128,9 +139,10 @@ export async function resolveDocument(
   db: CatalogDatabase,
   document: unknown,
   where: string,
+  owner: string = DIAGRAM_OWNER,
 ): Promise<{ subject: Subject; meta: DiagramMeta | null; notes: string[] }> {
   const meta = metaFromDocument(document);
-  const { known, vocabulary } = await databaseVocabulary(db);
+  const { known, vocabulary } = await databaseVocabulary(db, owner);
   const problems = new IndexErrors();
   const notes: string[] = [];
   const subject = resolveSubject(meta, where, known, vocabulary, problems, notes);
@@ -241,7 +253,7 @@ export async function putDiagram(
   const document = parseDocument(await readText(input.tldr), paths.tldr);
   const bytes = documentBytes(document);
   const docHash = sha256(bytes);
-  const { subject, notes } = await resolveDocument(db, document, paths.tldr);
+  const { subject, notes } = await resolveDocument(db, document, paths.tldr, ownerId);
 
   const job = input.jobId === undefined ? null : await checkJob(db, input.jobId, slug, subject.topicSlug);
 
@@ -446,6 +458,8 @@ export interface PutSvgInput {
   reason: string;
   author: string;
   authorKind: AuthorKind;
+  /** Whose diagram this is; the CLI's owner when omitted. */
+  ownerId?: string;
 }
 
 /**
@@ -465,6 +479,7 @@ export interface PutSvgInput {
 export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: PutSvgInput): Promise<PutResult> {
   const slug = input.slug.trim();
   assertDiagramSlug(slug);
+  const ownerId = input.ownerId ?? DIAGRAM_OWNER;
   const paths = diagramPaths(slug);
   const ids = diagramAssetIds(slug);
   const hasDocument = () =>
@@ -476,7 +491,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
   // Asked here to refuse early; asked again under the lock below, which is the answer that counts.
   if ((await readDiagramDocument(db, slug)) !== null) throw hasDocument();
   await readText(input.svg, "an SVG");
-  const { known, vocabulary } = await databaseVocabulary(db);
+  const { known, vocabulary } = await databaseVocabulary(db, ownerId);
   if (!vocabulary.bySlug.has(input.topic)) {
     throw new DiagramError("unresolved", `${paths.svg}: topic "${input.topic}" is not in the vocabulary.`);
   }
@@ -510,7 +525,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
       );
     }
   }
-  const uploaded = await uploadBlob(db, store, { ownerId: DIAGRAM_OWNER, file: input.svg, mime: "image/svg+xml", ext: "svg" });
+  const uploaded = await uploadBlob(db, store, { ownerId, file: input.svg, mime: "image/svg+xml", ext: "svg" });
   // The no-document answer has to hold until this commits. A document put
   // writes this same SVG asset and takes its lock first (the asset type sorts
   // before diagram), so holding that lock here while asking again means a
@@ -523,7 +538,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
     const latest = (await latestRevisions(tx, "asset", [ids.svg])).get(ids.svg);
     const [written] = await writeContents(tx, [
       {
-        owner: DIAGRAM_OWNER,
+        owner: ownerId,
         type: "asset",
         id: ids.svg,
         base: latest?.id ?? null,
@@ -542,7 +557,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
             sourceRepo: "self-learn",
             blobKey: uploaded.key,
             resourceType: null,
-            ownerId: DIAGRAM_OWNER,
+            ownerId,
           },
           links: {
             asset_topic: [{ topicSlug: input.topic }],
@@ -741,8 +756,12 @@ const iso = (value: Date | string | null): string | null =>
  * Every live diagram, or one: the fields the studio's grid and inspector
  * show, read with no subprocess and no document leaving the database. The
  * shapes and the stamp are read inside jsonb; only the counts come back.
+ *
+ * Scoped (phase 4): only diagrams `scope.readable` owns, so another owner's
+ * slug is absent here as a slug nobody holds is, and the studio, which lists,
+ * opens and serves through this, cannot reach it.
  */
-export async function listDiagrams(db: CatalogDatabase, only?: string): Promise<DiagramSummary[]> {
+export async function listDiagrams(db: CatalogDatabase, scope: OwnerScope, only?: string): Promise<DiagramSummary[]> {
   const { rows } = await db.execute<SummaryRow>(sql`
     select d.slug, d.title, d.topic_slug, d.document_hash, d.svg_blob_key, d.svg_document_hash, d.updated_at,
       (select count(*) from jsonb_array_elements(d.document -> 'records') r
@@ -761,7 +780,7 @@ export async function listDiagrams(db: CatalogDatabase, only?: string): Promise<
       where entity_type = 'diagram' and entity_id = d.slug
       order by seq desc limit 1
     ) rev on true
-    where d.archived_at is null ${only === undefined ? sql`` : sql`and d.slug = ${only}`}
+    where d.archived_at is null ${only === undefined ? sql`` : sql`and d.slug = ${only}`}${andOwnedBy(sql`d.owner_id`, scope.readable)}
     order by d.slug
   `);
   return rows.map((row) => {
@@ -796,15 +815,20 @@ export async function listDiagrams(db: CatalogDatabase, only?: string): Promise<
   });
 }
 
-/** The stored document of one live diagram, or null. */
+/**
+ * The stored document of one live diagram, or null. `owners` scopes it, so
+ * another owner's diagram is null as a missing one is; omitted, any owner's
+ * is found, which only a writer asking "is this slug taken" wants.
+ */
 export async function readDiagramDocument(
   db: CatalogDatabase,
   slug: string,
+  owners?: Owners,
 ): Promise<{ document: unknown; documentHash: string; svgBlobKey: string | null } | null> {
   const [row] = await db
     .select({ document: diagram.document, documentHash: diagram.documentHash, svgBlobKey: diagram.svgBlobKey })
     .from(diagram)
-    .where(and(eq(diagram.slug, slug), sql`${diagram.archivedAt} is null`))
+    .where(and(eq(diagram.slug, slug), sql`${diagram.archivedAt} is null`, ownedBy(diagram.ownerId, owners)))
     .limit(1);
   return row ?? null;
 }
@@ -898,11 +922,21 @@ export interface CheckoutState {
   latest: number | null;
 }
 
-/** Where a checkout stands, without touching it. */
-export async function checkoutState(db: CatalogDatabase, slug: string, dir: string): Promise<CheckoutState> {
+/**
+ * Where a checkout stands, without touching it. Scoped: another owner's
+ * diagram has no revision here, as a slug nobody holds has none, so neither
+ * its revision number nor its document's hash is read out through a checkout.
+ */
+export async function checkoutState(db: CatalogDatabase, slug: string, dir: string, scope: OwnerScope): Promise<CheckoutState> {
   const paths = checkoutPaths(slug, dir);
   const record = await readCheckoutRecord(paths);
-  const latest = (await latestRevisions(db, "diagram", [slug])).get(slug);
+  const [owned] = await db
+    .select({ ownerId: diagram.ownerId })
+    .from(diagram)
+    .where(eq(diagram.slug, slug))
+    .limit(1);
+  const readable = owned === undefined || scope.readable.includes(owned.ownerId);
+  const latest = readable ? (await latestRevisions(db, "diagram", [slug])).get(slug) : undefined;
   const latestId = latest === undefined || latest.deleted ? null : latest.id;
   const current = await fileHash(paths.tldr);
   // With no record, a file there is somebody's drawing unless it is exactly
@@ -918,7 +952,7 @@ export async function checkoutState(db: CatalogDatabase, slug: string, dir: stri
     const [row] = await db
       .select({ documentHash: diagram.documentHash })
       .from(diagram)
-      .where(eq(diagram.slug, slug))
+      .where(and(eq(diagram.slug, slug), ownedBy(diagram.ownerId, scope.readable)))
       .limit(1);
     dirty = row?.documentHash !== current;
   }
@@ -953,9 +987,30 @@ export async function checkoutDiagram(
   store: BlobStore,
   slug: string,
   dir: string,
+  scope: OwnerScope,
   options: { force?: boolean } = {},
 ): Promise<CheckoutResult> {
-  const state = await checkoutState(db, slug, dir);
+  // Another owner's slug answers as a slug with no diagram, and touches
+  // nothing: no record is written (a commit could only be refused), and a
+  // checkout already on disk, from before owners were scoped, is left as it
+  // is rather than cleared as if the diagram were gone.
+  const [held] = await db.select({ ownerId: diagram.ownerId }).from(diagram).where(eq(diagram.slug, slug)).limit(1);
+  if (held !== undefined && !scope.readable.includes(held.ownerId)) {
+    const paths = checkoutPaths(slug, dir);
+    return {
+      ok: true,
+      slug,
+      path: paths.tldr,
+      svgPath: null,
+      revision: null,
+      exists: false,
+      written: false,
+      // The sentence a slug with no diagram gets, so the note says nothing
+      // about whose the slug is. Only `written` differs: nothing was written.
+      note: `${slug} is not a diagram yet: draw it at ${paths.tldr} (canvas new), then commit`,
+    };
+  }
+  const state = await checkoutState(db, slug, dir, scope);
   const { paths } = state;
   if (state.dirty && options.force !== true) {
     throw new DiagramError(
@@ -964,7 +1019,7 @@ export async function checkoutDiagram(
         `(\`catalog diagram commit ${slug} --reason "..."\`), or pass --force to throw them away.`,
     );
   }
-  const stored = await readDiagramDocument(db, slug);
+  const stored = await readDiagramDocument(db, slug, scope.readable);
   const exists = stored !== null;
   const onDisk = (await fileHash(paths.tldr)) !== null;
   if (!state.dirty && state.record !== null && !state.behind && onDisk === exists) {
@@ -1032,6 +1087,8 @@ export interface CommitInput {
    */
   svg?: string | null;
   jobId?: string;
+  /** Whose diagram this is; the CLI's owner when omitted. */
+  ownerId?: string;
 }
 
 export interface CommitResult extends PutResult {
@@ -1087,6 +1144,7 @@ export async function commitDiagram(db: CatalogDatabase, store: BlobStore, input
     authorKind: input.authorKind,
     base: record.revision,
     ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
+    ...(input.ownerId === undefined ? {} : { ownerId: input.ownerId }),
   });
 
   const next: CheckoutRecord = {

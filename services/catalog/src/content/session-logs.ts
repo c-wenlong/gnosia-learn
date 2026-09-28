@@ -96,8 +96,19 @@ export async function readLogs(db: CatalogDatabase): Promise<{ id: string; markd
 }
 
 /** The ids of every log with an entry, sorted as file names sort. */
-export async function listLogIds(db: CatalogDatabase): Promise<string[]> {
-  const rows = await db.selectDistinct({ id: sessionLogEntry.sessionId }).from(sessionLogEntry);
+/**
+ * The session ids that have a log: every learner's (the export), or one
+ * learner's own, which is what the `learn` CLI counts and lists (phase 4).
+ */
+export async function listLogIds(db: CatalogDatabase, learnerId?: string): Promise<string[]> {
+  const rows =
+    learnerId === undefined
+      ? await db.selectDistinct({ id: sessionLogEntry.sessionId }).from(sessionLogEntry)
+      : await db
+          .selectDistinct({ id: sessionLogEntry.sessionId })
+          .from(sessionLogEntry)
+          .innerJoin(session, eq(session.id, sessionLogEntry.sessionId))
+          .where(eq(session.learnerId, learnerId));
   return rows.map((row) => row.id).sort();
 }
 
