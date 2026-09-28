@@ -4,6 +4,7 @@ import {
   assetTopic,
   blobObject,
   collection,
+  collectionItem,
   COMMONS_OWNER,
   concept,
   conceptPrerequisite,
@@ -262,6 +263,12 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
     await db.insert(assetDerivation).values({ assetId: POSTER, sourceAssetId: VIDEO });
     // The owner's poster, filed under B's topic as well as nothing else.
     await db.insert(assetTopic).values({ assetId: POSTER, topicSlug: B_TOPIC });
+    // The owner's course, whose one module is filed under B's topic.
+    await db.insert(collection).values([
+      { id: "lc", kind: "course", slug: "lc", title: "The owner's course" },
+      { id: "lc-m1", kind: "module", slug: "m1", title: "Module", parentId: "lc" },
+    ]);
+    await db.insert(collectionItem).values({ collectionId: "lc-m1", topicSlug: B_TOPIC, position: 0 });
   }, 120_000);
 
   afterAll(async () => {
@@ -284,6 +291,11 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
     // B can open the video but not the owner's poster of it.
     expect(await posterBlob(scratch.db, VIDEO, TENANT)).toBeNull();
     expect((await assetDerivations(scratch.db, VIDEO, TENANT)).derived).toEqual([]);
+  });
+
+  it("names no module topic another owner holds", async () => {
+    const course = (await dbSource(scratch.db, LOCAL).courses()).find((c) => c.id === "lc");
+    expect(course?.modules.map((m) => m.topic)).toEqual([""]);
   });
 
   it("shows no chip for another owner's topic on the owner's own asset", async () => {
@@ -367,11 +379,35 @@ describe.skipIf(!reachable.ok)("the write seam and the owner", () => {
     await expect(writeContent(scratch.db, topicWrite("nobody", " "))).rejects.toMatchObject({ code: "empty-owner" });
   });
 
-  it("creates the commons learner on its first write", async () => {
+  it("creates the commons learner on its first write, and stamps its links too", async () => {
     const commons = () => scratch.db.select().from(learner).where(eq(learner.id, COMMONS_OWNER));
     expect(await commons()).toHaveLength(0);
-    await writeContent(scratch.db, topicWrite("for-everyone", COMMONS_OWNER));
+    await writeContent(scratch.db, {
+      ...topicWrite("for-everyone", COMMONS_OWNER),
+      next: {
+        row: { slug: "for-everyone", title: "For everyone", domain: "testing" },
+        links: { topic_relation: [{ toSlug: TOPIC_SLUG, kind: "precedes", position: 1 }] },
+      },
+    });
     expect(await commons()).toHaveLength(1);
     expect(await ownerOf("for-everyone")).toBe(COMMONS_OWNER);
+    const relations = await scratch.db
+      .select({ owner: topicRelation.ownerId })
+      .from(topicRelation)
+      .where(eq(topicRelation.fromSlug, "for-everyone"));
+    expect(relations).toEqual([{ owner: COMMONS_OWNER }]);
+  });
+
+  it("refuses a link that names a different owner from the write", async () => {
+    await expect(
+      writeContent(scratch.db, {
+        ...topicWrite("linked-wrong", LOCAL_LEARNER_ID),
+        next: {
+          row: { slug: "linked-wrong", title: "Linked wrong", domain: "testing" },
+          links: { topic_relation: [{ toSlug: TOPIC_SLUG, kind: "precedes", position: 1, ownerId: B }] },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(await ownerOf("linked-wrong")).toBeUndefined();
   });
 });

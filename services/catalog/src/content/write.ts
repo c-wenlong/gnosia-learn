@@ -6,7 +6,7 @@ import {
   type RevisionEntityType,
   type RevisionOp,
 } from "@self-learn/schema";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "../state/learner";
@@ -294,9 +294,19 @@ async function writeRows(db: CatalogDatabase, input: WriteContentInput): Promise
     }
     await db.delete(linkSpec.table).where(eq(column(linkSpec.table, linkSpec.parent), input.id));
     if (rows.length > 0) {
+      // A link table with an owner of its own (`topic_relation`,
+      // `manimkc_topic`) belongs to the entity at its owning end, so its rows
+      // take the write's owner too, rather than the column's `'local'`.
+      const owned = "ownerId" in getTableColumns(linkSpec.table);
       await db
         .insert(linkSpec.table)
-        .values(rows.map((row) => ({ ...row, [linkSpec.parent]: input.id })) as never);
+        .values(
+          rows.map((row) => ({
+            ...row,
+            ...(owned ? { ownerId: input.owner } : {}),
+            [linkSpec.parent]: input.id,
+          })) as never,
+        );
     }
   }
 }
@@ -332,6 +342,17 @@ function validate(input: WriteContentInput): void {
       `the row says its owner is ${JSON.stringify(stated)}, but the write is for ${input.owner}. ` +
         `The seam stamps the owner; a row should not name another one.`,
     );
+  }
+  for (const [name, rows] of Object.entries(input.next.links ?? {})) {
+    for (const row of rows) {
+      if (row["ownerId"] !== undefined && row["ownerId"] !== input.owner) {
+        throw new ContentWriteError(
+          "invalid",
+          `a ${name} row says its owner is ${JSON.stringify(row["ownerId"])}, but the write is for ${input.owner}. ` +
+            `A link belongs to the entity at its owning end.`,
+        );
+      }
+    }
   }
   const key = input.next.row[spec.key];
   if (key !== input.id) {

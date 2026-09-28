@@ -114,7 +114,11 @@ async function readTree(db: CatalogDatabase, owners: Owners): Promise<Course[]> 
       db,
       sql`select c.id, c.parent_id, c.slug, c.title, c.position,
                  (select m.topic_slug from collection_item m
-                  where m.collection_id = c.id and m.topic_slug is not null
+                  where m.collection_id = c.id and m.topic_slug is not null${
+                    owners === undefined
+                      ? sql``
+                      : sql` and exists (select 1 from topic t where t.slug = m.topic_slug${andOwnedBy(sql`t.owner_id`, owners)})`
+                  }
                   order by m.position limit 1) as topic
           from collection c
           where c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
