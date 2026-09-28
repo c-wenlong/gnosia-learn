@@ -256,11 +256,26 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
     expect(derived).toEqual([]);
     expect((await assetRow(posterId(VIDEO_ID)))?.ownerId).toBe("local");
+
     // The video and its sidecars moved to the commons' prefix; no poster
     // bytes were cut for either owner.
     expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey(COMMONS_OWNER, sha256(VIDEO), "mp4"));
     const after = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
     expect(after.filter((k) => !before.includes(k)).every((k) => !k.endsWith(".jpg"))).toBe(true);
+  });
+
+  it("says a mismatched poster is to be moved even when it is present and its video unchanged (phase 4)", async () => {
+    await ensureLearner(scratch.db, COMMONS_OWNER);
+    await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER });
+    await uploadAssets(scratch.db, options());
+    await scratch.db.update(asset).set({ ownerId: "local" }).where(eq(asset.id, posterId(VIDEO_ID)));
+    const result = await uploadAssets(scratch.db, options());
+    const poster = result.items.filter((i) => i.id === posterId(VIDEO_ID));
+    // Refused by name, not reported as present; and left hooked up, since its
+    // video did not change and it is still the right picture.
+    expect(poster.map((i) => i.action)).toEqual(["refused"]);
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
+    expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
   });
 
   it("refuses another owner's video before storing a byte, and goes on with the rest (phase 4)", async () => {

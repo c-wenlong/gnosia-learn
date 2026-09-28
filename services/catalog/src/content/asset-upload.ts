@@ -535,11 +535,6 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
           .from(assetDerivation)
           .where(and(eq(assetDerivation.assetId, id), eq(assetDerivation.sourceAssetId, video.row.id)))
       ).length > 0;
-    if (current !== null && derived && !videoChanged) {
-      result.counts.posters += 1;
-      items.push({ id, kind: "poster", action: "present", key: current, bytes: existing?.bytes ?? null });
-      return null;
-    }
     /**
      * No new poster this run. When the video's bytes just changed, the stored
      * poster shows the old render, and nothing later would notice: the next
@@ -567,15 +562,22 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     // One left behind when its video moved (D23's move, done by hand for one
     // table and not the other) cannot be recut under either owner without
     // one of the two writes being refused, so it is refused here, before a
-    // byte is cut or stored; and since its video's link just changed, it is
-    // unhooked, written as its own owner, so it is not served as the video's
-    // current picture.
+    // byte is cut or stored, and said even when it is present; and when its
+    // video's link changes in this run it is unhooked, written as its own
+    // owner, so it is not served as the video's new current picture.
     if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
       const why =
         `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the poster with its ` +
         `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`;
       refuse(id, "poster", why);
+      // Unhooked only when its video's link changes in this run; otherwise
+      // it is still the right picture, and saying so is enough.
       return dryRun ? null : detach(why);
+    }
+    if (current !== null && derived && !videoChanged) {
+      result.counts.posters += 1;
+      items.push({ id, kind: "poster", action: "present", key: current, bytes: existing?.bytes ?? null });
+      return null;
     }
     if (dryRun) {
       if (options.ffmpeg === null) return null;
