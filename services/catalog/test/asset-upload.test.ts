@@ -248,9 +248,14 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER }).where(sql`${asset.id} like 'manimkc:%'`);
     const before = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
     const result = await uploadAssets(scratch.db, options());
-    const poster = result.items.find((i) => i.id === posterId(VIDEO_ID));
-    expect(poster?.action).toBe("refused");
-    expect(poster?.detail).toContain("belongs to local and its video to commons");
+    const poster = result.items.filter((i) => i.id === posterId(VIDEO_ID));
+    expect(poster.map((i) => i.action)).toEqual(["refused", "detached"]);
+    expect(poster[0]?.detail).toContain("belongs to local and its video to commons");
+    // Unhooked from the video whose link just changed, so it is not served
+    // as that video's current picture.
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
+    expect(derived).toEqual([]);
+    expect((await assetRow(posterId(VIDEO_ID)))?.ownerId).toBe("local");
     // The video and its sidecars moved to the commons' prefix; no poster
     // bytes were cut for either owner.
     expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey(COMMONS_OWNER, sha256(VIDEO), "mp4"));

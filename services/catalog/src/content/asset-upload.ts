@@ -523,20 +523,6 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       refuse(id, "poster", theirs);
       return null;
     }
-    // A poster is its video's owner's, and its bytes are keyed by that owner.
-    // One left behind when its video moved (D23's move, done by hand for one
-    // table and not the other) cannot be recut under either owner without
-    // one of the two writes being refused, so it is refused here, before a
-    // byte is cut or stored.
-    if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
-      refuse(
-        id,
-        "poster",
-        `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the poster with its ` +
-          `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`,
-      );
-      return null;
-    }
     const current =
       existing !== undefined && existing.blobKey !== null && existing.contentHash !== null
         ? await alreadyStored(existing, POSTER_EXTENSION.slice(1))
@@ -552,12 +538,6 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     if (current !== null && derived && !videoChanged) {
       result.counts.posters += 1;
       items.push({ id, kind: "poster", action: "present", key: current, bytes: existing?.bytes ?? null });
-      return null;
-    }
-    if (dryRun) {
-      if (options.ffmpeg === null) return null;
-      result.counts.posters += 1;
-      items.push({ id, kind: "poster", action: "would-make", key: null, bytes: null });
       return null;
     }
     /**
@@ -583,6 +563,26 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         reason,
       };
     };
+    // A poster is its video's owner's, and its bytes are keyed by that owner.
+    // One left behind when its video moved (D23's move, done by hand for one
+    // table and not the other) cannot be recut under either owner without
+    // one of the two writes being refused, so it is refused here, before a
+    // byte is cut or stored; and since its video's link just changed, it is
+    // unhooked, written as its own owner, so it is not served as the video's
+    // current picture.
+    if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
+      const why =
+        `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the poster with its ` +
+        `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`;
+      refuse(id, "poster", why);
+      return dryRun ? null : detach(why);
+    }
+    if (dryRun) {
+      if (options.ffmpeg === null) return null;
+      result.counts.posters += 1;
+      items.push({ id, kind: "poster", action: "would-make", key: null, bytes: null });
+      return null;
+    }
     if (options.ffmpeg === null) return detach("no ffmpeg to cut a poster from the new render");
     const frame = await extractPoster(options.ffmpeg, video.file);
     if (!frame.ok) {
