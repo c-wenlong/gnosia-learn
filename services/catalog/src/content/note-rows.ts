@@ -7,7 +7,7 @@ import type { CatalogDatabase } from "../db";
 import { parseFrontmatter, strayFrontmatterLines } from "../index/frontmatter";
 import { assertRenderable, notePath, readNote, renderNote, type NoteFields } from "./notes";
 import { POSITION_STEP } from "./positions";
-import { ownedBy, type Owners, CLI_OWNER } from "./scope";
+import { ownedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
 import { latestRevisions } from "./revisions";
 import { writeContents } from "./write";
 
@@ -252,7 +252,11 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
   return { path, revision: written.revisionId, changed: written.changed, hash };
 }
 
-/** `requires:` then `assumes:` as `concept_prerequisite` rows, checked against live concepts. */
+/**
+ * `requires:` then `assumes:` as `concept_prerequisite` rows, checked against
+ * live concepts the CLI's owner may read: another owner's concept is "not a
+ * concept" here, as it is on every page that owner's reader sees (phase 4).
+ */
 async function prerequisiteRows(db: CatalogDatabase, fields: NoteFields): Promise<Record<string, unknown>[]> {
   const named = [...new Set([...fields.requires, ...fields.assumes])];
   const live = new Set(
@@ -262,7 +266,7 @@ async function prerequisiteRows(db: CatalogDatabase, fields: NoteFields): Promis
           await db
             .select({ slug: concept.slug })
             .from(concept)
-            .where(and(inArray(concept.slug, named), isNull(concept.archivedAt)))
+            .where(and(inArray(concept.slug, named), isNull(concept.archivedAt), ownedBy(concept.ownerId, cliScope().readable)))
         ).map((row) => row.slug),
   );
   const problems: string[] = [];

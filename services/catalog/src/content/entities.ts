@@ -96,6 +96,44 @@ export const ENTITIES: Readonly<Record<RevisionEntityType, EntitySpec>> = {
   },
 };
 
+/** A column naming another content entity: where a link, or a row, points. */
+export interface FarEnd {
+  /** The column, by its TypeScript key. */
+  column: string;
+  /** The entity type it names. */
+  target: RevisionEntityType;
+}
+
+/**
+ * Every column of an entity's own row that names another content entity, by
+ * type. Together with `LINK_FAR_ENDS`, what the seam checks a write may point
+ * at (phase 4): only rows its owner may read, their own and the commons'.
+ */
+export const ROW_FAR_ENDS: Readonly<Partial<Record<RevisionEntityType, readonly FarEnd[]>>> = {
+  collection: [{ column: "parentId", target: "collection" }],
+  curriculum_item: [{ column: "collectionId", target: "collection" }],
+  concept: [{ column: "topicSlug", target: "topic" }],
+  diagram: [{ column: "topicSlug", target: "topic" }],
+};
+
+/** The same for each link table, by its SQL name: the far end, never the parent. */
+export const LINK_FAR_ENDS: Readonly<Record<string, readonly FarEnd[]>> = {
+  topic_relation: [{ column: "toSlug", target: "topic" }],
+  manimkc_topic: [],
+  collection_tag: [{ column: "tagId", target: "tag" }],
+  collection_item: [
+    { column: "topicSlug", target: "topic" },
+    { column: "conceptSlug", target: "concept" },
+    { column: "assetId", target: "asset" },
+  ],
+  curriculum_item_topic: [{ column: "topicSlug", target: "topic" }],
+  concept_curriculum_item: [{ column: "conceptSlug", target: "concept" }],
+  concept_prerequisite: [{ column: "prerequisiteSlug", target: "concept" }],
+  asset_topic: [{ column: "topicSlug", target: "topic" }],
+  asset_concept: [{ column: "conceptSlug", target: "concept" }],
+  asset_derivation: [{ column: "sourceAssetId", target: "asset" }],
+};
+
 /**
  * Columns that are facts about the write rather than the content, and so are
  * left out of a snapshot. Leaving them in would make every re-import a change:

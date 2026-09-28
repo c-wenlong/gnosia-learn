@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,10 +20,17 @@ import {
   sessionLogEntry,
   topic,
 } from "@self-learn/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { checkoutDiagram, checkoutState, listDiagrams, readDiagramDocument } from "../src/content/diagrams";
+import {
+  checkoutDiagram,
+  checkoutState,
+  DiagramError,
+  listDiagrams,
+  readDiagramDocument,
+  resolveDocument,
+} from "../src/content/diagrams";
 import { noteText, readNoteRows } from "../src/content/note-rows";
 import { cliScope, scopedRead } from "../src/content/scope";
 import { connect } from "../src/db";
@@ -176,6 +184,42 @@ describe.skipIf(!reachable.ok)("reads that crossed owners", () => {
     expect(await readFile(path.join(kept, "other-diagram.tldr"), "utf8")).toBe("{}");
     expect(await readFile(path.join(kept, "other-diagram.svg"), "utf8")).toBe("<svg/>");
     expect(JSON.parse(await readFile(path.join(kept, "other-diagram.checkout.json"), "utf8"))).toEqual(record);
+  });
+
+  it("files a diagram only under a topic and concepts its writer may read", async () => {
+    const stamped = (topicSlug: string, concepts: string[]) => ({
+      records: [{ typeName: "document", id: "document:document", meta: { tldrawkc: { kc: 1, topic: topicSlug, concepts } } }],
+    });
+    await expect(resolveDocument(scratch.db, stamped("other-topic", []), "x.tldr", LOCAL_LEARNER_ID)).rejects.toBeInstanceOf(DiagramError);
+    await expect(resolveDocument(scratch.db, stamped(TOPIC_SLUG, ["other-concept"]), "x.tldr", LOCAL_LEARNER_ID)).rejects.toBeInstanceOf(
+      DiagramError,
+    );
+    await expect(resolveDocument(scratch.db, stamped(TOPIC_SLUG, ["alpha"]), "x.tldr", LOCAL_LEARNER_ID)).resolves.toMatchObject({
+      subject: { topicSlug: TOPIC_SLUG },
+    });
+    await expect(resolveDocument(scratch.db, stamped("other-topic", ["other-concept"]), "x.tldr", OTHER)).resolves.toMatchObject({
+      subject: { topicSlug: "other-topic" },
+    });
+  });
+
+  it("calls a file at another owner's slug somebody's drawing, never their clean checkout", async () => {
+    // No record beside it, and bytes that hash to the other owner's stored
+    // document: to that owner it is an unedited checkout, to this one a file
+    // it cannot vouch for, so it is kept.
+    const dir = path.join(work, "unrecorded");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "other-diagram.tldr"), "{}");
+    const hash = createHash("sha256").update("{}").digest("hex");
+    await scratch.db.update(diagram).set({ documentHash: hash }).where(eq(diagram.slug, "other-diagram"));
+    expect((await checkoutState(scratch.db, "other-diagram", dir, THEIRS)).dirty).toBe(false);
+    expect((await checkoutState(scratch.db, "other-diagram", dir, LOCAL)).dirty).toBe(true);
+  });
+
+  it("resets only rows on items the learner may read", async () => {
+    // A tick on another owner's item, written before items were checked.
+    await scratch.db.insert(progress).values({ learnerId: LOCAL_LEARNER_ID, curriculumItemId: "other-item", completedAt: new Date() });
+    expect((await resetCourse(scratch.db, ["other-item"], LOCAL_LEARNER_ID)).cleared).toBe(0);
+    await scratch.db.delete(progress).where(and(eq(progress.learnerId, LOCAL_LEARNER_ID), eq(progress.curriculumItemId, "other-item")));
   });
 
   it("refuses a learner's tick, note and recap on an item they cannot read, as on a missing one", async () => {

@@ -21,7 +21,7 @@ import { ASSET_PREFIX } from "../index/source";
 import { diagramPaths } from "./diagram-document";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
-import { andOwnedBy, type Owners, CLI_OWNER } from "./scope";
+import { andOwnedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
 import {
   type LatestRevision,
   latestRevisions,
@@ -76,7 +76,8 @@ export type TopicErrorCode =
   | "cycle"
   | "no-room"
   | "diagrams-on-files"
-  | "jobs-open";
+  | "jobs-open"
+  | "foreign-owner";
 
 export class TopicError extends Error {
   constructor(
@@ -202,20 +203,49 @@ async function rowOf(db: CatalogDatabase, slug: string): Promise<TopicRow | unde
   return row;
 }
 
+function missingTopic(slug: string, role: string): TopicError {
+  return new TopicError(
+    "missing",
+    `no ${role} "${slug}" in the catalog. Find the slug with ` +
+      `\`npm run --silent catalog -- search <term> --json\`, or list them with ` +
+      `\`npm run --silent catalog -- topic ls --json\`.`,
+  );
+}
+
 async function liveRow(db: CatalogDatabase, slug: string, role = "topic"): Promise<TopicRow> {
   const row = await rowOf(db, slug);
-  if (row === undefined) {
-    throw new TopicError(
-      "missing",
-      `no ${role} "${slug}" in the catalog. Find the slug with ` +
-        `\`npm run --silent catalog -- search <term> --json\`, or list them with ` +
-        `\`npm run --silent catalog -- topic ls --json\`.`,
-    );
-  }
+  if (row === undefined) throw missingTopic(slug, role);
   if (row.archivedAt !== null) {
     throw new TopicError("archived", `${role} "${slug}" is archived. Restore it first: \`catalog topic restore ${slug}\`.`);
   }
   return row;
+}
+
+/**
+ * `liveRow`, for a topic the CLI's owner is about to link to: one another
+ * owner holds, not the commons, is refused with the sentence a missing one
+ * gets (phase 4). A relation, a concept's topic or a module's topic naming it
+ * would be a link its own reader could not follow.
+ */
+async function readableRow(db: CatalogDatabase, slug: string, role = "topic"): Promise<TopicRow> {
+  const row = await liveRow(db, slug, role);
+  if (!cliScope().readable.includes(row.ownerId)) throw missingTopic(slug, role);
+  return row;
+}
+
+/**
+ * Refuse a write to a topic another owner holds, before anything moves. The
+ * seam refuses the topic's own row the same way (`foreign-owner`); this is for
+ * the verbs that write around it, a rename above all, whose cascade and
+ * revisions would otherwise run as the CLI's owner over someone else's topic.
+ */
+function assertOwnTopic(row: TopicRow, verb: string): void {
+  if (row.ownerId === CLI_OWNER) return;
+  throw new TopicError(
+    "foreign-owner",
+    `topic "${row.slug}" belongs to ${row.ownerId}, and this ${verb} is for ${CLI_OWNER}. Ids are shared across ` +
+      `owners (D23 of docs/CONTENT-MIGRATION.md), so it would change their topic; nothing was written.`,
+  );
 }
 
 async function relationsOf(db: CatalogDatabase, owner: string): Promise<RelationRow[]> {
@@ -226,9 +256,15 @@ async function relationsOf(db: CatalogDatabase, owner: string): Promise<Relation
     .orderBy(asc(topicRelation.position), asc(topicRelation.kind), asc(topicRelation.toSlug));
 }
 
-/** An owned relation list as the seam replaces it: dense positions, the owner kept. */
-function relationLinks(rows: readonly Pick<RelationRow, "toSlug" | "kind" | "ownerId">[]): Record<string, unknown>[] {
-  return rows.map((row, i) => ({ toSlug: row.toSlug, kind: row.kind, position: i + 1, ownerId: row.ownerId }));
+/**
+ * An owned relation list as the seam replaces it: dense positions, and no
+ * `owner_id`. A relation belongs to the topic it is stored under (D24), and
+ * the seam stamps the write's owner on every row it puts back, so a row a
+ * mixed state left under another owner's name is repaired by the next write
+ * of its topic rather than refusing it.
+ */
+function relationLinks(rows: readonly Pick<RelationRow, "toSlug" | "kind">[]): Record<string, unknown>[] {
+  return rows.map((row, i) => ({ toSlug: row.toSlug, kind: row.kind, position: i + 1 }));
 }
 
 async function latestId(db: CatalogDatabase, type: RevisionEntityType, id: string): Promise<number | null> {
@@ -607,7 +643,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
   const own: RelationInput[] = [];
   const others = new Map<string, RelationInput[]>();
   for (const { kind, to } of relations) {
-    await liveRow(db, to, "related topic");
+    await readableRow(db, to, "related topic");
     await assertNoCycle(db, slug, kind, to, own);
     const { owner, other } = storedAs(slug, kind, to);
     if (owner === slug) own.push({ kind, to: other });
@@ -642,7 +678,7 @@ async function planAdd(db: CatalogDatabase, input: AddTopicInput, by: By): Promi
         links: {
           topic_relation: relationLinks([
             ...current,
-            ...added.map((r) => ({ toSlug: r.to, kind: r.kind, ownerId: row.ownerId })),
+            ...added.map((r) => ({ toSlug: r.to, kind: r.kind })),
           ]),
         },
       },
@@ -814,19 +850,19 @@ export async function relateTopic(db: CatalogDatabase, input: RelateInput, by: B
   if (from === to) throw new TopicError("invalid", `"${from}" cannot relate to itself`);
   const { owner, other } = storedAs(from, kind, to);
   const done = await writeThrough(db, ["topics"], async (tx) => {
-    await liveRow(tx, from);
-    await liveRow(tx, to, "other topic");
+    await readableRow(tx, from);
+    await readableRow(tx, to, "other topic");
     const row = await liveRow(tx, owner);
     const current = await relationsOf(tx, owner);
     const has = current.some((r) => r.kind === kind && r.toSlug === other);
-    let list: Pick<RelationRow, "toSlug" | "kind" | "ownerId">[];
+    let list: Pick<RelationRow, "toSlug" | "kind">[];
     if (input.remove === true) {
       if (!has) throw new TopicError("missing", `there is no "${from}" ${kind} "${to}" edge to remove`);
       list = current.filter((r) => !(r.kind === kind && r.toSlug === other));
     } else {
       if (has) throw new TopicError("exists", `"${from}" ${kind} "${to}" is already recorded`);
       await assertNoCycle(tx, from, kind, to);
-      list = [...current, { toSlug: other, kind, ownerId: row.ownerId }];
+      list = [...current, { toSlug: other, kind }];
     }
     return writeContent(tx, {
       owner: CLI_OWNER,
@@ -919,11 +955,11 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
       .from(manimkcTopic)
       .where(inArray(manimkcTopic.path, [...paths]));
     const mine = await tx
-      .select({ path: manimkcTopic.path, ownerId: manimkcTopic.ownerId })
+      .select({ path: manimkcTopic.path })
       .from(manimkcTopic)
       .where(eq(manimkcTopic.topicSlug, slug))
       .orderBy(asc(manimkcTopic.position), asc(manimkcTopic.path));
-    let list: { path: string; ownerId: string }[];
+    let list: { path: string }[];
     if (input.remove === true) {
       const missing = paths.filter((p) => !mine.some((m) => m.path === p));
       if (missing.length > 0) {
@@ -946,7 +982,7 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
             .join("\n"),
         );
       }
-      list = [...mine, ...paths.map((p) => ({ path: p, ownerId: row.ownerId }))];
+      list = [...mine, ...paths.map((p) => ({ path: p }))];
     }
     const result = await writeContent(tx, {
       owner: CLI_OWNER,
@@ -954,7 +990,8 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
       id: slug,
       next: {
         row,
-        links: { manimkc_topic: list.map((m, i) => ({ path: m.path, position: i + 1, ownerId: m.ownerId })) },
+        // No owner_id: a mapping belongs to its topic (D24), and the seam stamps it.
+        links: { manimkc_topic: list.map((m, i) => ({ path: m.path, position: i + 1 })) },
       },
       base: await latestId(tx, "topic", slug),
       ...by,
@@ -1199,6 +1236,7 @@ async function renameUnder(
       if (mapped.length > 0) throw new RenameNeedsCourses();
     }
     const row = await liveRow(tx, from);
+    assertOwnTopic(row, "rename");
     const clash = await rowOf(tx, to);
     if (clash !== undefined) {
       throw new TopicError("exists", `topic "${to}" already exists${clash.archivedAt === null ? "" : " (archived)"}; a slug names one topic`);
@@ -1297,12 +1335,17 @@ async function renameUnder(
       const { rows: last } = await tx.execute<{ at: number | null }>(
         sql`select max(position) as at from topic_relation where from_slug = ${owner}`,
       );
+      // The edge belongs to the topic it is now stored under (D24), whoever
+      // that topic's owner is.
+      const { rows: holder } = await tx.execute<{ owner_id: string }>(
+        sql`select owner_id from topic where slug = ${owner}`,
+      );
       await tx.insert(topicRelation).values({
         fromSlug: owner,
         toSlug: other,
         kind: "related",
         position: sameOwner ? edge.position : Number(last[0]?.at ?? 0) + 1,
-        ownerId: edge.ownerId,
+        ownerId: holder[0]?.owner_id ?? edge.ownerId,
       });
     }
 
@@ -1399,7 +1442,7 @@ export async function checkConceptTopic(
   db: CatalogDatabase,
   input: { concept: string; topic: string; root?: string },
 ): Promise<{ already: boolean }> {
-  await liveRow(db, input.topic);
+  await readableRow(db, input.topic);
   const [row] = await db.select({ topicSlug: concept.topicSlug }).from(concept).where(eq(concept.slug, input.concept));
   if (row?.topicSlug !== undefined && row.topicSlug !== null && row.topicSlug !== input.topic) {
     throw new TopicError(
@@ -1470,8 +1513,15 @@ async function prerequisiteLinks(
 ): Promise<Record<string, unknown>[]> {
   const targets = [...new Set(wanted.map((w) => w.slug))];
   if (targets.length === 0) return [];
+  // Only concepts the CLI's owner may read (phase 4): a prerequisite naming
+  // another owner's concept is dropped like one the catalog lacks.
   const known = new Set(
-    (await db.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, targets))).map((r) => r.slug),
+    (
+      await db
+        .select({ slug: concept.slug })
+        .from(concept)
+        .where(and(inArray(concept.slug, targets), inArray(concept.ownerId, [...cliScope().readable])))
+    ).map((r) => r.slug),
   );
   const seen = new Set<string>();
   const next = new Map<string, number>();
@@ -1550,4 +1600,45 @@ export async function fileConceptUnderTopic(
     revision: result === null ? null : written([result])[0] ?? null,
     exported: done.exported,
   };
+}
+
+/**
+ * `catalog doctor --fix`: every topic whose relations or manimkc mappings
+ * carry an `owner_id` other than the topic's own (the mixed state D24 rules
+ * out) is written again through the seam as its owner, with the links it
+ * already has, so the seam restamps them. One revision per topic, and the
+ * vocabulary file rewritten from the rows while topics are still on files.
+ * Nothing is added or removed; a relation to a topic its owner cannot read is
+ * carried over as it is (`doctor` reports it).
+ */
+export async function restampLinkOwners(db: CatalogDatabase, slugs: readonly string[], by: By): Promise<WrittenRevision[]> {
+  const revisions: WrittenRevision[] = [];
+  for (const slug of [...new Set(slugs)].sort()) {
+    const done = await writeThrough(db, ["topics"], async (tx) => {
+      const row = await rowOf(tx, slug);
+      if (row === undefined) return null;
+      const relations = await relationsOf(tx, slug);
+      const maps = await tx
+        .select({ path: manimkcTopic.path })
+        .from(manimkcTopic)
+        .where(eq(manimkcTopic.topicSlug, slug))
+        .orderBy(asc(manimkcTopic.position), asc(manimkcTopic.path));
+      return writeContent(tx, {
+        owner: row.ownerId,
+        type: "topic",
+        id: slug,
+        next: {
+          row,
+          links: {
+            topic_relation: relationLinks(relations),
+            manimkc_topic: maps.map((m, i) => ({ path: m.path, position: i + 1 })),
+          },
+        },
+        base: await latestId(tx, "topic", slug),
+        ...by,
+      });
+    });
+    if (done.value !== null) revisions.push(...written([done.value]));
+  }
+  return revisions;
 }
