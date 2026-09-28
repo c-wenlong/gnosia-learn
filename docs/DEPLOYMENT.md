@@ -320,6 +320,18 @@ table and the store disagree or while any asset points at a `pending` blob,
 including one `--fix` just sent back, so a clean exit means every stored asset
 serves.
 
+It also prints each owner's totals (objects, bytes, and new objects in the
+last 24 hours, grouped by the key's `<owner_id>/` prefix) and the per-owner
+caps in force. Two variables set them, both unset by default, which is no cap:
+`SELF_LEARN_OWNER_BYTES_CAP` (bytes one owner may store) and
+`SELF_LEARN_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
+rolling 24 hours). Every upload checks them before a byte moves and refuses,
+storing and recording nothing, a new object that would take its owner past
+either; `asset upload` lists it as refused and carries on. A key that already
+has a row is never refused, so a rerun can always put back an object the
+store lost. Set them in `services/catalog/.env`
+beside `SELF_LEARN_HOME`, since the catalog CLI is what uploads.
+
 ## Deploying from the command line
 
 For a one-off deploy from the local tree, without going through `main`:
