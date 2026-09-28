@@ -567,14 +567,17 @@ describe.skipIf(!reachable.ok)("the write seam and the owner", () => {
   it("creates the commons learner on its first write, and stamps its links too", async () => {
     const commons = () => scratch.db.select().from(learner).where(eq(learner.id, COMMONS_OWNER));
     expect(await commons()).toHaveLength(0);
+    await writeContent(scratch.db, topicWrite("commons-first", COMMONS_OWNER));
+    expect(await commons()).toHaveLength(1);
+    // A relation to another commons topic: the commons reads only the
+    // commons, so that is the far end a commons link may name.
     await writeContent(scratch.db, {
       ...topicWrite("for-everyone", COMMONS_OWNER),
       next: {
         row: { slug: "for-everyone", title: "For everyone", domain: "testing" },
-        links: { topic_relation: [{ toSlug: TOPIC_SLUG, kind: "precedes", position: 1 }] },
+        links: { topic_relation: [{ toSlug: "commons-first", kind: "precedes", position: 1 }] },
       },
     });
-    expect(await commons()).toHaveLength(1);
     expect(await ownerOf("for-everyone")).toBe(COMMONS_OWNER);
     const relations = await scratch.db
       .select({ owner: topicRelation.ownerId })
