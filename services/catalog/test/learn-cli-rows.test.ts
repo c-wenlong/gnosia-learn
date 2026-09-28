@@ -206,7 +206,7 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
       ).rows.map((r) => r.concept_slug);
     try {
       const message = await refused("concept", "add", "--title", "Eta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the courses source refused, so the row's link/);
+      expect(message).toMatch(/was written as rows and listed on xx1000-m1-t1, but the row's link to it is not in the catalog yet, and the index run stopped/);
       expect(message).toMatch(/yy2000-m1/);
       expect(message).toMatch(/catalog -- index --only courses/);
       expect(await row("eta")).toMatchObject({ topicSlug: "alpha" });
@@ -226,7 +226,7 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     await fixture.write(bad, "not a tldraw document");
     try {
       const message = await refused("concept", "add", "--title", "Theta", "--domain", "fixtures", "--item", "xx1000-m1-t1");
-      expect(message).toMatch(/listed on xx1000-m1-t1, and the row links to it, but the index run then stopped on another source/);
+      expect(message).toMatch(/listed on xx1000-m1-t1, and the row links to it, and the index run stopped/);
       expect(message).toMatch(/broken\.tldr/);
     } finally {
       await rm(path.join(fixture.root, bad));
