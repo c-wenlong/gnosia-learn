@@ -1005,7 +1005,9 @@ export async function checkoutDiagram(
       revision: null,
       exists: false,
       written: false,
-      note: `${slug} is not a diagram this owner can check out`,
+      // The sentence a slug with no diagram gets, so the note says nothing
+      // about whose the slug is. Only `written` differs: nothing was written.
+      note: `${slug} is not a diagram yet: draw it at ${paths.tldr} (canvas new), then commit`,
     };
   }
   const state = await checkoutState(db, slug, dir, scope);

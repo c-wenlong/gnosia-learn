@@ -158,6 +158,8 @@ describe.skipIf(!reachable.ok)("reads that crossed owners", () => {
     expect(state.latest).toBeNull();
     const out = await checkoutDiagram(scratch.db, store, "other-diagram", work, LOCAL);
     expect(out).toMatchObject({ exists: false, revision: null });
+    const missing = await checkoutDiagram(scratch.db, store, "no-such-diagram", work, LOCAL);
+    expect(out.note.replaceAll("other-diagram", "X")).toBe(missing.note.replaceAll("no-such-diagram", "X"));
     expect(await stat(path.join(work, "other-diagram.tldr")).catch(() => null)).toBeNull();
     expect((await checkoutState(scratch.db, "other-diagram", work, THEIRS)).latest).not.toBeNull();
 
