@@ -1,9 +1,11 @@
-import { contentSource, type ContentType, indexRun, type RevisionEntityType } from "@self-learn/schema";
+import { contentSource, type ContentType, type RevisionEntityType } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
-import { isExportType, type ExportType } from "./layout";
-import type { ParityRecord } from "./ownership";
+import { renderType } from "./export";
+import { databaseIdentity, recordedRoot } from "./import-root";
+import { exportHash, isExportType, readTypeFiles, type ExportType } from "./layout";
+import { mayRecord, type ParityRecord, recordExport } from "./ownership";
 import { parity } from "./parity";
 import { lockTypes } from "./revisions";
 import { COMPLETENESS_RULES, setTriggers, WRITE_GUARDS, writeGuardName } from "./rules";
@@ -31,6 +33,13 @@ import { readyTypes } from "./source";
  *   the transaction: arming takes each table's lock, so no writer can add a
  *   violator between the count and the commit;
  * - a `--waive` naming a rule that is not the type's, or with no reason.
+ *
+ * Once it flips it also records the tree's export hash on the row, the hash
+ * the next import checks the files against (edge case 12): they just passed
+ * parity, so they are the database's export, and without it every import of
+ * the type is refused until someone exports into the tree. The root parity
+ * runs against must be one this database recorded itself, not one a
+ * `createdb -T` copy inherited (`import-root.ts`).
  *
  * A waived rule is recorded on the row, reported by `catalog doctor`, not
  * counted by `--strict`, and disarmed, including when an earlier strict flip
@@ -78,6 +87,12 @@ export interface FlipResult {
   guardsArmed: string[];
   rulesArmed: string[];
   waivers: (Waiver & { at: string })[];
+  /**
+   * The tree's export hash, recorded on the row so the next import skips the
+   * files (false on a copy), and the files a fresh export would write in
+   * other bytes: the same content, since parity was clean.
+   */
+  export: { hash: string; recorded: boolean; rewrites: string[] };
 }
 
 const SHOWN = 20;
@@ -126,18 +141,30 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
   return db.transaction(async (tx) => {
     await lockTypes(tx, LOCKS[type]);
     const [row] = await tx.select().from(contentSource).where(eq(contentSource.type, type)).for("update");
-    const [run] = await tx
-      .select({ metadata: indexRun.metadata })
-      .from(indexRun)
-      .where(eq(indexRun.source, type));
-    const root = (run?.metadata as { root?: unknown } | undefined)?.root;
-    if (typeof root !== "string") {
+    const recorded = await recordedRoot(tx, type);
+    if (recorded === null) {
       throw new FlipRefused(
         `${type} has not been imported since 0.5, so nothing records which files it came from. ` +
           `Run \`catalog index\` (or \`catalog import <dir>\`), then flip.`,
       );
     }
-    const checked = await parity(tx, root, [type]);
+    // A root another database recorded is a tree this one never read: a
+    // `createdb -T` copy inherits its template's (content/import-root.ts).
+    const here = await databaseIdentity(tx);
+    if (recorded.database !== here) {
+      throw new FlipRefused(
+        `${type} was last imported from ${recorded.root} by ` +
+          (recorded.database === null ? "an import that did not record its database" : `another database (${recorded.database})`) +
+          `, not by this one (${here}), so parity against it would check a tree this database never read. ` +
+          `Run \`catalog index\` (or \`catalog import <dir>\`) against this database, then flip.`,
+      );
+    }
+    const root = recorded.root;
+    // Read once: parity compares these bytes and the hash recorded below is
+    // of these bytes, so a save landing after the read cannot be recorded as
+    // an export that passed.
+    const disk = await readTypeFiles(root, type);
+    const checked = await parity(tx, root, [type], { [type]: disk });
     const result = checked.types[0];
     const mismatches = checked.mismatches;
     const report: ParityRecord = {
@@ -191,6 +218,23 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       ...previous.filter((w) => !waived.has(w.rule)),
       ...waive.map((w) => ({ rule: w.rule, reason: w.reason.trim(), at: now })),
     ];
+    // The files just passed parity, so they are the database's export, and
+    // their hash is what the next import checks them against (edge case 12).
+    // Without it every import of the type is refused until someone runs an
+    // export into the tree. They may differ from a fresh export in bytes only
+    // (a `.tldr` in tldrawkc's key order, a comment): those are listed, and
+    // the next export into the tree rewrites them.
+    const rendered = new Map((await renderType(tx, type)).map((f) => [f.path, f.bytes]));
+    const rewrites = [...new Set([...disk.map((f) => f.path), ...rendered.keys()])]
+      .filter((p) => {
+        const want = rendered.get(p);
+        const got = disk.find((f) => f.path === p)?.bytes;
+        return want === undefined || got === undefined || !want.equals(got);
+      })
+      .sort();
+    const hash = exportHash(disk);
+    const exportRecorded = await mayRecord(tx);
+
     const already = row?.source === "db";
     const [written] = await tx
       .insert(contentSource)
@@ -207,6 +251,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
         },
       })
       .returning({ flippedAt: contentSource.flippedAt });
+    if (exportRecorded) await recordExport(tx, type, hash);
 
     return {
       type,
@@ -217,6 +262,7 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
       guardsArmed: guards.map(([table]) => table),
       rulesArmed: armedRules.map((rule) => rule.name),
       waivers,
+      export: { hash, recorded: exportRecorded, rewrites },
     };
   });
 }
