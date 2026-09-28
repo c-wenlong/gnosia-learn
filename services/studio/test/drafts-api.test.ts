@@ -292,3 +292,35 @@ describe("resume and revise carry the draft", () => {
     await until(() => agentMock.startAgent.mock.calls.length > 0, "the resumed job never reached its agent");
   });
 });
+
+describe("the event stream", () => {
+  it("drops the subscription of a client that left while the replay was being read", async () => {
+    let finish: (off: () => void) => void = () => undefined;
+    const off = vi.fn();
+    let subscribed = false;
+    const stub = {
+      get: () => ({ id: "d" }),
+      subscribe: () => {
+        subscribed = true;
+        return new Promise<() => void>((resolve) => {
+          finish = resolve;
+        });
+      },
+    };
+    const store = new JobStore();
+    const lone = createApi({ store, runner: new Runner(store), mirrors: new Mirrors(), drafts: stub as never });
+    await new Promise<void>((resolve) => lone.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(lone.address() as AddressInfo).port}/api/drafts/d/events`;
+    const controller = new AbortController();
+    const response = await fetch(url, { signal: controller.signal });
+    expect(response.status).toBe(200);
+    await until(() => subscribed, "the route never subscribed");
+    controller.abort();
+    // Let the server see the socket close before the replay finishes.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    finish(off);
+    await until(() => off.mock.calls.length === 1, "the subscription outlived its client");
+    await new Promise<void>((resolve) => lone.close(() => resolve()));
+  });
+});
+

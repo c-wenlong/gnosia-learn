@@ -1366,12 +1366,20 @@ async function draftEvents(
   const write = (event: DraftStreamEvent): void => {
     response.write(`${event.id === undefined ? "" : `id: ${event.id}\n`}event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
   };
-  const unsubscribe = await drafts.subscribe(id, after, write);
+  // The close handler is attached before the replay is read, so a client that
+  // goes away during it does not leave its subscription and its keep-alive
+  // behind: the subscription is dropped the moment it exists.
+  let closed = false;
+  let unsubscribe: (() => void) | null = null;
   const keepAlive = setInterval(() => response.write(": keep-alive\n\n"), 20_000);
-  request.on("close", () => {
+  response.on("close", () => {
+    closed = true;
     clearInterval(keepAlive);
-    unsubscribe();
+    unsubscribe?.();
   });
+  const off = await drafts.subscribe(id, after, write);
+  if (closed) off();
+  else unsubscribe = off;
 }
 
 /** What is and is not working right now. */
