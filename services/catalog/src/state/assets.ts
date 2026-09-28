@@ -27,7 +27,7 @@ import type { CatalogDatabase } from "../db";
  * `knowledge-base.ts` has read `concept`, `concept_prerequisite` and
  * `concept_curriculum_item` from this directory since bundle 5, for the same
  * one-door reason. Nothing below writes anything, and the content tables have
- * exactly one writer either way — `catalog index`, from files in git (rule 11).
+ * exactly one writer either way — `catalog import`, from files in git (rule 11).
  *
  * **Paths, never bodies**, the same rule `catalog show` states: a row says
  * which file, and the caller reads it or serves it. Putting the bytes of a
@@ -431,7 +431,7 @@ export interface ListAssetsOptions {
  * paged list first and then asked `asset_topic` for the ids it kept, in a
  * second query, on the theory that two cheap statements beat one query per
  * row. They do, but they are not the same statement: under the default READ
- * COMMITTED isolation, each query gets its own snapshot, so a `catalog index`
+ * COMMITTED isolation, each query gets its own snapshot, so a `catalog import`
  * run committing between them could hand back an asset whose chips no longer
  * match the membership that selected it for a `topicSlug` filter. A single
  * statement has one snapshot, so the question does not need answering rather

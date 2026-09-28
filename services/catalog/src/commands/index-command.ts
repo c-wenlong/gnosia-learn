@@ -8,17 +8,18 @@ import { runIndex, type RunResult } from "../index/run";
 import type { SourceWrite } from "../index/writer";
 
 /**
- * `catalog import <dir>` and `catalog index`: one code path.
+ * `catalog import [<dir>]`, and `catalog index`, its old name: one code path.
  *
  * `import` reads any directory laid out like the repository, which is what
  * `catalog export --out <dir>` writes, so an export can be read back
- * (docs/CONTENT-MIGRATION.md 0.5). `index` is `import` of the repository
- * itself and nothing more. Either way every source writes through the
- * revision writer, a type the database owns is skipped or refused by its
- * `content_source` row, and the pinned manimkc and tldrawkc checkouts are
- * the repository's, since an export directory holds no tools.
- *
- * `catalog index`: read the content trees, write the derived rows.
+ * (docs/CONTENT-MIGRATION.md 0.5); with no directory it reads the repository
+ * itself, which is all `index` ever did. Phase 2 made `import` the name, since
+ * once the database owns content the files are one format it imports, not
+ * what it indexes; `index` stays as an alias that says so once. Either way
+ * every source writes through the revision writer, a type the database owns
+ * is skipped or refused by its `content_source` row, and the pinned manimkc
+ * and tldrawkc checkouts are the repository's, since an export directory
+ * holds no tools.
  *
  * Reports two things per source, and the second matters more than the first:
  * what it wrote, and what it removed. A removal is the catalog agreeing that

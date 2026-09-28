@@ -469,9 +469,10 @@ computed from `event` and can be thrown away and rebuilt.
 
 ## Filling it
 
-`npm run catalog -- index` reads the content trees and rewrites the derived
+`npm run catalog -- import` reads the content trees and rewrites the derived
 rows; `catalog import <dir>` does the same from any directory in the same
-layout. Eight sources, run in the order the foreign keys require regardless of
+layout (`seed/`, an export). `catalog index` is its old name, kept as an alias
+that says so once on stderr. Eight sources, run in the order the foreign keys require regardless of
 how `--only` names them:
 
 | Source | Reads | Produces |
@@ -842,9 +843,23 @@ else. A waived rule is disarmed even if an earlier strict flip armed it.
 
 ### Export, import and parity
 
-`catalog index` is `catalog import` of the repository root: one code path,
-reading any directory laid out like the repository, with the pinned tools
-(`tools/manimkc`, `tools/tldrawkc`) always the repository's own.
+`catalog import` with no directory reads the repository root, and with one
+reads that directory: one code path, reading any directory laid out like the
+repository, with the pinned tools (`tools/manimkc`, `tools/tldrawkc`) always
+the repository's own. Phase 2 made `import` the name; `catalog index`, the old
+one, still runs it and prints the new name once, on stderr so a `--json`
+reader's stdout is unchanged.
+
+`catalog export --subset --topic <slug>... --course <id> --session <id>
+--diagram <slug> --out <dir>` writes a tree that imports into an empty
+database on its own: the named topics, the course's modules filed under them
+(and the course's tags), every note filed under them, one log and one diagram,
+with each topic's `maps.manimkc` left out since the tree has no videos. It
+refuses, by name, a reference that would leave the tree (a note's prerequisite,
+an item's concept, a diagram or a topic relation reaching a topic not named),
+and it refuses to write over the repository, over any tree the database was
+imported from, or through a symlink that leaves `<dir>` (a check every export
+now makes). It records no export hash. `seed/` is made this way (seed/README.md).
 
 `catalog export --out <dir>` writes the same layout back. Topics, tags and
 courses are written from rows, in the house style they are authored in, so an
@@ -930,7 +945,7 @@ expression cannot unnest an array. Near-duplicate search is `title % $1` and
 createdb self_learn                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
 npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
-npm run catalog -- index               # fill it from content/ and learn/
+npm run catalog -- import              # fill it from content/ and learn/ (or: import seed)
 ```
 
 Reading it back, cheapest first. Every command takes `--json`.

@@ -3,7 +3,7 @@
 Course content is data, not code. One YAML file per course under
 `content/courses/`, read by `loadCourses()` in
 [packages/content](../packages/content/src/courses.ts), the same parser the web
-app, `catalog index` and `catalog course import` all go through, so a course
+app, `catalog import` and `catalog course import` all go through, so a course
 file means one thing everywhere. The courses are moving into Postgres
 ([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), Track B); until the
 `courses` type is flipped the files are the truth, and after it they are the
@@ -69,7 +69,7 @@ file being imported is the exception, since it is the edit. The check compares
 bytes, so a file whose content matches but whose formatting does not (quoting,
 spacing, a comment) is refused too. The files in this repository are
 byte-for-byte the export's own. A tree written by hand is brought to that form
-once, in this order so no edit is lost: `npm run catalog -- index` reads
+once, in this order so no edit is lost: `npm run catalog -- import` reads
 every edit in, in the course files and `topics.yaml` alike (a type the
 database already owns refuses an edited file by name instead), then
 `npm run catalog -- export --only courses,topics --out <the tree>` rewrites
@@ -86,7 +86,7 @@ When writing the file itself:
 3. Point each module's `topic:` at a slug from `content/topics.yaml`. It is a
    lookup key, not free text: add or rename a topic there, never here. An
    import writes the module into that topic's `maps.courses` itself; while
-   courses are still read from files, `catalog index` refuses to run when the
+   courses are still read from files, `catalog import` refuses to run when the
    two files disagree in either direction.
 4. Use an existing entry from `content/tags.yaml` before inventing a theme;
    tags are how related courses find each other.
@@ -99,8 +99,8 @@ When writing the file itself:
    every file, `inferred` is set only on the courses that are genuinely
    inferred, every module names a real topic, every tag resolves.
 
-`catalog index --only courses` still reads every course file into the database
-while the courses type is on files. Once it is flipped, `catalog index` skips
+`catalog import --only courses` still reads every course file into the database
+while the courses type is on files. Once it is flipped, `catalog import` skips
 the course files while they are the database's own export and refuses them,
 naming the file, when someone edited one by hand: use `course import` instead.
 

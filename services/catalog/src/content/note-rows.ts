@@ -279,7 +279,7 @@ export async function noteText(
       const [row] = await readNoteRows(tx, [slug]);
       if (row === undefined) return null;
       if (row.body === null) {
-        throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog index\` before the flip`);
+        throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog import\` before the flip`);
       }
       return { text: renderNote({ ...row, body: row.body }), revision: await noteRevision(tx, slug), path: row.path };
     },

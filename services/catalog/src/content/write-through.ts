@@ -165,7 +165,7 @@ export async function assertInStep(
       throw new WriteThroughError(
         `${TYPE_LOCATION[type]} under ${root} is not what the database holds: ${changed.join(", ")} ` +
           `differ. Writing from the rows would throw that edit away. If the edit is wanted and ${type} ` +
-          `is still read from files, import it first (\`catalog index --only ${type}\`); otherwise put ` +
+          `is still read from files, import it first (\`catalog import --only ${type}\`); otherwise put ` +
           `the file back (\`catalog export --only ${type} --out <dir>\` writes what the database holds).`,
       );
     }

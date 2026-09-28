@@ -4,7 +4,7 @@ import { inArray } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 
 /**
- * Where a concept's note is, as the last `catalog index` run recorded it.
+ * Where a concept's note is, as the last `catalog import` run recorded it.
  *
  * The web app needs a note's words now and then (Today counts the check
  * blocks behind each due review), and ARCHITECTURE.md rule 6 says nothing

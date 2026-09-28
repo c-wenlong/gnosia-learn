@@ -4,7 +4,7 @@ Three files and two folders hold the content this repo authors, and each is on
 its way from being the truth to being an **export format**: the files the
 database writes out and reads back, in the repository's own layout
 ([docs/CONTENT-MIGRATION.md](../docs/CONTENT-MIGRATION.md), D1). Until a type
-flips, `catalog index` reads its files into Postgres; from its flip on, the
+flips, `catalog import` reads its files into Postgres; from its flip on, the
 rows are the truth and the files are what `catalog export` writes from them.
 
 **The vocabulary and the tags are written through the catalog now.**
@@ -31,10 +31,10 @@ between the two, and a parity test can notice drift but not prevent it.
 
 | Folder | What it holds | Read by |
 | --- | --- | --- |
-| [`content/topics.yaml`](topics.yaml) | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases, relations and the videos, course modules and concept notes it covers. Written by `catalog topic`. | `catalog index`, the web app, until topics flip |
-| [`content/courses/`](courses/README.md) | One YAML file per course: modules, curriculum items, subtopics and curated resources. | `catalog index`, the web app |
-| [`content/tags.yaml`](tags.yaml) | The cross-course themes a course's `tags:` names, and how related courses find each other. Written by `catalog tag`. | `catalog index`, the web app, until tags flip |
-| [`learn/`](../learn/README.md) | The knowledge base: concept notes under `learn/concepts/`, diagrams under `learn/assets/`, session logs under `learn/sessions/`. The learner state that used to sit beside them is in Postgres. | `catalog index`, the `learn` CLI |
+| [`content/topics.yaml`](topics.yaml) | The shared topic vocabulary: one entry per subject, with its domain, summary, aliases, relations and the videos, course modules and concept notes it covers. Written by `catalog topic`. | `catalog import`, the web app, until topics flip |
+| [`content/courses/`](courses/README.md) | One YAML file per course: modules, curriculum items, subtopics and curated resources. | `catalog import`, the web app |
+| [`content/tags.yaml`](tags.yaml) | The cross-course themes a course's `tags:` names, and how related courses find each other. Written by `catalog tag`. | `catalog import`, the web app, until tags flip |
+| [`learn/`](../learn/README.md) | The knowledge base: concept notes under `learn/concepts/`, diagrams under `learn/assets/`, session logs under `learn/sessions/`. The learner state that used to sit beside them is in Postgres. | `catalog import`, the `learn` CLI |
 
 `learn/` has not moved and is not going to move in this bundle. It is listed
 here because "where is the authored content" has more than one answer, and
@@ -78,7 +78,7 @@ through its course file, and a manimkc folder through `catalog topic map
 editing `maps`. A folder belongs to one topic, so mapping one another topic
 holds is refused, naming it.
 
-Each id under `maps` appears in exactly one topic. `catalog index` refuses to
+Each id under `maps` appears in exactly one topic. `catalog import` refuses to
 run when a mapping names something that does not exist, or when two topics claim
 the same source, so a typo is an error at index time rather than a row that
 joins to nothing. That includes a `maps.concepts` entry with no note behind it:
@@ -115,7 +115,7 @@ formatting.
 
 Postgres becomes the owner of this content one type at a time
 ([docs/CONTENT-MIGRATION.md](../docs/CONTENT-MIGRATION.md)). Until a type
-flips, these files are its truth and `catalog index` reads them; from its
+flips, these files are its truth and `catalog import` reads them; from its
 flip on they are an export, written by `catalog export` and refused by
 `catalog import` if they were edited by hand.
 
@@ -147,5 +147,5 @@ npm run catalog -- history topic tcp-congestion           # who wrote what, and 
 
 A write refuses, before changing anything, when the file under the tree the
 type was last imported from is not what the database would export: an edit
-made by hand and never imported. Import it (`catalog index --only topics`)
+made by hand and never imported. Import it (`catalog import --only topics`)
 while the type is still on files, or put the file back.

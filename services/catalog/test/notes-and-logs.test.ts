@@ -11,7 +11,6 @@ import { dbSource } from "../src/content/source";
 import { compare } from "../src/content/parity";
 import { readTypeFiles } from "../src/content/layout";
 import { noteParityForm, readNote, renderNote } from "../src/content/notes";
-import { REPO_ROOT } from "../src/env";
 import { conceptsIndexer } from "../src/index/concepts";
 import { runIndex } from "../src/index/run";
 import { topicsIndexer } from "../src/index/topics";
@@ -19,6 +18,7 @@ import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { SEED } from "./seed";
 
 /**
  * Concept notes and session logs as rows (Track C of
@@ -26,26 +26,27 @@ import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
  * its body byte for byte, and a log is the concatenation of its entries,
  * which an import only ever appends to.
  *
- * The real notes are read, never written. Fixture trees go under the OS temp
- * directory, and every database is a scratch one.
+ * The real notes are the seed's (seed/README.md), read and never written.
+ * Fixture trees go under the OS temp directory, and every database is a
+ * scratch one.
  */
 
 const reachable = await probe();
 
 async function realNotes(): Promise<{ file: string; text: string }[]> {
-  const root = path.join(REPO_ROOT, "learn", "concepts");
+  const root = path.join(SEED, "learn", "concepts");
   const out: { file: string; text: string }[] = [];
   for (const domain of (await readdir(root, { withFileTypes: true })).filter((e) => e.isDirectory())) {
     for (const name of (await readdir(path.join(root, domain.name))).filter((n) => n.endsWith(".md")).sort()) {
       const file = `learn/concepts/${domain.name}/${name}`;
-      out.push({ file, text: await readFile(path.join(REPO_ROOT, file), "utf8") });
+      out.push({ file, text: await readFile(path.join(SEED, file), "utf8") });
     }
   }
   return out;
 }
 
 describe("a note's row renders the note", () => {
-  it("keeps every real note's body byte for byte, and its fields through a second round", async () => {
+  it("keeps every seed note's body byte for byte, and its fields through a second round", async () => {
     const notes = await realNotes();
     expect(notes.length).toBeGreaterThan(0);
     let identical = 0;
@@ -58,9 +59,10 @@ describe("a note's row renders the note", () => {
       expect(noteParityForm(rendered, file), file).toEqual(noteParityForm(text, file));
       if (rendered === text) identical += 1;
     }
-    // Five of the 32 notes of 2026-09-28 lay their frontmatter out otherwise
-    // (four write an empty `assumes: []`, one writes `assumes` last); the
-    // rest are their own rendering. The body is exact for every one.
+    // In the full tree five of the 32 notes of 2026-09-28 lay their
+    // frontmatter out otherwise (four write an empty `assumes: []`, one writes
+    // `assumes` last). The seed is an export, so each is its own rendering;
+    // the bound stays for a seed recut from a tree that has such a note.
     expect(notes.length - identical).toBeLessThanOrEqual(5);
   });
 
@@ -102,15 +104,16 @@ describe("a note's row renders the note", () => {
   });
 });
 
-describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch database", () => {
+describe.skipIf(!reachable.ok)("the seed's notes and logs, imported into a scratch database", () => {
   let scratch: Scratch;
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db);
     await runIndex(scratch.db, {
+      repoRoot: SEED,
       only: ["topics", "tags", "concepts", "courses", "sessions"],
-      manimkcRoot: path.join(REPO_ROOT, "no-manimkc-here"),
+      manimkcRoot: path.join(SEED, "no-manimkc-here"),
     });
   }, 120_000);
 
@@ -120,19 +123,19 @@ describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch
 
   it("renders every log byte for byte and every note's body exactly, with the prerequisites as rows", async () => {
     for (const type of ["concepts", "sessions"] as const) {
-      const result = compare(type, await renderType(scratch.db, type), await readTypeFiles(REPO_ROOT, type));
+      const result = compare(type, await renderType(scratch.db, type), await readTypeFiles(SEED, type));
       expect(result.mismatches, type).toEqual([]);
       if (type === "sessions") expect(result.identicalFiles).toBe(result.files);
       expect(result.counts.expected).toEqual(result.counts.actual);
     }
     const { rows } = await scratch.db.execute<{ n: number }>("select count(*)::int as n from concept_prerequisite");
-    const files = compare("concepts", [], await readTypeFiles(REPO_ROOT, "concepts"));
+    const files = compare("concepts", [], await readTypeFiles(SEED, "concepts"));
     expect(rows[0]?.n).toBe(files.counts.actual["prerequisites"]);
   });
 
   it("reads every note and log back through the database reader as the file reader does", async () => {
     const rows = dbSource(scratch.db);
-    const files = fileSource(REPO_ROOT);
+    const files = fileSource(SEED);
     let identical = 0;
     const notes = await realNotes();
     for (const { file } of notes) {
@@ -143,7 +146,7 @@ describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch
       if (fromRows?.markdown === fromFiles?.markdown) identical += 1;
     }
     expect(notes.length - identical).toBeLessThanOrEqual(5);
-    for (const log of await readTypeFiles(REPO_ROOT, "sessions")) {
+    for (const log of await readTypeFiles(SEED, "sessions")) {
       const id = path.basename(log.path, ".md");
       expect(await rows.sessionLog(id)).toEqual(await files.sessionLog(id));
     }
@@ -155,9 +158,9 @@ describe.skipIf(!reachable.ok)("the real notes and logs, imported into a scratch
 
   it("imports each existing log as one entry, and a second import appends nothing", async () => {
     const before = await scratch.db.select().from(sessionLogEntry);
-    const logs = await readTypeFiles(REPO_ROOT, "sessions");
+    const logs = await readTypeFiles(SEED, "sessions");
     expect(before).toHaveLength(logs.length);
-    await runIndex(scratch.db, { only: ["sessions"], manimkcRoot: path.join(REPO_ROOT, "no-manimkc-here") });
+    await runIndex(scratch.db, { repoRoot: SEED, only: ["sessions"], manimkcRoot: path.join(SEED, "no-manimkc-here") });
     expect(await scratch.db.select().from(sessionLogEntry)).toHaveLength(logs.length);
   }, 60_000);
 });
