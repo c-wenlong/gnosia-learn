@@ -21,6 +21,7 @@ import {
   type CheckoutView,
 } from "./diagrams";
 import { studioBlobStore } from "./blobs";
+import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
 import { shotPath, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
@@ -215,6 +216,8 @@ function view(record: JobRecord): Record<string, unknown> {
     topic: record.topic,
     target: record.targetPath,
     candidate: record.candidatePath,
+    // The chat that asked for it (D35), or null.
+    draftId: record.draftId ?? null,
     attempt: record.attempt,
     turns: record.turns,
     costUsd: record.costUsd,
@@ -257,11 +260,13 @@ export interface ApiDeps {
   store: JobStore;
   runner: Runner;
   mirrors: Mirrors;
+  /** The planner conversations. Absent in a test that serves only the job routes. */
+  drafts?: Drafts;
 }
 
-export function createApi({ store, runner, mirrors }: ApiDeps): Server {
+export function createApi({ store, runner, mirrors, drafts }: ApiDeps): Server {
   return createServer((request, response) => {
-    void handle(request, response, store, runner, mirrors).catch((error: unknown) => {
+    void handle(request, response, store, runner, mirrors, drafts).catch((error: unknown) => {
       if (!response.headersSent) {
         fail(response, 500, "the studio threw handling this request", (error as Error).message);
       } else {
@@ -277,6 +282,7 @@ async function handle(
   store: JobStore,
   runner: Runner,
   mirrors: Mirrors,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
@@ -293,7 +299,13 @@ async function handle(
 
   /* /api/health */
   if (segments[1] === "health" && segments.length === 2) {
-    return send(response, 200, await health(store, runner));
+    return send(response, 200, await health(store, runner, drafts));
+  }
+
+  /* /api/drafts — the planner conversations (docs/STUDIO-CHAT-FIRST.md). */
+  if (segments[1] === "drafts") {
+    if (drafts === undefined) return fail(response, 404, "this studio was started without drafts");
+    return draftRoutes(request, response, segments, method, url, drafts);
   }
 
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
@@ -321,6 +333,9 @@ async function handle(
         "/api/jobs/{id}/log",
         "/api/jobs/{id}/shot?which=before|after",
         "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume|compare",
+        "/api/drafts",
+        "/api/drafts/{id}",
+        "/api/drafts/{id}/messages|events|draw|abandon",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -334,7 +349,7 @@ async function handle(
 
   /* /api/jobs */
   if (segments.length === 2) {
-    if (method === "POST") return postJob(request, response, runner);
+    if (method === "POST") return postJob(request, response, runner, drafts);
     if (method === "GET") {
       const limitRaw = Number.parseInt(url.searchParams.get("limit") ?? "25", 10);
       const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
@@ -500,10 +515,10 @@ async function handle(
     }
 
     case "POST revise":
-      return revise(request, response, runner, record);
+      return revise(request, response, runner, record, drafts);
 
     case "POST resume":
-      return resume(response, runner, record);
+      return resume(response, runner, record, drafts);
 
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`);
@@ -514,6 +529,7 @@ async function postJob(
   request: IncomingMessage,
   response: ServerResponse,
   runner: Runner,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   let body: unknown;
   try {
@@ -521,6 +537,37 @@ async function postJob(
   } catch (error) {
     return fail(response, 400, "the request body is not JSON", (error as Error).message);
   }
+
+  // A brief from a chat names its draft beside it (D35): the draft has to
+  // exist and be briefed, and it moves to drawing once the job is queued.
+  const draftId = typeof (body as { draftId?: unknown } | null)?.draftId === "string"
+    ? ((body as { draftId: string }).draftId.trim() || null)
+    : null;
+  let release: () => void = () => undefined;
+  if (draftId !== null) {
+    if (drafts === undefined) return fail(response, 404, `no draft ${draftId}`);
+    try {
+      // Held until the job is recorded on the draft, as a Draw press is.
+      release = drafts.claimForJob(draftId);
+    } catch (error) {
+      if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+      throw error;
+    }
+  }
+  try {
+    await enqueueChecked(response, body, runner, drafts, draftId);
+  } finally {
+    release();
+  }
+}
+
+async function enqueueChecked(
+  response: ServerResponse,
+  body: unknown,
+  runner: Runner,
+  drafts: Drafts | undefined,
+  draftId: string | null,
+): Promise<void> {
 
   // Read apart from the validation, because failing to read it is not the
   // brief's fault: with the catalog down and no cached copy (D13), nothing can
@@ -558,7 +605,8 @@ async function postJob(
   }
 
   try {
-    const { record, created, jobsAhead } = await runner.enqueue(brief);
+    const { record, created, jobsAhead } = await runner.enqueue(brief, undefined, { draftId });
+    if (draftId !== null && drafts !== undefined && created) await drafts.markDrawing(draftId, record.id);
     return send(response, created ? 201 : 200, {
       jobId: record.id,
       state: record.state,
@@ -572,6 +620,28 @@ async function postJob(
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
     throw error;
   }
+}
+
+/**
+ * The draft a Revise or a Resume carries: the parent job's, only while that
+ * job is still the draft's newest and the draft is not drawing another. The
+ * new job is then the draft's newest, and the draft follows it.
+ *
+ * Anything else queues the job standalone, with no draft, rather than
+ * refusing it: a Resume or Revise of an older job is still a job a person
+ * asked for, and carrying the draft would make it the one the conversation
+ * follows while another drawing is in flight.
+ */
+function carriedDraft(record: JobRecord, drafts: Drafts | undefined): string | null {
+  const id = record.draftId ?? null;
+  if (id === null || drafts === undefined) return null;
+  const draft = drafts.get(id);
+  if (draft === undefined || draft.state === "abandoned" || draft.state === "drawing") return null;
+  return draft.jobIds.at(-1) === record.id ? id : null;
+}
+
+async function followedBy(drafts: Drafts | undefined, job: JobRecord): Promise<void> {
+  if (drafts !== undefined && job.draftId !== null && job.draftId !== undefined) await drafts.markDrawing(job.draftId, job.id);
 }
 
 /**
@@ -598,6 +668,7 @@ async function revise(
   response: ServerResponse,
   runner: Runner,
   record: JobRecord,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   let body: { changes?: unknown };
   try {
@@ -629,7 +700,9 @@ async function revise(
         idempotencyKey: `${record.idempotencyKey}:revise:${Date.now()}`,
       },
       { jobId: record.id, agentSessionId: record.agentSessionId, changes },
+      { draftId: carriedDraft(record, drafts) },
     );
+    await followedBy(drafts, next);
     return send(response, 201, {
       jobId: next.id,
       state: next.state,
@@ -673,6 +746,7 @@ async function resume(
   response: ServerResponse,
   runner: Runner,
   record: JobRecord,
+  drafts: Drafts | undefined,
 ): Promise<void> {
   if (record.state !== "interrupted") {
     return fail(
@@ -704,7 +778,9 @@ async function resume(
         idempotencyKey: `${record.idempotencyKey}:resume:${record.finishedAt ?? record.id}`,
       },
       { jobId: record.id, agentSessionId: record.agentSessionId, changes: null },
+      { draftId: carriedDraft(record, drafts) },
     );
+    await followedBy(drafts, next);
     return send(response, 201, {
       jobId: next.id,
       state: next.state,
@@ -1152,8 +1228,168 @@ async function vocabularyRoute(response: ServerResponse): Promise<void> {
   }
 }
 
+/**
+ * `/api/drafts`: create, list, read, talk, follow, draw, abandon.
+ *
+ * Every refusal is a `JobRefused` from `drafts.ts` with the status the API
+ * table in docs/STUDIO-CHAT-FIRST.md names, answered in the `{ error, detail }`
+ * envelope every route here uses. Draw's refusals are `POST /api/jobs`'s, body
+ * and all, since it is the same enqueue.
+ */
+async function draftRoutes(
+  request: IncomingMessage,
+  response: ServerResponse,
+  segments: string[],
+  method: string,
+  url: URL,
+  drafts: Drafts,
+): Promise<void> {
+  const refusal = (error: unknown): void => {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  };
+  const body = async (): Promise<Record<string, unknown> | null> => {
+    try {
+      const parsed = await readJson(request);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        fail(response, 400, "the request body must be a JSON object");
+        return null;
+      }
+      return parsed as Record<string, unknown>;
+    } catch (error) {
+      fail(response, 400, "the request body is not JSON", (error as Error).message);
+      return null;
+    }
+  };
+
+  if (segments.length === 2) {
+    if (method === "GET") {
+      const limitRaw = Number.parseInt(url.searchParams.get("limit") ?? "25", 10);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
+      const state = url.searchParams.get("state") ?? undefined;
+      const list = drafts.list({ limit, ...(state === undefined || state === "" ? {} : { state }) });
+      return send(response, 200, { drafts: list, note: `${list.length} draft${list.length === 1 ? "" : "s"}, newest first` });
+    }
+    if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/drafts does`);
+    const input = await body();
+    if (input === null) return;
+    try {
+      const { record, created } = await drafts.create({
+        source: typeof input.source === "string" ? input.source : null,
+        idempotencyKey: typeof input.idempotencyKey === "string" ? input.idempotencyKey : null,
+      });
+      return send(response, created ? 201 : 200, {
+        draftId: record.id,
+        state: record.state,
+        note: created
+          ? record.source === null
+            ? "a new conversation: say what the diagram should make clear"
+            : `a conversation about extending ${record.source}`
+          : `this idempotency key already belongs to draft ${record.id}`,
+      });
+    } catch (error) {
+      return refusal(error);
+    }
+  }
+
+  const id = segments[2] ?? "";
+  if (drafts.get(id) === undefined) {
+    return fail(response, 404, `no draft ${id}`, "This conversation is gone. Drafts are kept seven days.");
+  }
+
+  if (segments.length === 3) {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/drafts/{id} does`);
+    return send(response, 200, await drafts.view(id));
+  }
+  if (segments.length !== 4) return fail(response, 404, `no route ${method} ${url.pathname}`);
+
+  switch (`${method} ${segments[3]}`) {
+    case "POST messages": {
+      const input = await body();
+      if (input === null) return;
+      try {
+        const { seq } = await drafts.send(id, input.text);
+        return send(response, 202, { draftId: id, seq, note: "the planner is answering; follow /events for its reply" });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
+    case "GET events":
+      return draftEvents(request, response, url, drafts, id);
+    case "POST draw": {
+      const input = await body();
+      if (input === null) return;
+      try {
+        const { jobId, created } = await drafts.draw(id, input.idempotencyKey);
+        return send(response, created ? 201 : 200, {
+          draftId: id,
+          jobId,
+          state: "drawing",
+          note: created ? `queued as job ${jobId}` : `this press already queued job ${jobId}`,
+        });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
+    case "POST abandon": {
+      try {
+        const record = await drafts.abandon(id);
+        return send(response, 200, { draftId: id, state: record.state, note: "this conversation is closed" });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
+    default:
+      return fail(response, 404, `no route ${method} ${url.pathname}`, {
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon"],
+      });
+  }
+}
+
+/**
+ * A draft's SSE stream. Transcript events carry `id:` (their seq), so a
+ * reconnect replays from `Last-Event-ID`; a first connection, which cannot set
+ * that header from `EventSource`, passes `?after=`. `delta` and `state` carry
+ * no id: they are a cache of the reply in progress and the record, never the
+ * record itself (rule 8).
+ */
+async function draftEvents(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  drafts: Drafts,
+  id: string,
+): Promise<void> {
+  const header = request.headers["last-event-id"];
+  const raw = (Array.isArray(header) ? header[0] : header) ?? url.searchParams.get("after") ?? "0";
+  const parsed = Number.parseInt(raw, 10);
+  const after = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  response.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+  const write = (event: DraftStreamEvent): void => {
+    response.write(`${event.id === undefined ? "" : `id: ${event.id}\n`}event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`);
+  };
+  // The close handler is attached before the replay is read, so a client that
+  // goes away during it does not leave its subscription and its keep-alive
+  // behind: the subscription is dropped the moment it exists.
+  let closed = false;
+  let unsubscribe: (() => void) | null = null;
+  const keepAlive = setInterval(() => response.write(": keep-alive\n\n"), 20_000);
+  response.on("close", () => {
+    closed = true;
+    clearInterval(keepAlive);
+    unsubscribe?.();
+  });
+  const off = await drafts.subscribe(id, after, write);
+  if (closed) off();
+  else unsubscribe = off;
+}
+
 /** What is and is not working right now. */
-async function health(store: JobStore, runner: Runner): Promise<Record<string, unknown>> {
+async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise<Record<string, unknown>> {
   const [checked, claudeVersion, catalog, vocabulary] = await Promise.all([
     doctor().catch(() => null),
     run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
@@ -1201,6 +1437,11 @@ async function health(store: JobStore, runner: Runner): Promise<Record<string, u
     queueDepth,
     running: runner.busy,
     costLast24h: cap.totalUsd,
+    // The planner's share of that figure: its turns are spend entries in the
+    // same window (D36 of docs/STUDIO-CHAT-FIRST.md).
+    plannerCostLast24h: cap.plannerUsd,
+    plannerTurnsLast24h: cap.plannerTurns,
+    plannerTurnsInFlight: drafts?.busy ?? 0,
     dailyCap: cap,
     note: !tldrawkc
       ? "tldrawkc cannot run, so no job can be queued. Build the submodule."

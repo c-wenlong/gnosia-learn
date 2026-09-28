@@ -26,7 +26,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 | Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
-| Studio | `session`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
+| Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
 
 `index_run` is the third thing because it is neither of the first two: it is not
 derived *from* files, and it is not the only copy of anything a learner did.
@@ -117,7 +117,8 @@ which brief produced them.
 | Table | Purpose |
 | --- | --- |
 | `session` | One run of something that writes to the knowledge base. `kind` is `tutor` (a `/learn` session) or `studio` (a generation runner); both share one id space, which is what lets `event.session_id` be a foreign key. |
-| `job` | One request to generate one file: the brief, the lease on a committed path, the state machine, the gate's verdict and what it cost. |
+| `draft` | One conversation with the studio's planner (docs/STUDIO-CHAT-FIRST.md, D32): the headless session every turn resumes, the transcript's path under the runner's `STUDIO_HOME`, the latest brief that passed and, when its topic does not exist yet, the proposed topic (`pending_topic`). One owner's, like a job. A mirror of the runner's `drafts/<id>/draft.json`, written by `catalog draft upsert`, so it has no transition guard of its own: the runner holds the record and the state machine (`DRAFT_TRANSITIONS`). |
+| `job` | One request to generate one file: the brief, the lease on a committed path, the state machine, the gate's verdict and what it cost. `draft_id` names the conversation that asked for it (D35), `ON DELETE SET NULL`, so pruning a draft never takes a job with it; a draft reports its newest job. |
 | `asset_job` | This job wrote this asset, at this hash, at this size. Provenance as a link table, so regenerating does not erase the earlier job's claim. Once the job is accepted the hash is a snapshot and is never rewritten: a repair assert over a file somebody has edited since would otherwise replace "what the job wrote" with "what a person wrote afterwards", which is the one comparison that makes the edit visible. |
 
 Three shapes here are worth stating outright.
@@ -1029,6 +1030,11 @@ generated block, as `0001`, `0003` and `0006` did before it:
 | `content_write_guard()`, its triggers, and `DISABLE TRIGGER` | Same, in a `DO` loop over the table list |
 | The three `catalog_check_*()` functions, their eight constraint triggers, and `DISABLE TRIGGER` | Same |
 | `catalog_copy_guard()` and its triggers | Same, in a `DO` loop |
+
+A table added after 0010 carries no copy guard unless its own migration adds
+one, since 0010 named its tables. `0014_studio_drafts.sql` ends with
+`draft_copy_guard`, below drizzle's block, and
+`test/content-seam.test.ts` fails any table without one.
 
 The trigram indexes themselves are drizzle's: `topic_title_trgm_idx` on
 `title` and `topic_aliases_trgm_idx` on `aliases::text`, since an index

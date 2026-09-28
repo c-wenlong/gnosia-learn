@@ -17,6 +17,14 @@ import {
   runItem,
 } from "./commands/course";
 import { runDiagramCommand } from "./commands/diagram";
+import {
+  formatDraft,
+  readDraftFile,
+  runDraftList,
+  runDraftShow,
+  runDraftUpsert,
+  type DraftResult,
+} from "./commands/draft";
 import { formatExport, runExport } from "./commands/export";
 import type { ExportSubset } from "./content/subset";
 import { formatFlip, runFlip } from "./commands/flip";
@@ -149,6 +157,10 @@ Commands:
                            enqueue --brief FILE, claim, finish --state S,
                            accept, discard, ls, show ID. --owner ID acts on
                            that owner's jobs only (default: local).
+  draft <verb>             The studio's planner conversations: upsert --file
+                           FILE (the runner's draft.json), show --id ID, ls
+                           [--state S] [--limit N]. --owner ID acts on that
+                           owner's drafts only (default: local).
   diagram <verb>           Diagrams in the database: put, checkout, commit,
                            list, show. \`catalog diagram --help\` has the
                            flags.
@@ -348,6 +360,7 @@ type Command =
   | "path"
   | "search"
   | "job"
+  | "draft"
   | "session"
   | "history"
   | "diff"
@@ -374,6 +387,7 @@ const COMMANDS: readonly Command[] = [
   "path",
   "search",
   "job",
+  "draft",
   "session",
   "history",
   "diff",
@@ -439,6 +453,7 @@ export async function main(argv: string[]): Promise<number> {
         job: { type: "string" },
         path: { type: "string", multiple: true },
         brief: { type: "string" },
+        file: { type: "string" },
         state: { type: "string" },
         phase: { type: "string" },
         candidate: { type: "string" },
@@ -733,6 +748,11 @@ export async function main(argv: string[]): Promise<number> {
         emit(result, formatJob(result));
         break;
       }
+      case "draft": {
+        const result = await draftCommand(positionals, values);
+        emit(result, formatDraft(result));
+        break;
+      }
       case "history": {
         const type = parseEntityType(positionals[1]);
         const id = positionals[2];
@@ -845,7 +865,8 @@ function reportFailure(error: unknown, command: string, verb: string | undefined
       `${JSON.stringify({ ok: false, command, database: redactUrl(databaseUrl()), error: message, ...coded }, null, 2)}\n`,
     );
     if (reason !== null) {
-      const named = command === "job" || command === "session" || command === "diagram" ? verb : undefined;
+      const named =
+        command === "job" || command === "draft" || command === "session" || command === "diagram" ? verb : undefined;
       process.stderr.write(`catalog ${named === undefined ? command : `${command} ${named}`} failed: ${reason}\n`);
     }
   } else {
@@ -907,6 +928,7 @@ async function jsonFile(
 
 type Values = {
   job?: string;
+  file?: string;
   path?: string[];
   brief?: string;
   state?: string;
@@ -1033,6 +1055,26 @@ async function job(positionals: string[], values: Values): Promise<JobResult> {
       throw new Usage(
         "usage: job enqueue|claim|finish|accept|discard|ls|show",
       );
+  }
+}
+
+/** `catalog draft <verb>`: the studio's planner conversations. */
+async function draftCommand(positionals: string[], values: Values): Promise<DraftResult> {
+  const verb = positionals[1];
+  switch (verb) {
+    case "upsert": {
+      if (values.file === undefined) throw new Usage("draft upsert needs --file <draft.json>");
+      return runDraftUpsert(await readDraftFile(values.file), values.owner);
+    }
+    case "show": {
+      const id = values.id ?? positionals[2];
+      if (id === undefined) throw new Usage("draft show needs --id <id>");
+      return runDraftShow(id, values.owner);
+    }
+    case "ls":
+      return runDraftList({ state: values.state, limit: number(values.limit, "--limit"), owner: values.owner });
+    default:
+      throw new Usage("usage: draft upsert|show|ls");
   }
 }
 
