@@ -637,9 +637,19 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
   });
 
   it("takes a waiver off the record when a later strict flip arms the rule", async () => {
-    // The flip above waived item-has-concept. Arming it again must clear that
-    // waiver too: on the owner's database the record stayed, and doctor read
-    // the rule as armed and waived at once.
+    // Waive first, in this test, so a run of it alone still covers the removal.
+    // Arming the rule again must clear the waiver: on the owner's database the
+    // record stayed, and doctor read the rule as armed and waived at once.
+    await runFlip({
+      type: "courses",
+      strict: true,
+      readers: READERS,
+      waive: [{ rule: "item-has-concept", reason: "waived, to be armed by the next flip" }],
+    });
+    expect((await doctor(scratch.db, "scratch")).rules.find((r) => r.name === "item-has-concept")).toMatchObject({
+      state: "disarmed",
+      waived: { type: "courses", reason: "waived, to be armed by the next flip" },
+    });
     const result = await runFlip({ type: "courses", strict: true, readers: READERS });
     expect(result.rulesArmed).toEqual(["module-has-item", "item-has-concept", "item-concept-in-module-topic"]);
     expect(result.waivers).toEqual([]);
