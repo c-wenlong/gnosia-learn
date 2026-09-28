@@ -19,7 +19,7 @@ import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { diagramPaths } from "./diagram-document";
-import { sha256 } from "./layout";
+import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
 import {
   type LatestRevision,
@@ -74,7 +74,8 @@ export type TopicErrorCode =
   | "not-owned"
   | "cycle"
   | "no-room"
-  | "diagrams-on-files";
+  | "diagrams-on-files"
+  | "jobs-open";
 
 export class TopicError extends Error {
   constructor(
@@ -1071,7 +1072,16 @@ export interface RenameResult {
   jobs: string[];
   /** Diagram files that still stamp the old slug, to restamp by hand (diagrams on files only). */
   restamp: string[];
+  /**
+   * The SVG of every diagram filed under the topic. `export --svg` stamps the
+   * topic into the SVG, and a rename rewrites only the document's stamp, so
+   * each of these still names the old slug until it is exported again.
+   */
+  staleSvgs: string[];
 }
+
+/** Thrown inside a rename's transaction when the export types it locked turn out not to cover what it writes. */
+class RenameNeedsCourses extends Error {}
 
 /** The entity types a rename can touch, which it locks like an import does. */
 const RENAME_LOCKS: readonly RevisionEntityType[] = ["asset", "collection", "concept", "curriculum_item", "diagram", "topic"];
@@ -1136,12 +1146,37 @@ export async function renameTopic(db: CatalogDatabase, input: RenameInput, by: B
   if (from === to) throw new TopicError("invalid", "--from and --to are the same slug");
 
   // The course files name each module's topic, so they are rewritten too
-  // when a module is mapped here.
+  // when a module is mapped here. The write-through takes its export locks
+  // before anything else, so the answer is guessed first and checked again
+  // under the rename's own locks, which hold every writer of `collection_item`
+  // off; a guess that turns out short is run again with courses included.
   const { rows: modules } = await db.execute(sql`select 1 from collection_item where topic_slug = ${from} limit 1`);
-  const types = modules.length > 0 ? (["topics", "courses"] as const) : (["topics"] as const);
+  let withCourses = modules.length > 0;
+  for (;;) {
+    try {
+      const types = withCourses ? (["topics", "courses"] as const) : (["topics"] as const);
+      return await renameUnder(db, types, from, to, input, by);
+    } catch (error) {
+      if (!(error instanceof RenameNeedsCourses) || withCourses) throw error;
+      withCourses = true;
+    }
+  }
+}
 
+async function renameUnder(
+  db: CatalogDatabase,
+  types: readonly ExportType[],
+  from: string,
+  to: string,
+  input: RenameInput,
+  by: By,
+): Promise<RenameResult> {
   const done = await writeThrough(db, types, async (tx) => {
     await lockTypes(tx, RENAME_LOCKS);
+    if (!types.includes("courses")) {
+      const { rows: mapped } = await tx.execute(sql`select 1 from collection_item where topic_slug = ${from} limit 1`);
+      if (mapped.length > 0) throw new RenameNeedsCourses();
+    }
     const row = await liveRow(tx, from);
     const clash = await rowOf(tx, to);
     if (clash !== undefined) {
@@ -1168,6 +1203,42 @@ export async function renameTopic(db: CatalogDatabase, input: RenameInput, by: B
           `SVG before the next \`catalog index\`, which refuses them until then.`,
       );
     }
+
+    // A studio job drawing under the old slug, or holding a candidate drawn
+    // under it, would come back stamped with a slug that no longer exists,
+    // and Accept refuses that. Its brief can be rewritten, but not what the
+    // agent already read or the candidate it wrote, so the rename waits for
+    // those to be accepted or discarded. Locked, so a queued job cannot be
+    // claimed between this check and the brief rewrite below.
+    const { rows: open } = await tx.execute<{ id: string; state: string }>(sql`
+      select id, state from job
+      where state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)})
+        and (topic_slug = ${from} or brief ->> 'topic' = ${from})
+      order by id for update`);
+    const busy = open.filter((job) => job.state !== "queued");
+    if (busy.length > 0) {
+      throw new TopicError(
+        "jobs-open",
+        `${busy.length} studio job(s) are drawing or awaiting review under "${from}": ` +
+          `${busy.map((job) => `${job.id} (${job.state})`).join(", ")}. A candidate drawn under the old slug ` +
+          `could not be accepted after the rename. Accept or discard each (\`catalog job accept|discard <id>\`), ` +
+          `then rename.`,
+      );
+    }
+
+    // Every SVG under the topic, before the cascade moves `topic_slug`.
+    const staleSvgs =
+      diagramsOwned?.source === "db"
+        ? (
+            await tx.execute<{ slug: string }>(
+              sql`select slug from diagram where topic_slug = ${from} and svg_blob_key is not null order by slug`,
+            )
+          ).rows.map((r) => diagramPaths(r.slug).svg)
+        : (
+            await tx.execute<{ path: string }>(sql`
+              select a.path from asset a join asset_topic t on t.asset_id = a.id
+              where a.kind = 'diagram_svg' and t.topic_slug = ${from} and a.path is not null order by a.path`)
+          ).rows.map((r) => r.path);
 
     const affected = await namedBy(tx, from);
     const renamed = (type: RevisionEntityType, id: string) => (type === "topic" && id === from ? to : id);
@@ -1282,6 +1353,7 @@ export async function renameTopic(db: CatalogDatabase, input: RenameInput, by: B
       })),
       jobs: jobs.rows.map((r) => r.id),
       restamp,
+      staleSvgs,
     };
   });
   return { from, to, ...done.value, exported: done.exported };

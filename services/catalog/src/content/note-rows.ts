@@ -87,11 +87,13 @@ export interface NoteWrite {
   /** The topic a new note is filed under. An existing note keeps its own; a different one is refused. */
   topicSlug?: string;
   /**
-   * The revision the writer started from: a checkout's, for a commit that
-   * must refuse a moved base (edge case 16). Left out, the write is based on
-   * whatever is latest, which is what a one-shot command means.
+   * The revision the writer read the note at, in the same snapshot as the
+   * fields it started from: a checkout's for a commit, the read's for a
+   * one-shot command. A note that moved since is refused (edge case 16), so a
+   * write landing between the read and this one is never overwritten. There
+   * is no default: "whatever is latest now" is exactly the lost update.
    */
-  base?: number | null;
+  base: number | null;
   reason: string;
   author?: string;
   /** The tutoring session that made the write, for its provenance. */
@@ -103,6 +105,8 @@ export interface NoteWritten {
   /** The concept's latest revision after the write. */
   revision: number;
   changed: boolean;
+  /** sha256 of the note as that revision renders it, which is also its `note:` asset's `content_hash`. */
+  hash: string;
 }
 
 /** The latest revision of a concept, or null when it has none. */
@@ -169,8 +173,8 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
   const path = existing?.path ?? notePath(domain, slug);
 
   const rendered = Buffer.from(renderNote(fields), "utf8");
+  const hash = createHash("sha256").update(rendered).digest("hex");
   const assetId = `note:${path}`;
-  const latest = await latestRevisions(db, "concept", [slug]);
   const latestAsset = await latestRevisions(db, "asset", [assetId]);
   const by = {
     author: input.author ?? LOCAL_LEARNER_ID,
@@ -199,7 +203,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
         },
         links: { concept_prerequisite: prerequisites },
       },
-      base: input.base !== undefined ? input.base : (latest.get(slug)?.id ?? null),
+      base: input.base,
       ...by,
     },
     {
@@ -211,7 +215,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
           kind: "note",
           path,
           url: null,
-          contentHash: createHash("sha256").update(rendered).digest("hex"),
+          contentHash: hash,
           bytes: rendered.length,
           title: fields.title,
           sourceRepo: "self-learn",
@@ -223,7 +227,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
     },
   ]);
   if (written === undefined) throw new Error(`concept "${slug}" was not written`);
-  return { path, revision: written.revisionId, changed: written.changed };
+  return { path, revision: written.revisionId, changed: written.changed, hash };
 }
 
 /** `requires:` then `assumes:` as `concept_prerequisite` rows, checked against live concepts. */

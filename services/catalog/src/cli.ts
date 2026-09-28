@@ -65,6 +65,7 @@ import {
   classifyConnectionFailure,
   describeConnectionFailure,
   EXIT_UNREACHABLE,
+  failureText,
 } from "./connection-failure";
 import { withDatabase } from "./db";
 import { databaseUrl, redactUrl } from "./env";
@@ -164,8 +165,11 @@ Commands:
                            posters whose video is gone. Exits 1 while any
                            disagreement stands or an asset points at a
                            pending blob. --fix deletes day-old
-                           orphans, marks broken rows pending, and deletes
-                           day-old pending rows nothing points at.
+                           orphans, marks broken rows pending, deletes
+                           day-old pending rows nothing points at, and
+                           sweeps day-old .tmp/*.part files. The store is
+                           $SELF_LEARN_HOME/blobs (else ~/.self-learn/blobs)
+                           for both commands, as for the web app.
   topic <verb>             The topic vocabulary, written through the catalog
                            with a --reason, and content/topics.yaml rewritten
                            from the rows after each write:
@@ -195,10 +199,14 @@ Commands:
                            rows on them stay. Rewrites the course file (and
                            topics.yaml when a module's topic moved) in the
                            tree courses were imported from. --dry-run says
-                           what would change and commits nothing.
+                           what would change and commits nothing. A file
+                           course export stamped is refused once the course
+                           has moved past its stamp, unless --force-base.
   course export <id>       One course as the database would export it: the
                            file to edit and import back. Prints it, or
-                           writes it to --out FILE.
+                           writes it to --out FILE, with a first line naming
+                           the revision it was read at (left off when --out
+                           is the course's own file in the tree).
   item <verb> <id>         One curriculum item, with --reason: archive (off
                            the course path, learner rows kept), restore (back
                            on it, or back from a purge), purge (delete an
@@ -228,10 +236,9 @@ Options:
                            topic add: validate, place and list near
                            matches, write nothing. course import: plan the
                            write, commit nothing.
-  --blob-root DIR          asset upload, blob audit: the fs store's root.
-                           Default: $SELF_LEARN_HOME/blobs, else
-                           ~/.self-learn/blobs.
-  --fix                    blob audit: act on what it finds (see above).
+  --fix                    blob audit: act on what it finds (see above),
+                           and only on a store whose .owner names this
+                           database; the first --fix claims an unclaimed one.
   --strict                 flip: also arm the type's completeness rules.
   --waive RULE             flip: leave this rule disarmed. Repeatable, each
                            with its own --reason, in the same order.
@@ -242,6 +249,8 @@ Options:
                            course import, item: why, kept on every revision.
   --author ID              topic, tag: who the revision names. Default:
                            the local learner.
+  --force-base             course import: import a file whose base-revision
+                           stamp the course has moved past, undoing the move.
   --with-learner-data      item purge: delete the item's progress and recap
                            rows too, after copying them into the revision.
   --topic SLUG             renumber concepts, modules: which topic's list.
@@ -456,6 +465,7 @@ export async function main(argv: string[]): Promise<number> {
         description: { type: "string" },
         author: { type: "string" },
         "with-learner-data": { type: "boolean", default: false },
+        "force-base": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
     });
@@ -556,6 +566,7 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "asset": {
         if (positionals[1] !== "upload") throw new Usage("asset takes one verb: upload");
+        if (values["blob-root"] !== undefined) throw new Usage(BLOB_ROOT_GONE);
         const source = values.source;
         if (source === undefined || !(UPLOAD_SOURCES as readonly string[]).includes(source)) {
           throw new Usage(`asset upload needs --source: ${UPLOAD_SOURCES.join(", ")}`);
@@ -567,7 +578,6 @@ export async function main(argv: string[]): Promise<number> {
         const result = await runAssetUpload({
           source: source as UploadSource,
           dryRun: values["dry-run"],
-          blobRoot: values["blob-root"],
           manimkcRoot: root === undefined ? undefined : path.resolve(root),
           reason: reasons[0],
         });
@@ -577,8 +587,9 @@ export async function main(argv: string[]): Promise<number> {
       }
       case "blob": {
         if (positionals[1] !== "audit") throw new Usage("blob takes one verb: audit");
+        if (values["blob-root"] !== undefined) throw new Usage(BLOB_ROOT_GONE);
         await schemaCurrent();
-        const result = await runBlobAudit({ fix: values.fix, blobRoot: values["blob-root"] });
+        const result = await runBlobAudit({ fix: values.fix });
         emit(result, formatBlobAudit(result));
         if (result.outstanding > 0) return 1;
         break;
@@ -612,7 +623,12 @@ export async function main(argv: string[]): Promise<number> {
           const reasons = values.reason ?? [];
           if (reasons.length !== 1) throw new Usage("course import takes exactly one --reason");
           await schemaCurrent();
-          const result = await runCourseImport({ file: target, reason: reasons[0] as string, dryRun: values["dry-run"] });
+          const result = await runCourseImport({
+            file: target,
+            reason: reasons[0] as string,
+            dryRun: values["dry-run"],
+            forceBase: values["force-base"],
+          });
           emit(result, formatCourseImport(result));
         } else if (verb === "export") {
           if (target === undefined) throw new Usage("course export needs a course id");
@@ -747,6 +763,11 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
+/** `--blob-root` was removed; the flag is still parsed so its use gets this sentence rather than "unknown option". */
+const BLOB_ROOT_GONE =
+  "--blob-root is gone: it wrote rows pointing at a store the web app never reads. Set SELF_LEARN_HOME=<dir> " +
+  "for a scratch store instead; the catalog and the web app both read it, and blobs live under <dir>/blobs.";
+
 /**
  * A command that failed, reported the one way every command reports it:
  * exit 4 for a database behind the journal, 3 for one that is not there, 1
@@ -754,7 +775,7 @@ export async function main(argv: string[]): Promise<number> {
  * failure shape on stdout.
  */
 function reportFailure(error: unknown, command: string, verb: string | undefined, json: boolean): number {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = failureText(error);
   if (error instanceof MigrationsOutstanding) {
     if (json) {
       process.stdout.write(
