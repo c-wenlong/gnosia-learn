@@ -741,6 +741,33 @@ list above, and why:
   write, commit included, puts the files back. So after any verb the next
   import of the tree writes zero revisions and parity is clean, which the
   tests assert after every write.
+- **Built (phase 1 review fixes): the write-through writes only a tree this
+  database imported, and never over a save.** A `createdb -T` copy inherits
+  `index_run.metadata.root`, and its `catalog_instance` says `primary` like
+  the original's, so a seam write on a scratch copy used to rewrite the
+  owner's working tree (reproduced). Each import now records which database
+  ran it beside the root (`metadata.database`, name and `pg_database` oid,
+  which a copy never shares), and `src/content/import-root.ts` refuses a root
+  another database recorded, or one in another git worktree of this
+  repository, naming the command that fixes it: `catalog index` against the
+  copy. An import that skips a flipped type because its files are the
+  database's export records that tree as the root too, so a copy imported
+  from an export folder writes there. This departs from the review's
+  suggested check of `catalog_instance.role` and `primary_host`: neither
+  tells a `createdb -T` copy from its template, and requiring the repository
+  root would refuse every write against a scratch tree. And each file is read
+  once more just before its rename: one saved since the check is left alone,
+  the database's version goes beside it as `<file>.incoming` (then
+  `.incoming.2`), and the verb lists it. That is #135's fix, lost when its
+  merge kept Track A's write-through. `test/write-through-root.test.ts`.
+- **Built (phase 1 review fixes): `catalog topic map <slug> --manimkc <path>...
+  [--remove] --reason`**, the one writer of `maps.manimkc`. Once topics are
+  flipped a hand edit of that list is refused as an edited export and the
+  manimkc indexer refuses a folder no topic maps, so without it the first new
+  rendered topic would block every `catalog index`. A folder another topic
+  holds is refused, naming that topic. Tested on a flipped scratch database
+  against a stand-in manimkc CLI: the index refuses the new folder, the map
+  writes it through, and the index then runs.
 - **`add` places the topic after the last topic of its domain** (the file is
   written in domain groups), as a sparse position between its neighbours
   (D22); no gap left is refused with `catalog renumber topics`. It also
@@ -810,15 +837,16 @@ list above, and why:
   will call are, and `topic add --dry-run --json` is the validation step D16
   names.
 - **Flip day for topics and tags** is, on the migrated primary: `catalog index`
-  (so both were last imported from the repository), `catalog parity . --only
-  topics,tags`, `catalog flip topics`, `catalog flip tags`, then
-  `catalog export --only topics,tags --out .`. The last step matters: `flip`
-  checks parity but records no export hash, and until one is recorded every
-  import that reaches a flipped type refuses with "No export of tags is
-  recorded", `learn concept add --topic` included (its index run pulls in
-  courses, and courses pull in tags). The export into the working tree is a
-  no-op on the files; any `catalog topic` or `catalog tag` write records the
-  hash too.
+  (so both were last imported from the repository, by this database),
+  `catalog parity . --only topics,tags`, `catalog flip topics`, `catalog flip
+  tags`. The flip records the tree's export hash (phase 1 review fixes; it
+  used to record none, and every import that reached a flipped type refused
+  with "No export of tags is recorded" until someone exported), and lists any
+  file whose bytes a fresh export would change. `catalog export --out <dir>`
+  records the hash only when `<dir>` is that tree, so an export to a scratch
+  folder no longer makes the next `catalog index` refuse the untouched tree
+  as edited; and an import skips a flipped type whose files are byte for byte
+  the database's current export wherever they were written.
 - **`--author`** names the person a write is for (the studio's Draw press);
   the default is the local learner. Every write needs `--reason`; a dry run
   does not.
@@ -1160,12 +1188,24 @@ around the list above, and why:
   `.tldr` asset's `content_hash`, the export and every checkout use it. Parity
   compares `.tldr` files parsed, so it is clean; the first `catalog export`
   into the working tree after the diagrams flip rewrites the two tracked
-  files' key order once, and that export is also what records the export hash
-  a later `catalog index` checks the tree against (edge case 12).
+  files' key order once. The flip records the tree's export hash as it
+  stands, so a later `catalog index` skips the tree without that export
+  (edge case 12), and lists the files the export would rewrite.
 - **Write-through until the flip, then no file (D17).** While the files own
-  diagrams, `put` also writes the `.tldr` and `.svg` it was given under the
-  directory diagrams were last imported from, or the next `catalog index`
-  would read the old files back and undo it (caught in review). Once
+  diagrams, `put` also writes the `.tldr` and `.svg` under the directory
+  diagrams were last imported from, or the next `catalog index` would read
+  the old files back and undo it (caught in review). Built (phase 1 review
+  fixes): that is the shared `writeThrough(db, ["diagrams"], ...)` now, not a
+  private copy that wrote after the commit with no export lock, no in-step
+  check and no put-back, overwrote a hand-edited `.tldr`, and with no import
+  root wrote nothing for the next index to revert. So a put takes the export
+  lock, refuses when a file under the root says something the rows do not (a
+  `.tldr` compared as its document, since tldrawkc's key order is not the
+  export's), renders the files from the rows with the blob store it uploaded
+  to, and writes the `.tldr` as the export does, in canonical JSON. The files
+  it was handed are exempt from the check, as `course import`'s are: a
+  `canvas` edit of `learn/assets/<slug>.tldr` in place is the edit being put.
+  A put on a database that never imported diagrams is refused. Once
   `catalog flip diagrams` hands the type to the database nothing validates
   against a diagram file (the embed resolves through the asset row and
   `/api/assets/{id}/file`, which reads the blob first), the import skips them,

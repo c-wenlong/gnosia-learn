@@ -8,9 +8,12 @@ import {
   type By,
   checkAddInput,
   checkEditInput,
+  checkManimkcPaths,
   checkSlugs,
   editTopic,
   listTopics,
+  mapTopic,
+  type MapResult,
   type NearMatch,
   parseRelate,
   relateTopic,
@@ -54,6 +57,7 @@ export interface TopicFlags {
   from?: string;
   to?: string;
   remove?: boolean;
+  manimkc?: string[];
   "restamp-diagrams-later"?: boolean;
   id?: string;
   label?: string;
@@ -65,6 +69,7 @@ export type TopicCommandResult =
   | ({ database: string; verb: "add" } & AddTopicResult)
   | ({ database: string; verb: "edit" | "archive" | "restore" } & TopicWriteResult)
   | ({ database: string; verb: "relate" } & RelateResult)
+  | ({ database: string; verb: "map" } & MapResult)
   | ({ database: string; verb: "rename" } & RenameResult)
   | ({ database: string; verb: "ls" } & TopicList);
 
@@ -179,6 +184,17 @@ export async function runTopic(
         ...(await relateTopic(db, { from, kind, to, remove: flags.remove === true }, author)),
       }));
     }
+    case "map": {
+      const slug = positional(positionals, 2, "topic map needs <slug> --manimkc <path>");
+      shape(() => checkSlugs([slug, "the topic"]));
+      const paths = shape(() => checkManimkcPaths(flags.manimkc ?? []));
+      const author = by(flags);
+      return withDatabase(async ({ db }) => ({
+        database,
+        verb: "map" as const,
+        ...(await mapTopic(db, { slug, manimkc: paths, remove: flags.remove === true }, author)),
+      }));
+    }
     case "archive":
     case "restore": {
       const slug = positional(positionals, 2, `topic ${verb} needs the topic's slug`);
@@ -194,7 +210,7 @@ export async function runTopic(
         ...(await listTopics(db, { domain: flags.domain })),
       }));
     default:
-      throw new TopicUsage("usage: topic add|edit|rename|relate|archive|restore|ls");
+      throw new TopicUsage("usage: topic add|edit|rename|relate|map|archive|restore|ls");
   }
 }
 
@@ -234,10 +250,17 @@ export async function runTag(
 }
 
 function exportedLines(exported: readonly ExportedType[]): string[] {
-  return exported.map((e) => {
+  return exported.flatMap((e) => {
     const files = [...e.written, ...e.removed.map((p) => `${p} (removed)`)];
-    return `files     ${files.length === 0 ? `${e.type}: unchanged` : files.join(", ")} under ${e.root}` +
-      (e.recorded ? "" : " (a copy: export hash not recorded)");
+    return [
+      `files     ${files.length === 0 ? `${e.type}: unchanged` : files.join(", ")} under ${e.root}` +
+        (e.recorded ? "" : " (a copy: export hash not recorded)"),
+      ...e.conflicts.map(
+        (c) =>
+          `conflict  ${c.path} changed on disk during the write and was left as it is` +
+          (c.incoming === null ? "" : `; the database's version is beside it as ${c.incoming}`),
+      ),
+    ];
   });
 }
 
@@ -274,6 +297,9 @@ export function formatTopic(result: TopicCommandResult): string {
       break;
     case "relate":
       lines.push(`${result.changed ? "recorded" : "unchanged"}  ${result.stored.from} ${result.stored.kind} ${result.stored.to} (stored under ${result.slug})`);
+      break;
+    case "map":
+      lines.push(`${result.changed ? "mapped" : "unchanged"}  ${result.slug}  maps.manimkc: ${result.manimkc.length === 0 ? "(none)" : result.manimkc.join(", ")}`);
       break;
     default:
       lines.push(`${result.changed ? `${result.verb === "edit" ? "edited" : `${result.verb}d`}` : "unchanged"}  ${result.slug}`);

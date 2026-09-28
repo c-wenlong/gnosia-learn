@@ -1,3 +1,4 @@
+import type { BlobStore } from "@self-learn/blob";
 import { COURSES_DIR, TAGS_FILE, TOPICS_FILE } from "@self-learn/content";
 import { sql } from "drizzle-orm";
 
@@ -77,7 +78,17 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 
 const text = (lines: readonly string[]) => Buffer.from(`${lines.join("\n")}\n`, "utf8");
 
-export async function renderType(db: CatalogDatabase, type: ExportType): Promise<ExportFile[]> {
+/**
+ * `store`: where a diagram's SVG is read from. The store the process opens
+ * from its environment unless a writer says otherwise: a write-through
+ * renders with the store its writer uploaded the SVG to, so the two cannot
+ * disagree about where the bytes are.
+ */
+export async function renderType(
+  db: CatalogDatabase,
+  type: ExportType,
+  options: { store?: BlobStore } = {},
+): Promise<ExportFile[]> {
   switch (type) {
     case "topics":
       return [await renderTopics(db)];
@@ -90,7 +101,7 @@ export async function renderType(db: CatalogDatabase, type: ExportType): Promise
     case "sessions":
       return renderSessions(db);
     case "diagrams":
-      return renderDiagrams(db);
+      return renderDiagrams(db, options.store);
   }
 }
 
@@ -368,7 +379,7 @@ async function renderSessions(db: CatalogDatabase): Promise<ExportFile[]> {
  * cannot be exported: it was imported before Track D, and a re-import stores
  * it.
  */
-async function renderDiagrams(db: CatalogDatabase): Promise<ExportFile[]> {
+async function renderDiagrams(db: CatalogDatabase, given?: BlobStore): Promise<ExportFile[]> {
   const files: ExportFile[] = [];
   const problems: string[] = [];
   const documents = await rows<{ slug: string; document: unknown; document_hash: string }>(
@@ -390,7 +401,7 @@ async function renderDiagrams(db: CatalogDatabase): Promise<ExportFile[]> {
         order by path`,
   );
   if (svgs.length > 0) {
-    const store = openBlobStore();
+    const store = given ?? openBlobStore();
     for (const svg of svgs) {
       if (svg.path === null || svg.content_hash === null || svg.blob_key === null) {
         problems.push(

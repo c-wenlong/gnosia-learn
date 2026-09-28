@@ -804,7 +804,7 @@ once per outage.
 | --- | --- | --- |
 | `source` | `catalog flip` sets `db`; a row created by an export says `files` | the importers: a `db` type is not read from files. Readers, through `ownership()` |
 | `flipped_at` | `catalog flip`, the first time; a second flip re-arms and keeps it | `catalog import`'s skip line |
-| `export_hash`, `exported_at` | `catalog export`: sha256 over `path<TAB>sha256(bytes)` lines of every file it wrote for the type | `catalog import`: a `db` type whose files hash to this is its own export and is skipped with a named line; any other hash is refused, naming the files that differ (edge case 12) |
+| `export_hash`, `exported_at` | sha256 over `path<TAB>sha256(bytes)` lines of the type's files, written by `catalog flip` (the tree it just checked), by every write-through (the tree it left), and by `catalog export` only when `--out` is the tree this database last imported the type from: the hash describes that tree, and an export elsewhere recording it would make the untouched tree look edited | `catalog import`: a `db` type whose files hash to this, or are byte for byte what the database would export now, is its own export and is skipped with a named line; anything else is refused, naming the files that differ (edge case 12) |
 | `parity_report` | `catalog flip`: the parity it checked before flipping, against the files the type was last imported from (`index_run.metadata.root`) | a person asking what the flip rested on |
 | `waivers` | `catalog flip --waive <rule> --reason` | `catalog doctor`, on every run; `flip --strict` leaves a waived rule disarmed |
 
@@ -812,9 +812,23 @@ once per outage.
 rather than failing on the copy guard at its last step. `catalog parity`
 records nothing anywhere.
 
-`catalog flip <type>` does three things in one transaction: writes the row as
+**A root belongs to the database that recorded it.** Every import records,
+beside `index_run.metadata.root`, which database it ran against
+(`metadata.database`: `current_database()` and its `pg_database` oid). A
+`createdb -T` copy inherits every row, the owner's root included, and its
+`catalog_instance` says `primary` like the original's, so the oid is what
+tells them apart. A write-through, `catalog flip`'s parity and `catalog
+export`'s hash all use a root only when this database recorded it, and a
+write-through also refuses a root inside another git worktree of this
+repository (`src/content/import-root.ts`). A copy therefore writes no file
+until an import run against the copy itself names its own tree; an import
+that skips a flipped type because its files are the database's own export
+records that tree as the type's root too.
+
+`catalog flip <type>` does four things in one transaction: writes the row as
 `db`, arms the type's write guards (`WRITE_GUARDS` in `src/content/rules.ts`),
-and with `--strict` arms the type's completeness rules. Before any of it, it
+records the export hash of the files it just checked parity against, and with
+`--strict` arms the type's completeness rules. Before any of it, it
 refuses a type whose database reader is not built (`DB_READERS` in
 `src/content/source.ts`, empty until a track fills one in), since readers
 follow the row, and it runs parity itself against the files the type was last
