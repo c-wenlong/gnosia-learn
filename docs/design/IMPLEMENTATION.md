@@ -591,7 +591,8 @@ in that session.
 | Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
 | Asset page Explains | always two rows | "No concept is linked to this asset yet." when there are none; "not started" in place of p(L) for a concept with no evidence | a prior is not a measurement |
 | Asset page Derived from | one line of filenames | "Derived from" for the sources and "Companion files" for what was made from it, each a list of links | the rows the old page showed, restyled |
-| Asset page catalog row | not drawn | a closed "Catalog row" disclosure under the asset: id, path, source, bytes, topic chips | the old page's facts; a reader checking what to type still finds them |
+| Asset page catalog row | not drawn | the Details tab of the asset's tabbed card (`AssetTabs`): progress (Watched or Read), kind, indexed, id, path, source, size, topic chips | the old page's facts; a reader checking what to type still finds them |
+| Asset page layout | two columns, a rail of cards beside the asset | one column for every kind: the asset, its title and actions (under a picture, above words), then one tabbed card (`AssetTabs`: Explains, Related, Files, Details; a video puts Transcript first) | the rail's cards piled up; one card with tabs takes less room and reads the same on every kind |
 
 **Library search** runs on the server over `?q=`: every row's title,
 filename and URL, plus the text of each note and transcript, read per
