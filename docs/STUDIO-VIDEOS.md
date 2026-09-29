@@ -749,8 +749,14 @@ The render wrote nothing outside the scratch root.
 (54.9 seconds of speech, about 170 kB a second), 4.4 MB the renders and
 sheets, 0.5 MB ManimGL's cache and 0.3 MB matplotlib's. Scaled by speech time,
 a five-minute video's workspace is about 80 MB (a guess from those rates).
-Once a job is accepted or discarded, the runner deletes `render/` and keeps the
-source, the sheets and its records (D52).
+Once a job is accepted or discarded, the runner keeps the source, the sheets,
+its records and the clips of the lines its final source voices, and deletes
+the rest of `render/` (D52). The clips move to `jobs/<id>/clips/`, copied as
+regular files with one link and a WAV header, by the keys the runner computes
+from the final source's `voiceover` literals; that is text parsed, never run.
+They are what a change job is seeded from, so a change re-voices only the
+lines it changes. About 170 kB a second of speech, so about 30 MB for a
+three-minute video.
 
 **Narration is the agent's, in its own sandbox (D47).** The agent voices
 its lines the way the owner does by hand: `video narrate`, or the step at the
@@ -778,7 +784,7 @@ failed until it moved.
 clips the owner's shared cache already holds for the brief's lines: it
 computes each clip's key (backend, voice, speed and text) itself, from the
 brief, with manimkc's own `cache_path`, and copies only files that exist, so
-no agent input is involved. A change job is seeded from its parent's job
+no agent input is involved. A change job is seeded from its parent's kept
 cache as well. The agent's narration step then makes only the clips that are
 missing: lines it changed, and lines no one has said before. Jobs never write
 the shared cache, and nothing is promoted into it after Accept.
@@ -819,8 +825,12 @@ silent one (`voice: "none"`) takes the silent line instead.
    say; the gate records each against the brief's `say` for its beat
    (unchanged, reworded, split, added or dropped) for the job view and the
    review, and fails only a scene with no `voiceover` at all. *Silent:* no `voiceover` call at
-   all, and each beat's `say`, its caption, appears as a string literal in
-   the class, in order.
+   all, and each beat's `say`, its caption, is the first argument, as a
+   literal, of a `CaptionBar` call that shows it (the constructor, `set` or
+   `say`), in beat order; a literal left elsewhere in the class does not
+   count. That holds the source to the approved captions, not the pixels: a
+   caption made invisible would still pass, which is the person's viewing to
+   catch, as the threat table says of narration.
 4. **The topic.** `topic.yml`'s `topic` is still the brief's.
 5. **The finished video, copied once.** `calls.ndjson` shows a `build` that
    exited 0 after the scene file's last change. The runner then copies the
@@ -1182,7 +1192,7 @@ limit. What remains:
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
 | Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
 | TTS | kokoro, local, no quota | ElevenLabs' free tier is about 10,000 characters a month (manimkc's `AGENTS.md`), which one three-minute script (2,700 characters) and two revisions would mostly spend |
-| Disk | no cap; `render/` deleted once the job is accepted or discarded | The measured workspace is 15 MB for a minute of video |
+| Disk | no cap; `render/` deleted once the job is accepted or discarded, except the final lines' clips | The measured workspace is 15 MB for a minute of video |
 
 ## Edge cases
 
@@ -1284,8 +1294,10 @@ permissions across the whole disk rather than a profile per job.
 
 ### D45. The agent's one command is a per-job wrapper over the skill's own verbs
 
-**Verdict:** `jobs/<id>/bin/video`, a Node program with four verbs, `api`,
-`lint`, `preview`, `build`, and the Bash allowlist naming that absolute path.
+**Verdict:** `jobs/<id>/bin/video`, a Node program with five verbs, `api`,
+`lint`, `narrate`, `preview`, `build`, and the Bash allowlist naming that
+absolute path. `narrate` is the explicit form of the narration step `preview`
+and `build` run first (D47); it re-voices without rendering.
 The runner runs `doctor` before a job is queued and `new` before the agent
 starts; the brief is the storyboard; `example` is replaced by two tested scenes
 in the manual. Everything else in the skill is the agent's, errors included.
@@ -1425,8 +1437,9 @@ parent's source, and its job cache is seeded from the parent's clips.
 When the parent is in review, the cap and the video doctor are checked first,
 then one catalog transaction discards the parent (keeping its source) and
 enqueues the child, so the slug's lease passes across with no gap and a
-refusal leaves the parent untouched. After a terminal state `render/` is
-deleted and the source, sheets and records stay.
+refusal leaves the parent untouched. After a terminal state the source,
+sheets, records and final clips stay (the job workspace) and the rest of
+`render/` is deleted.
 
 **Why:** a person watching a video says "change this" far more often than a
 person reviewing a diagram, and resuming the session keeps what the agent
