@@ -16,8 +16,8 @@ import { isActive, type GateStep, type Job } from "@/lib/studio-jobs";
  * runner's real shapes is a change to this one file. They follow
  * docs/STUDIO-VIDEOS.md ("The job view", "API") and the routes of the runner's
  * phase 1 (`services/studio/src/video/routes.ts`, `videoView`), and
- * `GET /api/videos` follows `catalog video list --json` (`VideoSummary` in
- * `services/catalog/src/content/videos.ts`).
+ * `GET /api/videos` follows the shape planned for step 2a (`StudioVideo`
+ * below), and reads `catalog video list --json`'s too.
  *
  * The rules of the diagram view hold: the polled record is the truth and the
  * stream decorates it (D8), and nothing shows a percentage (D23), since a
@@ -173,20 +173,25 @@ export interface ContactSheet {
   round: number;
 }
 
-/** One entry of `GET /api/videos`: a studio video, or a manimkc render the owner may read. */
-export interface VideoSummary {
-  origin: "studio" | "manimkc";
-  slug: string | null;
-  assetId: string;
+/**
+ * One studio video on the grid, from `GET /api/videos`.
+ *
+ * The runner's route (step 2a of docs/STUDIO-MENTIONS.md) is planned as
+ * `{ videos: [{ slug, title, topic, posterAssetId, updated }] }`, with
+ * `posterAssetId` the video's own asset id (`video:<slug>`), which is what the
+ * library's poster route takes. `readVideos` also reads `catalog video list
+ * --json`'s richer shape, in case the route passes that through, and keeps
+ * only studio videos either way.
+ */
+export interface StudioVideo {
+  slug: string;
   title: string | null;
   topic: string | null;
-  concepts: string[];
+  /** The asset id the poster route takes (`video:<slug>`), or null when there is no poster. */
+  posterAssetId: string | null;
   durationSeconds: number | null;
-  poster: { assetId: string; key: string | null } | null;
-  narrated: boolean;
-  revision: number | null;
-  revisionJob: string | null;
-  updatedAt: string;
+  /** The last write, ISO, or "" when the runner sent none. */
+  updated: string;
 }
 
 /** A job row of either kind, as the list mixes them. */
@@ -230,12 +235,12 @@ export function mediaHref(jobId: string, file: string): string {
   return `${jobBase(jobId)}/media/${encodeURIComponent(file)}`;
 }
 
-export function mediaFiles(slug: string): { mp4: string; vtt: string; transcript: string; chapters: string; poster: string } {
+export function mediaFiles(slug: string): { mp4: string; vtt: string; transcript: string; poster: string } {
   return {
     mp4: `${slug}.mp4`,
     vtt: `${slug}.vtt`,
+    // Carries the chapters as well as the lines, so no chapters file is asked for.
     transcript: `${slug}.transcript.json`,
-    chapters: `${slug}.chapters.json`,
     poster: "poster.jpg",
   };
 }
@@ -348,42 +353,41 @@ function sentence(text: string | null): string | null {
  * that stopped marks the step it stopped in as failed, since the runner's
  * list still says running there.
  *
+ * **One step is active.** The runner can report several steps as running
+ * at once (narration waits for a narrate call while the scenes are written;
+ * a preview round and the reads of its sheets overlap), so the furthest of
+ * them is the step happening now, and it alone is shown active. An earlier
+ * one that has done something (`rounds > 0`) reads as done, and one that has
+ * not, as not reached yet, its note still shown.
+ *
+ * **A job that stopped marks one step where it stopped:** the step the runner
+ * itself failed; else the one that was active; else, when nothing was
+ * running (killed between steps), the first not done.
+ *
  * "Lines changed" is not a step the runner sends: it is inserted after
- * Narration whenever the agent voiced a line that differs from the brief's,
- * as the design's table has it, so the change is seen while the job runs and
- * not only at review.
+ * Narration whenever the record lists a line voiced differently from the
+ * brief's, as the design's table has it. The runner fills that list at the
+ * gate today, so in practice the row appears when the checks run.
  */
 export function stepRows(job: VideoJob): StepRow[] {
   const sent = new Map(job.steps.map((step) => [step.name, step]));
   const narrated = job.steps.length > 0 ? sent.has("narration") : isNarrated(job.brief);
   const stopped = job.state === "failed" || job.state === "cancelled" || job.state === "interrupted";
-  const rows: StepRow[] = [];
+  const settled = job.state === "awaiting_review" || job.state === "accepted";
+  const active = furthestRunning(job.steps);
   const sentFailed = job.steps.some((step) => step.state === "failed");
-  let failedMarked = false;
+  const rows: StepRow[] = [];
   for (const name of VIDEO_STEP_NAMES) {
     if (name === "narration" && !narrated) continue;
     const step = sent.get(name);
-    let status: StepStatus =
-      step === undefined
-        ? "pending"
-        : step.state === "running"
-          ? "current"
-          : step.state;
+    let status: StepStatus;
     if (job.state === "queued") status = name === "storyboard" ? "done" : "pending";
-    // A job that stopped marks one step as where it stopped: a step the
-    // runner itself failed, else the first still running. Any other step it
-    // left running did not finish, and reads as not reached.
-    if (stopped && status === "current") {
-      if (failedMarked || sentFailed) {
-        status = "pending";
-      } else {
-        status = "failed";
-        failedMarked = true;
-      }
-    }
-    if (job.state === "awaiting_review" || job.state === "accepted") {
-      if (status === "current" || status === "pending") status = "done";
-    }
+    else if (step === undefined) status = "pending";
+    else if (step.state !== "running") status = step.state;
+    else if (name !== active) status = step.rounds > 0 ? "done" : "pending";
+    else if (stopped) status = sentFailed ? "pending" : "failed";
+    else status = "current";
+    if (settled && (status === "current" || status === "pending")) status = "done";
     rows.push({
       key: name,
       label: STEP_LABELS[name],
@@ -404,13 +408,21 @@ export function stepRows(job: VideoJob): StepRow[] {
       }
     }
   }
-  // A job that stopped with nothing running (killed between steps): the first
-  // step not done is where it stopped.
-  if (stopped && !failedMarked && !sentFailed) {
+  if (stopped && active === null && !sentFailed) {
     const first = rows.find((row) => row.status === "pending");
     if (first !== undefined) first.status = "failed";
   }
   return rows;
+}
+
+/** The furthest step, in the skill's order, that the runner reports running. */
+function furthestRunning(steps: readonly VideoStep[]): VideoStepName | null {
+  let at = -1;
+  for (const step of steps) {
+    if (step.state !== "running") continue;
+    at = Math.max(at, VIDEO_STEP_NAMES.indexOf(step.name));
+  }
+  return at < 0 ? null : (VIDEO_STEP_NAMES[at] ?? null);
 }
 
 /** The steps that repeat in the skill's loop, whose round count is news. */
@@ -419,8 +431,8 @@ const REPEATS = new Set<VideoStepName>(["narration", "scene-code", "lint", "prev
 /** The step happening now, or null when none is. */
 export function currentStep(job: VideoJob): VideoStepName | null {
   if (job.state !== "running") return null;
-  const running = job.steps.find((step) => step.state === "running");
-  if (running !== undefined) return running.name;
+  const running = furthestRunning(job.steps);
+  if (running !== null) return running;
   const phase = job.phase;
   return phase !== null && (VIDEO_STEP_NAMES as readonly string[]).includes(phase) ? (phase as VideoStepName) : null;
 }
@@ -550,9 +562,10 @@ export function parseVtt(text: string): TranscriptCue[] {
       .slice(timing + 1)
       .join(" ")
       .replace(/<[^>]*>/g, "")
-      .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
+      // Last, or `&amp;lt;` (a literal "&lt;") would decode twice into "<".
+      .replace(/&amp;/g, "&")
       .trim();
     if (words === "") continue;
     cues.push({ start, end, text: words });
@@ -754,7 +767,8 @@ export function videoFailure(job: VideoJob): VideoFailure {
       return { headline: "The agent could not make its first request", detail, actions: [] };
     case "timeout":
       return {
-        headline: "It stopped: nothing moved for twenty minutes",
+        // The hang timer's length is the runner's setting (STUDIO_VIDEO_HANG_MS), not a constant to repeat here.
+        headline: "It stopped: nothing moved for too long",
         detail,
         actions: ["revise", "talk"],
       };
@@ -800,6 +814,19 @@ export function videoAnnouncement(job: VideoJob): { title: string; body: string 
     default:
       return null;
   }
+}
+
+/**
+ * The newest job that continues this one (a revise or a resume names it as
+ * `parentJob`), so a job whose change was queued links to it, even when the
+ * reply to the press that queued it was lost. The list arrives newest first.
+ */
+export function childJob(jobs: readonly { kind?: string }[], jobId: string): VideoJob | null {
+  for (const entry of jobs) {
+    const job = asVideoJob(entry);
+    if (job !== null && job.parentJob === jobId) return job;
+  }
+  return null;
 }
 
 /** The longest change request the runner takes. */
@@ -870,48 +897,75 @@ export function videoJobForSlug(
   return newest !== undefined && videoShownOnGrid(newest, ended, dismissed) ? newest : null;
 }
 
-/** Read `GET /api/videos` defensively; only studio videos go on the grid. */
-export function readVideos(body: unknown): VideoSummary[] {
+/**
+ * Read `GET /api/videos` defensively, in the planned shape or the catalog's,
+ * keeping only studio videos. Anything malformed is dropped, never thrown.
+ */
+export function readVideos(body: unknown): StudioVideo[] {
   const list = (body as { videos?: unknown } | null)?.videos;
   if (!Array.isArray(list)) return [];
-  return list.flatMap((entry): VideoSummary[] => {
-    const raw = entry as Partial<VideoSummary> | null;
-    if (raw === null || raw.origin !== "studio" || typeof raw.slug !== "string" || typeof raw.assetId !== "string") return [];
+  const text = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+  return list.flatMap((entry): StudioVideo[] => {
+    if (entry === null || typeof entry !== "object") return [];
+    const raw = entry as Record<string, unknown>;
+    // The catalog's shape carries manimkc renders too, which have no slug.
+    if (raw.origin !== undefined && raw.origin !== "studio") return [];
+    const slug = text(raw.slug);
+    if (slug === null) return [];
+    const poster = raw.poster as { assetId?: unknown } | null | undefined;
+    const posterAssetId =
+      typeof raw.posterAssetId === "string"
+        ? text(raw.posterAssetId)
+        : raw.posterAssetId === null
+          ? null
+          : poster !== null && typeof poster === "object"
+            ? (text(raw.assetId) ?? `video:${slug}`)
+            : poster === null
+              ? null
+              : `video:${slug}`;
     return [
       {
-        origin: "studio",
-        slug: raw.slug,
-        assetId: raw.assetId,
-        title: typeof raw.title === "string" ? raw.title : null,
-        topic: typeof raw.topic === "string" ? raw.topic : null,
-        concepts: Array.isArray(raw.concepts) ? raw.concepts.filter((c): c is string => typeof c === "string") : [],
+        slug,
+        title: text(raw.title),
+        topic: text(raw.topic),
+        posterAssetId,
         durationSeconds: typeof raw.durationSeconds === "number" ? raw.durationSeconds : null,
-        poster:
-          raw.poster !== null && typeof raw.poster === "object" && typeof raw.poster.assetId === "string"
-            ? { assetId: raw.poster.assetId, key: typeof raw.poster.key === "string" ? raw.poster.key : null }
-            : null,
-        narrated: raw.narrated === true,
-        revision: typeof raw.revision === "number" ? raw.revision : null,
-        revisionJob: typeof raw.revisionJob === "string" ? raw.revisionJob : null,
-        updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
+        updated: text(raw.updated) ?? text(raw.updatedAt) ?? "",
       },
     ];
   });
 }
 
 /** The studio videos a filter keeps: the same topic chips and search the diagrams obey. */
-export function filterVideos(videos: readonly VideoSummary[], view: { topics: readonly string[]; query: string }): VideoSummary[] {
+export function filterVideos(videos: readonly StudioVideo[], view: { topics: readonly string[]; query: string }): StudioVideo[] {
   const query = view.query.trim().toLowerCase();
   return videos.filter((video) => {
     if (view.topics.length > 0 && !view.topics.includes(video.topic ?? "none")) return false;
     if (query === "") return true;
-    return [video.title ?? "", video.slug ?? "", video.topic ?? ""].some((field) => field.toLowerCase().includes(query));
+    return [video.title ?? "", video.slug, video.topic ?? ""].some((field) => field.toLowerCase().includes(query));
   });
 }
 
-/** Newest first: the grid's order for studio videos, whose only date is the last write. */
-export function sortVideos(videos: readonly VideoSummary[]): VideoSummary[] {
-  return [...videos].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+/**
+ * The grid's order, by the view's Sort as the diagrams are: title, or the
+ * last write for both Modified and Created (a video row has no creation
+ * time). Undated videos go last whichever way the arrow points.
+ */
+export function sortVideos(
+  videos: readonly StudioVideo[],
+  view: { sort: "modified" | "title" | "created"; direction: "asc" | "desc" } = { sort: "modified", direction: "desc" },
+): StudioVideo[] {
+  const sign = view.direction === "asc" ? 1 : -1;
+  const titleOf = (video: StudioVideo): string => video.title ?? video.slug;
+  return [...videos].sort((a, b) => {
+    if (view.sort === "title") return sign * titleOf(a).localeCompare(titleOf(b));
+    const at = Date.parse(a.updated);
+    const bt = Date.parse(b.updated);
+    if (!Number.isFinite(at) && !Number.isFinite(bt)) return 0;
+    if (!Number.isFinite(at)) return 1;
+    if (!Number.isFinite(bt)) return -1;
+    return sign * (at - bt);
+  });
 }
 
 /**
@@ -920,7 +974,7 @@ export function sortVideos(videos: readonly VideoSummary[]): VideoSummary[] {
  * when it has neither.
  */
 export function videoGroupKey(
-  video: Pick<VideoSummary, "topic">,
+  video: Pick<StudioVideo, "topic">,
   group: "none" | "topic" | "domain",
   domains: ReadonlyMap<string, string> = new Map(),
 ): string {
@@ -930,31 +984,71 @@ export function videoGroupKey(
   return domains.get(video.topic) ?? "none";
 }
 
+/** One section of the grid: a group's diagrams and its studio videos together. */
+export interface GridSection<D> {
+  key: string;
+  label: string;
+  diagrams: D[];
+  videos: StudioVideo[];
+}
+
 /**
- * The videos of each group, and the groups only videos are in, labelled as
- * `groupDiagrams` labels, so a topic with a video and no diagram still has
- * its section.
+ * The grid's sections, diagrams and videos in the same groups: with no
+ * grouping one section; by topic or domain one per key either kind has,
+ * ordered as `groupDiagrams` orders them (by label, the no-topic section
+ * last), so a topic with only videos takes its place among the rest rather
+ * than jumping the queue. `videos` arrive already sorted.
  */
-export function groupVideos(
-  videos: readonly VideoSummary[],
+export function gridSections<D>(
+  diagramGroups: readonly { key: string; label: string; items: D[] }[],
+  videos: readonly StudioVideo[],
   group: "none" | "topic" | "domain",
-  diagramGroups: readonly string[],
   titles: ReadonlyMap<string, string> = new Map(),
   domains: ReadonlyMap<string, string> = new Map(),
-): { byGroup: Map<string, VideoSummary[]>; extra: { key: string; label: string; items: VideoSummary[] }[] } {
-  const byGroup = new Map<string, VideoSummary[]>();
+): GridSection<D>[] {
+  const sections = new Map<string, GridSection<D>>();
+  for (const entry of diagramGroups) sections.set(entry.key, { key: entry.key, label: entry.label, diagrams: [...entry.items], videos: [] });
   for (const video of videos) {
     const key = videoGroupKey(video, group, domains);
-    byGroup.set(key, [...(byGroup.get(key) ?? []), video]);
+    const held = sections.get(key);
+    if (held !== undefined) {
+      held.videos.push(video);
+      continue;
+    }
+    const label =
+      key === "all" ? "" : key === "none" ? (group === "topic" ? "No topic" : "No domain") : group === "topic" ? (titles.get(key) ?? key) : key;
+    sections.set(key, { key, label, diagrams: [], videos: [video] });
   }
-  const known = new Set(diagramGroups);
-  const extra = [...byGroup.entries()]
-    .filter(([key]) => !known.has(key))
-    .map(([key, items]) => ({
-      key,
-      label: key === "all" ? "" : key === "none" ? (group === "topic" ? "No topic" : "No domain") : group === "topic" ? (titles.get(key) ?? key) : key,
-      items,
-    }))
-    .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
-  return { byGroup, extra };
+  const list = [...sections.values()];
+  if (group === "none") return list;
+  return list.sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
+}
+
+/**
+ * What a tile's Change got back from `POST /api/drafts` with `sourceKind:
+ * "video"`: the conversation to open, or why none opened. Only a draft the
+ * runner names, and does not say is about anything but a video, is success.
+ * A refusal (a 404 for a slug read as a diagram's, by a runner that predates
+ * `sourceKind`) is said, never treated as a conversation.
+ */
+export function changeDraftOutcome(
+  result:
+    | { ok: true; data: { draftId?: unknown; sourceKind?: unknown; kind?: unknown } }
+    | { ok: false; status: number; refusal: { error: string } },
+): { draftId: string } | { problem: string } {
+  if (!result.ok) {
+    return {
+      problem:
+        result.status === 404
+          ? `The runner found nothing to change: ${result.refusal.error}`
+          : `A conversation could not start: ${result.refusal.error}`,
+    };
+  }
+  const draftId = typeof result.data.draftId === "string" && result.data.draftId !== "" ? result.data.draftId : null;
+  if (draftId === null) return { problem: "A conversation could not start: the runner named no conversation." };
+  const kind = result.data.sourceKind ?? result.data.kind;
+  if (typeof kind === "string" && kind !== "video") {
+    return { problem: "The runner opened a conversation about a diagram, not this video. It may predate studio videos." };
+  }
+  return { draftId };
 }

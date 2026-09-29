@@ -25,7 +25,7 @@ import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
 import type { DraftSummary } from "@/lib/studio-drafts";
-import { filterVideos, groupVideos, readVideos, sortVideos } from "@/lib/studio-video";
+import { filterVideos, gridSections, readVideos, sortVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
   filterDiagrams,
@@ -156,18 +156,15 @@ export default async function StudioPage({
   }
 
   const listing = listed.data;
-  const chips = topicChips(listing.diagrams, topicTitles, topicDomains);
+  const allVideos = videoList.ok ? readVideos(videoList.data) : [];
+  // Chips count both kinds, so a topic with only videos can be picked too.
+  const chips = topicChips([...listing.diagrams, ...allVideos], topicTitles, topicDomains);
   const visible = sortDiagrams(filterDiagrams(listing.diagrams, view), view);
   const groups = groupDiagrams(visible, view, topicTitles, topicDomains);
-  const allVideos = videoList.ok ? readVideos(videoList.data) : [];
-  const videoSlugs = allVideos.flatMap((video) => (video.slug === null ? [] : [video.slug]));
-  const shownVideos = sortVideos(filterVideos(allVideos, view));
-  const videoGroups = groupVideos(
-    shownVideos,
-    view.group,
-    groups.map((group) => group.key),
-    topicTitles,
-    topicDomains,
+  const videoSlugs = allVideos.map((video) => video.slug);
+  const shownVideos = sortVideos(filterVideos(allVideos, view), view);
+  const sections = gridSections(groups, shownVideos, view.group, topicTitles, topicDomains).filter(
+    (section) => section.diagrams.length + section.videos.length > 0,
   );
   const selected = listing.diagrams.find((entry) => entry.name === view.selected) ?? null;
   const allJobs = jobList.ok ? jobList.data.jobs : [];
@@ -330,7 +327,7 @@ export default async function StudioPage({
             />
             {/* The plus card is the first tile under any filter, and on an
                 empty directory it is the whole grid: one way in (D31). */}
-            {(visible.length === 0 || groups.length === 0) &&
+            {sections.length === 0 &&
               (view.layout === "grid" ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
                   <PlusCard path={path} />
@@ -344,62 +341,38 @@ export default async function StudioPage({
                   <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />
                 </div>
               ))}
-            {/* Studio videos in sections no diagram is in (a topic with only
-                videos, or every video when no diagram matches). */}
-            {(visible.length === 0 ? [{ key: "videos", label: "", items: shownVideos }] : videoGroups.extra)
-              .filter((group) => group.items.length > 0)
-              .map((group) => (
-                <section key={`videos:${group.key}`}>
-                  {group.label !== "" && (
-                    <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
-                      {group.label} · {group.items.length}
-                    </h2>
-                  )}
-                  {view.layout === "grid" ? (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
-                      {group.items.map((video) => (
-                        <VideoTile key={video.assetId} video={video} path={path} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-0.5">
-                      {group.items.map((video) => (
-                        <VideoRow key={video.assetId} video={video} path={path} />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              ))}
-            {listing.diagrams.length === 0 && listing.errors.length === 0 ? (
-              allVideos.length === 0 ? <EmptyDirectory dir={listing.dir} /> : null
-            ) : visible.length === 0 ? (
-              shownVideos.length > 0 ? null : (
-              <p className="text-sm text-[var(--muted)]">
-                No diagram matches this filter.{" "}
-                <a className="underline underline-offset-2" href="/studio">
-                  Clear it
-                </a>
-                .
-              </p>
+            {sections.length === 0 ? (
+              listing.diagrams.length === 0 && listing.errors.length === 0 && allVideos.length === 0 ? (
+                <EmptyDirectory dir={listing.dir} />
+              ) : (
+                <p className="text-sm text-[var(--muted)]">
+                  {allVideos.length === 0 ? "No diagram matches this filter." : "No diagram or video matches this filter."}{" "}
+                  <a className="underline underline-offset-2" href="/studio">
+                    Clear it
+                  </a>
+                  .
+                </p>
               )
             ) : (
-              groups.map((group, at) => (
-                <section key={group.key}>
-                  {group.label !== "" && (
+              // Diagrams and studio videos share the groups, in one order:
+              // a topic with only videos sits among the rest, not above them.
+              sections.map((section, at) => (
+                <section key={section.key}>
+                  {section.label !== "" && (
                     <h2 className="mb-2 text-xs font-semibold text-[var(--muted-strong)]">
-                      {group.label} · {group.items.length}
+                      {section.label} · {section.diagrams.length + section.videos.length}
                     </h2>
                   )}
                   {view.layout === "grid" ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
                       {at === 0 && <PlusCard path={path} />}
-                      {/* A new diagram being drawn sits beside the way in. */}
+                      {/* A new diagram or video being made sits beside the way in. */}
                       {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
                       {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="grid" />}
-                      {(videoGroups.byGroup.get(group.key) ?? []).map((video) => (
-                        <VideoTile key={video.assetId} video={video} path={path} />
+                      {section.videos.map((video) => (
+                        <VideoTile key={video.slug} video={video} path={path} />
                       ))}
-                      {group.items.map((diagram) => (
+                      {section.diagrams.map((diagram) => (
                         <DiagramTile
                           key={diagram.name}
                           diagram={diagram}
@@ -416,10 +389,10 @@ export default async function StudioPage({
                       {at === 0 && <PlusCard path={path} layout="list" />}
                       {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
                       {at === 0 && <NewVideoJobs slugs={videoSlugs} path={path} layout="list" />}
-                      {(videoGroups.byGroup.get(group.key) ?? []).map((video) => (
-                        <VideoRow key={video.assetId} video={video} path={path} />
+                      {section.videos.map((video) => (
+                        <VideoRow key={video.slug} video={video} path={path} />
                       ))}
-                      {group.items.map((diagram) => (
+                      {section.diagrams.map((diagram) => (
                         <DiagramRow
                           key={diagram.name}
                           diagram={diagram}

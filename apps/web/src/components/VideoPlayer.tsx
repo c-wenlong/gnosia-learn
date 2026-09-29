@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   useSyncExternalStore,
@@ -149,20 +150,18 @@ export function VideoPlayer({
     setPaused(true);
   }
 
-  // A jump from outside. The element is moved directly; its own `seeked` and
-  // `timeupdate` events then bring the state along, as for any seek.
+  // A jump from outside goes through `seek`, the same path as a click on the
+  // bar, so a jump pressed before the metadata has loaded is held and applied
+  // at `loadedmetadata` rather than lost. Then it plays.
+  const jumpTo = useEffectEvent((seconds: number) => {
+    seek(seconds);
+    void videoRef.current?.play()?.catch(() => undefined);
+  });
   const seekKey = seekTo?.key;
   const seekSeconds = seekTo?.seconds;
   useEffect(() => {
     if (seekKey === undefined || seekSeconds === undefined) return;
-    const video = videoRef.current;
-    if (!video) return;
-    try {
-      video.currentTime = Math.max(0, seekSeconds);
-    } catch {
-      // Before metadata: the play below loads it, and the reader can press again.
-    }
-    void video.play()?.catch(() => undefined);
+    jumpTo(seekSeconds);
   }, [seekKey, seekSeconds]);
 
   useEffect(() => {

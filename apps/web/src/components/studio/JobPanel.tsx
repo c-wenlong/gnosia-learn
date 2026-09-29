@@ -43,33 +43,54 @@ import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
  * because "what did it do to get here" is the other half of deciding.
  */
 
-export function JobPanel(props: Parameters<typeof DiagramJobPanel>[0]) {
+export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "initial">) {
   const { jobs } = useStudioJobs();
   // A video job has its own view (docs/STUDIO-VIDEOS.md, "The job view"):
   // its steps are the manimkc-video skill's, and its review is a player. The
-  // kind is read from the provider's row; a job older than its fifty, or not
-  // listed yet, is asked for by the video view itself when the id says video.
+  // kind is read from the provider's row. A job the provider does not list
+  // (older than its fifty, or not polled yet) is read once here, and neither
+  // view is drawn until that read says which it is; the answer is handed to
+  // the view, so it does not ask again.
   const row = jobs.find((entry) => entry.jobId === props.jobId);
-  const [probed, setProbed] = useState<{ id: string; kind: string | null } | null>(null);
+  const [probed, setProbed] = useState<{ id: string; body: (Job & { kind?: string }) | null } | null>(null);
   useEffect(() => {
     if (row !== undefined) return;
     let alive = true;
     void (async () => {
       try {
         const response = await fetch(`/studio/api/jobs/${encodeURIComponent(props.jobId)}`, { cache: "no-store" });
-        const body = response.ok ? ((await response.json()) as { kind?: unknown }) : null;
-        if (alive) setProbed({ id: props.jobId, kind: typeof body?.kind === "string" ? body.kind : null });
+        const body = response.ok ? ((await response.json()) as Job) : null;
+        if (alive) setProbed({ id: props.jobId, body });
       } catch {
-        if (alive) setProbed({ id: props.jobId, kind: null });
+        if (alive) setProbed({ id: props.jobId, body: null });
       }
     })();
     return () => {
       alive = false;
     };
   }, [row, props.jobId]);
-  const kind = row?.kind ?? (probed?.id === props.jobId ? probed.kind : null);
-  if (kind === "video") return <VideoJobPanel jobId={props.jobId} path={props.path} inConversation={props.inConversation} />;
-  return <DiagramJobPanel {...props} />;
+  const answer = probed?.id === props.jobId ? probed : null;
+  if (row === undefined && answer === null) {
+    return (
+      <div className={props.embedded ? "px-5 py-4" : "p-3"}>
+        <p role="status" className="text-xs text-[var(--muted)]">
+          Looking up <Mono>{props.jobId}</Mono>…
+        </p>
+      </div>
+    );
+  }
+  const kind = row?.kind ?? answer?.body?.kind ?? null;
+  if (kind === "video") {
+    return (
+      <VideoJobPanel
+        jobId={props.jobId}
+        path={props.path}
+        inConversation={props.inConversation}
+        initial={row === undefined ? answer?.body : undefined}
+      />
+    );
+  }
+  return <DiagramJobPanel {...props} initial={row === undefined ? (answer?.body ?? null) : undefined} />;
 }
 
 function DiagramJobPanel({
@@ -77,9 +98,15 @@ function DiagramJobPanel({
   path,
   embedded = false,
   inConversation = false,
+  initial,
 }: {
   jobId: string;
   path: string;
+  /**
+   * The job as `JobPanel` already read it, when the provider did not list it:
+   * null for a job the runner does not have. Undefined means not read.
+   */
+  initial?: Job | null;
   /**
    * Shown under the conversation's own "From your conversation" bar, which
    * already leads back to it: the failure panel does not offer it twice.
@@ -104,12 +131,14 @@ function DiagramJobPanel({
    * would have answered for. `GET /api/jobs/{id}` is that answer, and a panel
    * opened on a link from anywhere else lands in the same place.
    */
-  const [fetched, setFetched] = useState<{ id: string; job: Job | null } | null>(null);
+  const [fetched, setFetched] = useState<{ id: string; job: Job | null } | null>(
+    initial === undefined ? null : { id: jobId, job: initial },
+  );
   const job = cached ?? (fetched?.id === jobId ? fetched.job : null);
   const looking = cached === null && fetched?.id !== jobId;
 
   useEffect(() => {
-    if (cached !== null) return;
+    if (cached !== null || initial !== undefined) return;
     let alive = true;
     void (async () => {
       try {
@@ -125,7 +154,7 @@ function DiagramJobPanel({
     return () => {
       alive = false;
     };
-  }, [jobId, cached]);
+  }, [jobId, cached, initial]);
 
   /** Cancel, Resume: one POST, and whatever the runner said about it. */
   const act = async (verb: string, body?: unknown): Promise<void> => {

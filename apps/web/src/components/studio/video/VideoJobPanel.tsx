@@ -17,6 +17,7 @@ import { formatDuration, isActive, narration, type StudioEvent } from "@/lib/stu
 import {
   changedLines,
   changeProblem,
+  childJob,
   changeWord,
   CHANGE_LIMIT,
   formatSize,
@@ -65,13 +66,16 @@ export function VideoJobPanel({
   jobId,
   path,
   inConversation = false,
+  initial,
 }: {
   jobId: string;
   path: string;
   /** Inside the conversation's own job view, which has its own way back. */
   inConversation?: boolean;
+  /** The job as `JobPanel` already read it, when the provider did not list it. */
+  initial?: unknown;
 }) {
-  const { job, brief, looking } = useVideoJob(jobId);
+  const { job, brief, looking } = useVideoJob(jobId, initial);
   if (job === null) {
     return (
       <div className="px-5 py-4 text-[14px] text-text2">
@@ -89,8 +93,11 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
   const reviewing = job.state === "awaiting_review" || job.state === "accepted";
   const stopped = job.state === "failed" || job.state === "cancelled" || job.state === "interrupted";
   const events = useJobEvents(job);
-  const { sheets, loaded } = useSheets(job.jobId, job.state === "running", job.state !== "queued" && job.state !== "discarded");
+  // A discarded job keeps its sheets (D52), so they are asked for too.
+  const { sheets, loaded } = useSheets(job.jobId, job.state === "running", job.state !== "queued");
   const rows = stepRows(full);
+  const { jobs } = useStudioJobs();
+  const child = childJob(jobs, job.jobId);
 
   return (
     <div className="flex min-w-0 flex-col gap-5 px-5 py-4">
@@ -98,8 +105,20 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
       {stopped && <FailureCard job={full} path={path} inConversation={inConversation} />}
       {job.state === "discarded" && (
         <p className="rounded-xl bg-surface2 px-4 py-3 text-[14px] text-text2">
-          Discarded. The renders are deleted and nothing landed in the catalog; the source is kept, so a later change can start from it.
+          {child === null
+            ? "Discarded. The renders are deleted and nothing landed in the catalog; the source is kept, so a later change can start from it."
+            : "Set aside for a change. The renders are deleted and nothing landed in the catalog; the change starts from this video's source."}
         </p>
+      )}
+      {child !== null && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hair px-4 py-3">
+          <p className="min-w-0 flex-1 text-[14px] text-text">
+            Continued in a newer job: {videoHeadline(child).toLowerCase()}.
+          </p>
+          <Button size="sm" href={panelHref(path, { job: child.jobId })}>
+            Open it
+          </Button>
+        </div>
       )}
 
       {reviewing && <Review job={full} path={path} />}
@@ -466,7 +485,7 @@ function StepList({ rows, live }: { rows: StepRow[]; live: boolean }) {
                 {row.label}
                 {row.rounds !== null && <span className="font-normal text-text3"> · {row.rounds}</span>}
               </span>
-              {row.note !== null && row.status !== "pending" && (
+              {row.note !== null && (
                 <span className="block text-[12px] leading-4 text-text3">{row.note}</span>
               )}
             </span>
@@ -868,7 +887,7 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
  * posted straight to the runner) has only the first.
  */
 function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClose: () => void }) {
-  const { post } = useStudioJobs();
+  const { refresh } = useStudioJobs();
   const router = useRouter();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -879,21 +898,46 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
   const canTalk = typeof job.draftId === "string";
 
   const revise = async (): Promise<void> => {
+    // Cmd+Enter reaches here as well as the button, which is disabled while busy.
+    if (busy) return;
     const wrong = changeProblem(text);
     if (wrong !== null) {
       setProblem(wrong);
       return;
     }
     setBusy(true);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, { changes: text.trim() });
-    setBusy(false);
-    const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
-    if (result.ok && next !== null) {
+    // Posted directly rather than through the provider's `post`, which reads
+    // the job list before it returns: on a job in review that list already
+    // says discarded, and the panel flashed "Discarded" before it moved on.
+    // The panel moves to the new job first and the list is read after.
+    let ok = false;
+    let status = 0;
+    let data: Record<string, unknown> = {};
+    try {
+      const response = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ changes: text.trim() }),
+        cache: "no-store",
+      });
+      ok = response.ok;
+      status = response.status;
+      data = ((await response.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
+    } catch (error) {
+      data = { error: `The studio runner is not answering: ${(error as Error).message}` };
+    }
+    const next = typeof data.jobId === "string" ? data.jobId : null;
+    if (ok && next !== null) {
       router.push(panelHref(path, { job: next }), { scroll: false });
+      void refresh();
       router.refresh();
       return;
     }
-    setProblem(typeof result.data.error === "string" ? result.data.error : `The runner answered ${result.status}.`);
+    setBusy(false);
+    // A lost reply after the runner committed shows up on the next poll as
+    // this job set aside with a link to its change (`childJob`).
+    void refresh();
+    setProblem(typeof data.error === "string" ? data.error : `The runner answered ${status}.`);
   };
 
   const talk = (): void => {

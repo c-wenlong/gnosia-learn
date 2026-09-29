@@ -31,11 +31,19 @@ import {
  * A job older than the provider's fifty is read from that route alone, and
  * polled while it is live.
  */
-export function useVideoJob(jobId: string): { job: VideoJob | null; brief: VideoBrief | null; looking: boolean } {
+export function useVideoJob(
+  jobId: string,
+  /** The detail `JobPanel` already read, for a job the provider does not list. */
+  initial?: unknown,
+): { job: VideoJob | null; brief: VideoBrief | null; looking: boolean } {
   const { jobs } = useStudioJobs();
   const cached = useMemo(() => asVideoJob(jobs.find((entry) => entry.jobId === jobId)), [jobs, jobId]);
-  const [detail, setDetail] = useState<{ id: string; job: VideoJob | null } | null>(null);
+  const [detail, setDetail] = useState<{ id: string; job: VideoJob | null } | null>(
+    initial === undefined ? null : { id: jobId, job: asVideoJob(initial as { kind?: string } | null) },
+  );
   const state = cached?.state ?? null;
+  // The first read is already done when `JobPanel` handed one down.
+  const skipFirst = useRef(initial !== undefined);
 
   useEffect(() => {
     let alive = true;
@@ -55,15 +63,21 @@ export function useVideoJob(jobId: string): { job: VideoJob | null; brief: Video
         if (alive) setDetail((held) => (held?.id === jobId ? held : { id: jobId, job: null }));
       }
     };
-    void load();
+    if (skipFirst.current) skipFirst.current = false;
+    else void load();
     // Polled only when the provider does not hold the row: it polls the record
     // already. A change of `state` there (the gate passing, an accept) reads
     // the detail again, for the fields only it carries.
-    if (state === null) timer = setInterval(() => void load(), 5_000);
+    const known = detail?.id === jobId ? detail.job : undefined;
+    if (state === null && (known === undefined || (known !== null && isActive(known.state)))) {
+      timer = setInterval(() => void load(), 5_000);
+    }
     return () => {
       alive = false;
       if (timer !== null) clearInterval(timer);
     };
+    // `detail` is read for its first value only; each answer must not start another read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, state]);
 
   const fetched = detail?.id === jobId ? detail.job : null;

@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   changedLines,
+  changeDraftOutcome,
+  childJob,
   changeProblem,
   chapterTitle,
   CHANGE_LIMIT,
   filterVideos,
-  groupVideos,
+  gridSections,
   sortVideos,
   videoGroupKey,
   libraryHref,
@@ -161,12 +163,34 @@ describe("the step list", () => {
   });
 
   it("marks one step, never two, and the runner's own failed step over a running one", () => {
-    const two = steps({ storyboard: { state: "done" }, preview: { state: "running" }, look: { state: "running" } });
+    const two = steps({ storyboard: { state: "done" }, preview: { state: "running", rounds: 2 }, look: { state: "running" } });
     const rows = stepRows(job({ state: "failed", steps: two }));
-    expect(rows.filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["preview"]);
-    expect(rows.find((row) => row.key === "look")?.status).toBe("pending");
+    // The furthest running step is where it stopped; the earlier one had run.
+    expect(rows.filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["look"]);
+    expect(rows.find((row) => row.key === "preview")?.status).toBe("done");
     const gate = steps({ preview: { state: "running" }, check: { state: "failed" } });
     expect(stepRows(job({ state: "failed", steps: gate })).filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["check"]);
+  });
+
+  it("shows one step active when the runner reports several running, the furthest", () => {
+    // Narration waits for a narrate call while the scenes are written.
+    const several = job({
+      phase: "narration",
+      steps: steps({
+        storyboard: { state: "done", rounds: 1 },
+        narration: { state: "running", rounds: 0, note: "4 of 6 lines already voiced" },
+        setup: { state: "done", rounds: 1 },
+        "scene-code": { state: "running", rounds: 1 },
+      }),
+    });
+    const rows = stepRows(several);
+    expect(rows.filter((row) => row.status === "current").map((row) => row.key)).toEqual(["scene-code"]);
+    expect(rows.find((row) => row.key === "narration")).toMatchObject({ status: "pending", note: "4 of 6 lines already voiced" });
+    expect(videoHeadline(several)).toBe("Writing the scenes");
+    expect(videoStepCount(several)).toBe("Step 4 of 11");
+    // A timeout with no step failed by the runner lands on the step that was active, not on narration.
+    const timedOut = stepRows({ ...several, state: "failed", errorKind: "timeout" });
+    expect(timedOut.filter((row) => row.status === "failed").map((row) => row.key)).toEqual(["scene-code"]);
   });
 
   it("marks where a job stopped between steps, when nothing was running", () => {
@@ -256,6 +280,8 @@ describe("the player's captions and chapters", () => {
       { start: 1.25, end: 3, text: "Tom & Jerry" },
     ]);
     expect(parseVtt("WEBVTT\r\n\r\n01:00:00.000 --> 01:00:01.5\r\nhi")).toEqual([{ start: 3600, end: 3601.5, text: "hi" }]);
+    // An escaped entity stays escaped once: `&amp;lt;` is the text "&lt;", never "<".
+    expect(parseVtt("WEBVTT\n\n00:00.000 --> 00:01.000\na &amp;lt; b &lt; c")[0]?.text).toBe("a &lt; b < c");
   });
 
   it("reads manimkc's transcript when the runner serves it, and nothing else", () => {
@@ -361,9 +387,28 @@ describe("the review", () => {
       detail: "No build after the last change.",
       actions: ["revise", "talk"],
     });
-    expect(videoFailure(job({ state: "failed", errorKind: "timeout" })).headline).toBe("It stopped: nothing moved for twenty minutes");
+    expect(videoFailure(job({ state: "failed", errorKind: "timeout" })).headline).toBe("It stopped: nothing moved for too long");
     expect(videoFailure(job({ state: "interrupted" })).actions).toEqual(["resume"]);
     expect(videoFailure(job({ state: "failed", errorKind: "agent", error: "401" }))).toMatchObject({ actions: [], detail: "401" });
+  });
+});
+
+describe("where a change leads", () => {
+  it("opens only a conversation the runner names, and not one about a diagram", () => {
+    expect(changeDraftOutcome({ ok: true, data: { draftId: "d-9", sourceKind: "video" } })).toEqual({ draftId: "d-9" });
+    expect(changeDraftOutcome({ ok: true, data: { draftId: "d-9" } })).toEqual({ draftId: "d-9" });
+    expect(changeDraftOutcome({ ok: true, data: { draftId: "d-9", kind: "diagram" } })).toHaveProperty("problem");
+    expect(changeDraftOutcome({ ok: true, data: {} })).toHaveProperty("problem");
+    // A runner before `sourceKind` looks for a diagram with the slug and answers 404.
+    expect(changeDraftOutcome({ ok: false, status: 404, refusal: { error: "no diagram attention-weights" } })).toEqual({
+      problem: "The runner found nothing to change: no diagram attention-weights",
+    });
+  });
+
+  it("finds the newest job continuing this one, even when the reply naming it was lost", () => {
+    const list = [job({ jobId: "child-2", parentJob: "p" }), job({ jobId: "child-1", parentJob: "p" }), job({ jobId: "p" }), { kind: "diagram", parentJob: "p" }];
+    expect(childJob(list, "p")?.jobId).toBe("child-2");
+    expect(childJob(list, "child-2")).toBeNull();
   });
 });
 
@@ -388,26 +433,42 @@ describe("the grid", () => {
     expect(videoTileStage(video({ state: "interrupted" }))).toBe("failed");
   });
 
-  it("reads the video list defensively and keeps only studio videos", () => {
-    const videos = readVideos({
+  it("reads the planned video list, and the catalog's shape too, keeping only studio videos", () => {
+    // The shape step 2a plans for `GET /api/videos`.
+    expect(
+      readVideos({
+        videos: [
+          { slug: "attention-weights", title: "Attention", topic: "t", posterAssetId: "video:attention-weights", updated: at(0) },
+          { slug: "no-poster", title: null, topic: null, posterAssetId: null, updated: at(1) },
+          { title: "no slug" },
+          null,
+        ],
+      }),
+    ).toEqual([
+      { slug: "attention-weights", title: "Attention", topic: "t", posterAssetId: "video:attention-weights", durationSeconds: null, updated: at(0) },
+      { slug: "no-poster", title: null, topic: null, posterAssetId: null, durationSeconds: null, updated: at(1) },
+    ]);
+    // `catalog video list --json`, should the route pass it through.
+    const catalog = readVideos({
       videos: [
-        { origin: "studio", slug: "attention-weights", assetId: "video:attention-weights", title: "Attention", topic: "t", concepts: ["a", 3], durationSeconds: 184, poster: { assetId: "poster:video:attention-weights", key: "k" }, narrated: true, revision: 2, revisionJob: "j", updatedAt: at(0) },
-        { origin: "manimkc", slug: null, assetId: "manimkc:x" },
-        { origin: "studio", slug: "no-poster", assetId: "video:no-poster", poster: null },
+        { origin: "studio", slug: "a", assetId: "video:a", title: "A", topic: "t", durationSeconds: 184, poster: { assetId: "poster:video:a", key: "k" }, updatedAt: at(2) },
+        { origin: "manimkc", slug: null, assetId: "manimkc:x", poster: { assetId: "poster:manimkc:x" } },
+        { origin: "studio", slug: "b", assetId: "video:b", poster: null },
       ],
     });
-    expect(videos.map((entry) => entry.slug)).toEqual(["attention-weights", "no-poster"]);
-    expect(videos[0]?.concepts).toEqual(["a"]);
-    expect(videos[1]?.poster).toBeNull();
+    expect(catalog.map((video) => [video.slug, video.posterAssetId, video.durationSeconds, video.updated])).toEqual([
+      ["a", "video:a", 184, at(2)],
+      ["b", null, null, ""],
+    ]);
     expect(readVideos({ error: "no route" })).toEqual([]);
   });
 
   it("filters videos with the same topic chips and search as the diagrams", () => {
     const videos = readVideos({
       videos: [
-        { origin: "studio", slug: "a", assetId: "video:a", title: "Attention weights", topic: "transformers" },
-        { origin: "studio", slug: "b", assetId: "video:b", title: "Tunnels", topic: "networking" },
-        { origin: "studio", slug: "c", assetId: "video:c", title: "Loose", topic: null },
+        { slug: "a", title: "Attention weights", topic: "transformers", posterAssetId: "video:a" },
+        { slug: "b", title: "Tunnels", topic: "networking", posterAssetId: "video:b" },
+        { slug: "c", title: "Loose", topic: null, posterAssetId: null },
       ],
     });
     expect(filterVideos(videos, { topics: ["networking", "none"], query: "" }).map((v) => v.slug)).toEqual(["b", "c"]);
@@ -424,24 +485,43 @@ describe("the grid", () => {
 describe("videos among the grid's groups", () => {
   const list = readVideos({
     videos: [
-      { origin: "studio", slug: "old", assetId: "video:old", topic: "networking", updatedAt: "2026-09-01T00:00:00.000Z" },
-      { origin: "studio", slug: "new", assetId: "video:new", topic: "transformers", updatedAt: "2026-09-20T00:00:00.000Z" },
-      { origin: "studio", slug: "loose", assetId: "video:loose", topic: null, updatedAt: "2026-09-10T00:00:00.000Z" },
+      { slug: "old", title: "Zebra", topic: "networking", updated: "2026-09-01T00:00:00.000Z" },
+      { slug: "new", title: "Apple", topic: "transformers", updated: "2026-09-20T00:00:00.000Z" },
+      { slug: "loose", title: "Mango", topic: null, updated: "2026-09-10T00:00:00.000Z" },
+      { slug: "undated", title: "Kiwi", topic: null },
     ],
   });
 
-  it("puts the newest first", () => {
-    expect(sortVideos(list).map((video) => video.slug)).toEqual(["new", "loose", "old"]);
+  it("sorts by the view's Sort and direction, undated last either way", () => {
+    expect(sortVideos(list).map((video) => video.slug)).toEqual(["new", "loose", "old", "undated"]);
+    expect(sortVideos(list, { sort: "modified", direction: "asc" }).map((video) => video.slug)).toEqual(["old", "loose", "new", "undated"]);
+    expect(sortVideos(list, { sort: "title", direction: "asc" }).map((video) => video.slug)).toEqual(["new", "undated", "loose", "old"]);
+    expect(sortVideos(list, { sort: "created", direction: "desc" })[0]?.slug).toBe("new");
   });
 
-  it("files each video where its topic's diagrams are, and makes a section for a topic with none", () => {
-    const { byGroup, extra } = groupVideos(list, "topic", ["networking"], new Map([["transformers", "Transformers"]]));
-    expect(byGroup.get("networking")?.map((video) => video.slug)).toEqual(["old"]);
-    expect(extra.map((entry) => `${entry.key}:${entry.label}`)).toEqual(["transformers:Transformers", "none:No topic"]);
+  const diagrams = [
+    { key: "networking", label: "Networking", items: ["tcp"] },
+    { key: "none", label: "No topic", items: ["scribble"] },
+  ];
+  const titles = new Map([
+    ["networking", "Networking"],
+    ["transformers", "Attention and transformers"],
+  ]);
+
+  it("puts videos in their topic's section, and a video-only topic in its place among the rest", () => {
+    const sections = gridSections(diagrams, list, "topic", titles);
+    expect(sections.map((section) => `${section.label}: ${section.diagrams.join(",")} | ${section.videos.map((v) => v.slug).join(",")}`)).toEqual([
+      "Attention and transformers:  | new",
+      "Networking: tcp | old",
+      "No topic: scribble | loose,undated",
+    ]);
   });
 
-  it("keeps them in one group with no grouping, and by domain when asked", () => {
-    expect(groupVideos(list, "none", ["all"]).extra).toEqual([]);
+  it("groups videos even when no diagram matches, and keeps one section with no grouping", () => {
+    expect(gridSections([], list, "topic", titles).map((section) => section.key)).toEqual(["transformers", "networking", "none"]);
+    const one = gridSections([{ key: "all", label: "", items: [] as string[] }], list, "none");
+    expect(one).toHaveLength(1);
+    expect(one[0]?.videos).toHaveLength(4);
     expect(videoGroupKey(list[0]!, "domain", new Map([["networking", "networks"]]))).toBe("networks");
     expect(videoGroupKey(list[1]!, "domain", new Map())).toBe("none");
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -12,6 +12,7 @@ import { formatDuration } from "@/lib/studio-jobs";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, sessionStore } from "@/lib/studio-extend";
 import {
+  changeDraftOutcome,
   libraryHref,
   mediaHref,
   newestSheet,
@@ -25,7 +26,7 @@ import {
   videoStepCount,
   videoTileStage,
   type VideoJob,
-  type VideoSummary,
+  type StudioVideo,
   type VideoTileStage,
 } from "@/lib/studio-video";
 import { conversationHref, panelHref, relativeTime } from "@/lib/studio-view";
@@ -50,16 +51,16 @@ import { conversationHref, panelHref, relativeTime } from "@/lib/studio-view";
 /* A landed video                                                             */
 /* -------------------------------------------------------------------------- */
 
-export function VideoTile({ video, path }: { video: VideoSummary; path: string }) {
-  const slug = video.slug ?? "";
+export function VideoTile({ video, path }: { video: StudioVideo; path: string }) {
+  const slug = video.slug;
   const title = video.title ?? slug;
   return (
     <div className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] transition-colors hover:bg-[var(--surface-hover)]">
       <Link href={libraryHref(slug)} aria-label={`Play ${title} in the library`} className="flex min-w-0 flex-col">
         <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-[var(--border)] bg-black">
-          {video.poster !== null ? (
+          {video.posterAssetId !== null ? (
             // eslint-disable-next-line @next/next/no-img-element -- a blob behind the asset route, which the optimiser cannot resize.
-            <img src={posterHref(video.assetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
+            <img src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
           ) : (
             <span className="text-xs text-white/70">No poster</span>
           )}
@@ -74,11 +75,11 @@ export function VideoTile({ video, path }: { video: VideoSummary; path: string }
           <span className="line-clamp-2 text-sm font-medium">{title}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {video.topic !== null && <Chip>{video.topic}</Chip>}
-            {video.updatedAt !== "" && <span className="text-xs text-[var(--muted)]">{relativeTime(video.updatedAt)}</span>}
+            {video.updated !== "" && <span className="text-xs text-[var(--muted)]">{relativeTime(video.updated)}</span>}
           </div>
         </div>
       </Link>
-      <TileVideoJob slug={slug} title={title} poster={video.poster === null ? null : posterHref(video.assetId)} path={path} />
+      <TileVideoJob slug={slug} title={title} poster={video.posterAssetId === null ? null : posterHref(video.posterAssetId)} path={path} />
       <div className="pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <VideoChangeButton slug={slug} title={title} path={path} className={HOVER_CONTROL} />
       </div>
@@ -87,17 +88,17 @@ export function VideoTile({ video, path }: { video: VideoSummary; path: string }
 }
 
 /** The list layout's 32px row for a landed video. */
-export function VideoRow({ video, path }: { video: VideoSummary; path: string }) {
-  const slug = video.slug ?? "";
+export function VideoRow({ video, path }: { video: StudioVideo; path: string }) {
+  const slug = video.slug;
   const title = video.title ?? slug;
   const { jobs, ended, dismissed } = useStudioJobs();
   const job = videoJobForSlug(jobs, slug, ended, dismissed);
   return (
     <div className="relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-[var(--surface-hover)]">
       <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border)] bg-black">
-        {video.poster !== null && (
+        {video.posterAssetId !== null && (
           // eslint-disable-next-line @next/next/no-img-element -- see VideoTile.
-          <img src={posterHref(video.assetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
+          <img src={posterHref(video.posterAssetId)} alt="" loading="lazy" className="h-full w-full object-contain" />
         )}
       </span>
       <Link
@@ -183,12 +184,13 @@ export function VideoChangeButton({
             sourceKind: "video",
             idempotencyKey: extendKey(store, name, () => idempotencyKey(`change:${slug}`)),
           });
-          const draftId = made.ok && typeof made.data.draftId === "string" ? made.data.draftId : null;
-          if (draftId === null) {
+          const outcome = changeDraftOutcome(made);
+          if ("problem" in outcome) {
             setPending(false);
-            setProblem(`A conversation could not start: ${made.ok ? "the runner named no conversation" : made.refusal.error}`);
+            setProblem(outcome.problem);
             return;
           }
+          const draftId = outcome.draftId;
           forgetExtendKey(store, name);
           router.push(conversationHref(path, draftId), { scroll: false });
         }}
@@ -278,7 +280,10 @@ function VideoStage({
   const stage = videoTileStage(job);
   const frame = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(frame);
-  const { sheets } = useSheets(job.jobId, job.state === "running", visible && job.state !== "queued");
+  // While this job's own panel is open it asks for the same sheets, and the
+  // tile is behind the dialog: one poll per job, not two.
+  const panelOpen = useSearchParams()?.get("job") === job.jobId;
+  const { sheets } = useSheets(job.jobId, job.state === "running", visible && !panelOpen && job.state !== "queued");
   const newest = newestSheet(sheets);
   const live = useDecoded(newest === null ? null : sheetSrc(job.jobId, newest));
   const headline = videoHeadline(job);
