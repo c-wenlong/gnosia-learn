@@ -21,7 +21,7 @@ import {
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
-import { LISTED_STATES } from "@/lib/studio-draft-list";
+import { listPath } from "@/lib/studio-draft-list";
 import type { DraftSummary } from "@/lib/studio-drafts";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
 import {
@@ -133,7 +133,7 @@ export default async function StudioPage({
     studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
     // The conversations to pick up again. A runner that cannot list them
     // costs the section, never the page.
-    studioApi<{ drafts: DraftSummary[] }>(`/api/drafts?state=${LISTED_STATES.join(",")}&limit=50`),
+    studioApi<{ drafts: DraftSummary[] }>(listPath()),
   ]);
   const drafts = draftList.ok && Array.isArray(draftList.data.drafts) ? draftList.data.drafts : null;
   const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];

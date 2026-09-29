@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DraftSummary } from "@/lib/studio-drafts";
 
-import { draftRows, stateWords } from "./studio-draft-list";
+import { draftRows, listPath, stateWords } from "./studio-draft-list";
 
 /** The drafts list above the studio grid (phase 3): which rows, called what. */
 
@@ -36,10 +36,6 @@ describe("draftRows", () => {
     expect(rows[1]).toMatchObject({ state: "In conversation", briefed: false });
   });
 
-  it("leaves out a conversation nobody said anything in", () => {
-    expect(draftRows([draft({ turns: 0 })])).toEqual([]);
-  });
-
   it("names a row by its title, else the first message, else what it extends", () => {
     const rows = draftRows(
       [
@@ -64,6 +60,12 @@ describe("draftRows", () => {
     const summary = draft({ draftId: "x" });
     delete summary.firstMessage;
     expect(draftRows([summary])[0]!.heading).toBe("A conversation with no brief yet");
+  });
+});
+
+describe("listPath", () => {
+  it("asks the runner for talking and briefed drafts somebody said something in, filtered before the limit", () => {
+    expect(listPath()).toBe("/api/drafts?state=open,briefed&nonEmpty=1&limit=50");
   });
 });
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
-import { draftRows, LIST_ROWS, LISTED_STATES } from "@/lib/studio-draft-list";
+import { draftRows, LIST_LIMIT, LIST_ROWS, LISTED_STATES } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -41,7 +41,7 @@ export function DraftsList({
   const drafts = fresh !== null && fresh.base === version ? fresh.drafts : initial;
 
   const reread = useCallback(async () => {
-    const result = await listDrafts({ state: LISTED_STATES, limit: 50 });
+    const result = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT });
     // A failed read keeps what is shown: a runner that stopped answering is
     // the page's to say, and an empty list here would read as "no drafts".
     if (result.ok && Array.isArray(result.data.drafts)) setFresh({ base: version, drafts: result.data.drafts });

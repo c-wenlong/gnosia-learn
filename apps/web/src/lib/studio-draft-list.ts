@@ -11,6 +11,17 @@ import type { DraftState, DraftSummary } from "@/lib/studio-drafts";
 /** The states the list asks for: a conversation still talking, or holding a brief nobody drew. */
 export const LISTED_STATES: readonly DraftState[] = ["open", "briefed"];
 
+/** How many drafts the list asks for. */
+export const LIST_LIMIT = 50;
+
+/**
+ * The runner's path for the list, as the page reads it on the server; the
+ * panel's own re-read asks `listDrafts` for the same thing.
+ */
+export function listPath(): string {
+  return `/api/drafts?state=${LISTED_STATES.join(",")}&nonEmpty=1&limit=${LIST_LIMIT}`;
+}
+
 /** How many rows show before "Show more". */
 export const LIST_ROWS = 4;
 
@@ -45,11 +56,12 @@ export function stateWords(state: DraftState): string {
 /**
  * The rows, newest first.
  *
- * A draft nobody has said anything in is left out: pressing the plus card and
- * closing the panel makes one, and a row for it would reopen an empty
- * conversation that the plus card opens just as well. A draft in any other
- * state is left out too, whatever the runner sent, since the list is for
- * conversations that can still go somewhere.
+ * A draft in any other state is left out, whatever the runner sent, since
+ * the list is for conversations that can still go somewhere. A draft nobody
+ * has said anything in is left out by the runner (`nonEmpty=1`), not here:
+ * pressing the plus card and closing the panel makes one, and filtering them
+ * after the runner's limit would let a run of them push real rows off the
+ * list.
  */
 export function draftRows(
   drafts: readonly DraftSummary[],
@@ -57,7 +69,6 @@ export function draftRows(
 ): DraftRow[] {
   return drafts
     .filter((draft) => LISTED_STATES.includes(draft.state))
-    .filter((draft) => draft.turns > 0 || (draft.title ?? "").trim() !== "")
     .sort((a, b) => b.updated.localeCompare(a.updated))
     .map((draft) => {
       const title = draft.title?.trim() ?? "";

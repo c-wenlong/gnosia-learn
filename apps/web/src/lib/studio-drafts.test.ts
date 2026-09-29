@@ -51,7 +51,7 @@ describe("the calls", () => {
     await sendMessage("d1", "hello");
     await drawDraft("d1", "key");
     await abandonDraft("d1");
-    await listDrafts({ state: ["open", "briefed"], limit: 50 });
+    await listDrafts({ state: ["open", "briefed"], nonEmpty: true, limit: 50 });
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([path, init]) => `${init.method ?? "GET"} ${path} ${init.body ?? ""}`.trim())).toEqual([
       "GET /studio/api/drafts/a%20b",
@@ -60,7 +60,7 @@ describe("the calls", () => {
       'POST /studio/api/drafts/d1/messages {"text":"hello"}',
       'POST /studio/api/drafts/d1/draw {"idempotencyKey":"key"}',
       "POST /studio/api/drafts/d1/abandon {}",
-      "GET /studio/api/drafts?state=open%2Cbriefed&limit=50",
+      "GET /studio/api/drafts?state=open%2Cbriefed&nonEmpty=1&limit=50",
     ]);
   });
 
@@ -75,9 +75,9 @@ describe("the calls", () => {
       relations: [],
     };
     const fetchMock = answer(400, { error: '"title" is required', detail: { field: "title" } });
-    const result = await saveBrief("d 1", brief);
+    const result = await saveBrief("d 1", brief, 7);
     const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(`${init.method} ${path}`).toBe("PUT /studio/api/drafts/d%201/brief");
+    expect(`${init.method} ${path}`).toBe("PUT /studio/api/drafts/d%201/brief?base=7");
     expect(JSON.parse(String(init.body))).toEqual(brief);
     expect(init.headers).toEqual({ "content-type": "application/json" });
     expect(result.ok).toBe(false);
