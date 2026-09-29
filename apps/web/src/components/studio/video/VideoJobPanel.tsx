@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { formatTimecode } from "@/components/media";
+import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
 import { Duration } from "@/components/studio/JobStrip";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -30,6 +30,7 @@ import {
   mediaHref,
   readyHeadline,
   reviewActions,
+  sceneTitle,
   sheetSrc,
   sheetsInOrder,
   spokenLength,
@@ -100,6 +101,12 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
   const rows = stepRows(full);
   const { jobs } = useStudioJobs();
   const child = childJob(jobs, job.jobId);
+  // The finished cut's transcript and its stored chapters, read once for the
+  // whole view: the chapters' titles are the scenes' names everywhere in it,
+  // the player's bar, the chapters tab, the changed lines, the sheets and the log.
+  const ready = job.state === "awaiting_review";
+  const narrated = full.brief === undefined || full.brief.voice !== "none";
+  const { cues, chapters } = useTranscript(job.jobId, job.slug, ready && narrated);
 
   return (
     <div className="flex min-w-0 flex-col gap-5 px-5 py-4">
@@ -123,18 +130,18 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
         </div>
       )}
 
-      {reviewing && <Review job={full} path={path} />}
+      {reviewing && <Review job={full} path={path} cues={narrated ? cues : undefined} chapters={chapters} />}
 
       {!reviewing && (
-        <SheetStrip job={full} sheets={sheets} loaded={loaded} running={running} />
+        <SheetStrip job={full} sheets={sheets} loaded={loaded} running={running} chapters={chapters} />
       )}
 
       {reviewing ? (
-        <HowItWasMade job={full} rows={rows} events={events} sheets={sheets} />
+        <HowItWasMade job={full} rows={rows} events={events} sheets={sheets} chapters={chapters} />
       ) : (
         <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
           <StepList rows={rows} live={job.state === "running"} />
-          <MakingLog job={full} events={events} />
+          <MakingLog job={full} events={events} chapters={chapters} />
         </div>
       )}
 
@@ -326,17 +333,22 @@ function SheetStrip({
   sheets,
   loaded,
   running,
+  chapters,
 }: {
   job: VideoJob;
   sheets: ContactSheet[];
   loaded: boolean;
   running: boolean;
+  chapters: VideoChapter[] | null;
 }) {
   const ordered = sheetsInOrder(sheets, job.classes);
   const scenes = job.classes.length > 0 ? job.classes : ordered.map((sheet) => sheet.scene);
   const [open, setOpen] = useState<string | null>(null);
   const shown = ordered.find((sheet) => sheet.scene === open) ?? null;
   const labelId = useId();
+  // The runner titles a sheet by the brief's scene name; once the video has
+  // stored chapters, their titles are the scene's name here as everywhere.
+  const titleOf = (scene: string): string => sceneTitle(job, scene, chapters);
 
   if (scenes.length === 0) {
     return (
@@ -386,11 +398,11 @@ function SheetStrip({
           {/* eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy, which the image optimiser cannot reach. */}
           <img
             src={sheetSrc(job.jobId, shown)}
-            alt={`Contact sheet for ${shown.title}, round ${shown.round}`}
+            alt={`Contact sheet for ${titleOf(shown.scene)}, round ${shown.round}`}
             className="max-h-[60dvh] w-full rounded-lg bg-black object-contain"
           />
           <figcaption className="flex flex-wrap items-center gap-2 px-1">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">{shown.title}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">{titleOf(shown.scene)}</span>
             <span className="text-[12px] text-text3">Round {shown.round}</span>
             {ordered.length > 1 && (
               <>
@@ -412,7 +424,7 @@ function SheetStrip({
       <ol className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:thin]">
         {scenes.map((scene, index) => {
           const sheet = ordered.find((entry) => entry.scene === scene) ?? null;
-          const title = sheet?.title ?? job.brief?.scenes[index]?.name.replaceAll("_", " ") ?? scene;
+          const title = chapters === null && sheet !== null ? sheet.title : titleOf(scene);
           return (
             <li key={scene} className="w-44 shrink-0 snap-start sm:w-48">
               {sheet === null ? (
@@ -424,7 +436,7 @@ function SheetStrip({
                   type="button"
                   onClick={() => setOpen(open === scene ? null : scene)}
                   aria-pressed={open === scene}
-                  aria-label={`Open the sheet for ${sheet.title}`}
+                  aria-label={`Open the sheet for ${title}`}
                   className={cx(
                     "relative block aspect-video w-full overflow-hidden rounded-lg border bg-black transition-shadow",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
@@ -518,7 +530,7 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
  * from the runner's own records (D24), newest last, and the runner's seeding
  * of the voice before any of it.
  */
-function MakingLog({ job, events }: { job: VideoJob; events: StudioEvent[] }) {
+function MakingLog({ job, events, chapters }: { job: VideoJob; events: StudioEvent[]; chapters: VideoChapter[] | null }) {
   const labelId = useId();
   const lines = narration(events, 40);
   const box = useRef<HTMLOListElement>(null);
@@ -546,7 +558,7 @@ function MakingLog({ job, events }: { job: VideoJob; events: StudioEvent[] }) {
           {lines.map((line) => (
             <li key={`${line.at}-${line.note}`} className="flex gap-2 text-[13px] leading-5">
               <span className="w-11 shrink-0 tabular-nums text-text3">{clock(line.at)}</span>
-              <span className="min-w-0 break-words text-text2">{logLine(line.note, job)}</span>
+              <span className="min-w-0 break-words text-text2">{logLine(line.note, job, chapters)}</span>
             </li>
           ))}
         </ol>
@@ -562,7 +574,19 @@ function clock(at: string): string {
 }
 
 /** At review the making-of folds away under the video, where it is still one press off. */
-function HowItWasMade({ job, rows, events, sheets }: { job: VideoJob; rows: StepRow[]; events: StudioEvent[]; sheets: ContactSheet[] }) {
+function HowItWasMade({
+  job,
+  rows,
+  events,
+  sheets,
+  chapters,
+}: {
+  job: VideoJob;
+  rows: StepRow[];
+  events: StudioEvent[];
+  sheets: ContactSheet[];
+  chapters: VideoChapter[] | null;
+}) {
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
@@ -579,10 +603,10 @@ function HowItWasMade({ job, rows, events, sheets }: { job: VideoJob; rows: Step
       </button>
       <Collapse open={open} id={id}>
         <div className="flex flex-col gap-5 pt-4">
-          <SheetStrip job={job} sheets={sheets} loaded running={false} />
+          <SheetStrip job={job} sheets={sheets} loaded running={false} chapters={chapters} />
           <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
             <StepList rows={rows} live={false} />
-            <MakingLog job={job} events={events} />
+            <MakingLog job={job} events={events} chapters={chapters} />
           </div>
         </div>
       </Collapse>
@@ -594,11 +618,20 @@ function HowItWasMade({ job, rows, events, sheets }: { job: VideoJob; rows: Step
 /* The review                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function Review({ job, path }: { job: VideoJob; path: string }) {
+function Review({
+  job,
+  path,
+  cues,
+  chapters,
+}: {
+  job: VideoJob;
+  path: string;
+  /** Undefined for a silent video, or before the transcript is read. */
+  cues: TranscriptCue[] | undefined;
+  chapters: VideoChapter[] | null;
+}) {
   const files = mediaFiles(job.slug);
   const ready = job.state === "awaiting_review";
-  const narrated = job.brief === undefined || job.brief.voice !== "none";
-  const { cues, chapters } = useTranscript(job.jobId, job.slug, ready && narrated);
   const [seek, setSeek] = useState<{ seconds: number; key: number } | undefined>(undefined);
   const playerBox = useRef<HTMLDivElement>(null);
   const board = storyboard(job, chapters);
@@ -608,7 +641,7 @@ function Review({ job, path }: { job: VideoJob; path: string }) {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     playerBox.current?.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
   };
-  const changes = changedLines(job);
+  const changes = changedLines(job, chapters);
   const actions = reviewActions(job);
 
   return (
@@ -619,7 +652,7 @@ function Review({ job, path }: { job: VideoJob; path: string }) {
           poster={mediaHref(job.jobId, files.poster)}
           title={job.title ?? job.slug}
           chapters={chapters ?? undefined}
-          transcript={narrated ? cues : undefined}
+          transcript={cues}
           seekTo={seek}
           // The storyboard beside the transcript, in the same card the
           // library uses: the chapters, each scene's lines as voiced, and a
@@ -639,7 +672,7 @@ function Review({ job, path }: { job: VideoJob; path: string }) {
         <Landed job={job} />
       )}
 
-      {changes.length > 0 && <ChangedLines job={job} />}
+      {changes.length > 0 && <ChangedLines lines={changes} />}
       {job.gate !== null && ready && <Checks job={job} />}
       <Actions job={job} path={path} accept={actions.accept} discard={actions.discard} change={actions.change} />
     </div>
@@ -700,9 +733,8 @@ function Chapters({
 }
 
 /** Every line the agent changed, beside the brief's version (D47, D48). */
-function ChangedLines({ job }: { job: VideoJob }) {
+function ChangedLines({ lines }: { lines: ReturnType<typeof changedLines> }) {
   const labelId = useId();
-  const lines = changedLines(job);
   return (
     <section aria-labelledby={labelId} className="min-w-0">
       <h3 id={labelId} className={cx(LABEL, "mb-2")}>
