@@ -1,0 +1,159 @@
+"use client";
+
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+
+import { cx } from "@/components/ui/classes";
+
+/**
+ * A card of words at a fixed height that scrolls, with an icon in its top
+ * right corner that opens the same words as a popup at nearly the size of the
+ * screen.
+ *
+ * A long note set in the page's flow pushed everything under it (the tabs of
+ * the asset page) a screen or more down. Here the page keeps its shape and
+ * the note scrolls inside its card; the popup is for reading it at length.
+ *
+ * The popup is a `<dialog>` opened with `showModal()`, as the studio's is:
+ * the platform puts it in the top layer, makes the page inert and traps
+ * focus. Escape, the close button (in the same corner as the icon that
+ * opened it) and a click outside all close it, and focus goes back to that
+ * icon. A click only counts as outside when the press started there too, so
+ * a text selection dragged out of the note does not close it. The page under
+ * it does not scroll while it is open.
+ *
+ * The content is rendered a second time inside the popup, and only while it
+ * is open: the children are an element description, so the same prose can
+ * sit in both places without the card being moved out of the page.
+ */
+export function ExpandablePanel({
+  title,
+  action,
+  label,
+  children,
+}: {
+  /** The card's heading: a filename, say. */
+  title: ReactNode;
+  /** A link beside the corner icon, such as the raw file. */
+  action?: ReactNode;
+  /** What the panel holds, for the icon's and the popup's names: "agent-failure-mode-analysis.md". */
+  label: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const pressedOnBackdrop = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (dialog === null) return;
+    // The icon that opened it, to give focus back to on close.
+    const opener = openerRef.current;
+    if (!dialog.open) dialog.showModal();
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = overflow;
+      if (dialog.open) dialog.close();
+      opener?.focus({ preventScroll: true });
+    };
+  }, [open]);
+
+  return (
+    <section className="flex min-w-0 flex-col overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+      <PanelHeader title={title} action={action}>
+        <CornerButton
+          ref={openerRef}
+          label={`Expand ${label}`}
+          onClick={() => setOpen(true)}
+          path="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11"
+        />
+      </PanelHeader>
+      <div className="max-h-[min(36rem,65dvh)] overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
+
+      {open && (
+        <dialog
+          ref={dialogRef}
+          aria-label={label}
+          onCancel={(event) => {
+            // Escape: closed through state, so the two cannot disagree.
+            event.preventDefault();
+            setOpen(false);
+          }}
+          onPointerDown={(event) => {
+            pressedOnBackdrop.current = event.target === event.currentTarget;
+          }}
+          onClick={(event) => {
+            // The backdrop is the dialog element itself; everything inside is
+            // the panel's own content, which fills it.
+            const started = pressedOnBackdrop.current;
+            pressedOnBackdrop.current = false;
+            if (started && event.target === event.currentTarget) setOpen(false);
+          }}
+          className={cx(
+            "m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
+            "backdrop:bg-page/70 backdrop:backdrop-blur-[2px]",
+            // A phone gets the whole screen; anything wider a large card.
+            "h-dvh max-h-none w-full max-w-none rounded-none",
+            "md:h-[calc(100dvh-64px)] md:w-[min(64rem,calc(100vw-48px))] md:rounded-[20px] md:border-2 md:border-border",
+            "transition-[opacity,scale] duration-200 ease-out starting:open:scale-[0.98] starting:open:opacity-0",
+            "motion-reduce:transition-none",
+          )}
+        >
+          <PanelHeader title={title} action={action}>
+            <CornerButton label="Close" onClick={() => setOpen(false)} path="M5 5l10 10M15 5 5 15" />
+          </PanelHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">{children}</div>
+        </dialog>
+      )}
+    </section>
+  );
+}
+
+function PanelHeader({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex shrink-0 items-center gap-3 py-3 pr-3 pl-5">
+      <h2 className="min-w-0 flex-1 truncate text-[16px] font-bold leading-snug text-text">{title}</h2>
+      {action}
+      {children}
+    </div>
+  );
+}
+
+function CornerButton({
+  ref,
+  label,
+  onClick,
+  path,
+}: {
+  ref?: Ref<HTMLButtonElement>;
+  label: string;
+  onClick: () => void;
+  path: string;
+}) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text2 transition-colors hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 20 20"
+        className="h-4 w-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={path} />
+      </svg>
+    </button>
+  );
+}
