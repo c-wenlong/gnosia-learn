@@ -87,7 +87,8 @@ describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   it("appends one watched event when saves together cross the threshold, and none after", async () => {
     await call({ assetId: ASSETS.video, position: 50, duration: 100, ranges: [[0, 50]] });
     const crossing = await call({ assetId: ASSETS.video, position: 92, duration: 100, ranges: [[50, 92]] });
-    expect(crossing.body.result).toMatchObject({ crossed: true });
+    expect(crossing.body.result).toMatchObject({ crossed: true, position: 92 });
+    expect((crossing.body.result as { watchedDay: string }).watchedDay).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await call({ assetId: ASSETS.video, position: 100, duration: 100, ranges: [[92, 100]] });
 
     const events = await state.readEvents(scratch.db);

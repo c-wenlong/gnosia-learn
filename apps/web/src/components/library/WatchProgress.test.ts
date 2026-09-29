@@ -29,6 +29,15 @@ describe("WatchProgress", () => {
     );
   });
 
+  it("does not call a short play of a long video unstarted", () => {
+    expect(text({ coverage: 0.002, watched: false, position: 12, watchedDay: null })).toBe("<1%, stopped at 0:12");
+    expect(text({ coverage: 0, watched: false, position: 90, watchedDay: null })).toBe("Not played yet, stopped at 1:30");
+  });
+
+  it("keeps the stop time near the end, where the next visit starts over", () => {
+    expect(text({ coverage: 0.4, watched: false, position: 345, watchedDay: null })).toBe("40%, stopped at 5:45");
+  });
+
   it("says watched, with the day when the server knows it", () => {
     expect(text({ coverage: 0.95, watched: true, position: 0, watchedDay: "2026-09-29" })).toBe(
       "Watched 2026-09-29 (95% played)",

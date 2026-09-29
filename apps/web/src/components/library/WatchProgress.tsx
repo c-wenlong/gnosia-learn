@@ -10,12 +10,11 @@ export type WatchStatus = {
   coverage: number;
   /** Past `WATCHED_FRACTION`, so the `watched` event has been appended. */
   watched: boolean;
-  /** Where the next visit resumes, in seconds, or 0 for the start. */
+  /** Where the reader stopped, as stored, in seconds. */
   position: number;
   /**
    * The day it was first watched through (`2026-09-29`), made on the server in
-   * the habit's time zone so both renders print the same text, or null when
-   * it has not been, or was only just now in this tab.
+   * the habit's time zone (by the page, then by each save's answer), or null.
    */
   watchedDay: string | null;
 };
@@ -32,8 +31,11 @@ export const WatchStatusContext = createContext<WatchStatus | null>(null);
 export function WatchProgress() {
   const status = useContext(WatchStatusContext);
   if (status === null) return <>unknown</>;
-  const percent = Math.round(status.coverage * 100);
-  const resume = status.position > 0 ? `, stopped at ${formatTimecode(status.position)}` : "";
+  // A few seconds of a long video rounds to 0%, which is not the same as none.
+  const rounded = Math.round(status.coverage * 100);
+  const percent = status.coverage > 0 && rounded === 0 ? "<1%" : `${rounded}%`;
+  const stopped = status.position >= 1 ? `stopped at ${formatTimecode(status.position)}` : null;
+  const resume = stopped === null ? "" : `, ${stopped}`;
   if (status.watched) {
     return (
       <span aria-live="polite">
@@ -52,9 +54,11 @@ export function WatchProgress() {
           </svg>
           Watched{status.watchedDay !== null ? ` ${status.watchedDay}` : ""}
         </span>
-        {` (${percent}% played${resume})`}
+        {` (${percent} played${resume})`}
       </span>
     );
   }
-  return <span aria-live="polite">{percent > 0 ? `${percent}%${resume}` : "Not started"}</span>;
+  const text =
+    status.coverage > 0 ? `${percent}${resume}` : stopped !== null ? `Not played yet, ${stopped}` : "Not started";
+  return <span aria-live="polite">{text}</span>;
 }

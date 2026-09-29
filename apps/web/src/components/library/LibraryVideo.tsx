@@ -16,6 +16,15 @@ const MAX_STEP_SECONDS = 3;
 
 const ENDPOINT = "/api/learner/playback";
 
+/** What `POST /api/learner/playback` answers. */
+type SaveResult = {
+  coverage: number;
+  watchedAt: string | null;
+  watchedDay: string | null;
+  position: number;
+  crossed: boolean;
+};
+
 /**
  * A library video that remembers where the reader is.
  *
@@ -74,7 +83,7 @@ export function LibraryVideo({
   const [status, setStatus] = useState<WatchStatus>(() => ({
     coverage: saved === null ? 0 : coverage(saved.ranges, saved.duration),
     watched: saved?.watchedAt != null,
-    position: startAt,
+    position: saved?.position ?? 0,
     watchedDay,
   }));
 
@@ -87,6 +96,9 @@ export function LibraryVideo({
     // not from the epoch, so the first time update is not a save of nothing.
     sentAt: 0,
     sentPosition: startAt,
+    // Saves can overlap and answer out of order; only the newest answer is shown.
+    sent: 0,
+    shown: 0,
   });
 
   /** Close the stretch playing now at `end`, and start none. */
@@ -112,9 +124,8 @@ export function LibraryVideo({
       s.ranges = [];
       s.sentAt = Date.now();
       s.sentPosition = s.last;
-      const sentPosition = s.last;
-      const sentDuration = s.duration;
-      const body = JSON.stringify({ assetId, position: sentPosition, duration: sentDuration, ranges });
+      const seq = ++s.sent;
+      const body = JSON.stringify({ assetId, position: s.last, duration: s.duration, ranges });
 
       if (beacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
         navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "application/json" }));
@@ -138,19 +149,19 @@ export function LibraryVideo({
           if (response.status >= 500 || response.status === 429) requeue();
           return null;
         })
-        .then((payload: { result?: { coverage: number; watchedAt: string | null; crossed: boolean } } | null) => {
+        .then((payload: { result?: SaveResult } | null) => {
           const result = payload?.result;
           if (!result) return;
-          setStatus((previous) => ({
+          // A crossing refreshes the streak whichever answer arrives last.
+          if (result.crossed) router.refresh();
+          if (seq < s.shown) return;
+          s.shown = seq;
+          setStatus({
             coverage: result.coverage,
             watched: result.watchedAt !== null,
-            // Where the next visit would start, by the same rule it will use.
-            position: resumeAt({ position: sentPosition, duration: sentDuration }),
-            watchedDay: previous.watchedDay,
-          }));
-          // A watched event is a study day: the streak pill is drawn by the
-          // root layout, which a client navigation keeps mounted.
-          if (result.crossed) router.refresh();
+            position: result.position,
+            watchedDay: result.watchedDay,
+          });
         })
         .catch(requeue);
     },
