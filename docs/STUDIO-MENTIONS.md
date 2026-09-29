@@ -350,6 +350,32 @@ the same slug on both: a diagram and a video are different targets
 (`learn/assets/<slug>.tldr` and `videos/<slug>.mp4`), different leases and
 different asset namespaces, and one slug lets the library pair them.
 
+**A tag waits for its brief.** A tagged message is a request, and the request
+stays open until it is answered, not only for the one reply after it. When the
+message is sent, the runner marks each tagged kind as waiting on the draft
+(`waiting: { requestSeq }` in that kind's slot, the seq of the tagged message).
+The planner may ask a question first ("narrated, or silent?"), and the person
+may answer without repeating the tag; while a kind is waiting, every later turn
+carries a WAITING block beside any TAGS block, listing the kinds still owed,
+and a brief of a waiting kind is accepted from any reply, exactly as if its
+message had been tagged. So "@video attention weights", then "narrated, for
+beginners" with no tag, still ends in a video card.
+
+| A waiting kind is cleared when | Because |
+| --- | --- |
+| A valid brief of that kind lands, in any reply, retries included | The request is answered; the brief carries the `requestSeq` it answered |
+| A newer message tags the same kind | That message is the request now; `requestSeq` moves to it |
+| The person presses Stop waiting | They no longer want it, and no turn is spent saying so |
+| Its brief is refused twice (E6) | The planner has failed at it twice; the E6 card's Ask again sends the tag again, which waits anew |
+
+**How waiting shows.** In the thread, the tagged message's chip carries a
+quiet "waiting" after its name (12px `--text3`, and " waiting for its brief"
+for a screen reader) until the kind is cleared, when it drops. Above the
+composer, while any kind waits, one line in the label role says so, "Video
+brief still to come", with a Stop waiting link beside it; it is the only
+control, and it is where the person's eye is when they type the answer. Both go
+the moment the card appears.
+
 **Tags reach the runner as data.** `POST /api/drafts/{id}/messages` takes
 `{ text, mentions? }`. The runner validates the mentions (the checks under
 "What it sends", each kind known to the build and carried by this draft's
@@ -461,28 +487,43 @@ brief; open question 3.
 | Briefs per reply | One | At most one per tagged kind |
 | Live cards on screen | One, ever | At most one per kind: a diagram card and a video card at once |
 | A newer brief | Greys every older card | Greys only the older card of its own kind |
-| The press | Draw | Draw on a diagram card, Make video on a video card, each its own press and its own idempotency key; and Make both under a reply whose two cards are both live and both enabled |
+| The press | Draw | Draw on a diagram card, Make video on a video card, each its own press and its own idempotency key; and Make both under a diagram and video pair asked for in one message, once both cards are live and enabled |
 | Pressed while that kind's job from this draft is queued, running or in review | Not reachable: the draft was `drawing` and refused messages | The card stays live, its button disabled with the reason ("The diagram is still being drawn", "The video is still being made"), until that job reaches a verdict. The other kind's card is unaffected |
 | Messages while a job runs | 409 (C14) | Accepted, for every kind |
 | After a press | The panel becomes the job view | The job view when no other card is live; when another is, the panel stays on the conversation and the pressed card shows "Drawing" or "Making the video" with a link to its job, so the second card is not hidden behind the first job. After Make both, the panel stays on the conversation with a link on each card |
 
-**Make both** (the owner's decision 2) is a primary `Button` under the second
-card of a reply that carries a diagram card and a video card, shown while both
-cards are live and neither press is disabled. One press sends both, each with
-its own idempotency key, to `POST /api/drafts/{id}/draw` (API). The runner
-creates a proposed topic both briefs name once, first; a refusal there refuses
-both, since neither brief can be made without it. Then it enqueues each on its
-own runner, independently: if one refuses (its slug held, the video doctor
-failing), the other still starts, and the refusal shows under the card it
-belongs to, exactly as that card's own press would have shown it. The daily
-cap is checked by each enqueue, as for two presses. A retried press is safe:
-each key returns the job it already started and tries only what has not. With
-a proposed topic the button reads "Create topic and make both".
+**Make both** (the owner's decision 2) is a primary `Button` for a diagram and
+video pair asked for together, shown while both cards are live and neither
+press is disabled. One press sends both, each with its own idempotency key, to
+`POST /api/drafts/{id}/draw` (API).
 
-It is only for a pair from one reply, as the owner asked. Two live cards from
-different replies (a diagram proposed early, a video later) are pressed one at
-a time; a reply that proposed both is the case where the person asked for both
-at once.
+**What makes a pair: the request, not the reply.** Every brief records the
+`requestSeq` it answered (the tagged message, carried through any waiting
+turns). Two live cards, one of each kind, with the same `requestSeq` are a
+pair, whichever replies they landed in: normally the same one, but a retry
+(below) or a clarifying question can put the second card in a later reply.
+Make both sits under whichever of the two landed later, so it is under the
+card the person reads last. Two live cards answering different requests (a
+diagram asked for early, a video later) are pressed one at a time, as the owner
+asked: Make both is for the case where the person asked for both at once.
+
+**Each card stands alone at the press.** The runner handles the items in
+order, and each item fails or starts on its own:
+
+1. **Topics.** For each distinct proposed topic among the items (the briefs
+   usually share one, but need not), the runner creates it once. A refusal
+   refuses only the items whose brief names that topic, each with the refusal
+   under its own card; an item on an existing topic, or on a topic that was
+   created, goes on.
+2. **Enqueue.** Each remaining item is enqueued on its own runner. A refusal
+   (its slug held, the video doctor failing, the cap) shows under its own card,
+   exactly as that card's own press would have shown it; the other still
+   starts.
+
+The daily cap is checked by each enqueue, as for two presses. A retried press
+is safe: each key returns the job it already started and tries only what has
+not. When either brief names a proposed topic the button reads "Create topic
+and make both".
 
 **A card's identity is its reply and its kind**, never the reply alone. Two
 briefs in one reply share a transcript `seq`, so everything the web app keys by
@@ -498,13 +539,47 @@ it narrows to the kinds the message tagged:
 
 | The reply answers | Diagram card | Video card |
 | --- | --- | --- |
-| An untagged message | Unchanged | Unchanged |
+| An untagged message | Unchanged, unless the reply holds it | Unchanged, unless the reply holds it |
+| An untagged message the planner read as contradicting the live video brief (a `hold` block for video) | Unchanged | On hold |
 | A message tagged Video, with a valid video brief | Unchanged | Replaced by the new brief |
-| A message tagged Video, with no video brief (the planner asked about it) | Unchanged | Out of force, if the planner wrote it |
+| A message tagged Video, with no video brief (the planner asked about it) | Unchanged | Out of force, if the planner wrote it; video stays waiting |
 | A message tagged both, with both briefs | Replaced | Replaced |
 
 A card the person edited stays in force, as today, and a held card can be put
 back with its own edit button without a turn.
+
+**On hold: an untagged correction.** Untagged is chat (D58), so a correction
+like "that's the wrong topic" writes no new brief, and without more the old
+card would stay one press from a paid job the person just said was wrong. The
+planner therefore ends such a reply with a `hold` block naming the kind and a
+reason of a few words:
+
+````text
+```hold
+{"kinds": ["video"], "reason": "You said the topic is wrong"}
+```
+````
+
+The runner strips it like `suggest`, checks each kind has a live card (a kind
+with none is ignored), and puts that card on hold: greyed, its press and Make
+both disabled with "On hold: You said the topic is wrong", and a secondary
+button, Use this brief, that puts it back in force with no turn (recorded as a
+`studio` note so the planner hears it next turn). An inline edit of a held card
+puts it back too, since editing is choosing it. The same reply suggests the
+kind, so the corrected brief is one click and a send away. A held card is out
+of the live set for Cmd+Enter.
+
+**Why the planner flags it, rather than every message holding every card.**
+Holding on any message after a card would grey cards through ordinary
+conversation, a question about the idea or a tangent, which is what the owner's
+"untagged is chat" and the removal of greying on untagged replies set out to
+stop, and it would make every card cost a Use this brief click. The planner
+reads the correction in context and can say which kind it touches. It can miss
+one; then the card stays live, and the press is still the person's, made
+moments after they said it was wrong, with the brief in front of them. It can
+also flag one that was fine; then Use this brief costs a click and no turn.
+The two errors are cheap in different ways, and the common case (chat that
+contradicts nothing) costs nothing.
 
 **Cmd+Enter.** Today Cmd+Enter from an empty composer presses the one live
 Draw. With exactly one live, enabled card it still presses that card. With two,
@@ -525,6 +600,9 @@ slot per kind:
 | `brief`, `briefAt`, `briefSeq`, `briefBy` | Today's four fields, for this kind |
 | `pendingTopic` | The proposed topic this kind's brief names, if any |
 | `jobId` | This kind's newest job from this draft |
+| `waiting` | `{ requestSeq }` while a tagged request for this kind is owed a brief, else null |
+| `requestSeq` | The tagged message the brief in force answered, which pairs it for Make both |
+| `held` | `{ reason, at }` while the brief in force is on hold, else null |
 | `state` | `open`, `briefed`, `drawing` or `done`, today's meanings, for this kind alone |
 
 The row's `state` becomes a summary for the drafts list and pruning:
@@ -572,8 +650,8 @@ is a shared core and a section per kind:
 | Part | Content |
 | --- | --- |
 | Opening | You are the planner in a studio that makes teaching diagrams and short explainer videos. Mostly you talk: answer the person's questions, help them think an idea through. You write a brief only when they tag a kind |
-| Conversation | Answer from what you know, briefly; say when you are unsure; never cite a source you cannot see (you have no tools and no network). When a diagram or a video would help, say so in one sentence and end with one `suggest` block naming the kinds; never a brief |
-| Tags | The TAGS block is the only order to write a brief. Write one brief per tagged kind, in the same reply when you can; ask first only when a tagged brief cannot be guessed. An `@` word the TAGS block does not list is only a word. A bare tag means: from what we discussed. One brief per kind per reply; a second of the same kind is asked for in a later message (T21). A diagram and a video of one idea take the same slug |
+| Conversation | Answer from what you know, briefly; say when you are unsure; never cite a source you cannot see (you have no tools and no network). When a diagram or a video would help, say so in one sentence and end with one `suggest` block naming the kinds; never a brief. When the person contradicts a live brief (the wrong topic, the wrong idea, a scene they do not want), end with a `hold` block naming its kind and a reason of a few words, and suggest that kind so the corrected brief is one click away |
+| Tags | The TAGS block is the order to write a brief, and the WAITING block lists kinds tagged earlier whose brief is still owed: write each as soon as you can guess it, whether or not the latest message repeats the tag. Write one brief per tagged or waiting kind, in the same reply when you can; ask first only when a tagged brief cannot be guessed. An `@` word the TAGS block does not list is only a word. A bare tag means: from what we discussed. One brief per kind per reply; a second of the same kind is asked for in a later message (T21). A diagram and a video of one idea take the same slug |
 | When to stop asking | The shared rules, for a tagged request; "just draw it" and "just make it" both end the questions |
 | Topics | Shared, as both prompts have it |
 | A diagram brief | "What you must end up knowing" and "The brief" from the diagram prompt, with `"kind": "diagram"` in the block |
@@ -630,7 +708,7 @@ in the object:
 | --- | --- |
 | The runner reads every `brief` block, groups them by `kind`, and keeps the last of each kind | Today's "last block wins" (`lastFencedBlock` in `planner.ts`), per kind |
 | A block with no `kind` is a diagram | Every session recorded before this ships has a prompt that never mentions `kind`; its briefs keep working |
-| A brief of a kind the message did not tag is dropped: not validated, not shown, no retry. The transcript records `brief-ignored` with the kind | The owner's rule that a brief follows a tag. A retry would pay to be told a rule the prompt already states; the prose above it still shows |
+| A brief of a kind neither tagged by the message nor waiting (T30) is dropped: not validated, not shown, no retry. The transcript records `brief-ignored` with the kind | The owner's rule that a brief follows a tag. A retry would pay to be told a rule the prompt already states; the prose above it still shows |
 | An unknown `kind`, or a kind outside `plannerKinds` | Dropped the same way |
 | `kind` is removed before validation, and each brief goes to its own validator (`validateBrief`, `validateVideoBrief`) with its own planner field list | A diagram brief can never carry a video field, or the reverse, as `plannerFields` already ensures for one kind |
 | At most one `topic` block per reply | See the shared topic above |
@@ -645,7 +723,8 @@ asking for those briefs again and no others. The retry's reply is read for
 those kinds only; a brief of a kind that already passed is ignored, so the
 retry cannot quietly replace a card the person may already be reading. A brief
 refused a second time shows the E6 card for its kind, and the other card stays
-live. Make both appears only once both cards are live.
+live. Make both appears once both cards of the request are live (they are a
+pair by `requestSeq`, not by reply).
 
 **In the thread.** When every brief in a reply was refused, the reply is marked
 `superseded` and the retry's reply takes its place, as today. When some passed,
@@ -653,8 +732,8 @@ the first reply stays with its valid cards, the refused kind's place shows
 "Checking the video brief" until the retry lands, and the retry's reply appears
 under it as an ordinary planner turn carrying the fixed card. That is one more
 bubble than today in the partial case, and it keeps a card the person may be
-reading from moving. Make both then sits under the retry's card, the second of
-the pair.
+reading from moving. Make both then sits under the retry's card, the later of
+the pair, still tied to the first by the request both answer (T31).
 
 The retry counts as one turn against the turn cap, as today, however many
 briefs it fixes.
@@ -673,9 +752,11 @@ in D62, and the slots live on disk.
 | --- | --- | --- |
 | `POST` | `/api/drafts` | `sourceKind` (`diagram`, the default, or `video`) beside `source`, for a draft opened on a studio video; no `kind` |
 | `GET` | `/api/drafts` | Each draft gains `kinds`, the kinds it has briefs or jobs of. `kind` is the newest brief's |
-| `GET` | `/api/drafts/{id}` | Gains `slots: { diagram?, video? }` (the fields in D62) and `plannerKinds`; transcript entries gain `mentions` (a message), `briefs: [{ kind, brief }]` and `suggest` (a reply). `brief`, `briefSeq` and `jobId` stay one release as the newest of any kind, so the runner PR can land before the web PR, then go |
+| `GET` | `/api/drafts/{id}` | Gains `slots: { diagram?, video? }` (the fields in D62) and `plannerKinds`; transcript entries gain `mentions` (a message), `briefs: [{ kind, brief, requestSeq }]`, `suggest` and `hold` (a reply). `brief`, `briefSeq` and `jobId` stay one release as the newest of any kind, so the runner PR can land before the web PR, then go |
 | `POST` | `/api/drafts/{id}/messages` | `{ text, mentions? }`. `400 { field: "mentions" }` when a mention's range is out of bounds, overlaps another, does not read `@<kind>`, or repeats a kind; `409 { reason: "kind-not-in-conversation", kind }` for a kind outside `plannerKinds`; `400 { field: "text" }` for empty text, or a bare mention on a draft with no turns yet. No longer 409 while a job runs (C14 lifted) |
-| `GET` | `/api/drafts/{id}/events` | `brief` and `brief-invalid` carry `kind`; `reply` carries `suggest` |
+| `GET` | `/api/drafts/{id}/events` | `brief` and `brief-invalid` carry `kind`; `reply` carries `suggest` and `hold`; `state` carries the slots, so waiting and held show at once |
+| `POST` | `/api/drafts/{id}/slots/{kind}/stop-waiting` | New: clears that kind's `waiting`. `200` with the slots; a kind not waiting is `200` and writes nothing |
+| `POST` | `/api/drafts/{id}/slots/{kind}/use` | New, Use this brief: `?base=<seq>` names the held brief; clears `held` and appends the `studio` note. `409 brief-changed` when `base` is no longer that kind's brief in force; a brief not on hold is `200` and writes nothing |
 | `POST` | `/api/drafts/{id}/draw` | `{ idempotencyKey, kind? }` for one card, `kind` defaulting to `diagram` for the web app from before this ships; or `{ items: [{ kind, idempotencyKey }, ...] }` for Make both. One card answers as today, plus `409 { reason: "kind-busy", jobId }` while that kind's newest job from this draft is not terminal. Make both answers `200 { results: [{ kind, jobId } \| { kind, status, refusal }] }`, one entry per item, each the answer that card's own press would have had |
 | `PUT` | `/api/drafts/{id}/brief` | `?base=<seq>&kind=<kind>`; validates with that kind's validator; `409 brief-changed` compares that kind's slot only |
 | `PUT` | `/api/drafts/{id}/kind` | Not built (STUDIO-VIDEOS.md listed it) |
@@ -698,7 +779,7 @@ T for tags, so they do not collide with C, M, E, U or V.
 | T10 | The diagram and the video share a slug | Allowed, and what the prompt asks for: different targets, leases and namespaces |
 | T11 | Both briefs name one proposed topic | The first press, or Make both, creates it; the other slot's pending topic is cleared and its button reads plain |
 | T12 | Both cards pressed, one after the other or from two tabs | Two keys (the kind is in each), two runners, the cap checked by each press. V20's "both run" now happens inside one draft; the machine carries one Chromium job and one render job, still unmeasured together |
-| T13 | An untagged question while cards are live | The planner answers; every card stays as it was (the table in "Which briefs a reply ends") |
+| T13 | An untagged question while cards are live | The planner answers; every card stays as it was unless the reply holds one (the table in "Which briefs a reply ends") |
 | T14 | Pasted text containing `@video` | Text. Only a pick or a suggestion button makes a chip |
 | T15 | A bare chip in an empty conversation | Send disabled, "Say what it should show" |
 | T16 | A bare chip after a turn | Sent: the planner writes that kind's brief from the conversation so far |
@@ -709,11 +790,16 @@ T for tags, so they do not collide with C, M, E, U or V.
 | T21 | "Two diagrams, one for X and one for Y" in one tagged message | One diagram brief per reply (the prompt's rule). The planner writes the brief for the first, and says in one line that the second is asked for with another Diagram tag, offering it as a suggestion button. Its brief is then written in answer to that tagged message, never unprompted, since a press of Draw starts no planner turn. Two briefs of one kind in one reply stay out of scope (open question 1) |
 | T22 | The planner's session is lost (C3) | The replay writes each tagged message's TAGS block back, and `plannerKinds` is kept, so the fresh session gets the same prompt |
 | T23 | A job's verdict arrives as a STUDIO note | The note names its kind and slug; only that kind's slot moves, and the planner proposes nothing on its own |
-| T24 | The planner writes a brief for a kind nobody tagged | Dropped: not validated, not shown, no retry; `brief-ignored` in the transcript |
+| T24 | The planner writes a brief for a kind nobody tagged and nothing is waiting for | Dropped: not validated, not shown, no retry; `brief-ignored` in the transcript |
 | T25 | A suggestion names a kind the draft cannot make | The block is dropped (outside `plannerKinds`), or the button is shown disabled with the menu's reason (the doctor failing) |
 | T26 | Make both, and one of the two is refused | The other starts; the refusal shows under its own card, and that card's own press stays for a retry |
 | T27 | `@video` typed and then Esc | It stays text and is not a mention; the planner is told such a word is not an order |
 | T28 | The drafts list for a draft that only talked | `title` is null (no brief yet), so the list shows `firstMessage` as it does today |
+| T29 | "That's the wrong topic", untagged, while a video card is live | The planner answers, ends with `hold` for video and suggests Video. The card greys with "On hold: You said the topic is wrong" and Use this brief; Make video and Make both are disabled. The person presses the suggestion and sends, and the new brief replaces the held one; or presses Use this brief if the planner misread them |
+| T30 | "@video attention weights", the planner asks "narrated or silent?", the person answers "narrated" with no tag | Video is waiting from the first message, so the second turn carries a WAITING block, the planner writes the video brief, and it is accepted as answering the first message's request. The chip on that message says "waiting" until the card lands |
+| T31 | Both tagged; the diagram brief passes, the video brief is refused and passes on the retry | Two replies, one card each, both with the first message's `requestSeq`: a pair. Make both appears under the video card once it is live |
+| T32 | Make both where the diagram names a proposed topic that fails to create and the video's topic exists | The diagram is refused with the topic's reason under its card; the video starts |
+| T33 | A person stops waiting, then changes their mind | Tagging the kind again waits anew; nothing else brings it back |
 
 ## Decisions
 
@@ -765,7 +851,10 @@ overruled.
 runner, recorded on the `message` event, and written into the planner's turn
 as a fenced TAGS block of kinds ahead of the text. The planner writes a brief
 of every tagged kind in its reply, asking first only when a tagged brief cannot
-be guessed; one message may carry one tag of each kind.
+be guessed; one message may carry one tag of each kind. A tagged kind waits
+on the draft until a brief of it lands, a newer tag replaces the request, the
+person stops waiting, or it is refused twice, so a clarifying answer without
+the tag still gets its brief.
 
 **Why:** the owner's word was "explicitly commands", so a tag must not be a
 guess the planner makes from prose, and a pasted or abandoned `@video` must not
@@ -782,8 +871,8 @@ which spends without a card to read (D29).
 answer and no brief. When the planner judges a diagram or a video would help,
 it says so and ends with a `suggest` block; the panel draws a button per kind
 under the newest reply, and pressing it puts that chip in the composer without
-sending. A brief is written only for a tagged kind, a brief for any other kind
-is dropped, and a change to a brief is itself a tagged request (or an inline
+sending. A brief is written only for a tagged kind (or one still waiting from an
+earlier tag), a brief for any other kind is dropped, and a change to a brief is itself a tagged request (or an inline
 edit).
 
 **Why:** the owner's words: "It should just continue to chat and answer
@@ -820,9 +909,12 @@ second storyboard call.
 most one brief in force per kind; a newer brief supersedes only the older
 brief of its kind, and an untagged reply supersedes nothing. Each card has its
 own button (Draw, Make video) and its own idempotency key, keyed by reply and
-kind. When one reply carries a live diagram card and a live video card, both
-enabled, Make both starts the two jobs with one press, each with its own key;
-one refusal does not stop the other. A card's press is disabled while that
+kind. When a diagram and a video card asked for in one message (the same
+`requestSeq`, whatever replies they landed in) are both live and enabled, Make
+both starts the two jobs with one press, each with its own key; each card is
+refused or started on its own, a failed proposed topic included. An untagged
+correction puts the card it contradicts on hold, by the planner's `hold` block,
+until the person presses Use this brief, edits it, or a new brief replaces it. A card's press is disabled while that
 kind's newest job from the draft is not terminal. Messages are accepted while
 jobs run, for every kind, which lifts C14. This amends D29: every job still
 starts from a person's press, and the owner chose one press for a pair asked
@@ -837,7 +929,9 @@ where it applied and stops a video reply from greying a diagram the person was
 about to draw.
 
 **Rejected:** only separate presses, this document's first version, which the
-owner overruled; Make both across cards from different replies, which the
+owner overruled; pairing by reply, which a retry or a clarifying question
+splits; any message putting every card on hold until re-affirmed, which greys
+cards through ordinary chat; Make both across cards from different requests, which the
 owner did not ask for and which would start two jobs proposed at different
 points in a conversation; one live card for the whole draft, which makes a
 two-tag message impossible; several live briefs of the same kind (open
@@ -846,8 +940,8 @@ question 1).
 ### D61. A brief's kind is in its block, and each brief is validated and retried on its own
 
 **Verdict:** every `brief` block carries `kind` (absent means diagram). The
-runner keeps the last block of each kind in a reply, drops any kind the message
-did not tag, validates each of the rest with its own validator, settles the
+runner keeps the last block of each kind in a reply, drops any kind that is
+neither tagged by the message nor waiting, validates each of the rest with its own validator, settles the
 valid ones at once, and sends one retry naming every refused brief, read only
 for those kinds. A draft from before this ships treats an untagged message as
 tagged Diagram, so its recorded prompt keeps working.
@@ -1006,8 +1100,13 @@ loses the Diagram or Video control and `PUT /api/drafts/{id}/kind`, and gains:
 - [ ] Brief blocks with `kind` (absent means diagram), the last per kind,
       untagged kinds dropped as `brief-ignored`, per-brief validation, the one
       shared retry for refused kinds, the partial-reply thread
-- [ ] The `suggest` block: read, checked against `plannerKinds`, stripped, and
-      carried on the reply
+- [ ] The `suggest` and `hold` blocks: read, checked (`plannerKinds`; a live
+      card to hold), stripped, and carried on the reply; `held` on the slot and
+      the Use this brief route
+- [ ] Waiting kinds: `waiting` set on a tagged message, the WAITING block in
+      later turns, a brief of a waiting kind accepted from any reply, the four
+      ways it clears, the stop-waiting route; every brief records its
+      `requestSeq`
 - [ ] `POST .../draw` by kind and as Make both (`items`), each item independent;
       `PUT .../brief` by kind
 - [ ] C14 lifted: messages accepted while a job runs; the press disabled per
@@ -1027,7 +1126,9 @@ loses the Diagram or Video control and `PUT /api/drafts/{id}/kind`, and gains:
 - [ ] The transcript draws a message's chips inline; the drafts list shows its
       kinds; suggestion buttons under the newest reply
 - [ ] One live card per kind, `(seq, kind)` keys everywhere a card is keyed,
-      Make both, Cmd+Enter with two cards, and the panel staying on the
+      Make both for a pair by `requestSeq` whatever replies it landed in, the
+      held card with Use this brief, the waiting chip and the Stop waiting
+      line, Cmd+Enter with two cards, and the panel staying on the
       conversation while another card is live
 - [ ] The opening line, "Ask me about an idea, or type @ to make a diagram or
       a video of it", and the labels (open question 2)
@@ -1048,6 +1149,10 @@ Its done-when gains:
 - Five untagged conversations about an idea (a question, a follow-up, a
   request to explain) produce no brief, and in at least three the planner
   offers a suggestion whose button puts the right chip in the composer.
+- A tagged request answered by a clarifying question and an untagged reply
+  ends in its card (T30); an untagged "that's the wrong topic" holds the card
+  it contradicts in at least four of five tries (T29); and a pair split by a
+  retry still offers Make both (T31).
 - A draft created before this ships still draws.
 - The composer is worked by keyboard alone, by mouse, by touch at 400px on iOS
   Safari and Android Chrome (with the phone's own keyboard, including one IME),

@@ -663,9 +663,11 @@ notes' shapes.
 Diagram or Video control in the empty conversation, `PUT
 /api/drafts/{id}/kind` while `turns` is 0, and a kind fixed after the first
 message (D51). Instead, any message may carry an @ tag for Diagram, Video or
-both; an untagged one makes what its words ask for, a diagram when they do not
-say; and the planner's one prompt carries every built kind from the first turn,
-so nothing has to switch mid-conversation.
+both, and a brief is written only for a tagged kind (or one still waiting from
+an earlier tag). An untagged message is conversation and writes no brief; when
+a video would help, the planner offers it as a button that puts the Video chip
+in the composer (D58 there). The planner's one prompt carries every built kind
+from the first turn, so nothing has to switch mid-conversation.
 
 ## The confirm card
 
