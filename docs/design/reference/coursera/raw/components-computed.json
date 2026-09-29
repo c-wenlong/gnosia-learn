@@ -50646,10 +50646,10 @@
        "padding": "0px 0px 0px 4px"
       },
       "previous": {
-       "display": "block",
-       "w": 24,
-       "h": 274,
-       "x": 329.6,
+       "display": "none",
+       "w": 0,
+       "h": 0,
+       "x": 0,
        "padding": "0px 4px 0px 0px"
       },
       "scroller": {

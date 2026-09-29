@@ -1096,7 +1096,14 @@ async function explore() {
 
   comp('explore-carousel-dark', { description: 'A carousel that overflows (20 cards at 242 wide, fixed columns): the scroll container has overflow-x auto, scroll-snap-type x mandatory and no scrollbar. The Next arrow appears at the right end; after one click the Previous arrow appears at the left end and the row has scrolled by four cards.', selector: '[data-testid=overflow-carousel] (dark band)' });
   await centre(darkCarousel);
-  await measure('explore-carousel-dark', 'default', darkCarousel, { pad: 0, extra: async (l) => ({ snapProbe: await l.evaluate(async (wrap) => { const sc = wrap.firstElementChild; sc.style.scrollBehavior = 'auto'; sc.scrollLeft = 100; await new Promise((r) => setTimeout(r, 700)); const settled = sc.scrollLeft; sc.scrollLeft = 0; sc.style.scrollBehavior = ''; return { requested: 100, settled }; }), ...(await carouselExtra(l)) }) });
+  await measure('explore-carousel-dark', 'default', darkCarousel, { pad: 0, extra: async (l) => {
+    // The arrow state is read first: the snap probe below scrolls to 100 and back,
+    // and the row only re-hides Previous on a scroll event that lands after the
+    // reset, so reading it afterwards recorded Previous as visible at scrollLeft 0.
+    const rest = await carouselExtra(l);
+    const snapProbe = await l.evaluate(async (wrap) => { const sc = wrap.firstElementChild; sc.style.scrollBehavior = 'auto'; sc.scrollLeft = 100; await new Promise((r) => setTimeout(r, 700)); const settled = sc.scrollLeft; sc.scrollLeft = 0; sc.style.scrollBehavior = ''; await new Promise((r) => setTimeout(r, 700)); return { requested: 100, settled }; });
+    return { snapProbe, ...rest };
+  } });
   out.components['explore-carousel-dark'].repeat = await repeatGap('[data-m="explore-band-dark"] [data-testid=overflow-carousel-content] > div');
 
   comp('explore-carousel-next', { description: 'Next arrow: a 24px wide button the height of the row, pinned to the right end, a 24px chevron over a white fade (linear-gradient to the right, 0 to 0.8 alpha; hover and pressed swap in a stronger fade), padding 0 0 0 4px. 0x0 when the row does not overflow. Clicking scrolls the row by four cards (1016px at 254 pitch) with scroll-behavior smooth.', selector: '[data-testid=overflow-carousel] button "Next"' });
