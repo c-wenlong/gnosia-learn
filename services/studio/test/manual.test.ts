@@ -146,6 +146,10 @@ describe("the options section", () => {
     expect(manual.text).not.toContain("**`boxShapes(keys, opts)`**");
     // Types are printed as written, so the allowed words stay a static list.
     expect(manual.text).toContain("- Colours (`TLDefaultColorStyle`, `BoxOptions[\"color\"]`): `black`");
+    // `text` never read `labelColor`, and since tldrawkc b0d2d0e it is not listed.
+    const text = manual.text.split("**`text`** (`opts`, a `TextOptions`):")[1]?.split("\n\n")[0] ?? "";
+    expect(text).toContain("- `color` (`TLDefaultColorStyle`): Text colour, default `black`.");
+    expect(text).not.toContain("labelColor");
   });
 
   it("merges per helper: generated where the tool lists fields, static for the rest", async () => {
