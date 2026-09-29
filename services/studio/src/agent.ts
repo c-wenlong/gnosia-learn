@@ -12,7 +12,7 @@ import {
   type Model,
 } from "./config";
 import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
-import { run, signalGroup } from "./proc";
+import { signalGroup, sweepByMarker } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
 /**
@@ -447,7 +447,7 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   this: connectors are not a setting source.
  * - `--append-system-prompt-file <manual>` adds the tldraw manual to Claude
  *   Code's own system prompt (docs/STUDIO-CHAT-FIRST.md, D30). The file form
- *   rather than `--append-system-prompt <text>`: the text is about 29,000
+ *   rather than `--append-system-prompt <text>`: the text is about 38,000
  *   characters, well inside the argument limit, but it would sit in every
  *   `ps` listing and in each recorded argv, and the file is already on disk
  *   under its hash. Measured on the installed CLI (2.1.274): a `--resume`
@@ -530,19 +530,5 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
  * group kill was enough.
  */
 export async function sweepOrphans(jobId: string): Promise<number[]> {
-  const marker = tmpDir(jobId);
-  const found = await run("pgrep", ["-f", "--", marker], { timeoutMs: 10_000 }).catch(() => null);
-  if (found === null) return [];
-  const pids = found.stdout
-    .split("\n")
-    .map((line) => Number.parseInt(line.trim(), 10))
-    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      /* already gone */
-    }
-  }
-  return pids;
+  return sweepByMarker(tmpDir(jobId));
 }

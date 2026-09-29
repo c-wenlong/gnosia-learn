@@ -1412,8 +1412,10 @@ async function health(store: JobStore, runner: Runner, drafts?: Drafts): Promise
     hash: null,
     chars: null,
     optionsSource: null,
+    optionsFallback: [],
     reasons: [],
     snippets: null,
+    snippetsPending: false,
     error: "this runner holds no manual source",
     builtAt: null,
   };

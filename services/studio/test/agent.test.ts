@@ -138,7 +138,7 @@ describe("the tldraw manual on the agent's system prompt", () => {
     const file = path.join(HOME, "manual", "abc.md");
     const { env } = await runFake("job-manual", undefined, false, file);
     expect(env.manualFile).toBe(file);
-    // The text form would put 29,000 characters of manual in every argv.
+    // The text form would put about 38,000 characters of manual in every argv.
     expect(env.appendText).toBe(false);
   });
 
