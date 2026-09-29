@@ -81,7 +81,7 @@ export function extendRefusal(status: number, refusal: Refusal, title: string): 
     case 404:
       return {
         headline: `There is no diagram called ${title} any more.`,
-        detail: "It may have been deleted, or renamed, since the grid was drawn. Close this to see the grid as it is now.",
+        detail: "It may have been deleted or renamed since the grid was drawn.",
         actions: ["close"],
       };
     case 502:
@@ -211,4 +211,27 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
 /** `window.sessionStorage`, or null where reading it throws or there is no window. */
 export function sessionStore(): Storage | null {
   return safely(() => (typeof window === "undefined" ? null : window.sessionStorage), null);
+}
+
+/* -------------------------------------------------------------------------- */
+/* The picture across the hand-off                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The diagram each just-created draft was opened on, in this tab's memory.
+ *
+ * The conversation reads its record before it knows it is an extend one, and
+ * without this its first frame would drop the pinned picture and the header
+ * the person was just looking at. Memory rather than storage on purpose: a
+ * reload renders on the server first, where this is always empty, and in a
+ * fresh tab it is empty too, so the two renders cannot disagree.
+ */
+const arriving = new Map<string, string>();
+
+export function noteArrival(draftId: string, name: string): void {
+  arriving.set(draftId, name);
+}
+
+export function arrivingSource(draftId: string): string | null {
+  return arriving.get(draftId) ?? null;
 }

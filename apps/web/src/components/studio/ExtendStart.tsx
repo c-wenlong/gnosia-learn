@@ -17,6 +17,7 @@ import {
   extendRefusal,
   forgetExtendKey,
   leaveOpener,
+  noteArrival,
   readingWords,
   sessionStore,
   type ExtendRefusal,
@@ -39,7 +40,18 @@ import { canvasHref, panelHref } from "@/lib/studio-view";
  * it: 400 and 404 can only be closed, 502 can be tried again or looked at on
  * the canvas, 503 and a runner that is down can be tried again.
  */
-export function ExtendStart({ name, title, path }: { name: string; title: string; path: string }) {
+export function ExtendStart({
+  name,
+  title,
+  path,
+  listed,
+}: {
+  name: string;
+  title: string;
+  path: string;
+  /** Whether the grid has this diagram. A name it does not have gets no picture, only the runner's answer. */
+  listed: boolean;
+}) {
   const router = useRouter();
   const { close } = useStudioDialog();
   const [refused, setRefused] = useState<ExtendRefusal | null>(null);
@@ -85,6 +97,7 @@ export function ExtendStart({ name, title, path }: { name: string; title: string
       return;
     }
     forgetExtendKey(store, name);
+    noteArrival(result.data.draftId, name);
     const { text: draftText, queued: waiting } = typed.current;
     leaveOpener(store, result.data.draftId, { send: waiting ?? EXTEND_OPENER, compose: waiting === null ? "" : draftText });
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
@@ -106,7 +119,11 @@ export function ExtendStart({ name, title, path }: { name: string; title: string
   }, [pending]);
 
   useEffect(() => {
-    composer.current?.focus();
+    // After the dialog's own effect, which runs after this one and focuses
+    // its first control (Close) when it opens: typing straight away should
+    // land in the composer, and an Enter there should not close the panel.
+    const later = setTimeout(() => composer.current?.focus(), 0);
+    return () => clearTimeout(later);
   }, []);
 
   const words = readingWords(now - startedAt);
@@ -122,7 +139,7 @@ export function ExtendStart({ name, title, path }: { name: string; title: string
         aria-label="Conversation"
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
-        <PinnedDiagram name={name} title={title} />
+        {listed && <PinnedDiagram name={name} title={title} />}
 
         {queued !== null && <UserMessage>{queued}</UserMessage>}
 
@@ -167,31 +184,28 @@ export function ExtendStart({ name, title, path }: { name: string; title: string
         )}
       </div>
 
-      <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
-        <Composer
-          value={text}
-          onChange={setText}
-          onSubmit={(value) => {
-            const body = value.trim();
-            if (body === "" || queued !== null || !pending) return;
-            setQueued(body);
-            setText("");
-          }}
-          label="Tell the planner what to add to this diagram"
-          placeholder="What should it gain?"
-          maxLength={8_000}
-          disabled={!pending}
-          sendDisabled={queued !== null}
-          disabledReason={
-            !pending
-              ? "The conversation could not start."
-              : queued !== null
-                ? "Your message goes as soon as the diagram is read."
-                : undefined
-          }
-          inputRef={composer}
-        />
-      </div>
+      {/* Refused, there is nothing to talk to: the composer goes rather than
+          sitting there disabled. */}
+      {pending && (
+        <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
+          <Composer
+            value={text}
+            onChange={setText}
+            onSubmit={(value) => {
+              const body = value.trim();
+              if (body === "" || queued !== null) return;
+              setQueued(body);
+              setText("");
+            }}
+            label="Tell the planner what to add to this diagram"
+            placeholder="What should it gain?"
+            maxLength={8_000}
+            sendDisabled={queued !== null}
+            disabledReason={queued !== null ? "Your message goes as soon as the diagram is read." : undefined}
+            inputRef={composer}
+          />
+        </div>
+      )}
     </div>
   );
 }

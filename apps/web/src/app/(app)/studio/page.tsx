@@ -201,7 +201,7 @@ export default async function StudioPage({
       return (
         <StudioDialog key="conversation" closeHref={closeHref} label={`Extending ${title}`} tall>
           {/* Keyed by name: Extend on another diagram is another press, with its own post. */}
-          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} />
+          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={view.extend in titles} />
         </StudioDialog>
       );
     }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
+import { ExtendLink } from "@/components/studio/ExtendLink";
 import { Button, ButtonLink, Chip, MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Button as KitButton } from "@/components/ui/Button";
 import { buttonClasses } from "@/components/ui/classes";
@@ -112,9 +113,7 @@ export function DiagramPanelBody({
         <SelectedDiagram diagram={diagram} jobs={jobs} path={path} embedded />
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-hair px-5 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
-        <Link href={extendHref} scroll={false} className={buttonClasses({})}>
-          Extend
-        </Link>
+        <ExtendLink href={extendHref} className={buttonClasses({})} />
         <KitButton href={canvasHref(diagram.name)} variant="secondary">
           Open canvas
         </KitButton>

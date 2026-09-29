@@ -57,7 +57,7 @@ import {
   type DraftView,
   type TranscriptEntry,
 } from "@/lib/studio-drafts";
-import { EXTEND_OPENING_TURN, sessionStore, takeOpener } from "@/lib/studio-extend";
+import { arrivingSource, EXTEND_OPENING_TURN, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-view";
 
@@ -137,6 +137,7 @@ export function DraftPanel({
   const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
+  const arriving = arrivingSource(draftId);
   const topicMap = useMemo(() => new Map(topics.map((topic) => [topic.slug, topic])), [topics]);
 
   /* ---------------------------------------------------------------- */
@@ -409,6 +410,23 @@ export function DraftPanel({
           </Button>
           <Failure text={startError} />
         </Empty>
+      </>
+    );
+  }
+
+  if (status === "loading" && arriving !== null) {
+    // Straight from Extend: the picture and the header stay where they were
+    // while the record is read, rather than blinking to a blank panel.
+    const arrivingTitle = titles[arriving] ?? arriving;
+    return (
+      <>
+        <DialogHeader title={`Extending ${arrivingTitle}`} />
+        <div className="flex min-h-0 flex-1 flex-col gap-5 px-5 py-5">
+          <PinnedDiagram name={arriving} title={arrivingTitle} />
+          <p className="text-center text-[13px] text-text3" role="status">
+            Opening the conversation…
+          </p>
+        </div>
       </>
     );
   }

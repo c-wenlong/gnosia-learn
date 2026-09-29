@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ExtendLink } from "@/components/studio/ExtendLink";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
@@ -85,14 +86,13 @@ export function DiagramTile({
           to the canvas, or to a conversation about extending the diagram.
           Separate targets, because a grid where one click does everything has
           no way to browse. Shown on hover, and on keyboard focus anywhere in
-          the tile, so Tab reaches them; invisible controls take no clicks. */}
-      <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-reduce:transition-none">
+          the tile, so Tab reaches them, and while Extend is opening; invisible
+          controls take no clicks. */}
+      <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <Link href={canvasHref(diagram.name)} className={HOVER_CONTROL}>
           Open canvas
         </Link>
-        <Link href={extendHref} scroll={false} className={HOVER_CONTROL}>
-          Extend
-        </Link>
+        <ExtendLink href={extendHref} className={HOVER_CONTROL} />
       </div>
     </div>
   );

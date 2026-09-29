@@ -134,3 +134,12 @@ describe("the opener handed to the conversation", () => {
     expect(takeOpener(null, "d4")).toBeNull();
   });
 });
+
+describe("the picture across the hand-off", () => {
+  it("remembers which diagram a draft was just opened on, and nothing else", async () => {
+    const { arrivingSource, noteArrival } = await import("./studio-extend");
+    expect(arrivingSource("fresh")).toBeNull();
+    noteArrival("d9", "dot-product");
+    expect(arrivingSource("d9")).toBe("dot-product");
+  });
+});

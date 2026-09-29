@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { commitDiagram, exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
 import { DiagramInspector, type JobRow } from "@/components/studio/DiagramInspector";
+import { ExtendLink } from "@/components/studio/ExtendLink";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
@@ -327,9 +328,10 @@ function Strip({ diagram, path, uncommitted }: { diagram: Diagram; path: string;
       {/* A change is asked for in a conversation on the grid, which opens on
           this diagram with its thumbnail pinned (docs/STUDIO-CHAT-FIRST.md,
           "Extend from a tile"). */}
-      <ButtonLink href={extendHref(diagram.name)} filled>
-        Extend
-      </ButtonLink>
+      <ExtendLink
+        href={extendHref(diagram.name)}
+        className="inline-flex h-8 shrink-0 items-center rounded-md bg-[var(--accent)] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-strong)]"
+      />
     </StudioStrip>
   );
 }
