@@ -760,3 +760,62 @@ describe("following the job when the draft was not listening", () => {
   });
 });
 
+
+describe("C11: the extend target changed after the conversation started", () => {
+  /** An extend draft on disk, as `create` leaves one after `inspect`, with its checkout beside it. */
+  async function extendDraft(document: unknown, revision: number): Promise<{ id: string; drafts: DraftsT }> {
+    const { record } = await drafts.create({ idempotencyKey: "c11" });
+    const { workDir, workPath } = await import("../src/paths");
+    const { documentHashOf } = await import("../src/diagrams");
+    await mkdir(workDir(), { recursive: true });
+    await writeFile(workPath("dot-product"), JSON.stringify(document), "utf8");
+    await writeFile(path.join(workDir(), "dot-product.checkout.json"), JSON.stringify({ revision }), "utf8");
+    const saved = JSON.parse(await readFile(draftJsonPath(record.id), "utf8"));
+    await writeFile(
+      draftJsonPath(record.id),
+      JSON.stringify({ ...saved, source: "dot-product", sourceHash: await documentHashOf(workPath("dot-product")), sourceRevision: revision }),
+      "utf8",
+    );
+    const loaded = build();
+    await loaded.load();
+    return { id: record.id, drafts: loaded };
+  }
+
+  it("reports nothing on a new diagram's conversation", async () => {
+    const { record } = await drafts.create({ idempotencyKey: "plain" });
+    const view = await drafts.view(record.id);
+    expect(view.sourceChanged).toBe(false);
+    expect(view.sourceRevision).toBeNull();
+  });
+
+  it("is false while the checkout is what the planner was told about, whatever order its keys are in", async () => {
+    const { id, drafts: loaded } = await extendDraft({ a: 1, b: [1, 2] }, 3);
+    const { workPath } = await import("../src/paths");
+    await writeFile(workPath("dot-product"), JSON.stringify({ b: [1, 2], a: 1 }), "utf8");
+    const view = await loaded.view(id);
+    expect(view.sourceChanged).toBe(false);
+    expect(view.sourceRevision).toBe(3);
+  });
+
+  it("is true after an edit to the checkout", async () => {
+    const { id, drafts: loaded } = await extendDraft({ a: 1 }, 3);
+    const { workPath } = await import("../src/paths");
+    await writeFile(workPath("dot-product"), JSON.stringify({ a: 2 }), "utf8");
+    expect((await loaded.view(id)).sourceChanged).toBe(true);
+  });
+
+  it("is true once the checkout is brought up to a newer revision", async () => {
+    const { id, drafts: loaded } = await extendDraft({ a: 1 }, 3);
+    const { workDir } = await import("../src/paths");
+    await writeFile(path.join(workDir(), "dot-product.checkout.json"), JSON.stringify({ revision: 4 }), "utf8");
+    expect((await loaded.view(id)).sourceChanged).toBe(true);
+  });
+
+  it("does not guess when the checkout is gone", async () => {
+    const { id, drafts: loaded } = await extendDraft({ a: 1 }, 3);
+    const { workDir, workPath } = await import("../src/paths");
+    await rm(workPath("dot-product"));
+    await rm(path.join(workDir(), "dot-product.checkout.json"));
+    expect((await loaded.view(id)).sourceChanged).toBe(false);
+  });
+});

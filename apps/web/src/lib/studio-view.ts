@@ -94,20 +94,27 @@ export interface StudioView {
   /**
    * The job whose panel is open, or null for the inspector.
    *
-   * In the URL for the same reason the filters are: the right panel has three
-   * contents now — the inspector, the brief form and one job — and which one is
+   * In the URL for the same reason the filters are: the panel holds one of
+   * several things (a tile's panel, a conversation, one job) and which one is
    * showing is a thing a person navigates to and back from. It is not job
    * *state*: the runner holds that, and this is a pointer at it.
    */
   job: string | null;
   /**
-   * The brief form: `""` for a blank one, a job id to prefill from that job.
-   *
-   * Null is "not open". Edit brief on a failed job is the second case, and it
-   * is a prefill rather than a copy — the form posts a new brief, and a job is
-   * never edited in place.
+   * The diagram an Extend press is opening a conversation on, by name, while
+   * the runner checks it out and inspects it (docs/STUDIO-CHAT-FIRST.md,
+   * "Extend from a tile"). A pointer at a request in flight, not at a draft:
+   * once the draft exists the panel moves to `?draft=` and this is dropped.
    */
-  brief: string | null;
+  extend: string | null;
+  /**
+   * The Extend press came from Talk it through on a failed job (`&talk=1`),
+   * so it sends no opener, whatever storage does or does not hold: the
+   * person writes the first turn. In the URL rather than in storage so a
+   * browser with no storage cannot turn it into a paid turn nobody asked
+   * for. Meaningless without `extend`, and dropped with it.
+   */
+  talk: boolean;
   /**
    * Whether the job panel may open an event stream at all.
    *
@@ -148,7 +155,8 @@ export const DEFAULT_VIEW: StudioView = {
   selected: null,
   panel: true,
   job: null,
-  brief: null,
+  extend: null,
+  talk: false,
   stream: true,
   shot: null,
   draft: null,
@@ -198,26 +206,21 @@ export function parseView(params: RawParams): StudioView {
 }
 
 /**
- * The three parameters that decide what the right panel holds.
+ * The parameters that decide what the panel holds.
  *
  * Split out of `parseView` because the canvas route needs them and does not
  * have a view: `/studio/d/<name>` has no filters, no sort and no selection, and
  * a job started from the canvas has to be visible there too.
- *
- * `new` is read with `has` rather than through `one`, because an empty value is
- * meaningful here: `?new=` is a blank form and `?new=job-id` is a prefilled
- * one, and `one` returns null for both.
  */
 export function parsePanel(
   params: RawParams,
-): Pick<StudioView, "job" | "brief" | "stream" | "shot" | "draft"> {
-  const brief = params.new;
-  const first = Array.isArray(brief) ? brief[0] : brief;
+): Pick<StudioView, "job" | "extend" | "talk" | "stream" | "shot" | "draft"> {
   const shot = one(params.shot);
   const job = one(params.job);
   return {
     job,
-    brief: first === undefined ? null : first,
+    extend: one(params.extend),
+    talk: one(params.extend) !== null && one(params.talk) === "1",
     stream: (one(params.stream) ?? "on") !== "off",
     // A picture belongs to a job, so `?shot=after` on its own names nothing and
     // is read as nothing rather than as a main area that cannot say whose
@@ -246,7 +249,8 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.selected !== null) params.set("sel", next.selected);
   if (next.panel !== DEFAULT_VIEW.panel) params.set("panel", next.panel ? "1" : "0");
   if (next.job !== null) params.set("job", next.job);
-  if (next.brief !== null) params.set("new", next.brief);
+  if (next.extend !== null) params.set("extend", next.extend);
+  if (next.extend !== null && next.talk) params.set("talk", "1");
   if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
@@ -255,18 +259,19 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
 }
 
 /**
- * The same three parameters, patched onto any path.
+ * The panel's parameters, patched onto any path.
  *
  * `studioHref` rebuilds `/studio` from a whole view, which the canvas route
- * cannot use: it has a name in its path and only these three in its query. Both
- * screens open a job panel and a brief form with the same links, so the patch
- * is written once and takes the path it is given.
+ * cannot use: it has a name in its path and only these in its query. Both
+ * screens open a job panel with the same links, so the patch is written once
+ * and takes the path it is given.
  */
 export function panelHref(
   path: string,
   patch: {
     job?: string | null;
-    brief?: string | null;
+    extend?: string | null;
+    talk?: boolean;
     shot?: "before" | "after" | null;
     draft?: string | null;
     selected?: string | null;
@@ -286,19 +291,24 @@ export function panelHref(
     if (patch.job === null) params.delete("job");
     else params.set("job", patch.job);
   }
-  if (patch.brief !== undefined) {
-    if (patch.brief === null) params.delete("new");
-    else params.set("new", patch.brief);
+  if (patch.extend !== undefined) {
+    if (patch.extend === null) params.delete("extend");
+    else params.set("extend", patch.extend);
+    // A new press, or none, is not the Talk it through one unless it says so.
+    if (patch.talk !== true) params.delete("talk");
   }
+  if (patch.talk === true && params.get("extend") !== null) params.set("talk", "1");
+  if (patch.talk === false) params.delete("talk");
+  if (params.get("extend") === null) params.delete("talk");
   if (patch.shot !== undefined) {
     if (patch.shot === null) params.delete("shot");
     else params.set("shot", patch.shot);
   }
   // A picture belongs to one job, so anything that changes which job the panel
-  // is about takes the picture with it: closing the panel, opening a brief form
-  // over it, or following a Resume to the job it queued. Only a patch that
-  // names a picture keeps one, which is the link that opens it.
-  if (patch.shot === undefined && (patch.job !== undefined || patch.brief != null)) {
+  // is about takes the picture with it: closing the panel, opening a
+  // conversation over it, or following a Resume to the job it queued. Only a
+  // patch that names a picture keeps one, which is the link that opens it.
+  if (patch.shot === undefined && (patch.job !== undefined || patch.extend != null)) {
     params.delete("shot");
   }
   if (params.get("job") === null) params.delete("shot");
@@ -307,6 +317,30 @@ export function panelHref(
   for (const key of ["v", "ok", "m"]) params.delete(key);
   const query = params.toString();
   return query === "" ? (base ?? "/studio") : `${base ?? "/studio"}?${query}`;
+}
+
+/**
+ * The conversation a job came from, from wherever the job is showing.
+ *
+ * The conversation panel lives on `/studio` only, so from the canvas route
+ * this leaves for the grid rather than patching a path that has no panel for
+ * a draft. On `/studio` it keeps the filters and swaps the panel.
+ */
+export function conversationHref(path: string, draftId: string): string {
+  const [base] = path.split("?");
+  const from = base === "/studio" ? path : "/studio";
+  return panelHref(from, { draft: draftId, job: null, selected: null, extend: null });
+}
+
+/**
+ * An Extend press on `name`, from wherever a person is: on `/studio` it keeps
+ * the filters and swaps the panel, and from the canvas route it goes to the
+ * grid, where the Extend panel lives.
+ */
+export function extendFromHref(path: string, name: string, options: { talk?: boolean } = {}): string {
+  const [base] = path.split("?");
+  const from = base === "/studio" ? path : "/studio";
+  return panelHref(from, { extend: name, talk: options.talk === true, draft: null, job: null, selected: null });
 }
 
 /** Add or remove one topic chip, which is what clicking a chip means. */
@@ -580,6 +614,24 @@ export function readOutcome(params: RawParams): VerbReport | null {
     headline: headline ?? verb,
     detail: detail ?? null,
   };
+}
+
+/**
+ * Extend, from anywhere but the grid: `/studio?extend=<name>`, the panel that
+ * opens a conversation on that diagram. On the grid itself the tile and its
+ * panel patch the current view instead, so the filters survive.
+ */
+export function extendHref(name: string): string {
+  return panelHref("/studio", { extend: name });
+}
+
+/**
+ * A diagram's display title from a name-to-title record, or null. Own keys
+ * only: a name comes from the URL, and `?extend=constructor` must not find
+ * `Object.prototype.constructor` and render a function as a title.
+ */
+export function titleOf(titles: Readonly<Record<string, string>>, name: string): string | null {
+  return Object.hasOwn(titles, name) ? (titles[name] ?? null) : null;
 }
 
 /** `/studio/d/<name>`, the canvas route. */

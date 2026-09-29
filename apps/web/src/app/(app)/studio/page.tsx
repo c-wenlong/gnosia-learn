@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { BriefForm } from "@/components/studio/BriefForm";
 import { DiagramPanelBody, type JobRow } from "@/components/studio/DiagramInspector";
 import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
 import { DraftPanel } from "@/components/studio/DraftPanel";
+import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { PlusCard } from "@/components/studio/PlusCard";
@@ -30,6 +30,7 @@ import {
   readOutcome,
   sortDiagrams,
   studioHref,
+  titleOf,
   topicChips,
   type DiagramListing,
   type RawParams,
@@ -159,19 +160,26 @@ export default async function StudioPage({
     topicTitles,
   );
   // Close drops every parameter the panel reads, and keeps the filters.
-  const closeHref = panelHref(path, { draft: null, job: null, brief: null, selected: null, shot: null });
+  const closeHref = panelHref(path, { draft: null, job: null, extend: null, selected: null, shot: null });
+  const titles = Object.fromEntries(listing.diagrams.map((diagram) => [diagram.name, displayTitle(diagram)]));
+  // Extend patches this view, so the filters are there when the panel closes.
+  const extendFrom = (name: string) => panelHref(path, { extend: name, selected: null, job: null, draft: null });
   const dialog = view.shot !== null ? null : panelFor();
 
   function panelFor() {
     if (view.draft !== null) {
       return (
-        <StudioDialog key={`draft:${view.draft}`} closeHref={closeHref} label="New diagram" tall>
+        // One key for a conversation and the Extend press before it, so the
+        // dialog stays open while one becomes the other rather than closing
+        // and opening again. The panel inside is keyed by draft.
+        <StudioDialog key="conversation" closeHref={closeHref} label="Diagram conversation" tall>
           <DraftPanel
+            key={view.draft}
             draftId={view.draft}
             jobId={view.job}
-            form={view.brief}
             path={path}
             topics={topicOptions}
+            titles={titles}
             suggestions={chatSuggestions}
             cap={cap}
           />
@@ -189,13 +197,12 @@ export default async function StudioPage({
         </StudioDialog>
       );
     }
-    if (view.brief !== null) {
+    if (view.extend !== null) {
+      const title = titleOf(titles, view.extend) ?? view.extend;
       return (
-        <StudioDialog key="brief" closeHref={closeHref} label="Fill the brief yourself" tall>
-          <DialogHeader title="Fill the brief yourself" />
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <BriefForm path={path} topics={topicOptions} from={view.brief} embedded />
-          </div>
+        <StudioDialog key="conversation" closeHref={closeHref} label={`Extending ${title}`} tall>
+          {/* Keyed by name: Extend on another diagram is another press, with its own post. */}
+          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={titleOf(titles, view.extend) !== null} talk={view.talk} />
         </StudioDialog>
       );
     }
@@ -213,7 +220,7 @@ export default async function StudioPage({
               There is no diagram named <span className="font-mono">{view.selected}</span> in this studio.
             </p>
           ) : (
-            <DiagramPanelBody diagram={selected} jobs={jobs} path={path} />
+            <DiagramPanelBody diagram={selected} jobs={jobs} path={path} extendHref={extendFrom(selected.name)} />
           )}
         </StudioDialog>
       );
@@ -326,6 +333,7 @@ export default async function StudioPage({
                           diagram={diagram}
                           selected={diagram.name === view.selected}
                           selectHref={studioHref(view, { selected: diagram.name })}
+                          extendHref={extendFrom(diagram.name)}
                           showConcepts={view.chips}
                         />
                       ))}
