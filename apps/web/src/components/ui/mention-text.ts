@@ -148,27 +148,27 @@ export function inlinePieces<K extends string = string>(value: MentionValue<K>):
  * Returns the ones that pass, in text order.
  */
 /**
- * The tags a plain-text edit of `previous` still carries: each old mention
- * whose token is still in `text`, in order, at the occurrence nearest where it
- * was. For a field that cannot draw chips (the fallback when Lexical will not
- * load), so a tagged message handed to it sends as tagged. It only keeps tags;
- * an `@video` typed as text never becomes one, the rule the planner follows.
+ * The tags a plain-text edit of `previous` still carries. A field that cannot
+ * draw chips (the fallback when Lexical will not load) reports each change as
+ * one contiguous edit, so the text splits into a common prefix, the edited
+ * span and a common suffix. A tag wholly in the prefix stays where it was, one
+ * wholly in the suffix moves by the edit's net length, and one the edit
+ * touched is gone. Nothing is matched by token: an `@video` typed as text
+ * never becomes a tag, even where a deleted one used to be (Greptile on #204).
  */
 export function carryMentions<K extends string>(previous: MentionValue<K>, text: string): Mention<K>[] {
+  const before = previous.text;
+  const most = Math.min(before.length, text.length);
+  let prefix = 0;
+  while (prefix < most && before[prefix] === text[prefix]) prefix += 1;
+  let suffix = 0;
+  while (suffix < most - prefix && before[before.length - 1 - suffix] === text[text.length - 1 - suffix]) suffix += 1;
+  const tail = before.length - suffix;
+  const shift = text.length - before.length;
   const kept: Mention<K>[] = [];
-  let cursor = 0;
-  const shift = text.length - previous.text.length;
-  for (const mention of validMentions(previous.text, previous.mentions)) {
-    const token = mentionToken(mention.kind);
-    const occurrences: number[] = [];
-    for (let at = text.indexOf(token, cursor); at !== -1; at = text.indexOf(token, at + 1)) occurrences.push(at);
-    if (occurrences.length === 0) continue;
-    // Nearest to where it was, or to where it was plus the edit's net length
-    // (a tag after an insertion moved right by it).
-    const near = (at: number) => Math.min(Math.abs(at - mention.start), Math.abs(at - mention.start - shift));
-    const start = occurrences.reduce((best, at) => (near(at) < near(best) ? at : best));
-    kept.push({ kind: mention.kind, start, end: start + token.length });
-    cursor = start + token.length;
+  for (const mention of validMentions(before, previous.mentions)) {
+    if (mention.end <= prefix) kept.push(mention);
+    else if (mention.start >= tail) kept.push({ ...mention, start: mention.start + shift, end: mention.end + shift });
   }
   return kept;
 }

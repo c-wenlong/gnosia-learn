@@ -201,21 +201,30 @@ describe("the plus menu", () => {
 });
 
 describe("carryMentions (the plain fallback)", () => {
-  const tagged = { text: "@video the loop", mentions: [{ kind: "video", start: 0, end: 6 }] };
+  const tagged = { text: "@video the loop", mentions: [{ kind: "video" as const, start: 0, end: 6 }] };
 
-  it("keeps a tag through an edit before, after or around it", () => {
+  it("keeps a tag through an edit before or after it", () => {
     expect(carryMentions(tagged, "Make a @video the loop")).toEqual([{ kind: "video", start: 7, end: 13 }]);
     expect(carryMentions(tagged, "@video the whole loop")).toEqual([{ kind: "video", start: 0, end: 6 }]);
     expect(carryMentions(tagged, tagged.text)).toEqual(tagged.mentions);
   });
 
-  it("drops a tag whose token was edited away, and never makes one from typed text", () => {
+  it("drops a tag the edit touched, and never makes one from typed text", () => {
     expect(carryMentions(tagged, "@vide the loop")).toEqual([]);
     expect(carryMentions({ text: "the loop", mentions: [] }, "@video the loop")).toEqual([]);
   });
 
-  it("keeps two tags in order, and a typed @video beside a tag stays a word", () => {
-    const both = { text: "@diagram and @video", mentions: [{ kind: "diagram", start: 0, end: 8 }, { kind: "video", start: 13, end: 19 }] };
+  it("does not attach a deleted tag to an @video typed elsewhere (Greptile on #204)", () => {
+    // The tag deleted in one edit, then @video typed at the end in the next.
+    const deleted = carryMentions(tagged, " the loop");
+    expect(deleted).toEqual([]);
+    expect(carryMentions({ text: " the loop", mentions: deleted }, " the loop @video")).toEqual([]);
+    // Or both in one edit that replaces the tag's span along with more text.
+    expect(carryMentions(tagged, "the loop @video")).toEqual([]);
+  });
+
+  it("keeps two tags, and a typed @video beside a tag stays a word", () => {
+    const both = { text: "@diagram and @video", mentions: [{ kind: "diagram" as const, start: 0, end: 8 }, { kind: "video" as const, start: 13, end: 19 }] };
     expect(carryMentions(both, "@diagram and also @video")).toEqual([
       { kind: "diagram", start: 0, end: 8 },
       { kind: "video", start: 18, end: 24 },
