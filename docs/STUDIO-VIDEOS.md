@@ -24,8 +24,9 @@ shows a storyboard: the one idea, who it is for, the length, and every scene
 as a list of beats, each a line the voice will say and what the screen does
 while it says it. The person reads the script, edits a line if they like, and
 presses Make video. A video agent does what the owner does by hand with the
-manimkc-video skill: writes the ManimGL scenes, previews them, looks at every
-contact sheet, fixes, and builds the final cut; the runner then checks the cut
+manimkc-video skill: writes the ManimGL scenes, voices the narration with the
+local model, previews them, looks at every contact sheet, fixes (a line
+included, if the picture needs it), and builds the final cut; the runner then checks the cut
 against the script. The panel shows each step and the sheets as they arrive,
 then plays the finished video. Accept stores it in the catalog, where the library plays it
 with its chapters and transcript. To change it, the person says what to change.
@@ -62,6 +63,18 @@ written, and designed around below:
 5. **A settings panel** where the owner picks the model and the effort level
    the video agent runs with, defaulting to the owner's own Claude Code
    default (D53).
+
+Four more, answered the same day to the questions this document raised:
+
+6. **The agent voices it.** The video agent runs the local narration step
+   itself, as the owner's hand runs do, so it can reword and re-voice a line
+   mid-job; the approved brief's lines are the starting script, not a lock
+   (D47, D48).
+7. **Clean room.** No `manimkc example` over the owner's videos; the manual's
+   two worked scenes instead.
+8. **Source in the catalog only**, never in `tools/manimkc/topics/` (D49).
+9. **Talking while a video renders** is allowed; the Draw press stays locked
+   while this draft's video job runs.
 
 ## Read order
 
@@ -101,12 +114,12 @@ flowchart LR
     UI["/studio<br/>chat panel"] -- "draft kind video" --> PL["planner turn<br/>video prompt"]
     PL -- "brief" --> V["validateVideoBrief"]
     V -- "Draw press: Make video" --> Q["video runner<br/>own queue"]
-    Q -- "brief's lines" --> TTS["narration<br/>kokoro, before the agent"]
     Q --> FARM["jobs/id/checkout<br/>synthetic manimkc"]
     Q --> AG["video agent<br/>claude -p, sealed"]
     AG -- "Edit" --> SRC["topics/studio/slug/slug.py"]
     AG -- "Bash: jobs/id/bin/video" --> W["wrapper"]
-    W -- "sandbox-exec" --> SB["manimkc api, lint,<br/>preview, build"]
+    W -- "narration profile" --> TTS["video narrate<br/>kokoro, local"]
+    W -- "render profile" --> SB["manimkc api, lint,<br/>preview, build"]
     SB --> R["jobs/id/render<br/>sheets, scenes, the cut"]
     AG -- "Read" --> R
     R -- "copied once" --> G["gate<br/>checks the copies"]
@@ -159,7 +172,7 @@ runner's, not the agent's.
 | Step | Executes agent-written code? | Runs |
 | --- | --- | --- |
 | `manimkc lint` | no: it parses with `ast.parse` | inside the sandbox anyway, since it costs nothing |
-| Narration (`narration.prefetch`) | no: it synthesises the brief's lines, before the agent has written anything | outside the sandbox, by the runner, with its own environment (D47) |
+| Narration (`video narrate`, and the start of every `preview` and `build`) | no, but its input is text the agent wrote: the `voiceover` literals of the scene file | inside the narration profile, which can read the kokoro model and write only the job's audio directory (D47) |
 | `manimkc preview` (the agent's call) | yes: `manimgl` imports the scene file | inside the sandbox |
 | `manimkc build` (the agent's call, as the skill's last step) | yes, again, at 1080p | inside the sandbox |
 | Contact sheets, ffprobe, the join | no, but they run under the same `manimkc` process | inside the sandbox |
@@ -364,9 +377,10 @@ note when the brief names one. Suppose it gets all the way.
 | Asking launchd or LaunchServices to start a process outside the sandbox | Refused: no program outside the exec list starts, and the LaunchServices services are denied (measured) |
 | Planting a link in `render/` so the runner reads or overwrites a file elsewhere | Symbolic and hard links are refused (measured). The runner still copies outputs with `O_NOFOLLOW`, regular files with one link only, before it reads them (the gate, step 5) |
 | Leaving a process running that rewrites the finished video after the gate looked | The gate reads copies, taken once and hashed, never `render/` again; Accept uploads those copies |
-| Planting code the next unsandboxed step imports | There is none that reads agent input: narration is synthesised from the brief, with `python -I`, before the agent starts (D47), and the wrapper builds its child's environment from nothing. Whether the CLI's Bash matcher accepts a leading `PYTHONPATH=... ` before the allowed prefix was not tested; with the wrapper ignoring its inherited environment, the answer does not matter |
+| Planting code the next unsandboxed step imports | Nothing unsandboxed reads agent input: narration runs in its own sandbox (D47), and the wrapper builds its child's environment from nothing. Whether the CLI's Bash matcher accepts a leading `PYTHONPATH=... ` before the allowed prefix was not tested; with the wrapper ignoring its inherited environment, the answer does not matter |
 | Reading other topics' scenes or renders, or other jobs | Refused twice: by the permission file for the agent's own tools, and by the sandbox for its code |
-| Saying something other than the approved script | Bounded, not prevented. The only audio the sandbox can read is the brief's own clips, and it cannot synthesise more (the model's files are outside what it may read), so the worst is the approved lines out of order, or tones. The gate's script step checks the source; its sync step reads a transcript the scene's own `VoiceScene` wrote, so it catches mistakes, not a hostile scene. The person watching is the check for that |
+| Saying something other than the approved script | Allowed by design since the owner's decision 6: the agent may reword a line. It is made visible, not prevented. The gate compares the voiced lines with the brief's and the job view and the review list every changed line beside its original; the voice is local kokoro reading text that is in the source. A hostile scene could still play one of its own job's clips in the wrong place; the transcript it writes catches mistakes, not that. The person watching is the check |
+| Feeding the narration step a hostile line of text | The text goes to kokoro's phonemiser and model and nowhere else: no shell, no LLM. A line built to crash or exploit that parser would run inside the narration profile, which has no network, reads only the model, the venvs and the job, and writes only the job's audio directory; measured, it could not read the Hugging Face token or the owner's shared TTS cache. A very long line costs its own job's time. Whatever audio comes out is in the video the person watches |
 | Showing something false or offensive | Not preventable by a check. The person watches it before it lands, which is the reason Accept exists |
 | Burning money | The hang timer, and the daily cap if the owner sets one. By the owner's decision there is no per-video limit; a session that is working and not hung runs until it finishes (D54) |
 
@@ -409,7 +423,7 @@ decides is everything on screen.
 | `voice` | a kokoro voice from the VOICES block, or `none` for a silent video | Kokoro only in v1 (D47) |
 | `scenes` | 2 to 8; `name` lower-case words joined by underscores, unique, under 30 characters | A scene becomes one class, one chapter and one contact sheet |
 | `beats` | 1 to 6 per scene, 40 in all | The skill's rule is three to six beats a scene; the total bounds one agent session |
-| `say` | 1 to 600 characters; no `{`, `}`, backslash or straight double quote (typographic quotes are fine) | It becomes one `voiceover("...")` literal, verbatim, and manimkc's own narration count reads double-quoted literals with a regex |
+| `say` | 1 to 600 characters; no `{`, `}`, backslash or straight double quote (typographic quotes are fine) | The starting line for one `voiceover("...")` literal, and manimkc's narration step reads double-quoted literals with a regex |
 | `show` | 1 to 300 characters | The agent's instruction for the beat |
 | `labels` | at most 4 per beat, each under 40 characters | The gate looks for each as a string literal in the scene (see the gate) |
 | `seconds` | 3 to 8, on every beat of a silent video and on no other | A silent beat has no voice to set its length |
@@ -435,8 +449,10 @@ the target is 180, so add about 1,100 characters or set `targetSeconds` to
 word missing from `narration.SPOKEN`, because the voice reads it as a word
 (`ACL` as "ackle"). The runner runs the same check on the brief's lines at
 validation time and, rather than refusing, adds a STUDIO note listing them, so
-the planner can spell them out ("A C L") in the next brief. The agent cannot
-fix it later: the lines are verbatim and `lib/` is not its to edit.
+the planner can spell them out ("A C L") in the next brief. The agent may
+also respell one while voicing it (D47), which the job view shows as a
+changed line; it cannot edit `narration.SPOKEN`, since `lib/` is not its to
+edit.
 
 ## The planner's prompt
 
@@ -512,9 +528,10 @@ studio is in this prompt.
 
 - The first scene says why a viewer should care. The last scene is a short
   map of what they saw, in two or three beats.
-- `say` is what the voice says, word for word: one to three sentences of
-  plain spoken English. The finished video is checked for these exact words,
-  so write them as final, never as notes. Write numbers the way a person
+- `say` is what the voice says: one to three sentences of plain spoken
+  English. Write it as final, never as notes: it is the script the person
+  approves, and the video agent changes a line only when the picture needs
+  it, which the person is shown. Write numbers the way a person
   says them ("three hundred milliseconds"); the digits go in `labels`. Spell
   out an abbreviation the way it is spoken ("A C L") unless it is said as a
   word.
@@ -646,22 +663,22 @@ changes the predicted length at once.
 ## The agent's prompt and manual
 
 The user message is built like the diagram one: the files the agent may edit,
-the loop, the rule that every line is verbatim, the brief inside its data
+the loop, the rule that the brief's lines are the script to start from, the brief inside its data
 fence. The manual is appended with `--append-system-prompt-file`, hashed and
 recorded on the job as `manualHash`, exactly as D38. It is the manimkc-video
 skill, rewritten for a session with one command. Its sections:
 
 | Section | Content | Source |
 | --- | --- | --- |
-| Your commands | `video api [names]`, `video lint`, `video preview [Scene ...]`, `video build`, spelled as the absolute wrapper path, and that nothing else runs | Static |
+| Your commands | `video api [names]`, `video lint`, `video narrate [Scene ...]`, `video preview [Scene ...]`, `video build`, spelled as the absolute wrapper path, and that nothing else runs | Static |
 | The loop | The skill's order from step 6: write every scene; `lint` and fix every error; `preview`; **Read every sheet path it prints**; fix and preview only the scenes you changed; when every sheet is clean, `build`, and read its report. An error anywhere is yours to fix and run again, as the owner would | Static, from the manimkc-video skill |
-| Verbatim lines | Narrated: each beat is one `with self.voiceover("..."):` block holding that beat's `say` exactly, in order; the closing fade goes after the last block. The clips already exist for exactly these lines, and no other line can be voiced. Silent: each beat's `say` is its caption, shown with `CaptionBar` as written, and the beat holds for its `seconds`; no `voiceover` at all | Static, from manimkc's `AGENTS.md`, `lib/cslib.py` and the server's prompt |
+| The script | Narrated: start with each beat as one `with self.voiceover("..."):` block holding that beat's `say`, in order, as a double-quoted literal; the closing fade goes after the last block. Reword, split or respell a line when the picture or the voice needs it, as the owner would, and say which and why in the final message; `preview` and `build` voice whatever the file says, and `narrate` re-voices on its own. Silent: each beat's `say` is its caption, shown with `CaptionBar` as written, and the beat holds for its `seconds`; no `voiceover` at all | Static, from manimkc's `AGENTS.md`, `lib/cslib.py` and the server's prompt |
 | The frame and the house style | 14.22 by 8 units, keep inside x in [-6.9, 6.9] and y in [-3.8, 3.8], heading at `to_edge(UP, buff=0.45)`, body around y = -0.3; `Text` for words, `Tex` only when the video doctor found tectonic and dvisvgm; the names that do not exist here | Static, from the skill and `AGENTS.md` |
 | The library | Every helper and constant with its usage line | **Generated** by the runner from the real checkout's `manimkc api --json` (12,452 characters today, measured); the agent's own `video api` runs in the job checkout, where the only topic is its own, so the manual's listing is the complete one |
 | Looking at a sheet | The skill's checklist, in its order | Static |
 | Two worked scenes | A narrated scene built from `labeled_box` and `routed_arrow`, and one built on `DataTable`, each rendered in the suite | Static, tested |
 | Known traps | `TracedPath.clear_updaters()` before a fade, `Annulus(center=)`, the `animate` snapshot trap, garbled `ReplacementTransform` between texts of different lengths, the parallel text-render race that a solo re-render fixes | Static, from `AGENTS.md` |
-| Never | Other topics, `new`, `example`, reading `lib/` to find a helper `api` already lists, the network | Static |
+| Never | Other topics, `new`, `example`, reading `lib/` to find a helper `api` already lists, the network, changing the scenes the brief names | Static |
 
 The Bash tool's own timeout is two minutes by default, and an uncached
 preview of a whole video took up to 131 seconds in manimkc's log
@@ -675,14 +692,18 @@ even that is a timeout the agent sees and handles, as it would by hand.
 `jobs/<id>/bin/video` is a small Node program the runner writes per job, with
 the job's paths compiled into it. It is the only thing the agent can run.
 
-- It accepts four verbs and nothing else: `api` (with helper names from
-  `manimkc api`'s own list), `lint`, `preview` (with scene class names from
-  the brief), `build`. Any other argument is refused with a fixed sentence
-  that never repeats what was passed.
+- It accepts five verbs and nothing else: `api` (with helper names from
+  `manimkc api`'s own list), `lint`, `narrate`, `preview` (both with scene
+  class names from the brief), `build`. Any other argument is refused with a
+  fixed sentence that never repeats what was passed.
 - It builds the child's environment from nothing (`env -i` and the allowlist
-  above) and runs every `manimkc` verb under `sandbox-exec` with the job's
-  profile, from the job checkout, with `--root` and `MANIMKC_HOME` fixed.
-  `preview` always passes `--no-narration`, since the clips already exist.
+  above) and runs everything from the job checkout, with `--root` and
+  `MANIMKC_HOME` fixed, under one of two profiles. `narrate` runs
+  `lib/narration.py <file>` under the narration profile. `preview` and
+  `build` first run that same step, as `manimkc preview` does its own
+  prefetch, then run `manimkc` under the render profile with
+  `--no-narration`, since the render profile can read clips but has no model
+  to make them.
 - It appends one line per call to `jobs/<id>/calls.ndjson`: the verb, the
   scenes, the start and end, the exit code, and the paths of the sheets or the
   deliverable it expects, computed from the brief and the checkout rather than
@@ -708,7 +729,7 @@ $STUDIO_HOME/jobs/<id>/
     topics/studio/<slug>/topic.yml          written by the runner (manimkc new)
   render/                                   MANIMKC_HOME; the only place the sandbox may write
     .env                                    NARRATION_BACKEND=kokoro and the voice; no keys
-    cache/audio/                            the brief's clips, copied in before the agent starts
+    cache/audio/                            this job's clips: seeded by the runner, then voiced by the agent
     out/studio/<slug>/scenes/               per-scene renders and <Scene>.sheet.png
     out/studio/<slug>/<slug>.mp4            the agent's build, with its three sidecars
     manim-cache/, mpl/, tmp/
@@ -731,19 +752,53 @@ a five-minute video's workspace is about 80 MB (a guess from those rates).
 Once a job is accepted or discarded, the runner deletes `render/` and keeps the
 source, the sheets and its records (D52).
 
-**Narration comes first (D47).** Before the agent starts, the runner
-synthesises every line of the brief, with a Python process of its own
-(`python -I`, `env -i`, `NARRATION_BACKEND=kokoro`, the brief's voice, the
-speed pinned, `HF_HUB_OFFLINE=1`) calling `narration.prefetch` on the
-brief's lines against the owner's shared `$MANIMKC_HOME/cache/audio`, so a line
-said before is never synthesised again. It then copies exactly those clips
-into `render/cache/audio/`, while `render/` is still empty and no agent code
-has run. Nothing unsandboxed ever reads a file the agent wrote to decide what
-to synthesise. A scene that voices any other line finds no clip, and the
-sandbox cannot synthesise one (the model's files are outside what it may
-read), so the render fails loudly and the agent corrects the line. A phase 0
-lint rule refuses a `voiceover` whose argument is not a string literal before
-it gets that far. A silent video has no narration step.
+**Narration is the agent's, in its own sandbox (D47).** The agent voices
+its lines the way the owner does by hand: `video narrate`, or the step at the
+start of `preview` and `build`, runs manimkc's own narration code
+(`lib/narration.py <file>`) over the scene file's `voiceover` literals. It
+runs under a third profile, the narration profile: the render profile's
+deny-by-default base, reads widened to the kokoro model's files in the
+Hugging Face cache, writes narrowed to `render/cache/audio/` and
+`render/tmp/`, the exec list the venvs' Python plus `ffmpeg` (which the step
+uses to convert each clip), and an environment with `HF_HUB_OFFLINE=1`,
+`HF_HOME` inside `render/tmp/` and `HF_HUB_CACHE` at the model's cache. No
+network, no key.
+
+**Measured: kokoro runs inside it.** Two lines, one of them a string of
+shell words, were voiced under that profile in 11.9 s against 10.2 s
+unsandboxed (the model load is 6 to 8 s of either; synthesis 1.6 s). From
+inside, the Hugging Face token file and the owner's shared TTS cache were both
+unreadable. The first attempt found that the Hugging Face library reads
+`~/.cache/huggingface/token` on load when `HF_HOME` is the default, which is
+why `HF_HOME` moves into the job; the sandbox refused the read, and the step
+failed until it moved.
+
+**The TTS cache: per job, seeded by the runner.** Each job has its own
+`render/cache/audio/`. Before the agent starts, the runner copies in the
+clips the owner's shared cache already holds for the brief's lines: it
+computes each clip's key (backend, voice, speed and text) itself, from the
+brief, with manimkc's own `cache_path`, and copies only files that exist, so
+no agent input is involved. A change job is seeded from its parent's job
+cache as well. The agent's narration step then makes only the clips that are
+missing: lines it changed, and lines no one has said before. Jobs never write
+the shared cache, and nothing is promoted into it after Accept.
+
+Why, against the alternative (the shared cache mounted read-only into the
+narration profile, new clips written job-local, and promoted into the shared
+cache by the runner after Accept): the shared cache is the owner's hand-run
+cache (1,058 clips on this machine, measured by `manimkc doctor`), and
+promotion would write audio made from agent-chosen text into it under keys
+the runner can recompute from the text but whose sound it cannot verify.
+Mounting it would also need a manimkc change for a second, read-only cache
+directory, and would let the narration step read other videos' clips, which
+the clean-room rule keeps out. What the per-job cache costs is re-voicing a
+changed line in a later hand run, about two seconds a clip, plus one model
+load per narration call.
+
+A render that asks for a clip nobody made fails loudly: the render profile
+cannot read the model. A phase 0 lint rule refuses a `voiceover` whose
+argument is not a double-quoted string literal, since that is what the
+narration step reads. A silent video has no narration step.
 
 ## The gate
 
@@ -760,8 +815,10 @@ silent one (`voice: "none"`) takes the silent line instead.
    scene, in order, named `<PREFIX><n>_<Name>`; and every `labels` entry
    appears inside some string literal in that class. Loose in one direction
    only, like the diagram gate: a literal may say more than the label.
-   *Narrated:* each beat is exactly one `voiceover` literal equal to its
-   `say` (whitespace normalised), in order. *Silent:* no `voiceover` call at
+   *Narrated:* the `voiceover` literals are the voiced lines, whatever they
+   say; the gate records each against the brief's `say` for its beat
+   (unchanged, reworded, split, added or dropped) for the job view and the
+   review, and fails only a scene with no `voiceover` at all. *Silent:* no `voiceover` call at
    all, and each beat's `say`, its caption, appears as a string literal in
    the class, in order.
 4. **The topic.** `topic.yml`'s `topic` is still the brief's.
@@ -777,15 +834,19 @@ silent one (`voice: "none"`) takes the silent line instead.
    the format pinned (`-f mov`): a video stream, the index at the front
    (faststart), and the duration. *Narrated:* an audio stream. *Silent:* none.
 7. **Sync.** *Silent: skipped;* there is no transcript. *Narrated:* from the
-   copied `transcript.json`: its segments are the brief's
-   lines, in order, every one voiced; and no scene holds more than four
+   copied `transcript.json`: its segments are the source's `voiceover`
+   literals from step 3, in order, every one voiced (the lines actually said,
+   not necessarily the brief's); and no scene holds more than four
    seconds of picture after its last line ends (the skill's rule for a held
    frame), from each chapter's end and its last segment's end. This file was
    written by the scene's own `VoiceScene`, so the step catches mistakes, not
    a hostile scene (see the threat table).
 8. **Length.** The duration is within 15 percent of the length the script
    predicts, which catches dead air the per-scene check misses. *Narrated:*
-   the prediction is the `say` characters at 15.2 a second, times 1.08.
+   the prediction is the voiced lines' characters at 15.2 a second, times
+   1.08; a result more than 25 percent from the brief's `targetSeconds` is a
+   warning on the card, not a failure, since the agent may have changed the
+   lines.
    *Silent:* the sum of the beats' `seconds`, within 20 percent, since a
    silent scene's fades are not in any beat. Size is
    reported, not judged: manimkc's 36 deliverables run at 30 to 35 kB a second
@@ -833,7 +894,8 @@ advanced by what the runner can see rather than by the agent's say-so:
 | Step | Advanced by |
 | --- | --- |
 | Storyboard | done at the press: the brief is the storyboard |
-| Narration | the runner's own prefetch, before the agent starts: "12 lines, 9 new clips, 21 s"; absent for a silent video |
+| Narration | the runner's seeding before the agent starts ("9 of 12 lines already voiced"), then each narration step the wrapper runs ("3 new clips, 11 s"); absent for a silent video |
+| Lines changed | each time a narration step voices a line that differs from the brief's: the beat, the brief's line and the new one. Shown in the log as it happens and listed again under the player |
 | Setup | the runner's `new` and checkout |
 | Scene code | the agent's first `Edit` of the scene file, then each later one |
 | Lint | each `video lint` in `calls.ndjson` |
@@ -861,9 +923,10 @@ Beside the list:
 `GET /api/jobs/{id}/media/<slug>.mp4` (the runner serves byte ranges, and the
 web app's `/studio/api/*` route handler already forwards `Range` and streams
 the body), with the gate's poster, the `.vtt` as its captions track, and the
-chapters beside it as the storyboard: each scene's title, its lines, and a
-link to its start time. Under it, the gate's results (warnings included), the
-cost, and three actions:
+chapters beside it as the storyboard: each scene's title, its lines as voiced,
+and a link to its start time. Under it, every line the agent changed, beside
+the brief's version, then the gate's results (warnings included), the cost,
+and three actions:
 
 | Action | What happens |
 | --- | --- |
@@ -980,6 +1043,7 @@ handler. Only what changes:
 | --- | --- | --- |
 | `POST` | `/api/drafts` | accepts `kind` (`diagram` default, or `video`); with `kind: "video"`, `source` names a studio video slug (a change draft) |
 | `PUT` | `/api/drafts/{id}/kind` | new: `{ kind }`, only while `turns` is 0; rewrites `planner-system.md`. 409 otherwise |
+| `POST` | `/api/drafts/{id}/messages` | on a video draft, accepted while the draft is `drawing` (owner's decision 9); still 409 for a turn already in flight |
 | `POST` | `/api/drafts/{id}/draw` | unchanged route; the Draw press of a video draft runs `validateVideoBrief` and the video doctor, and enqueues on the video runner. The UI labels it Make video |
 | `PUT` | `/api/drafts/{id}/brief` | unchanged; validates by the draft's kind |
 | `POST` | `/api/jobs` | accepts `kind: "video"` with a video brief |
@@ -993,8 +1057,8 @@ handler. Only what changes:
 **The video doctor** is `manimkc doctor --json` against a scratch job
 checkout, plus the studio's own checks: `sandbox-exec` present, the profile
 renders a one-scene fixture (which proves Metal finds its adapter inside it),
-the hostile probe blocked, and the kokoro model cached so the prefetch never
-downloads during a job. `manimkc doctor` took **9.0 s** (*measured*), so the
+the hostile probe blocked, and the kokoro model cached so the narration step,
+offline by design, never needs to download it. `manimkc doctor` took **9.0 s** (*measured*), so the
 result is cached like the canvas doctor's, and refreshed at start and every ten
 minutes. While it fails, the Video option shows why and Make video answers
 503, the diagram studio's U4 behaviour.
@@ -1134,9 +1198,10 @@ V for video, so they do not collide with C, M, E or U.
 | V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and nothing is written under `render/` for 20 minutes, the hang timer stops the job |
 | V7 | A scene writes until the disk fills | Only `render/` is writable, so it fills the disk with its own job's files and nothing else; the render fails, the agent sees why. No cap, by the owner's decision |
 | V8 | Two drafts make the same slug | The target lease on `videos/<slug>.mp4` refuses the second with 409, named |
-| V9 | The kokoro model is not downloaded | The video doctor fails. The prefetch runs with `HF_HUB_OFFLINE=1`, so it never downloads during a job |
-| V10 | The agent rewords a line | Step 3 of the gate names the scene and shows both versions; the agent is resumed. If the person wants the new wording, it goes through the planner as a new brief |
-| V11 | An abbreviation the voice will read as a word | Found at validation, sent to the planner as a STUDIO note, shown on the card as a warning. Never a refusal: some abbreviations are meant to be said as words |
+| V9 | The kokoro model is not downloaded | The video doctor fails. The narration step runs with `HF_HUB_OFFLINE=1` and cannot reach the network anyway, so it never downloads during a job |
+| V10 | The agent rewords a line | Allowed (D47). The narration step voices the new line into the job's cache, the job view logs it beside the brief's, the gate records it, and the review lists it. The person who wants the brief's wording back says so under Change |
+| V11 | An abbreviation the voice will read as a word | Found at validation, sent to the planner as a STUDIO note, shown on the card as a warning; the agent may also respell it while voicing, shown as a changed line. Never a refusal: some abbreviations are meant to be said as words |
+| V25 | A message arrives on a video draft while its job runs | Accepted (owner's decision 9): the planner answers and may propose the next brief, which waits; Make video stays disabled with "The video is still being made" until the job reaches a verdict |
 | V12 | The person closes the panel during a 15-minute job | Nothing changes; the job strip shows it, and reopening the draft lands in the job view |
 | V13 | A change job's parent session cannot be resumed | As C3: a fresh session, the source copied in, and a STUDIO note saying the agent starts without the earlier conversation |
 | V14 | The owner has set `STUDIO_DAILY_USD` and a video job crosses it | The job runs on; the next Make video or planner turn is 429. With the variable unset, the default, nothing is refused |
@@ -1192,9 +1257,9 @@ its SQLite.
 
 ### D44. Agent-written code runs only inside a per-job OS sandbox the runner owns
 
-**Verdict:** every `manimkc` call, and every tool the runner points at a file
-agent code wrote, runs under `sandbox-exec` with a per-job profile that
-denies by default: no network, no DNS, no program outside a short exec list,
+**Verdict:** every `manimkc` call, the narration step, and every tool the
+runner points at a file agent code wrote, runs under `sandbox-exec` with a
+per-job profile (render, narration or gate, one base) that denies by default: no network, no DNS, no program outside a short exec list,
 writes only under `render/` and no links, reads of the home directory and the
 temporary directories only for manimkc's code and venvs and the job, and an
 allowlisted environment. Linux gets bubblewrap once measured. No sandbox, no
@@ -1255,48 +1320,59 @@ manimkc submodule per job, which carries every other topic the clean-room rule
 then has to deny one by one, and whose venvs would have to be rebuilt, since a
 venv cannot move.
 
-### D47. Narration is synthesised by the runner from the brief, before the agent starts; kokoro only
+### D47. The agent voices its own lines, in a narration sandbox with a per-job cache; kokoro only
 
-**Verdict:** the runner synthesises every `say` line of the brief with its own
-process (`python -I`, `env -i`, the voice and speed pinned, offline) against
-the shared TTS cache, then copies those clips into the empty `render/`. The
-sandboxed render only reads clips; the agent never causes a synthesis. The
-backend is kokoro; `voice` picks a kokoro voice.
+**Verdict (the owner's, 2026-09-29: "Agent voices it"):** the video agent
+runs the local narration step itself, through `video narrate` and the step at
+the start of `preview` and `build`, as the owner's hand runs do, so it can
+reword and re-voice a line mid-job. The step runs manimkc's own narration code
+under a narration profile: no network, reads widened only to the kokoro
+model, writes only the job's audio and temporary directories, Hugging Face
+offline with its home in the job. Each job has its own TTS cache, seeded by
+the runner from the owner's shared cache for the brief's lines (and from the
+parent job's for a change); jobs never write the shared cache. The backend is
+kokoro; `voice` picks a kokoro voice.
 
-**Why:** the sandbox should hold no key and need no network, and the TTS step
-needs a model, a cache shared across jobs, and for a cloud voice a key and the
-network. The brief already holds every line the video may say (D48), so
-nothing unsandboxed ever has to read a file the agent wrote. The first draft
-of this design read the scene file's literals with manimkc's regex in the
-wrapper; the independent review showed that let agent input choose what an
-unsandboxed process synthesised, and that the regex misses single-quoted and
-keyword literals. Kokoro needs no key and costs no quota.
+**Why:** parity with the hand workflow, which the owner chose over a locked
+script; a video agent that sees a line fight its picture should be able to
+fix the line, as the owner does. Kokoro is local, so the sandbox still holds
+no key and needs no network, and a hostile line of text meets a phonemiser
+inside a box that can reach nothing (measured: the token file and the shared
+cache were unreadable from inside). The per-job cache keeps agent-chosen text
+from ever writing into the owner's cache.
 
-**Rejected:** synthesising inside the sandbox (the model files and the shared
-cache would have to be readable and writable from agent code); synthesising
-from the scene file's literals, above; ElevenLabs and Sarvam in v1 (quota, and
-a key the job would have to carry; open question 4).
+**Rejected:** the runner synthesising the brief's lines before the agent
+starts, which this design proposed first and the independent review
+strengthened: it kept every synthesis away from agent input, and it locked
+the script, which the owner did not want. The shared cache mounted read-only
+with clips promoted after Accept (see the job workspace for why). ElevenLabs
+and Sarvam in v1: a key the job would have to carry and network the narration
+profile does not have (open question 4).
 
-### D48. The brief is the script, and the gate holds the video to it word for word
+### D48. The brief is the starting script, and the gate holds the video to what it says
 
-**Verdict:** scenes of beats, each with `say` (verbatim narration, one
-`voiceover` block per beat), `show` and `labels`; the gate checks each block
-against its line in the source, compares the transcript with the lines, and
-finds each label among the scene's string literals.
+**Verdict:** scenes of beats, each with `say` (the line to start from), `show`
+and `labels`. The confirm card shows the brief's script, and that is what the
+person approves. The agent may change a line (D47); the gate then checks the
+video against the lines actually voiced, the scene file's `voiceover`
+literals, which the transcript must match, finds each label among the scene's
+string literals, and records every line that differs from the brief, which
+the job view and the review show beside the original.
 
 **Why:** the words are what the person most wants to control, and the planner
-loop is where changing them costs cents rather than a render. It is also what
-manimkc's server already asks of its callers, and the only part of a video a
-check can hold exactly, the way the diagram gate holds labels and arrows. The
-length rule falls out of it: 15.2 characters a second (measured, n=29) predicts
-the video's length before anything is spent. "Exactly" has a limit, stated in
-the threat table: the transcript is written by the scene's own code, so the
+loop is where changing them costs cents rather than a render, so the script is
+agreed there. The owner also wants the agent free to fix a line mid-job, so
+the check moves from "the brief's words" to "the words in the source, all
+voiced, and every change shown". The length rule still holds at the brief:
+15.2 characters a second (measured, n=29) predicts the video's length before
+anything is spent. The transcript is written by the scene's own code, so the
 source check is the strong one and the person's viewing is the last.
 
-**Rejected:** beats as intent, with the agent writing the narration: a
-cheaper brief to read, and a gate left with nothing to check but a duration;
-exact on-screen checks by reading frames, which would need OCR on a render for
-a check the source tree answers.
+**Rejected:** holding the video to the brief's words exactly, as the first
+draft did, which the owner overruled (decision 6); beats as intent, with the
+agent writing all the narration, which leaves the person nothing to approve
+before the spend; exact on-screen checks by reading frames, which would need
+OCR on a render for a check the source tree answers.
 
 ### D49. A studio video lands as a `video` row and blob-stored assets, never in manimkc's tree
 
@@ -1345,7 +1421,7 @@ that has to describe both briefs); two plus cards (two ways into one chat).
 session with the change as text; a script change is a new brief with `mode:
 "change"`, enqueued with the draft's newest video job as its parent, which may
 be in review or accepted. Either way the new job's checkout starts from the
-parent's source, and its narration is synthesised afresh from its own brief.
+parent's source, and its job cache is seeded from the parent's clips.
 When the parent is in review, the cap and the video doctor are checked first,
 then one catalog transaction discards the parent (keeping its source) and
 enqueues the child, so the slug's lease passes across with no gap and a
@@ -1411,30 +1487,28 @@ the owner of build failures.
 ## Open questions for the owner
 
 Decided on 2026-09-29 and no longer open: who dispatches (D43), how much
-sandbox (D44), the steps in the job view, limits (D54), and the model and
-effort panel (D53).
+sandbox (D44), the steps in the job view, limits (D54), the model and effort
+panel (D53), and who voices the lines (D47).
 
 1. **The script in the brief.** The person approves every line the voice will
-   say (D48), which makes the confirm card long: a three-minute video is about
-   2,700 characters. **Recommendation:** keep it, with scenes collapsed on the
-   card so the glance is still the title, the idea, the length and one line
-   per scene.
-2. **Where a studio video's source lives.** Only in the catalog (D49), never
-   in `tools/manimkc/topics/`. **Recommendation:** yes. If one should join the
-   series by hand, `catalog video checkout <slug> --dir` writes the topic
-   folder for a person to commit there.
+   start from (D48), which makes the confirm card long: a three-minute video
+   is about 2,700 characters. **Recommendation:** keep it, with scenes
+   collapsed on the card so the glance is still the title, the idea, the
+   length and one line per scene.
+2. **Where a studio video's source lives.** *Resolved 2026-09-29 by the
+   owner:* only in the catalog (D49), never in `tools/manimkc/topics/`. If one
+   should join the series by hand, `catalog video checkout <slug> --dir`
+   writes the topic folder for a person to commit there.
 3. **Changing the existing manimkc videos from the studio.** Their source is
    in the submodule. **Recommendation:** not in this design. Studio videos
    first; revisit once one has been changed through the chat.
-4. **Cloud voices.** **Recommendation:** kokoro only until a video has been
-   made end to end; then an opt-in `STUDIO_VIDEO_TTS=elevenlabs`, synthesised
-   by the runner from the brief so the key never reaches the sandbox.
-5. **Examples from the owner's own videos.** Parity with the hand workflow
-   would let the agent run `manimkc example` over the 35 existing topics; the
-   clean-room rule, which manimkc's own server keeps, forbids it so every
-   video does not come out looking like the first. **Recommendation:** keep
-   the clean room and the two worked scenes in the manual; open a read-only
-   `video example` over a list the owner picks if the first videos look thin.
+4. **Cloud voices.** A cloud voice needs a key and the network, and the
+   narration profile has neither. **Recommendation:** kokoro only. If a cloud
+   voice is wanted later, the runner, not the sandbox, should hold the key
+   and make the request, with the text the narration step asks for.
+5. **Examples from the owner's own videos.** *Resolved 2026-09-29 by the
+   owner:* clean room. No `manimkc example` over the owner's topics; the two
+   worked scenes in the manual instead.
 6. **The planner's model.** `STUDIO_PLANNER_MODEL` stays an environment
    variable (D53). **Recommendation:** leave it off the panel until twenty
    drafts show a reason, as the chat-first doc's open question 8 says.
@@ -1443,10 +1517,12 @@ effort panel (D53).
 8. **Exports.** Videos never enter an export today (D7 of the seed format).
    **Recommendation:** export a studio video's source and brief (a few tens of
    kilobytes of text) under `videos/<slug>/`, and still not the mp4.
-9. **Talking while a video is made.** A job takes minutes, not seconds.
-   **Recommendation:** allow planner turns on a draft whose video job is
-   running, for script changes queued behind it; this is the chat-first doc's
-   open question 5, and it matters more here.
+9. **Talking while a video is made.** *Resolved 2026-09-29 by the owner:*
+   allowed. Planner turns run on a draft whose video job is running, so the
+   next change can be talked through while the render goes on; the Draw press
+   (Make video) stays locked while this draft's video job runs. This lifts the
+   chat-first doc's C14 refusal for video drafts: a message to a draft in
+   `drawing` is accepted rather than refused with 409.
 
 ## Phases
 
@@ -1460,8 +1536,8 @@ permission file. Status key: `[ ]` not started, `[x]` done.
 
 - [ ] `assemble.sh` makes its temporary directory under `$TMPDIR`
 - [ ] `lib/narration.py` treats an unreadable `.env` as absent
-- [ ] `manimkc lint` refuses a `voiceover` whose argument is not a string
-      literal
+- [ ] `manimkc lint` refuses a `voiceover` whose argument is not a
+      double-quoted string literal, the form the narration step reads
 - [ ] The submodule pointer bumped here (Workflow 1 of the root `AGENTS.md`)
 
 Done when: the ssh-tunnels topic previews and builds inside the measured
@@ -1470,8 +1546,9 @@ profile with no directory other than `render/` writable, and manimkc's
 
 ### Phase 1. The runner half
 
-- [ ] `services/studio/src/video/`: the job checkout, the profile, the
-      wrapper, the environment allowlist, the narration step, the video
+- [ ] `services/studio/src/video/`: the job checkout, the render, narration
+      and gate profiles, the wrapper with its `narrate` verb, the environment
+      allowlist, the job cache and its seeding from the shared cache, the video
       doctor, the settings file, the prompt and the manual (generated listing
       plus static sections)
 - [ ] The video runner: queue, the hang timer, spawn through the shared code
@@ -1484,12 +1561,15 @@ profile with no directory other than `render/` writable, and manimkc's
 - [ ] The routes: `POST /api/jobs` with a video brief, sheets, media,
       health's `video` and `agent` blocks
 - [ ] Tests: both hostile scenes blocked on every probe (skipped with a named
-      reason off macOS); the wrapper refusing any verb or name outside its
+      reason off macOS); a narration step under its profile voicing a line of
+      shell words, unable to read the Hugging Face token or the shared cache,
+      and writing nothing outside the job's audio directory; seeding copying
+      only the brief's existing clips and never writing the shared cache; the wrapper refusing any verb or name outside its
       lists without echoing it, and ignoring an inherited `PYTHONPATH`; the
       gate's copy refusing a symbolic link, a hard link and a non-regular
       file; the settings file allowing one Bash prefix and no bare tool; the
       gate's script, labels, sync, length and looked steps against recorded
-      fixtures, for a narrated and a silent brief; the gate's profile cutting
+      fixtures, for a narrated and a silent brief and for a reworded line; the gate's profile cutting
       the poster and refusing any other write; `video put --job` accepting the
       job in the same transaction, and a repeated put returning the landed
       revision; model and effort resolved from a panel value, from the user

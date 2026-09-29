@@ -1080,7 +1080,7 @@ pieces above.
 
 That design is [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md) (proposed 2026-09-29):
 a second runner in the studio process, every render of agent-written Python
-inside a per-job OS sandbox, a brief that carries the script word for word,
+inside a per-job OS sandbox, a brief that carries the starting script,
 Accept as `catalog video put --job`, and a settings panel for the agent's
 model and effort. Its decisions continue from D43.
 
