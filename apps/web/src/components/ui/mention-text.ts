@@ -326,3 +326,26 @@ export function rowAnnouncement(option: MentionOption): string {
 function lowerFirst(text: string): string {
   return text === "" ? text : text[0]!.toLowerCase() + text.slice(1);
 }
+
+/** Where the plus menu opened: the caret's node and offset, and the text then. */
+export interface PlusAnchor {
+  key: string;
+  offset: number;
+  text: string;
+}
+
+/**
+ * Whether the plus menu stays open after an update. It has no query, so any
+ * typing (the text changed) or any caret move (the anchor moved, or the
+ * selection is no longer a caret) closes it and leaves the words as typed:
+ * otherwise a sentence typed after opening it would end with Enter picking a
+ * chip rather than sending.
+ */
+export function plusMenuStays(
+  opened: PlusAnchor,
+  now: { key: string; offset: number; collapsed: boolean } | null,
+  text: string,
+): boolean {
+  if (now === null || !now.collapsed) return false;
+  return now.key === opened.key && now.offset === opened.offset && text === opened.text;
+}

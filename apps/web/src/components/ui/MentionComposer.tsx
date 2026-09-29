@@ -63,8 +63,10 @@ import {
   sameValue,
   serializeMentions,
   valuePieces,
+  plusMenuStays,
   type MentionOption,
   type MentionValue,
+  type PlusAnchor,
   type SerializedNodeLike,
 } from "./mention-text";
 
@@ -247,6 +249,8 @@ interface MenuState<K extends string> {
   query: string;
   options: MentionOption<K>[];
   active: number;
+  /** The plus menu only: where the caret was, and the text, when it opened. */
+  anchor?: PlusAnchor;
 }
 
 /** Updates this file makes itself, which must not be reported as the person's. */
@@ -319,12 +323,21 @@ function Field<K extends string>({
       if (editor.isComposing()) return;
       editorState.read(() => {
         const current = menuRef.current;
+        // Pasted text is words (T14): a paste ending in " @video" opens no menu.
+        if (tags.has("paste")) {
+          if (current !== null) openMenu(null);
+          return;
+        }
         if (current !== null && current.mode === "plus") {
           // The plus menu has no query: typing, or the caret leaving where it
-          // opened, closes it and leaves what was typed.
+          // opened, closes it and leaves what was typed, so the Enter that
+          // ends the sentence sends it rather than picking a chip.
           if (tags.has(EXTERNAL)) return;
           const selection = $getSelection();
-          if (!$isRangeSelection(selection) || !selection.isCollapsed()) openMenu(null);
+          const now = $isRangeSelection(selection)
+            ? { key: selection.anchor.key, offset: selection.anchor.offset, collapsed: selection.isCollapsed() }
+            : null;
+          if (current.anchor === undefined || !plusMenuStays(current.anchor, now, next.text)) openMenu(null);
           return;
         }
         const found = $queryAtCaret();
@@ -473,11 +486,28 @@ function Field<K extends string>({
   const openFromPlus = useCallback(() => {
     if (latest.current.disabled) return;
     editor.focus(() => {
-      editor.getEditorState().read(() => {
-        if (!$isRangeSelection($getSelection())) editor.update(() => $getRoot().selectEnd());
+      // A caret to open at: where the field last had one, else the end.
+      editor.update(
+        () => {
+          if (!$isRangeSelection($getSelection())) $getRoot().selectEnd();
+        },
+        { discrete: true },
+      );
+      const anchor = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        return $isRangeSelection(selection) ? { key: selection.anchor.key, offset: selection.anchor.offset } : null;
       });
+      if (anchor === null) return;
       const options = [...latest.current.mentions];
-      openMenu({ mode: "plus", nodeKey: null, offset: 0, query: "", options, active: firstActive(options) });
+      openMenu({
+        mode: "plus",
+        nodeKey: null,
+        offset: 0,
+        query: "",
+        options,
+        active: firstActive(options),
+        anchor: { ...anchor, text: emitted.current.text },
+      });
     });
   }, [editor, openMenu]);
 
@@ -502,7 +532,12 @@ function Field<K extends string>({
     };
     const choose = (event: KeyboardEvent | null) => {
       const current = menuRef.current;
-      if (current === null) return false;
+      // With nothing to pick ("Nothing matches", or every row disabled), the
+      // menu closes and the key does what it would have done without it.
+      if (current === null || !current.options.some(isUsable)) {
+        if (current !== null) openMenu(null);
+        return false;
+      }
       // Cmd or Ctrl+Enter with the menu open is ignored: a key meant for the
       // menu never sends and never presses a card.
       event?.preventDefault();
@@ -535,7 +570,7 @@ function Field<K extends string>({
             // The input method's Enter confirms a word; leave it to the browser.
             return true;
           }
-          if (menuRef.current !== null) return choose(event);
+          if (menuRef.current !== null && choose(event)) return true;
           if (event === null) return false;
           const meaning = composerKey({
             key: event.key,

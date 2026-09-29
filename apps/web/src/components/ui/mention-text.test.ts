@@ -10,6 +10,7 @@ import {
   mentionQuery,
   menuOpenedAnnouncement,
   moveActive,
+  plusMenuStays,
   prependValue,
   rowAnnouncement,
   sameValue,
@@ -182,5 +183,18 @@ describe("the menu", () => {
       "Video, start a new conversation to make a video.",
     );
     expect(menuOpenedAnnouncement([], -1)).toBe("Nothing matches.");
+  });
+});
+
+describe("the plus menu", () => {
+  const opened = { key: "3", offset: 5, text: "hello" };
+  it("stays while the caret sits where it opened and nothing was typed", () => {
+    expect(plusMenuStays(opened, { key: "3", offset: 5, collapsed: true }, "hello")).toBe(true);
+  });
+  it("closes on typing, on a caret move, on a range selection and on no selection", () => {
+    expect(plusMenuStays(opened, { key: "3", offset: 6, collapsed: true }, "hello!")).toBe(false);
+    expect(plusMenuStays(opened, { key: "3", offset: 4, collapsed: true }, "hello")).toBe(false);
+    expect(plusMenuStays(opened, { key: "3", offset: 5, collapsed: false }, "hello")).toBe(false);
+    expect(plusMenuStays(opened, null, "hello")).toBe(false);
   });
 });
