@@ -7,13 +7,16 @@ import { ExpandablePanel } from "./ExpandablePanel";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // jsdom's dialog does not open itself; this is the part the panel relies on.
+  // jsdom's dialog does not open itself. This does what a browser's does
+  // that the panel relies on: it opens, and moves focus to the first button
+  // inside, so the test of focus coming back starts from focus being away.
   const proto = HTMLDialogElement.prototype as unknown as {
     showModal: () => void;
     close: () => void;
   };
   proto.showModal ??= function (this: HTMLDialogElement) {
     this.setAttribute("open", "");
+    this.querySelector<HTMLElement>("button")?.focus();
   };
   proto.close ??= function (this: HTMLDialogElement) {
     this.removeAttribute("open");
@@ -67,15 +70,19 @@ describe("ExpandablePanel", () => {
     act(() => button(host, "Expand note.md").click());
     expect(dialog(host)?.hasAttribute("open")).toBe(true);
     expect(dialog(host)?.querySelector(".words")?.textContent).toBe("The note.");
+    // One copy at a time, so a note's heading ids are never doubled.
+    expect(host.querySelectorAll(".words")).toHaveLength(1);
     expect(document.documentElement.style.overflow).toBe("hidden");
   });
 
   it("closes from the corner button, and gives the page its scroll and focus back", () => {
     const host = render();
     act(() => button(host, "Expand note.md").click());
+    expect(document.activeElement).toBe(button(host, "Close"));
     act(() => button(host, "Close").click());
     expect(dialog(host)).toBeNull();
     expect(document.documentElement.style.overflow).toBe("");
+    expect(host.querySelectorAll(".words")).toHaveLength(1);
     expect(document.activeElement).toBe(button(host, "Expand note.md"));
   });
 

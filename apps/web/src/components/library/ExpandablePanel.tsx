@@ -21,9 +21,11 @@ import { cx } from "@/components/ui/classes";
  * a text selection dragged out of the note does not close it. The page under
  * it does not scroll while it is open.
  *
- * The content is rendered a second time inside the popup, and only while it
- * is open: the children are an element description, so the same prose can
- * sit in both places without the card being moved out of the page.
+ * The content lives in one place at a time: in the card, or, while the popup
+ * is open, in the popup. Two copies at once would give a note's headings the
+ * same ids twice, and a heading link in the popup would jump to the card's.
+ * The card keeps its height meanwhile, so the page under the popup does not
+ * reflow.
  */
 export function ExpandablePanel({
   title,
@@ -43,6 +45,14 @@ export function ExpandablePanel({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
   const pressedOnBackdrop = useRef(false);
+  const cardBodyRef = useRef<HTMLDivElement | null>(null);
+  // The card's height when the popup opened, held while its words are away.
+  const [heldHeight, setHeldHeight] = useState<number | null>(null);
+
+  function expand() {
+    setHeldHeight(cardBodyRef.current?.offsetHeight ?? null);
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -67,11 +77,17 @@ export function ExpandablePanel({
         <CornerButton
           ref={openerRef}
           label={`Expand ${label}`}
-          onClick={() => setOpen(true)}
+          onClick={expand}
           path="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5 11 9M3.5 16.5 9 11"
         />
       </PanelHeader>
-      <div className="max-h-[min(36rem,65dvh)] overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
+      <div
+        ref={cardBodyRef}
+        style={open && heldHeight !== null ? { height: heldHeight } : undefined}
+        className="max-h-[min(36rem,65dvh)] overflow-y-auto overscroll-contain px-5 pt-1 pb-5"
+      >
+        {open ? null : children}
+      </div>
 
       {open && (
         <dialog
