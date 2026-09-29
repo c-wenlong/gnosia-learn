@@ -28,6 +28,7 @@ import {
   sheetSrc,
   spokenLength,
   stepRows,
+  uniqueWarnings,
   storyboard,
   videoFailure,
   videoHeadline,
@@ -396,6 +397,13 @@ describe("the review", () => {
     expect(readyHeadline(job({ state: "awaiting_review", gate: { ...gate, warnings: [], durationSeconds: 58 } }))).toBe("The video is ready, 58 s");
     expect(spokenLength(120)).toBe("2 min");
     expect(spokenLength(null)).toBe("");
+  });
+
+  it("lists each warning once, with how often it came up", () => {
+    expect(uniqueWarnings(["lint: a", "lint: b", "lint: a"])).toEqual([
+      { text: "lint: a", count: 2 },
+      { text: "lint: b", count: 1 },
+    ]);
   });
 
   it("offers Accept and Discard only in review, and Change after an accept too", () => {

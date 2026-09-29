@@ -738,6 +738,17 @@ export function readyHeadline(job: VideoJob): string {
   return warnings === 0 ? lead : `${lead}, with ${warnings} warning${warnings === 1 ? "" : "s"}`;
 }
 
+/**
+ * The gate's warnings once each, with how often each came up: lint repeats a
+ * warning per scene ("self.wait() in a narrated file" twice for two scenes),
+ * which read as a stutter, and twice the same text was also one React key.
+ */
+export function uniqueWarnings(warnings: readonly string[]): { text: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const warning of warnings) counts.set(warning, (counts.get(warning) ?? 0) + 1);
+  return [...counts.entries()].map(([text, count]) => ({ text, count }));
+}
+
 /** The gate's steps in a person's words, in order. */
 const GATE_WORDS: Record<string, string> = {
   source: "The scene file",

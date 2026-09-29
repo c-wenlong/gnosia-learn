@@ -162,6 +162,15 @@ export function liveShotHref(jobId: string): string {
   return `/studio/api/jobs/${encodeURIComponent(jobId)}/shot?which=live`;
 }
 
+/**
+ * The live picture's URL for a job, or null for any job that is not a
+ * diagram's: the only way the tile builds that URL, so a video job (whose
+ * `shot?which=live` is a 404) never asks for it.
+ */
+export function liveShotFor(job: Pick<Job, "jobId" | "kind">): string | null {
+  return isDiagramJob(job) ? liveShotHref(job.jobId) : null;
+}
+
 /** The candidate as the gate photographed it: the picture a finished card shows. */
 export function afterShotHref(jobId: string): string {
   return `/studio/api/jobs/${encodeURIComponent(jobId)}/shot?which=after`;
@@ -169,7 +178,9 @@ export function afterShotHref(jobId: string): string {
 
 /** Whether the tile should be asking for a newer picture. */
 export function wantsLivePicture(job: Job, visible: boolean, pageHidden: boolean): boolean {
-  return job.state === "running" && visible && !pageHidden;
+  // Only a diagram job has a live shot: a video job's picture is its newest
+  // contact sheet (`studio-video.ts`), and `shot?which=live` 404s for it.
+  return isDiagramJob(job) && job.state === "running" && visible && !pageHidden;
 }
 
 /**

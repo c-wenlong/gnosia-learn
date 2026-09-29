@@ -23,6 +23,7 @@ import {
   CHANGE_LIMIT,
   formatSize,
   gateStepLabel,
+  uniqueWarnings,
   libraryHref,
   logLine,
   mediaFiles,
@@ -102,13 +103,13 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
 
   return (
     <div className="flex min-w-0 flex-col gap-5 px-5 py-4">
-      <StatusLine job={full} />
+      <StatusLine job={full} replaced={job.state === "discarded" && child !== null} />
       {stopped && <FailureCard job={full} path={path} inConversation={inConversation} />}
       {job.state === "discarded" && (
         <p className="rounded-xl bg-surface2 px-4 py-3 text-[14px] text-text2">
           {child === null
             ? "Discarded. The renders are deleted and nothing landed in the catalog; the source is kept, so a later change can start from it."
-            : "Replaced by a newer version. Its renders are deleted and nothing of it landed in the catalog; the newer one starts from its source."}
+            : "Its renders are deleted and nothing of it landed in the catalog; the newer version starts from its source."}
         </p>
       )}
       {child !== null && (
@@ -156,7 +157,7 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
  * What the job is doing, the step count, the time and the cost, and Cancel.
  * The headline is a live region, so a screen reader hears each new step.
  */
-function StatusLine({ job }: { job: VideoJob }) {
+function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
   const { post } = useStudioJobs();
   const [cancelling, setCancelling] = useState(false);
   const live = job.state === "running" || job.state === "queued";
@@ -167,7 +168,7 @@ function StatusLine({ job }: { job: VideoJob }) {
   const model = job.resolvedModel ?? job.agentModel?.passed ?? null;
   const facts: ReactNode[] = [
     step,
-    job.state === "queued" ? null : <Duration key="time" ms={elapsed} live={live} />,
+    job.state === "queued" ? null : <Duration key="time" ms={elapsed} live={false} />,
     job.attempt > 1 ? `Attempt ${job.attempt}` : null,
   ].filter((part) => part !== null && part !== "");
 
@@ -176,7 +177,7 @@ function StatusLine({ job }: { job: VideoJob }) {
       <span aria-hidden className={cx("size-2.5 shrink-0 rounded-full", dotTone(job))} />
       <div className="min-w-0 flex-1">
         <p role="status" className="truncate text-[15px] font-semibold text-text">
-          {headline(job)}
+          {replaced ? "Replaced" : headline(job)}
         </p>
         <p className="truncate text-[13px] tabular-nums text-text2">
           {facts.map((part, at) => (
@@ -761,9 +762,10 @@ function Checks({ job }: { job: VideoJob }) {
       </div>
       {gate.warnings.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 rounded-xl bg-warn-tint px-4 py-2.5">
-          {gate.warnings.map((warning) => (
-            <li key={warning} className="text-[13px] leading-5 text-warn-text">
-              {warning}
+          {uniqueWarnings(gate.warnings).map(({ text, count }) => (
+            <li key={text} className="text-[13px] leading-5 text-warn-text">
+              {text.charAt(0).toUpperCase() + text.slice(1)}
+              {count > 1 && <span className="text-warn-text/80"> ({count} times)</span>}
             </li>
           ))}
         </ul>
