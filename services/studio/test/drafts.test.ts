@@ -1129,3 +1129,24 @@ describe("vocabularyChange", () => {
     expect(vocabularyChange(second.baseline, now)?.note).toBeNull();
   });
 });
+
+describe("notes a turn did not deliver", () => {
+  it("stay queued when the turn fails, and reach the planner on the next turn that answers", async () => {
+    await fake.script([{ text: proposing(good) }, { refused: "Overloaded" }, { text: "Noted." }, { text: "Still here." }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    await edit(record.id, { ...good, title: "Edited" });
+    await say(record.id, "good?");
+    expect((await drafts.view(record.id)).error).toMatchObject({ kind: "agent" });
+    // The failed turn was sent the note, and it is still queued.
+    expect(drafts.get(record.id)?.pendingEdit?.text).toContain('"Edited"');
+    await say(record.id, "again?");
+    const prompts = await fake.prompts();
+    expect(prompts[1]).toContain('title: "TCP congestion window" -> "Edited"');
+    expect(prompts[2]).toContain('title: "TCP congestion window" -> "Edited"');
+    // Answered, so taken off the queue: the next turn is the person's text alone.
+    expect(drafts.get(record.id)?.pendingEdit).toBeNull();
+    await say(record.id, "and now?");
+    expect((await fake.prompts())[3]).toBe("and now?");
+  });
+});

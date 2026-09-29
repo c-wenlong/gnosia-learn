@@ -1000,10 +1000,14 @@ export class Drafts {
     const record = this.require(id);
     const notes = [...record.undelivered, ...(record.pendingEdit ? [record.pendingEdit.text] : [])];
     const prompt = [...notes.map(studioMessage), text].join("\n\n");
-    if (notes.length > 0) await this.write(id, () => this.save(id, { undelivered: [], pendingEdit: null }));
+    const delivered = { undelivered: [...record.undelivered], edit: record.pendingEdit?.text ?? null };
 
     const first = await this.speak(id, turn, prompt, false);
+    // Only a turn that answered has heard its notes. A refused, timed-out or
+    // cut-off turn leaves them queued for the next one: told twice is better
+    // than never told.
     if (first === null) return;
+    if (notes.length > 0) await this.write(id, () => this.clearDelivered(id, delivered));
     const verdict = await this.judge(first.text);
     if (verdict.kind !== "invalid") return this.write(id, () => this.settle(id, first.seq, verdict));
 
@@ -1042,6 +1046,22 @@ export class Drafts {
       });
       await this.refusedTwice(id, again);
     });
+  }
+
+  /**
+   * Take the notes a turn carried off the queue, and only those: a note
+   * queued while the turn ran (a job's verdict, a later edit) stays for the
+   * next one.
+   */
+  private async clearDelivered(id: string, delivered: { undelivered: string[]; edit: string | null }): Promise<void> {
+    const current = this.require(id);
+    const left = [...current.undelivered];
+    for (const note of delivered.undelivered) {
+      const at = left.indexOf(note);
+      if (at !== -1) left.splice(at, 1);
+    }
+    const edit = current.pendingEdit && current.pendingEdit.text === delivered.edit ? null : (current.pendingEdit ?? null);
+    await this.save(id, { undelivered: left, pendingEdit: edit });
   }
 
   /** E6: the second refusal is shown, not retried. */
