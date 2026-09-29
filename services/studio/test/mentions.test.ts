@@ -579,6 +579,27 @@ describe("a video in review (D52)", () => {
   });
 });
 
+describe("a change brief (#207 review)", () => {
+  it("is made only for a video the conversation opened on or made", async () => {
+    const change = { kind: "video", ...videoBrief, mode: "change", slug: "someone-elses-video" };
+    await fake.script([{ text: videoOnly(change) }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "change that other video", "video");
+    await expect(drafts.drawOne(record.id, "v", "video")).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "change-not-in-conversation", slug: "someone-elses-video" },
+    });
+    expect(videoRunner.enqueue).not.toHaveBeenCalled();
+
+    // Opened on that video with Change, the same brief is pressable.
+    catalogMock.videoShow.mockResolvedValue(ok({ video: { slug: "someone-elses-video", title: "x", topic: "tcp-congestion-control", durationSeconds: 61, sourceHash: "h", revision: 1, brief: narratedBrief() } }));
+    const opened = await drafts.create({ source: "someone-elses-video", sourceKind: "video" });
+    await fake.script([{ text: videoOnly(change) }]);
+    await send(opened.record.id, "slower", "video");
+    await expect(drafts.drawOne(opened.record.id, "v", "video")).resolves.toMatchObject({ kind: "video", created: true });
+  });
+});
+
 describe("a draft from before tags", () => {
   it("loading while drawing, knows the brief its job draws: an edit mid-draw is refused, and after the verdict it is pressable (#207 review)", async () => {
     const { record } = await drafts.create({});

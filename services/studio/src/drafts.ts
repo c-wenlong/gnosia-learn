@@ -2163,6 +2163,16 @@ export class Drafts {
       throw new JobRefused(503, "this studio was started without the video runner, so nothing was queued", { reason: "no-video-runner" });
     }
     const brief = slot.brief as DraftVideoBrief;
+    // A change is to a video this conversation is about: the one it opened
+    // on, or one of its own jobs made (the #207 review). The planner could
+    // otherwise propose changing any of the owner's videos from any chat.
+    if (brief.mode === "change" && !this.videoSlugsOf(record).has(brief.slug)) {
+      throw new JobRefused(
+        409,
+        `this conversation can change only a video it opened on or made; "${brief.slug}" is neither. Open a conversation on that video with Change, or ask for a new one.`,
+        { reason: "change-not-in-conversation", kind: "video", slug: brief.slug },
+      );
+    }
     // D52: a newer brief on the slug of this draft's video in review replaces
     // it in one catalog transaction; a change to an accepted one starts from
     // its source.
@@ -2176,6 +2186,17 @@ export class Drafts {
     const ready: Prepared = { kind: "video", jobKey: item.jobKey, briefSeq, brief, pending, mermaid: null, parent };
     await this.video.runner.admit(validVideo(ready, await vocabularyFor(pending)), parent?.discard === true ? parent.jobId : null);
     return ready;
+  }
+
+  /** The studio videos this conversation is about: its video source, and every video its own jobs made. */
+  private videoSlugsOf(record: DraftRecord): Set<string> {
+    const slugs = new Set<string>();
+    if (record.sourceKind === "video" && record.source !== null) slugs.add(record.source);
+    for (const jobId of record.jobIds) {
+      const job = this.video?.store.get(jobId);
+      if (job !== undefined && job.draftId === record.id) slugs.add(job.slug);
+    }
+    return slugs;
   }
 
   /** One checked card, enqueued on its own runner and recorded on the draft. */
