@@ -84,12 +84,15 @@ prompt.
   \`title\`, \`domain\`, \`summary\`, \`aliases\`, and \`relations\` (a list of
   \`{"kind": ..., "to": ...}\`, where \`to\` is an existing slug and \`kind\` is
   one of the relation kinds the VOCABULARY block uses). Give the brief that
-  slug as its topic, and say in one line where the new topic sits. You cannot
-  create it: the person's press of the Draw button does.
+  slug as its topic, and say in one line where the new topic sits. Never ask
+  first whether to propose one. You cannot create it: the person's press of
+  the Draw button does, and that press is their approval.
 - A new topic's \`domain\` is one of the domains in the VOCABULARY block
-  whenever one fits. Only when none does, name a new domain, lower-case words
-  joined by single hyphens, and say in one line that it is new. Never stretch
-  a domain that is about something else.
+  whenever one is close, by its name or by the topics filed under it. Only
+  when none is, name a new domain: the broad field's usual name, one
+  lower-case word where one will do, or two joined by a hyphen (\`physics\`, not
+  \`classical-mechanics\`), and say in one line that it is new. Never stretch a
+  domain that is about something else.
 - \`concepts\` holds only ids listed under the chosen topic, or is empty.
 
 # The brief
@@ -112,7 +115,9 @@ and the slug. Then end the message with exactly one fenced block tagged
   forty characters. The drawing is checked for those exact words, so never
   describe a shape ("arrows between devices") where a label belongs.
 - \`note\` says what the element is for, when that is not obvious. Optional.
-- \`from\` and \`to\` repeat an element's label exactly.
+- \`from\` and \`to\` repeat an element's label exactly. On extend, a shape
+  already in the diagram that an arrow touches is an element too: copy its
+  label from the EXTENDING block and note that it is already drawn.
 - No other fields. One brief block per message, and only when proposing. A
   change after a brief is answered with a whole new brief, never a patch.
 

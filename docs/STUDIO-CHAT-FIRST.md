@@ -223,7 +223,9 @@ phase 3 inline edit). That answers concern 4 without loosening the gate.
 
 In full. It is the system prompt, followed by three data blocks the runner
 appends. Measured size: 1,444 tokens alone; about 9,900 with today's vocabulary
-of 86 topics (8,269 tokens) and the three-diagram corpus.
+of 86 topics (8,269 tokens) and the three-diagram corpus. The three rules added
+after [Phase 2 measured](#phase-2-measured) are about 110 tokens more, estimated
+from their length rather than counted.
 
 ````text
 You are the planner in a diagram studio. A person tells you what they want a
@@ -273,12 +275,15 @@ prompt.
   `title`, `domain`, `summary`, `aliases`, and `relations` (a list of
   `{"kind": ..., "to": ...}`, where `to` is an existing slug and `kind` is
   one of the relation kinds the VOCABULARY block uses). Give the brief that
-  slug as its topic, and say in one line where the new topic sits. You cannot
-  create it: the person's press of the Draw button does.
+  slug as its topic, and say in one line where the new topic sits. Never ask
+  first whether to propose one. You cannot create it: the person's press of
+  the Draw button does, and that press is their approval.
 - A new topic's `domain` is one of the domains in the VOCABULARY block
-  whenever one fits. Only when none does, name a new domain, lower-case words
-  joined by single hyphens, and say in one line that it is new. Never stretch
-  a domain that is about something else.
+  whenever one is close, by its name or by the topics filed under it. Only
+  when none is, name a new domain: the broad field's usual name, one
+  lower-case word where one will do, or two joined by a hyphen (`physics`, not
+  `classical-mechanics`), and say in one line that it is new. Never stretch a
+  domain that is about something else.
 - `concepts` holds only ids listed under the chosen topic, or is empty.
 
 # The brief
@@ -301,7 +306,9 @@ and the slug. Then end the message with exactly one fenced block tagged
   forty characters. The drawing is checked for those exact words, so never
   describe a shape ("arrows between devices") where a label belongs.
 - `note` says what the element is for, when that is not obvious. Optional.
-- `from` and `to` repeat an element's label exactly.
+- `from` and `to` repeat an element's label exactly. On extend, a shape
+  already in the diagram that an arrow touches is an element too: copy its
+  label from the EXTENDING block and note that it is already drawn.
 - No other fields. One brief block per message, and only when proposing. A
   change after a brief is answered with a whole new brief, never a patch.
 
@@ -343,6 +350,18 @@ conversation rather than a form read aloud. Concern 2: the Topics section
 searches the whole vocabulary by title, alias and summary rather than a list of
 slugs, and when nothing fits it proposes a new topic, which the Draw press
 creates, instead of forcing a match (D16 of CONTENT-MIGRATION.md).
+
+Three rules came from [Phase 2 measured](#phase-2-measured): never ask before
+proposing a topic (the TCP draft asked), name a new domain by the broad field's
+usual name (two networking drafts named two domains), and on extend list the
+existing shapes an arrow touches as elements (the extend brief was refused
+once). Re-run on a seed database the same way, with no Draw pressed: the TCP
+request proposed its topic with the brief in the first reply, with no question;
+four networking drafts in separate conversations (TCP twice, DNS twice) all
+chose `networking`; and an extend of `vector-as-a-list-of-numbers` whose two
+arrows land on the existing lists `[ 1, 3 ]` and `[ 2√2, √2 ]` listed both,
+marked "already drawn", and passed first time. Five drafts, one turn each,
+$0.128. One or two runs per case, so this shows the rules work, not how often.
 
 The whole system prompt is written to `drafts/<id>/planner-system.md` once and
 passed unchanged on every turn. The CLI records a system prompt on a
@@ -761,6 +780,7 @@ C for the chat and planner, M for the manual.
 | C14 | Messages arrive while the draft is `drawing` | 409 with "wait for the drawing, or cancel it". Talking about the next diagram while this one draws is an open question |
 | C15 | The claude.ai connectors load into a spawn anyway | `--strict-mcp-config` is what prevents it; a test asserts the init event's `tools` is empty for the planner, and the runner fails the turn with `agent` if it is not |
 | C16 | A runner serving an owner other than `local` meets a brief on a proposed topic | `catalog topic add` writes as the catalog CLI's owner, `local`, and takes no `--owner` yet, so the topic would be filed under the wrong owner. The Draw press refuses before any write with 409 `topic-owner` and a STUDIO note saying so; a brief whose topic already exists draws as usual. Lifted when the topic verbs take `--owner` |
+| C17 | Two open drafts each propose a topic in a field no domain in the vocabulary covers | A proposed topic is created only at Draw, so neither planner sees the other's proposal and each names a domain on its own (Phase 2 measured: `networking` and `computer-networks`). The prompt asks for the broad field's usual name, one word where one will do, and four networking drafts re-run after that rule all chose `networking`. When they do not, the confirm card shows the proposed domain under "New topic" before the press, and once C4's note is built the second planner is told of the first topic when it lands |
 | M1 | The tldrawkc build changes between two attempts of one job | The session's recorded system prompt is reused on resume, so every attempt of a job reads the manual it started with. `manualHash` on the job says which |
 | M2 | `api --json` names a lint rule the static table does not | The manual carries the generated name with "no fix recorded", `/api/health` reports `manual: stale`, and a test fails in the suite |
 | M3 | A worked snippet stops passing against a new tldrawkc | The snippet test fails. Until it is fixed the manual still ships the snippet, because a slightly wrong example beats none, and `/api/health` says which |
