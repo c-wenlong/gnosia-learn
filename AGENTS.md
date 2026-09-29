@@ -994,3 +994,13 @@ not have to be worked out again.
   verdicts. Neutering `Runner.settled` fails `queue.test.ts` eight runs in
   eight under load, on a state read too early and on `ENOTEMPTY` from the
   teardown deleting a workspace mid-write, so those waits are a real gate.
+- **A studio test that runs planner turns must set `STUDIO_CLAUDE_BIN`
+  before anything imports `services/studio/src/config.ts`.** `CLAUDE_BIN` is
+  read once, at import, and a static import that reaches it (the video
+  fixture does, through `src/video/brief.ts`) is evaluated before the test
+  file's body sets the fake's path. The planner then spawns the real `claude`
+  under the machine's login and pays for every turn: phase 2a's first draft of
+  `services/studio/test/mentions.test.ts` did, about $0.05 over two runs.
+  `mentions.test.ts` and `mentions-api.test.ts` now set a path that cannot
+  run inside `vi.hoisted`, import every fixture dynamically after the fake
+  exists, and throw when `CLAUDE_BIN` is not the fake's.

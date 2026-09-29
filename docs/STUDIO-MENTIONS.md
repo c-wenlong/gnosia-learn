@@ -995,19 +995,25 @@ on `origin/main` when that was written; its catalog branch was not pushed when
 this was). This file adds nothing to it: `draft.kind` stays, with the meaning
 in D62, and the slots live on disk.
 
-**On the runner**, behind the same guard and route handler:
+**On the runner**, behind the same guard and route handler, as built in
+phase 2a (`services/studio/src/api.ts`; the web app's `/studio/api/*` route
+handler already forwards every method and path, so it needed no change):
 
-| Method | Path | Change |
+| Method | Path | As built |
 | --- | --- | --- |
-| `POST` | `/api/drafts` | `sourceKind` (`diagram`, the default, or `video`) beside `source`, for a draft opened on a studio video; no `kind` |
-| `GET` | `/api/drafts` | Each draft gains `kinds`, the kinds it has briefs or jobs of. `kind` is the newest brief's |
-| `GET` | `/api/drafts/{id}` | Gains `slots: { diagram?, video? }` (the fields in D62) and `plannerKinds`; transcript entries gain `mentions` (a message), `briefs: [{ kind, brief, requestSeq }]`, `suggest` and `hold` (a reply). `brief`, `briefSeq` and `jobId` stay one release as the newest of any kind, so the runner PR can land before the web PR, then go |
-| `POST` | `/api/drafts/{id}/messages` | `{ text, mentions? }`. `400 { field: "mentions" }` when a mention's range is out of bounds, overlaps another, does not read `@<kind>`, or repeats a kind; `409 { reason: "kind-not-in-conversation", kind }` for a kind outside `plannerKinds`; `400 { field: "text" }` for empty text, or a bare mention on a draft with no turns yet. No longer 409 while a job runs (C14 lifted) |
-| `GET` | `/api/drafts/{id}/events` | `brief` and `brief-invalid` carry `kind`; `reply` carries `suggest` and `hold`; `state` carries the slots, so waiting and held show at once |
-| `POST` | `/api/drafts/{id}/slots/{kind}/stop-waiting` | New: clears that kind's `waiting`. `200` with the slots; a kind not waiting is `200` and writes nothing |
-| `POST` | `/api/drafts/{id}/slots/{kind}/use` | New, Use this brief: `?base=<seq>` names the held brief; clears `held` and appends the `studio` note. `409 brief-changed` when `base` is no longer that kind's brief in force; a brief not on hold is `200` and writes nothing |
-| `POST` | `/api/drafts/{id}/draw` | `{ idempotencyKey, kind? }` for one card, `kind` defaulting to `diagram` for the web app from before this ships; or `{ items: [{ kind, idempotencyKey }, ...] }` for Make both. One card answers as today, plus `409 { reason: "kind-busy", jobId }` while that kind's newest job from this draft is not terminal. Make both answers `200 { results: [{ kind, jobId } \| { kind, status, refusal }] }`, one entry per item, each the answer that card's own press would have had |
-| `PUT` | `/api/drafts/{id}/brief` | `?base=<seq>&kind=<kind>`; validates with that kind's validator; `409 brief-changed` compares that kind's slot only |
+| `POST` | `/api/drafts` | `{ source?, sourceKind?, idempotencyKey? }`. `sourceKind` is `diagram` (the default) or `video`; a video source is resolved against the owner's studio videos only (`catalog video show`), never a same-slug diagram. Answers `{ draftId, state, plannerKinds, sourceKind, note }`. `400 { field: "sourceKind" \| "source" }`; `404 { reason: "no-video", source }` for an unknown video slug; `409 { reason: "kind-not-in-conversation", kind: "video" }` on a build without the video kind; `503`/`502` when the catalog cannot say |
+| `GET` | `/api/drafts` | Each row gains `kinds` (the kinds with a brief or a job). `kind` is the newest brief's |
+| `GET` | `/api/drafts/{id}` | Gains `plannerKinds`, `conversational` (false for a draft from before), `sourceKind`, `slots: { diagram?, video? }`, `waiting: kind[]` (oldest request first) and `pair: { requestSeq, kinds } \| null` (both cards live, not held, one `requestSeq`). A slot is `{ kind, brief, briefAt, briefSeq, briefBy, pendingTopic, jobId, jobState, waiting: { requestSeq } \| null, requestSeq, held: { reason, at } \| null, state, live, busy: { jobId, state } \| null, replaces: { jobId } \| null }`; `replaces` is the video in review a press would discard in the same transaction ("Replace and make video"). Transcript: a message gains `mentions`; a reply gains `briefs: [{ kind, brief, pendingTopic?, requestSeq }]`, `briefsInvalid: [{ kind, field, message, retried }]`, `briefsIgnored: kind[]`, `suggest: kind[]`, `hold: { kinds, reason }`. `brief`, `briefSeq`, `pendingTopic`, `jobId` and an entry's `brief` and `briefInvalid` stay one release as the newest of any kind. `error` gains `briefKind` |
+| `POST` | `/api/drafts/{id}/messages` | `{ text, mentions? }`, `mentions: [{ kind, start, end }]` against `text` as sent (leading space may be trimmed; the stored positions move with it). `400 { field: "mentions" }` for a range out of bounds, overlapping, not reading `@<kind>`, a repeated or unknown kind; `409 { reason: "kind-not-in-conversation", kind }`; `400 { field: "text" }` for empty text or a bare tag on a draft with no turns. Accepted while any job runs (C14 lifted); still `409 { reason: "in-flight" \| "draw-in-progress" }` |
+| `GET` | `/api/drafts/{id}/events` | `brief` carries `kind` and `requestSeq`; `brief-invalid` carries `kind`; new `brief-ignored { seq, replySeq, kind }`; `reply` entries carry `suggest` and `hold`; `state` carries `slots`, `waiting`, `pair` and `kind` |
+| `POST` | `/api/drafts/{id}/slots/{kind}/stop-waiting` | `200 { draftId, kind, changed, slots, waiting, note }`; a kind not waiting is `changed: false`. Allowed while a turn is in flight: a brief of that kind landing after it is dropped as `brief-ignored` |
+| `POST` | `/api/drafts/{id}/slots/{kind}/use?base=<seq>` | `200 { draftId, kind, changed, slots, pair, note }`; `409 { reason: "brief-changed", base }`; a brief not on hold is `changed: false` |
+| `POST` | `/api/drafts/{id}/draw` | One card: `{ idempotencyKey, kind? }` answers `201`/`200 { draftId, jobId, kind, created, state: "drawing", replaces: jobId \| null, note }`, refusals as before plus `409 { reason: "kind-busy", kind, jobId, state }`, `409 { reason: "held", kind, held }` and `409 { reason: "not-briefed", kind, state }`. Make both: `{ items: [{ kind, idempotencyKey }] }` answers `200 { draftId, results, note }`, each result `{ kind, jobId, created, replaces }` or `{ kind, status, refusal: { error, detail } }`. A malformed `items` (a kind twice, one key for both, none) is `400` whole |
+| `PUT` | `/api/drafts/{id}/brief` | `?base=<seq>&kind=<kind>` (no `kind` means diagram). Answers `{ draftId, kind, state, brief, briefSeq, pendingTopic, note }` for that kind's slot. An edit of a held card puts it back in force; an edit clears that kind's `waiting` |
+| `GET` | `/api/videos` | `{ videos: [{ slug, title, topic, concepts, assetId, posterAssetId, durationSeconds, narrated, revision, updated }], note }`: the owner's studio videos only. `posterAssetId` is the video's own `video:<slug>` (what `/api/assets/{id}/poster` takes), or null when no poster was stored |
+| `GET` | `/api/settings/agent` | `{ video, diagram, defaults: { model, effort }, models: [{ value, label, id }], efforts }`, each row `{ key, stored: { model, effort } \| null, value, model: AgentSetting, effort: AgentSetting }` |
+| `PUT` | `/api/settings/agent` | `{ kind, model, effort }`, stored with `catalog preference set`; answers as `GET`. `400 { field }`; `503` with Postgres down. The web app's own server action writes the same row |
+| `GET` | `/api/health` | `agent` gains `defaults: { model, effort }`, what "Claude Code default" resolves to now |
 | `PUT` | `/api/drafts/{id}/kind` | Not built (STUDIO-VIDEOS.md listed it) |
 
 ## Edge cases
@@ -1341,28 +1347,31 @@ loses the Diagram or Video control and `PUT /api/drafts/{id}/kind`, and gains:
 
 **2a, the runner:**
 
-- [ ] `draft.json` slots per kind, the row's summary state and mirror, and
+- [x] `draft.json` slots per kind, the row's summary state and mirror, and
       `plannerKinds`; old drafts read as one diagram slot, their untagged
       messages treated as tagged Diagram
-- [ ] `mentions` on `POST .../messages` with its checks, the TAGS block in the
+- [x] `mentions` on `POST .../messages` with its checks, the TAGS block in the
       turn, `mentions` on the `message` event, the C3 replay writing it back
-- [ ] Brief blocks with `kind` (absent means diagram), the last per kind,
+- [x] Brief blocks with `kind` (absent means diagram), the last per kind,
       untagged kinds dropped as `brief-ignored`, per-brief validation, the one
       shared retry for refused kinds, the partial-reply thread
-- [ ] The `suggest` and `hold` blocks: read, checked (`plannerKinds`; a live
+- [x] The `suggest` and `hold` blocks: read, checked (`plannerKinds`; a live
       card to hold), stripped, and carried on the reply; `held` on the slot and
       the Use this brief route
-- [ ] Waiting kinds: `waiting` set on a tagged message, the WAITING block in
+- [x] Waiting kinds: `waiting` set on a tagged message, the WAITING block in
       later turns, a brief of a waiting kind accepted from any reply, the four
       ways it clears, the stop-waiting route; every brief records its
       `requestSeq`
-- [ ] `POST .../draw` by kind and as Make both (`items`), each item independent;
+- [x] `POST .../draw` by kind and as Make both (`items`), each item independent;
       `PUT .../brief` by kind
-- [ ] C14 lifted: messages accepted while a job runs; the press disabled per
+- [x] C14 lifted: messages accepted while a job runs; the press disabled per
       kind instead; a reply ends only the briefs of the kinds its message tagged
-- [ ] The combined prompt: the conversational core, the TAGS and suggestion
+- [x] The combined prompt: the conversational core, the TAGS and suggestion
       rules, the diagram section, the video section, and the CORPUS, VIDEOS,
       VOICES, EXTENDING and CHANGING blocks; `sourceKind` on `POST /api/drafts`
+
+Done 2026-09-29 in phase 2a's PR; its body records the smoke run and the
+shapes as built (the API table above).
 
 **2b, the web app:**
 
