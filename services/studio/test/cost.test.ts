@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   costFromLog,
   JobCostMeter,
+  priceableAs,
   priceUsd,
   RATE_TABLE,
   ratesFor,
@@ -365,5 +366,23 @@ describe("the rolling 24 hour window", () => {
     );
     expect(window.totalUsd).toBeCloseTo(EXACT_USD + ESTIMATED_USD, 6);
     expect(window.jobs).toBe(2);
+  });
+});
+
+describe("a model the rate table cannot price (#207 review)", () => {
+  const assistant = (model: string) =>
+    JSON.stringify({ type: "assistant", message: { id: "m1", model, usage: { input_tokens: 1000, output_tokens: 1000 } } });
+
+  it("is priced as its family, or at the dearest rate, never at none, so the cap still counts it", () => {
+    expect(priceableAs("claude-opus-9")).toBe("claude-opus-5");
+    expect(priceableAs("claude-fable-7[1m]")).toBe("claude-fable-5-1");
+    expect(priceableAs("claude-mystery-9")).toBe("claude-fable-5");
+    expect(priceableAs("sonnet")).toBe("claude-sonnet-5");
+    const meter = new JobCostMeter("claude-mystery-9");
+    meter.observe(assistant("claude-mystery-9"));
+    const reading = meter.read();
+    expect(reading.usd).not.toBeNull();
+    expect(reading.usd).toBeGreaterThan(0);
+    expect(reading).toMatchObject({ source: "stream", model: "claude-mystery-9", pricedAs: "claude-fable-5" });
   });
 });

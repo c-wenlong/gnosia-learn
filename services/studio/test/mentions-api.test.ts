@@ -299,6 +299,13 @@ describe("the agent settings (D53)", () => {
     });
     expect((view.models as { value: string }[]).map((model) => model.value)).toEqual(["fable", "opus", "sonnet", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5"]);
 
+    expect(view.video).toMatchObject({ price: { priced: true, pricedAs: "claude-fable-5-1" }, warning: null });
+    // An unpriced model runs, and the menu says how a stopped job is estimated.
+    catalogMock.preferenceGet.mockResolvedValue(ok({ value: { model: "claude-new-9", effort: "default" } }));
+    const unpriced = await get("/api/settings/agent");
+    expect(unpriced.diagram).toMatchObject({ price: { priced: false, pricedAs: "claude-fable-5" }, warning: expect.stringContaining('"claude-new-9" has no price') });
+    catalogMock.preferenceGet.mockResolvedValue(ok({ value: null }));
+
     const stored = await put("/api/settings/agent", { kind: "diagram", model: "opus", effort: "low" });
     expect(stored.status).toBe(200);
     expect(catalogMock.preferenceSet).toHaveBeenCalledWith("studioDiagramAgent", { model: "opus", effort: "low" });

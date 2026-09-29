@@ -32,7 +32,10 @@ import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
 import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
-import { ratesFor } from "./cost";
+import { priceableAs, ratesFor } from "./cost";
+
+/** What a studio spawn with no `--model` runs on under the seal, measured (D53). */
+const CLI_DEFAULT_MODEL = "claude-opus-5";
 import { EFFORTS, readClaudeDefaults } from "./video/agent-model";
 import type { VideoDoctor } from "./video/doctor";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
@@ -1609,8 +1612,18 @@ const OFFERED_MODELS = [
 /** One kind's row, as `GET /api/settings/agent` reports it. */
 async function agentSettingView(kind: "video" | "diagram"): Promise<Record<string, unknown>> {
   const resolved = kind === "video" ? await resolveVideoAgent() : await resolveDiagramAgent();
+  // A model the rate table cannot price still runs (the owner may pick a new
+  // one); a job stopped before it reports its own cost is then estimated at
+  // the rate `priceableAs` falls back to, which the menu says.
+  const passed = resolved.model.passed;
+  const pricedAs = priceableAs(passed ?? CLI_DEFAULT_MODEL);
+  const priced = passed !== null && ratesFor(passed) !== null;
   return {
     key: kind === "video" ? "studioVideoAgent" : "studioDiagramAgent",
+    price: { priced, pricedAs },
+    warning: priced
+      ? null
+      : `${passed === null ? "The CLI's own default" : `"${passed}"`} has no price in the studio's rate table, so a job stopped before it reports its own cost is estimated at ${pricedAs}'s rates.`,
     stored: resolved.stored,
     // What the menus show as chosen: the row, else the kind's own default.
     value: resolved.stored ?? (kind === "video" ? { model: "default", effort: "default" } : { model: "sonnet", effort: "default" }),

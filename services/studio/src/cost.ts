@@ -193,6 +193,22 @@ export function canonicalModel(model: string | null): string | null {
   return canonical in RATE_TABLE ? canonical : null;
 }
 
+/**
+ * The table's id to price `model` at: its own when the table has it, else
+ * the newest of its family by name (`fable`, `opus`, `sonnet`), else the
+ * dearest rate in the table, so an unknown model over-counts against the cap
+ * rather than under-counting.
+ */
+export function priceableAs(model: string): string {
+  const own = canonicalModel(model);
+  if (own !== null) return own;
+  const lower = model.toLowerCase();
+  for (const family of ["fable", "opus", "sonnet"] as const) {
+    if (lower.includes(family)) return canonicalModel(family)!;
+  }
+  return Object.entries(RATE_TABLE).sort((a, b) => b[1].output - a[1].output)[0]![0];
+}
+
 /** Price one bag of tokens. Null when the model is not in the table. */
 export function priceUsd(usage: TokenUsage, model: string | null): number | null {
   const rate = ratesFor(model);
@@ -343,10 +359,18 @@ export class JobCostMeter {
   private seen = new Set<string>();
   private messages = 0;
 
-  /** A model to fall back on when the stream never names a priceable one. */
+  /**
+   * A model to fall back on when the stream never names a priceable one. A
+   * model the table cannot price (one the settings panel or the owner's own
+   * settings named, newer than this table) is priced as its family, or at the
+   * dearest rate the table has, never at none: a killed attempt with no
+   * figure is one the daily cap cannot count (the #207 review). The reading's
+   * `pricedAs` says which rate it was, so the figure stays an estimate on the
+   * record, and a clean exit's own `total_cost_usd` never uses it.
+   */
   constructor(fallbackModel: string | null = null) {
     this.model = fallbackModel;
-    this.priceableModel = canonicalModel(fallbackModel);
+    this.priceableModel = fallbackModel === null ? null : priceableAs(fallbackModel);
   }
 
   /** One raw line. Anything unparseable, or irrelevant, is ignored. */
