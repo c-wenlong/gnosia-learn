@@ -224,7 +224,9 @@ describe("reading a reply", () => {
     expect(verdict.kind).toBe("valid");
     if (verdict.kind !== "valid") return;
     expect(verdict.brief.slug).toBe("tcp-congestion-window");
-    expect(verdict.brief.model).toBe("sonnet");
+    // Not even `sonnet`: a brief that names no model is what lets the
+    // settings panel's Diagrams row choose one at job start (D53).
+    expect(verdict.brief).not.toHaveProperty("model");
     expect(verdict.brief).not.toHaveProperty("mermaid");
     expect(verdict.brief).not.toHaveProperty("source");
     expect(verdict.brief).not.toHaveProperty("idempotencyKey");

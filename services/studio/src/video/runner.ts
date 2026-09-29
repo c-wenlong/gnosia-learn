@@ -561,7 +561,9 @@ export class VideoRunner {
     }
     const auth = agentAuth();
     record = await this.store.update(id, { agentAuth: auth, manualHash, agentModel, agentEffort });
-    entry.meter = new JobCostMeter(agentModel.passed);
+    // No flag passed runs the CLI's own default under the seal, measured as
+    // claude-opus-5 (D53); priced so until the stream names its model.
+    entry.meter = new JobCostMeter(agentModel.passed ?? "claude-opus-5");
     await this.refreshSteps(entry, { setupDone: true });
 
     let gate: VideoGateResult | null = null;

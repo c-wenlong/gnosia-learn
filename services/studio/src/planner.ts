@@ -8,7 +8,9 @@ import { BriefError, validateBrief, type ValidBrief, type Vocabulary } from "./b
 import type { InspectReport } from "./canvas";
 import type { TopicProposal } from "./catalog";
 import { CLAUDE_BIN, KILL_GRACE_MS, PLANNER_IDLE_MS, PLANNER_TURN_MS, type AgentAuth } from "./config";
+import { isBriefKind, type BriefKind } from "./planner-prompt";
 import { signalGroup } from "./proc";
+import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
 
 /**
  * The planner: one `claude -p` per person turn, resumed turn by turn, that
@@ -633,6 +635,103 @@ export function mermaidBlocks(text: string): string[] {
   return [...text.matchAll(pattern)].map((match) => match[2] ?? "");
 }
 
+/**
+ * Every fenced block tagged `tag` in a reply, in order. A fence may sit up to
+ * three spaces in (a model sometimes indents one under a list item), and is
+ * closed by a line of the same backticks.
+ */
+export function fencedBlocks(text: string, tag: string): string[] {
+  const pattern = new RegExp(`^[ ]{0,3}(\`{3,})[ \\t]*${tag}[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n[ ]{0,3}\\1[ \\t]*$`, "gm");
+  return [...text.matchAll(pattern)].map((match) => match[2] ?? "");
+}
+
+/**
+ * The reply with every block tagged one of `tags` taken out, and the blank
+ * lines they leave collapsed: what a person reads, once the runner has read
+ * the `suggest` and `hold` blocks off it (D58, D60).
+ */
+export function stripFencedBlocks(text: string, tags: readonly string[]): string {
+  let out = text;
+  for (const tag of tags) {
+    const pattern = new RegExp(`^[ ]{0,3}(\`{3,})[ \\t]*${tag}[ \\t]*\\r?\\n[\\s\\S]*?\\r?\\n[ ]{0,3}\\1[ \\t]*$`, "gm");
+    out = out.replace(pattern, "");
+  }
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** One `brief` block and the kind it names. A block with no `kind` is a diagram (D61). */
+export interface BriefBlock {
+  /** The kind the block names, as written: possibly one the build does not have. */
+  kind: string;
+  body: string;
+}
+
+/**
+ * The last `brief` block of each kind in a reply (D61): today's "last block
+ * wins", per kind. The kind is read from the JSON; a block that does not
+ * parse is attributed by a `"kind": "..."` it still spells, else to diagram,
+ * so its refusal names the right card.
+ */
+export function briefBlocks(text: string): BriefBlock[] {
+  const last = new Map<string, string>();
+  for (const body of fencedBlocks(text, "brief")) {
+    let kind: string | null = null;
+    try {
+      const parsed = record(JSON.parse(body));
+      if (parsed !== null) kind = typeof parsed.kind === "string" ? parsed.kind : parsed.kind === undefined ? "diagram" : String(parsed.kind);
+    } catch {
+      kind = /"kind"\s*:\s*"([a-z]{1,20})"/.exec(body)?.[1] ?? null;
+    }
+    last.delete(kind ?? "diagram");
+    last.set(kind ?? "diagram", body);
+  }
+  return [...last].map(([kind, body]) => ({ kind, body }));
+}
+
+/**
+ * The kinds a `suggest` block offers (D58), kept to `allowed` (the draft's
+ * `plannerKinds`), in the build's order. A block that does not parse, or names
+ * nothing allowed, is dropped quietly: a malformed offer is not worth a paid
+ * retry. The last block wins.
+ */
+export function readSuggest(text: string, allowed: readonly BriefKind[]): BriefKind[] {
+  const body = fencedBlocks(text, "suggest").at(-1);
+  if (body === undefined) return [];
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = record(JSON.parse(body));
+  } catch {
+    return [];
+  }
+  const kinds = Array.isArray(parsed?.kinds) ? parsed.kinds : [];
+  return (["diagram", "video"] as const).filter((kind) => kinds.includes(kind) && allowed.includes(kind));
+}
+
+/** The longest hold reason kept, in characters: "a reason of a few words". */
+export const HOLD_REASON_LIMIT = 120;
+
+/**
+ * A `hold` block (D60): the kinds of live cards the reply contradicts, kept
+ * to `live`, and a one-line reason. Null when there is none, it does not
+ * parse, or it names no live card.
+ */
+export function readHold(text: string, live: readonly BriefKind[]): { kinds: BriefKind[]; reason: string } | null {
+  const body = fencedBlocks(text, "hold").at(-1);
+  if (body === undefined) return null;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = record(JSON.parse(body));
+  } catch {
+    return null;
+  }
+  const named = Array.isArray(parsed?.kinds) ? parsed.kinds : [];
+  const kinds = (["diagram", "video"] as const).filter((kind) => named.includes(kind) && live.includes(kind));
+  if (kinds.length === 0) return null;
+  const raw = typeof parsed?.reason === "string" ? oneLine(parsed.reason) : "";
+  const reason = raw === "" ? "The conversation contradicted it" : raw.length > HOLD_REASON_LIMIT ? `${raw.slice(0, HOLD_REASON_LIMIT - 1).trimEnd()}…` : raw;
+  return { kinds, reason };
+}
+
 /** The brief fields a planner may set. Everything else it writes is dropped before validation. */
 export const PLANNER_BRIEF_FIELDS = [
   "intent",
@@ -646,8 +745,28 @@ export const PLANNER_BRIEF_FIELDS = [
   "concepts",
 ] as const;
 
+/** The video brief fields a planner may set (STUDIO-VIDEOS.md, "The video brief"); `source` is a person's. */
+export const PLANNER_VIDEO_FIELDS = [
+  "title",
+  "topic",
+  "slug",
+  "mode",
+  "idea",
+  "audience",
+  "targetSeconds",
+  "voice",
+  "scenes",
+  "concepts",
+] as const;
+
 /** A brief as a draft stores it: validated, with no idempotency key until Draw mints one. */
 export type DraftBrief = Omit<ValidBrief, "idempotencyKey">;
+
+/** A video brief as a draft stores it, the same way. */
+export type DraftVideoBrief = Omit<ValidVideoBrief, "idempotencyKey">;
+
+/** A brief of either kind, as a slot holds it. */
+export type AnyDraftBrief = DraftBrief | DraftVideoBrief;
 
 /** A proposed topic the dry run accepted, and the existing topics that look like it. */
 export interface PendingTopic {
@@ -658,6 +777,11 @@ export interface PendingTopic {
 export type BriefVerdict =
   | { kind: "none" }
   | { kind: "valid"; brief: DraftBrief; pendingTopic: PendingTopic | null }
+  | { kind: "invalid"; field: string; message: string };
+
+/** The verdict on one brief of a known kind: `valid` or `invalid`, never `none`. */
+export type KindVerdict =
+  | { kind: "valid"; brief: AnyDraftBrief; pendingTopic: PendingTopic | null }
   | { kind: "invalid"; field: string; message: string };
 
 /** What the evaluator needs to check a proposed topic without importing the catalog. */
@@ -677,18 +801,18 @@ function parseJsonObject(body: string, field: string): Record<string, unknown> {
   return object;
 }
 
-/** Only the planner's fields, so a brief it wrote can never carry `model`, `mermaid`, `source` or a key. */
-function plannerFields(raw: Record<string, unknown>): Record<string, unknown> {
+/** Only the planner's fields, so a brief it wrote can never carry `model`, `mermaid`, `source`, `kind` or a key. */
+function plannerFields(raw: Record<string, unknown>, fields: readonly string[] = PLANNER_BRIEF_FIELDS): Record<string, unknown> {
   const picked: Record<string, unknown> = {};
-  for (const field of PLANNER_BRIEF_FIELDS) if (field in raw) picked[field] = raw[field];
+  for (const field of fields) if (field in raw) picked[field] = raw[field];
   return picked;
 }
 
-function strip(brief: ValidBrief): DraftBrief {
-  // The key `validateBrief` minted is not the draft's: Draw mints its own.
-  const kept: Partial<ValidBrief> = { ...brief };
+function strip<T extends { idempotencyKey: string }>(brief: T): Omit<T, "idempotencyKey"> {
+  // The key the validator minted is not the draft's: Draw mints its own.
+  const kept: Partial<T> = { ...brief };
   delete kept.idempotencyKey;
-  return kept as DraftBrief;
+  return kept as Omit<T, "idempotencyKey">;
 }
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -726,23 +850,44 @@ export function topicProposal(raw: Record<string, unknown>): TopicProposal {
 }
 
 /**
- * Judge one planner reply: no brief, a valid one (perhaps on a proposed
- * topic), or a refusal naming the field and the validator's sentence.
- *
- * `validateBrief` checks the topic first and throws at its first failure, so
- * a refusal on `topic` says nothing about the rest. When the same reply
- * carries a `topic` block naming that slug, the entry is dry-run through the
- * catalog, and the brief is validated a second time against a vocabulary
- * widened with the proposed slug, in memory only. Either check failing, or a
- * block naming a different slug, is an ordinary refusal.
+ * Judge one planner reply the way a draft from before D61 was judged: its
+ * last `brief` block, as a diagram, whatever kind it names.
  */
 export async function evaluateReply(text: string, vocabulary: Vocabulary, topics: TopicChecker): Promise<BriefVerdict> {
   const body = lastFencedBlock(text, "brief");
   if (body === null) return { kind: "none" };
+  const verdict = await evaluateBrief("diagram", body, text, vocabulary, topics);
+  return verdict.kind === "valid" ? { kind: "valid", brief: verdict.brief as DraftBrief, pendingTopic: verdict.pendingTopic } : verdict;
+}
+
+/**
+ * Judge one brief of a known kind: valid (perhaps on a proposed topic), or a
+ * refusal naming the field and the validator's sentence.
+ *
+ * `kind` is removed before validation, and each kind goes to its own
+ * validator with its own planner field list, so a diagram brief can never
+ * carry a video field or the reverse (D61).
+ *
+ * Both validators check the topic first and throw at the first failure, so a
+ * refusal on `topic` says nothing about the rest. When the same reply carries
+ * a `topic` block naming that slug, the entry is dry-run through the catalog,
+ * and the brief is validated a second time against a vocabulary widened with
+ * the proposed slug, in memory only. Either check failing, or a block naming
+ * a different slug, is an ordinary refusal.
+ */
+export async function evaluateBrief(
+  briefKind: BriefKind,
+  body: string,
+  text: string,
+  vocabulary: Vocabulary,
+  topics: TopicChecker,
+): Promise<KindVerdict> {
+  const validate = (raw: Record<string, unknown>, against: Vocabulary): AnyDraftBrief =>
+    briefKind === "video" ? strip(validateVideoBrief(raw, against)) : strip(validateBrief(raw, against));
   try {
-    const raw = plannerFields(parseJsonObject(body, "brief"));
+    const raw = plannerFields(parseJsonObject(body, "brief"), briefKind === "video" ? PLANNER_VIDEO_FIELDS : PLANNER_BRIEF_FIELDS);
     try {
-      return { kind: "valid", brief: strip(validateBrief(raw, vocabulary)), pendingTopic: null };
+      return { kind: "valid", brief: validate(raw, vocabulary), pendingTopic: null };
     } catch (error) {
       if (!(error instanceof BriefError) || error.field !== "topic") throw error;
       const block = lastFencedBlock(text, "topic");
@@ -767,7 +912,7 @@ export async function evaluateReply(text: string, vocabulary: Vocabulary, topics
         ...vocabulary,
         topics: new Map([...vocabulary.topics, [entry.slug, { title: entry.title, concepts: [] }]]),
       };
-      const brief = strip(validateBrief(raw, widened));
+      const brief = validate(raw, widened);
       const answer = record(dry.json);
       const near = Array.isArray(answer?.nearMatches) ? answer.nearMatches : [];
       return {
@@ -792,6 +937,13 @@ export async function evaluateReply(text: string, vocabulary: Vocabulary, topics
     throw error;
   }
 }
+
+/** Whether a brief a slot holds is a video brief, by its shape. */
+export function isVideoBrief(brief: AnyDraftBrief): brief is DraftVideoBrief {
+  return Array.isArray((brief as DraftVideoBrief).scenes);
+}
+
+export { isBriefKind };
 
 /** The part of a catalog error a person can read: the CLI's own last sentence. */
 function lastLine(error: string | null): string {

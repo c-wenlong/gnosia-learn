@@ -193,8 +193,20 @@ export interface StudioAgentPreference {
   effort: "default" | AgentEffort;
 }
 
-/** A model name `claude --model` could take: an alias or a full id, never a flag. */
-const AGENT_MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,79}$/;
+/**
+ * A model name `claude --model` could take, and the one rule every reader and
+ * writer of a studio agent preference shares: an alias or a full id, lower
+ * case, letters, digits, dots and hyphens, and at most one context suffix in
+ * brackets at the end (`claude-fable-5-1[1m]`). Never a flag. A looser rule at
+ * set time than at read time once stored "Sonnet", which the runner then read
+ * as "default" and ran on the owner's own, dearer default.
+ */
+const AGENT_MODEL = /^[a-z][a-z0-9.-]{0,79}(\[[0-9a-z]{1,8}\])?$/;
+
+/** Whether a string is a model name a studio agent preference may hold (see `AGENT_MODEL`). */
+export function isAgentModel(value: unknown): value is string {
+  return typeof value === "string" && AGENT_MODEL.test(value);
+}
 
 /**
  * A stored `studioVideoAgent` or `studioDiagramAgent` value, read the one way
@@ -204,7 +216,7 @@ const AGENT_MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,79}$/;
  */
 export function studioAgentPreference(value: unknown): StudioAgentPreference {
   const record = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  const model = typeof record.model === "string" && AGENT_MODEL.test(record.model.trim()) ? record.model.trim() : "default";
+  const model = typeof record.model === "string" && (record.model === "default" || isAgentModel(record.model)) ? record.model : "default";
   const effort =
     typeof record.effort === "string" && (AGENT_EFFORTS as readonly string[]).includes(record.effort)
       ? (record.effort as AgentEffort)

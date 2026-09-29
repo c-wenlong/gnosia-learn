@@ -42,7 +42,7 @@ vi.mock("../src/canvas", async (importOriginal) => ({
   doctor: canvasMock.doctor,
 }));
 
-const { Drafts } = await import("../src/drafts");
+const { Drafts, emptySlot } = await import("../src/drafts");
 const { JobStore } = await import("../src/store");
 const { JobRefused } = await import("../src/runner");
 const { spendWindow } = await import("../src/cost");
@@ -128,9 +128,25 @@ function edit(id: string, body: unknown, base?: string) {
   return drafts.editBrief(id, body, base ?? (current?.brief ? String(current.briefSeq) : "none"));
 }
 
-/** Send and wait for the whole turn, retries and writes included. */
-async function say(id: string, text: string): Promise<void> {
+/** A message tagged Diagram (D57): the chip first, as the composer sends it. */
+function tagged(text: string): [string, { kind: "diagram"; start: number; end: number }[]] {
+  return [`@diagram ${text}`, [{ kind: "diagram", start: 0, end: 8 }]];
+}
+
+/** An untagged message (D58): conversation, answered with no brief. */
+async function chat(id: string, text: string): Promise<void> {
   await drafts.send(id, text);
+  await drafts.settled(id);
+}
+
+/**
+ * Send a message tagged Diagram and wait for the whole turn, retries and
+ * writes included. Every message these tests send orders a diagram brief, as
+ * every message did before tags (D61); untagged conversation is in
+ * `mentions.test.ts`.
+ */
+async function say(id: string, text: string): Promise<void> {
+  await drafts.send(id, ...tagged(text));
   await drafts.settled(id);
 }
 
@@ -203,7 +219,8 @@ describe("what a person types", () => {
     // Every turn produced a reply: none of them was refused as an unknown option.
     expect(view.error).toBeNull();
     expect(view.transcript.filter((entry) => entry.role === "planner")).toHaveLength(3);
-    expect(await fake.prompts()).toEqual(texts);
+    // Each behind the TAGS block its Diagram chip wrote (D57), and still never in argv.
+    expect(await fake.prompts()).toEqual(texts.map((text) => `-----BEGIN TAGS-----\ndiagram\n-----END TAGS-----\n\n@diagram ${text.trim()}`));
     for (const argv of await fake.argvs()) {
       for (const text of texts) expect(argv.some((arg) => arg.includes(text.slice(0, 12)))).toBe(false);
     }
@@ -281,8 +298,8 @@ describe("a proposed topic", () => {
       expect(options.draftId).toBe(record.id);
       return { record: { id: "job-1", state: "queued", draftId: record.id }, created: true, jobsAhead: 0 };
     });
-    const drawn = await drafts.draw(record.id, "press-1");
-    expect(drawn).toEqual({ jobId: "job-1", created: true });
+    const drawn = await drafts.drawOne(record.id, "press-1");
+    expect(drawn).toEqual({ kind: "diagram", jobId: "job-1", created: true, replaces: null });
     expect(order).toEqual(["topic add", "enqueue"]);
     view = await drafts.view(record.id);
     expect(view.state).toBe("drawing");
@@ -295,7 +312,7 @@ describe("a proposed topic", () => {
     const { record } = await drafts.create({});
     await say(record.id, "tailscale tunnels");
     canvasMock.doctor.mockResolvedValue({ code: 1, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
-    await expect(drafts.draw(record.id, "p")).rejects.toMatchObject({ status: 503 });
+    await expect(drafts.drawOne(record.id, "p")).rejects.toMatchObject({ status: 503 });
     expect(catalogMock.topicAdd).not.toHaveBeenCalled();
     expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
   });
@@ -308,7 +325,7 @@ describe("a proposed topic", () => {
       const pending = (await drafts.create({})).record;
       await say(pending.id, "tailscale tunnels");
       expect(drafts.get(pending.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
-      await expect(drafts.draw(pending.id, "p")).rejects.toMatchObject({ status: 409, detail: { reason: "topic-owner" } });
+      await expect(drafts.drawOne(pending.id, "p")).rejects.toMatchObject({ status: 409, detail: { reason: "topic-owner" } });
       expect(catalogMock.topicAdd).not.toHaveBeenCalled();
       expect(runner.enqueue).not.toHaveBeenCalled();
       expect(canvasMock.doctor).not.toHaveBeenCalled();
@@ -319,7 +336,7 @@ describe("a proposed topic", () => {
       await fake.script([{ text: proposing(good) }]);
       const existing = (await drafts.create({})).record;
       await say(existing.id, "the congestion window");
-      await expect(drafts.draw(existing.id, "p")).resolves.toMatchObject({ created: true });
+      await expect(drafts.drawOne(existing.id, "p")).resolves.toMatchObject({ created: true });
       expect(drafts.get(existing.id)?.state).toBe("drawing");
     } finally {
       if (saved === undefined) delete process.env.STUDIO_OWNER;
@@ -343,7 +360,7 @@ describe("a proposed topic", () => {
     const { record } = await drafts.create({});
     await say(record.id, "tailscale tunnels");
     catalogMock.topicAdd.mockResolvedValue({ ok: false, json: { ok: false, error: "no such domain" }, error: "exited 1", offline: false });
-    await expect(drafts.draw(record.id, "p")).rejects.toMatchObject({ status: 400, detail: { reason: "topic-add" } });
+    await expect(drafts.drawOne(record.id, "p")).rejects.toMatchObject({ status: 400, detail: { reason: "topic-add" } });
     expect(runner.enqueue).not.toHaveBeenCalled();
     const view = await drafts.view(record.id);
     expect(view.state).toBe("briefed");
@@ -370,13 +387,13 @@ describe("a Draw press", () => {
       await gate;
       return { record: { id: "job-held", state: "queued", draftId: record.id, idempotencyKey: valid.idempotencyKey }, created: true, jobsAhead: 0 };
     });
-    const first = drafts.draw(record.id, "press");
-    const second = drafts.draw(record.id, "press");
-    await expect(drafts.draw(record.id, "another")).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
+    const first = drafts.drawOne(record.id, "press");
+    const second = drafts.drawOne(record.id, "press");
+    await expect(drafts.drawOne(record.id, "another")).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
     await expect(drafts.send(record.id, "wait, change it")).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
     release();
-    expect(await first).toEqual({ jobId: "job-held", created: true });
-    expect(await second).toEqual({ jobId: "job-held", created: false });
+    expect(await first).toEqual({ kind: "diagram", jobId: "job-held", created: true, replaces: null });
+    expect(await second).toEqual({ kind: "diagram", jobId: "job-held", created: false, replaces: null });
     expect(catalogMock.topicAdd).toHaveBeenCalledTimes(1);
     expect(runner.enqueue).toHaveBeenCalledTimes(1);
     expect(drafts.get(record.id)?.state).toBe("drawing");
@@ -385,7 +402,7 @@ describe("a Draw press", () => {
   it("is not undone by a turn that was already running when a Resume moved the draft to drawing", async () => {
     await fake.script([{ text: proposing(good), hangMs: 300 }]);
     const { record } = await drafts.create({});
-    await drafts.send(record.id, "draw it");
+    await drafts.send(record.id, ...tagged("draw it"));
     // A Resume from the job panel lands while the planner is still answering.
     await drafts.markDrawing(record.id, "job-resumed");
     expect(drafts.get(record.id)?.state).toBe("drawing");
@@ -400,7 +417,7 @@ describe("a Draw press", () => {
     const { record } = await drafts.create({});
     await say(record.id, "tailscale tunnels");
     runner.admit.mockRejectedValueOnce(new JobRefused(409, "learn/assets/tcp-congestion-window.tldr is already held by job j", { holder: "j" }));
-    await expect(drafts.draw(record.id, "p")).rejects.toMatchObject({ status: 409, detail: { holder: "j" } });
+    await expect(drafts.drawOne(record.id, "p")).rejects.toMatchObject({ status: 409, detail: { holder: "j" } });
     expect(catalogMock.topicAdd).not.toHaveBeenCalled();
     expect(runner.enqueue).not.toHaveBeenCalled();
     expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
@@ -421,7 +438,7 @@ describe("a Draw press", () => {
       expect(rowExists).toBe(true);
       return { record: { id: "job-row", state: "queued", draftId: record.id }, created: true, jobsAhead: 0 };
     });
-    await expect(drafts.draw(record.id, "p")).resolves.toEqual({ jobId: "job-row", created: true });
+    await expect(drafts.drawOne(record.id, "p")).resolves.toEqual({ kind: "diagram", jobId: "job-row", created: true, replaces: null });
   });
 });
 
@@ -497,7 +514,8 @@ describe("what goes wrong", () => {
     expect(argvs[1]).toContain("--session-id");
     const prompts = await fake.prompts();
     expect(prompts[1]).toContain("-----BEGIN CONVERSATION-----");
-    expect(prompts[1]).toContain("person: one");
+    // A tagged message keeps its TAGS block in the replay (T22).
+    expect(prompts[1]).toContain("person: -----BEGIN TAGS-----\ndiagram\n-----END TAGS-----\n@diagram one");
     expect(drafts.get(record.id)!.plannerSessionId).not.toBe(before);
     const view = await drafts.view(record.id);
     expect(view.transcript.at(-1)).toMatchObject({ role: "planner", text: "carried on" });
@@ -627,7 +645,14 @@ describe("a crash between two writes", () => {
       { seq: 2, type: "message", text: "draw it" },
       { seq: 3, type: "reply", turn: 2, text: proposing(good) },
       { seq: 4, type: "brief", replySeq: 3, brief, pendingTopic: null },
-    ], { seq: 4, turns: 1, state: "briefed", brief, inFlight: { turn: 2, startedAt: new Date().toISOString() } });
+    ], {
+      seq: 4,
+      turns: 1,
+      state: "briefed",
+      brief,
+      slots: { diagram: { ...emptySlot(), brief, briefSeq: 3, briefBy: "planner", requestSeq: 2, state: "briefed" } },
+      inFlight: { turn: 2, startedAt: new Date().toISOString() },
+    });
     const restarted = build();
     await restarted.load();
     await restarted.reconcile();
@@ -656,9 +681,14 @@ describe("the job a draft follows", () => {
     await fake.script([{ text: proposing(good) }]);
     const { record } = await drafts.create({});
     await say(record.id, "draw it");
-    const { jobId } = await drafts.draw(record.id, "press");
+    const { jobId } = await drafts.drawOne(record.id, "press");
     expect(drafts.get(record.id)?.state).toBe("drawing");
-    await expect(drafts.send(record.id, "while drawing")).rejects.toMatchObject({ status: 409, detail: { reason: "drawing" } });
+    // C14 lifted (D60): a message while the drawing runs is talked about. Its
+    // reply's brief, untagged, is dropped and moves nothing.
+    await drafts.send(record.id, "while drawing");
+    await drafts.settled(record.id);
+    expect(drafts.get(record.id)?.state).toBe("drawing");
+    expect((await drafts.view(record.id)).transcript.at(-1)).toMatchObject({ role: "planner", briefsIgnored: ["diagram"] });
 
     const job = {
       id: jobId,
@@ -680,7 +710,7 @@ describe("the job a draft follows", () => {
     // The planner hears it on the next turn.
     expect(drafts.get(record.id)?.undelivered).toHaveLength(1);
 
-    const { jobId: second } = await drafts.draw(record.id, "press-2");
+    const { jobId: second } = await drafts.drawOne(record.id, "press-2");
     await store.create({ ...job, id: second, state: "awaiting_review" } as never);
     await store.update(second, { state: "accepted" });
     await until(() => drafts.get(record.id)?.state === "done", "an accepted drawing never finished the draft");
@@ -719,7 +749,7 @@ describe("following the job when the draft was not listening", () => {
       await store.update("job-fast", { state: "failed", error: "the agent never started" });
       return { record: store.get("job-fast"), created: true, jobsAhead: 0 };
     });
-    await drafts.draw(record.id, "p");
+    await drafts.drawOne(record.id, "p");
     await drafts.settled(record.id);
     const view = await drafts.view(record.id);
     expect(view.state).toBe("briefed");
@@ -732,7 +762,7 @@ describe("following the job when the draft was not listening", () => {
     await fake.script([{ text: proposing(good) }]);
     const { record } = await drafts.create({});
     await say(record.id, "draw it");
-    const { jobId } = await drafts.draw(record.id, "p");
+    const { jobId } = await drafts.drawOne(record.id, "p");
     expect(drafts.get(record.id)?.state).toBe("drawing");
     await drafts.settled(record.id);
 
@@ -849,7 +879,7 @@ describe("a brief edited by hand", () => {
     expect(view.pendingTopic).toBeNull();
     // Two edits, one note waiting for the planner: both changes, from the brief it proposed.
     expect(drafts.get(record.id)?.undelivered).toEqual([]);
-    const told = drafts.get(record.id)?.pendingEdit?.text ?? "";
+    const told = drafts.get(record.id)?.slots?.diagram?.pendingEdit?.text ?? "";
     expect(told).toContain('- title: "TCP congestion window" -> "Tailscale tunnels, end to end"');
     expect(told).toContain('- topic: "mesh-vpn" -> "tcp-congestion-control"');
     // Each edit mirrored the row.
@@ -866,7 +896,7 @@ describe("a brief edited by hand", () => {
         release = () => resolve({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
       }),
     );
-    const press = drafts.draw(record.id, "press");
+    const press = drafts.drawOne(record.id, "press");
     await expect(edit(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
     release();
     const { jobId } = await press;
@@ -914,11 +944,11 @@ describe("C4: the vocabulary changes during a conversation", () => {
   it("tells the planner what was added and archived at the head of its next turn, once", async () => {
     await fake.script([{ text: "Which one?" }, { text: "Mesh VPNs, then." }, { text: "Still here." }]);
     const { record } = await drafts.create({});
-    await say(record.id, "hello");
+    await chat(record.id, "hello");
     // One topic added, one archived, after the system prompt was written.
     catalogMock.topicList.mockResolvedValue(topicListAnswer([TOPICS[1]!, added]));
-    await say(record.id, "tailscale tunnels");
-    await say(record.id, "and?");
+    await chat(record.id, "tailscale tunnels");
+    await chat(record.id, "and?");
     const prompts = await fake.prompts();
     expect(prompts[0]).toBe("hello");
     expect(prompts[1]).toContain("-----BEGIN STUDIO-----");
@@ -937,9 +967,9 @@ describe("C4: the vocabulary changes during a conversation", () => {
   it("says nothing when the vocabulary is the one the prompt was written with, or cannot be read", async () => {
     await fake.script([{ text: "Which one?" }, { text: "Ok." }]);
     const { record } = await drafts.create({});
-    await say(record.id, "hello");
+    await chat(record.id, "hello");
     catalogMock.topicList.mockResolvedValue(topicListDown());
-    await say(record.id, "again");
+    await chat(record.id, "again");
     expect(await fake.prompts()).toEqual(["hello", "again"]);
   });
 });
@@ -1086,7 +1116,7 @@ describe("the brief a person edited", () => {
     // The one disk write holds the brief, its seq and the planner's note together.
     const onDisk = JSON.parse(await readFile(draftJsonPath(record.id), "utf8")) as Record<string, unknown>;
     expect(onDisk).toMatchObject({ brief: { title: "Edited" }, briefSeq: (seen[0]?.data as { seq: number }).seq, briefBy: "person" });
-    expect(onDisk.pendingEdit).toMatchObject({ text: expect.stringContaining('"Edited"') });
+    expect((onDisk.slots as { diagram: { pendingEdit: unknown } }).diagram.pendingEdit).toMatchObject({ text: expect.stringContaining('"Edited"') });
   });
 });
 
@@ -1095,9 +1125,10 @@ describe("the vocabulary a turn reads", () => {
     await fake.script([{ text: "Which one?" }, { text: "Ok." }]);
     const { record } = await drafts.create({});
     catalogMock.topicList.mockClear();
+    await fake.script([{ text: proposing(good) }, { text: proposing(good) }]);
     await say(record.id, "hello");
     await say(record.id, "again");
-    // One read per reply's verdict, none before either turn.
+    // One read per reply's verdict on a brief, none before either turn.
     expect(catalogMock.topicList).toHaveBeenCalledTimes(2);
   });
 });
@@ -1139,14 +1170,16 @@ describe("notes a turn did not deliver", () => {
     await say(record.id, "good?");
     expect((await drafts.view(record.id)).error).toMatchObject({ kind: "agent" });
     // The failed turn was sent the note, and it is still queued.
-    expect(drafts.get(record.id)?.pendingEdit?.text).toContain('"Edited"');
+    expect(drafts.get(record.id)?.slots?.diagram?.pendingEdit?.text).toContain('"Edited"');
     await say(record.id, "again?");
     const prompts = await fake.prompts();
     expect(prompts[1]).toContain('title: "TCP congestion window" -> "Edited"');
     expect(prompts[2]).toContain('title: "TCP congestion window" -> "Edited"');
     // Answered, so taken off the queue: the next turn is the person's text alone.
-    expect(drafts.get(record.id)?.pendingEdit).toBeNull();
-    await say(record.id, "and now?");
-    expect((await fake.prompts())[3]).toBe("and now?");
+    expect(drafts.get(record.id)?.slots?.diagram?.pendingEdit).toBeNull();
+    await chat(record.id, "and now?");
+    // The diagram the last tagged message asked for is still owed, so the
+    // untagged turn carries the WAITING block (D57), and no STUDIO note.
+    expect((await fake.prompts())[3]).toBe("-----BEGIN WAITING-----\ndiagram\n-----END WAITING-----\n\nand now?");
   });
 });

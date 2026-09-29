@@ -17,6 +17,7 @@ import {
   studioHome,
   tmpDir,
 } from "./paths";
+import type { AgentSetting } from "./video/types";
 
 /**
  * The write-ahead log, and the only thing the API reads.
@@ -191,6 +192,21 @@ export interface JobRecord {
    * only the studio reads.
    */
   manualHash?: string | null;
+  /**
+   * The model and effort the agent ran with, each `{ requested, passed,
+   * source }` (D53 of docs/STUDIO-VIDEOS.md, `agent-settings.ts`): the
+   * brief's model, else the settings panel's Diagrams row, else `sonnet`, and
+   * the panel's effort, else the owner's Claude Code default. Resolved once,
+   * before the first spawn, never at enqueue, so a change in the panel reaches
+   * a queued job; a revise or a resume keeps its parent's, as it keeps its
+   * parent's manual, because it continues the same session. Kept here and in
+   * the job view, not on the catalog row, for the reason `manualHash` is.
+   * Absent on a job recorded before the panel.
+   */
+  agentModel?: AgentSetting | null;
+  agentEffort?: AgentSetting | null;
+  /** The model the session's `system/init` event named: what `--model` (or its absence) became. */
+  resolvedModel?: string | null;
   gate: GateResult | null;
   /**
    * Before and after, and the difference: the finished-job screen's whole
