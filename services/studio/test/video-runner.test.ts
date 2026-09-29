@@ -405,4 +405,38 @@ describe("a kick while a job's enqueue has not answered", () => {
     await enqueued;
     expect((await made.cancel(id)).state).toBe("cancelled");
   });
+
+  it("does not start a replacing child until its parent's cleanup is done", async () => {
+    const queued = (await runner()).enqueue(brief());
+    await until(() => answer !== null, "the parent's enqueue never reached the catalog");
+    answer!(ok({ job: {} }));
+    const { record: parent } = await queued;
+    await store.update(parent.id, { state: "awaiting_review", agentSessionId: "11111111-1111-4111-8111-111111111111", classes: ["TB1_WhyItMatters"] });
+    answer = null;
+
+    // Admitted while the doctor passes, failing by the start, as above.
+    const flaky = doctor();
+    const failing = { ...flaky.current()!, ok: false, checks: [{ name: "render profile", ok: false, detail: "no Metal" }] };
+    let asked = 0;
+    const made = new VideoRunner(store, { doctor: { ...flaky, report: async () => (asked++ === 0 ? flaky.current()! : failing) } as unknown as VideoDoctor });
+    // The parent's source and clips are rewritten here; the child starts from them.
+    let release: () => void = () => undefined;
+    const cleanup = vi
+      .spyOn(made as unknown as { cleanup: (...args: unknown[]) => Promise<void> }, "cleanup")
+      .mockImplementation(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const revised = made.revise(store.get(parent.id)!, "the arrow in scene two points at the wrong box");
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    answer!(ok({ job: {} }));
+    await until(() => cleanup.mock.calls.length > 0, "the parent was never cleaned up");
+    void made.kick();
+    expect(made.busy).toBe(0);
+
+    release();
+    const child = await revised;
+    await made.settled(child.id);
+    expect(catalogMock.jobClaim).toHaveBeenCalledTimes(1);
+    expect(store.get(child.id)).toMatchObject({ state: "failed", errorKind: "internal" });
+    await made.drain();
+  });
 });
