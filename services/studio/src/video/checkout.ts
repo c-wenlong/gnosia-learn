@@ -142,6 +142,20 @@ export function topicOf(topicYml: string): string | null {
   return value === "" ? null : value;
 }
 
+/**
+ * The scene-class prefix: the slug's initials, cut to the four letters
+ * manimkc allows. Passed explicitly because `new` would suggest all the
+ * initials and then refuse its own suggestion for a slug of five words or
+ * more (measured on the first real run). The job checkout holds no other
+ * topic, so no prefix is taken.
+ */
+export function prefixFor(slug: string): string {
+  const words = slug.split("-").filter((word) => word !== "");
+  const initials = words.map((word) => word.charAt(0)).join("").toUpperCase().replace(/[^A-Z]/g, "");
+  const prefix = words.length === 1 ? (words[0] ?? "").slice(0, 2).toUpperCase().replace(/[^A-Z]/g, "") : initials;
+  return (prefix || "V").slice(0, 4);
+}
+
 /** A title manimkc can put in a docstring and a YAML string: no quote, backslash or line break. */
 function safeTitle(title: string): string {
   return title.replace(/["\\\r\n]/g, "").slice(0, 120);
@@ -183,6 +197,8 @@ export async function scaffold(
         `${STUDIO_DOMAIN}/${brief.slug}`,
         "--title",
         safeTitle(brief.title),
+        "--prefix",
+        prefixFor(brief.slug),
         "--scenes",
         brief.scenes.map((scene) => scene.name).join(","),
         "--no-makefile",

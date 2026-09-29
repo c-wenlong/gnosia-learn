@@ -10,7 +10,7 @@ import { BriefError } from "../src/brief";
 import { normalisePreference, readClaudeDefaults, resolveAgentSettings, resolveSetting } from "../src/video/agent-model";
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
 import { ReadTracker } from "../src/video/calls";
-import { rebasePaths } from "../src/video/checkout";
+import { prefixFor, rebasePaths } from "../src/video/checkout";
 import { CopyRefused, safeCopy } from "../src/video/copy";
 import { videoPaths, type VideoPaths } from "../src/video/paths";
 import { buildProfile, renderJobs, sandboxEnv } from "../src/video/sandbox";
@@ -242,3 +242,12 @@ describe("tracking Reads in the stream", () => {
 });
 
 void readFile;
+
+describe("the scene-class prefix", () => {
+  it("takes the slug's initials, cut to manimkc's four letters", () => {
+    expect(prefixFor("dot-product-in-one-number")).toBe("DPIO");
+    expect(prefixFor("two-boxes")).toBe("TB");
+    expect(prefixFor("attention")).toBe("AT");
+    expect(prefixFor("3d-rotation")).toBe("R");
+  });
+});
