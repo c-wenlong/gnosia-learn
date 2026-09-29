@@ -121,21 +121,25 @@ export default async function StudioPage({
   // and with no copy at all the chips fall back to slugs and the banner below
   // says why.
   const healthCall = studioApi<Health>("/api/health", { timeoutMs: 150_000 });
+  // One signal for the five: a blocked screen aborts them, so the runner is not
+  // left running catalog subprocesses for answers nobody will read.
+  const moot = new AbortController();
+  const { signal } = moot;
   const reads = Promise.all([
-    studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
-    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
-    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
+    studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000, signal }),
+    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200", { signal }),
+    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000, signal }),
     // The conversations to pick up again. A runner that cannot list them
     // costs the section, never the page.
-    studioApi<{ drafts: DraftSummary[] }>(listPath()),
+    studioApi<{ drafts: DraftSummary[] }>(listPath(), { signal }),
     // The owner's studio videos (docs/STUDIO-VIDEOS.md, "API"). A runner
     // without the route, or one that cannot read the catalog, costs the
     // video tiles and nothing else.
-    studioApi<unknown>("/api/videos", { timeoutMs: 60_000 }),
+    studioApi<unknown>("/api/videos", { timeoutMs: 60_000, signal }),
   ]);
-  // The blocked screens below leave `reads` unawaited, so a rejection there
-  // (`studioApi` returns failures rather than throwing, but `currentOwner()`
-  // can) must not surface as an unhandled one. The `await` further down still
+  // The blocked screens below leave `reads` unawaited (and abort them), so a
+  // rejection there (`studioApi` returns failures rather than throwing, but
+  // `currentOwner()` can) must not surface as an unhandled one. The `await` further down still
   // throws it on the path that uses the answers.
   reads.catch(() => undefined);
 
@@ -144,6 +148,7 @@ export default async function StudioPage({
   // very thing that is wrong is what they run on.
   const health = await healthCall;
   if (!health.ok) {
+    moot.abort();
     return (
       <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard
@@ -161,6 +166,7 @@ export default async function StudioPage({
   // U4: a doctor failure replaces the screen. A grid that half works — no
   // thumbnails, every verb 503 — is worse than a page that says what is wrong.
   if (!health.data.tldrawkc) {
+    moot.abort();
     return (
       <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard

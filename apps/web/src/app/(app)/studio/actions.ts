@@ -156,12 +156,16 @@ const RUNNER_SAVE_MS = 20_000;
  * the new model at once instead of up to 15 s later. The two answers to a
  * runner that says no are told apart:
  *
- * - The runner is not there (nothing listening, or no answer inside
- *   `RUNNER_SAVE_MS`), or it answered with a server error, or with a 404 or
- *   405 because it is an older process that has no such route: the row is
+ * - The runner certainly never got the request (connection refused, the
+ *   name did not resolve), or it answered with a server error, or with a 404
+ *   or 405 because it is an older process that has no such route: the row is
  *   written directly, as before the runner took it over, so a save still works
  *   with the runner down. Both writes are the same row and the same value, so
  *   a runner that stored it and then failed to say so costs nothing.
+ * - The runner did not answer in time, or the connection broke mid-request:
+ *   it may have the request and write it later, after a newer pick, so the
+ *   direct write is not made and the save is reported as not made. The panel
+ *   puts the menus back to the stored row and the person tries again.
  * - The runner answered with any other 4xx: it looked at the value and refused
  *   it. That is the answer, shown as the refusal; writing the row behind its
  *   back would store what the runner said it would not run with.
@@ -191,6 +195,10 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
     });
     if (viaRunner.ok) return { ok: true, error: null };
     if (runnerRefused(viaRunner)) return { ok: false, error: `Not saved: ${viaRunner.headline}` };
+    // No answer, and no proof the request was not delivered: it may still land.
+    if (viaRunner.reason === "down" && viaRunner.undelivered !== true) {
+      return { ok: false, error: "Not saved: the studio did not answer in time. Try again." };
+    }
 
     console.warn(`studio settings: the runner did not store it (${viaRunner.headline}), writing the row directly`);
     await withLearnerStore((db) => writePreference(db, AGENT_KEYS[kind], value, owner));
@@ -204,8 +212,8 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
 /**
  * Whether a failed runner call is the runner looking at the value and saying
  * no: a 4xx, other than the 404 and 405 an older runner gives a route it does
- * not have. Nothing listening, a timeout and a 5xx are the runner being
- * unable, which is what the direct write is for.
+ * not have. Nothing listening and a 5xx are the runner being unable, which is
+ * what the direct write is for; a timeout is neither, and is handled apart.
  */
 function runnerRefused(result: Extract<StudioResult<unknown>, { ok: false }>): boolean {
   if (result.reason !== "refused" || result.status === null) return false;

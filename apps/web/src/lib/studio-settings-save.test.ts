@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * and refused it is the answer, not something to route around.
  */
 
-type Failure = { ok: false; reason: "down" | "refused"; status: number | null; headline: string; detail: string };
+type Failure = { ok: false; reason: "down" | "refused"; status: number | null; undelivered?: boolean; headline: string; detail: string };
 
 const mocks = vi.hoisted(() => ({
   studioApi: vi.fn(),
@@ -24,7 +24,10 @@ vi.mock("@/lib/owner", () => ({ currentOwner: async () => "local" }));
 const { saveStudioAgent } = await import("@/app/(app)/studio/actions");
 
 const db = { db: true };
-const down: Failure = { ok: false, reason: "down", status: null, headline: "The studio runner is not answering.", detail: "ECONNREFUSED" };
+/** Nothing listening: the request never left. */
+const down: Failure = { ok: false, reason: "down", status: null, undelivered: true, headline: "The studio runner is not answering.", detail: "ECONNREFUSED" };
+/** No answer in time, or a broken connection: the runner may hold the request. */
+const silent: Failure = { ok: false, reason: "down", status: null, undelivered: false, headline: "The studio runner is not answering.", detail: "The operation was aborted due to timeout" };
 const refused = (status: number, headline = "the runner said no"): Failure => ({ ok: false, reason: "refused", status, headline, detail: "{}" });
 
 function form(fields: Record<string, string>): FormData {
@@ -69,11 +72,23 @@ describe("saveStudioAgent", () => {
     expect(mocks.writePreference).not.toHaveBeenCalled();
   });
 
-  it("writes the row directly when nothing is listening or the runner times out", async () => {
+  it("writes the row directly when the request certainly never reached the runner", async () => {
     mocks.studioApi.mockResolvedValue(down);
     expect(await saveStudioAgent(pick({ kind: "diagram", model: "sonnet", effort: "low" }))).toEqual({ ok: true, error: null });
     expect(mocks.writePreference).toHaveBeenCalledTimes(1);
     expect(mocks.writePreference).toHaveBeenCalledWith(db, "studioDiagramAgent", { model: "sonnet", effort: "low" }, "local");
+  });
+
+  it("writes nothing when the runner times out, since its own write may still land after a newer pick", async () => {
+    mocks.studioApi.mockResolvedValue(silent);
+    expect(await saveStudioAgent(pick())).toEqual({ ok: false, error: "Not saved: the studio did not answer in time. Try again." });
+    expect(mocks.writePreference).not.toHaveBeenCalled();
+  });
+
+  it("treats a failure that does not say the request was undelivered as one that may have been", async () => {
+    mocks.studioApi.mockResolvedValue({ ok: false, reason: "down", status: null, headline: "x", detail: "y" });
+    expect((await saveStudioAgent(pick())).ok).toBe(false);
+    expect(mocks.writePreference).not.toHaveBeenCalled();
   });
 
   it.each([500, 502, 503])("writes the row directly when the runner answers %i, being unable rather than refusing", async (status) => {

@@ -13,6 +13,7 @@ type Answer = { ok: true; data: unknown } | { ok: false; reason: "down" | "refus
 /** One call the page made, and the promise it is waiting on. */
 interface Call {
   path: string;
+  signal: AbortSignal | undefined;
   settle: (answer: Answer) => void;
 }
 
@@ -47,7 +48,10 @@ const listing = { dir: "catalog", diagrams: [], errors: [], counts: { total: 0, 
 
 beforeEach(() => {
   calls.length = 0;
-  mocks.studioApi.mockImplementation((path: string) => new Promise<Answer>((settle) => calls.push({ path, settle })));
+  mocks.studioApi.mockImplementation(
+    (path: string, init?: { signal?: AbortSignal }) =>
+      new Promise<Answer>((settle) => calls.push({ path, signal: init?.signal, settle })),
+  );
 });
 
 function answer(path: string, value: Answer): void {
@@ -104,6 +108,35 @@ describe("the /studio load", () => {
     // The five never answer: a doctor failure must not wait on them.
     const tree = await pending;
     expect(blockedTitles(tree)).toEqual(["tldrawkc cannot run on this machine"]);
+  });
+
+  it("aborts the five reads when a blocked screen makes them moot, and leaves health's own call alone", async () => {
+    const { page } = await render();
+    const reads = calls.filter((call) => call.path !== "/api/health");
+    expect(reads).toHaveLength(5);
+    // One signal for all five, live while the page is deciding.
+    expect(new Set(reads.map((call) => call.signal)).size).toBe(1);
+    expect(reads.every((call) => call.signal !== undefined && !call.signal.aborted)).toBe(true);
+    answer("/api/health", { ok: true, data: { ...healthy, tldrawkc: false } });
+    await page;
+    expect(reads.every((call) => call.signal?.aborted)).toBe(true);
+    expect(calls.find((call) => call.path === "/api/health")?.signal).toBeUndefined();
+  });
+
+  it("aborts them when the runner is down too", async () => {
+    const { page } = await render();
+    answer("/api/health", { ok: false, reason: "down", status: null, headline: "down", detail: "" });
+    await page;
+    expect(calls.filter((call) => call.path !== "/api/health").every((call) => call.signal?.aborted)).toBe(true);
+  });
+
+  it("does not abort them when the page draws", async () => {
+    const { page } = await render();
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: true, data: listing });
+    for (const path of ["/api/jobs", "/api/vocabulary", "/api/drafts", "/api/videos"]) answer(path, down);
+    await page;
+    expect(calls.filter((call) => call.path !== "/api/health").some((call) => call.signal?.aborted)).toBe(false);
   });
 
   it("shows the runner being down as it did, and leaves the reads unused", async () => {
