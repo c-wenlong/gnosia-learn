@@ -1,0 +1,16 @@
+# Course card cover credits
+
+All photos are from Unsplash, used under the [Unsplash License](https://unsplash.com/license) (free commercial use, no permission needed; credit given anyway). Each was confirmed as a free (non-Unsplash+) photo on its page. Processed: centre-cropped to 16:9, resized to 960x540, WebP quality 80.
+
+| Slug | Course | Shows | Photographer | Source page | Licence |
+| --- | --- | --- | --- | --- | --- |
+| cp4281 | AI for Graphics | 3D render of iridescent glass shapes with rainbow light refraction, teal background | Dzo (@dzo_renders) | https://unsplash.com/photos/abstract-iridescent-glass-shapes-with-rainbow-reflections-nzkGVjsIkG8 | [Unsplash License](https://unsplash.com/license) |
+| cp4282 | Gaussian Splatting | Glowing red-orange particles scattered on a dark background (cropped from portrait) | Logan Voss (@loganvoss) | https://unsplash.com/photos/glowing-red-particles-against-a-dark-background-jI3iED26rIg | [Unsplash License](https://unsplash.com/license) |
+| cp4283 | Deep Generative Models | Black ink billowing through pale green water | engin akyurt (@enginakyurt) | https://unsplash.com/photos/a-painting-of-black-ink-floating-in-water-kPt9t2yqXiQ | [Unsplash License](https://unsplash.com/license) |
+| cp4284 | LLM Reasoning Agents | 3D render of a glowing CPU on a circuit board with lit traces | Brecht Corbeel (@brechtcorbeel) | https://unsplash.com/photos/a-glowing-cpu-on-a-circuit-board-with-illuminated-traces-iyyP3vPPWpk | [Unsplash License](https://unsplash.com/license) |
+| cp4285 | Modern Recommendation Systems | Library aisle of shelves packed with colourful books | Zoshua Colah (@zoshuacolah) | https://unsplash.com/photos/bookshelves-are-filled-with-colorful-books-in-a-library-3L3wWzhAOdY | [Unsplash License](https://unsplash.com/license) |
+| cs2111 | Human-Centred Computing | Hand-drawn website wireframes on paper with an orange pen | Compagnons (@sigmund) | https://unsplash.com/photos/website-wireframe-sketch-on-paper-4UGmm3WRUoQ | [Unsplash License](https://unsplash.com/license) |
+| cs3216 | Software Product Engineering for Digital Markets | Whiteboard with columns of orange and blue sticky notes (cropped to the small-note side so the handwriting is unreadable) | Paymo (@paymo) | https://unsplash.com/photos/a-white-board-with-sticky-notes-attached-to-it-JXyY3jRV9oI | [Unsplash License](https://unsplash.com/license) |
+| cs3227 | Agentic Software Engineering | Robotic arm handling samples in a blue-lit automated lab | Testalize.me (@testalizeme) | https://unsplash.com/photos/industrial-robotic-arm-in-blue-lit-factory-9xHsWmh3m_4 | [Unsplash License](https://unsplash.com/license) |
+| cs3249 | Conversational User Interface | Studio microphone in purple light with warm bokeh | benjamin lehman (@abject) | https://unsplash.com/photos/a-close-up-of-a-microphone-in-a-dark-room-PMN6wntEQtQ | [Unsplash License](https://unsplash.com/license) |
+| cs4263 | Artificial Intelligence Principles | Wooden chessboard with pieces at the start of a game (cropped to drop the board's edge letters) | Annie Spratt (@anniespratt) | https://unsplash.com/photos/a-close-up-of-a-chess-board-with-pieces-on-it-bRPQ8UMw3D0 | [Unsplash License](https://unsplash.com/license) |
