@@ -190,8 +190,10 @@ export async function videoJobRoutes(
         if (changes === "" || changes.length > 2_000) {
           return fail(response, 400, `"changes" is required, at most 2000 characters: what should look different`);
         }
-        const revise = (): Promise<VideoJobRecord> => runner.revise(record, changes, carried);
-        const next = carried !== null && record.state === "awaiting_review" ? await drafts!.replacingDuring(record.id, revise) : await revise();
+        // From review, the parent is discarded in the child's own transaction
+        // and marked `replacedBy` the child, which is how its draft tells the
+        // discard from a verdict (D52).
+        const next = await runner.revise(record, changes, carried);
         if (carried !== null) await drafts!.markDrawing(carried, next.id, "video");
         return send(response, 201, {
           jobId: next.id,

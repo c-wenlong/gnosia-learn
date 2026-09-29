@@ -338,6 +338,16 @@ export class VideoRunner {
       // this job's lease are one transaction or nothing (D52).
       await rm(jobDir(id), { recursive: true, force: true });
       this.store.forget(id);
+      if (parent?.discard === true && !enqueued.offline && leftReview(enqueued.error)) {
+        // The parent's row lock was taken first by another change of it (a
+        // Replace and a Revise pressed together) or by a verdict: a conflict
+        // with that press, not a bad request.
+        throw new JobRefused(
+          409,
+          `job ${parent.jobId} left review while this change was being queued: another change or a verdict reached it first, so nothing was queued`,
+          { reason: "parent-left-review", parentJob: parent.jobId },
+        );
+      }
       throw new JobRefused(
         enqueued.offline ? 503 : enqueued.error?.includes("already held") === true ? 409 : 400,
         enqueued.error ?? "the catalog would not take this job",
@@ -347,7 +357,9 @@ export class VideoRunner {
     if (parent?.discard === true) {
       const previous = this.store.get(parent.jobId);
       if (previous !== undefined) {
-        await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString() });
+        // `replacedBy` rides on the state change itself, so whoever follows
+        // the parent (its draft) reads a replacement, not a verdict.
+        await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString(), replacedBy: id });
         await this.cleanup(previous, { candidate: true });
       }
     }
@@ -1096,6 +1108,15 @@ export function narrateCall(call: { verb: string; scenes?: string[]; exitCode: n
     default:
       return "a command was refused";
   }
+}
+
+/**
+ * Whether the catalog refused a `--discard-parent` enqueue because the parent
+ * was no longer in review when its row lock was taken (`discardForChange` in
+ * `services/catalog/src/commands/job.ts`).
+ */
+function leftReview(error: string | null | undefined): boolean {
+  return error !== null && error !== undefined && (/, not awaiting_review, so there is nothing to discard/.test(error) || /moved while it was being discarded/.test(error));
 }
 
 /** The plain-English line every response carries about a video job. */

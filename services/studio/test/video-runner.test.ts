@@ -216,7 +216,8 @@ describe("a change asked of a video in review (D52)", () => {
     await store.update(parent.id, { state: "awaiting_review", agentSessionId: "11111111-1111-4111-8111-111111111111", classes: ["TB1_WhyItMatters", "TB2_Recap"] });
     const child = await made.revise(store.get(parent.id)!, "the arrow in scene two points at the wrong box");
     expect(catalogMock.jobEnqueue).toHaveBeenLastCalledWith(path.join(home, "jobs", child.id, "brief.json"), { discardParent: parent.id });
-    expect(store.get(parent.id)?.state).toBe("discarded");
+    // Marked as replaced by the child, so its draft does not read the discard as a verdict.
+    expect(store.get(parent.id)).toMatchObject({ state: "discarded", replacedBy: child.id });
     expect(child).toMatchObject({ parentJobId: parent.id, agentSessionId: "11111111-1111-4111-8111-111111111111", changes: "the arrow in scene two points at the wrong box", state: "queued" });
     const written = JSON.parse(await readFile(path.join(home, "jobs", child.id, "brief.json"), "utf8")) as Record<string, unknown>;
     expect(written.parentJob).toBe(parent.id);
@@ -230,6 +231,17 @@ describe("a change asked of a video in review (D52)", () => {
     await expect(made.revise(store.get(parent.id)!, "change it")).rejects.toMatchObject({ status: 400 });
     catalogMock.jobEnqueue.mockResolvedValueOnce({ ok: false, json: null, error: "ECONNREFUSED", offline: true });
     await expect(made.revise(store.get(parent.id)!, "change it")).rejects.toMatchObject({ status: 503 });
+    // Another change of it, or a verdict, took the parent's row lock first: a conflict, not a bad request.
+    catalogMock.jobEnqueue.mockResolvedValueOnce({
+      ok: false,
+      json: null,
+      error: `job ${parent.id} is discarded, not awaiting_review, so there is nothing to discard for this change. Enqueue without --discard-parent.`,
+      offline: false,
+    });
+    await expect(made.revise(store.get(parent.id)!, "change it")).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "parent-left-review", parentJob: parent.id },
+    });
     expect(store.get(parent.id)?.state).toBe("awaiting_review");
     expect(store.list().filter((record) => record.parentJobId === parent.id)).toEqual([]);
   });
