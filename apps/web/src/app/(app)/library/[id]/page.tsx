@@ -384,7 +384,15 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         progress={
           asset.kind === "video"
             ? undefined
-            : { label: "Read", value: lastWatched === null ? "Not yet" : `Last marked ${dayKey(lastWatched, zone)}` }
+            : {
+                label: "Read",
+                value:
+                  lastWatched === undefined
+                    ? "unknown (the event log could not be read)"
+                    : lastWatched === null
+                      ? "Not yet"
+                      : `Last marked ${dayKey(lastWatched, zone)}`,
+              }
         }
       />
     </div>

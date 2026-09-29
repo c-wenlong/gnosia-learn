@@ -108,16 +108,16 @@ export function DiagramView({
           </a>
         </div>
       ) : (
-        failure === null && (
-          <a
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute top-3 right-3 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1 text-[12px] font-medium text-accent-text shadow-sm backdrop-blur-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Full size
-          </a>
-        )
+        // Kept when the picture fails too: opening the file itself is then
+        // the one way left to see it, or to see why not.
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-3 right-3 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1 text-[12px] font-medium text-accent-text shadow-sm backdrop-blur-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Full size
+        </a>
       )}
 
       {failure !== null ? (
