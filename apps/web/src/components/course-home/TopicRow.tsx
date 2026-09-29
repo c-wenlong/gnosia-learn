@@ -8,32 +8,32 @@ import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { MasteryDot } from "@/components/ui/MasteryDot";
-import { PathNode } from "@/components/ui/PathNode";
-import { conceptHref, nodeCaption, topicSessionHref, type TopicMastery } from "@/lib/course-path";
+import { conceptHref, topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import type { Course, Module, Topic } from "@/lib/types";
 
+import { TopicMarkIcon } from "./icons";
+import { ROW_BOX, ROW_HOVER, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
+
 /**
- * One node on the path and the row beside it: the topic's title, its
- * mastery caption, Continue on the active node, and a toggle that opens the
- * topic's own tools underneath.
+ * One topic as a Coursera item row: its status mark, its title over a grey
+ * meta line ("3 concepts · Learning"), and on the active topic the tint and
+ * Continue at the right, where Coursera puts Resume.
  *
- * Those tools are what the module page's checklist used to hold, folded in
- * so nothing was lost when the page became a unit on the path: the concepts
- * behind the node, the subtopics, the done tick, the personal note, the recap,
- * and the topic's tutor session.
- *
- * The node column is a fixed 72px track whose connector stretches to the
- * row's full height, so an open panel keeps the path joined up.
+ * The whole row opens the topic's own tools underneath: the concepts behind
+ * it with their mastery, what it covers, the done tick, the tutor chat, the
+ * recap and the learner's note. Those are what the old module checklist held,
+ * so nothing it had is lost. Continue sits above the row's stretched toggle
+ * and keeps its own click. On a phone it drops under the title, where the
+ * row has room for it.
  */
-export function PathTopicRow({
+export function TopicRow({
   course,
   module,
   topic,
   mastery,
   active,
   continueHref,
-  last,
 }: {
   course: Course;
   module: Module;
@@ -41,7 +41,6 @@ export function PathTopicRow({
   mastery: TopicMastery | undefined;
   active: boolean;
   continueHref: string;
-  last: boolean;
 }) {
   const { state } = useLearner();
   const [open, setOpen] = useState(false);
@@ -51,60 +50,59 @@ export function PathTopicRow({
   const panelId = useId();
   const ticked = Boolean(state.completed[topic.id]);
 
-  const bucket = mastery ? mastery.bucket : ticked ? "mastered" : "untouched";
-
   return (
-    <li className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-4">
-      <div className="flex flex-col items-center">
-        <PathNode bucket={bucket} active={active} glyph={!mastery && ticked ? "check" : "dot"} />
-        {!last && <span aria-hidden className="min-h-[18px] w-[3px] flex-1 rounded-sm bg-border" />}
-      </div>
-      <div className={cx("min-w-0", !last && "pb-[18px]")}>
-        <div className="flex min-h-[78px] items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 py-2">
-            <div className="min-w-[min(100%,12rem)] flex-1">
-              <h3 className={cx("text-[15px] leading-snug text-text", active ? "font-bold" : "font-medium")}>
-                {topic.title}
-              </h3>
-              <p className="mt-0.5 text-[12px] text-text2">{nodeCaption(mastery, ticked)}</p>
-            </div>
-            {active && (
-              <Button href={continueHref} size="sm">
-                Continue
-              </Button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setOpened(true);
-              setOpen((v) => !v);
-            }}
-            aria-expanded={open}
-            aria-controls={panelId}
-            aria-label={`${open ? "Hide" : "Show"} notes and links for ${topic.title}`}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text3 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    <li>
+      <div
+        className={cx(
+          ROW_BOX,
+          ROW_HOVER,
+          "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]",
+          active && "bg-tint",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setOpened(true);
+            setOpen((v) => !v);
+          }}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className={cx("col-start-1 row-start-1 flex min-w-0 cursor-pointer items-center gap-2 text-left", STRETCHED)}
+        >
+          <TopicMarkIcon mark={topicMark(mastery, ticked)} />
+          <span className="min-w-0 flex-1 pl-1">
+            <span className={cx(ROW_TITLE, active && "font-semibold")}>{topic.title}</span>
+            <span className={ROW_META}>{topicMeta(mastery, ticked)}</span>
+          </span>
+        </button>
+        {active && (
+          <Button
+            href={continueHref}
+            size="sm"
+            className="relative z-10 col-start-1 row-start-2 ml-8 mt-2 justify-self-start sm:col-start-2 sm:row-start-1 sm:ml-0 sm:mt-1"
           >
-            <CollapseChevron open={open} />
-          </button>
-        </div>
-        {/* The panel glides open and shut; it is mounted on first open and
-            then kept, so closing it keeps the note's pending keystrokes. */}
-        <Collapse open={open}>
-          {opened && (
-            <TopicPanel
-              // A reset clears the notes on the server; a new epoch remounts the
-              // panel so the draft does not write the old note straight back.
-              key={state.epoch}
-              id={panelId}
-              course={course}
-              module={module}
-              topic={topic}
-              mastery={mastery}
-            />
-          )}
-        </Collapse>
+            Continue
+          </Button>
+        )}
+        <CollapseChevron open={open} className="col-start-2 row-start-1 shrink-0 text-text2 sm:col-start-3" />
       </div>
+      {/* The panel glides open and shut; it is mounted on first open and then
+          kept, so closing it keeps the note's pending keystrokes. */}
+      <Collapse open={open}>
+        {opened && (
+          <TopicPanel
+            // A reset clears the notes on the server; a new epoch remounts the
+            // panel so the draft does not write the old note straight back.
+            key={state.epoch}
+            id={panelId}
+            course={course}
+            module={module}
+            topic={topic}
+            mastery={mastery}
+          />
+        )}
+      </Collapse>
     </li>
   );
 }
@@ -138,17 +136,14 @@ function TopicPanel({
   const hasRecap = Boolean(state.knowledge[topic.id]);
 
   return (
-    <div id={id} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
+    <div id={id} className="mb-2 ml-[40px] mr-2 mt-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
       {mastery && (
         <section>
-          <h4 className={LABEL}>Concepts</h4>
+          <h3 className={LABEL}>Concepts</h3>
           <ul className="mt-2 flex flex-col gap-1.5">
             {mastery.concepts.map((c) => (
               <li key={c.slug} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <Link
-                  href={conceptHref(c.slug)}
-                  className="font-medium text-accent-text underline-offset-4 hover:underline"
-                >
+                <Link href={conceptHref(c.slug)} className="font-medium text-accent-text underline-offset-4 hover:underline">
                   {c.title}
                 </Link>
                 <MasteryDot bucket={c.bucket} pL={c.pL} showLabel size={12} />
@@ -160,7 +155,7 @@ function TopicPanel({
 
       {topic.subtopics.length > 0 && (
         <section>
-          <h4 className={LABEL}>Covers</h4>
+          <h3 className={LABEL}>Covers</h3>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-text2">
             {topic.subtopics.map((s) => (
               <li key={s}>{s}</li>
@@ -189,8 +184,8 @@ function TopicPanel({
         <TopicRecap course={course} module={module} topic={topic} />
       </div>
       {mastery && (
-        <p className="-mt-2 text-[12px] text-text3">
-          Mastery moves this node. The tick is your own record and does not.
+        <p className="-mt-2 text-[12px] text-text2">
+          Mastery sets this topic&apos;s mark. The tick is your own record and does not.
         </p>
       )}
 

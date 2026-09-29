@@ -3,17 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   conceptsForTopic,
   continueHref,
-  courseSummaryLine,
+  defaultModuleIndex,
+  doneLine,
   EMPTY_STANDING,
   guidebookConcept,
   isLocked,
   itemDoneWith,
   itemStanding,
-  nodeCaption,
+  moduleConceptCount,
+  moduleHref,
+  moduleMark,
+  moduleMeta,
+  moduleObjectives,
   pathStatus,
   resolveTopicMastery,
   topicDone,
-  unitSubtitle,
+  topicMark,
+  topicMeta,
   type KbConceptLike,
   type PathConcept,
   type TopicMastery,
@@ -234,33 +240,96 @@ describe("pathStatus", () => {
   });
 });
 
-describe("labels", () => {
-  it("words a unit by its lock and what done means there", () => {
+describe("the module a course page opens on", () => {
+  const modules = [{ id: "m1" }, { id: "m2" }, { id: "m3" }];
+
+  it("is the module holding the active topic", () => {
     const s = pathStatus(
       [
         { id: "m1", topics: [{ id: "t1", mastery: mastered }] },
-        { id: "m2", topics: [{ id: "t2", mastery: null }, { id: "t3", mastery: null }] },
-        { id: "m3", topics: [{ id: "t4", mastery: null }] },
+        { id: "m2", topics: [{ id: "t2", mastery: null }] },
+        { id: "m3", topics: [{ id: "t3", mastery: null }] },
       ],
       {},
     );
-    expect(unitSubtitle(s.modules[0]!, undefined)).toBe("1 of 1 mastered");
-    expect(unitSubtitle(s.modules[1]!, 1)).toBe("0 of 2 done");
-    expect(unitSubtitle(s.modules[2]!, 2)).toBe("Locked until Module 2");
-    expect(courseSummaryLine(s)).toBe("3 modules · 4 topics · 25% done");
+    expect(defaultModuleIndex(modules, s)).toBe(1);
   });
 
-  it("captions a node from its mastery or its tick", () => {
-    expect(nodeCaption(learning, false)).toBe("Learning · p(L) 0.40");
-    expect(nodeCaption({ ...learning, concepts: [concept("b", 0.4, "learning"), concept("c", 0.5, "learning")] }, false)).toBe(
-      "Learning · p(L) 0.40 · 2 concepts",
+  it("is the first module on a finished course, or when the active one is not listed", () => {
+    expect(defaultModuleIndex(modules, { active: null })).toBe(0);
+    expect(defaultModuleIndex(modules, { active: { moduleId: "gone", topicId: "x" } })).toBe(0);
+  });
+});
+
+describe("labels", () => {
+  const s = pathStatus(
+    [
+      { id: "m1", topics: [{ id: "t1", mastery: mastered }] },
+      { id: "m2", topics: [{ id: "t2", mastery: null }, { id: "t3", mastery: null }] },
+      { id: "m3", topics: [{ id: "t4", mastery: null }] },
+      { id: "m4", topics: [] },
+    ],
+    { t2: true },
+  );
+
+  it("marks a module done, in progress, not started or locked", () => {
+    expect(s.modules.map(moduleMark)).toEqual(["done", "progress", "todo", "locked"]);
+    const fresh = pathStatus(
+      [
+        { id: "m1", topics: [{ id: "t1", mastery: null }] },
+        { id: "m2", topics: [{ id: "t2", mastery: null }] },
+      ],
+      {},
     );
-    expect(nodeCaption(null, true)).toBe("Completed");
-    expect(nodeCaption(null, false)).toBe("Not started");
+    expect(fresh.modules.map(moduleMark)).toEqual(["todo", "locked"]);
+  });
+
+  it("says mastered only when every topic has a concept", () => {
+    expect(doneLine(1, 1, true)).toBe("1 of 1 mastered");
+    expect(doneLine(1, 2, false)).toBe("1 of 2 done");
+  });
+
+  it("builds a module's meta row, leaving out the counts of nothing", () => {
+    expect(moduleMeta({ status: s.modules[1]!, concepts: 0, assets: null }).map((p) => p.text)).toEqual([
+      "2 topics",
+      "1 of 2 done",
+    ]);
+    expect(moduleMeta({ status: s.modules[0]!, concepts: 3, assets: 1 })).toEqual([
+      { icon: "topics", text: "1 topic" },
+      { icon: "concepts", text: "3 concepts" },
+      { icon: "assets", text: "1 asset" },
+      { icon: "done", text: "1 of 1 mastered" },
+    ]);
+    expect(moduleMeta({ status: s.modules[3]!, concepts: 0, assets: 0 }).map((p) => p.text)).toEqual(["0 topics"]);
+  });
+
+  it("marks and captions a topic from its mastery, or its tick without one", () => {
+    expect(topicMark(mastered, false)).toBe("done");
+    expect(topicMark(learning, true)).toBe("learning");
+    expect(topicMark(null, true)).toBe("done");
+    expect(topicMark(null, false)).toBe("untouched");
+    expect(topicMeta(learning, false)).toBe("1 concept · Learning");
+    expect(topicMeta({ ...learning, concepts: [concept("b", 0.4, "learning"), concept("c", 0.5, "learning")] }, false)).toBe(
+      "2 concepts · Learning",
+    );
+    expect(topicMeta(null, true)).toBe("Done");
+    expect(topicMeta(null, false)).toBe("Not started");
+  });
+
+  it("lists a module's objectives from its topics' subtopics, each once", () => {
+    expect(moduleObjectives([{ subtopics: ["a", " b "] }, { subtopics: ["b", "", "c"] }])).toEqual(["a", "b", "c"]);
+  });
+
+  it("counts the distinct concepts behind a module", () => {
+    expect(moduleConceptCount([mastered, learning, null, { ...learning, concepts: [concept("a", 0.9, "mastered")] }])).toBe(2);
   });
 });
 
 describe("links", () => {
+  it("gives each module a page of its own", () => {
+    expect(moduleHref("cp4284", "m1-x")).toBe("/courses/cp4284/m1-x");
+  });
+
   it("sends Continue to the concept session, or the topic session without a concept", () => {
     expect(continueHref("cp4284", "m1-x", "cp4284-m1-t1", learning)).toBe("/learn/b/session");
     expect(continueHref("cp4284", "m1-x", "cp4284-m1-t2", null)).toBe(
