@@ -136,16 +136,37 @@ export interface AgentOutcome {
  * A running agent, with the two things the runner needs from it: a promise for
  * the outcome, and a way to stop it.
  */
+/**
+ * What an `AgentRun` needs from whoever spawned it: the two callbacks and the
+ * timers. The diagram agent passes its attempt and idle ceilings; the video
+ * agent passes one hang timer and a way to ask whether the job is still doing
+ * something the stream does not show (D54 of docs/STUDIO-VIDEOS.md).
+ */
+export interface RunWatch {
+  onLine: (line: string) => void;
+  onInit?: (init: AgentInit) => void;
+  /** Stop after this long whatever happens. Null for no ceiling. */
+  attemptMs: number | null;
+  /** Stop after this long with nothing on stdout. Null for no idle stop. */
+  idleMs: number | null;
+  /**
+   * Asked when the idle timer fires. True means the job is still working in a
+   * way the stream does not show (a render writing files), and the timer is
+   * armed again rather than the session stopped.
+   */
+  stillWorking?: () => Promise<boolean>;
+}
+
 export class AgentRun {
   private readonly child: ChildProcess;
-  private readonly options: AgentOptions;
+  private readonly options: RunWatch;
   private stopReason: StopReason = null;
   private idleTimer: NodeJS.Timeout | null = null;
   private attemptTimer: NodeJS.Timeout | null = null;
   private killTimer: NodeJS.Timeout | null = null;
   readonly done: Promise<AgentOutcome>;
 
-  constructor(child: ChildProcess, options: AgentOptions) {
+  constructor(child: ChildProcess, options: RunWatch) {
     this.child = child;
     this.options = options;
     this.done = this.watch();
@@ -158,12 +179,24 @@ export class AgentRun {
 
   private touch(): void {
     if (this.idleTimer !== null) clearTimeout(this.idleTimer);
+    const idleMs = this.options.idleMs;
+    if (idleMs === null || this.stopReason !== null) return;
     this.idleTimer = setTimeout(() => {
       // Silence, not slowness. The CLI's own 30 second exec timeout covers a
       // command that hangs; this covers a browser that never answered the
       // bridge, where nothing is running and nothing will time out.
-      void this.stop("idle-timeout");
-    }, IDLE_TIMEOUT_MS);
+      const check = this.options.stillWorking;
+      if (check === undefined) {
+        void this.stop("idle-timeout");
+        return;
+      }
+      void check()
+        .catch(() => false)
+        .then((working) => {
+          if (working) this.touch();
+          else void this.stop("idle-timeout");
+        });
+    }, idleMs);
   }
 
   private watch(): Promise<AgentOutcome> {
@@ -177,9 +210,11 @@ export class AgentRun {
       const denials: { tool: string; input: unknown }[] = [];
       let buffer = "";
 
-      this.attemptTimer = setTimeout(() => {
-        void this.stop("attempt-timeout");
-      }, ATTEMPT_TIMEOUT_MS);
+      if (this.options.attemptMs !== null) {
+        this.attemptTimer = setTimeout(() => {
+          void this.stop("attempt-timeout");
+        }, this.options.attemptMs);
+      }
       this.touch();
 
       this.child.stdout?.on("data", (chunk: Buffer) => {
@@ -509,18 +544,38 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     ...(options.resume ? ["--resume", options.sessionId] : ["--session-id", options.sessionId]),
   ];
 
-  const child = spawn(CLAUDE_BIN, argv, {
+  return spawnClaude(argv, {
     cwd: REPO_ROOT,
+    // Deliberate rather than inherited: `agentEnv` and `STUDIO_AGENT_AUTH` in
+    // `config.ts` say why a shell's `ANTHROPIC_API_KEY` must not reach here.
+    env: agentEnv(process.env, options.auth ?? agentAuth(), tmpDir(options.jobId)),
+    watch: {
+      onLine: options.onLine,
+      ...(options.onInit === undefined ? {} : { onInit: options.onInit }),
+      attemptMs: ATTEMPT_TIMEOUT_MS,
+      idleMs: IDLE_TIMEOUT_MS,
+    },
+  });
+}
+
+/**
+ * Spawn `claude` with an argv somebody else built, into its own process
+ * group, and watch it. The one place either runner starts an agent, so the
+ * group, the stream parsing and the stop are the same for both kinds.
+ */
+export function spawnClaude(
+  argv: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; watch: RunWatch },
+): AgentRun {
+  const child = spawn(CLAUDE_BIN, argv, {
+    cwd: options.cwd,
     // A new process group, so cancel is one signal to the group rather than a
     // signal to a parent whose children outlive it.
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
-    // Deliberate rather than inherited: `agentEnv` and `STUDIO_AGENT_AUTH` in
-    // `config.ts` say why a shell's `ANTHROPIC_API_KEY` must not reach here.
-    env: agentEnv(process.env, options.auth ?? agentAuth(), tmpDir(options.jobId)),
+    env: options.env,
   });
-
-  return new AgentRun(child, options);
+  return new AgentRun(child, options.watch);
 }
 
 /**

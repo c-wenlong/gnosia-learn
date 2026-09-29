@@ -76,12 +76,8 @@ describe("the process group kill", () => {
 
     let grandchild = 0;
     const run = new AgentRun(child, {
-      jobId: "job-cancel",
-      slug: "x",
-      prompt: "",
-      model: "sonnet",
-      sessionId: "00000000-0000-4000-8000-000000000000",
-      resume: false,
+      attemptMs: 15 * 60_000,
+      idleMs: 5 * 60_000,
       onLine: (line) => {
         const parsed = JSON.parse(line) as { grandchild?: number };
         if (typeof parsed.grandchild === "number") grandchild = parsed.grandchild;
@@ -121,12 +117,8 @@ describe("the process group kill", () => {
 
     let escaped = 0;
     const run = new AgentRun(child, {
-      jobId: "job-cancel",
-      slug: "x",
-      prompt: "",
-      model: "sonnet",
-      sessionId: "00000000-0000-4000-8000-000000000000",
-      resume: false,
+      attemptMs: 15 * 60_000,
+      idleMs: 5 * 60_000,
       onLine: (line) => {
         const parsed = JSON.parse(line) as { escaped?: number };
         if (typeof parsed.escaped === "number") escaped = parsed.escaped;
