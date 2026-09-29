@@ -59,6 +59,7 @@ describe("the runner's catalog calls", () => {
         "diagramList",
         "diagramPut",
         "diagramShow",
+        "draftDelete",
         "draftUpsert",
         "jobAccept",
         "jobClaim",

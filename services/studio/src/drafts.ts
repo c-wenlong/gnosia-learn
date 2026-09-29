@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import {
   DRAFT_TRANSITIONS,
@@ -43,9 +44,11 @@ import {
   fence,
   mermaidBlocks,
   plannerArgv,
+  PLANNER_BRIEF_FIELDS,
   plannerSettings,
   startPlanner,
   studioMessage,
+  vocabularyBlock,
   vocabularyHash,
   EXTENDING_LINE_CAP,
   type BriefVerdict,
@@ -124,7 +127,13 @@ export interface DraftRecord {
   /** The field a brief was refused on, beside an `error` of kind `brief-invalid`. */
   errorField?: string | null;
   idempotencyKey: string;
+  /**
+   * The hash of the vocabulary the planner has been told of: the system
+   * prompt's at creation, then the one each C4 note brought it up to.
+   */
   vocabularyHash: string;
+  /** The person's first message, collapsed and cut for the drafts list; null before one. */
+  firstMessage?: string | null;
   /** The last transcript seq written. */
   seq: number;
   /** The turn a planner process is answering right now, if any. */
@@ -213,6 +222,8 @@ export interface DraftSummaryView {
   kind: "diagram";
   state: DraftState;
   title: string | null;
+  /** The person's first message, for a row with no title yet. */
+  firstMessage: string | null;
   source: string | null;
   turns: number;
   costUsd: number | null;
@@ -319,6 +330,8 @@ export class Drafts {
   private draining = false;
   /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
+  /** Drafts the pruner has taken (D40): gone to `get`, `require` and `list` from that moment. */
+  private readonly pruning = new Set<string>();
 
   constructor(
     private readonly store: JobStore,
@@ -352,8 +365,12 @@ export class Drafts {
         // `append` moves `seq` in memory and the next save writes it, so a
         // crash between the two leaves a record behind its own transcript.
         // The transcript is the authority on what was written.
-        const seq = (await this.events(entry)).reduce((max, event) => Math.max(max, event.seq), record.seq);
-        this.records.set(record.id, { ...record, seq });
+        const events = await this.events(entry);
+        const seq = events.reduce((max, event) => Math.max(max, event.seq), record.seq);
+        // A draft from before the list showed first messages learns its own.
+        const first = events.find((event) => event.type === "message" && typeof event.text === "string");
+        const firstMessage = record.firstMessage ?? (first === undefined ? null : listLine(first.text as string));
+        this.records.set(record.id, { ...record, seq, firstMessage });
       } catch {
         // A workspace with no readable record is one that was created and
         // never written, or one a person has been poking at: nothing to serve.
@@ -457,19 +474,26 @@ export class Drafts {
   /* Reads                                                              */
   /* ------------------------------------------------------------------ */
 
+  /** A draft being pruned is already gone to every reader, so nothing new can start on it. */
   get(id: string): DraftRecord | undefined {
-    return this.records.get(id);
+    return this.pruning.has(id) ? undefined : this.records.get(id);
   }
 
   private require(id: string): DraftRecord {
-    const record = this.records.get(id);
+    const record = this.get(id);
     if (record === undefined) throw new JobRefused(404, `no draft ${id}`, "This conversation is gone, or never existed.");
     return record;
   }
 
+  /** `state` may name several, comma-separated (`open,briefed`). */
   list(filter: { state?: string; limit?: number } = {}): DraftSummaryView[] {
+    const states =
+      filter.state === undefined
+        ? null
+        : new Set(filter.state.split(",").map((state) => state.trim()).filter((state) => state !== ""));
     return [...this.records.values()]
-      .filter((record) => filter.state === undefined || record.state === filter.state)
+      .filter((record) => !this.pruning.has(record.id))
+      .filter((record) => states === null || states.size === 0 || states.has(record.state))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, filter.limit ?? 50)
       .map((record) => ({
@@ -477,6 +501,7 @@ export class Drafts {
         kind: record.kind,
         state: record.state,
         title: record.title,
+        firstMessage: record.firstMessage ?? null,
         source: record.source,
         turns: record.turns,
         costUsd: record.costUsd,
@@ -783,6 +808,7 @@ export class Drafts {
       errorField: null,
       idempotencyKey: key ?? `draft:${id}`,
       vocabularyHash: hash,
+      firstMessage: null,
       seq: 0,
       inFlight: null,
       undelivered: [],
@@ -878,6 +904,7 @@ export class Drafts {
       await this.save(id, {
         turns: current.turns + 1,
         inFlight: { turn: message.seq, startedAt: message.at },
+        ...(current.firstMessage === undefined || current.firstMessage === null ? { firstMessage: listLine(text) } : {}),
         errorKind: null,
         error: null,
         errorField: null,
@@ -928,6 +955,7 @@ export class Drafts {
 
   /** One person turn: the planner's reply, then the verdict on any brief in it, with at most one retry. */
   private async converse(id: string, turn: number, text: string): Promise<void> {
+    await this.tellVocabularyChanges(id);
     const record = this.require(id);
     const prompt = [...record.undelivered.map(studioMessage), text].join("\n\n");
     if (record.undelivered.length > 0) await this.write(id, () => this.save(id, { undelivered: [] }));
@@ -1006,6 +1034,35 @@ export class Drafts {
       briefAt: new Date().toISOString(),
       pendingTopic: verdict.pendingTopic,
       title: verdict.brief.title,
+    });
+  }
+
+  /**
+   * C4: topics added, changed or archived since the planner last heard. Its
+   * system prompt stays as it was written (the CLI replays the recorded one on
+   * every resume), so the change reaches it as a STUDIO note at the head of
+   * this turn, and the vocabulary it was told of is kept beside the prompt as
+   * the next comparison's baseline. A read that fails tells nothing: Draw
+   * still checks the brief against the vocabulary as it is.
+   */
+  private async tellVocabularyChanges(id: string): Promise<void> {
+    let vocabulary: Vocabulary;
+    try {
+      vocabulary = await loadVocabulary();
+    } catch {
+      return;
+    }
+    const hash = vocabularyHash(vocabulary.entries);
+    if (hash === this.require(id).vocabularyHash) return;
+    const told =
+      (await readFile(vocabularyToldPath(id), "utf8").catch(() => null)) ??
+      (await readFile(plannerSystemPath(id), "utf8").catch(() => null));
+    const now = vocabularyBlock(vocabulary.entries);
+    const text = told === null ? null : vocabularyChangeNote(told, now);
+    await this.write(id, async () => {
+      await atomicWrite(vocabularyToldPath(id), `${now}\n`);
+      if (text !== null) await this.note(id, text);
+      await this.save(id, { vocabularyHash: hash });
     });
   }
 
@@ -1452,6 +1509,118 @@ export class Drafts {
   }
 
   /* ------------------------------------------------------------------ */
+  /* The brief, edited by hand                                          */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Refused while anything else could move the draft or its brief: a turn,
+   * a Draw press, a drawing, or a draft that is done or closed. The reasons
+   * are the ones a message and a Draw already give.
+   */
+  private assertEditable(id: string): DraftRecord {
+    const record = this.require(id);
+    if (record.state === "abandoned") {
+      throw new JobRefused(409, "this conversation was closed. Start a new one.", { reason: "abandoned" });
+    }
+    if (record.inFlight !== null || this.turnsInFlight.has(id)) {
+      throw new JobRefused(409, "the planner is still answering; edit the brief once its reply is in", { reason: "in-flight" });
+    }
+    if (this.draws.has(id)) {
+      throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+        reason: "draw-in-progress",
+      });
+    }
+    if (record.state === "drawing") {
+      throw new JobRefused(409, "a drawing from this conversation is in progress, so its brief cannot change under it", {
+        reason: "drawing",
+        jobId: record.jobIds.at(-1) ?? null,
+      });
+    }
+    if (record.state === "done") {
+      throw new JobRefused(409, "this conversation's drawing is reviewed; ask the planner for another diagram instead", {
+        reason: "done",
+      });
+    }
+    return record;
+  }
+
+  /**
+   * `PUT /api/drafts/{id}/brief`: a person's own edit of the brief (phase 3,
+   * the confirm card's inline edits). The whole brief is checked by the same
+   * `validateBrief` as a planner's, against the vocabulary as it is now,
+   * widened with the draft's proposed topic when the brief still names it; a
+   * brief on any other topic ends the proposal. Stored disk first, then
+   * mirrored, and the planner is told on its next turn, with the brief now in
+   * force, so it builds on the edit rather than on its own older proposal.
+   *
+   * An identical brief on a briefed draft changes nothing and writes nothing.
+   */
+  async editBrief(id: string, input: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    const before = this.assertEditable(id);
+    if (typeof input !== "object" || input === null || Array.isArray(input)) {
+      throw new JobRefused(400, "the request body must be a JSON object holding a brief", { field: "body" });
+    }
+    const raw: Record<string, unknown> = {};
+    for (const field of EDITABLE_BRIEF_FIELDS) if (field in input) raw[field] = (input as Record<string, unknown>)[field];
+    let vocabulary: Vocabulary;
+    try {
+      vocabulary = await loadVocabulary();
+    } catch (error) {
+      throw vocabularyDown(error);
+    }
+    return this.write(id, async () => {
+      // Asked again after the read: a turn or a press may have started since.
+      const current = this.assertEditable(id);
+      if (current.briefAt !== before.briefAt) {
+        throw new JobRefused(409, "the brief changed while this edit was being checked; look at the new one and edit that", {
+          reason: "brief-changed",
+        });
+      }
+      const pending = current.pendingTopic;
+      const keepsPending = pending !== null && raw.topic === pending.entry.slug && !vocabulary.topics.has(pending.entry.slug);
+      const checkedAgainst: Vocabulary = keepsPending
+        ? { ...vocabulary, topics: new Map([...vocabulary.topics, [pending.entry.slug, { title: pending.entry.title, concepts: [] }]]) }
+        : vocabulary;
+      let valid: ValidBrief;
+      try {
+        valid = validateBrief(raw, checkedAgainst);
+      } catch (error) {
+        if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
+        throw error;
+      }
+      const brief = withoutKey(valid);
+      const pendingTopic = keepsPending ? pending : null;
+      if (
+        current.state === "briefed" &&
+        JSON.stringify(brief) === JSON.stringify(current.brief) &&
+        pendingTopic === current.pendingTopic
+      ) {
+        return { record: current, changed: false };
+      }
+      // The record first, in memory at once: a Draw pressed from here on
+      // draws this brief, never the one it replaces.
+      await this.save(id, {
+        state: "briefed",
+        brief,
+        briefAt: new Date().toISOString(),
+        pendingTopic,
+        title: brief.title,
+        errorKind: null,
+        error: null,
+        errorField: null,
+      });
+      const summary = describeBriefEdit(current.brief, brief, { pendingCleared: pending !== null && pendingTopic === null });
+      const note = await this.append(id, { type: "studio", text: summary, edit: true });
+      await this.append(id, { type: "brief", replySeq: note.seq, brief, pendingTopic, edit: true });
+      // The planner is told the whole brief now in force; the person sees the summary.
+      await this.save(id, {
+        undelivered: [...this.require(id).undelivered, `${summary}\n\nThe brief now in force:\n${JSON.stringify(brief, null, 1)}`],
+      });
+      return { record: this.require(id), changed: true };
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Following the job                                                  */
   /* ------------------------------------------------------------------ */
 
@@ -1528,6 +1697,58 @@ export class Drafts {
   }
 
   /* ------------------------------------------------------------------ */
+  /* Pruning (D40), driven by prune.ts                                  */
+  /* ------------------------------------------------------------------ */
+
+  /** Nothing is running on the draft or waiting to write it: no turn, no press, no mirror. */
+  private idle(id: string): boolean {
+    const record = this.records.get(id);
+    return (
+      record !== undefined &&
+      record.inFlight === null &&
+      !this.turnsInFlight.has(id) &&
+      !this.running.has(id) &&
+      !this.draws.has(id) &&
+      !this.mirroring.has(id)
+    );
+  }
+
+  /** Drafts untouched since `before` (epoch ms) that nothing is using, oldest first: the pruner's candidates. */
+  untouchedSince(before: number): DraftRecord[] {
+    return [...this.records.values()]
+      .filter((record) => !this.pruning.has(record.id) && Date.parse(record.updatedAt) < before && this.idle(record.id))
+      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  }
+
+  /**
+   * Remove one draft for the pruner, if it is still untouched since `before`
+   * and idle once every earlier write has landed. The draft is taken first:
+   * from then on every route answers 404 for it and no press, message, edit or
+   * job can start on it, so `decide` (the pruner's job checks and the row's
+   * delete) judges a draft nothing can move. When `decide` says yes the
+   * record leaves memory, then the workspace goes; a workspace that will not
+   * go is found again at the next start, and its row is already gone.
+   */
+  async prune(id: string, before: number, decide: (record: DraftRecord) => Promise<boolean>): Promise<boolean> {
+    return this.write(id, async () => {
+      const record = this.records.get(id);
+      if (record === undefined || this.pruning.has(id) || Date.parse(record.updatedAt) >= before || !this.idle(id)) return false;
+      this.pruning.add(id);
+      try {
+        if (!(await decide(record))) return false;
+        this.records.delete(id);
+        this.live.delete(id);
+        this.streams.get(id)?.removeAllListeners();
+        this.streams.delete(id);
+        await rm(draftDir(id), { recursive: true, force: true });
+        return true;
+      } finally {
+        this.pruning.delete(id);
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Abandon and shutdown                                               */
   /* ------------------------------------------------------------------ */
 
@@ -1569,6 +1790,135 @@ const JOB_VERDICTS: readonly string[] = ["failed", "cancelled", "interrupted", "
 
 /** Job states that hold the draft at `drawing`. */
 const ACTIVE_JOB: readonly string[] = ["queued", "running", "awaiting_review"];
+
+/** The fields a person's edit may set: the brief as GET returns it, less the key Draw mints and the flowchart Draw attaches (C8). */
+export const EDITABLE_BRIEF_FIELDS = [...PLANNER_BRIEF_FIELDS, "model", "notes", "source"] as const;
+
+function withoutKey(brief: ValidBrief): DraftBrief {
+  const kept: Partial<ValidBrief> = { ...brief };
+  delete kept.idempotencyKey;
+  delete kept.mermaid;
+  return kept as DraftBrief;
+}
+
+const quoted = (value: unknown): string => (value === undefined || value === null || value === "" ? "(none)" : JSON.stringify(value));
+
+/**
+ * The STUDIO note after a person edits the brief: what changed, field by
+ * field, so the person can check it and the planner knows what to build on.
+ */
+export function describeBriefEdit(before: DraftBrief | null, after: DraftBrief, options: { pendingCleared?: boolean } = {}): string {
+  const lines: string[] = [];
+  if (before === null) {
+    lines.push(`The person wrote the brief "${after.title}" by hand.`);
+  } else {
+    for (const field of ["title", "intent", "topic", "slug", "mode", "layout", "model", "notes", "source"] as const) {
+      if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+        lines.push(`- ${field}: ${quoted(before[field])} -> ${quoted(after[field])}`);
+      }
+    }
+    const shared = Math.min(before.elements.length, after.elements.length);
+    for (let i = 0; i < shared; i += 1) {
+      const was = before.elements[i]!;
+      const now = after.elements[i]!;
+      if (was.label !== now.label) lines.push(`- element ${i + 1}: "${was.label}" -> "${now.label}"`);
+      if ((was.note ?? "") !== (now.note ?? "")) lines.push(`- element "${now.label}" note: ${quoted(was.note)} -> ${quoted(now.note)}`);
+    }
+    for (const element of after.elements.slice(shared)) lines.push(`- element added: "${element.label}"`);
+    for (const element of before.elements.slice(shared)) lines.push(`- element removed: "${element.label}"`);
+    const arrow = (relation: DraftBrief["relations"][number]): string =>
+      `${relation.from} -> ${relation.to}${relation.label === undefined ? "" : ` (${relation.label})`}`;
+    const was = new Set(before.relations.map(arrow));
+    const now = new Set(after.relations.map(arrow));
+    for (const relation of now) if (!was.has(relation)) lines.push(`- arrow added: ${relation}`);
+    for (const relation of was) if (!now.has(relation)) lines.push(`- arrow removed: ${relation}`);
+    if (JSON.stringify(before.concepts) !== JSON.stringify(after.concepts)) {
+      lines.push(`- concepts: ${quoted(before.concepts.join(", "))} -> ${quoted(after.concepts.join(", "))}`);
+    }
+    lines.unshift(lines.length === 0 ? "The person confirmed the brief as it stands." : "The person edited the brief by hand:");
+  }
+  if (options.pendingCleared === true) lines.push("The proposed new topic is dropped: the brief now names a topic that exists.");
+  lines.push("This is the brief in force. Build on it; a change is still a whole new brief.");
+  return lines.join("\n");
+}
+
+/** The VOCABULARY block the planner was last told of by a C4 note; before any, its system prompt's. */
+function vocabularyToldPath(id: string): string {
+  return path.join(draftDir(id), "vocabulary-told.md");
+}
+
+/**
+ * Each topic in a VOCABULARY block, by slug: its line and the relation and
+ * concept lines under it, exactly as the planner read them. Taken from the
+ * first such block in `text`, which may be the whole system prompt.
+ */
+export function vocabularyTopics(text: string): { domains: string | null; topics: Map<string, string> } | null {
+  const begin = "-----BEGIN VOCABULARY-----";
+  const start = text.indexOf(begin);
+  if (start === -1) return null;
+  const end = text.indexOf("-----END VOCABULARY-----", start);
+  const lines = text.slice(start + begin.length, end === -1 ? undefined : end).split("\n");
+  let domains: string | null = null;
+  const topics = new Map<string, string>();
+  let current: string | null = null;
+  let body = false;
+  for (const line of lines) {
+    if (!body) {
+      if (line.startsWith("domains: ")) domains = line;
+      if (line.trim() === "" && domains !== null) body = true;
+      continue;
+    }
+    if (line.trim() === "") continue;
+    if (line.startsWith("  ") && current !== null) {
+      topics.set(current, `${topics.get(current)!}\n${line}`);
+      continue;
+    }
+    current = line.split(" | ")[0]!.trim();
+    topics.set(current, line);
+  }
+  return { domains, topics };
+}
+
+/** Lines a C4 note may carry before it says how many more there were, as the EXTENDING block is capped. */
+const VOCABULARY_NOTE_CAP = EXTENDING_LINE_CAP;
+
+/**
+ * The C4 note: what is new, what changed and what is gone between the
+ * vocabulary the planner was told of and the one the catalog lists now. Null
+ * when no topic differs.
+ */
+export function vocabularyChangeNote(told: string, now: string): string | null {
+  const before = vocabularyTopics(told);
+  const after = vocabularyTopics(now);
+  if (before === null || after === null) return null;
+  const added: string[] = [];
+  const changed: string[] = [];
+  const gone: string[] = [];
+  for (const [slug, entry] of after.topics) {
+    const was = before.topics.get(slug);
+    if (was === undefined) added.push(entry);
+    else if (was !== entry) changed.push(entry);
+  }
+  for (const slug of before.topics.keys()) if (!after.topics.has(slug)) gone.push(slug);
+  if (added.length === 0 && changed.length === 0 && gone.length === 0) return null;
+  const lines = ["The topic list changed since you were given the VOCABULARY block. Read it with these changes, in the same format:"];
+  if (after.domains !== null && after.domains !== before.domains) lines.push(after.domains);
+  // Removals first: one line, and the one a cap must never cut.
+  if (gone.length > 0) lines.push(`archived or removed, so no brief may name them: ${gone.join(", ")}`);
+  if (added.length > 0) lines.push("added:", ...added.flatMap((entry) => entry.split("\n")));
+  if (changed.length > 0) lines.push("changed (as they are now):", ...changed.flatMap((entry) => entry.split("\n")));
+  if (lines.length <= VOCABULARY_NOTE_CAP) return lines.join("\n");
+  return [...lines.slice(0, VOCABULARY_NOTE_CAP), `(${lines.length - VOCABULARY_NOTE_CAP} more lines not shown)`].join("\n");
+}
+
+/** How long a first message may be in the drafts list. */
+export const LIST_LINE_LIMIT = 120;
+
+/** A message as one line of the drafts list: whitespace collapsed, cut with an ellipsis. */
+export function listLine(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length <= LIST_LINE_LIMIT ? line : `${line.slice(0, LIST_LINE_LIMIT - 1).trimEnd()}…`;
+}
 
 function safeJson(line: string): Record<string, unknown> | null {
   try {

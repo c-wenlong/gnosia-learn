@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
-import { TOPICS, topicListAnswer } from "./vocabulary";
+import { TOPICS, topicListAnswer, topicListDown } from "./vocabulary";
 import { until } from "./wait";
 
 /**
@@ -817,5 +817,136 @@ describe("C11: the extend target changed after the conversation started", () => 
     await rm(workPath("dot-product"));
     await rm(path.join(workDir(), "dot-product.checkout.json"));
     expect((await loaded.view(id)).sourceChanged).toBe(false);
+  });
+});
+
+describe("a brief edited by hand", () => {
+  it("keeps a proposed topic while the brief still names it, and drops it for a topic that exists", async () => {
+    const brief = { ...good, topic: "mesh-vpn", slug: "tailscale-tunnels" };
+    await fake.script([{ text: withTopic(brief) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "tailscale tunnels");
+    expect(drafts.get(record.id)?.pendingTopic?.entry.slug).toBe("mesh-vpn");
+
+    // Still on the proposed slug: checked against the widened vocabulary, and the proposal stays.
+    const renamed = await drafts.editBrief(record.id, { ...brief, title: "Tailscale tunnels, end to end" });
+    expect(renamed.changed).toBe(true);
+    expect(renamed.record.pendingTopic?.entry.slug).toBe("mesh-vpn");
+    expect(renamed.record.title).toBe("Tailscale tunnels, end to end");
+
+    // An existing topic ends the proposal, and the note says so.
+    const moved = await drafts.editBrief(record.id, { ...brief, topic: "tcp-congestion-control" });
+    expect(moved.record.pendingTopic).toBeNull();
+    const view = await drafts.view(record.id);
+    expect(view.transcript.at(-1)?.text).toContain('topic: "mesh-vpn" -> "tcp-congestion-control"');
+    expect(view.transcript.at(-1)?.text).toContain("proposed new topic is dropped");
+    expect(view.pendingTopic).toBeNull();
+    // Two edits, two notes waiting for the planner.
+    expect(drafts.get(record.id)?.undelivered).toHaveLength(2);
+    // Each edit mirrored the row.
+    expect(catalogMock.draftUpsert).toHaveBeenCalled();
+  });
+
+  it("is refused while Draw is being pressed, and after the drawing is reviewed", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    let release: () => void = () => undefined;
+    canvasMock.doctor.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        release = () => resolve({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
+      }),
+    );
+    const press = drafts.draw(record.id, "press");
+    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "draw-in-progress" } });
+    release();
+    const { jobId } = await press;
+    await mkdir(path.join(process.env.STUDIO_HOME!, "jobs", jobId, "scratch"), { recursive: true });
+    await store.create({ id: jobId, state: "awaiting_review", slug: good.slug, topic: good.topic, draftId: record.id, brief: { ...good, model: "sonnet" }, gate: null, error: null } as never);
+    await store.update(jobId, { state: "discarded" });
+    await until(() => drafts.get(record.id)?.state === "done", "a discarded drawing never finished the draft");
+    await drafts.settled(record.id);
+    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 409, detail: { reason: "done" } });
+  });
+
+  it("is refused with 503 when the vocabulary cannot be read at all", async () => {
+    await fake.script([{ text: proposing(good) }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "draw it");
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    // The cache the first read wrote answers instead, so the edit still passes...
+    await expect(drafts.editBrief(record.id, { ...good, title: "Renamed" })).resolves.toMatchObject({ changed: true });
+    // ...and with no cache either, it is a 503.
+    await rm(path.join(process.env.STUDIO_HOME!, "cache"), { recursive: true, force: true });
+    await expect(drafts.editBrief(record.id, good)).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe("C4: the vocabulary changes during a conversation", () => {
+  const added = {
+    slug: "mesh-vpn",
+    title: "Mesh VPNs",
+    domain: "networking",
+    summary: "Overlay networks between devices.",
+    aliases: ["tailscale"],
+    relations: [],
+    maps: { manimkc: [], courses: [], concepts: [] },
+    incoming: [],
+  };
+
+  it("tells the planner what was added and archived at the head of its next turn, once", async () => {
+    await fake.script([{ text: "Which one?" }, { text: "Mesh VPNs, then." }, { text: "Still here." }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "hello");
+    // One topic added, one archived, after the system prompt was written.
+    catalogMock.topicList.mockResolvedValue(topicListAnswer([TOPICS[1]!, added]));
+    await say(record.id, "tailscale tunnels");
+    await say(record.id, "and?");
+    const prompts = await fake.prompts();
+    expect(prompts[0]).toBe("hello");
+    expect(prompts[1]).toContain("-----BEGIN STUDIO-----");
+    expect(prompts[1]).toContain("mesh-vpn | Mesh VPNs | networking | tailscale | Overlay networks between devices.");
+    expect(prompts[1]).toContain("archived or removed, so no brief may name them: vector-and-linear-algebra-basics");
+    expect(prompts[1]!.indexOf("-----END STUDIO-----")).toBeLessThan(prompts[1]!.indexOf("tailscale tunnels"));
+    // Told once: the next turn is the person's text alone.
+    expect(prompts[2]).toBe("and?");
+    // The system prompt is left as it was written; the baseline moved beside it.
+    const system = await readFile(path.join(draftDir(record.id), "planner-system.md"), "utf8");
+    expect(system).not.toContain("mesh-vpn");
+    const view = await drafts.view(record.id);
+    expect(view.transcript.filter((entry) => entry.role === "studio")).toHaveLength(1);
+  });
+
+  it("says nothing when the vocabulary is the one the prompt was written with, or cannot be read", async () => {
+    await fake.script([{ text: "Which one?" }, { text: "Ok." }]);
+    const { record } = await drafts.create({});
+    await say(record.id, "hello");
+    catalogMock.topicList.mockResolvedValue(topicListDown());
+    await say(record.id, "again");
+    expect(await fake.prompts()).toEqual(["hello", "again"]);
+  });
+});
+
+describe("vocabularyChangeNote", () => {
+  it("lists a changed topic as it is now, and keeps the removals when the note is capped", async () => {
+    const { vocabularyChangeNote } = await import("../src/drafts");
+    const { vocabularyBlock } = await import("../src/planner");
+    const entry = (slug: string, concepts: string[] = []) => ({
+      slug,
+      title: slug,
+      domain: "d",
+      summary: null,
+      aliases: [],
+      relations: [],
+      maps: { manimkc: [], courses: [], concepts },
+    });
+    const before = vocabularyBlock([entry("a"), entry("b"), entry("gone")]);
+    const after = vocabularyBlock([entry("a"), entry("b", ["b-one"]), ...Array.from({ length: 300 }, (_, i) => entry(`new-${i}`))]);
+    const note = vocabularyChangeNote(`prompt text\n\n${before}\n\nCORPUS`, after)!;
+    expect(note).toContain("archived or removed, so no brief may name them: gone");
+    expect(note).toMatch(/more lines not shown\)$/);
+    expect(vocabularyChangeNote(before, vocabularyBlock([entry("a"), entry("b"), entry("gone")]))).toBeNull();
+    const changed = vocabularyChangeNote(before, vocabularyBlock([entry("a"), entry("b", ["b-one"]), entry("gone")]))!;
+    expect(changed).toContain("changed (as they are now):\nb | b | d |  | \n  concepts: b-one");
   });
 });

@@ -160,7 +160,7 @@ describe("the draft routes", () => {
 
     const list = (await (await fetch(`${base}/api/drafts?state=briefed`)).json()) as { drafts: Record<string, unknown>[] };
     expect(list.drafts).toEqual([
-      { draftId, kind: "diagram", state: "briefed", title: "TCP congestion window", source: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
+      { draftId, kind: "diagram", state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
     ]);
 
     // Replay from the start carries ids; ?after skips what the client has.
@@ -230,6 +230,139 @@ describe("the draft routes", () => {
     expect(health.plannerTurnsLast24h).toBe(1);
     expect(health.plannerCostLast24h).toBeCloseTo(0.03, 6);
     expect(health.costLast24h).toBeCloseTo(0.03, 6);
+  });
+});
+
+describe("PUT /api/drafts/{id}/brief", () => {
+  const put = (route: string, body: unknown, type = "application/json") =>
+    fetch(`${base}${route}`, { method: "PUT", headers: { "content-type": type }, body: JSON.stringify(body) });
+
+  /** A briefed draft: one turn that proposes `good`. */
+  async function briefed(): Promise<string> {
+    await fake.script([{ text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)?.state).toBe("briefed");
+    return draftId;
+  }
+
+  const edited = {
+    ...good,
+    elements: [{ label: "Sender" }, { label: "Server" }],
+    relations: [{ from: "Sender", to: "Server", label: "sends segments" }],
+  };
+
+  it("stores the edit, shows it as a studio note carrying the brief, tells the planner next turn, and Draw draws it", async () => {
+    const draftId = await briefed();
+    const response = await put(`/api/drafts/${draftId}/brief`, { ...edited, idempotencyKey: "ignored", mermaid: "flowchart LR\n a-->b" });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ draftId, state: "briefed", pendingTopic: null, note: expect.any(String) });
+    expect((body.brief as { elements: unknown }).elements).toEqual(edited.elements);
+    // Neither the key Draw mints nor the flowchart Draw attaches is stored.
+    expect(body.brief).not.toHaveProperty("idempotencyKey");
+    expect(body.brief).not.toHaveProperty("mermaid");
+
+    const view = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as {
+      brief: unknown;
+      transcript: { role: string; text: string; brief?: unknown }[];
+    };
+    expect(view.brief).toEqual(body.brief);
+    const last = view.transcript.at(-1)!;
+    expect(last.role).toBe("studio");
+    expect(last.text).toContain('element 2: "Receiver" -> "Server"');
+    expect(last.text).toContain("arrow added: Sender -> Server (sends segments)");
+    expect(last.brief).toEqual(body.brief);
+    const stream = await readEvents(`/api/drafts/${draftId}/events?after=4`, (text) => text.includes("event: brief\n"));
+    expect(stream).toMatch(/event: studio\n/);
+    expect(stream).toMatch(/event: brief\ndata: \{"seq":\d+,"replySeq":\d+,"brief":/);
+
+    // The planner's next turn opens with the edit and the brief now in force.
+    await fake.script([{ text: "Noted: Server it is." }]);
+    await post(`/api/drafts/${draftId}/messages`, { text: "looks right?" });
+    await drafts.settled(draftId);
+    const [prompt] = await fake.prompts();
+    expect(prompt).toContain("-----BEGIN STUDIO-----");
+    expect(prompt).toContain('element 2: "Receiver" -> "Server"');
+    expect(prompt).toContain("The brief now in force:");
+    expect(prompt!.indexOf("-----END STUDIO-----")).toBeLessThan(prompt!.indexOf("looks right?"));
+    // A reply with no brief leaves the draft open, and the edit is still the brief on record.
+    expect(drafts.get(draftId)?.brief?.elements).toEqual(edited.elements);
+
+    // An open draft takes an edit too, and is briefed again; Draw sends the edited labels to the job.
+    const again = await put(`/api/drafts/${draftId}/brief`, edited);
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { state: string }).state).toBe("briefed");
+    const drawn = await post(`/api/drafts/${draftId}/draw`, { idempotencyKey: "press" });
+    expect(drawn.status).toBe(201);
+    const { jobId } = (await drawn.json()) as { jobId: string };
+    expect(store.get(jobId)?.brief.elements.map((element) => element.label)).toEqual(["Sender", "Server"]);
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
+
+    // While it draws, the brief is not the person's to change.
+    const busy = await put(`/api/drafts/${draftId}/brief`, good);
+    expect(busy.status).toBe(409);
+    expect(await busy.json()).toMatchObject({ detail: { reason: "drawing" } });
+  });
+
+  it("changes nothing for an identical brief", async () => {
+    const draftId = await briefed();
+    const before = (await drafts.view(draftId)).transcript.length;
+    const { brief } = await drafts.view(draftId);
+    const response = await put(`/api/drafts/${draftId}/brief`, brief);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ note: "the brief is unchanged" });
+    expect((await drafts.view(draftId)).transcript).toHaveLength(before);
+    expect(drafts.get(draftId)?.undelivered).toEqual([]);
+  });
+
+  it("refuses what validateBrief refuses, names the field, and keeps the brief", async () => {
+    const draftId = await briefed();
+    const bad = await put(`/api/drafts/${draftId}/brief`, { ...good, relations: [{ from: "Sender", to: "Relay" }] });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: expect.stringContaining("Relay"), detail: { field: "relations[0].to" } });
+    const topic = await put(`/api/drafts/${draftId}/brief`, { ...good, topic: "no-such-topic" });
+    expect(await topic.json()).toMatchObject({ detail: { field: "topic" } });
+    const array = await put(`/api/drafts/${draftId}/brief`, [good]);
+    expect(array.status).toBe(400);
+    expect(await array.json()).toMatchObject({ error: "the request body must be a JSON object" });
+    // A PUT body is JSON or it is refused before any route, as a POST's is.
+    expect((await put(`/api/drafts/${draftId}/brief`, good, "text/plain")).status).toBe(403);
+    expect(drafts.get(draftId)?.brief?.elements).toEqual(good.elements);
+    expect((await put("/api/drafts/nope/brief", good)).status).toBe(404);
+  });
+
+  it("refuses while a turn is in flight, and on a closed conversation", async () => {
+    const draftId = await briefed();
+    await fake.script([{ text: "thinking", hangMs: 500 }]);
+    await post(`/api/drafts/${draftId}/messages`, { text: "one more thing" });
+    const during = await put(`/api/drafts/${draftId}/brief`, edited);
+    expect(during.status).toBe(409);
+    expect(await during.json()).toMatchObject({ detail: { reason: "in-flight" } });
+    await drafts.settled(draftId);
+    await post(`/api/drafts/${draftId}/abandon`, {});
+    const closed = await put(`/api/drafts/${draftId}/brief`, edited);
+    expect(closed.status).toBe(409);
+    expect(await closed.json()).toMatchObject({ detail: { reason: "abandoned" } });
+  });
+
+  it("lists drafts by several states at once, with the first message for a row that has no title", async () => {
+    await fake.script([{ text: "Which protocol?" }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: `  Show   how ${"a very long message ".repeat(10)}` });
+    await drafts.settled(draftId);
+    const briefedId = await briefed();
+    const list = (await (await fetch(`${base}/api/drafts?state=open,briefed`)).json()) as { drafts: Record<string, unknown>[] };
+    expect(list.drafts.map((row) => row.draftId).sort()).toEqual([draftId, briefedId].sort());
+    const open = list.drafts.find((row) => row.draftId === draftId)!;
+    expect(open.title).toBeNull();
+    expect(open.firstMessage).toMatch(/^Show how a very long message/);
+    expect((open.firstMessage as string).length).toBeLessThanOrEqual(120);
+    expect(open.firstMessage).toMatch(/…$/);
+    expect(list.drafts.find((row) => row.draftId === briefedId)?.firstMessage).toBe("draw it");
+    const onlyOpen = (await (await fetch(`${base}/api/drafts?state=open`)).json()) as { drafts: unknown[] };
+    expect(onlyOpen.drafts).toHaveLength(1);
   });
 });
 
