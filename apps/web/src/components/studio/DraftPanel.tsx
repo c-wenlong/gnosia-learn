@@ -13,6 +13,7 @@ import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { cx } from "@/components/ui/classes";
 import { Composer } from "@/components/ui/Composer";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { TopicOption } from "@/data/topics";
@@ -729,7 +730,14 @@ function Entry({
     // stored brief as the card under it (phase 3).
     return (
       <div className="flex flex-col gap-3">
-        <p className="mx-auto max-w-[56ch] whitespace-pre-wrap text-center text-[13px] leading-5 text-text3">
+        {/* An edit's note lists its changes one to a line, which reads as a
+            list only when the lines start together. */}
+        <p
+          className={cx(
+            "mx-auto max-w-[56ch] whitespace-pre-wrap text-[13px] leading-5 text-text3",
+            card === null ? "text-center" : "w-fit text-left",
+          )}
+        >
           <span className="sr-only">Studio: </span>
           {entry.text}
         </p>

@@ -300,9 +300,7 @@ export function ConfirmCard({
                     void save();
                   }
                 }}
-                // The text starts where the heading's did; the field's own
-                // border and inset sit in the card's padding.
-                className="-ml-3.5 w-[calc(100%+14px)] flex-1 text-[16px] font-bold"
+                className="flex-1 text-[16px] font-bold"
               />
             ) : (
               <h2 className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-text">{brief.title}</h2>
@@ -680,58 +678,67 @@ function RelationsEditor({
   return (
     <div data-group="relations" className="flex flex-col gap-1 pt-1">
       {edit.relations.length > 0 && (
-        <ul className="flex flex-col gap-1" aria-label="Arrows">
+        <ul className="flex flex-col gap-2.5 sm:gap-1" aria-label="Arrows">
           {edit.relations.map((relation, at) => {
             const problem = (end: "from" | "to" | "label") => problemFor(`relation:${relation.id}:${end}`);
             const shown = (["from", "label", "to"] as const).filter((end) => problem(end) !== null);
             return (
               <li key={relation.id} className="flex flex-col">
+                {/* Three pieces that wrap as units on a narrow screen: an end
+                    and its arrow, the label and its arrow, the other end and
+                    its remove. A remove never lands on a line of its own. */}
                 <div className="flex min-h-7 flex-wrap items-center gap-y-1">
-                  <EndSelect
-                    relation={relation}
-                    end="from"
-                    at={at}
-                    edit={edit}
-                    saving={saving}
-                    problem={problem("from")}
-                    describedBy={messageId(`relation:${relation.id}:from`)}
-                    onChange={onChange}
-                  />
-                  <Arrow />
-                  <input
-                    data-field={`relation:${relation.id}:label`}
-                    aria-label={`Arrow ${at + 1} label`}
-                    value={relation.label}
-                    placeholder="No label"
-                    readOnly={saving}
-                    maxLength={200}
-                    size={Math.max(8, relation.label.length + 1)}
-                    aria-invalid={problem("label") !== null || undefined}
-                    aria-describedby={problem("label") === null ? undefined : messageId(`relation:${relation.id}:label`)}
-                    onChange={(event) => onChange(relation.id, { label: event.target.value }, "label")}
-                    className={cx(CHIP_FIELD, "px-2.5")}
-                  />
-                  <Arrow />
-                  <EndSelect
-                    relation={relation}
-                    end="to"
-                    at={at}
-                    edit={edit}
-                    saving={saving}
-                    problem={problem("to")}
-                    describedBy={messageId(`relation:${relation.id}:to`)}
-                    onChange={onChange}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onRemove(relation.id)}
-                    disabled={saving}
-                    aria-label={`Remove arrow ${at + 1}`}
-                    title="Remove"
-                    className={cx(REMOVE, "ml-1")}
-                  >
-                    <RemoveIcon />
-                  </button>
+                  <span className="inline-flex max-w-full items-center">
+                    <EndSelect
+                      relation={relation}
+                      end="from"
+                      at={at}
+                      edit={edit}
+                      saving={saving}
+                      problem={problem("from")}
+                      describedBy={messageId(`relation:${relation.id}:from`)}
+                      onChange={onChange}
+                    />
+                    <Arrow />
+                  </span>
+                  <span className="inline-flex max-w-full items-center">
+                    <input
+                      data-field={`relation:${relation.id}:label`}
+                      aria-label={`Arrow ${at + 1} label`}
+                      value={relation.label}
+                      placeholder="No label"
+                      readOnly={saving}
+                      maxLength={200}
+                      size={Math.max(8, relation.label.length + 1)}
+                      aria-invalid={problem("label") !== null || undefined}
+                      aria-describedby={problem("label") === null ? undefined : messageId(`relation:${relation.id}:label`)}
+                      onChange={(event) => onChange(relation.id, { label: event.target.value }, "label")}
+                      className={cx(CHIP_FIELD, "px-2.5")}
+                    />
+                    <Arrow />
+                  </span>
+                  <span className="inline-flex max-w-full items-center">
+                    <EndSelect
+                      relation={relation}
+                      end="to"
+                      at={at}
+                      edit={edit}
+                      saving={saving}
+                      problem={problem("to")}
+                      describedBy={messageId(`relation:${relation.id}:to`)}
+                      onChange={onChange}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onRemove(relation.id)}
+                      disabled={saving}
+                      aria-label={`Remove arrow ${at + 1}`}
+                      title="Remove"
+                      className={cx(REMOVE, "ml-1")}
+                    >
+                      <RemoveIcon />
+                    </button>
+                  </span>
                 </div>
                 {shown.map((end) => (
                   <Problem key={end} id={messageId(`relation:${relation.id}:${end}`)} problem={problem(end)} />
