@@ -5,6 +5,7 @@ import {
   announcement,
   elapsedMs,
   failureFooter,
+  plainPaths,
   failureReport,
   finishedHeadline,
   formatDuration,
@@ -342,6 +343,16 @@ describe("what a failure says", () => {
     // The relative form the catalog stores, and an SVG beside it.
     const relative = failureReport(job({ state: "failed", errorKind: "timeout", error: "stopped before jobs/j1/candidate/x.svg was exported" }));
     expect(relative.detail).toBe("stopped before the job's picture was exported");
+    // A STUDIO_HOME with a space in it is replaced whole, not from `jobs/` on (Greptile on #217).
+    expect(plainPaths("Nothing was written to /Users/a b/.studio/jobs/j1/candidate/x.tldr. That is the file.")).toBe(
+      "Nothing was written to the job's drawing. That is the file.",
+    );
+    // The words before a path stay, a slash among them included.
+    expect(plainPaths("left and/or wrote to /Users/a b/jobs/j1/candidate/x.svg")).toBe("left and/or wrote to the job's picture");
+    // A job recorded before the move drew into learn/assets/.candidates/: that is the job's drawing, not the diagram.
+    expect(plainPaths("Nothing was written to learn/assets/.candidates/dot.tldr.")).toBe("Nothing was written to the job's drawing.");
+    expect(plainPaths("Nothing was written to /Users/a b/repo/learn/assets/.candidates/dot.tldr")).toBe("Nothing was written to the job's drawing");
+    expect(plainPaths("/Users/a b/repo/learn/assets/dot.tldr is unchanged")).toBe("the diagram is unchanged");
     // Files written where they should not be are the finding, and a person has to find them.
     const strayed = failureReport(job({ state: "failed", errorKind: "wrote-outside", error: "left tools/x/y.ts dirty" }));
     expect(strayed.detail).toBe("left tools/x/y.ts dirty");

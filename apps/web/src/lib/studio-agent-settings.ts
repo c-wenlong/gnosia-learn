@@ -166,11 +166,24 @@ export function modelOptions(
   currentPriced: boolean | null = null,
 ): FilterOption<string>[] {
   const byModel = new Map<string, FilterOption<string>>();
+  const idOf = new Map<string, string>();
   for (const choice of models) {
     const id = choice.id ?? choice.value;
+    idOf.set(choice.value, id);
+    idOf.set(id, id);
     const held = byModel.get(id);
     if (held === undefined) byModel.set(id, { value: choice.value, label: modelName(id) });
     else if (choice.value === current) held.value = current;
+  }
+  // A stored name with a context window (`claude-fable-5-1[1m]`, `fable[1m]`)
+  // runs an offered model: it is that model's one entry, chosen and named
+  // with its window, never a second entry for the same model.
+  const window = /\[[0-9a-z]{1,8}\]$/.exec(current);
+  const windowed = window === null ? undefined : idOf.get(current.slice(0, window.index));
+  if (window !== null && windowed !== undefined) {
+    const entry = byModel.get(windowed)!;
+    entry.value = current;
+    entry.label = modelName(`${windowed}${window[0]}`);
   }
   const offered = [...byModel.values()].sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true }));
   const options: FilterOption<string>[] = [

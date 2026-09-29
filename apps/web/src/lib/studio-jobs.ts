@@ -428,16 +428,25 @@ export function failureReport(job: Job): FailureReport {
 
 /**
  * A runner's sentence with the job's own files said in words: its candidate
- * drawing and picture (`jobs/<id>/candidate/<slug>.tldr`, relative or
- * absolute) are "the job's drawing" and "the job's picture", and the
- * diagram's logical name (`learn/assets/<slug>.tldr`) is "the diagram".
+ * drawing and picture (`jobs/<id>/candidate/<slug>.tldr`, or
+ * `learn/assets/.candidates/<slug>.tldr` for a job recorded before the move)
+ * are "the job's drawing" and "the job's picture", and the diagram's logical
+ * name (`learn/assets/<slug>.tldr`) is "the diagram". Each is replaced whole
+ * with any absolute prefix, which may hold spaces (a `$STUDIO_HOME` under
+ * "/Users/a b/"): the prefix starts at a slash that opens a word and runs
+ * through whole directory names to the known tail.
  */
 export function plainPaths(text: string): string {
+  const candidate = (_: string, ext: string): string => (ext === "svg" ? "the job's picture" : "the job's drawing");
   return text
-    .replace(/(?:\/[^\s"'`]*)?\bjobs\/[^\s"'`/]+\/candidate\/[^\s"'`]+?\.(tldr|svg)\b/g, (_, ext: string) =>
-      ext === "svg" ? "the job's picture" : "the job's drawing",
-    )
-    .replace(/\blearn\/assets\/[^\s"'`]+?\.(?:tldr|svg)\b/g, "the diagram");
+    .replace(pathTo(String.raw`jobs\/[^\s"'\x60/]+\/candidate\/[^\s"'\x60/]+?\.(tldr|svg)\b`), candidate)
+    .replace(pathTo(String.raw`learn\/assets\/\.candidates\/[^\s"'\x60]+?\.(tldr|svg)\b`), candidate)
+    .replace(pathTo(String.raw`learn\/assets\/[^\s"'\x60]+?\.(?:tldr|svg)\b`), "the diagram");
+}
+
+/** `tail`, relative or behind an absolute prefix whose directory names may hold spaces. */
+function pathTo(tail: string): RegExp {
+  return new RegExp(String.raw`(?:(?<![^\s"'\x60(])\/(?:[^/\n"'\x60]*\/)*?)?\b` + tail, "g");
 }
 
 function rawFailureReport(job: Job): FailureReport {

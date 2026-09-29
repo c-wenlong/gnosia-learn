@@ -339,6 +339,15 @@ export function panelHref(
  * this leaves for the grid rather than patching a path that has no panel for
  * a draft. On `/studio` it keeps the filters and swaps the panel.
  */
+/**
+ * The name the full-width Before/After view gives its picture: the job's
+ * title, never its target (`learn/assets/<slug>.tldr` is a path, not a name).
+ */
+export function shotTitle(jobs: readonly { jobId: string; title?: string | null }[], jobId: string): string {
+  const title = jobs.find((job) => job.jobId === jobId)?.title?.trim() ?? "";
+  return title === "" ? "the diagram" : title;
+}
+
 export function conversationHref(path: string, draftId: string): string {
   const [base] = path.split("?");
   const from = base === "/studio" ? path : "/studio";

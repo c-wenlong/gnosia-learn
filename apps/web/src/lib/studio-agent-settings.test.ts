@@ -111,6 +111,17 @@ describe("GET /api/settings/agent (#207)", () => {
     expect(labels).toEqual(["Claude Code default (Fable 5.1)", "Fable 5.1", "Opus 5", "Opus 5.5", "Sonnet 5", "Sonnet 5.5"]);
     expect(labels.join(" ")).not.toContain("[1m]");
   });
+
+  it("shows a stored model with a context window as that model's one entry, chosen (Greptile on #217)", () => {
+    for (const stored of ["claude-fable-5-1[1m]", "fable[1m]"]) {
+      const options = modelOptions(stored, null);
+      const fable = options.filter((option) => option.label.startsWith("Fable"));
+      expect(fable).toEqual([{ value: stored, label: "Fable 5.1, 1M context" }]);
+      expect(options).toHaveLength(6);
+    }
+    // A context window on a model the menu does not offer is still appended, once.
+    expect(modelOptions("claude-haiku-9[1m]", null).filter((option) => option.label.startsWith("Haiku"))).toHaveLength(1);
+  });
 });
 
 describe("a model's name, for a person", () => {
