@@ -40,6 +40,7 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
+import { ownValue } from "@/lib/own-key";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
 
 /**
@@ -348,7 +349,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                   // folder too, so the index built alongside the row is what
                   // closes that gap. An unresolved slug stays readable text.
                   resolveNote={(slug) => {
-                    const noteId = notes[slug];
+                    const noteId = ownValue(notes, slug);
                     return noteId === undefined ? undefined : assetHref(noteId);
                   }}
                   // Checked above: a known problem renders the failure panel on

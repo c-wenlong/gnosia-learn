@@ -88,7 +88,7 @@ export interface LibrarySnapshot {
   /**
    * Titles for every topic slug the rows carry, keyed by slug.
    *
-   * Chips render `titles[slug] ?? slug`, so this failing to resolve one costs
+   * Chips render `ownValue(titles, slug) ?? slug`, so this failing to resolve one costs
    * a readable label and nothing else. That is why it is not folded into
    * `listAssets`: a title is presentation, the slug is the identity, and the
    * page is correct with only the slug.
@@ -401,7 +401,7 @@ export function unservedRows<T extends Pick<AssetWithTopics, "id" | "path">>(
 /**
  * Titles for a page's rows, or none, never a thrown error.
  *
- * The chips render `titles[slug] ?? slug`, so an empty result is a page of
+ * The chips render `ownValue(titles, slug) ?? slug`, so an empty result is a page of
  * slugs: the same page this code shipped before titles existed, and a fine
  * one. Letting this share the caller's `catch` instead would turn a label
  * failure into an empty library, hiding rows that had already been read.
@@ -451,12 +451,15 @@ async function optionalNotes(db: CatalogDatabase): Promise<Record<string, string
  * note. Nothing in the corpus collides today.
  */
 function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
-  const out: Record<string, string> = {};
+  // A Map, then `fromEntries`: assigning `out["__proto__"]` on a plain object
+  // sets its prototype instead of a key, so a note by that name would be
+  // unlinkable, and `fromEntries` defines every key as the object's own.
+  const out = new Map<string, string>();
   for (const row of rows) {
     const slug = row.path?.split("/").pop()?.replace(/\.md$/, "");
-    if (slug !== undefined && slug !== "" && out[slug] === undefined) out[slug] = row.id;
+    if (slug !== undefined && slug !== "" && !out.has(slug)) out.set(slug, row.id);
   }
-  return out;
+  return Object.fromEntries(out);
 }
 
 /**
