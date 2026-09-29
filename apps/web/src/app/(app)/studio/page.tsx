@@ -109,8 +109,46 @@ export default async function StudioPage({
   // What the last verb did, if the person reached this page through one.
   const outcome = readOutcome(params);
 
-  const health = await studioApi<Health>("/api/health", { timeoutMs: 150_000 });
+  // Health and the five reads the grid is drawn from all start now, so a load
+  // costs the slowest of them and not health plus the slowest. Health has
+  // answered from its cached checks since #218 (milliseconds), but each of the
+  // five still runs a catalog subprocess in the runner, which is 1 to 2 s
+  // under load.
+  //
+  // The topics come from the runner, not from the app's own content read: that
+  // read is database-only and throws with Postgres down, and U3 says this
+  // screen still browses and draws then. The runner answers from its D13 copy,
+  // and with no copy at all the chips fall back to slugs and the banner below
+  // says why.
+  const healthCall = studioApi<Health>("/api/health", { timeoutMs: 150_000 });
+  // One signal for the five: a blocked screen aborts them, so the runner is not
+  // left running catalog subprocesses for answers nobody will read.
+  const moot = new AbortController();
+  const { signal } = moot;
+  const reads = Promise.all([
+    studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000, signal }),
+    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200", { signal }),
+    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000, signal }),
+    // The conversations to pick up again. A runner that cannot list them
+    // costs the section, never the page.
+    studioApi<{ drafts: DraftSummary[] }>(listPath(), { signal }),
+    // The owner's studio videos (docs/STUDIO-VIDEOS.md, "API"). A runner
+    // without the route, or one that cannot read the catalog, costs the
+    // video tiles and nothing else.
+    studioApi<unknown>("/api/videos", { timeoutMs: 60_000, signal }),
+  ]);
+  // The blocked screens below leave `reads` unawaited (and abort them), so a
+  // rejection there (`studioApi` returns failures rather than throwing, but
+  // `currentOwner()` can) must not surface as an unhandled one. The `await` further down still
+  // throws it on the path that uses the answers.
+  reads.catch(() => undefined);
+
+  // Decided from health alone, as before: a wall on a failing doctor does not
+  // wait for the five reads, which can take as long as their timeouts when the
+  // very thing that is wrong is what they run on.
+  const health = await healthCall;
   if (!health.ok) {
+    moot.abort();
     return (
       <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard
@@ -128,6 +166,7 @@ export default async function StudioPage({
   // U4: a doctor failure replaces the screen. A grid that half works — no
   // thumbnails, every verb 503 — is worse than a page that says what is wrong.
   if (!health.data.tldrawkc) {
+    moot.abort();
     return (
       <div data-layout="full" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <BlockedCard
@@ -144,23 +183,7 @@ export default async function StudioPage({
     );
   }
 
-  // The topics come from the runner, not from the app's own content read: that
-  // read is database-only and throws with Postgres down, and U3 says this
-  // screen still browses and draws then. The runner answers from its D13 copy,
-  // and with no copy at all the chips fall back to slugs and the banner below
-  // says why.
-  const [listed, jobList, vocabulary, draftList, videoList] = await Promise.all([
-    studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 }),
-    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
-    studioApi<unknown>("/api/vocabulary", { timeoutMs: 120_000 }),
-    // The conversations to pick up again. A runner that cannot list them
-    // costs the section, never the page.
-    studioApi<{ drafts: DraftSummary[] }>(listPath()),
-    // The owner's studio videos (docs/STUDIO-VIDEOS.md, "API"). A runner
-    // without the route, or one that cannot read the catalog, costs the
-    // video tiles and nothing else.
-    studioApi<unknown>("/api/videos", { timeoutMs: 60_000 }),
-  ]);
+  const [listed, jobList, vocabulary, draftList, videoList] = await reads;
   const drafts = draftList.ok && Array.isArray(draftList.data.drafts) ? draftList.data.drafts : null;
   const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
   const staleVocabulary = vocabularyBanner(health.data.vocabulary);
