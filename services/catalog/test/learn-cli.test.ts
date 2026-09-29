@@ -408,6 +408,28 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
       await rm(path.join(root, "learn", "concepts", "fixtures", "widgets.md"), { force: true });
     });
 
+    it("doctor calls a note an orphan only when it has no edge of either kind", async () => {
+      // `background` has an outgoing `assumes` edge and nothing else, and
+      // `basis` only an incoming one (nothing requires it); the doc tells
+      // authors to prefer that kind when in doubt, so neither direction may
+      // be the thing the orphan warning fires on. `solo` has no edge at all.
+      const dir = path.join(root, "learn", "concepts", "fixtures");
+      const fixtures = {
+        basis: "---\nid: basis\ntitle: Basis\n---\n\n# Basis\n",
+        background: "---\nid: background\ntitle: Background\nassumes: [basis]\n---\n\n# Background\n",
+        solo: "---\nid: solo\ntitle: Solo\n---\n\n# Solo\n",
+      };
+      for (const [id, body] of Object.entries(fixtures)) await writeFile(path.join(dir, `${id}.md`), body, "utf8");
+      try {
+        const { stdout } = await learn("doctor", "--json").catch((error: { stdout: string }) => error);
+        const report = JSON.parse(stdout) as { problems: { kind: string; message: string }[] };
+        const orphans = report.problems.filter((p) => p.kind === "orphan").map((p) => p.message);
+        expect(orphans).toEqual(["solo is connected to nothing — is a prerequisite missing?"]);
+      } finally {
+        for (const id of Object.keys(fixtures)) await rm(path.join(dir, `${id}.md`), { force: true });
+      }
+    });
+
     it("map prints the map, and writes a file only when --out names one", async () => {
       const { stdout } = await learn("map");
       expect(stdout).toContain("# Knowledge Map");
