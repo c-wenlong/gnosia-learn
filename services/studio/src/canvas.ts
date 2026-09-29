@@ -80,6 +80,15 @@ export async function doctor(force = false): Promise<RunResult> {
   return doctorInFlight;
 }
 
+/**
+ * When the cached `doctor` answer came, or null when there is none. Health
+ * reports it beside the verdict, since a caller of `doctor()` within the TTL
+ * gets an answer up to that old.
+ */
+export function doctorAnsweredAt(): number | null {
+  return doctorCache?.at ?? null;
+}
+
 /** For the tests, and for a `?refresh=1` the UI may want in a later phase. */
 export function forgetDoctor(): void {
   doctorCache = null;
