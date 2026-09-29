@@ -106,9 +106,26 @@ describe("the system prompt", () => {
     expect(quoted).toBe(PLANNER_PROMPT);
   });
 
-  it("prefers an existing domain for a new topic, and allows a new one only when none fits", () => {
-    expect(PLANNER_PROMPT).toContain("A new topic's `domain` is one of the domains in the VOCABULARY block\n  whenever one fits. Only when none does, name a new domain");
+  it("prefers a close existing domain for a new topic, and names a new one broadly only when none is close", () => {
+    // Phase 2 measured: two networking drafts invented `networking` and
+    // `computer-networks`, since neither can see the other's pending topic.
+    expect(PLANNER_PROMPT).toContain("A new topic's `domain` is one of the domains in the VOCABULARY block\n  whenever one is close, by its name or by the topics filed under it. Only\n  when none is, name a new domain");
+    expect(PLANNER_PROMPT).toContain("the broad field's usual name");
     expect(PLANNER_PROMPT).not.toContain("(one of the domains in the VOCABULARY block)");
+  });
+
+  it("proposes a new topic with the brief, without asking first", () => {
+    // Phase 2 measured: the TCP draft asked leave before proposing one.
+    expect(PLANNER_PROMPT).toContain("Never ask\n  first whether to propose one.");
+    expect(PLANNER_PROMPT).toContain("that press is their approval");
+  });
+
+  it("lists, on extend, the existing shapes an arrow touches as elements", () => {
+    // Phase 2 measured: the extend brief was refused once on `relations[1].to`
+    // for an arrow to an existing shape it had not listed.
+    expect(PLANNER_PROMPT).toContain(
+      "On extend, a shape\n  already in the diagram that an arrow touches is an element too: copy its\n  label from the EXTENDING block",
+    );
   });
 
   it("is the doc's prompt, then VOCABULARY and CORPUS, and EXTENDING only on extend", () => {
