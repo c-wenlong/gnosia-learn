@@ -158,8 +158,19 @@ export function sessionEnd(id: string, state: string, error?: string): Promise<C
 }
 
 /** `job enqueue --brief <file>`. The file is the job workspace's own brief.json. */
-export function jobEnqueue(briefFile: string): Promise<CatalogResult> {
-  return catalog(["job", "enqueue", "--brief", briefFile, ...owned()]);
+export function jobEnqueue(briefFile: string, options: { discardParent?: string } = {}): Promise<CatalogResult> {
+  return catalog([
+    "job",
+    "enqueue",
+    "--brief",
+    briefFile,
+    // A video change whose parent is still in review (D52 of
+    // docs/STUDIO-VIDEOS.md): the parent is discarded and this job inserted in
+    // one transaction, so the slug's lease passes across with no gap and a
+    // refusal leaves the parent as it was.
+    ...(options.discardParent === undefined ? [] : ["--discard-parent", options.discardParent]),
+    ...owned(),
+  ]);
 }
 
 export function jobClaim(jobId: string, runner: string, sessionId: string): Promise<CatalogResult> {
@@ -390,4 +401,60 @@ export function status(): Promise<CatalogResult> {
  */
 export function conceptShow(slug: string): Promise<CatalogResult> {
   return npmCli("learn", ["concept", "show", slug], 60_000);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Videos (docs/STUDIO-VIDEOS.md)                                             */
+/* -------------------------------------------------------------------------- */
+
+/** `catalog video show <slug>`: one studio video this owner may read, or `video: null`. */
+export function videoShow(slug: string): Promise<CatalogResult> {
+  return catalog(["video", "show", slug, ...owned()], 60_000);
+}
+
+/** `catalog video checkout <slug> --dir <dir>`: the stored source files, written into `dir`. */
+export function videoCheckout(slug: string, dir: string): Promise<CatalogResult> {
+  return catalog(["video", "checkout", slug, "--dir", dir, "--force", ...owned()], 60_000);
+}
+
+export interface VideoPutInput {
+  jobId: string;
+  slug: string;
+  /** The gate's `candidate/` directory, holding the copies and `copies.json`. */
+  dir: string;
+  /** The revision the job started from, null for a new video, undefined when unknown. */
+  base: number | null | undefined;
+  reason: string;
+}
+
+/**
+ * `catalog video put --job`: Accept's whole write in one transaction, the
+ * job's move to `accepted` included (D49). A repeat for the same job and the
+ * same bytes is an idempotent own retry.
+ */
+export function videoPut(input: VideoPutInput): Promise<CatalogResult> {
+  return catalog([
+    "video",
+    "put",
+    "--job",
+    input.jobId,
+    "--slug",
+    input.slug,
+    "--dir",
+    input.dir,
+    ...(input.base === undefined ? [] : ["--base", input.base === null ? "none" : String(input.base)]),
+    "--reason",
+    input.reason,
+    ...owned(),
+  ], 600_000);
+}
+
+/** `catalog video list`: this owner's studio videos and manimkc videos. */
+export function videoList(): Promise<CatalogResult> {
+  return catalog(["video", "list", ...owned()], 60_000);
+}
+
+/** `catalog preference get --key <key>`: one owner-scoped preference, raw. */
+export function preferenceGet(key: string): Promise<CatalogResult> {
+  return catalog(["preference", "get", "--key", key, ...owned()], 60_000);
 }

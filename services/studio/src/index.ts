@@ -9,7 +9,10 @@ import { Mirrors } from "./mirrors";
 import { DraftPruner } from "./prune";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
-import { JobStore } from "./store";
+import { JobStore, RecordStore } from "./store";
+import { VideoDoctor } from "./video/doctor";
+import { VideoRunner } from "./video/runner";
+import type { VideoJobRecord } from "./video/types";
 
 /**
  * `npm run studio`: the process.
@@ -73,6 +76,29 @@ async function main(): Promise<void> {
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
 
+  // The video runner (D43 of docs/STUDIO-VIDEOS.md): its own store over the
+  // same jobs/ directory (each loads only its own kind), its own queue, and
+  // the one daily cap both runners and the planner count against. Its doctor
+  // runs now and every ten minutes, not awaited: until the first answer, a
+  // video brief is refused with 503, and nothing renders unsandboxed ever.
+  const videoStore = new RecordStore<VideoJobRecord>("video");
+  await videoStore.load();
+  const videoDoctor = new VideoDoctor();
+  const videoRunner = new VideoRunner(videoStore, {
+    doctor: videoDoctor,
+    otherSpend: () => [...store.list(), ...drafts.spendEntries()],
+  });
+  runner.otherJobSpend = () => videoStore.list();
+  const videoReconciled = await videoRunner.reconcile();
+  if (videoReconciled.interrupted.length > 0) {
+    process.stdout.write(`marked ${videoReconciled.interrupted.length} video job(s) interrupted: ${videoReconciled.interrupted.join(", ")}\n`);
+  }
+  void videoDoctor.report(true).then((report) => {
+    process.stdout.write(report.ok ? "video doctor: every check passed\n" : `video doctor: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
+    void videoRunner.kick();
+  });
+  videoDoctor.start();
+
   // D40: a draft untouched for seven days goes, row and workspace, unless a
   // job names it. After the job records are loaded and every draft follows
   // its jobs, and not awaited: a pass asks the catalog, and the first request
@@ -81,7 +107,7 @@ async function main(): Promise<void> {
 
   const mirrors = new Mirrors();
   runner.canvasOpen = (target) => mirrors.isOpen(target);
-  const server = createApi({ store, runner, mirrors, drafts });
+  const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor } });
   server.listen(PORT, HOST, () => {
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
@@ -109,6 +135,10 @@ async function main(): Promise<void> {
       .then(() => pruner.drain())
       .then(() => drafts.drain())
       .then(() => runner.drain())
+      .then(() => {
+        videoDoctor.stop();
+        return videoRunner.drain();
+      })
       .finally(() => {
         server.close(() => process.exit(0));
         // A stream that is still open would hold the process forever, and the
