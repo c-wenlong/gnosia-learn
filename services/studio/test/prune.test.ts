@@ -2,7 +2,9 @@ import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+
+import type { CatalogResult } from "../src/catalog";
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
 import { topicListAnswer } from "./vocabulary";
@@ -62,7 +64,7 @@ let runner: { enqueue: ReturnType<typeof vi.fn>; admit: ReturnType<typeof vi.fn>
 /** What Postgres holds, as far as pruning asks: draft rows, and the drafts job rows name. */
 let rows: Set<string>;
 let jobRows: Set<string>;
-let deleteRow: ReturnType<typeof vi.fn>;
+let deleteRow: Mock<(id: string) => Promise<CatalogResult>>;
 
 beforeEach(async () => {
   process.env.STUDIO_HOME = path.join(tmpdir(), `studio-prune-${Date.now()}-${Math.random()}`);
@@ -78,7 +80,7 @@ beforeEach(async () => {
   catalogMock.topicAddDryRun.mockReset().mockResolvedValue(ok({ nearMatches: [] }));
   catalogMock.diagramList.mockReset().mockResolvedValue(ok({ diagrams: [] }));
   canvasMock.doctor.mockReset().mockResolvedValue({ code: 0, stdout: "", stderr: "", json: null, signal: null, timedOut: false });
-  deleteRow = vi.fn(async (id: string) => {
+  deleteRow = vi.fn(async (id: string): Promise<CatalogResult> => {
     if (!rows.has(id)) return ok({ outcome: "no-draft" });
     if (jobRows.has(id)) return ok({ outcome: "has-jobs" });
     rows.delete(id);
