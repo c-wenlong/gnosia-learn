@@ -137,9 +137,20 @@ export function effortOptions(defaults: AgentDefaults | null): FilterOption<stri
  * `studioAgentPreference` would not keep as sent is refused rather than
  * quietly stored as something else.
  */
-export function checkedAgent(value: unknown): StudioAgentPreference | null {
+export function checkedAgent(value: unknown, stored: StudioAgentPreference | null = null): StudioAgentPreference | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const read = studioAgentPreference(value);
   const sent = value as { model?: unknown; effort?: unknown };
-  return read.model === sent.model && read.effort === sent.effort ? read : null;
+  if (read.model !== sent.model || read.effort !== sent.effort) return null;
+  return acceptableModel(read.model, stored?.model ?? null) ? read : null;
+}
+
+/**
+ * A model the panel may store: `default`, one the menu offers, or the value
+ * already stored (a full id set some other way, which the menu shows and a
+ * change of the effort beside it sends back). Anything else is a typo that
+ * would fail every job of that kind at spawn.
+ */
+export function acceptableModel(model: string, stored: string | null): boolean {
+  return model === "default" || MODEL_CHOICES.some((choice) => choice.value === model) || model === stored;
 }

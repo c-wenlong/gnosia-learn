@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 
 import type { StudioAgentPreference } from "@self-learn/schema/shared";
 
@@ -51,25 +51,48 @@ export function StudioSettings({
   const [notes, setNotes] = useState<Partial<Record<AgentKind, { ok: boolean; text: string }>>>({});
   const [saving, startSaving] = useTransition();
 
+  /**
+   * Saves run one after another per row, each carrying the whole row, so
+   * the last pick is the last write. Only the newest save's answer is shown:
+   * an older one finishing late, or failing, says nothing over it. A save
+   * that throws (the network, a restart, the session gone) is a refused save
+   * here, never an exception that takes the studio page down.
+   */
+  const saved = useRef<Record<AgentKind, StudioAgentPreference>>(
+    Object.fromEntries(rows.map((row) => [row.kind, row.value])) as Record<AgentKind, StudioAgentPreference>,
+  );
+  const sequence = useRef<Record<string, number>>({});
+  const chain = useRef<Record<string, Promise<unknown>>>({});
+
   function change(kind: AgentKind, patch: Partial<StudioAgentPreference>) {
-    const previous = values[kind];
-    const next = { ...previous, ...patch };
+    const next = { ...values[kind], ...patch };
+    const ticket = (sequence.current[kind] ?? 0) + 1;
+    sequence.current[kind] = ticket;
     setValues((held) => ({ ...held, [kind]: next }));
     setNotes((held) => ({ ...held, [kind]: undefined }));
-    startSaving(async () => {
+    const run = (chain.current[kind] ?? Promise.resolve()).then(async () => {
       const form = new FormData();
       form.set("kind", kind);
       form.set("model", next.model);
       form.set("effort", next.effort);
-      const result = await saveStudioAgent(form);
+      let result: { ok: boolean; error: string | null };
+      try {
+        result = await saveStudioAgent(form);
+      } catch {
+        result = { ok: false, error: "Not saved: the studio did not answer." };
+      }
+      if (result.ok) saved.current[kind] = next;
+      if (sequence.current[kind] !== ticket) return;
       if (result.ok) {
         setNotes((held) => ({ ...held, [kind]: { ok: true, text: "Saved" } }));
         return;
       }
-      // A refused save puts the menu back: what is shown is what is stored.
-      setValues((held) => ({ ...held, [kind]: previous }));
+      // A refused save puts the menus back to what is stored.
+      setValues((held) => ({ ...held, [kind]: saved.current[kind] }));
       setNotes((held) => ({ ...held, [kind]: { ok: false, text: result.error ?? "Not saved." } }));
     });
+    chain.current[kind] = run;
+    startSaving(() => run);
   }
 
   return (

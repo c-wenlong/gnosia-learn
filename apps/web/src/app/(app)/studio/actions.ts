@@ -1,12 +1,12 @@
 "use server";
 
-import { writePreference } from "@self-learn/catalog/state";
+import { readPreference, writePreference } from "@self-learn/catalog/state";
 import { redirect } from "next/navigation";
 
 import { withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { requireStudio, studioApi } from "@/lib/studio";
-import { AGENT_KEYS, checkedAgent } from "@/lib/studio-agent-settings";
+import { AGENT_KEYS, checkedAgent, storedAgent } from "@/lib/studio-agent-settings";
 import { withOutcome } from "@/lib/studio-view";
 
 /**
@@ -147,12 +147,18 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
   requireStudio();
   const kind = String(formData.get("kind") ?? "");
   if (kind !== "video" && kind !== "diagram") return { ok: false, error: "That is not a studio agent." };
-  const value = checkedAgent({ model: String(formData.get("model") ?? ""), effort: String(formData.get("effort") ?? "") });
-  if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
   const owner = await currentOwner();
+  const sent = { model: String(formData.get("model") ?? ""), effort: String(formData.get("effort") ?? "") };
   try {
-    await withLearnerStore((db) => writePreference(db, AGENT_KEYS[kind], value, owner));
-    return { ok: true, error: null };
+    return await withLearnerStore(async (db) => {
+      // A model the menu offers, `default`, or the one already stored: a
+      // typo stored here would fail every job of this kind at spawn.
+      const stored = storedAgent(kind, await readPreference(db, AGENT_KEYS[kind], owner));
+      const value = checkedAgent(sent, stored);
+      if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
+      await writePreference(db, AGENT_KEYS[kind], value, owner);
+      return { ok: true, error: null };
+    });
   } catch (error) {
     console.warn(`studio settings: save failed — ${error instanceof Error ? error.message : String(error)}`);
     return { ok: false, error: "Not saved: the catalog did not answer." };
