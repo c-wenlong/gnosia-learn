@@ -9,9 +9,9 @@ import {
   KILL_GRACE_MS,
   MAX_TURNS,
   type AgentAuth,
-  type Model,
 } from "./config";
-import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
+import { diagramPathProblem, writeDiagramGuard } from "./diagram-guard";
+import { candidateDir, REPO_ROOT, scratchDir, settingsPath, studioHome, tmpDir } from "./paths";
 import { signalGroup, sweepByMarker } from "./proc";
 import { buildSettings, type SettingsInput } from "./settings";
 
@@ -45,7 +45,14 @@ export interface AgentOptions {
   slug: string;
   source?: string;
   prompt: string;
-  model: Model;
+  /**
+   * `--model`, or null for no flag (the CLI's own default under the seal).
+   * Resolved by the runner at job start (`agent-settings.ts`), so an alias or
+   * a full id from the owner's settings, not only the two the brief allows.
+   */
+  model: string | null;
+  /** `--effort`, one of `low` to `max`, or null (or absent) for no flag. */
+  effort?: string | null;
   /** A UUID, minted and persisted before this is called. */
   sessionId: string;
   /** True for attempt two and three: continue the stored session. */
@@ -471,7 +478,8 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *
  * The argv is the security surface, so every flag on it earns its place:
  *
- * - `--settings <per-job file>` is the primary control, written first.
+ * - `--settings <per-job file>` is the primary control, written first, with
+ *   the job's Bash guard (`diagram-guard.ts`) as a `PreToolUse` hook in it.
  * - `--setting-sources ""` stops this machine's `~/.claude/settings.json` and
  *   the repo's `.claude/settings.json` contributing rules of their own. Allow
  *   lists **merge** across sources rather than the most specific one winning,
@@ -490,6 +498,12 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   its own snippets and the document it is drawing. The candidate directory
  *   and not the workspace: the workspace root holds the runner's records.
  * - `--max-turns` capped server side regardless of the brief.
+ * - `--model` and `--effort` only when the runner resolved a value for them
+ *   (D53 of docs/STUDIO-VIDEOS.md). The seal above also hides the owner's own
+ *   `model` and `effortLevel`, so "the owner's default" is read and passed
+ *   by the runner, and no flag means the CLI's default under the seal, which
+ *   is not the owner's (measured: `claude-opus-5[1m]` against their
+ *   `claude-fable-5-1`).
  * - `--strict-mcp-config` with an empty `--mcp-config` seals the session from
  *   this machine's own MCP servers, `claude_desktop_config.json` included.
  *   Measured (docs/STUDIO-CHAT-FIRST.md, D34, open question 4): without it, a
@@ -513,15 +527,22 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   which it does after a compaction (M1).
  */
 export async function startAgent(options: AgentOptions): Promise<AgentRun> {
-  const settingsInput: SettingsInput = {
-    jobId: options.jobId,
-    slug: options.slug,
-    ...(options.source === undefined ? {} : { source: options.source }),
-  };
   const file = settingsPath(options.jobId);
   await mkdir(scratchDir(options.jobId), { recursive: true });
   await mkdir(candidateDir(options.jobId), { recursive: true });
   await mkdir(tmpDir(options.jobId), { recursive: true });
+  // The enqueue check again, for a job queued before the studio home moved:
+  // refused before anything is spawned, with the same sentence.
+  const pathProblem = diagramPathProblem(studioHome());
+  if (pathProblem !== null) throw new Error(`the diagram agent cannot run from this studio home: ${pathProblem}`);
+  // After the directories, so the policy can name their resolved spellings.
+  const guard = await writeDiagramGuard(options.jobId, options.slug);
+  const settingsInput: SettingsInput = {
+    jobId: options.jobId,
+    slug: options.slug,
+    guard,
+    ...(options.source === undefined ? {} : { source: options.source }),
+  };
   await writeFile(file, `${JSON.stringify(buildSettings(settingsInput), null, 1)}\n`, "utf8");
 
   const argv = [
@@ -543,8 +564,8 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     scratchDir(options.jobId),
     "--add-dir",
     candidateDir(options.jobId),
-    "--model",
-    options.model,
+    ...(options.model === null ? [] : ["--model", options.model]),
+    ...(options.effort === undefined || options.effort === null ? [] : ["--effort", options.effort]),
     "--max-turns",
     String(MAX_TURNS),
     ...(options.manualPath === undefined || options.manualPath === null

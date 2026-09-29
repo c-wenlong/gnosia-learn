@@ -238,8 +238,15 @@ describe("a brief is refused before anything is spent", () => {
 
   it("accepts a complete one", () => {
     const brief: ValidBrief = validateBrief(base, vocabulary);
-    expect(brief.model).toBe("sonnet");
+    // No model filled in: the runner takes it from the settings panel at job
+    // start, and `sonnet` only when the owner never saved one (D53).
+    expect(brief).not.toHaveProperty("model");
     expect(brief.idempotencyKey).toContain("a-diagram");
+  });
+
+  it("keeps a model the brief names, and refuses one it does not allow", () => {
+    expect(validateBrief({ ...base, model: "opus" }, vocabulary).model).toBe("opus");
+    expect(() => validateBrief({ ...base, model: "--dangerously-skip-permissions" }, vocabulary)).toThrow(BriefError);
   });
 
   it("refuses a topic that is not in the vocabulary, with the field named", () => {

@@ -149,7 +149,7 @@ bare tool name anywhere). What differs:
 
 | Tool | Allowed | Why |
 | --- | --- | --- |
-| Bash | exactly one prefix, `Bash(<abs>/jobs/<id>/bin/video:*)`, the diagram agent's deny list (`cat`, `head`, `ls`, `python3`, `curl`, `git` and the rest), and a `PreToolUse` hook, `jobs/<id>/bin/bash-guard.cjs`, that refuses any command other than the wrapper's absolute path followed by plain words (`[A-Za-z0-9_.-]`, space-separated). The hook exits 2 to refuse, and on anything it cannot parse | The wrapper is the only way to run anything, and it is written per job with the job's paths inside it, so the agent cannot point it at another job. The hook exists because the matcher's splitting is not a contract and the deny list names spellings, not behaviour. Measured on CLI 2.1.274 with a headless session under these rules and no hook: `<wrapper> lint $(cat <secret>)` was refused by the deny list; `$(/bin/cat …)`, `$(grep …)`, backticks, `<( )`, `;`, `&&`, `\|\|`, a newline, and bare `/bin/cat` or `grep` on a file outside the topic folder all needed approval nobody can give, so were refused; **`<wrapper> lint \| base64` ran**, since the CLI counts a pipe into a read-only command as safe. With the hook, all twelve of those were refused and `<wrapper> lint` still ran. The hook loads from the `--settings` file under `--setting-sources ""` (measured). The diagram agent has no hook; its rules are unchanged |
+| Bash | exactly one prefix, `Bash(<abs>/jobs/<id>/bin/video:*)`, the diagram agent's deny list (`cat`, `head`, `ls`, `python3`, `curl`, `git` and the rest), and a `PreToolUse` hook, `jobs/<id>/bin/bash-guard.cjs`, that refuses any command other than the wrapper's absolute path followed by plain words (`[A-Za-z0-9_.-]`, space-separated). The hook exits 2 to refuse, and on anything it cannot parse | The wrapper is the only way to run anything, and it is written per job with the job's paths inside it, so the agent cannot point it at another job. The hook exists because the matcher's splitting is not a contract and the deny list names spellings, not behaviour. Measured on CLI 2.1.274 with a headless session under these rules and no hook: `<wrapper> lint $(cat <secret>)` was refused by the deny list; `$(/bin/cat …)`, `$(grep …)`, backticks, `<( )`, `;`, `&&`, `\|\|`, a newline, and bare `/bin/cat` or `grep` on a file outside the topic folder all needed approval nobody can give, so were refused; **`<wrapper> lint \| base64` ran**, since the CLI counts a pipe into a read-only command as safe. With the hook, all twelve of those were refused and `<wrapper> lint` still ran. The hook loads from the `--settings` file under `--setting-sources ""` (measured). The diagram agent has its own hook since the follow-up, the same program around a check of `npm run --silent canvas -- <verb>` on the job's own files (docs/TLDRAWKC-INTEGRATION.md, "A Bash guard in front of the rules") |
 | Edit | the scene file, `jobs/<id>/checkout/topics/studio/<slug>/<slug>.py`, and nothing else | `topic.yml` is written by the runner and checked by the gate; `lib/` is a copy the render reads, not a place to fix things |
 | Read | the topic directory, which is its working directory; the checkout's `lib/` copy and `jobs/<id>/render/out/` (the contact sheets), its two `--add-dir`s; and the brief's source note, if any. `blockReadsOutsideWorkingDirectories` is on | It has to look at its sheets; it may read the helpers it calls. The diagram agent runs from the repository root, which leaves the whole repository readable to its Read tool; the video agent does not |
 | WebFetch, WebSearch | denied as whole tools | Clean room, as manimkc's own server rule |
@@ -1126,7 +1126,8 @@ handler. Only what changes:
 | `GET` | `/api/jobs/{id}/sheets/{scene}.png` | new: one sheet, the scene name checked against the brief, the file opened with `O_NOFOLLOW` and served only if it is a regular file with one link, since it lives in `render/` |
 | `GET` | `/api/jobs/{id}/media/{file}` | new: the gate's copies in `candidate/`, the mp4 (with `Range`), `.vtt` and `poster.jpg`, named from a fixed list |
 | `POST` | `/api/jobs/{id}/revise` | on a video job, allowed from `awaiting_review` too. The cap and the video doctor are checked first; then one catalog transaction discards the parent (keeping its source) and enqueues the child, so the lease on the slug passes from one to the other with no gap and a refusal leaves the parent as it was (D52) |
-| `GET` | `/api/videos`, `/api/videos/{slug}` | new: the owner's studio videos and manimkc videos for the grid and the CORPUS block, through `catalog video list` |
+| `GET` | `/api/videos` | new, built in phase 2a: the owner's landed studio videos for the grid, `{ videos: [{ slug, title, topic, concepts, assetId, posterAssetId, durationSeconds, narrated, revision, updated }] }` through `catalog video list`. The VIDEOS block reads the same verb directly, manimkc videos included. `/api/videos/{slug}` is not built |
+| `GET`, `PUT` | `/api/settings/agent` | new, built in phase 2a: both rows, what "Claude Code default" resolves to, and the priced models; `PUT { kind, model, effort }` stores a row through `catalog preference set` (STUDIO-MENTIONS.md, "API and schema", has the shapes) |
 | `GET` | `/api/health` | gains `video: { ok, sandbox, metal, kokoro, checks }` from the video doctor, and `agent: { video, diagram }`, each the model and effort a job started now would get, and where each came from |
 
 **The video doctor** is `manimkc doctor --json` against a scratch job
@@ -1194,7 +1195,8 @@ nothing is resolved at enqueue.
 
 **What each job records.** `job.json` and the job view carry `agentModel` and
 `agentEffort`, each `{ requested, passed, source }` with `source` one of
-`panel`, `claude-settings` or `cli`, and `resolvedModel` from the session's
+`panel`, `claude-settings` or `cli` (and, for a diagram job, `brief` when the
+brief names a model and `default` for today's `sonnet` with no row), and `resolvedModel` from the session's
 init event, beside `agentAuth` and `manualHash` and for the same reason not on
 the catalog row: they are decided after enqueue wrote it.
 
@@ -1705,8 +1707,9 @@ An earlier run of the same brief, before the merge, cost $2.03 in 220 s.
 
 ### Phase 2. The chat and the panel
 
-- [ ] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
-      VOICES and CHANGING blocks
+- [x] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
+      VOICES and CHANGING blocks (phase 2a: the video section of the combined
+      prompt, its corpus named VIDEOS)
 - [ ] ~~The Diagram or Video control and `PUT /api/drafts/{id}/kind`~~
       Superseded: the @ menu and the inline-chip composer, tags, the
       conversational combined planner prompt, suggestions, per-kind cards and

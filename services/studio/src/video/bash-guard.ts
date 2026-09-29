@@ -1,7 +1,9 @@
-import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { guardHooks, hookProgram, writeHook } from "../bash-guard";
 import type { VideoPaths } from "./paths";
+
+export { guardHooks };
 
 /**
  * The video agent's Bash guard: a `PreToolUse` hook in the job's permission
@@ -27,7 +29,8 @@ import type { VideoPaths } from "./paths";
  * The hook is a file this job writes into `bin/`, beside the wrapper, which
  * the agent can neither read nor edit and the sandbox cannot write. It fails
  * closed: exit 2 blocks the call, and it exits 2 on anything it cannot parse.
- * The diagram agent is not given one; its rules are unchanged.
+ * The hook program and the file it goes in are shared with the diagram
+ * agent's guard (`../bash-guard.ts`); only the check differs.
  */
 
 const WORD = /^[A-Za-z0-9_.-]+$/;
@@ -67,49 +70,26 @@ export function wrapperCommandAllowed(command: string, wrapper: string): boolean
 export const GUARD_REFUSAL =
   "Refused by the job's Bash guard: the only command this job runs is its video command with plain words after it (a verb, scene names, helper names), with no pipe, list, substitution, redirect, variable, quote or line break.";
 
-/** The hook program. Plain CommonJS, node alone, the same test as `wrapperCommandAllowed`. */
+/** The hook program: the shared one (`../bash-guard.ts`) around the same test as `wrapperCommandAllowed`. */
 export function guardSource(wrapper: string): string {
   if (!/^[A-Za-z0-9/._-]+$/.test(wrapper)) throw new Error("the wrapper's path cannot be compiled into the guard");
-  return `// Written by the studio runner. The video agent's Bash guard: see services/studio/src/video/bash-guard.ts.
-"use strict";
-const WRAPPER = ${JSON.stringify(wrapper)};
+  return hookProgram(
+    "The video agent's Bash guard: see services/studio/src/video/bash-guard.ts.",
+    `const WRAPPER = ${JSON.stringify(wrapper)};
 const WORD = ${WORD.toString()};
-const REFUSAL = ${JSON.stringify(GUARD_REFUSAL)};
 function allowed(command) {
   if (typeof command !== "string") return false;
   const trimmed = command.replace(/^ +| +$/g, "");
   if (trimmed !== WRAPPER && !trimmed.startsWith(WRAPPER + " ")) return false;
   return trimmed.slice(WRAPPER.length).split(" ").filter((w) => w !== "").every((w) => WORD.test(w));
-}
-let input = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => { input += chunk; });
-process.stdin.on("end", () => {
-  try {
-    const event = JSON.parse(input);
-    if (event.tool_name !== "Bash") { process.exitCode = 0; return; }
-    if (allowed(event.tool_input && event.tool_input.command)) { process.exitCode = 0; return; }
-  } catch {
-    /* anything unreadable is refused */
-  }
-  process.stderr.write(REFUSAL + "\\n");
-  process.exitCode = 2;
-});
-`;
+}`,
+    GUARD_REFUSAL,
+  );
 }
 
 /** Write `bin/bash-guard.cjs`, read-only, and return the hook's command line. */
 export async function writeGuard(node: string, paths: VideoPaths): Promise<string> {
   const file = path.join(paths.bin, "bash-guard.cjs");
   if (!/^[A-Za-z0-9/._-]+$/.test(node) || !/^[A-Za-z0-9/._-]+$/.test(file)) throw new Error("the guard's command line would need quoting");
-  await mkdir(paths.bin, { recursive: true });
-  await chmod(file, 0o644).catch(() => undefined);
-  await writeFile(file, guardSource(paths.wrapper), { encoding: "utf8", mode: 0o444 });
-  await chmod(file, 0o444);
-  return `${node} ${file}`;
-}
-
-/** The `hooks` block of the job's permission file. */
-export function guardHooks(command: string): Record<string, unknown> {
-  return { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command }] }] };
+  return writeHook(file, guardSource(paths.wrapper), node);
 }
