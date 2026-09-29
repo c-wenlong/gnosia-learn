@@ -331,9 +331,13 @@ Rules of engagement:
   number unauditable against the CLI's own figure. An unpriceable model
   records `null`, never zero, so an unknown cost is not presented as a free
   job; the spend cap's real protection is the fallback that keeps pricing at
-  the brief's own model when the stream names one the rate table has never
+  the model the job passed when the stream names one the rate table has never
   heard of, so an all-null reading is a rare edge case rather than the
-  ordinary path.
+  ordinary path. A model the job passed that the table cannot price (the
+  settings panel or the owner's own settings can name one) is priced as its
+  family by name, else at the dearest rate in the table (`priceableAs` in
+  `cost.ts`), and the reading's `pricedAs` says which: an estimate, never
+  none, so the cap still counts a killed attempt.
 - The mirror iframe at `/studio/d/<name>` is cross-origin, so the studio has
   no channel to ask the live canvas anything; it derives the SVG-freshness
   pill by comparing file modification times instead. An open canvas sends a
@@ -561,6 +565,15 @@ not have to be worked out again.
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
   `npm run learn`.
+- **`npm run canvas` must not start through the `tsx` CLI.** It is
+  `node --import tsx services/catalog/src/canvas.ts` on purpose. The `tsx` CLI
+  binds a Unix socket at `$TMPDIR/tsx-<uid>/<pid>.pipe` on every start, and
+  the studio runs `canvas` with `TMPDIR` inside `$STUDIO_HOME` (every job's
+  agent, the manual check). macOS keeps 104 bytes of a socket path and libuv
+  binds whatever those bytes name, so a long home failed with `EADDRINUSE`
+  whenever the cut landed on a directory, and health reported
+  `manual: stale` for good. `services/studio/test/long-home.test.ts` fails if
+  the script goes back.
 - **`canvas export --svg` takes the output path, it is not a flag.**
   `export x.tldr --svg` fails with "argument missing"; the call is
   `export x.tldr --svg x.svg`. Re-exporting in place after a `meta set` is
@@ -1002,3 +1015,13 @@ not have to be worked out again.
   verdicts. Neutering `Runner.settled` fails `queue.test.ts` eight runs in
   eight under load, on a state read too early and on `ENOTEMPTY` from the
   teardown deleting a workspace mid-write, so those waits are a real gate.
+- **A studio test that runs planner turns must set `STUDIO_CLAUDE_BIN`
+  before anything imports `services/studio/src/config.ts`.** `CLAUDE_BIN` is
+  read once, at import, and a static import that reaches it (the video
+  fixture does, through `src/video/brief.ts`) is evaluated before the test
+  file's body sets the fake's path. The planner then spawns the real `claude`
+  under the machine's login and pays for every turn: phase 2a's first draft of
+  `services/studio/test/mentions.test.ts` did, about $0.05 over two runs.
+  `mentions.test.ts` and `mentions-api.test.ts` now set a path that cannot
+  run inside `vi.hoisted`, import every fixture dynamically after the fake
+  exists, and throw when `CLAUDE_BIN` is not the fake's.

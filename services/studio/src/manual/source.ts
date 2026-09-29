@@ -409,9 +409,11 @@ export type CanvasRunner = (args: string[], timeoutMs?: number) => Promise<RunRe
  * `canvas`, for the runner's own background check: its own process group,
  * stopped whole on a timeout or an abort (`canvas()` kills only the npm
  * launcher), with `TMPDIR` under the check's directory so the Chromium that
- * Playwright moves into a group of its own can be swept by that path.
+ * Playwright moves into a group of its own can be swept by that path. That
+ * `TMPDIR` can be long, which is safe only because `canvas` binds no socket
+ * under it (the note in `services/catalog/src/canvas.ts`).
  */
-function groupCanvas(signal: AbortSignal): CanvasRunner {
+export function groupCanvas(signal: AbortSignal): CanvasRunner {
   const tmp = path.join(manualCheckDir(), "tmp");
   return async (args, timeoutMs = 120_000) => {
     await mkdir(tmp, { recursive: true });

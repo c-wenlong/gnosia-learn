@@ -1126,7 +1126,8 @@ handler. Only what changes:
 | `GET` | `/api/jobs/{id}/sheets/{scene}.png` | new: one sheet, the scene name checked against the brief, the file opened with `O_NOFOLLOW` and served only if it is a regular file with one link, since it lives in `render/` |
 | `GET` | `/api/jobs/{id}/media/{file}` | new: the gate's copies in `candidate/`, the mp4 (with `Range`), `.vtt` and `poster.jpg`, named from a fixed list |
 | `POST` | `/api/jobs/{id}/revise` | on a video job, allowed from `awaiting_review` too. The cap and the video doctor are checked first; then one catalog transaction discards the parent (keeping its source) and enqueues the child, so the lease on the slug passes from one to the other with no gap and a refusal leaves the parent as it was (D52) |
-| `GET` | `/api/videos`, `/api/videos/{slug}` | new: the owner's studio videos and manimkc videos for the grid and the CORPUS block, through `catalog video list` |
+| `GET` | `/api/videos` | new, built in phase 2a: the owner's landed studio videos for the grid, `{ videos: [{ slug, title, topic, concepts, assetId, posterAssetId, durationSeconds, narrated, revision, updated }] }` through `catalog video list`. The VIDEOS block reads the same verb directly, manimkc videos included. `/api/videos/{slug}` is not built |
+| `GET`, `PUT` | `/api/settings/agent` | new, built in phase 2a: both rows, what "Claude Code default" resolves to, and the priced models; `PUT { kind, model, effort }` stores a row through `catalog preference set` (STUDIO-MENTIONS.md, "API and schema", has the shapes) |
 | `GET` | `/api/health` | gains `video: { ok, sandbox, metal, kokoro, checks }` from the video doctor, and `agent: { video, diagram }`, each the model and effort a job started now would get, and where each came from |
 
 **The video doctor** is `manimkc doctor --json` against a scratch job
@@ -1194,7 +1195,8 @@ nothing is resolved at enqueue.
 
 **What each job records.** `job.json` and the job view carry `agentModel` and
 `agentEffort`, each `{ requested, passed, source }` with `source` one of
-`panel`, `claude-settings` or `cli`, and `resolvedModel` from the session's
+`panel`, `claude-settings` or `cli` (and, for a diagram job, `brief` when the
+brief names a model and `default` for today's `sonnet` with no row), and `resolvedModel` from the session's
 init event, beside `agentAuth` and `manualHash` and for the same reason not on
 the catalog row: they are decided after enqueue wrote it.
 
@@ -1705,8 +1707,9 @@ An earlier run of the same brief, before the merge, cost $2.03 in 220 s.
 
 ### Phase 2. The chat and the panel
 
-- [ ] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
-      VOICES and CHANGING blocks
+- [x] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
+      VOICES and CHANGING blocks (phase 2a: the video section of the combined
+      prompt, its corpus named VIDEOS)
 - [ ] ~~The Diagram or Video control and `PUT /api/drafts/{id}/kind`~~
       Superseded: the @ menu and the inline-chip composer, tags, the
       conversational combined planner prompt, suggestions, per-kind cards and
