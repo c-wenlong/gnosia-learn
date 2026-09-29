@@ -5,6 +5,8 @@ import { candidatePath, candidateSvgPath, mermaidPath, scratchDir } from "./path
 export interface CandidateFiles {
   tldr: string;
   svg: string;
+  /** The job's scratch directory, where a continued session puts its verify PNG. */
+  scratch?: string;
 }
 
 /**
@@ -36,6 +38,12 @@ export interface PromptInput {
   brief: ValidBrief;
   /** True when the brief carried a flowchart and the runner wrote it to scratch. */
   hasMermaid: boolean;
+  /**
+   * True when the agent's system prompt carries the tldraw manual, which lists
+   * every helper with its options. The agent then has no reason to spend its
+   * first request on `canvas api`, which prints a subset of the same thing.
+   */
+  manual?: boolean;
 }
 
 export function buildPrompt(input: PromptInput): string {
@@ -69,16 +77,40 @@ export function buildPrompt(input: PromptInput): string {
     ``,
     `# How to work`,
     ``,
-    `1. Run \`npm run --silent canvas -- api\` and read it. It lists every helper the`,
-    `   page bundle exposes, with a real usage line for each. Build shapes with those`,
-    `   helpers; bind every arrow with \`helpers.connect\` so it stays attached.`,
+    ...(input.manual === true
+      ? [
+          `1. The tldraw manual in your system prompt lists every helper the page bundle`,
+          `   exposes, with its options, the lint rules and three worked snippets. Work from`,
+          `   it rather than running \`canvas -- api\` or looking for the tool's source. Build`,
+          `   shapes with those helpers; bind every arrow with \`helpers.connect\` so it stays`,
+          `   attached.`,
+        ]
+      : [
+          `1. Run \`npm run --silent canvas -- api\` and read it. It lists every helper the`,
+          `   page bundle exposes, with a real usage line for each. Build shapes with those`,
+          `   helpers; bind every arrow with \`helpers.connect\` so it stays attached.`,
+        ]),
   ];
 
-  if (input.hasMermaid) {
+  if (input.hasMermaid && brief.mode === "new") {
+    // `from-mermaid` refuses a document that exists, so on a new job it is the
+    // command that creates the file, and `new` would make it fail. The
+    // metadata `new` would have stamped goes on afterwards with `meta set`.
     lines.push(
       `2. A flowchart was supplied at \`${mermaidPath(jobId)}\`. Lift it onto the canvas`,
-      `   first: \`npm run --silent canvas -- from-mermaid ${candidate} --source ${mermaidPath(jobId)}\`.`,
+      `   first, which also creates the document (do not run \`new\`, or this refuses):`,
+      `   \`npm run --silent canvas -- from-mermaid ${candidate} --source ${mermaidPath(jobId)}\`.`,
+      `   Then stamp its metadata: \`npm run --silent canvas -- meta set ${candidate} --title <title>\``,
+      `   \`--topic <topic>\` and one \`--concept <slug>\` per concept from the brief.`,
       `   Treat the result as a starting skeleton, then lay it out and label it properly.`,
+    );
+  } else if (input.hasMermaid) {
+    lines.push(
+      `2. \`${candidate}\` already holds the current drawing: it was copied there for you`,
+      `   before you started. Extend it; do not start it again. A flowchart was supplied at`,
+      `   \`${mermaidPath(jobId)}\`; add it to the drawing with`,
+      `   \`npm run --silent canvas -- from-mermaid ${candidate} --source ${mermaidPath(jobId)} --append\``,
+      `   (without \`--append\` it refuses a document that exists), then lay it out.`,
     );
   } else if (brief.mode === "new") {
     lines.push(
@@ -103,7 +135,10 @@ export function buildPrompt(input: PromptInput): string {
     `   a failure, but it is not finished either. Keep going until it exits 0.`,
     `6. Export: \`npm run --silent canvas -- export ${candidate} --svg ${candidateSvg}\`.`,
     `   Note that \`--svg\` takes the output path as its value; it is not a bare flag.`,
-    `7. Stop. Do not rename or copy anything anywhere else, and do not run git.`,
+    `7. Verify the export: \`npm run --silent canvas -- verify ${candidateSvg} -o ${scratch}/verify.png\`,`,
+    `   then Read that PNG and the four checks. It renders the file a reader gets, which`,
+    `   the canvas screenshots are not. Exit 3 means a check failed and it is not finished.`,
+    `8. Stop. Do not rename or copy anything anywhere else, and do not run git.`,
     `   A person reviews the candidate and accepts it; that is not your step.`,
     ``,
     `# What the diagram must contain`,
@@ -175,7 +210,9 @@ export function buildRevisePrompt(changes: string, candidate: CandidateFiles): s
     `Make only that change, in \`${candidate.tldr}\`, the same way you drew it: a`,
     `snippet through \`npm run --silent canvas -- run\`, a screenshot, a look at the`,
     `screenshot with the Read tool, then \`inspect --json\` until it exits 0, then`,
-    `re-export with \`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`.`,
+    `re-export with \`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`,`,
+    `then \`npm run --silent canvas -- verify ${candidate.svg} -o ${candidate.scratch ?? "<your scratch directory>"}/verify.png\``,
+    `and Read that PNG.`,
     `Everything the brief asked for has to still be there afterwards.`,
     ``,
     DATA_FENCE,
@@ -211,9 +248,11 @@ export function buildResumePrompt(candidate: CandidateFiles): string {
     `intended. Then carry on the same way you were working: a snippet through`,
     `\`npm run --silent canvas -- run\`, a screenshot, a look at the screenshot with`,
     `the Read tool, \`inspect --json\` until it exits 0, then re-export with`,
-    `\`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`.`,
+    `\`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`,`,
+    `then \`npm run --silent canvas -- verify ${candidate.svg} -o ${candidate.scratch ?? "<your scratch directory>"}/verify.png\``,
+    `and Read that PNG.`,
     ``,
-    `If the document is already finished, verify that it is: inspect it, export it,`,
+    `If the document is already finished, verify that it is: inspect it, export it, verify it,`,
     `and stop. A finished diagram redrawn from the start is the one outcome this`,
     `resume exists to avoid.`,
   ].join("\n");
@@ -236,7 +275,9 @@ export function buildRetryPrompt(findings: string[], candidate: CandidateFiles):
     `Fix exactly that, in the same file (\`${candidate.tldr}\`), the same way you`,
     `drew it: a snippet through \`npm run --silent canvas -- run\`, a screenshot, a look`,
     `at the screenshot, then \`inspect --json\` until it exits 0, then re-export with`,
-    `\`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`.`,
+    `\`npm run --silent canvas -- export ${candidate.tldr} --svg ${candidate.svg}\`,`,
+    `then \`npm run --silent canvas -- verify ${candidate.svg} -o ${candidate.scratch ?? "<your scratch directory>"}/verify.png\``,
+    `and Read that PNG.`,
     `Change nothing else.`,
   ].join("\n");
 }
