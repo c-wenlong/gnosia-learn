@@ -340,7 +340,14 @@ export function drawDraft(draftId: string, key: string) {
  * `drawing`, `done` or `abandoned`; 503 when the topic list cannot be read.
  */
 export function saveBrief(draftId: string, brief: Brief, base: number) {
-  return call<{ draftId: string; state: DraftState; brief: Brief; pendingTopic: PendingTopic | null; note: string }>(
+  return call<{
+    draftId: string;
+    state: DraftState;
+    brief: Brief;
+    briefSeq?: number | null;
+    pendingTopic: PendingTopic | null;
+    note: string;
+  }>(
     draftPath(draftId, `/brief?base=${encodeURIComponent(String(base))}`),
     { method: "PUT", body: JSON.stringify(brief) },
   );
