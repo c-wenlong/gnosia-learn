@@ -1279,8 +1279,8 @@ and $0.835 for the extend drawing.
 
 ### Phase 3. Polish
 
-- [ ] Inline edits on the confirm card, through `PUT /api/drafts/{id}/brief`
-- [ ] The drafts list: the drafts in `open` and `briefed`, newest first, as a
+- [x] Inline edits on the confirm card, through `PUT /api/drafts/{id}/brief`
+- [x] The drafts list: the drafts in `open` and `briefed`, newest first, as a
       section above the grid when any exist
 - [ ] Pruning per D40, run at runner start and daily
 - [ ] The vocabulary-changed STUDIO note (C4)
