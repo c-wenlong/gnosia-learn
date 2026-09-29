@@ -106,12 +106,12 @@ export interface Rates {
   cacheRead: number;
 }
 
-const rates = (input: number, output: number): Rates => ({
+const rates = (input: number, output: number, cacheRead: number = input * 0.1): Rates => ({
   input,
   output,
   cacheWrite5m: input * 1.25,
   cacheWrite1h: input * 2,
-  cacheRead: input * 0.1,
+  cacheRead,
 });
 
 /**
@@ -147,12 +147,23 @@ const rates = (input: number, output: number): Rates => ({
 export const RATE_TABLE: Readonly<Record<string, Rates>> = {
   "claude-sonnet-5": rates(2, 10),
   "claude-opus-5": rates(5, 25),
+  // Added 2026-09-29 for the settings panel (D53 of docs/STUDIO-VIDEOS.md),
+  // which offers every model this table prices. From the same skill table,
+  // cached 2026-09-25. Cache reads are the published per-model figures where
+  // they are not the 0.1x multiplier: $0.25 on Fable 5.1 and $0.20 on Opus 5.5.
+  // Not yet checked against a finished session's `total_cost_usd` as the two
+  // above were; a `result` figure is the CLI's own and never uses these.
+  "claude-sonnet-5-5": rates(2, 10, 0.2),
+  "claude-opus-5-5": rates(4, 20, 0.2),
+  "claude-fable-5": rates(10, 50),
+  "claude-fable-5-1": rates(10, 50, 0.25),
 };
 
-/** The brief's two model names, onto what the CLI actually runs. */
+/** The model names a brief or the panel may pass, onto the id the table keys on. */
 export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   sonnet: "claude-sonnet-5",
   opus: "claude-opus-5",
+  fable: "claude-fable-5-1",
 };
 
 /**
@@ -175,7 +186,10 @@ export function ratesFor(model: string | null): Rates | null {
  */
 export function canonicalModel(model: string | null): string | null {
   if (model === null) return null;
-  const canonical = MODEL_ALIASES[model] ?? model;
+  // A context-window suffix (`claude-fable-5-1[1m]`, as the owner's settings
+  // name it) prices the same as the bare id.
+  const bare = model.replace(/\[[0-9a-z]{1,8}\]$/, "");
+  const canonical = MODEL_ALIASES[bare] ?? bare;
   return canonical in RATE_TABLE ? canonical : null;
 }
 

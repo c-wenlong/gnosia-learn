@@ -70,6 +70,12 @@ describe("the rate table", () => {
     // Null, not a guess. A model this cannot price is a cost it cannot report,
     // and a made-up rate would put a number on a row nothing backs up.
     expect(ratesFor("claude-something-6")).toBeNull();
+    // Every model the settings panel offers is priced: the aliases, and the
+    // owner's own default with its context suffix.
+    expect(ratesFor("fable")).toEqual(RATE_TABLE["claude-fable-5-1"]);
+    expect(ratesFor("claude-fable-5-1[1m]")).toEqual(RATE_TABLE["claude-fable-5-1"]);
+    expect(RATE_TABLE["claude-fable-5-1"]).toMatchObject({ input: 10, output: 50, cacheRead: 0.25, cacheWrite1h: 20 });
+    expect(RATE_TABLE["claude-opus-5-5"]).toMatchObject({ input: 4, output: 20, cacheRead: 0.2 });
     expect(priceUsd({ inputTokens: 100, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, cacheReadTokens: 0, outputTokens: 0 }, "claude-something-6")).toBeNull();
   });
 
