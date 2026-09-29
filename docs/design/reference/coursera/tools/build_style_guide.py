@@ -65,8 +65,8 @@ def css_val(name, t):
     v, ty = t["$value"], t["$type"]
     if ty == "cubicBezier":
         return "cubic-bezier(%s)" % ", ".join(str(x) for x in v)
-    if ty == "boxShadow":
-        return ", ".join(("inset " if s.get("type") == "innerShadow" else "") + f'{s["x"]} {s["y"]} {s["blur"]} {s["spread"]} {alias(s["color"])}' for s in v)
+    if ty == "shadow":
+        return ", ".join(("inset " if s.get("inset") else "") + f'{s["offsetX"]} {s["offsetY"]} {s["blur"]} {s["spread"]} {alias(s["color"])}' for s in v)
     if ty == "typography":
         return typo(v)
     if ty == "fontFamily":

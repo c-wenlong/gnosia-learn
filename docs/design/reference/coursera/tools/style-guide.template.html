@@ -761,7 +761,7 @@ function lum(c) { const d = document.createElement('div'); d.style.color = c; do
   const a = m[3] ?? 1; const [r, g, b] = m.slice(0, 3).map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return { L: .2126 * r + .7152 * g + .0722 * b, a }; }
 function ink(c) { const { L } = lum(c); return (1.05 / (L + .05)) >= ((L + .05) / .05) ? '#fff' : '#0d0f12'; }
 const cssv = (path) => 'var(--' + path.replace(/\./g, '-') + ')';
-function shadowText(v, set) { return v.map(s => `${s.type === 'innerShadow' ? 'inset ' : ''}${s.x} ${s.y} ${s.blur} ${s.spread} ${resolve(s.color, set)}`).join(', '); }
+function shadowText(v, set) { return v.map(s => `${s.inset ? 'inset ' : ''}${s.offsetX} ${s.offsetY} ${s.blur} ${s.spread} ${resolve(s.color, set)}`).join(', '); }
 function table(sel, head, rows) { $(sel).innerHTML = `<tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>` + rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join(''); }
 const src = (tk) => `<span class="src">${esc(tk.s)}${tk.d ? ' · ' + esc(tk.d) : ''}</span>`;
 
@@ -822,8 +822,8 @@ function drawSpace() {
 }
 function drawShadows() {
   const set = getTheme();
-  const items = walk(TOKENS[set].elevation, 'elevation.', []).concat(walk(TOKENS[set].component, 'component.', []).filter(([, tk]) => tk.t === 'boxShadow' && !/focus/.test(tk.s)));
-  const light = walk(TOKENS.light.component, 'component.', []).filter(([n, tk]) => tk.t === 'boxShadow' && !n.includes('focus') && !get(set, n));
+  const items = walk(TOKENS[set].elevation, 'elevation.', []).concat(walk(TOKENS[set].component, 'component.', []).filter(([, tk]) => tk.t === 'shadow' && !/focus/.test(tk.s)));
+  const light = walk(TOKENS.light.component, 'component.', []).filter(([n, tk]) => tk.t === 'shadow' && !n.includes('focus') && !get(set, n));
   $('#shadows').innerHTML = items.concat(light).map(([n, tk]) => `<div title="${esc(tk.s)}${tk.d ? '\n' + esc(tk.d) : ''}"><div class="box" style="box-shadow:${cssv(n)}"></div><div class="cap" style="margin-top:8px">${n}<br>${shadowText(tk.v, get(set, n) ? set : 'light')}</div></div>`).join('');
 }
 function drawMotion() {

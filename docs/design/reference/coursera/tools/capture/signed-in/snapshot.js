@@ -1,13 +1,20 @@
 // Paste into the console of a signed-in coursera.org page, then call
-// window.__snap('<label>'). It returns one string, SNAPSTART<meta>SNAPMETA<html>SNAPEND:
-// a static copy of the page with every stylesheet inlined from the CSSOM (Emotion
-// inserts its rules with insertRule, so the <style> tags alone are empty), scripts
-// removed, iframes replaced by same-size boxes, the current video frame kept as a
-// poster, and the learner's name, avatar initials, email and programme redacted.
-// unsnap.py writes it to disk and refuses it if a name survived; render.mjs
-// screenshots it headless at 2x. Extend the redaction list for another account.
-window.__snap = function (label) {
-  const abs = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
+// window.__snap('<label>', REDACT), where REDACT is the contents of the account's redaction
+// file (see redact.example.json): { "replace": [[pattern, flags, replacement], ...],
+// "badges": [[css selector, letter], ...] }. It returns one string,
+// SNAPSTART<meta>SNAPMETA<html>SNAPEND: a static copy of the page with every stylesheet
+// inlined from the CSSOM (Emotion inserts its rules with insertRule, so the <style> tags
+// alone are empty), scripts removed, iframes replaced by same-size boxes, the current video
+// frame kept as a poster, signed URLs cut back to their path, and every REDACT pattern
+// replaced. unsnap.py writes it to disk and refuses it if a redacted string or a signing
+// parameter survived; render.mjs screenshots it headless at 2x. The redaction file names the
+// learner, so it lives outside the repository.
+window.__snap = function (label, REDACT) {
+  if (!REDACT || !Array.isArray(REDACT.replace)) throw new Error('pass the redaction file as the second argument');
+  // A presigned URL (S3, CloudFront) carries a credential that works until it expires, so
+  // any URL with a signing parameter loses its whole query string.
+  const SIGNED = /[?&](X-Amz-[A-Za-z-]+|Signature|Key-Pair-Id|Policy|Expires|token|access_token|auth)=/i;
+  const abs = (u) => { let h; try { h = new URL(u, location.href).href; } catch { return u; } return SIGNED.test(h) ? h.split('?')[0] : h; };
   const parts = [];
   for (const ss of document.styleSheets) {
     try {
@@ -61,23 +68,21 @@ window.__snap = function (label) {
     const a = p.trim().split(/\s+/); a[0] = abs(a[0]); return a.join(' ');
   }).join(', ')));
   clone.querySelectorAll('[poster]').forEach((n) => { const v = n.getAttribute('poster'); if (!v.startsWith('data:')) n.setAttribute('poster', abs(v)); });
-  // Avatar initials: the header menu, the My Learning greeting, and the programme badge.
-  clone.querySelectorAll('[data-testid="user-avatar"],[aria-label*="User dropdown"],[aria-label="National University of Singapore"]').forEach((b) => {
-    const rep = (b.getAttribute('aria-label') || 'User').startsWith('User') ? 'L' : 'E';
-    const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
-    while (w.nextNode()) if (/^\s*[A-Za-z]{1,2}\s*$/.test(w.currentNode.nodeValue)) w.currentNode.nodeValue = rep;
-    b.querySelectorAll('img').forEach((i) => i.remove());
-  });
+  // Avatar initials in the header menu and the My Learning greeting become L; each badge the
+  // redaction file lists (a programme's initial, say) becomes its letter.
+  const initials = [['[data-testid="user-avatar"],[aria-label*="User dropdown"]', 'L'], ...(REDACT.badges || [])];
+  for (const [sel, rep] of initials) {
+    clone.querySelectorAll(sel).forEach((b) => {
+      const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) if (/^\s*[A-Za-z]{1,2}\s*$/.test(w.currentNode.nodeValue)) w.currentNode.nodeValue = rep;
+      b.querySelectorAll('img').forEach((i) => i.remove());
+    });
+  }
   clone.querySelector('head').insertAdjacentHTML('beforeend', parts.map((p) => (p.href
     ? '<link rel="stylesheet" href="' + p.href + '">'
     : '<style' + (p.media ? ' media="' + p.media + '"' : '') + '>' + p.css.replace(/<\/style/gi, '<\\/style') + '</style>')).join('\n'));
   let html = '<!doctype html>\n' + clone.outerHTML;
-  html = html
-    .replace(/Kai Chen/gi, 'Learner').replace(/Kai/g, 'Learner')
-    .replace(/chenwenlongofficial@gmail\.com/gi, 'learner@example.com').replace(/Wenlong/gi, 'Learner')
-    .replace(/National University of Singapore/g, 'Example University')
-    .replace(/Uplift Mentorship Programme 2026[^"<]*/g, 'Example Program')
-    .replace(/uplift-mentorship-programme-2026-expiry-31-jul-2026-82y1r/g, 'example-program');
+  for (const [pattern, flags, rep] of REDACT.replace) html = html.replace(new RegExp(pattern, flags), rep);
   const meta = { label, url: location.href, title: document.title, scrollY, w: innerWidth, h: innerHeight, docH: document.documentElement.scrollHeight };
   return 'SNAPSTART' + JSON.stringify(meta) + 'SNAPMETA' + html + 'SNAPEND';
 };

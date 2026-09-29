@@ -192,10 +192,33 @@ def semantic(scheme):
     return out
 
 
+# ---------- DTCG types ----------
+# The builders above use Tokens Studio's type names; the file is published with the W3C
+# DTCG ones: every length is a dimension, and a shadow is a list of
+# {color, offsetX, offsetY, blur, spread, inset}.
+DTCG_TYPE = {"fontWeights": "fontWeight", "fontSizes": "dimension", "lineHeights": "dimension",
+             "letterSpacing": "dimension", "spacing": "dimension", "borderRadius": "dimension",
+             "boxShadow": "shadow", "textDecoration": "other"}
+
+
+def dtcg(node):
+    if isinstance(node, dict) and "$value" in node:
+        node["$type"] = DTCG_TYPE.get(node["$type"], node["$type"])
+        if node["$type"] == "shadow":
+            node["$value"] = [{"color": l["color"], "offsetX": l["x"], "offsetY": l["y"], "blur": l["blur"], "spread": l["spread"],
+                               "inset": l.get("type") == "innerShadow"} for l in node["$value"]]
+    elif isinstance(node, dict):
+        for v in node.values():
+            dtcg(v)
+
+
+for part in (core, light_set := semantic("light"), dark_set := semantic("dark")):
+    dtcg(part)
+
 tokens = {
     "core": core,
-    "light": semantic("light"),
-    "dark": semantic("dark"),
+    "light": light_set,
+    "dark": dark_set,
     "$themes": [
         {"id": "light", "name": "Light", "selectedTokenSets": {"core": "source", "light": "enabled"}},
         {"id": "dark", "name": "Dark", "selectedTokenSets": {"core": "source", "dark": "enabled"},
