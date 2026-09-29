@@ -1,7 +1,9 @@
 import { readdirSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 
+import { guardHooks } from "./bash-guard";
 import { cacheDir } from "./content-cache";
+import { guardPath } from "./diagram-guard";
 import {
   absolute,
   candidatePath,
@@ -113,6 +115,12 @@ export function rule(tool: string, absolutePath: string, suffix = ""): string {
  * at a picture is the point — and the boundary stops depending on an
  * enumeration being complete.
  *
+ * **The prefix is not the whole Bash boundary any more.** A `PreToolUse` hook
+ * (`diagram-guard.ts`) refuses every command but `npm run --silent canvas --
+ * <verb>` on the job's own files before these rules are read, because the
+ * matcher let a pipe into a read-only command and an output path anywhere on
+ * the disk through this prefix (measured, and written up there).
+ *
  * `npm run --silent canvas` carries `--silent` because npm prints a two-line
  * banner otherwise and `--json` output is then unparseable. It is in the rule
  * rather than only in the prompt, so the call that works is the call that is
@@ -186,6 +194,15 @@ export interface SettingsInput {
   slug: string;
   /** A concept note the agent may read, repo-relative, from the brief. */
   source?: string;
+  /**
+   * The Bash guard's command line, from `writeDiagramGuard`. Required, so no
+   * job's permission file can be built without its hook.
+   */
+  guard: string;
+}
+
+export interface DiagramAgentSettings extends AgentSettings {
+  hooks: Record<string, unknown>;
 }
 
 /**
@@ -201,7 +218,7 @@ export interface SettingsInput {
  * after this file is written is not in any walk, so the other jobs are also
  * denied by globs that match every id but this one (`siblingJobRules`).
  */
-export function buildSettings(input: SettingsInput): AgentSettings {
+export function buildSettings(input: SettingsInput): DiagramAgentSettings {
   const home = process.env.HOME ?? "";
   const candidate = candidatePath(input.jobId, input.slug);
   const candidateSvg = candidateSvgPath(input.jobId, input.slug);
@@ -282,6 +299,10 @@ export function buildSettings(input: SettingsInput): AgentSettings {
     rule("Edit", sessionLogPath(input.jobId)),
     rule("Read", settingsPath(input.jobId)),
     rule("Edit", settingsPath(input.jobId)),
+    // Its Bash guard (`diagram-guard.ts`): the job's paths are compiled into
+    // it, and a rewritten one could allow any command.
+    rule("Read", guardPath(input.jobId)),
+    rule("Edit", guardPath(input.jobId)),
     // Every other job's workspace, walked rather than denied as a parent:
     // a deny on the jobs directory would take this job's own scratch with it,
     // because deny beats allow.
@@ -298,6 +319,7 @@ export function buildSettings(input: SettingsInput): AgentSettings {
       allow,
       deny,
     },
+    hooks: guardHooks(input.guard),
   };
 }
 

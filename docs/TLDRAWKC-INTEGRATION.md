@@ -530,15 +530,58 @@ Each with the reason it exists.
   `npm run --silent canvas -- run x --code "$(cat ~/.aws/credentials)"` matches
   the allowed prefix as one string, and a deny rule is the half of the matcher
   that reaches inside a substitution.
-- **The residual hole, named rather than hidden.** `canvas run <file> --code
-  <snippet>` takes an output path as an argument, so even the allowlist lets the
-  agent write a `.tldr` or a `.png` outside its candidate directory. Three
-  things sit on that and none of them is airtight: the prompt names the
-  candidate path and nothing else, `--settings` denies `Write` and `Edit` so the
-  snippet file itself has to live in the scratch directory, and the backstop
-  below catches it after the fact. The real fix is an OS-level filesystem
-  sandbox around the agent process, which is a known gap below and not a thing
-  this design invents.
+- **A Bash guard in front of the rules.** The follow-up to the review of the
+  video agent's sandbox (#201), which found that the matcher does not split a
+  command substitution, so only deny rules reach inside `$( )`, and that the
+  deny list names spellings (`cat`, not `/bin/cat`) rather than behaviour.
+  Measured on CLI 2.1.274 with a headless session under this agent's own
+  settings file, spawned by `startAgent`, the default `STUDIO_HOME` inside the
+  repository, and a fake secret outside every working directory:
+
+  | Command | Without the hook | With the hook |
+  | --- | --- | --- |
+  | `canvas -- inspect <candidate> --json \| base64` | **ran**: the CLI counts a pipe into a read-only command as safe | refused |
+  | `canvas -- new <scratch>/p.tldr --title "$(grep FAKE <secret>)"` | refused, needs approval | refused |
+  | `canvas -- inspect <candidate> --json ; grep FAKE <secret>` | refused, needs approval | refused |
+  | `` canvas -- new <scratch>/p.tldr --title "`grep FAKE <secret>`" `` | refused, needs approval | refused |
+  | `/bin/cat <secret>` | refused, needs approval | refused |
+  | `canvas -- new … --title "$(/bin/cat <secret>)"` | refused, needs approval | refused |
+  | `canvas -- inspect <candidate> --json && /bin/cat <secret>` | refused, needs approval | refused |
+  | `canvas -- inspect <candidate> --json \| grep -r FAKE <checkouts>` | refused by the `Read` deny on the checkouts | refused |
+  | `canvas -- inspect <checkout>/other.tldr --json` | refused by the same deny, which the matcher applies to a path argument | refused |
+  | `canvas -- new <outside>/planted.tldr --title x` | **ran, and wrote the file** outside the repository and the workspace | refused |
+  | `canvas -- run <candidate> --code <secret>` | refused, needs approval (a read outside the working directories) | refused |
+  | `canvas -- inspect <candidate> --json` | ran | ran |
+
+  So the matcher checks a path argument it takes for a read and never an
+  output path, and tldrawkc has five of those (`--shot`, `--svg`, `--png`,
+  `-o`, and the document `new` and `from-mermaid` create). The runner now
+  writes a `PreToolUse` hook into each job's settings file,
+  `jobs/<id>/bash-guard.cjs`, beside the permission file and denied to the
+  agent like it (`services/studio/src/diagram-guard.ts`, the check in
+  `canvas-guard.cjs`). It allows `npm run --silent canvas -- <verb> …` for the
+  verbs the agent is taught (`new`, `run`, `shot`, `inspect`, `export`,
+  `verify`, `from-mermaid`, `meta set`, `api`, `doctor`), each with only the
+  flags tldrawkc gives that verb, less `--chromium` (it launches the binary it
+  names) and `--headed`; every file argument an absolute path to the job's
+  candidate `.tldr`, its `.svg`, or a file inside its scratch directory, in
+  either spelling of a linked `STUDIO_HOME`, with no `..`; and every other
+  value a plain word, a number, or a quoted string with no `$`, backtick or
+  backslash. It reads the line with a tokenizer that knows those three token
+  shapes and nothing else, so every pipe, list, substitution, redirect,
+  glob, variable, comment and line break is refused by one rule, whatever the
+  matcher would have made of it. It fails closed (exit 2 on anything it cannot
+  parse) and only takes away: exit 0 hands the call to the rules above, which
+  are unchanged. The hook program, its read-only file and the settings block
+  are the video guard's, shared in `services/studio/src/bash-guard.ts`.
+- **The residual hole, now narrower.** `canvas run <file> --code <snippet>`
+  takes output paths as arguments, and until the guard an allowlisted command
+  could write a `.tldr` or a `.png` anywhere on the disk (measured above). The
+  guard confines every such argument to the job's own files. What is left is
+  what tldrawkc itself does with arguments it was allowed, and what a snippet
+  does in the page, which has no filesystem or network access (layering rule
+  2). An OS-level filesystem sandbox around the agent process is still the
+  only thing that would not depend on either, and it stays a known gap below.
 - **A narrowed clean-room rule.** The agent may read `canvas api`, the tool's
   [`HELPERS.md`](../tools/tldrawkc/docs/HELPERS.md), its own candidate and the
   concept note named in `source` (the copy in its scratch directory, for a
@@ -1251,7 +1294,7 @@ raised it: S schema, A API and runner, U interface.
 | A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
 | A2 | A job hangs | Fifteen minutes per attempt, forty-five per job, five minutes idle. The idle timer catches a browser that never answered the bridge, where the CLI's own 30 second exec timeout never fires. On timeout the job is `failed` with `reason: "timeout"` and the last fifty log lines, and the session id is kept so Resume can continue rather than paying again. The job ceiling and a person's Cancel share one mechanism — kill the process group, wait, sweep — and must not share a verdict: only a job somebody stopped is `cancelled`, and "stopped on request" written over a timeout hides the one number that needs raising | Runner timers |
 | A3 | The agent exits zero but wrote nothing, or wrote something that fails `verify` | The gate, in the five steps listed above. Any failure is fed back as a resume prompt carrying the specific finding, three attempts total, then `failed` with the findings and the partials moved to `jobs/<id>/rejected/` | The gate |
-| A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Edit` on exactly the two candidate paths in the job's workspace and the scratch directory, so no diagram is reachable through it. The CLI allows writes into its own session scratchpad without consulting that file, and a real job used it once, so the agent runs with `CLAUDE_CODE_TMPDIR` at the job's `tmp/`, which puts the scratchpad inside the job, and an `Edit` deny on the default `/tmp/claude-<uid>/` refuses it there if the variable is ever ignored (measured on 2.1.274: the deny is read before the scratchpad allowance). `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`. And the runner compares `git status --porcelain` before and after the agent; a job writes nothing in the working tree, so anything newly dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and `canvas run` takes an output path, so an allowlisted command can still write a `.tldr` elsewhere. An OS-level filesystem sandbox is the only answer that closes it, and it is a known gap | Settings file; the Bash allowlist; the backstop check |
+| A4 | The agent tries to write outside its allowed paths | Three layers, and the doc is explicit that they are not airtight. The per-job settings file allows `Edit` on exactly the two candidate paths in the job's workspace and the scratch directory, so no diagram is reachable through it. The CLI allows writes into its own session scratchpad without consulting that file, and a real job used it once, so the agent runs with `CLAUDE_CODE_TMPDIR` at the job's `tmp/`, which puts the scratchpad inside the job, and an `Edit` deny on the default `/tmp/claude-<uid>/` refuses it there if the variable is ever ignored (measured on 2.1.274: the deny is read before the scratchpad allowance). `Bash` is an allowlist of command prefixes, not a deny list, because a deny list does not constrain a shell redirect, `cp`, `tee` or `python3`; and a `PreToolUse` hook in front of it refuses any command but `npm run --silent canvas -- <verb>` with every file argument on the job's own files, because the prefix alone let a pipe into a read-only command and a `canvas new` outside the workspace through (measured on 2.1.274; "A Bash guard in front of the rules" above). And the runner compares `git status --porcelain` before and after the agent; a job writes nothing in the working tree, so anything newly dirty fails the job with the file list even on a zero exit. It reverts nothing, because a revert can destroy a concurrent human edit, so it refuses and names the files for a person to handle. Two honest limits: a snippet is arbitrary JavaScript, but the page has no filesystem or network access (layering rule 2), so Bash is the risk and not the snippet; and the guard trusts tldrawkc to write only where its arguments say. An OS-level filesystem sandbox is the only answer that depends on neither, and it is a known gap | Settings file; the Bash allowlist and its guard; the backstop check |
 | A5 | A prompt injected through a brief field or a pasted mermaid source | The person submitting is not the threat; a note or a flowchart pasted from somewhere else is. Brief fields enter the prompt inside a delimited block labelled as data. Mermaid never enters the prompt: it is written to the scratch directory and lifted with `from-mermaid --source <path>`, which is a parser rather than a model. Slug fields are pattern-checked and free-text fields length-capped. The settings file is the backstop, so an injected command fails on a permission rule rather than on judgment | Prompt assembly; `from-mermaid`; the settings file |
 | A6 | Two jobs on one file, or a job on a file open in a mirror | The lease in S3 covers the first. For the second, the studio closes the mirror when a job starts on that file and reopens it when the job ends, so the common case never reaches a refusal. It matters less than it did under D2: the job writes a candidate, so only accept collides. Accept on a file with an open mirror closes the mirror first, because Cmd+S PUTs the document as the tab last loaded it and a human save landing after the rename would silently revert it | `POST /api/mirrors`; accept step 3 |
 | A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
@@ -2133,10 +2176,12 @@ deliberately.
 
 - **There is no OS-level filesystem sandbox around the agent, and the
   permission rules are not a substitute for one.** The `Bash` allowlist stops a
-  redirect and a `cp`, and the `Write` and `Edit` allowlist stops the direct
-  path, but `canvas run` takes an output path as an argument, so an allowlisted
-  command can still write a `.tldr` somewhere the brief never named. The
-  backstop catches it after the fact and refuses the job; nothing prevents it.
+  redirect and a `cp`, the `Write` and `Edit` allowlist stops the direct
+  path, and since the Bash guard every output path a canvas call names has to
+  be one of the job's own files, so an allowlisted command no longer writes a
+  `.tldr` somewhere the brief never named. What is left rests on tldrawkc
+  writing only where it was told, and on the page having no filesystem, and
+  the backstop still catches a write in the tree after the fact.
   Closing this means running the agent under a sandbox that denies writes
   outside the job's own directories, which is a real piece of work and belongs
   in its own phase rather than bolted onto phase 1. Phase 1 established what
