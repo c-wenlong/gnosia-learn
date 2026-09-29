@@ -1616,7 +1616,8 @@ export class Drafts {
       await this.save(id, {
         undelivered: [
           ...this.require(id).undelivered,
-          `${summary}\n\nThe brief now in force:\n${JSON.stringify(brief, null, 1)}\n\n` +
+          `${summary}\n\nThis is the brief in force; build on it, and a change is still a whole new brief:\n` +
+            `${JSON.stringify(brief, null, 1)}\n\n` +
             "A reply of yours with no brief block takes this brief out of force and hides Draw. So if your next " +
             "reply keeps it, end that reply with it in a brief block, unchanged.",
         ],
@@ -1822,25 +1823,40 @@ export function describeBriefEdit(before: DraftBrief | null, after: DraftBrief, 
         lines.push(`- ${field}: ${quoted(before[field])} -> ${quoted(after[field])}`);
       }
     }
-    const shared = Math.min(before.elements.length, after.elements.length);
-    // A label changed in place is a rename, and the arrows that named it are
-    // read under the new name, so a rename is one line rather than every
-    // arrow it touches added and removed.
+    // Elements are matched by label first; the leftovers are paired in order
+    // as renames, and whatever is left over after that was added or removed.
+    // So an insert reads as one added element, not a cascade of renames.
+    const afterLabels = new Set(after.elements.map((element) => element.label));
+    const beforeLabels = new Set(before.elements.map((element) => element.label));
+    const removed = before.elements.filter((element) => !afterLabels.has(element.label));
+    const added = after.elements.filter((element) => !beforeLabels.has(element.label));
     const renamed = new Map<string, string>();
-    for (let i = 0; i < shared; i += 1) {
-      const was = before.elements[i]!;
-      const now = after.elements[i]!;
-      if (was.label !== now.label) {
-        renamed.set(was.label, now.label);
-        lines.push(`- element ${i + 1}: "${was.label}" -> "${now.label}"`);
-      }
-      if ((was.note ?? "") !== (now.note ?? "")) lines.push(`- element "${now.label}" note: ${quoted(was.note)} -> ${quoted(now.note)}`);
+    const pairs = Math.min(removed.length, added.length);
+    for (let i = 0; i < pairs; i += 1) {
+      const was = removed[i]!;
+      const now = added[i]!;
+      renamed.set(was.label, now.label);
+      const place = after.elements.indexOf(now) + 1;
+      lines.push(`- element ${place}: "${was.label}" -> "${now.label}"`);
     }
-    for (const element of after.elements.slice(shared)) lines.push(`- element added: "${element.label}"`);
-    for (const element of before.elements.slice(shared)) lines.push(`- element removed: "${element.label}"`);
+    for (const element of added.slice(pairs)) lines.push(`- element added: "${element.label}"`);
+    for (const element of removed.slice(pairs)) lines.push(`- element removed: "${element.label}"`);
+    const rename = (label: string): string => renamed.get(label) ?? label;
+    const notes = new Map(before.elements.map((element) => [rename(element.label), element.note ?? ""]));
+    for (const element of after.elements) {
+      const was = notes.get(element.label);
+      if (was !== undefined && was !== (element.note ?? "")) {
+        lines.push(`- element "${element.label}" note: ${quoted(was)} -> ${quoted(element.note)}`);
+      }
+    }
+    const mapped = before.elements.map((element) => rename(element.label));
+    const common = (labels: string[], other: string[]): string => labels.filter((label) => other.includes(label)).join("\u0000");
+    const current = after.elements.map((element) => element.label);
+    if (common(mapped, current) !== common(current, mapped)) {
+      lines.push(`- elements reordered: ${after.elements.map((element) => `"${element.label}"`).join(", ")}`);
+    }
     const arrow = (relation: DraftBrief["relations"][number]): string =>
       `${relation.from} -> ${relation.to}${relation.label === undefined ? "" : ` (${relation.label})`}`;
-    const rename = (label: string): string => renamed.get(label) ?? label;
     const was = new Set(before.relations.map((relation) => arrow({ ...relation, from: rename(relation.from), to: rename(relation.to) })));
     const now = new Set(after.relations.map(arrow));
     for (const relation of now) if (!was.has(relation)) lines.push(`- arrow added: ${relation}`);
@@ -1851,7 +1867,6 @@ export function describeBriefEdit(before: DraftBrief | null, after: DraftBrief, 
     lines.unshift(lines.length === 0 ? "The person confirmed the brief as it stands." : "The person edited the brief by hand:");
   }
   if (options.pendingCleared === true) lines.push("The proposed new topic is dropped: the brief now names a topic that exists.");
-  lines.push("This is the brief in force. Build on it; a change is still a whole new brief.");
   return lines.join("\n");
 }
 

@@ -964,5 +964,30 @@ describe("describeBriefEdit", () => {
     const note = describeBriefEdit(before, after);
     expect(note).toContain('- element 2: "Receiver" -> "Server"');
     expect(note).not.toContain("arrow");
+    // What the planner is told stays out of what the person reads.
+    expect(note).not.toContain("brief in force");
+  });
+
+  it("reads an insert as one added element, and a rename beside it as one line", async () => {
+    const { describeBriefEdit } = await import("../src/drafts");
+    const brief = (labels: string[], relations: [string, string, string][]) =>
+      ({
+        ...good,
+        model: "sonnet",
+        elements: labels.map((label) => ({ label })),
+        relations: relations.map(([from, to, label]) => ({ from, to, label })),
+      }) as never;
+    const before = brief(["Think", "Act", "Tool", "Observe", "Answer"], [["Act", "Tool", "calls"], ["Tool", "Observe", "returns"]]);
+    const after = brief(
+      ["Think", "Act", "Search tool", "Result", "Observe", "Answer"],
+      [["Act", "Search tool", "calls"], ["Search tool", "Observe", "returns"]],
+    );
+    expect(describeBriefEdit(before, after).split("\n")).toEqual([
+      "The person edited the brief by hand:",
+      '- element 3: "Tool" -> "Search tool"',
+      '- element added: "Result"',
+    ]);
+    const reordered = brief(["Act", "Think", "Tool", "Observe", "Answer"], [["Act", "Tool", "calls"], ["Tool", "Observe", "returns"]]);
+    expect(describeBriefEdit(before, reordered)).toContain("- elements reordered:");
   });
 });

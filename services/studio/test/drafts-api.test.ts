@@ -285,7 +285,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     const [prompt] = await fake.prompts();
     expect(prompt).toContain("-----BEGIN STUDIO-----");
     expect(prompt).toContain('element 2: "Receiver" -> "Server"');
-    expect(prompt).toContain("The brief now in force:");
+    expect(prompt).toContain("This is the brief in force");
     expect(prompt!.indexOf("-----END STUDIO-----")).toBeLessThan(prompt!.indexOf("looks right?"));
     // A reply with no brief leaves the draft open, and the edit is still the brief on record.
     expect(drafts.get(draftId)?.brief?.elements).toEqual(edited.elements);
