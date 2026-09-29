@@ -3,12 +3,12 @@ import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { BriefError, loadVocabulary, validateBrief, vocabularyStatus, type ValidBrief } from "./brief";
+import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
-import { preferenceSet, status as catalogStatus, videoList } from "./catalog";
+import { preferenceSet, videoList } from "./catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
 
-import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
+import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
 import { diagramCommit } from "./catalog";
 import {
@@ -26,8 +26,9 @@ import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
 import { matchesTag, openNewestShot } from "./live-shot";
 import { diagramPathProblem } from "./diagram-guard";
+import { HealthProbes } from "./health-probes";
+import type { ProbeReading } from "./probe";
 import { scratchDir, shotPath, studioHome, targetPath, workDir, workSvgPath } from "./paths";
-import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
@@ -290,11 +291,17 @@ export interface ApiDeps {
    * brief is refused as a kind this studio does not run.
    */
   video?: VideoDeps & { doctor: VideoDoctor };
+  /**
+   * The checks `/api/health` reports on, kept by probes so a health call waits
+   * on none of them. `npm run studio` makes one and warms it at start; a test
+   * that passes none gets its own, cold, so its first health call checks.
+   */
+  probes?: HealthProbes;
 }
 
-export function createApi({ store, runner, mirrors, drafts, video }: ApiDeps): Server {
+export function createApi({ store, runner, mirrors, drafts, video, probes = new HealthProbes() }: ApiDeps): Server {
   return createServer((request, response) => {
-    void handle(request, response, store, runner, mirrors, drafts, video).catch((error: unknown) => {
+    void handle(request, response, store, runner, mirrors, drafts, video, probes).catch((error: unknown) => {
       if (!response.headersSent) {
         fail(response, 500, "the studio threw handling this request", (error as Error).message);
       } else {
@@ -312,6 +319,7 @@ async function handle(
   mirrors: Mirrors,
   drafts: Drafts | undefined,
   video: (VideoDeps & { doctor: VideoDoctor }) | undefined = undefined,
+  probes: HealthProbes = new HealthProbes(),
 ): Promise<void> {
   const refused = guard(request);
   if (refused !== null) return fail(response, 403, refused);
@@ -328,7 +336,7 @@ async function handle(
 
   /* /api/health */
   if (segments[1] === "health" && segments.length === 2) {
-    return send(response, 200, await health(store, runner, drafts, video));
+    return send(response, 200, await health(store, runner, probes, drafts, video));
   }
 
   /* /api/drafts — the planner conversations (docs/STUDIO-CHAT-FIRST.md). */
@@ -345,7 +353,7 @@ async function handle(
 
   /* /api/settings/agent: the two agents' model and effort (D53). */
   if (segments[1] === "settings" && segments[2] === "agent" && segments.length === 3) {
-    return agentSettingsRoute(request, response, method);
+    return agentSettingsRoute(request, response, method, probes);
   }
 
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
@@ -1582,23 +1590,6 @@ async function draftEvents(
 }
 
 /** What is and is not working right now. */
-/**
- * The model and effort a job started now would get, per kind, and where each
- * came from (D53 of docs/STUDIO-VIDEOS.md), by the same resolvers the runners
- * use. The diagram block is for a brief that names no model, which is every
- * brief the planner writes; one that names a model runs on it.
- */
-async function agentSettings(): Promise<Record<string, unknown>> {
-  const [video, diagram] = await Promise.all([resolveVideoAgent(), resolveDiagramAgent()]);
-  return {
-    video: { model: video.model, effort: video.effort },
-    diagram: { model: diagram.model, effort: diagram.effort },
-    // What "Claude Code default" resolves to now, for either kind: the
-    // owner's user settings file. The menu shows it whatever a row says.
-    defaults: { model: video.claude.model, effort: video.claude.effort },
-  };
-}
-
 /** The models the settings menu offers: every model the rate table prices, by the name `claude --model` takes. */
 const OFFERED_MODELS = [
   { value: "fable", label: "Fable", id: "claude-fable-5-1" },
@@ -1639,7 +1630,12 @@ async function agentSettingView(kind: "video" | "diagram"): Promise<Record<strin
  * as `GET`. The web app's own server action writes the same row; either is
  * read by the runner at the next job's start.
  */
-async function agentSettingsRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+async function agentSettingsRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  method: string,
+  probes: HealthProbes,
+): Promise<void> {
   const view = async (): Promise<Record<string, unknown>> => {
     const [video, diagram, claude] = await Promise.all([agentSettingView("video"), agentSettingView("diagram"), readClaudeDefaults()]);
     return {
@@ -1666,6 +1662,9 @@ async function agentSettingsRoute(request: IncomingMessage, response: ServerResp
   if (clean.model !== value.model) return fail(response, 400, `"model" is "default" or a model name the claude CLI takes`, { field: "model" });
   if (clean.effort !== value.effort) return fail(response, 400, `"effort" is "default" or one of ${EFFORTS.join(", ")}`, { field: "effort" });
   const written = await preferenceSet(body.kind === "video" ? "studioVideoAgent" : "studioDiagramAgent", clean);
+  // Health's copy of the settings is now wrong, whether or not the write took:
+  // its next read asks again rather than reporting the row this replaced.
+  probes.agent.forget();
   if (!written.ok) {
     return fail(response, written.offline ? 503 : 502, `the setting could not be stored: ${written.error ?? "no reason given"}`, {
       reason: written.offline ? "catalog-unreachable" : "catalog",
@@ -1705,21 +1704,35 @@ async function videosRoute(response: ServerResponse): Promise<void> {
   return send(response, 200, { videos, note: `${videos.length} studio video${videos.length === 1 ? "" : "s"}` });
 }
 
+/** One probe's age, as health reports it. */
+function freshness(read: ProbeReading<unknown>): Record<string, unknown> {
+  return { checkedAt: read.checkedAt, stale: read.stale, refreshing: read.refreshing };
+}
+
 async function health(
   store: JobStore,
   runner: Runner,
+  probes: HealthProbes,
   drafts?: Drafts,
   video?: VideoDeps & { doctor: VideoDoctor },
 ): Promise<Record<string, unknown>> {
-  const [checked, claudeVersion, catalog, vocabulary, agent] = await Promise.all([
-    doctor().catch(() => null),
-    run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
-    catalogStatus().catch(() => null),
-    // The last read any route made, when it is recent, rather than a
-    // `catalog topic ls` on every page render.
-    vocabularyStatus(),
-    agentSettings().catch(() => null),
+  // Every answer is the last one each probe has, returned at once; an old one
+  // starts a refresh for the next call (health-probes.ts has the measurements
+  // that made this necessary). Only a probe that has never answered is waited
+  // for, which `npm run studio` avoids by warming them all at start.
+  const [doctorRead, claudeRead, catalogRead, agentRead, vocabulary] = await Promise.all([
+    probes.doctor.read(),
+    probes.claude.read(),
+    probes.catalog.read(),
+    probes.agent.read(),
+    // The last read any route made, however old, rather than a `catalog topic
+    // ls` on this call; an old one is refreshed behind it.
+    vocabularyStatusNow(),
   ]);
+  const checked = doctorRead.value.result;
+  const claudeVersion = claudeRead.value;
+  const catalog = catalogRead.value;
+  const agent = agentRead.value;
   // The video doctor's cached answer: it takes seconds, so health never
   // waits for a fresh one (it refreshes at start and every ten minutes).
   const videoReport = video?.doctor.current() ?? null;
@@ -1800,6 +1813,16 @@ async function health(
           : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length },
     agent,
     diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
+    // When each answer above was checked. `stale` means it is older than that
+    // check's own lifetime and a refresh is under way: the next call has it.
+    // The video doctor carries its own `checkedAt`, and `vocabulary` its
+    // `readAt`.
+    freshness: {
+      tldrawkc: freshness(doctorRead),
+      claude: freshness(claudeRead),
+      postgres: freshness(catalogRead),
+      agent: freshness(agentRead),
+    },
     note: !tldrawkc
       ? "tldrawkc cannot run, so no job can be queued. Build the submodule."
       : !claude

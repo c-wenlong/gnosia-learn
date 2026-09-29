@@ -277,6 +277,18 @@ export async function vocabularyStatus(maxAgeMs: number = VOCABULARY_STATUS_MS):
   return statusRead;
 }
 
+/**
+ * `vocabularyStatus` for `/api/health`, which never waits once there is an
+ * answer: the last outcome, however old, and a read started behind it when it
+ * is older than `STUDIO_VOCABULARY_STATUS_MS`. Only with no outcome at all
+ * (the first call after a start) does it wait for one.
+ */
+export async function vocabularyStatusNow(maxAgeMs: number = VOCABULARY_STATUS_MS): Promise<VocabularyStatus> {
+  if (lastStatus === null) return vocabularyStatus(maxAgeMs);
+  if (Date.now() - lastStatus.at >= maxAgeMs) void vocabularyStatus(maxAgeMs);
+  return lastStatus.status;
+}
+
 /** The fields `loadVocabulary` reads, checked on a cached copy before it is trusted. */
 function isTopicList(value: unknown): value is TopicEntry[] {
   return (
