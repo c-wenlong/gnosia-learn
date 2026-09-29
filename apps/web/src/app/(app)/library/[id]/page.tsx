@@ -6,6 +6,7 @@ import type { AssetRef } from "@self-learn/catalog/state";
 import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
 import { DiagramView } from "@/components/DiagramView";
 import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/library/AssetTabs";
+import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
@@ -412,7 +413,7 @@ function Aside({ children }: { children: ReactNode }) {
  */
 function RawText({ text }: { text: string }) {
   return (
-    <pre className="max-h-[36rem] max-w-[80ch] overflow-auto font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap text-text2">
+    <pre className="max-w-[80ch] overflow-x-auto font-mono text-[13px] leading-relaxed break-words whitespace-pre-wrap text-text2">
       {text}
     </pre>
   );
@@ -436,12 +437,16 @@ function RawLink({ href, children = "Raw file" }: { href: string; children?: Rea
  * A file's own words, in a card titled with its filename and a Raw file link.
  * `children` is what varies: a markdown note is rendered as prose, everything
  * else is shown as it is on disk.
+ *
+ * The card is a fixed height that scrolls, so a long note does not push the
+ * tabs under it off the page, and the icon in its corner opens the words as
+ * a popup to read at length (`ExpandablePanel`).
  */
 function TextPanel({ title, href, children }: { title: string; href: string; children: ReactNode }) {
   return (
-    <Card title={<span className="block truncate">{title}</span>} action={<RawLink href={href} />}>
+    <ExpandablePanel title={title} label={title} action={<RawLink href={href} />}>
       {children}
-    </Card>
+    </ExpandablePanel>
   );
 }
 
