@@ -1,7 +1,7 @@
-// Measures Coursera's CDS components on four public pages, in every state
+// Measures Coursera's CDS components on five public pages, in every state
 // that can be reached without signing in, enrolling or submitting anything.
 //
-//   PLAYWRIGHT=/path/to/playwright/index.mjs node measure.mjs [home search course spec layout]
+//   PLAYWRIGHT=/path/to/playwright/index.mjs node measure.mjs [home search course spec explore layout]
 //
 // Writes raw/components-computed.json (merged, so a subset of pages can be
 // re-run) and one crop per component and state into components/crops/.
@@ -18,14 +18,16 @@
 //                  that navigates, submits or enrolls is clicked
 import fs from 'node:fs';
 import path from 'node:path';
-import { launch, open, styleOf, crop, centre, RAW } from './lib.mjs';
+import { UA, launch, open, styleOf, crop, centre, RAW } from './lib.mjs';
 
 const URLS = {
   home: 'https://www.coursera.org/',
   search: 'https://www.coursera.org/search?query=machine%20learning',
   course: 'https://www.coursera.org/learn/machine-learning',
   spec: 'https://www.coursera.org/specializations/machine-learning-introduction',
+  explore: 'https://www.coursera.org/explore/generative-ai',
 };
+const UA_MOBILE = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 const OUT = process.env.OUT_JSON || path.join(RAW, 'components-computed.json');
 const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : {};
 out._meta ??= {};
@@ -68,7 +70,7 @@ async function toggle(loc) {
 
 async function reset() {
   await page.evaluate(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
-  await page.mouse.move(1439, 460);
+  await page.mouse.move((page.viewportSize()?.width ?? 1440) - 1, 460);
   await page.waitForTimeout(250);
 }
 
@@ -236,11 +238,11 @@ async function sheetsFor(key) {
   out._meta.sheets[key] = s;
 }
 
-async function newPage(key) {
+async function newPage(key, context = ctx) {
   current = key;
-  page = await ctx.newPage();
+  page = await context.newPage();
   page.setDefaultTimeout(8000);
-  cdp = await ctx.newCDPSession(page);
+  cdp = await context.newCDPSession(page);
   await cdp.send('DOM.enable');
   await cdp.send('CSS.enable');
   log('open', key);
@@ -947,6 +949,230 @@ async function spec() {
   await page.close();
 }
 
+// The Explore topic page (/explore/generative-ai): bands of a heading column on
+// the left and a chip row over a horizontal row of compact course cards on the
+// right, plus one dark band with next / previous arrows. Desktop is read at
+// 1440 in the shared context; the states marked `mobile` come from a second
+// 390x844 context (mobile Chrome user agent, touch) because the band restacks.
+async function explore() {
+  await newPage('explore');
+  const desktopPage = page;
+  const desktopCdp = cdp;
+  const light = await mark('explore-band', () => {
+    const b = [...document.querySelectorAll('[data-testid=block_layout]')].find((x) => x.querySelector('[data-testid=overflow-carousel]') && x.querySelector('.cds-Chip-selected'));
+    return b && b.parentElement;
+  });
+  const dark = await mark('explore-band-dark', () => [...document.querySelectorAll('[data-testid=block_layout]')].find((x) => x.querySelector('[data-testid=overflow-carousel]') && x.querySelector('.cds-button-ghostInvert')));
+  const blk = light.locator('[data-testid=block_layout]');
+  const head = blk.locator('.cds-grid-item').first();
+  const carousel = blk.locator('[data-testid=overflow-carousel]');
+  const content = carousel.locator('[data-testid=overflow-carousel-content]');
+  const card = content.locator('.cds-ProductCard-grid').first();
+  const chipRow = blk.locator('button.cds-Chip-root').first().locator('xpath=..');
+  const idleChip = blk.locator('button.cds-Chip-root:not(.cds-Chip-selected)').first();
+  const selChip = blk.locator('button.cds-Chip-root.cds-Chip-selected').first();
+  const darkCol = dark.locator('.cds-grid-item');
+  const darkCarousel = dark.locator('[data-testid=overflow-carousel]');
+  const next = darkCarousel.locator('button', { hasText: 'Next' });
+  const prev = darkCarousel.locator('button', { hasText: 'Previous' });
+
+  // What a carousel does: the scroll container, the grid inside it, how many
+  // cards show, and the arrow buttons.
+  const carouselExtra = (l) => l.evaluate((wrap) => {
+    const sc = wrap.firstElementChild;
+    const ct = wrap.querySelector('[data-testid=overflow-carousel-content]');
+    const items = [...ct.children];
+    const box = sc.getBoundingClientRect();
+    const rects = items.map((i) => i.getBoundingClientRect());
+    const cs = getComputedStyle(sc);
+    const cc = getComputedStyle(ct);
+    // The hidden label reads Previous / Next on desktop and "Displaying items ..." on
+    // the mobile user agent, so a button is found by label or, failing that, by order.
+    const btns = [...wrap.querySelectorAll('button')];
+    const arrow = (t, i) => {
+      const b = btns.find((x) => x.textContent.trim() === t) || btns[i];
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      const bs = getComputedStyle(b);
+      return { display: bs.display, w: +r.width.toFixed(1), h: +r.height.toFixed(1), x: +r.x.toFixed(1), padding: bs.padding };
+    };
+    const cols = getComputedStyle(ct).gridTemplateColumns.split(' ');
+    return {
+      cards: items.length,
+      cardWidth: +rects[0].width.toFixed(1),
+      cardPitch: rects[1] ? +(rects[1].left - rects[0].left).toFixed(1) : null,
+      fullyVisible: rects.filter((r) => r.left >= box.left - 1 && r.right <= box.right + 1).length,
+      partlyVisible: rects.filter((r) => r.right > box.left + 1 && r.left < box.right - 1).length,
+      next: arrow('Next', 1),
+      previous: arrow('Previous', 0),
+      scroller: { overflowX: cs.overflowX, scrollSnapType: cs.scrollSnapType, scrollSnapAlign: cs.scrollSnapAlign, scrollSnapStop: cs.scrollSnapStop, scrollBehavior: cs.scrollBehavior, scrollbarWidth: cs.scrollbarWidth, padding: cs.padding, scrollWidth: sc.scrollWidth, clientWidth: sc.clientWidth, scrollLeft: sc.scrollLeft },
+      content: { display: cc.display, columns: cols.length > 4 ? `${cols[0]} x ${cols.length}` : cols.join(' '), gap: cc.gap, padding: cc.padding, role: ct.getAttribute('role'), itemRole: items[0].getAttribute('role'), itemSnapAlign: getComputedStyle(items[0]).scrollSnapAlign },
+    };
+  });
+
+  // Shift+Tab, Tab (kbFocus) would walk through the last card's link first and
+  // scroll the row to its end, which hides Next. The arrows are focused after a
+  // key press instead, without a scroll, so :focus-visible still applies.
+  const arrowStates = async (key, loc) => {
+    await states(key, loc, ['default', 'hover'], { pad: 24 });
+    await reset();
+    const l = loc.filter({ visible: true }).first();
+    await centre(l);
+    await page.keyboard.press('Shift');
+    await l.evaluate((el) => el.focus({ preventScroll: true }));
+    await page.waitForTimeout(350);
+    const fv = await l.evaluate((el) => el.matches(':focus-visible'));
+    await measure(key, 'focus-visible', l, { pad: 24, via: `Shift key press, then focus() without scrolling (:focus-visible ${fv ? 'matches' : 'does not match'})` });
+    await reset();
+    await states(key, loc, ['pressed'], { pad: 24 });
+  };
+
+  // ----- the light band: heading column, chips, cards -----
+  await centre(light);
+  comp('explore-band', { description: 'Explore page band (Trusted AI Learning): a full-width grey wrapper holding a 20% heading column and an 80% column with the chip row over the card carousel. The wrapper paints the fill; the block inside it (1440 wide, radius 24) paints nothing here.', selector: '[data-testid=block_layout] parent' });
+  await measure('explore-band', 'default', light, { pad: 0, extra: (l) => l.evaluate((w) => {
+    const b = w.querySelector('[data-testid=block_layout]');
+    const row = b.firstElementChild;
+    const bs = getComputedStyle(b);
+    const rs = getComputedStyle(row);
+    const cols = [...row.children].filter((c) => c.classList.contains('cds-grid-item')).map((c) => { const cs = getComputedStyle(c); const r = c.getBoundingClientRect(); return { x: +r.x.toFixed(1), w: +r.width.toFixed(1), flexBasis: cs.flexBasis, maxWidth: cs.maxWidth, padding: cs.padding, alignItems: cs.alignItems }; });
+    return { block: { w: +b.getBoundingClientRect().width.toFixed(1), padding: bs.padding, borderRadius: bs.borderRadius, maxWidth: bs.maxWidth, backgroundColor: bs.backgroundColor }, row: { display: rs.display, flexWrap: rs.flexWrap, justifyContent: rs.justifyContent, margin: rs.margin, w: +row.getBoundingClientRect().width.toFixed(1) }, columns: cols };
+  }) });
+
+  comp('explore-section-heading', { description: 'Band heading (h2 "Trusted AI Learning") in the left column: 600 20/24 with the -0.003em tracking of the subtitle styles.', selector: 'block h2' });
+  await measure('explore-section-heading', 'default', blk.locator('h2').first());
+  comp('explore-section-sub', { description: 'Sub text under the band heading: 400 16/24 in the primary ink, 4px below the heading, wrapping in the 243px column.', selector: 'block .cds-grid-item p' });
+  await measure('explore-section-sub', 'default', head.locator('p').first());
+
+  comp('explore-chip-row', { description: 'Row of chips above the cards: flex, wrap, 8px between chips, 8px above the cards.', selector: 'parent of .cds-Chip-root' });
+  await measure('explore-chip-row', 'default', chipRow, { pad: 4 });
+  out.components['explore-chip-row'].repeat = await repeatGap('[data-m="explore-band"] .cds-Chip-root');
+
+  comp('explore-chip', { description: 'Idle chip (cds-Chip-root): white pill, 1px grey border, 400 14/20 label, 32 tall. Read as loaded: no chip was clicked.', selector: 'button.cds-Chip-root:not(.cds-Chip-selected)' });
+  await states('explore-chip', idleChip, B4, { pad: 8 });
+  comp('explore-chip-selected', { description: 'Selected chip (cds-Chip-selected): near-black fill, white 600 14/20 label with 0.14px tracking, same 32px height and 12px side padding as the idle chip.', selector: 'button.cds-Chip-root.cds-Chip-selected' });
+  await states('explore-chip-selected', selChip, ['default', 'hover', 'focus-visible', 'pressed'], { pad: 8 });
+
+  comp('explore-carousel', { description: 'The card row (data-testid overflow-carousel): a flex wrapper with -8px -16px margins that holds the scroll container, the card grid inside it and two absolutely placed arrow buttons. With four cards and room for four it does not scroll and both arrows are 0x0.', selector: '[data-testid=overflow-carousel]' });
+  await centre(carousel);
+  await measure('explore-carousel', 'default', carousel, { pad: 0, extra: carouselExtra });
+  out.components['explore-carousel'].repeat = await repeatGap('[data-m="explore-band"] [data-testid=overflow-carousel-content] > div');
+  comp('explore-carousel-content', { description: 'The card grid (data-testid overflow-carousel-content, role list): grid with 12px gap (--cds-spacing-150), 16px left padding and four equal columns, or minmax(150px, 1fr) columns below 600.', selector: '[data-testid=overflow-carousel-content]' });
+  await measure('explore-carousel-content', 'default', content, { crop: false });
+
+  // Compact card
+  comp('explore-card', { description: 'Compact course card: the search product card (cds-ProductCard-grid) without the skills line or tags. 8px inset 16:9 cover image, partner row, title, one type line. Height follows the tallest card in the row.', selector: '[data-testid=overflow-carousel-content] .cds-ProductCard-grid' });
+  await states('explore-card', card, ['default', 'hover', 'focus-visible', 'pressed'], { pad: 20, focusLoc: card.locator('.cds-CommonCard-titleLink'), pressLoc: card });
+  const parts = [
+    ['explore-card-click-area', '.cds-CommonCard-clickArea', 'The inner click area that holds the hover shadow and focus ring.', false],
+    ['explore-card-image-container', '.cds-ProductCard-gridPreviewContainer', 'Image well: 16:9, inset 8px.', true],
+    ['explore-card-image', '.cds-CommonCard-previewImage', 'Preview image wrapper: 16:9, radius 8, clips an img with object-fit cover.', true],
+    ['explore-card-content', '.cds-ProductCard-content', 'Text column under the image: 8px padding, 8px between the header and the footer.', false],
+    ['explore-card-partner-logo', '.cds-ProductCard-partnerLogos .cds-Avatar-base', 'Organisation avatar: 18px square, 1px border, radius 5, 2px padding around a 12px logo.', true],
+    ['explore-card-partner-name', '.cds-ProductCard-partnerNames', 'Organisation name beside the avatar: 400 14/24.', true],
+    ['explore-card-title', '.cds-CommonCard-title', 'Card title (h3): 600 16/20, -0.048px tracking, three-line clamp.', true],
+    ['explore-card-title-link', '.cds-CommonCard-titleLink', 'The title link; it is stretched over the whole card, so it takes the card focus ring.', false],
+    ['explore-card-type', '.cds-CommonCard-metadata p', 'Type line under the title ("Professional Certificate", "Specialization", "Course"): 400 12/18 in the weak ink.', true],
+    ['explore-card-footer', '.cds-ProductCard-footer', 'Footer block that holds the type line; it has no gap in a carousel.', false],
+  ];
+  const partOf = (sel) => card.locator(sel).first();
+  for (const [k, s, d, shot] of parts) {
+    comp(k, { description: d, selector: `.cds-ProductCard-grid ${s}` });
+    await centre(partOf(s));
+    await measure(k, 'default', partOf(s), { crop: shot, extra: k === 'explore-card-image' ? (l) => l.evaluate((el) => { const i = el.querySelector('img'); const cs = getComputedStyle(i); const r = i.getBoundingClientRect(); return { img: { w: +r.width.toFixed(1), h: +r.height.toFixed(1), objectFit: cs.objectFit, radius: cs.borderRadius } }; }) : k === 'explore-card-partner-logo' ? (l) => l.evaluate((el) => { const i = el.querySelector('img'); const cs = getComputedStyle(i); const r = i.getBoundingClientRect(); return { img: { w: +r.width.toFixed(1), h: +r.height.toFixed(1), objectFit: cs.objectFit, radius: cs.borderRadius } }; }) : undefined });
+  }
+  await states('explore-card-title-link', card.locator('.cds-CommonCard-titleLink'), ['hover', 'focus-visible'], { cropLoc: card, pad: 20 });
+
+  // ----- the dark band: heading, sub text, arrow link, arrows -----
+  await centre(dark);
+  comp('explore-band-dark', { description: 'Dark band (Learn AI with today\'s most popular certificates): a 1344 wide block with radius 24 on the grey-975 ground, a 20% heading column, an 80% card column, and decorative art absolutely placed behind. The white text and the ghost-invert link sit on it.', selector: '[data-testid=block_layout] with a ghostInvert link' });
+  await measure('explore-band-dark', 'default', dark, { pad: 0, extra: (l) => l.evaluate((b) => { const bs = getComputedStyle(b); const p = b.parentElement; const ps = getComputedStyle(p); return { block: { w: +b.getBoundingClientRect().width.toFixed(1), padding: bs.padding, borderRadius: bs.borderRadius, overflow: bs.overflow }, parent: { w: +p.getBoundingClientRect().width.toFixed(1), padding: ps.padding, backgroundColor: ps.backgroundColor } }; }) });
+  comp('explore-section-heading-inverse', { description: 'Band heading on the dark band: the same 600 20/24 style in white.', selector: 'dark block h2' });
+  await measure('explore-section-heading-inverse', 'default', dark.locator('h2').first(), { pad: 12 });
+  comp('explore-section-sub-inverse', { description: 'Sub text on the dark band: 400 16/24 in white.', selector: 'dark block .cds-grid-item p' });
+  await measure('explore-section-sub-inverse', 'default', darkCol.locator('p').first(), { pad: 12 });
+  comp('explore-section-link', { description: 'The "Explore programs" arrow link under the sub text: cds-button-ghostInvert, a link styled as a button (48 tall, 600 16/24, 0.16px tracking) with a 24px arrow end icon; its left margin is -16px so the text lines up with the heading.', selector: 'a.cds-button-ghostInvert' });
+  await states('explore-section-link', dark.locator('a.cds-button-ghostInvert').first(), B4, { pad: 12 });
+
+  comp('explore-carousel-dark', { description: 'A carousel that overflows (20 cards at 242 wide, fixed columns): the scroll container has overflow-x auto, scroll-snap-type x mandatory and no scrollbar. The Next arrow appears at the right end; after one click the Previous arrow appears at the left end and the row has scrolled by four cards.', selector: '[data-testid=overflow-carousel] (dark band)' });
+  await centre(darkCarousel);
+  await measure('explore-carousel-dark', 'default', darkCarousel, { pad: 0, extra: async (l) => ({ snapProbe: await l.evaluate(async (wrap) => { const sc = wrap.firstElementChild; sc.style.scrollBehavior = 'auto'; sc.scrollLeft = 100; await new Promise((r) => setTimeout(r, 700)); const settled = sc.scrollLeft; sc.scrollLeft = 0; sc.style.scrollBehavior = ''; return { requested: 100, settled }; }), ...(await carouselExtra(l)) }) });
+  out.components['explore-carousel-dark'].repeat = await repeatGap('[data-m="explore-band-dark"] [data-testid=overflow-carousel-content] > div');
+
+  comp('explore-carousel-next', { description: 'Next arrow: a 24px wide button the height of the row, pinned to the right end, a 24px chevron over a white fade (linear-gradient to the right, 0 to 0.8 alpha; hover and pressed swap in a stronger fade), padding 0 0 0 4px. 0x0 when the row does not overflow. Clicking scrolls the row by four cards (1016px at 254 pitch) with scroll-behavior smooth.', selector: '[data-testid=overflow-carousel] button "Next"' });
+  await arrowStates('explore-carousel-next', next);
+  await reset();
+  await centre(next);
+  const scrollBefore = await darkCarousel.evaluate((w) => w.firstElementChild.scrollLeft);
+  await next.filter({ visible: true }).first().click();
+  await page.waitForTimeout(1500);
+  await measure('explore-carousel-dark', 'scrolled', darkCarousel, { pad: 0, via: `clicked Next once from scrollLeft ${scrollBefore}, read after the smooth scroll settled`, extra: carouselExtra });
+  comp('explore-carousel-prev', { description: 'Previous arrow: mirror of the Next arrow at the left end (white fade to the left, padding 0 4px 0 0). It is 0x0 until the row has scrolled.', selector: '[data-testid=overflow-carousel] button "Previous"' });
+  await arrowStates('explore-carousel-prev', prev);
+  await reset();
+  await darkCarousel.evaluate((w) => { const sc = w.firstElementChild; sc.style.scrollBehavior = 'auto'; sc.scrollLeft = 0; sc.style.scrollBehavior = ''; });
+  await page.waitForTimeout(400);
+
+  await sheetsFor('explore');
+
+  // ----- 390 wide -----
+  const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, userAgent: UA_MOBILE, isMobile: true, hasTouch: true, locale: 'en-US', reducedMotion: 'no-preference' });
+  await newPage('explore', mctx);
+  const via = '390x844 mobile context (touch, Android Chrome user agent)';
+  const mlight = await mark('explore-band', () => {
+    const b = [...document.querySelectorAll('[data-testid=block_layout]')].find((x) => x.querySelector('[data-testid=overflow-carousel]') && x.querySelector('.cds-Chip-selected'));
+    return b && b.parentElement;
+  });
+  const mblk = mlight.locator('[data-testid=block_layout]');
+  const mcar = mblk.locator('[data-testid=overflow-carousel]');
+  const mcard = mcar.locator('.cds-ProductCard-grid').first();
+  await centre(mlight);
+  await measure('explore-band', 'mobile', mlight, { pad: 0, via, extra: (l) => l.evaluate((w) => {
+    const b = w.querySelector('[data-testid=block_layout]');
+    const row = b.firstElementChild;
+    const bs = getComputedStyle(b);
+    const cols = [...row.children].filter((c) => c.classList.contains('cds-grid-item')).map((c) => { const cs = getComputedStyle(c); const r = c.getBoundingClientRect(); return { x: +r.x.toFixed(1), w: +r.width.toFixed(1), flexBasis: cs.flexBasis, padding: cs.padding }; });
+    const h2 = b.querySelector('h2');
+    return { block: { w: +b.getBoundingClientRect().width.toFixed(1), padding: bs.padding, borderRadius: bs.borderRadius }, columns: cols, h2Displayed: h2 ? h2.getBoundingClientRect().width > 0 : null };
+  }) });
+  comp('explore-section-heading-link', { description: 'Below 600 the h2 collapses to 0x0 and the heading is shown as a link: the same 600 20/24 text with a chevron icon (4px margin) after it, on the band\'s own link. Read in the 390 context only.', selector: 'block .cds-grid-item a (below 600)' });
+  await states('explore-section-heading-link', mblk.locator('.cds-grid-item').first().locator('a').filter({ hasText: 'Trusted AI Learning' }), ['default', 'focus-visible'], { pad: 8 });
+  await measure('explore-section-sub', 'mobile', mblk.locator('.cds-grid-item').first().locator('p').first(), { via });
+  await measure('explore-chip-row', 'mobile', mblk.locator('button.cds-Chip-root').first().locator('xpath=..'), { via, pad: 4 });
+  await measure('explore-chip', 'mobile', mblk.locator('button.cds-Chip-root:not(.cds-Chip-selected)').first(), { via, pad: 8 });
+  await centre(mcar);
+  await measure('explore-carousel', 'mobile', mcar, { pad: 0, via, extra: carouselExtra });
+  await measure('explore-carousel-content', 'mobile', mcar.locator('[data-testid=overflow-carousel-content]'), { via, crop: false });
+  await measure('explore-card', 'mobile', mcard, { via, pad: 20 });
+  for (const [k, s, , shot] of parts) {
+    if (!shot) continue;
+    await measure(k, 'mobile', mcard.locator(s).first(), { via });
+  }
+  await page.close();
+  await mctx.close();
+
+  // The same page at 390 wide with the desktop user agent. The mobile user agent
+  // above hides both arrows (display none, the row is for touch); a narrow desktop
+  // window keeps them, so their 390 state is read here.
+  const nctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, userAgent: UA, locale: 'en-US', reducedMotion: 'no-preference' });
+  await newPage('explore', nctx);
+  const nvia = '390x844 window with the desktop user agent';
+  const nlight = await mark('explore-band', () => {
+    const b = [...document.querySelectorAll('[data-testid=block_layout]')].find((x) => x.querySelector('[data-testid=overflow-carousel]') && x.querySelector('.cds-Chip-selected'));
+    return b && b.parentElement;
+  });
+  const ncar = nlight.locator('[data-testid=block_layout] [data-testid=overflow-carousel]');
+  await centre(ncar);
+  await measure('explore-carousel', 'narrow', ncar, { pad: 0, via: nvia, extra: carouselExtra });
+  await measure('explore-carousel-next', 'narrow', ncar.locator('button').filter({ visible: true }).first(), { via: nvia, pad: 24 });
+  await page.close();
+  await nctx.close();
+  page = desktopPage;
+  cdp = desktopCdp;
+  current = 'explore';
+  await page.close();
+}
+
 // Layout grid at several widths.
 async function layout() {
   out._meta.layout = {};
@@ -974,9 +1200,10 @@ async function layout() {
 
 // ---------- run ----------
 const which = process.argv.slice(2);
-const run = which.length ? which : ['home', 'search', 'course', 'spec', 'layout'];
+const run = which.length ? which : ['home', 'search', 'course', 'spec', 'explore', 'layout'];
 const { browser, context: ctx } = await launch();
-out._meta.capturedAt = new Date().toISOString();
+// A subset run (for example only `explore`) keeps the capture stamp of the full run.
+if (!which.length || !out._meta.capturedAt) out._meta.capturedAt = new Date().toISOString();
 out._meta.viewport = '1440x900 @2x, headless Chromium (Playwright 1.63), desktop Chrome UA';
 const save = () => fs.writeFileSync(OUT, JSON.stringify(out, null, 1));
 for (const k of run) {
@@ -985,6 +1212,7 @@ for (const k of run) {
     if (k === 'search') await search();
     if (k === 'course') await course();
     if (k === 'spec') await spec();
+    if (k === 'explore') await explore();
     if (k === 'layout') await layout();
   } catch (e) {
     log('PAGE FAILED', k, e.stack?.slice(0, 600));

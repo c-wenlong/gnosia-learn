@@ -157,6 +157,18 @@ const desktop = {
     });
   },
   browse: async (p, S) => { await S.view('default'); await S.full('full'); },
+  explore: async (p, S) => {
+    // The first band (heading column, chip row, four compact cards), scrolled just under the sticky header.
+    await lazyScroll(p);
+    await scrollToEl(p, '[data-testid=block_layout]:has(.cds-Chip-selected):has([data-testid=overflow-carousel])', 110);
+    await S.view('default');
+    await step('card-hover', async () => {
+      const card = await p.$('[data-testid=block_layout]:has(.cds-Chip-selected):has([data-testid=overflow-carousel])' + ' .cds-ProductCard-grid');
+      const box = await card.boundingBox();
+      await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await wait(p, 700); await S.view('card-hover');
+      await p.mouse.move(5, 5);
+    });
+  },
   course: async (p, S, theme) => {
     // default state has the AI panel open, so take that first and close it afterwards
     await S.view('ai-panel');
@@ -210,6 +222,12 @@ const desktop = {
 
 const mobile = {
   home: async (p, S) => { await S.view('default'); await S.full('full'); },
+  explore: async (p, S) => {
+    await lazyScroll(p);
+    await scrollToEl(p, '[data-testid=block_layout]:has(.cds-Chip-selected):has([data-testid=overflow-carousel])', 80);
+    await S.view('default');
+  },
+
   search: async (p, S) => { await S.view('default'); await S.full('full'); },
   course: async (p, S) => {
     await S.view('default'); await S.full('full');
@@ -236,7 +254,7 @@ const mobile = {
 const paths = {
   home: '/', search: '/search?query=machine%20learning', browse: '/browse/data-science',
   course: '/learn/machine-learning', specialization: '/specializations/machine-learning-introduction',
-  certificate: '/professional-certificates/google-data-analytics', course2: '/learn/learning-how-to-learn',
+  certificate: '/professional-certificates/google-data-analytics', course2: '/learn/learning-how-to-learn', explore: '/explore/generative-ai',
 };
 
 const b = await chromium.launch();

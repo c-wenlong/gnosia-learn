@@ -361,6 +361,36 @@
     "value": "16px",
     "type": "dimension",
     "source": "measured raw/measurements-signed-in.md#my-learning-standalone-course-card"
+   },
+   "explore-heading-column": {
+    "value": 0.2,
+    "type": "number",
+    "source": "measured raw/measurements.md#explore-band",
+    "description": "Heading column share of the band row at 1440 (flex-basis 20%); the card column is 80%. Both are 100% below 600"
+   },
+   "explore-band-padding-block": {
+    "value": "32px",
+    "type": "spacing",
+    "source": "measured raw/measurements.md#explore-band",
+    "description": "Block padding of the light band at 1440; 24px at 390"
+   },
+   "explore-band-padding-inline": {
+    "value": "48px",
+    "type": "spacing",
+    "source": "measured raw/measurements.md#explore-band",
+    "description": "Inline padding of the light band at 1440; 16px at 390"
+   },
+   "explore-cards-visible-1440": {
+    "value": 4,
+    "type": "number",
+    "source": "measured raw/measurements.md#explore-carousel",
+    "description": "Cards fully shown at 1440 in a light row; 4 fully and 5 partly in the overflowing row"
+   },
+   "explore-cards-visible-390": {
+    "value": 2,
+    "type": "number",
+    "source": "measured raw/measurements.md#explore-carousel",
+    "description": "Fully shown at 390, with a third card peeking"
    }
   },
   "size": {
@@ -633,6 +663,126 @@
     "value": "13px",
     "type": "dimension",
     "source": "measured raw/measurements.md#button-enroll"
+   },
+   "explore-card-width": {
+    "value": "266.19px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card",
+    "description": "Compact card at 1440, four across the 1117px card column; the columns are 1fr, so it is derived, not fixed"
+   },
+   "explore-card-width-overflow": {
+    "value": "242px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel-dark",
+    "description": "Card width when a row has more cards than fit: fixed 242px columns, 254px pitch"
+   },
+   "explore-card-width-390": {
+    "value": "150px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card",
+    "description": "minmax(150px, 1fr) columns below 600, so two cards show whole and a third peeks"
+   },
+   "explore-card-image-inset": {
+    "value": "8px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-image-container",
+    "description": "Padding of the card around the 16:9 image well; the image is 248.19 wide inside a 266.19 card"
+   },
+   "explore-card-body-padding": {
+    "value": "8px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-content"
+   },
+   "explore-card-body-gap": {
+    "value": "8px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-content",
+    "description": "Between the header (partner row and title) and the footer (type line)"
+   },
+   "explore-card-partner-logo": {
+    "value": "18px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-partner-logo",
+    "description": "Organisation avatar: 12px logo, 2px padding, 1px border"
+   },
+   "explore-card-partner-logo-image": {
+    "value": "12px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-partner-logo"
+   },
+   "explore-card-partner-logo-padding": {
+    "value": "2px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-card-partner-logo"
+   },
+   "explore-chip": {
+    "value": "32px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-chip",
+    "description": "Same height idle and selected"
+   },
+   "explore-chip-padding-block": {
+    "value": "4px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-chip"
+   },
+   "explore-chip-padding-inline": {
+    "value": "12px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-chip"
+   },
+   "explore-chip-gap": {
+    "value": "8px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-chip-row",
+    "description": "Between chips, and 8px between the chip row and the cards; chips wrap below 1024"
+   },
+   "explore-arrow-width": {
+    "value": "24px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel-next",
+    "description": "Next and Previous arrows: full row height, 4px padding on the inner side"
+   },
+   "explore-arrow-padding-inner": {
+    "value": "4px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel-next"
+   },
+   "explore-carousel-gap": {
+    "value": "12px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel",
+    "description": "--cds-spacing-150 between cards"
+   },
+   "explore-carousel-padding-start": {
+    "value": "16px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel-content",
+    "description": "Left padding of the card grid; the light rows have no right padding, the overflowing row 16px"
+   },
+   "explore-carousel-scroll-step": {
+    "value": "1016px",
+    "type": "dimension",
+    "source": "measured raw/measurements.md#explore-carousel-dark",
+    "description": "One click on Next: four cards at a 254px pitch"
+   },
+   "explore-card-radius": {
+    "value": "16px",
+    "type": "borderRadius",
+    "source": "measured raw/measurements.md#explore-card",
+    "description": "Equals --cds-border-radius-200"
+   },
+   "explore-card-image-radius": {
+    "value": "8px",
+    "type": "borderRadius",
+    "source": "measured raw/measurements.md#explore-card-image",
+    "description": "The wrapper clips the image; the img itself has radius 0. Equals --cds-border-radius-100"
+   },
+   "explore-chip-radius": {
+    "value": "32px",
+    "type": "borderRadius",
+    "source": "measured raw/measurements.md#explore-chip",
+    "description": "Equals --cds-border-radius-400"
    }
   },
   "shape": {

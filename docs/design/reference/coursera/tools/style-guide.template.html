@@ -235,6 +235,57 @@ a.btn.primary:hover, a.btn.primary.is-hover, a.btn.primary.is-focus, a.btn.prima
 .pcard .meta .ic { color: var(--neutral-primary); }
 .pcard .tags { display: flex; gap: var(--spacing-50); flex-wrap: wrap; }
 
+/* Compact course card, chip row and carousel (explore page) */
+.xchip { position: relative; display: inline-flex; align-items: center; justify-content: center; height: var(--size-explore-chip); padding: var(--size-explore-chip-padding-block) var(--size-explore-chip-padding-inline); border: 1px solid var(--neutral-stroke-primary-weak); border-radius: var(--size-explore-chip-radius); background: var(--neutral-background-primary); color: var(--interactive-secondary); font: var(--typography-body2); cursor: pointer; white-space: nowrap; outline: 1px solid transparent; outline-offset: var(--focus-forced-colors-outline-offset); }
+.xchip:hover, .xchip.is-hover { border-color: var(--interactive-primary-hover); background: var(--interactive-background-primary-hover-weak); color: var(--interactive-primary-hover); }
+.xchip:active, .xchip.is-pressed { border-color: var(--interactive-primary-selected); background: var(--interactive-background-primary-selected-weak); color: var(--interactive-primary-selected); }
+.xchip.sel { border-color: var(--interactive-secondary-selected); background: var(--interactive-secondary-selected); color: var(--neutral-primary-invert); font: var(--typography-action-secondary); letter-spacing: var(--tracking-action); }
+.xchip.sel:hover, .xchip.sel.is-hover { border-color: var(--interactive-primary-hover); background: var(--interactive-primary-hover); }
+.xchip.sel:active, .xchip.sel.is-pressed { border-color: var(--interactive-primary-selected); background: var(--interactive-primary-selected); }
+.xchip:focus-visible::after, .xchip.is-focus::after { content: ""; position: absolute; inset: var(--focus-ring-inset); border-radius: inherit; box-shadow: var(--component-focus-ring); pointer-events: none; }
+.xchips { display: flex; flex-wrap: wrap; gap: var(--size-explore-chip-gap); margin-bottom: var(--size-explore-chip-gap); }
+.xcard { position: relative; display: flex; flex-direction: column; justify-content: space-between; width: var(--size-explore-card-width); max-width: 100%; border: 1px solid var(--neutral-stroke-primary-weak); border-radius: var(--size-explore-card-radius); background: var(--neutral-background-primary); color: var(--interactive-secondary); transition: all var(--duration-card) var(--easing-card); }
+.xcard:hover, .xcard.is-hover, .xcard.is-pressed { box-shadow: var(--component-product-card-shadow-hover); }
+.xcard .in { display: flex; flex-direction: column; padding: var(--size-explore-card-image-inset); }
+.xcard .img { aspect-ratio: 16 / 9; border-radius: var(--size-explore-card-image-radius); background: var(--neutral-disabled); display: grid; place-items: center; overflow: hidden; color: var(--neutral-primary-weak); font: var(--typography-body-tertiary); }
+.xcard .body { display: flex; flex-direction: column; gap: var(--size-explore-card-body-gap); padding: var(--size-explore-card-body-padding); }
+.xcard .hd { display: flex; flex-direction: column; gap: var(--spacing-50); min-width: 0; }
+.xcard .partner { display: flex; align-items: center; gap: var(--spacing-50); min-width: 0; font: 400 14px/24px var(--ff-source-sans-pro); }
+.xcard .partner span.n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlogo { flex: none; display: grid; width: var(--size-explore-card-partner-logo); height: var(--size-explore-card-partner-logo); padding: var(--size-explore-card-partner-logo-padding); border: 1px solid var(--neutral-stroke-primary-weak); border-radius: var(--shape-partner-logo); }
+.xlogo i { display: block; border-radius: var(--radius-50); background: var(--emphasis-primary-background-weak); }
+.xcard h4 { margin: 0; font: var(--typography-subtitle-medium); letter-spacing: var(--tracking-subtitle); }
+.xcard h4 a { display: block; color: inherit; text-decoration: none; }
+.xcard h4 a::before { content: ""; position: absolute; inset: 0; }
+.xcard.is-focus h4 a { box-shadow: var(--component-focus-ring); border-radius: var(--focus-link-radius); outline: 1px solid transparent; outline-offset: var(--focus-forced-colors-outline-offset); }
+.xcard .type { margin: 0; font: var(--typography-body-tertiary); color: var(--neutral-primary-weak); }
+.xband { display: grid; grid-template-columns: minmax(0, 20%) minmax(0, 1fr); gap: var(--spacing-200); align-items: center; padding: var(--layout-explore-band-padding-block) var(--layout-explore-band-padding-inline); background: var(--neutral-background-primary-weak); color: var(--interactive-secondary); }
+.xband .xhead { display: flex; flex-direction: column; gap: var(--spacing-50); }
+.xband h4.xh { margin: 0; font: var(--typography-subtitle-large); letter-spacing: var(--tracking-subtitle); }
+.xband p.xsub { margin: 0; font: var(--typography-body1); }
+.xband.dark { background: var(--palette-grey-975); color: var(--palette-white); border-radius: var(--radius-300); padding: var(--spacing-200) var(--spacing-200) var(--spacing-200) var(--spacing-400); }
+.xband.narrow { grid-template-columns: minmax(0, 1fr); width: 390px; max-width: 100%; padding-inline: var(--layout-side-padding-compact); }
+@media (max-width: 1023.95px) { .xband { grid-template-columns: minmax(0, 1fr); padding-inline: var(--layout-side-padding-compact); } }
+.xlink { position: relative; display: inline-flex; align-items: center; justify-content: center; align-self: flex-start; height: var(--size-button-large); margin-left: calc(-1 * var(--size-button-padding-medium-inline)); padding: var(--size-button-padding-large-block) var(--size-button-padding-medium-inline); border-radius: var(--radius-100); color: inherit; font: var(--typography-action-primary); letter-spacing: var(--tracking-action); text-decoration: none; cursor: pointer; outline: 1px solid transparent; outline-offset: var(--focus-forced-colors-outline-offset); }
+.xlink .ic { margin-left: var(--spacing-50); }
+.xlink:hover, .xlink.is-hover, .xlink.is-pressed, .xlink:focus-visible, .xlink.is-focus { text-decoration: underline; }
+.xlink:focus-visible::after, .xlink.is-focus::after { content: ""; position: absolute; inset: var(--focus-ring-inset); border-radius: inherit; box-shadow: var(--component-focus-ring); pointer-events: none; }
+.xrow { position: relative; max-width: 100%; }
+.xscroll { overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; padding-block: var(--spacing-100); }
+.xscroll::-webkit-scrollbar { display: none; }
+.xgrid { display: grid; grid-auto-flow: column; grid-auto-columns: var(--size-explore-card-width-overflow); gap: var(--size-explore-carousel-gap); width: max-content; padding-inline: var(--size-explore-carousel-padding-start); }
+.xgrid.m { grid-auto-columns: var(--size-explore-card-width-390); }
+.xgrid .xcard { width: auto; height: 100%; }
+.xarrow { position: absolute; top: var(--spacing-100); bottom: var(--spacing-100); z-index: 1; display: flex; align-items: center; justify-content: center; width: var(--size-explore-arrow-width); padding: 0; border: 0; color: var(--interactive-secondary); cursor: pointer; background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%); }
+.xarrow.nx { right: 0; padding-left: var(--size-explore-arrow-padding-inner); }
+.xarrow.pv { left: 0; padding-right: var(--size-explore-arrow-padding-inner); background: linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%); }
+.xarrow.nx:hover, .xarrow.nx.is-hover, .xarrow.nx.is-pressed { background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%); }
+.xarrow:hover, .xarrow.is-hover, .xarrow.is-pressed { color: var(--interactive-primary); }
+.xarrow:focus-visible::after, .xarrow.is-focus::after { content: ""; position: absolute; inset: var(--focus-ring-inset); border-radius: var(--radius-100); box-shadow: var(--component-focus-ring); pointer-events: none; }
+.xarrowbox { position: relative; width: 96px; height: 132px; border-radius: var(--radius-100); background: var(--neutral-disabled); overflow: hidden; }
+.xarrowbox .xarrow { top: 0; bottom: 0; }
+.xarrowbox .xarrow.pv { left: 0; }
+
 /* Course hero and stats card */
 .hero-demo { position: relative; overflow: hidden; border-radius: var(--radius-200); border: 1px solid var(--neutral-stroke-primary-weak); background: var(--neutral-background-primary); }
 .hero { position: relative; background: var(--component-hero-band); padding: var(--spacing-300) var(--spacing-600) 108px; overflow: hidden; }
@@ -588,6 +639,47 @@ a.btn.primary:hover, a.btn.primary.is-hover, a.btn.primary.is-focus, a.btn.prima
       </div>
     </template></div>
     <p class="note">335 wide, 1px grey-200 edge, radius 16, no shadow at rest. Hover adds the shadow over 300ms on the card curve; the title stays dark in the hover crop. The title link is stretched over the whole card and turns blue-850 when it is the hovered or focused element; focus puts the link ring on the title.</p>
+  </div>
+
+  <h3 class="sub">Compact course card and chip row</h3>
+  <div class="panel">
+    <h4 class="lbl">Chip, idle (32 tall, radius 32, 4 / 12 padding)</h4>
+    <div class="states" data-states="default hover focus pressed"><template><button class="xchip" type="button">New</button></template></div>
+    <h4 class="lbl">Chip, selected</h4>
+    <div class="states" data-states="default hover focus pressed"><template><button class="xchip sel" type="button">Bestsellers</button></template></div>
+    <p class="note">Idle is a white pill on a 1px grey-200 edge. Hover and pressed change the edge, label and fill together (blue, then purple); selected is a near-black fill with a 600 label that goes blue on hover and purple pressed. The ring sits on an ::after 2px out, with the chip's own 32 radius. Chips are 8 apart and wrap, they do not scroll.</p>
+    <h4 class="lbl">Compact card (266 wide at 1440, 8px inset image, 12px between cards)</h4>
+    <div class="states" data-states="default hover focus pressed"><template><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Google</span></div><h4><a>Google AI</a></h4></div><p class="type">Professional Certificate</p></div></div></div></template></div>
+    <p class="note">The search product card without the skills line or tags: 1px grey-200 edge, radius 16, hover shadow over 300ms on the card curve, focus ring on the stretched title link. Partner row is an 18px avatar (12px logo, 2px padding, 1px edge, radius 5) and a 14/24 name; title is 600 16/20; the type line is 12/18 in the weak ink.</p>
+    <h4 class="lbl">Band with heading column, chip row and card row (1440)</h4>
+    <div class="xband">
+      <div class="xhead"><h4 class="xh">Trusted AI Learning</h4><p class="xsub">Advance your skills with programs loved by learners, trending across the industry, and hand-selected by our experts for maximum career impact.</p></div>
+      <div>
+        <div class="xchips"><button class="xchip sel" type="button">Bestsellers</button><button class="xchip" type="button">New</button><button class="xchip" type="button">Trending Now</button><button class="xchip" type="button">Staff Picks</button><button class="xchip" type="button">Top Rated</button></div>
+        <div class="xrow"><div class="xscroll"><div class="xgrid" style="grid-auto-columns: var(--size-explore-card-width)"><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Google</span></div><h4><a>Google AI</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="xlogo"><i></i></span><span class="n">Multiple educators</span></div><h4><a>Machine Learning</a></h4></div><p class="type">Specialization</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">IBM</span></div><h4><a>IBM Generative AI Engineering</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Stanford Online</span></div><h4><a>AI in Healthcare</a></h4></div><p class="type">Specialization</p></div></div></div></div></div></div>
+      </div>
+    </div>
+    <p class="note">The heading column is 20% and the card column 80% (both 100% below 600), on the grey-25 ground. The four columns are 1fr wide, so four cards show at 1440 and the arrows are 0x0.</p>
+    <h4 class="lbl">Dark band with an arrow link and a row that scrolls (cards 242 wide, 254 pitch)</h4>
+    <div class="xband dark">
+      <div class="xhead"><h4 class="xh">Learn AI with today's most popular certificates</h4><p class="xsub">Career-focused programs employers recognize.</p><a class="xlink">Explore programs<!--icon:arrow-right:24--></a></div>
+      <div class="xrow"><div class="xscroll"><div class="xgrid"><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Google</span></div><h4><a>Google AI</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="xlogo"><i></i></span><span class="n">Multiple educators</span></div><h4><a>Machine Learning</a></h4></div><p class="type">Specialization</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">IBM</span></div><h4><a>IBM Generative AI Engineering</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Stanford Online</span></div><h4><a>AI in Healthcare</a></h4></div><p class="type">Specialization</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Google</span></div><h4><a>Google AI</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="xlogo"><i></i></span><span class="n">Multiple educators</span></div><h4><a>Machine Learning</a></h4></div><p class="type">Specialization</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">IBM</span></div><h4><a>IBM Generative AI Engineering</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Stanford Online</span></div><h4><a>AI in Healthcare</a></h4></div><p class="type">Specialization</p></div></div></div></div></div><button class="xarrow nx" type="button" aria-label="Next"><!--icon:chevron-right:24--></button></div>
+    </div>
+    <p class="note">The scroller has overflow-x auto, scroll-snap-type x mandatory and no scrollbar, but no card sets a snap alignment, so it does not snap: setting scrollLeft to 100 settled at 100. Next scrolls four cards (1016px) smoothly and Previous then appears at the left.</p>
+    <h4 class="lbl">Arrows (24 wide, the height of the row, over a fade of literal white, also in dark)</h4>
+    <div class="states" data-states="default hover focus pressed"><template><div class="xarrowbox"><button class="xarrow nx" type="button" aria-label="Next"><!--icon:chevron-right:24--></button></div></template></div>
+    <div class="states" data-states="default hover focus pressed" style="margin-top: var(--spacing-200)"><template><div class="xarrowbox"><button class="xarrow pv" type="button" aria-label="Previous"><!--icon:chevron-left:24--></button></div></template></div>
+    <h4 class="lbl">Arrow link on the dark band</h4>
+    <div class="xband dark" style="display: inline-flex; padding: var(--spacing-100) var(--spacing-200)"><div class="states" data-states="default hover focus pressed" style="gap: var(--spacing-300)"><template><a class="xlink" style="margin-left: 0">Explore programs<!--icon:arrow-right:24--></a></template></div></div>
+    <h4 class="lbl">At 390: the band stacks, cards are 150 wide and a third peeks</h4>
+    <div class="xband narrow">
+      <div class="xhead"><h4 class="xh">Trusted AI Learning</h4><p class="xsub">Advance your skills with programs loved by learners, trending across the industry, and hand-selected by our experts for maximum career impact.</p></div>
+      <div>
+        <div class="xchips"><button class="xchip sel" type="button">Bestsellers</button><button class="xchip" type="button">New</button><button class="xchip" type="button">Trending Now</button><button class="xchip" type="button">Staff Picks</button><button class="xchip" type="button">Top Rated</button></div>
+        <div class="xrow" style="margin-inline: calc(-1 * var(--layout-side-padding-compact))"><div class="xscroll"><div class="xgrid m"><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Google</span></div><h4><a>Google AI</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="xlogo"><i></i></span><span class="n">Multiple educators</span></div><h4><a>Machine Learning</a></h4></div><p class="type">Specialization</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">IBM</span></div><h4><a>IBM Generative AI Engineering</a></h4></div><p class="type">Professional Certificate</p></div></div></div><div class="xcard"><div class="in"><div class="img">16:9 image</div><div class="body"><div class="hd"><div class="partner"><span class="xlogo"><i></i></span><span class="n">Stanford Online</span></div><h4><a>AI in Healthcare</a></h4></div><p class="type">Specialization</p></div></div></div></div></div></div>
+      </div>
+    </div>
+    <p class="note">Below 600 the h2 collapses and the heading is drawn as a link with a chevron after it. On the mobile user agent the arrows are display none (touch scrolling only); a 390 window with the desktop user agent keeps the Next arrow.</p>
   </div>
 
   <h3 class="sub">Course hero with stats card</h3>

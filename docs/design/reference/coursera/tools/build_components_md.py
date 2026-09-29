@@ -579,6 +579,27 @@ G('Cards',
       E_('Pill', P('pill')),
   ])
 
+G('Explore page: compact card, chips and carousel',
+  'The Explore topic page (`/explore/generative-ai`) is a stack of bands. Each band has a 20% heading column (heading, sub text, sometimes an arrow link) and an 80% column with a chip row over a row of compact course cards. The card is the search product card without the skills line or tags. A row that has more cards than fit scrolls sideways with Next and Previous arrows. Below 600 the band stacks and the cards are 150 wide with a third peeking; the mobile user agent hides the arrows, a 390 window with the desktop user agent keeps the Next arrow. Screenshots: [explore-light-default](screenshots/explore-light-default.png), [explore-light-card-hover](screenshots/explore-light-card-hover.png) and [mobile-explore-light-default](screenshots/mobile-explore-light-default.png).',
+  [
+      E_('Explore band', P('explore-band')),
+      E_('Explore band heading and sub text', P('explore-section-heading'), [P('explore-section-sub'), P('explore-section-heading-link')]),
+      E_('Explore chip row', P('explore-chip-row')),
+      E_('Explore chip', P('explore-chip')),
+      E_('Explore chip, selected', P('explore-chip-selected')),
+      E_('Explore card row', P('explore-carousel'), [P('explore-carousel-content')]),
+      E_('Compact course card', P('explore-card'),
+         [P('explore-card-click-area'), P('explore-card-image-container'), P('explore-card-image'),
+          P('explore-card-content'), P('explore-card-partner-logo'), P('explore-card-partner-name'),
+          P('explore-card-title'), P('explore-card-type'), P('explore-card-footer')]),
+      E_('Compact card title link', P('explore-card-title-link')),
+      E_('Explore dark band', P('explore-band-dark'), [P('explore-section-heading-inverse'), P('explore-section-sub-inverse')]),
+      E_('Explore band arrow link', P('explore-section-link')),
+      E_('Scrolling card row', P('explore-carousel-dark')),
+      E_('Carousel Next arrow', P('explore-carousel-next')),
+      E_('Carousel Previous arrow', P('explore-carousel-prev')),
+  ])
+
 G('Course landing',
   'The course page top to bottom: hero band with a floating stats card, in-page tabs, About (what you will learn, skills, details), Outcomes, Modules with the instructor rail, Recommendations, Testimonials, Reviews, FAQ. The hero and stats card are shared with specializations and professional certificates. A 146px sticky nav replaces the tabs once they scroll away.',
   [
@@ -733,6 +754,13 @@ G('Footer',
 
 
 NOTES = {
+    'Compact course card': 'Four per row at 1440 (266.19 wide, 12px between), 242 wide in a row that scrolls, 150 wide at 390. The height follows the tallest card in the row (247.6 here). Hover and pressed add `0 0 4px #e9eef7, 0 4px 12px 4px rgba(15,17,20,.1)` over 0.3s `cubic-bezier(0, 0, 0.5, 1)`; the focus ring is on the stretched title link, not the card.',
+    'Explore chip': 'Hover and pressed change the border, label and fill together: `#0b408b` on `#f0f6ff`, then `#3c0f8a` on `#f9f5ff`. No transition. The ring is an `::after` 2px out with the chip radius.',
+    'Explore chip, selected': 'Fill and border `#1c2026`, label white 600 with 0.14px tracking. Hover fills `#0b408b`, pressed `#3c0f8a`.',
+    'Explore card row': 'The row is a scroll container (overflow-x auto, `scroll-snap-type: x mandatory`, no scrollbar, `scroll-behavior: smooth`) around a grid with a 12px gap (`--cds-spacing-150`). No card sets a snap alignment, so it does not snap: `scrollLeft = 100` settled at 100.',
+    'Scrolling card row': 'Twenty 242px columns (254 pitch); four cards show whole and five in part at 1440. One click on Next scrolls 1016px, four cards. The row keeps `padding: 0 16px` where the four-card rows have no right padding.',
+    'Carousel Next arrow': 'The hover and pressed fade is stronger: `linear-gradient(90deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,.8) 40%, #fff 100%)`. Focus is set after a key press without scrolling, because Shift+Tab from Next walks through the last card and scrolls the row to its end.',
+    'Explore band arrow link': 'A ghost-invert link on the dark band. Hover, focus and pressed only add an underline.',
     'Enroll button': 'The label is 16/24 600 over a 12.8/16 600 "Starts <date>" line, both white, with padding 11px 80px 13px. The compact sticky-nav copy is 180x60 with 32px side padding.',
     'Secondary button': 'The 1px edge is an inset box shadow in the label colour; the CSS border is 0.',
     'Product card': 'Four per row at 1440 with a 12px gutter. Tags are 20px tall and 14/18 600: Free trial is `#0d2f60` on `#f0f6ff`, Top AI program is `#2c0b65` on `#e8d6ff`.',
@@ -751,7 +779,7 @@ NOTES = {
 
 # card comparison table (default state values)
 CARD_KEYS = [
-    ('Product card', P('product-card')), ('Product card, list variant', P('product-card-list')),
+    ('Product card', P('product-card')), ('Compact course card', P('explore-card')), ('Product card, list variant', P('product-card-list')),
     ('Stats card', P('stats-card')), ('Module list', P('module-list')), ('Review card', P('review-card')),
     ('Testimonial card', P('testimonial-card')), ('Instructor card', P('instructor-card')),
     ('Filter popover', P('filter-popover')),
@@ -859,6 +887,7 @@ pubpages = [
     ('Browse category', 'browse', '/browse/data-science', 'Breadcrumb, stats, "Most popular" cards, sticky 304px filter sidebar, 3-column grid, FAQ.'),
     ('Course landing', 'course', '/learn/machine-learning', 'Hero, stats card, tabs, About, Outcomes, Modules with rail, Recommendations, Testimonials, Reviews, FAQ. All six tab positions, module expand and details, instructors, offered by, sticky nav and the AI panel captured.'),
     ('Second course', 'course2', '/learn/learning-how-to-learn', 'Same frame as the first course, no Outcomes tab, four modules, an "AI Graded" disclaimer.'),
+    ('Explore topic', 'explore', '/explore/generative-ai', 'Bands of heading column, chip row and four compact cards, a dark band with an arrow link and a scrolling row, degrees, articles, FAQ. Card hover captured; the chip and card states are crops and measurements.'),
     ('Specialization', 'specialization', '/specializations/machine-learning-introduction', 'Same hero and stats card; the course list replaces Modules; Course details opens a panel.'),
     ('Professional certificate', 'certificate', '/professional-certificates/google-data-analytics', 'Adds a dismissible promo banner and nine course rows.'),
 ]
@@ -870,7 +899,7 @@ W('Mobile pages (390x844): header 65px with hamburger, wordmark and search icon;
 W('')
 W('| Surface | Light |')
 W('|---|---|')
-for name, page in [('Home', 'mobile-home'), ('Search results', 'mobile-search'), ('Course landing', 'mobile-course'), ('Specialization', 'mobile-specialization')]:
+for name, page in [('Home', 'mobile-home'), ('Search results', 'mobile-search'), ('Explore topic', 'mobile-explore'), ('Course landing', 'mobile-course'), ('Specialization', 'mobile-specialization')]:
     W('| %s | %s |' % (name, shot_links(page, 'light')))
 W('')
 W('### Signed-in learner pages (light only, 1440x900)')
@@ -908,6 +937,7 @@ ov = [
     ('Filter and sort side sheet', 'search, Filter & Sort', 'crop and measurements only; entry [Filter and sort side sheet](#filter-and-sort-side-sheet)', None),
     ('Applied filter chip, filtered results', 'search', 'L and D screenshots', 'screenshots/search-light-chip-applied.png'),
     ('Card hover', 'search', 'L and D screenshots; shadow and overlay label', 'screenshots/search-light-card-hover.png'),
+    ('Compact card hover', 'explore, first band', 'L screenshot `explore-light-card-hover`; entry [Compact course card](#compact-course-card)', 'screenshots/explore-light-card-hover.png'),
     ('AI panel', 'course, specialization, certificate (desktop)', 'L and D screenshots; the panel opens by default and squeezes the page to 1024px', 'screenshots/course-light-ai-panel.png'),
     ('Sticky course nav', 'course, after the hero scrolls away', 'L and D screenshots; entry [Sticky nav](#sticky-nav)', 'screenshots/course-light-sticky.png'),
     ('Module expanded, module details', 'course Modules', 'L and D screenshots; entries [Module accordion](#module-accordion) and [Module panel](#module-panel)', 'screenshots/course-light-module-expanded.png'),
@@ -942,7 +972,7 @@ W('|---|---|---|---|')
 W('| 0.15s | `cubic-bezier(0.4, 0, 0.2, 1)` | background-color | checkbox glyph |')
 W('| 0.15s | `ease-in-out` | transform | FAQ chevron |')
 W('| 0.2s | `ease-in-out` | transform | header container |')
-W('| 0.3s | `cubic-bezier(0, 0, 0.5, 1)` | all | pill, product card, list product card |')
+W('| 0.3s | `cubic-bezier(0, 0, 0.5, 1)` | all | pill, product card, list product card, compact course card |')
 W('')
 W('**Layout grid.** Read on the course page and the search grid at each width.')
 W('')
@@ -1090,6 +1120,7 @@ W('- **Help (i):** opens a modal dialog, not a hover tooltip. Both are measured 
 W('- **Disabled primary button:** none appeared. Disabled ghost and disabled secondary were measured in the filter popover and sheet.')
 W('- **Not measured on purpose:** the AI coach panel contents, the cookie banner (OneTrust is in the DOM but showed nothing in a fresh context, so nothing was declined), sign-in and enrolment flows.')
 W('- **Footer link lists:** the link lists under the footer headings did not render in the headless captures, so the footer screenshots show headings over empty space. The footer link entry was measured on the home page.')
+W('- **Explore page:** only the first light band (Trusted AI Learning) and the dark certificates band were measured. Selecting a chip was not tried, so what it does to the row is not recorded; the degrees band, the articles grid, the role tiles and the FAQ were not measured. The "AI courses by leading organizations" chips carry a logo and are 34 tall; they were not measured. Previous exists only after the row has scrolled (measured after one click on Next). Dark screenshots were not taken.')
 W('- **Empty and error states, toasts:** none appeared on any captured page.')
 W('')
 W('### Signed-in pages')
