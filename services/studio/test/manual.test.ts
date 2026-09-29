@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -9,7 +9,7 @@ import { assembleManual } from "../src/manual/assemble";
 import { STATIC_LINT_NAMES } from "../src/manual/lints";
 import { compareLintNames, lintNamesFromApi, parseApi, type ApiEntry } from "../src/manual/listing";
 import { readOptions } from "../src/manual/options";
-import { ManualSource } from "../src/manual/source";
+import { checkSnippets, ManualSource } from "../src/manual/source";
 import { manualPath } from "../src/paths";
 import type { RunResult } from "../src/proc";
 
@@ -324,6 +324,32 @@ describe("ManualSource", () => {
     await source.refresh();
     expect(await readFile(manualPath(info?.hash ?? ""), "utf8")).toContain("# The tldraw manual");
   });
+  it("reports missing, not ok, when an unchanged build finds its file gone and cannot write it back (Greptile 4128883056)", async () => {
+    const info = await source.refresh();
+    const hash = info?.hash ?? "";
+    await rm(manualPath(hash));
+    await chmod(path.dirname(manualPath(hash)), 0o500);
+    try {
+      expect(await source.refresh()).toBe(info);
+      const status = source.status();
+      expect(status.state).toBe("missing");
+      expect(status.error).toContain("could not be written back");
+      expect(status.reasons.at(-1)).toContain("jobs run without the manual");
+      // And a spawn is told the same thing: no file to pass.
+      expect(await source.ensureFile(hash)).toBeNull();
+    } finally {
+      await chmod(path.dirname(manualPath(hash)), 0o755);
+    }
+    // Once it can be written again, the next refresh puts it back and health recovers.
+    await source.refresh();
+    expect(source.status()).toMatchObject({ state: "ok", error: null });
+  });
+
+  it("does not let an inherited parent's missing file mark the current manual missing", async () => {
+    await source.refresh();
+    expect(await source.ensureFile("b".repeat(64))).toBeNull();
+    expect(source.status().state).toBe("ok");
+  });
 });
 
 describe("the background snippet check (M3)", () => {
@@ -331,7 +357,7 @@ describe("the background snippet check (M3)", () => {
   let idle: boolean;
   let healthy: boolean;
   let checks: number;
-  let behaviour: "clean" | "fail" | "throw" | "hang";
+  let behaviour: "clean" | "fail" | "throw" | "hang" | "yield";
   let logged: string[];
   let source: ManualSource;
   const clean = [
@@ -354,8 +380,13 @@ describe("the background snippet check (M3)", () => {
       checkSnippets: true,
       isIdle: () => idle,
       doctorOk: async () => healthy,
-      runCheck: async (signal) => {
+      runCheck: async (signal, keepGoing) => {
         checks += 1;
+        if (behaviour === "yield") {
+          // The first snippet runs, then a job arrives before the second.
+          idle = false;
+          return keepGoing() ? clean : null;
+        }
         if (behaviour === "throw") throw new Error("spawn npm ENOENT");
         if (behaviour === "hang") {
           await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
@@ -428,4 +459,47 @@ describe("the background snippet check (M3)", () => {
     // Shutting down is not a finding.
     expect(source.status().reasons).toEqual([]);
   });
+
+  it("yields to a job queued mid-check, and stays owed until the queue is idle again (Greptile 4128883064)", async () => {
+    behaviour = "yield";
+    await source.refresh();
+    await source.tick();
+    expect(checks).toBe(1);
+    expect(source.status()).toMatchObject({ state: "ok", snippets: null, snippetsPending: true });
+    expect(source.status().reasons).toEqual([]);
+    // Still busy: nothing runs.
+    await source.tick();
+    expect(checks).toBe(1);
+    // Idle again: it runs to the end.
+    behaviour = "clean";
+    idle = true;
+    await source.tick();
+    expect(checks).toBe(2);
+    expect(source.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+  });
 });
+
+describe("checkSnippets", () => {
+  it("asks before each snippet, and stops with null rather than a partial list", async () => {
+    const dir = path.join(tmpdir(), `studio-check-${Date.now()}-${Math.random()}`);
+    let runs = 0;
+    let asked = 0;
+    const result = await checkSnippets(
+      async () => {
+        runs += 1;
+        return result0;
+      },
+      dir,
+      () => {
+        asked += 1;
+        return asked === 1;
+      },
+    );
+    expect(result).toBeNull();
+    expect(runs).toBe(1);
+    expect(asked).toBe(2);
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+const result0: RunResult = { code: 0, signal: null, stdout: "{}", stderr: "", json: { lints: [] }, timedOut: false };

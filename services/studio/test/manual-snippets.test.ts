@@ -43,7 +43,7 @@ describe.skipIf(!built)(
   built ? "the manual against the installed tldrawkc" : `SKIPPED, tldrawkc is not built (${reason}): the manual against the installed tldrawkc`,
   () => {
     it("runs each worked snippet clean: exit 0, no lint at error level (M3)", async () => {
-      const checks = await checkSnippets(canvas, scratch);
+      const checks = (await checkSnippets(canvas, scratch)) ?? [];
       expect(checks.map((check) => check.name)).toEqual(SNIPPETS.map((snippet) => snippet.name));
       for (const check of checks) expect(check, `${check.name}: ${check.detail}`).toMatchObject({ ok: true });
       // `--no-save` means what it says: the documents it was pointed at never appear.

@@ -84,8 +84,11 @@ export interface ManualSourceOptions {
    * `isIdle` says no job is running or queued.
    */
   checkSnippets?: boolean;
-  /** The check itself, injectable for the tests. */
-  runCheck?: (signal: AbortSignal) => Promise<SnippetCheck[]>;
+  /**
+   * The check itself, injectable for the tests. `keepGoing` is asked before
+   * each snippet; a check that stops because it said no resolves to null.
+   */
+  runCheck?: (signal: AbortSignal, keepGoing: () => boolean) => Promise<SnippetCheck[] | null>;
   /** Whether a check may run now: nothing running, nothing queued. */
   isIdle?: () => boolean;
   /** Whether the tool is healthy: `doctor` exits 0. */
@@ -101,6 +104,12 @@ const sha256 = (text: string | Buffer): string => createHash("sha256").update(te
 export class ManualSource {
   private info: ManualInfo | null = null;
   private error: string | null = null;
+  /**
+   * Why the current manual's file cannot be passed to a spawn: it is missing
+   * or altered and could not be written back. Jobs then run without the
+   * manual, so health reports it missing until the file is put right.
+   */
+  private fileError: string | null = null;
   /** Every manual text this process built, by hash, so a file can be put back. */
   private readonly texts = new Map<string, string>();
   private inFlight: Promise<ManualInfo | null> | null = null;
@@ -116,7 +125,7 @@ export class ManualSource {
 
   private readonly api: () => Promise<RunResult>;
   private readonly check: boolean;
-  private readonly runCheck: (signal: AbortSignal) => Promise<SnippetCheck[]>;
+  private readonly runCheck: (signal: AbortSignal, keepGoing: () => boolean) => Promise<SnippetCheck[] | null>;
   private readonly isIdle: () => boolean;
   private readonly doctorOk: () => Promise<boolean>;
   private readonly tickMs: number;
@@ -125,7 +134,8 @@ export class ManualSource {
   constructor(options: ManualSourceOptions = {}) {
     this.api = options.api ?? (() => canvas(["api", "--json"], 60_000));
     this.check = options.checkSnippets ?? false;
-    this.runCheck = options.runCheck ?? ((signal) => checkSnippets(groupCanvas(signal)));
+    this.runCheck =
+      options.runCheck ?? ((signal, keepGoing) => checkSnippets(groupCanvas(signal), manualCheckDir(), keepGoing));
     this.isIdle = options.isIdle ?? (() => true);
     this.doctorOk = options.doctorOk ?? (async () => (await doctor().catch(() => null))?.code === 0);
     this.tickMs = options.tickMs ?? 15_000;
@@ -165,8 +175,10 @@ export class ManualSource {
     }
     const apiHash = sha256(result.stdout);
     if (this.info !== null && this.info.apiHash === apiHash) {
-      // Same build. The file is checked before every spawn anyway; this only
-      // puts right a manual whose file was lost or changed in the meantime.
+      // Same build. The file is checked before every spawn anyway; this puts
+      // right a manual whose file was lost or changed in the meantime, and a
+      // file that cannot be put right is recorded (see `fileError`) rather
+      // than reported as a healthy manual.
       this.error = null;
       await this.ensureFile(this.info.hash);
       return this.info;
@@ -192,6 +204,7 @@ export class ManualSource {
       builtAt: new Date().toISOString(),
     };
     this.error = null;
+    this.fileError = null;
     for (const reason of lintReasons(this.info)) this.log(`manual stale: ${reason}`);
     if (this.check) {
       this.snippets = null;
@@ -234,23 +247,36 @@ export class ManualSource {
    */
   async ensureFile(hash: string): Promise<string | null> {
     const file = manualPath(hash);
+    const found = await this.makeRight(hash, file);
+    // Only the current manual's file decides health: an inherited parent's
+    // that is gone after a restart costs that one resume its flag and nothing
+    // else, since the resumed session replays its recorded prompt anyway.
+    if (hash === this.info?.hash) this.fileError = found.error;
+    if (found.error !== null) this.log(`manual: ${found.error}`);
+    return found.file;
+  }
+
+  private async makeRight(hash: string, file: string): Promise<{ file: string | null; error: string | null }> {
     const body = await readFile(file).catch(() => null);
-    if (body !== null && sha256(body) === hash) return file;
+    if (body !== null && sha256(body) === hash) return { file, error: null };
     const text = this.texts.get(hash);
     if (text === undefined) {
-      this.log(
-        `manual: ${file} is ${body === null ? "missing" : "not the text its name hashes"}, ` +
+      return {
+        file: null,
+        error:
+          `${file} is ${body === null ? "missing" : "not the text its name hashes"}, ` +
           `and this runner never built it, so it is not passed`,
-      );
-      return null;
+      };
     }
     try {
       await this.write(hash, text);
       if (body !== null) this.log(`manual: ${file} did not match its hash and was written again`);
-      return file;
+      return { file, error: null };
     } catch (error) {
-      this.log(`manual: ${file} could not be written: ${(error as Error).message}`);
-      return null;
+      return {
+        file: null,
+        error: `${file} is ${body === null ? "missing" : "altered"} and could not be written back: ${(error as Error).message}`,
+      };
     }
   }
 
@@ -302,7 +328,13 @@ export class ManualSource {
     const abort = new AbortController();
     this.abort = abort;
     try {
-      const checks = await this.runCheck(abort.signal);
+      // Asked before each snippet, not only before the first: a job queued
+      // while the check runs gets the machine, and the check stays owed.
+      const checks = await this.runCheck(
+        abort.signal,
+        () => !this.stopped && this.isIdle() && this.info?.apiHash === build,
+      );
+      if (checks === null) return; // yielded to a job; owed, and run again when idle
       if (this.stopped || this.info?.apiHash !== build) return;
       const failed = checks.filter((each) => !each.ok);
       // A failure while the tool itself is broken says nothing about the
@@ -338,8 +370,11 @@ export class ManualSource {
     if (info !== null && this.error !== null) {
       reasons.push(`the last refresh failed, so an older manual is in use: ${this.error}`);
     }
+    if (info !== null && this.fileError !== null) {
+      reasons.push(`jobs run without the manual: ${this.fileError}`);
+    }
     return {
-      state: info === null ? "missing" : reasons.length > 0 ? "stale" : "ok",
+      state: info === null || this.fileError !== null ? "missing" : reasons.length > 0 ? "stale" : "ok",
       hash: info?.hash ?? null,
       chars: info?.chars ?? null,
       optionsSource: info?.optionsSource ?? null,
@@ -347,7 +382,7 @@ export class ManualSource {
       reasons,
       snippets: this.snippets,
       snippetsPending: this.check && this.wanted !== null && this.wanted === info?.apiHash,
-      error: this.error,
+      error: this.error ?? this.fileError,
       builtAt: info?.builtAt ?? null,
     };
   }
@@ -396,17 +431,22 @@ function groupCanvas(signal: AbortSignal): CanvasRunner {
  * Run each worked snippet through `canvas run --no-save` on a document that
  * does not exist, and say whether it ran clean: exit 0, and no lint at error
  * level. Nothing is written: `--create` starts from an empty page and
- * `--no-save` leaves the path untouched. The suite runs this too
+ * `--no-save` leaves the path untouched. Null when `keepGoing` said stop
+ * before a snippet (a job arrived). The suite runs this too
  * (`test/manual-snippets.test.ts`), so a snippet that stops passing fails there
  * as well as in health (M3).
  */
 export async function checkSnippets(
   runCanvas: CanvasRunner = canvas,
   directory: string = manualCheckDir(),
-): Promise<SnippetCheck[]> {
+  keepGoing: () => boolean = () => true,
+): Promise<SnippetCheck[] | null> {
   await mkdir(directory, { recursive: true });
   const checks: SnippetCheck[] = [];
   for (const snippet of SNIPPETS) {
+    // Null, not a partial list: a check that stopped part-way says nothing
+    // about the snippets it did not reach.
+    if (!keepGoing()) return null;
     const document = path.join(directory, `${snippet.name}.tldr`);
     await rm(document, { force: true });
     const result = await runCanvas(
