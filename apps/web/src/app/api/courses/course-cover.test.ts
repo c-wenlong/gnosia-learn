@@ -43,7 +43,7 @@ vi.mock("@/lib/blob-store", async () => {
 });
 
 /**
- * `GET /api/courses/<slug>/cover` (migration 0015): the cover photo a course
+ * `GET /api/courses/<slug>/cover` (migration 0016): the cover photo a course
  * row names by its blob key, served to the signed-in owner from the blob
  * store, and the course list's read of which covers there are.
  *

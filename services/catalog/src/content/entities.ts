@@ -17,6 +17,7 @@ import {
   tag,
   topic,
   topicRelation,
+  video,
 } from "@self-learn/schema";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -94,6 +95,9 @@ export const ENTITIES: Readonly<Record<RevisionEntityType, EntitySpec>> = {
     key: "id",
     links: [link(assetTopic, "assetId"), link(assetConcept, "assetId"), link(assetDerivation, "assetId")],
   },
+  // A studio video's rendered files are `asset` rows of their own, each with
+  // its own revisions; the `video` row is the source they came from.
+  video: { type: "video", table: video, key: "slug", links: [] },
 };
 
 /** A column naming another content entity: where a link, or a row, points. */
@@ -114,6 +118,7 @@ export const ROW_FAR_ENDS: Readonly<Partial<Record<RevisionEntityType, readonly 
   curriculum_item: [{ column: "collectionId", target: "collection" }],
   concept: [{ column: "topicSlug", target: "topic" }],
   diagram: [{ column: "topicSlug", target: "topic" }],
+  video: [{ column: "topicSlug", target: "topic" }],
 };
 
 /** The same for each link table, by its SQL name: the far end, never the parent. */
@@ -136,13 +141,14 @@ export const LINK_FAR_ENDS: Readonly<Record<string, readonly FarEnd[]>> = {
 
 /**
  * Every column of an entity row that names a blob, by its TypeScript key and
- * its SQL name: `asset.blob_key`, `diagram.svg_blob_key` and a course's
- * `collection.cover_blob_key`. Each must be under the row's owner's prefix.
+ * its SQL name: `asset.blob_key`, `diagram.svg_blob_key`, a course's
+ * `collection.cover_blob_key` and a studio video's `video.mp4_blob_key`. Each must be under the row's owner's prefix.
  */
 export const BLOB_KEY_COLUMNS = [
   ["blobKey", "blob_key"],
   ["svgBlobKey", "svg_blob_key"],
   ["coverBlobKey", "cover_blob_key"],
+  ["mp4BlobKey", "mp4_blob_key"],
 ] as const;
 
 /**
@@ -165,7 +171,7 @@ const NOT_CONTENT_IN = new Map<string, ReadonlySet<string>>([["collection_item",
  * without the new value snapshots exactly as it did before the migration,
  * and the first revision that mentions the column is the one that set it.
  *
- * `collection.cover_blob_key` came with 0015, after every course and module
+ * `collection.cover_blob_key` came with 0016, after every course and module
  * had a history.
  */
 export const OMITTED_WHEN_NULL: ReadonlyMap<string, ReadonlySet<string>> = new Map([

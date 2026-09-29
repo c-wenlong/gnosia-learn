@@ -770,7 +770,7 @@ async function editedExport(
 
 /**
  * The owner's course covers as the rows hold them, for the courses source
- * (`IndexContext.knownCovers`). A database from before 0015 has no column,
+ * (`IndexContext.knownCovers`). A database from before 0016 has no column,
  * and so no covers (undefined_column).
  */
 async function storedCovers(

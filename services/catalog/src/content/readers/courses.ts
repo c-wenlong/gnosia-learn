@@ -43,7 +43,7 @@ import type { TypeReader } from "./reader";
  *   and its `type` the asset's `resource_type`;
  * - a cover is the course's `cover_blob_key` and `metadata.coverCredit`, named
  *   as the export names its file (`<code>.cover.<ext>`, the key's extension).
- *   Read through `to_jsonb`, so a database that has not had 0015 yet reads
+ *   Read through `to_jsonb`, so a database that has not had 0016 yet reads
  *   as courses with no cover rather than failing the whole list.
  *
  * Six queries per call, whatever the number of courses, in one snapshot, each

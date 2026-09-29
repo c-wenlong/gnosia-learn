@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -818,6 +819,63 @@ export const diagram = pgTable(
     index("diagram_owner_id_idx").on(t.ownerId),
     index("diagram_topic_slug_idx").on(t.topicSlug),
     index("diagram_svg_blob_key_idx").on(t.svgBlobKey),
+  ],
+);
+
+/**
+ * A video made through the studio's chat (docs/STUDIO-VIDEOS.md, D49): the
+ * editable source (the scene files and `topic.yml`, with the brief it was made
+ * from) in jsonb, the rendered cut in the blob store. The same shape as
+ * `diagram`, for the same reason: a change starts from the source, and the
+ * owner's history holds it revision by revision.
+ *
+ * The mp4, its three sidecars and its poster are also `asset` rows under
+ * `video:` and `poster:video:`, a namespace no importer prunes, so the library
+ * plays a studio video exactly as it plays a manimkc render. This row is what
+ * those assets were rendered from; `rendered_source_hash` says which source.
+ *
+ * Written only through the write seam, as `catalog video put --job` (Accept),
+ * so its write guard is armed from the migration that creates it: unlike the
+ * older content tables there was never a writer outside the seam to wait for.
+ */
+export const video = pgTable(
+  "video",
+  {
+    slug: text("slug").primaryKey(),
+    ownerId: ownerId(() => learner.id),
+    title: text("title"),
+    topicSlug: text("topic_slug")
+      .notNull()
+      .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
+    /** `{ files: { "<name>": "<text>" }, brief: { ... } }`: what a change job starts from. */
+    source: jsonb("source").notNull(),
+    /** sha256 of the canonical source. */
+    sourceHash: text("source_hash").notNull(),
+    /** The rendered cut. */
+    mp4BlobKey: text("mp4_blob_key").references(() => blobObject.key, {
+      onDelete: "restrict",
+      onUpdate: "cascade",
+    }),
+    /** The `source_hash` the mp4 was rendered from. */
+    renderedSourceHash: text("rendered_source_hash"),
+    /** ffprobe's figure, from the studio's gate; the asset row has no column for it. */
+    durationSeconds: numeric("duration_seconds", { mode: "number" }),
+    archivedAt: archivedAt(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("video_slug_check", kebab("slug")),
+    check("video_source_object_check", sql`jsonb_typeof(source) = 'object'`),
+    check("video_source_hash_check", sql`source_hash ~ '^[0-9a-f]{64}$'`),
+    // As `diagram_svg_pair_check`: a cut with no record of what it was
+    // rendered from cannot be judged current, and a hash with no cut
+    // describes nothing.
+    check("video_mp4_pair_check", sql`(mp4_blob_key is null) = (rendered_source_hash is null)`),
+    check("video_duration_check", sql`duration_seconds is null or duration_seconds > 0`),
+    index("video_owner_id_idx").on(t.ownerId),
+    index("video_topic_slug_idx").on(t.topicSlug),
+    index("video_mp4_blob_key_idx").on(t.mp4BlobKey),
   ],
 );
 

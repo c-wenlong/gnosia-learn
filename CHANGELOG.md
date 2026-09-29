@@ -148,7 +148,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 - **Course cover photos are blobs, named by the course row.** The ten photos
   that were `apps/web/public/course-covers/` move into the blob store:
-  migration 0015 adds `collection.cover_blob_key` (a course only, always with
+  migration 0016 adds `collection.cover_blob_key` (a course only, always with
   `metadata.coverCredit`: photographer, source page, licence), and the web
   app serves each from `/api/courses/<slug>/cover` to the signed-in owner,
   cached for good under a URL versioned by the image's hash. `catalog course

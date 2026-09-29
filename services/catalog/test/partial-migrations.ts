@@ -26,7 +26,7 @@ export async function partialMigrations(count = 2): Promise<string> {
  * Every migration but phase 2's contract, 0013: a database holding the rows
  * the contract forbids (a stored-kind asset with a path and no blob) that has
  * had every other migration since. A suite that writes content through
- * today's code needs the columns added after 0013 (0015's
+ * today's code needs the columns added after 0013 (0016's
  * `collection.cover_blob_key`, which every collection upsert names), and a
  * database stopped at 0012 has none of them.
  */

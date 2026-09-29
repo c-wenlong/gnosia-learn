@@ -110,8 +110,15 @@
     {
       "idx": 15,
       "version": "7",
-      "when": 1790664024029,
-      "tag": "0015_course_cover_blob",
+      "when": 1790663471524,
+      "tag": "0015_studio_videos",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790667734389,
+      "tag": "0016_course_cover_blob",
       "breakpoints": true
     }
   ]

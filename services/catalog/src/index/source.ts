@@ -102,7 +102,7 @@ export interface IndexContext {
    * by course id. The courses source reads it because a course file from
    * before covers existed has no `cover:`, and must not take away a cover
    * the database holds; one whose `cover:` differs is refused, as `course
-   * import` refuses it. Empty for a database with none, or before 0015.
+   * import` refuses it. Empty for a database with none, or before 0016.
    */
   knownCovers: () => Promise<ReadonlyMap<string, { key: string; credit: CoverCredit | null }>>;
 }

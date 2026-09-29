@@ -22,7 +22,7 @@ import { SEED } from "./seed";
 import { storedBlob } from "./stored-blob";
 
 /**
- * Course covers (migration 0015): the cover photo is a blob, the course row
+ * Course covers (migration 0016): the cover photo is a blob, the course row
  * names its key in `cover_blob_key`, and its credit is `metadata.coverCredit`.
  *
  * Three things are pinned here. The schema's own rules (only a course has a
@@ -157,7 +157,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
       );
     });
 
-    it("snapshots a course without a cover as it did before 0015", async () => {
+    it("snapshots a course without a cover as it did before 0016", async () => {
       const read = await readSnapshots(scratch.db, "collection", ["cp4284", "cp4284-m1"]);
       for (const id of ["cp4284", "cp4284-m1"]) {
         expect(Object.keys(read.get(id)?.snapshot.entity ?? {}), id).not.toContain("cover_blob_key");

@@ -21,7 +21,7 @@ import { sqlstate } from "./errors";
  * unreachable.
  */
 
-/** undefined_table, undefined_column: the schema predates 0010 (or, for covers, 0015). */
+/** undefined_table, undefined_column: the schema predates 0010 (or, for covers, 0016). */
 const BEFORE_BLOBS = new Set(["42P01", "42703"]);
 
 let warned = false;
@@ -35,7 +35,7 @@ async function orNoBlobs<T>(read: () => Promise<T>, none: T): Promise<T> {
     if (!warned) {
       warned = true;
       console.warn(
-        "blobs: this database predates the blob store (0010) or course covers (0015); run `npm run catalog -- migrate`",
+        "blobs: this database predates the blob store (0010) or course covers (0016); run `npm run catalog -- migrate`",
       );
     }
     return none;
@@ -194,7 +194,7 @@ const COVER_COLUMNS = {
 /**
  * Live courses with a cover, readable by `scope`: the course row and the
  * blob's owner both (phase 4), as `keyedFor` asks of an asset. `slug`
- * narrows it to one course. A database that has not had 0015 has no
+ * narrows it to one course. A database that has not had 0016 has no
  * `cover_blob_key` and answers no covers, as one before 0010 answers no blobs.
  */
 async function covers(db: CatalogDatabase, scope: OwnerScope, slug?: string): Promise<CourseCoverBlob[]> {

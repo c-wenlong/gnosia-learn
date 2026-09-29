@@ -18,7 +18,7 @@ import { currentScope } from "@/lib/owner";
  * not link an image the route would answer with a 404.
  *
  * **It degrades to no covers.** A cover is decoration, so a read that fails
- * (the store's table unreachable, or a database that has not had 0015) costs
+ * (the store's table unreachable, or a database that has not had 0016) costs
  * the photos and not the page: every card draws its code placeholder and the
  * server log says why. The courses themselves are a separate read, which
  * refuses on its own terms (`@/data/source`).

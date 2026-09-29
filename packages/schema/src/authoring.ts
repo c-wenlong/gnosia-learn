@@ -44,6 +44,9 @@ export const REVISION_ENTITY_TYPES = [
   "concept",
   "diagram",
   "asset",
+  // A studio video (docs/STUDIO-VIDEOS.md, D49): its source and brief, with
+  // the rendered cut as a blob. Its asset rows are revisions of `asset`.
+  "video",
 ] as const;
 export type RevisionEntityType = (typeof REVISION_ENTITY_TYPES)[number];
 

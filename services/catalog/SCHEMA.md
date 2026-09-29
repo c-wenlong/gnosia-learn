@@ -23,7 +23,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
@@ -72,7 +72,7 @@ which brief produced them.
 | --- | --- |
 | `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
-| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0015), with its credit in `metadata.coverCredit`. |
+| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. |
 | `asset_topic` | This asset is about this topic. |
@@ -87,6 +87,7 @@ which brief produced them.
 | `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. Read from a topic's `relations:` list, at its position there. |
 | `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
 | `diagram` | A `.tldr` document in jsonb, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
+| `video` | A video made through the studio's chat (0015, docs/STUDIO-VIDEOS.md D49): its source (the scene files, `topic.yml` and the brief) in jsonb, its cut as a blob, and the hash of the source the cut was rendered from. The cut, its sidecars and its poster are also `asset` rows under `video:` and `poster:video:`. See [Studio videos: a row, five assets and one transaction](#studio-videos-a-row-five-assets-and-one-transaction). |
 | `blob_object` | One object in the blob store: `<owner_id>/<sha256>.<ext>`, its size, type, provider and whether the upload is confirmed. |
 | `session_log_entry` | One appended piece of a session log: the exact text that went onto the end of the file, so the log is its entries concatenated, byte for byte. The first entry is what `learn session start` wrote, frontmatter included. Append-only; its own history, so no revisions. An import appends what a file grew by and refuses one edited above its end. |
 | `content_revision` | One row per content write: the whole entity after it, its hash, who wrote it and why. Append-only. |
@@ -101,7 +102,7 @@ which brief produced them.
 | `review` | SM-2 card per concept: repetitions, ease, interval, lapses, due, leech. Derived. |
 | `progress` | A ticked checklist row, plus the learner's note on it. |
 | `recap` | The durable "what I learnt" record per checklist row. |
-| `preference` | Theme, epoch, last visited. Key/value, because these change with the UI. |
+| `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
 
 ### Operational
 
@@ -118,7 +119,7 @@ which brief produced them.
 | --- | --- |
 | `session` | One run of something that writes to the knowledge base. `kind` is `tutor` (a `/learn` session) or `studio` (a generation runner); both share one id space, which is what lets `event.session_id` be a foreign key. |
 | `draft` | One conversation with the studio's planner (docs/STUDIO-CHAT-FIRST.md, D32): the headless session every turn resumes, the transcript's path under the runner's `STUDIO_HOME`, the latest brief that passed and, when its topic does not exist yet, the proposed topic (`pending_topic`). One owner's, like a job. A mirror of the runner's `drafts/<id>/draft.json`, written by `catalog draft upsert`, so it has no transition guard of its own: the runner holds the record and the state machine (`DRAFT_TRANSITIONS`). |
-| `job` | One request to generate one file: the brief, the lease on a committed path, the state machine, the gate's verdict and what it cost. `draft_id` names the conversation that asked for it (D35), `ON DELETE SET NULL`, so pruning a draft never takes a job with it; a draft reports its newest job. |
+| `job` | One request to generate one file (`kind` `diagram` or, since 0015, `video`, whose `target_path` is `videos/<slug>.mp4`): the brief, the lease on a committed path, the state machine, the gate's verdict and what it cost. `draft_id` names the conversation that asked for it (D35), `ON DELETE SET NULL`, so pruning a draft never takes a job with it; a draft reports its newest job. |
 | `asset_job` | This job wrote this asset, at this hash, at this size. Provenance as a link table, so regenerating does not erase the earlier job's claim. Once the job is accepted the hash is a snapshot and is never rewritten: a repair assert over a file somebody has edited since would otherwise replace "what the job wrote" with "what a person wrote afterwards", which is the one comparison that makes the edit visible. |
 
 Three shapes here are worth stating outright.
@@ -604,7 +605,7 @@ is refused unless it names exactly that; after it, the writer's links stand.
 ### Course covers: a column and a blob
 
 A course's cover photo is a blob (D5, D7), and the course row names it by key
-in `collection.cover_blob_key` (0015), never by a URL: the web app serves it
+in `collection.cover_blob_key` (0016), never by a URL: the web app serves it
 from `/api/courses/<slug>/cover`, so the route and a later cloud store can
 change without a migration. The key follows `diagram.svg_blob_key`: a foreign
 key to `blob_object(key)`, `ON DELETE RESTRICT` (an object a course shows
@@ -636,6 +637,58 @@ under its locks: a `course cover` that committed in between refuses the
 courses source by name, writing nothing for it, and a rerun reads the new
 cover. `course import` of one file carries the cover over and
 refuses a `cover:` that differs from the course's.
+
+### Studio videos: a row, five assets and one transaction
+
+A video made through the studio's chat (docs/STUDIO-VIDEOS.md, D49) is the
+shape a diagram is. The `video` row holds the source, `{ files: { "<name>.py":
+..., "topic.yml": ... }, brief: {...} }`, which is what a change job starts from,
+and `source_hash`, the sha256 of its canonical JSON. The cut is a blob,
+`mp4_blob_key`, paired by `video_mp4_pair_check` with `rendered_source_hash`,
+the source it was rendered from, as `diagram_svg_pair_check` pairs an SVG.
+`duration_seconds` is the gate's ffprobe figure, since `asset` has no column
+for it.
+
+The files are also `asset` rows, so the library plays a studio video as it
+plays a manimkc render: `video:<slug>` (kind `video`, path `videos/<slug>.mp4`,
+a logical name, D11), `video:<slug>.transcript.json`, `.chapters.json` and
+`.vtt` (derived from the video; a silent cut has none, and a change to silent
+deletes the old ones through the seam), and `poster:video:<slug>`, derived
+from it too, in the `poster:` namespace the blob audit and the re-render
+unhooking key on. The video carries `asset_topic` and one `asset_concept` per
+concept in the brief. `video:` is no import source, so no import prunes it; the
+`manimkc:` namespace is deliberately not used, since `catalog import --only
+manimkc` deletes every `manimkc:` asset its report does not list, and a studio
+video has no folder in manimkc's `topics/` (edge case V16).
+
+`catalog video put --job <id> --slug S --dir <candidate> --base <rev|none>`
+(`src/content/videos.ts`) is Accept. It reads the job (this owner's, kind
+`video`, `awaiting_review`, target `videos/S.mp4`), holds every file in the
+candidate directory to the hash the gate wrote in `copies.json` (each a regular
+file with one link; every source file needs a record, and every recorded source
+file must be there), stores the blobs, and then, in one transaction, writes the
+`video` row, the asset rows, their `asset_job` provenance and the job's move to
+`accepted`, through the same checked transition `catalog job accept` makes
+(`acceptJobIn` in `src/commands/job.ts`). So there is no state in which a video
+is in the catalog and its job still in review, unlike a diagram's put and
+accept, which predate this and are two calls. A put repeated for an accepted
+job returns the landed revision and writes nothing when the source hash and
+every file's hash are what that job landed, and is refused by name otherwise;
+the same check runs again under the locks, so a retry that raced the first put
+gets the landed Accept rather than a stale-base refusal.
+
+The blobs are stored before the transaction, so a put refused inside it leaves
+them in the store with no row naming them. Nothing deletes them: a retry of the
+same Accept reuses them (the keys are hashes), `catalog blob audit` lists any
+left as `unreferenced` (the audit counts `video.mp4_blob_key` as a reference),
+and they count toward the owner's byte cap, the same as a re-rendered video's
+old bytes. A reclaim of unreferenced blobs, for every kind, is still to build.
+
+A change to a video in review is `catalog job enqueue --discard-parent <id>`
+(D52): the parent is locked, checked (this owner's, a video job, awaiting
+review, the same target) and discarded in the transaction that inserts the
+child, so the lease on `videos/<slug>.mp4` passes from one to the other with no
+gap, and a refused insert leaves the parent in review.
 
 ### The mirror ledger
 
@@ -767,7 +820,7 @@ that uses it (0.3) is in `src/content/`.
 Every content entity carries `owner_id text not null default 'local'
 references learner(id) on delete restrict`: `topic`, `tag`, `topic_relation`,
 `manimkc_topic`, `concept`, `collection`, `curriculum_item`, `asset`,
-`diagram`, `blob_object`, `content_revision`, and `job` and `asset_job`. Link
+`diagram`, `video`, `blob_object`, `content_revision`, and `job` and `asset_job`. Link
 tables carry none; they belong to the entity at their owning end. Primary keys
 did not change, so ids stay global across owners (D3). The migration inserts
 the `local` learner before the first `owner_id` column, because a database that
@@ -793,6 +846,7 @@ row-level security, which waits for a second service to read the database:
 | The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
 | The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. Stamps its link rows the same way (D24: a link belongs to its parent's owner) and refuses a new far end, or a row's own reference, naming a row neither the writer's nor the commons' (`ROW_FAR_ENDS`, `LINK_FAR_ENDS` in `src/content/entities.ts`); one already there is carried over. `deleteContent` deletes through the same two checks. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
 | The verbs that write around the seam | `topic rename` refuses another owner's topic; `item purge` refuses another owner's item and deletes only the purging learner's rows; `course import` deletes only its own orphaned links, through `deleteContent` |
+| `catalog video put`, `list`, `show`, `checkout` (`src/content/videos.ts`) and `catalog preference get` | Take `--owner` (default `CLI_OWNER`): `put` lands only that owner's job (another owner's is "no job") and writes as them; `list`, `show` and `checkout` read only what they may read, and another owner's slug is a slug with no video (`checkout` writes nothing). Their joins are scoped at the far end too: a poster, transcript, topic or concept another owner holds is left out rather than named `preference get` reads only that learner's row |
 | `catalog job` and `catalog session` | Take `--owner` (default `CLI_OWNER`) and act only on that owner's jobs and sessions: another owner's is "no job", an id another learner holds is refused rather than adopted, and a job's session and parent job must be the owner's too. The studio passes the owner it serves |
 | `catalog doctor` | Reports D24's mixed rows (a relation or mapping whose `owner_id` is not its topic's), which fail it (exit 1) as an armed rule's violator does, and links pointing at a row their owner cannot read, which are reported only; `--fix` restamps the mixed rows through the seam, one revision per topic |
 | `catalog export`, parity, `topic ls` | Read every owner, through an `owners` argument that is optional only on those internal functions |
@@ -851,11 +905,11 @@ they cannot snapshot the same entity two ways.
 | `curriculum_item` | `curriculum_item_topic`, `concept_curriculum_item` |
 | `concept` | `concept_prerequisite` |
 | `asset` | `asset_topic`, `asset_concept`, `asset_derivation` |
-| `tag`, `diagram` | none |
+| `tag`, `diagram`, `video` | none |
 
 A column added to a table after its entities had revisions is left out of the
 snapshot while it is null (`OMITTED_WHEN_NULL` in `src/content/entities.ts`):
-`collection.cover_blob_key`, from 0015. Without that, the new empty key would
+`collection.cover_blob_key`, from 0016. Without that, the new empty key would
 change the hash of every course and module, and the next write of each would
 append a revision whose only difference is a key that says nothing. The first
 revision that mentions the column is the one that set it.
@@ -1030,6 +1084,7 @@ cannot point them elsewhere.
 | `event_no_update`, `event_no_delete` | `event` | before, per row | on | Append-only (0001, per row since 0003) |
 | `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, `catalog_append_only()` |
 | `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, same function, its own hint |
+| `video_write_guard` | `video` | before, per row | on | The same guard, armed by 0015 itself: `video` has had no writer outside the seam, so there was nothing to wait for |
 | `<table>_write_guard` | the 17 tables in `WRITE_GUARDS` (`src/content/rules.ts`) | before, per row | **off** | Refuses a write unless the transaction set `self_learn.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
 | `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
 | `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
