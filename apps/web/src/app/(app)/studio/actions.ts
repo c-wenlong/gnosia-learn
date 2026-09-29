@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
-import { requireStudio, studioApi } from "@/lib/studio";
+import { requireStudio, studioApi, type StudioResult } from "@/lib/studio";
 import { AGENT_KEYS, checkedAgent, storedAgent } from "@/lib/studio-agent-settings";
 import { withOutcome } from "@/lib/studio-view";
 
@@ -133,6 +133,14 @@ export interface AgentSaved {
 }
 
 /**
+ * How long a save waits on the runner before writing the row itself. The
+ * runner's own write is a `catalog preference set` subprocess (1 to 2 s when
+ * the machine is loaded), so this is generous; what it must not do is leave the
+ * panel waiting on a runner that never answers.
+ */
+const RUNNER_SAVE_MS = 20_000;
+
+/**
  * The settings panel's save: one row's model and effort (D53 of
  * docs/STUDIO-VIDEOS.md), as the `studioVideoAgent` or `studioDiagramAgent`
  * preference of the signed-in owner. The runner reads it at job start
@@ -142,6 +150,25 @@ export interface AgentSaved {
  * person just changed, and says "Saved" or why not beside it. A value the
  * shared reader would not keep as sent (a model that is not a CLI name, an
  * effort outside the list) is refused, never stored as something else.
+ *
+ * **The runner writes it when it can.** `PUT /api/settings/agent` stores the
+ * same row and drops the runner's cached copy of it, so `/api/health` shows
+ * the new model at once instead of up to 15 s later. The two answers to a
+ * runner that says no are told apart:
+ *
+ * - The runner is not there (nothing listening, or no answer inside
+ *   `RUNNER_SAVE_MS`), or it answered with a server error, or with a 404 or
+ *   405 because it is an older process that has no such route: the row is
+ *   written directly, as before the runner took it over, so a save still works
+ *   with the runner down. Both writes are the same row and the same value, so
+ *   a runner that stored it and then failed to say so costs nothing.
+ * - The runner answered with any other 4xx: it looked at the value and refused
+ *   it. That is the answer, shown as the refusal; writing the row behind its
+ *   back would store what the runner said it would not run with.
+ *
+ * The checks that come first (the kind, and the model being one the menu
+ * offers or the one already stored) do not change, and still read the stored
+ * row, so with the catalog down a save says so before it tries either writer.
  */
 export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
   requireStudio();
@@ -150,17 +177,38 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
   const owner = await currentOwner();
   const sent = { model: String(formData.get("model") ?? ""), effort: String(formData.get("effort") ?? "") };
   try {
-    return await withLearnerStore(async (db) => {
-      // A model the menu offers, `default`, or the one already stored: a
-      // typo stored here would fail every job of this kind at spawn.
-      const stored = storedAgent(kind, await readPreference(db, AGENT_KEYS[kind], owner));
-      const value = checkedAgent(sent, stored);
-      if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
-      await writePreference(db, AGENT_KEYS[kind], value, owner);
-      return { ok: true, error: null };
+    // A model the menu offers, `default`, or the one already stored: a
+    // typo stored here would fail every job of this kind at spawn.
+    const value = await withLearnerStore(async (db) =>
+      checkedAgent(sent, storedAgent(kind, await readPreference(db, AGENT_KEYS[kind], owner))),
+    );
+    if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
+
+    const viaRunner = await studioApi<unknown>("/api/settings/agent", {
+      method: "PUT",
+      body: JSON.stringify({ kind, model: value.model, effort: value.effort }),
+      timeoutMs: RUNNER_SAVE_MS,
     });
+    if (viaRunner.ok) return { ok: true, error: null };
+    if (runnerRefused(viaRunner)) return { ok: false, error: `Not saved: ${viaRunner.headline}` };
+
+    console.warn(`studio settings: the runner did not store it (${viaRunner.headline}), writing the row directly`);
+    await withLearnerStore((db) => writePreference(db, AGENT_KEYS[kind], value, owner));
+    return { ok: true, error: null };
   } catch (error) {
     console.warn(`studio settings: save failed — ${error instanceof Error ? error.message : String(error)}`);
     return { ok: false, error: "Not saved: the catalog did not answer." };
   }
+}
+
+/**
+ * Whether a failed runner call is the runner looking at the value and saying
+ * no: a 4xx, other than the 404 and 405 an older runner gives a route it does
+ * not have. Nothing listening, a timeout and a 5xx are the runner being
+ * unable, which is what the direct write is for.
+ */
+function runnerRefused(result: Extract<StudioResult<unknown>, { ok: false }>): boolean {
+  if (result.reason !== "refused" || result.status === null) return false;
+  if (result.status === 404 || result.status === 405) return false;
+  return result.status >= 400 && result.status < 500;
 }
