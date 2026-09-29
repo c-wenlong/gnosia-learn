@@ -215,6 +215,7 @@ export function DraftPanel({
   path,
   topics,
   titles,
+  videoTitles = {},
   suggestions,
   cap: initialCap,
   video: initialVideo = null,
@@ -228,6 +229,11 @@ export function DraftPanel({
   topics: TopicOption[];
   /** Each diagram's display title by name, for an extend conversation's header and picture. */
   titles: Readonly<Record<string, string>>;
+  /**
+   * Each video's title by slug, for a Change conversation's header and poster.
+   * Its own map: a diagram and a video can share a slug.
+   */
+  videoTitles?: Readonly<Record<string, string>>;
   suggestions: Suggestion[];
   /** `dailyCap` from `/api/health` at render time. A 429 replaces it. */
   cap: CapStatus | null;
@@ -769,7 +775,8 @@ export function DraftPanel({
   }
 
   const diagramSource = view.sourceKind === undefined || view.sourceKind === "diagram";
-  const sourceTitle = view.source === null ? null : diagramSource ? (titleOf(titles, view.source) ?? view.source) : view.source;
+  const sourceTitle =
+    view.source === null ? null : ((diagramSource ? titleOf(titles, view.source) : titleOf(videoTitles, view.source)) ?? view.source);
   const newestTitle = cards.at(-1)?.brief.title ?? null;
   const title =
     view.title ??

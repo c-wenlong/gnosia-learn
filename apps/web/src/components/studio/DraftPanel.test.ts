@@ -211,6 +211,7 @@ async function mount(view: DraftView) {
         suggestions: [],
         cap: null,
         video: { ok: true, reason: null },
+        videoTitles: { "softmax-basics": "Softmax, slowly" },
       }),
     );
   });
@@ -297,7 +298,8 @@ describe("Start over while a job runs (Greptile on #204)", () => {
 describe("a conversation opened with Change on a video (p2v-video on #203)", () => {
   it("names, pins and opens on the video, never as a diagram", async () => {
     const host = await mount(draft({ source: "softmax-basics", sourceKind: "video" }));
-    expect(host.textContent).toContain("Changing softmax-basics");
+    // The video's own title, never a diagram's of the same slug.
+    expect(host.textContent).toContain("Changing Softmax, slowly");
     expect(host.textContent).not.toContain("Extending");
     expect(host.textContent).toContain("I've read this video's brief.");
     expect(host.textContent).not.toContain("I've read this diagram");
