@@ -23,7 +23,8 @@ import {
 import { studioBlobStore } from "./blobs";
 import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
-import { shotPath, targetPath, workDir, workSvgPath } from "./paths";
+import { matchesTag, newestShot, openShot } from "./live-shot";
+import { scratchDir, shotPath, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
@@ -336,7 +337,7 @@ async function handle(
         "/api/jobs/{id}",
         "/api/jobs/{id}/events",
         "/api/jobs/{id}/log",
-        "/api/jobs/{id}/shot?which=before|after",
+        "/api/jobs/{id}/shot?which=before|after|live",
         "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume|compare",
         "/api/drafts",
         "/api/drafts/{id}",
@@ -474,8 +475,11 @@ async function handle(
     }
 
     case "GET shot": {
-      const which = url.searchParams.get("which") === "before" ? "before" : "after";
-      return shotBytes(response, record, which);
+      const asked = url.searchParams.get("which");
+      // `live` is the newest picture the agent took of its own work, for the
+      // grid's preview while the job runs; the other two are the comparison.
+      if (asked === "live") return liveShotBytes(request, response, record);
+      return shotBytes(response, record, asked === "before" ? "before" : "after");
     }
 
     case "POST compare": {
@@ -1045,6 +1049,58 @@ async function shotBytes(
     "last-modified": info.mtime.toUTCString(),
   });
   createReadStream(file).pipe(response);
+}
+
+/**
+ * The newest picture the drawing agent took, for the grid's live preview.
+ *
+ * Read from this job's own scratch directory and nowhere else: the id picks
+ * the directory, the request names no path, and `newestShot` follows no
+ * symlink (see `live-shot.ts`). The tile polls this every few seconds while
+ * the job runs, so it answers a repeat with a 304 on the strong tag: an
+ * unchanged directory costs a directory read and no bytes. No Chromium is
+ * launched; the agent already took the picture for itself.
+ *
+ * A 404 before the first pass is the ordinary answer, and the tile keeps its
+ * blurred thumbnail (or its blank card) until there is something to show.
+ */
+async function liveShotBytes(
+  request: IncomingMessage,
+  response: ServerResponse,
+  record: JobRecord,
+): Promise<void> {
+  const shot = await newestShot(scratchDir(record.id));
+  const cache = {
+    // Revalidated on every poll: the tag is what makes that cheap.
+    "cache-control": "private, no-cache",
+    "x-content-type-options": "nosniff",
+  };
+  if (shot === null) {
+    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
+  }
+  if (matchesTag(request.headers["if-none-match"], shot.etag)) {
+    response.writeHead(304, { ...cache, etag: shot.etag });
+    response.end();
+    return;
+  }
+  const handle = await openShot(shot.file);
+  if (handle === null) {
+    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
+  }
+  const info = await handle.stat().catch(() => null);
+  if (info === null || !info.isFile() || info.size !== shot.size) {
+    await handle.close();
+    // Rewritten between the look and the open; the next poll gets it whole.
+    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
+  }
+  response.writeHead(200, {
+    ...cache,
+    "content-type": "image/png",
+    "content-length": info.size,
+    etag: shot.etag,
+    "last-modified": new Date(shot.mtimeMs).toUTCString(),
+  });
+  handle.createReadStream().pipe(response);
 }
 
 /**
