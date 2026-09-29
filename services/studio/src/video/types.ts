@@ -91,6 +91,13 @@ export interface VideoJobRecord {
   agentSessionId: string | null;
   parentJobId: string | null;
   draftId?: string | null;
+  /**
+   * The job that discarded this one, in review, in its own catalog
+   * transaction (D52): a Replace or a Revise. Written with the `discarded`
+   * state, so a draft reads that discard as a replacement rather than a
+   * verdict however late it hears of it. Absent for every other discard.
+   */
+  replacedBy?: string | null;
   /** What the person asked to be different (a revise), or null. */
   changes: string | null;
   idempotencyKey: string;

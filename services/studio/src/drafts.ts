@@ -516,13 +516,6 @@ export class Drafts {
    * create the topic twice and queue a second job.
    */
   private readonly draws = new Map<string, { key: string; result: Promise<unknown> }>();
-  /**
-   * Video jobs in review that a press is replacing right now (D52). The video
-   * runner marks the parent discarded inside the child's enqueue, before the
-   * draft records the child, and that discard is not a verdict to tell the
-   * planner about: the press's own note says what happened.
-   */
-  private readonly replacing = new Set<string>();
   private draining = false;
   /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
@@ -2211,21 +2204,16 @@ export class Drafts {
     }
     const video = this.video!;
     const parent = ready.parent;
-    if (parent?.discard === true) this.replacing.add(parent.jobId);
-    try {
-      const { record: job, created } = await video.runner.enqueue(
-        validVideo(ready, vocabulary),
-        parent === null ? undefined : { jobId: parent.jobId, agentSessionId: null, changes: null, discard: parent.discard },
-        { draftId: id },
-      );
-      await this.markDrawing(id, job.id, "video", ready.briefSeq);
-      if (parent?.discard === true && created) {
-        await this.write(id, () => this.note(id, `The video in review (job ${parent.jobId}) was discarded and replaced by the new brief; nothing of it landed.`));
-      }
-      return { kind: "video", jobId: job.id, created, replaces: parent?.discard === true ? parent.jobId : null };
-    } finally {
-      if (parent?.discard === true) this.replacing.delete(parent.jobId);
+    const { record: job, created } = await video.runner.enqueue(
+      validVideo(ready, vocabulary),
+      parent === null ? undefined : { jobId: parent.jobId, agentSessionId: null, changes: null, discard: parent.discard },
+      { draftId: id },
+    );
+    await this.markDrawing(id, job.id, "video", ready.briefSeq);
+    if (parent?.discard === true && created) {
+      await this.write(id, () => this.note(id, `The video in review (job ${parent.jobId}) was discarded and replaced by the new brief; nothing of it landed.`));
     }
+    return { kind: "video", jobId: job.id, created, replaces: parent?.discard === true ? parent.jobId : null };
   }
 
   /** The press's topic: created, or the reason it could not be. Clears the pending topic on every slot naming it (T11). */
@@ -2341,20 +2329,6 @@ export class Drafts {
     const slot = slotOf(record, kind);
     if (slot.jobId !== jobId) return false;
     return kind === "video" || slot.state !== "drawing";
-  }
-
-  /**
-   * Run `fn` (a Revise from review, which discards its parent in the child's
-   * own transaction) with the parent's discard read as a replacement rather
-   * than a verdict, as a press that replaces a video in review does.
-   */
-  async replacingDuring<T>(parentJobId: string, fn: () => Promise<T>): Promise<T> {
-    this.replacing.add(parentJobId);
-    try {
-      return await fn();
-    } finally {
-      this.replacing.delete(parentJobId);
-    }
   }
 
   /**
@@ -2680,8 +2654,11 @@ export class Drafts {
       return;
     }
     if (!JOB_VERDICTS.includes(job.state)) return;
-    if (job.state === "discarded" && this.replacing.has(job.id)) {
-      // Replaced by this draft's own press (D52): the press says so.
+    if (job.state === "discarded" && kind === "video" && typeof (job as VideoJobRecord).replacedBy === "string") {
+      // Replaced by a Replace or a Revise, in the child's own transaction
+      // (D52): not a verdict. The record says so, not a marker held while a
+      // press runs, so a loser of a Replace and Revise pressed together, or a
+      // draft that hears of the discard late, cannot read it as one.
       await this.append(id, { type: "job", jobId: job.id, state: job.state, kind, replaced: true });
       await this.save(id, withSlot(current, kind, { followed }));
       return;
