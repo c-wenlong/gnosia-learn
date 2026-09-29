@@ -45,8 +45,8 @@ import {
 } from "react";
 
 import { Button } from "./Button";
-import { COMPOSER_FRAME, COMPOSER_REASON, COMPOSER_TEXT, cx } from "./classes";
-import { composerKey, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS } from "./composer-keys";
+import { cx } from "./classes";
+import { COMPOSER_FRAME, COMPOSER_LINE_PX, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, composerKey } from "./composer-keys";
 import { Glyph, type GlyphName } from "./Glyph";
 import { MentionChip } from "./MentionChip";
 import {
@@ -276,7 +276,10 @@ function Field<K extends string>({
   const [menu, setMenu] = useState<MenuState<K> | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const menuRef = useRef<MenuState<K> | null>(null);
-  const emitted = useRef<MentionValue<K>>(value);
+  // Empty, not `value`: the editor starts empty, so a value the parent holds
+  // when the field mounts (an opener's words and chips, taken while the panel
+  // showed a job) is built into it by the effect below rather than skipped.
+  const emitted = useRef<MentionValue<K>>({ text: "", mentions: [] });
   const focusedOnce = useRef(false);
 
   // The latest props, for command handlers registered once.
@@ -551,7 +554,11 @@ function Field<K extends string>({
           if (meaning === "mod-send") {
             event.preventDefault();
             const { value: now, onModEnter: mod } = latest.current;
-            if (mod !== undefined && isEmptyValue(now)) mod();
+            // After the key's own update commits: a command listener runs
+            // inside one, and its commit puts the DOM selection (and so the
+            // focus) back in the field, which would undo a caller moving
+            // focus to a card's button.
+            if (mod !== undefined && isEmptyValue(now)) setTimeout(mod, 0);
             else submit();
             return true;
           }
@@ -638,7 +645,9 @@ function Field<K extends string>({
                     </span>
                     {tagged.has(option.id) && (
                       <>
-                        <Glyph name="check" size={16} className="mt-1 text-accent-text" />
+                        <svg aria-hidden viewBox="0 0 20 20" width={16} height={16} className="mt-1 shrink-0 text-accent-text" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4.5 10.5l3.5 3.5 7.5-8" />
+                        </svg>
                         <span className="sr-only">, already tagged</span>
                       </>
                     )}
