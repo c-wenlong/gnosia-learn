@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/components/ui/classes";
 
@@ -25,7 +25,9 @@ import { cx } from "@/components/ui/classes";
  * is open, in the popup. Two copies at once would give a note's headings the
  * same ids twice, and a heading link in the popup would jump to the card's.
  * The card keeps its height meanwhile, so the page under the popup does not
- * reflow.
+ * reflow, and the reading position goes with the words: the popup opens at
+ * the place the card was scrolled to, and closing puts the card at the place
+ * the popup was, each as a share of the way down.
  */
 export function ExpandablePanel({
   title,
@@ -49,10 +51,29 @@ export function ExpandablePanel({
   // The card's height when the popup opened, held while its words are away.
   const [heldHeight, setHeldHeight] = useState<number | null>(null);
 
+  const dialogBodyRef = useRef<HTMLDivElement | null>(null);
+  // How far down the reader was, from 0 to 1, carried between the two views.
+  const readAt = useRef(0);
+
   function expand() {
-    setHeldHeight(cardBodyRef.current?.offsetHeight ?? null);
+    const body = cardBodyRef.current;
+    setHeldHeight(body?.offsetHeight ?? null);
+    readAt.current = body ? shareScrolled(body) : 0;
     setOpen(true);
   }
+
+  function collapse() {
+    const body = dialogBodyRef.current;
+    if (body) readAt.current = shareScrolled(body);
+    setOpen(false);
+  }
+
+  // Back in the card: scroll it to where the reader was in the popup. A
+  // layout effect, so the jump happens before the frame is painted. The popup
+  // is scrolled in the effect below, since it has no height until it is open.
+  useLayoutEffect(() => {
+    if (!open && cardBodyRef.current) scrollToShare(cardBodyRef.current, readAt.current);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,6 +82,7 @@ export function ExpandablePanel({
     // The icon that opened it, to give focus back to on close.
     const opener = openerRef.current;
     if (!dialog.open) dialog.showModal();
+    if (dialogBodyRef.current) scrollToShare(dialogBodyRef.current, readAt.current);
     const root = document.documentElement;
     const overflow = root.style.overflow;
     root.style.overflow = "hidden";
@@ -96,7 +118,7 @@ export function ExpandablePanel({
           onCancel={(event) => {
             // Escape: closed through state, so the two cannot disagree.
             event.preventDefault();
-            setOpen(false);
+            collapse();
           }}
           onPointerDown={(event) => {
             pressedOnBackdrop.current = event.target === event.currentTarget;
@@ -106,7 +128,7 @@ export function ExpandablePanel({
             // the panel's own content, which fills it.
             const started = pressedOnBackdrop.current;
             pressedOnBackdrop.current = false;
-            if (started && event.target === event.currentTarget) setOpen(false);
+            if (started && event.target === event.currentTarget) collapse();
           }}
           className={cx(
             "m-auto flex-col overflow-hidden bg-surface p-0 text-text open:flex",
@@ -119,13 +141,25 @@ export function ExpandablePanel({
           )}
         >
           <PanelHeader title={title} action={action}>
-            <CornerButton label="Close" onClick={() => setOpen(false)} path="M5 5l10 10M15 5 5 15" />
+            <CornerButton label="Close" onClick={collapse} path="M5 5l10 10M15 5 5 15" />
           </PanelHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">{children}</div>
+          <div ref={dialogBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-6 md:px-8">
+            {children}
+          </div>
         </dialog>
       )}
     </section>
   );
+}
+
+/** How far down a scroller is, from 0 (top) to 1 (bottom). */
+function shareScrolled(element: HTMLElement): number {
+  const range = element.scrollHeight - element.clientHeight;
+  return range > 0 ? element.scrollTop / range : 0;
+}
+
+function scrollToShare(element: HTMLElement, share: number) {
+  element.scrollTop = share * Math.max(0, element.scrollHeight - element.clientHeight);
 }
 
 function PanelHeader({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
