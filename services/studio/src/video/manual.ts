@@ -115,6 +115,8 @@ You may reword, split or respell a line when the picture or the voice needs it, 
 
 In a silent video there is no voiceover at all. Each beat's \`say\` is its caption, shown with \`CaptionBar\` exactly as written: \`cap = CaptionBar(self)\`, then \`cap.say("the caption", hold=<the beat's seconds>)\` (or \`self.play(cap.set("the caption"))\`), in beat order.
 
+A scene's chapter title is the first line of its class docstring, else its class name: give each scene a docstring whose first line is a short title a viewer reads in the chapter list ("Multiply, then add"), never a note about what the screen does.
+
 Every beat's \`labels\` must appear on screen, and the check looks for each inside a string literal in that scene's class: put the label's text in the \`Text\`, \`labeled_box\` or \`value_tag\` that shows it.
 
 ## The frame and the house style

@@ -59,6 +59,8 @@ interface Running {
   reads: ReadTracker;
   edits: number;
   gateRunning: boolean;
+  /** How many wrapper calls the narration log has said something about. */
+  callsNarrated: number;
 }
 
 export interface VideoParent {
@@ -362,6 +364,7 @@ export class VideoRunner {
         reads: new ReadTracker(),
         edits: 0,
         gateRunning: false,
+        callsNarrated: 0,
       };
       this.running.set(next.id, entry);
       let settle: () => void = () => undefined;
@@ -813,12 +816,11 @@ export class VideoRunner {
     });
     const running = steps.find((step) => step.state === "running");
     await this.store.update(record.id, { steps, ...(running === undefined ? {} : { phase: running.name }) });
-    const before = record.steps.map((step) => `${step.name}:${step.state}:${step.rounds}`).join(",");
-    const after = steps.map((step) => `${step.name}:${step.state}:${step.rounds}`).join(",");
-    if (before !== after && calls.length > 0) {
-      const last = calls.at(-1)!;
-      await this.store.emit(record.id, { type: "step", state: "running", note: narrateCall(last) });
+    // One line in the narration log per wrapper call, once (D24).
+    for (const call of calls.slice(entry.callsNarrated)) {
+      await this.store.emit(record.id, { type: "step", state: "running", note: narrateCall(call) });
     }
+    entry.callsNarrated = Math.max(entry.callsNarrated, calls.length);
   }
 
   private async finish(
