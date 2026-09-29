@@ -52,9 +52,9 @@ vi.mock("@self-learn/catalog/state", () => ({
   listAssets: async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}) =>
     filter.kind === "note"
       ? notes
-      : filter.ids?.some((id) => id.startsWith("note:"))
-        ? notes.filter((r) => filter.ids!.includes(r.id))
-        : rows,
+      : filter.ids === undefined
+        ? rows
+        : [...rows, ...notes].filter((r) => filter.ids!.includes(r.id)),
   assetCounts: async () => [{ kind: "video", count: 1 }],
   assetDerivations: async () => ({ sources: [], derived: [] }),
   // The one that fails. Everything else answers normally, which is the shape
@@ -99,6 +99,14 @@ describe("a failing topic-title lookup", () => {
     expect(detail.asset?.id).toBe("manimkc:out/x/y.mp4");
     expect(detail.reachable).toBe(true);
     expect(detail.titles).toEqual({});
+  });
+});
+
+describe("an asset id the catalog does not hold", () => {
+  it("is no asset, on a reachable catalog", async () => {
+    const detail = await readAssetDetail("manimkc:out/nowhere.mp4");
+    expect(detail.asset).toBeNull();
+    expect(detail.reachable).toBe(true);
   });
 });
 
