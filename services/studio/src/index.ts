@@ -6,6 +6,7 @@ import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
 import { ManualSource } from "./manual/source";
 import { Mirrors } from "./mirrors";
+import { DraftPruner } from "./prune";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
 import { JobStore } from "./store";
@@ -72,6 +73,12 @@ async function main(): Promise<void> {
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
 
+  // D40: a draft untouched for seven days goes, row and workspace, unless a
+  // job names it. After the job records are loaded and every draft follows
+  // its jobs, and not awaited: a pass asks the catalog, and the first request
+  // should not wait on it. With Postgres down the pass prunes nothing.
+  const pruner = new DraftPruner(drafts, store);
+
   const mirrors = new Mirrors();
   runner.canvasOpen = (target) => mirrors.isOpen(target);
   const server = createApi({ store, runner, mirrors, drafts });
@@ -89,6 +96,7 @@ async function main(): Promise<void> {
   // queued job survives a restart by design; it is only in-flight work that
   // does not.
   void runner.kick();
+  pruner.start();
 
   const shutdown = (signal: string): void => {
     process.stdout.write(`\n${signal}: stopping the running job and closing the browser\n`);
@@ -98,6 +106,7 @@ async function main(): Promise<void> {
     void mirrors
       .stopAll()
       .then(() => manual.drain())
+      .then(() => pruner.drain())
       .then(() => drafts.drain())
       .then(() => runner.drain())
       .finally(() => {

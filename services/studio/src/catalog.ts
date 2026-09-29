@@ -301,6 +301,15 @@ export function draftUpsert(file: string): Promise<CatalogResult> {
   return catalog(["draft", "upsert", "--file", file, ...owned()], 60_000);
 }
 
+/**
+ * `catalog draft delete --id <id>`: the row goes only when no job row names
+ * it, decided in one transaction (D40). `json.outcome` says `deleted`,
+ * `no-draft` or `has-jobs`.
+ */
+export function draftDelete(id: string): Promise<CatalogResult> {
+  return catalog(["draft", "delete", "--id", id, ...owned()], 60_000);
+}
+
 /** A topic the planner proposed, as `catalog topic add` takes it. */
 export interface TopicProposal {
   slug: string;
