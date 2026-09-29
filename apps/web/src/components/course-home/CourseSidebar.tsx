@@ -128,7 +128,7 @@ export function CourseSidebar({
         <Link
           href={libraryHref}
           className={cx(
-            "flex min-h-10 items-center gap-2.5 rounded-lg p-2 text-[16px] leading-6 text-text max-lg:hidden",
+            "flex min-h-10 items-center gap-2.5 rounded-lg p-2 text-[16px] leading-6 text-text",
             ROW_HOVER,
             FOCUS_RING,
           )}

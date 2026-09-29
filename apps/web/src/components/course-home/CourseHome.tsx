@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { Panel } from "@/components/ui/Panel";
 import { VisitTracker } from "@/components/VisitTracker";
@@ -62,6 +63,17 @@ export function CourseHome({
       ),
     [course, mastery, state.completed],
   );
+
+  // A link from before module pages, `/courses/<slug>#<module>` (bookmarks,
+  // old notes), names its module in the hash, which the server never sees:
+  // send it to that module's own page instead of the learner's current one.
+  const router = useRouter();
+  useEffect(() => {
+    if (moduleSlug !== undefined) return;
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    const target = hash ? course.modules.find((m) => m.slug === hash || m.id === hash) : undefined;
+    if (target) router.replace(`/courses/${course.slug}/${target.slug}`);
+  }, [course, moduleSlug, router]);
 
   const [landing] = useState(() => defaultModuleIndex(course.modules, status));
   const named = moduleSlug === undefined ? -1 : course.modules.findIndex((m) => m.slug === moduleSlug);

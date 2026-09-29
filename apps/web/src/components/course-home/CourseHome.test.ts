@@ -15,6 +15,8 @@ const learner = {
   resetCourse: vi.fn(),
 };
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
+const router = { replace: vi.fn() };
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 // Children that talk to the server; not what this suite is about.
 vi.mock("@/components/VisitTracker", () => ({ VisitTracker: () => null }));
 vi.mock("@/components/ResetCourseButton", () => ({ ResetCourseButton: () => null }));
@@ -53,7 +55,19 @@ const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   learner.state.completed = {};
+  learner.updateNote.mockClear();
+  router.replace.mockClear();
+  window.location.hash = "";
 });
+
+/** Types into a React-controlled textarea: the value setter React tracks, then an input event. */
+function type(field: HTMLTextAreaElement, text: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  act(() => {
+    setter.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
 
 function render(moduleSlug?: string) {
   const host = document.createElement("div");
@@ -170,5 +184,37 @@ describe("CourseHome", () => {
     expect(toggle.textContent).toBe("Hide learning objectives");
     const items = host.querySelectorAll(`#${CSS.escape(toggle.getAttribute("aria-controls")!)} li`);
     expect([...items].map((li) => li.textContent)).toEqual(["m1-a covers this", "m1-b covers this"]);
+  });
+
+  it("sends an old /courses/<slug>#<module> link to that module's page", () => {
+    window.location.hash = "#m3";
+    render();
+    expect(router.replace).toHaveBeenCalledWith("/courses/c/m3");
+  });
+
+  it("leaves a hash that names no module alone", () => {
+    window.location.hash = "#resources";
+    render();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("saves a note edit still pending when the panel goes away", () => {
+    const { host } = render("m1");
+    act(() => topicToggle(host, "m1-a").click());
+    type(host.querySelector("textarea")!, "remember the heuristic");
+    expect(learner.updateNote).not.toHaveBeenCalled();
+    act(() => mounted.pop()?.());
+    expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "remember the heuristic");
+  });
+
+  it("saves a note at once when the field loses focus, and only once", () => {
+    const { host } = render("m1");
+    act(() => topicToggle(host, "m1-a").click());
+    const field = host.querySelector("textarea")!;
+    type(field, "draft");
+    act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    expect(learner.updateNote).toHaveBeenCalledTimes(1);
+    act(() => mounted.pop()?.());
+    expect(learner.updateNote).toHaveBeenCalledTimes(1);
   });
 });

@@ -39,7 +39,9 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
     loadCourseAssets(moduleTopics),
     getCourses(),
     getTopics(),
-    getTags(),
+    // The tags only label related courses: a tags read that fails costs the
+    // labels (tagsFor then shows the ids), not the course page.
+    getTags().catch(() => []),
   ]);
 
   const bySlug = new Map(topics.map((t) => [t.slug, t]));

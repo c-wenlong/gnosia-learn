@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
@@ -126,12 +126,33 @@ function TopicPanel({
   const checkboxId = useId();
   const noteId = useId();
 
-  // Saved 400ms after the last keystroke, as the checklist did.
+  // Saved 400ms after the last keystroke, as the checklist did, and at once
+  // when the field loses focus or the panel goes away with an edit pending:
+  // following a sidebar or next-module link unmounts the panel, and a timer
+  // cancelled then would drop the last edit. Clicking any link or Reset blurs
+  // the field first, so the flush lands before a reset clears the notes and
+  // the reset's remount never writes an old draft back.
+  const pending = useRef<string | null>(null);
+  const target = useRef({ updateNote, topicId: topic.id });
   useEffect(() => {
-    if (draft === saved) return;
-    const t = window.setTimeout(() => updateNote(topic.id, draft), 400);
+    target.current = { updateNote, topicId: topic.id };
+  }, [updateNote, topic.id]);
+  const [flush] = useState(() => () => {
+    if (pending.current === null) return;
+    const note = pending.current;
+    pending.current = null;
+    target.current.updateNote(target.current.topicId, note);
+  });
+  useEffect(() => {
+    if (draft === saved) {
+      pending.current = null;
+      return;
+    }
+    pending.current = draft;
+    const t = window.setTimeout(flush, 400);
     return () => window.clearTimeout(t);
-  }, [draft, saved, topic.id, updateNote]);
+  }, [draft, saved, flush]);
+  useEffect(() => flush, [flush]);
 
   const hasRecap = Boolean(state.knowledge[topic.id]);
 
@@ -197,6 +218,7 @@ function TopicPanel({
           id={noteId}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={flush}
           placeholder="Personal notes for this topic"
           rows={3}
           className="mt-1.5 block w-full resize-y rounded-lg border-2 border-border bg-surface px-3.5 py-2.5 text-[14px] text-text outline-none transition-colors duration-100 placeholder:text-text3 focus:border-accent"
