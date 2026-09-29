@@ -24,7 +24,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "learn": "node scripts/learn/cli.mjs",
-    "canvas": "tsx services/catalog/src/canvas.ts",
+    "canvas": "node --import tsx services/catalog/src/canvas.ts",
     "gitmodules": "scripts/update-gitmodules.sh",
     "catalog": "tsx services/catalog/src/cli.ts",
     "studio": "tsx services/studio/src/index.ts",
