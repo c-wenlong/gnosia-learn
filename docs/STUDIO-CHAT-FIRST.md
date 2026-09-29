@@ -1135,9 +1135,10 @@ drawing.
 
 **Held, with one part read narrowly** (below). The ten drafts reached a live
 Draw button with no form and a valid brief within one retry, but Draw was
-pressed on only one of them (twice, for the comparison); the other nine were
-not drawn, to keep the spend down. Read as "reached Draw", the part held; read
-as "was drawn", it held for one draft in ten. The other three parts held. The
+pressed on none of them, to keep the spend down. One of their briefs was drawn
+twice, through `POST /api/jobs`, for the comparison below; the only Draw press
+was on the extend draft. Read as "reached Draw", the part held; read as "was
+drawn from the chat", it was not measured on these ten. The other three parts held. The
 extend job's result was read by the owner after the measuring session's
 permission layer refused the read: the gate passed.
 
@@ -1149,9 +1150,9 @@ runners ran from worktrees on ports 7391 and 7392 against a scratch database
 built from `seed/` the way `scripts/e2e.mjs` builds it (five topics in four
 domains). They were driven over HTTP with no browser and no form.
 
-**Ten drafts, first message to a brief that passes `validateBrief`.** Draw
-was pressed on one of them, twice, for the comparison below; the other nine
-stopped at a live Draw button.
+**Ten drafts, first message to a brief that passes `validateBrief`.** Each
+stopped at a live Draw button; none was pressed. Draft 1's brief was drawn
+twice through `POST /api/jobs` for the comparison below.
 
 | # | First message (abridged) | Person turns | Questions | Retry | New topic | Brief | Cost |
 | --- | --- | --- | --- | --- | --- | --- | --- |
