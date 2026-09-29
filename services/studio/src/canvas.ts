@@ -1,3 +1,5 @@
+import { diagramPathProblem } from "./diagram-guard";
+import { studioHome } from "./paths";
 import { NPM, run, type RunResult } from "./proc";
 
 /**
@@ -69,7 +71,7 @@ export async function doctor(force = false): Promise<RunResult> {
       // (U4, U5) name the failing checks individually and mark a `warn` as a
       // banner rather than a wall, which needs the status per check and not the
       // last eight lines of a padded listing.
-      const result = await canvas(["doctor", "--json"], 120_000);
+      const result = withPathCheck(await canvas(["doctor", "--json"], 120_000));
       // Stamped when the answer arrived, not when it was asked for.
       doctorCache = { at: Date.now(), result };
       return result;
@@ -78,6 +80,25 @@ export async function doctor(force = false): Promise<RunResult> {
     }
   })();
   return doctorInFlight;
+}
+
+/**
+ * The tool's own report, plus one check of this studio's: a studio home the
+ * diagram agent's Bash guard cannot carry (`diagramPathProblem`) fails the
+ * doctor, so `POST /api/jobs` refuses a job it would only waste, and health
+ * names the path. A failing check makes the result non-zero, which is what
+ * every caller reads as "tldrawkc cannot run here".
+ */
+export function withPathCheck(result: RunResult, home: string = studioHome()): RunResult {
+  const problem = diagramPathProblem(home);
+  if (problem === null) return result;
+  const report = result.json as { checks?: unknown } | null;
+  const checks = Array.isArray(report?.checks) ? report.checks : [];
+  return {
+    ...result,
+    code: result.code === 0 ? 1 : result.code,
+    json: { ...(report ?? {}), checks: [...checks, { name: "studio home", status: "fail", detail: problem }] },
+  };
 }
 
 /** For the tests, and for a `?refresh=1` the UI may want in a later phase. */

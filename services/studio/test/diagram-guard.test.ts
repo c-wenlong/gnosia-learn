@@ -7,8 +7,11 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { shellWord } from "../src/bash-guard";
 import type { ValidBrief } from "../src/brief";
+import { withPathCheck } from "../src/canvas";
 import {
   canvasCommandAllowed,
+  canvasTokens,
+  diagramPathProblem,
   canvasPolicy,
   DIAGRAM_GUARD_REFUSAL,
   diagramGuardSource,
@@ -52,6 +55,11 @@ const allowed = [
   `${NPM} doctor --json`,
   `${NPM} new ${C} --title "Binary search" --topic algorithms --concept binary-search --concept sorted-arrays`,
   `${NPM} new ${C} --title 'Binary search, halving' --topic algorithms`,
+  // Single quotes take every character literally in both shells (Greptile on #206).
+  `${NPM} new ${C} --title 'Save $50' --topic algorithms`,
+  `${NPM} meta set ${C} --title 'Costs $(not run) and \`not run\` and a \\ backslash, "quoted"'`,
+  `${NPM} run ${C} --eval 'return "$" + helpers.getLints().length' --json`,
+  `${NPM} new ${C} --title "Dijkstra's algorithm"`,
   `${NPM} run ${C} --code ${X}/pass1.js --shot ${X}/pass1.png`,
   `${NPM} run ${C} --code ${X}/pass2.js --shot ${X}/pass2.png --json --timeout 60000`,
   `${NPM} run ${C} --eval "return helpers.getLints()" --json`,
@@ -99,6 +107,12 @@ const refused = [
   `${NPM} new ${X}/p1.tldr --title "$HOME"`,
   `${NPM} new ${X}/p1.tldr --title \${HOME}`,
   `${NPM} new ${X}/p1.tldr --title "a\\"b"`,
+  `${NPM} new ${X}/p1.tldr --title "Save $50"`,
+  `${NPM} new ${X}/p1.tldr --title "a \\ b"`,
+  `${NPM} new ${X}/p1.tldr --title 'Bob'"'"'s'`,
+  `${NPM} new ${X}/p1.tldr --title 'a''b'`,
+  `${NPM} new ${X}/p1.tldr --title 'line\nbreak'`.replace("\\n", "\n"),
+  `${NPM} new ${X}/p1.tldr --title $'x'`,
   `${NPM} new ${X}/p1.tldr --title "unterminated`,
   `${NPM} new ${X}/p1.tldr --title "a"b`,
   `${NPM} run ${C} --code ${X}/*.js`,
@@ -262,7 +276,8 @@ describe("the diagram agent's Bash guard", () => {
 
   it("is written read-only into the job's workspace and named in its permission file", async () => {
     const command = await writeDiagramGuard(JOB, SLUG, "/usr/local/bin/node");
-    expect(command).toBe(`/usr/local/bin/node ${guardPath(JOB)}`);
+    // `|| exit 2`: the CLI blocks only on exit 2, so a hook that crashes must not fail open.
+    expect(command).toBe(`/usr/local/bin/node ${guardPath(JOB)} || exit 2`);
     expect(path.dirname(guardPath(JOB))).toBe(jobDir(JOB));
     expect(statSync(guardPath(JOB)).mode & 0o777).toBe(0o444);
     // Written again for a second attempt, over its own read-only copy.
@@ -284,5 +299,95 @@ describe("the diagram agent's Bash guard", () => {
     const spaced: CanvasPolicy = { files: ["/Users/a b/.studio/jobs/j/candidate/x.tldr"], dirs: ["/Users/a b/.studio/jobs/j/scratch"] };
     expect(canvasCommandAllowed(`${NPM} run "/Users/a b/.studio/jobs/j/candidate/x.tldr" --code '/Users/a b/.studio/jobs/j/scratch/p.js'`, spaced)).toBe(true);
     expect(canvasCommandAllowed(`${NPM} run /Users/a b/.studio/jobs/j/candidate/x.tldr`, spaced)).toBe(false);
+  });
+
+  it("fails closed when the hook itself cannot run: any non-zero exit on its command line becomes 2", () => {
+    const command = `${process.execPath} ${path.join(home, "no-such-dir", "bash-guard.cjs")} || exit 2`;
+    const status = (line: string): number => {
+      try {
+        execFileSync("/bin/sh", ["-c", line], { input: "{}", stdio: ["pipe", "pipe", "pipe"] });
+        return 0;
+      } catch (error) {
+        return (error as { status: number }).status;
+      }
+    };
+    expect(status(command.replace(" || exit 2", ""))).toBe(1);
+    expect(status(command)).toBe(2);
+    expect(status(`${process.execPath} -e "process.kill(process.pid, 'SIGKILL')" || exit 2`)).toBe(2);
+  });
+
+  it("agrees with bash and zsh on the words of every line it reads", () => {
+    const shells = [["bash", "--norc", "--noprofile"], ["zsh", "-f"], ["zsh", "-f", "-o", "rcquotes", "-o", "extendedglob"]].filter(([shell]) => {
+      try {
+        execFileSync("/usr/bin/env", ["which", shell!], { stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    // A seeded generator, so a failure is the same failure on the next run.
+    let seed = 206;
+    // mulberry32: a small generator whose low bits are not periodic, unlike a bare LCG's.
+    const next = (n: number): number => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) % n;
+    };
+    const pick = <T,>(items: readonly T[]): T => items[next(items.length)]!;
+    const nasty = ["$", "`", "\\", "'", '"', "!", "*", "?", "~", "#", "%", "^", "&", ";", "|", "<", ">", "(", ")", "{", "}", "[", "]", "=", " ", "\t", "$(", "${", "$'", "a", "Z", "9", ".", "/", ":", ",", "@", "+", "-", "é", "·"];
+    const text = (): string => Array.from({ length: 1 + next(8) }, () => pick(nasty)).join("");
+    const word = (): string => {
+      switch (next(6)) {
+        case 0:
+          return `'${text()}'`;
+        case 5:
+          return `'${text()}$${text()}'`;
+        case 1:
+          return `"${text()}"`;
+        case 2:
+          return text();
+        case 3:
+          return pick(["--title", "--json", C, `${X}/p.js`, "'Save $50'", "'$(id)'", "'`id`'", "'a\\b'", '"it\'s"']);
+        default:
+          return Array.from({ length: 1 + next(6) }, () => pick([..."abcXYZ019_./:,@+=-"])).join("");
+      }
+    };
+    const lines: string[] = [];
+    for (let i = 0; lines.length < 400 && i < 200_000; i += 1) {
+      const line = `${NPM} ${Array.from({ length: 1 + next(4) }, word).join(pick([" ", "  "]))}`;
+      if (canvasTokens(line) !== null) lines.push(line);
+    }
+    expect(lines.length).toBe(400);
+    // Lines holding `$` inside single quotes, which is what this change allows.
+    expect(lines.filter((line) => /'[^']*\$[^']*'/.test(line)).length).toBeGreaterThan(40);
+    // Each line runs with `npm` as a function printing its arguments, NUL-separated, then a record separator.
+    const script = `npm() { printf '%s\\0' "$@"; }\n${lines.map((line) => `${line}\nprintf '\\036'`).join("\n")}\n`;
+    const file = path.join(home, "fuzz.sh");
+    writeFileSync(file, script, "utf8");
+    expect(shells.length).toBeGreaterThan(0);
+    for (const [shell, ...flags] of shells) {
+      const out = execFileSync("/usr/bin/env", [shell!, ...flags, file], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+      const records = out.split("\u001e").slice(0, -1);
+      expect(records.length).toBe(lines.length);
+      records.forEach((record, i) => {
+        const words = record.split("\0").slice(0, -1);
+        expect({ shell: [shell, ...flags].join(" "), line: lines[i], words }).toEqual({ shell: [shell, ...flags].join(" "), line: lines[i], words: canvasTokens(lines[i]!)!.slice(1) });
+      });
+    }
+  });
+
+  it("refuses at the doctor a studio home the agent could not type, and allows letters, digits and spaces", () => {
+    expect(diagramPathProblem("/Users/a/Projects/self-learn/.studio", "/usr/bin/node")).toBeNull();
+    expect(diagramPathProblem("/Users/a b/.studio", "/usr/bin/node")).toBeNull();
+    for (const bad of ["/Users/a$b/.studio", "/Users/a`b/.studio", "/Users/o'brien/.studio", '/Users/a"b/.studio', "/Users/a\\b/.studio", "/Users/a*b/.studio", "/Users/~a/.studio", "/Users/a;b/.studio"]) {
+      expect({ bad, problem: diagramPathProblem(bad, "/usr/bin/node") }).toEqual({ bad, problem: expect.stringContaining("the studio home path holds") });
+    }
+    expect(diagramPathProblem("/Users/a/.studio", "/opt/o'brien/node")).toContain("quote");
+    const ok = { code: 0, signal: null, stdout: "", stderr: "", json: { ok: true, checks: [{ name: "node", status: "pass", detail: "" }] }, timedOut: false };
+    expect(withPathCheck(ok, "/Users/a/.studio")).toBe(ok);
+    const refused = withPathCheck(ok, "/Users/a$b/.studio");
+    expect(refused.code).toBe(1);
+    expect((refused.json as { checks: { name: string; status: string }[] }).checks.map((check) => [check.name, check.status])).toEqual([["node", "pass"], ["studio home", "fail"]]);
   });
 });

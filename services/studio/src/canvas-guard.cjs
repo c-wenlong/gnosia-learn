@@ -15,8 +15,9 @@
  * verb takes (and not one that launches a browser the agent chooses or opens
  * a window or a port), every file argument is an absolute path to the job's
  * candidate document, its SVG, or a file inside its scratch directory, and
- * every other value is a plain word, a number, or a quoted string with no
- * `$`, backtick or backslash in it.
+ * every other value is a plain word, a number, or a quoted string: single
+ * quotes around anything but a single quote, double quotes around nothing
+ * the shell expands there (`$`, backtick, backslash).
  *
  * The command is read by a tokenizer that knows three token shapes and
  * nothing else: a bare word of `[A-Za-z0-9_./:,@+=-]` not starting with `=`
@@ -33,8 +34,17 @@
 const PREFIX = ["npm", "run", "--silent", "canvas", "--"];
 
 const BARE = /^[A-Za-z0-9_./:,@+-][A-Za-z0-9_./:,@+=-]*$/;
-/** What a quoted string may hold: no quote of its kind, no `$`, backtick or backslash, no control character. */
-const QUOTED_BODY = /^[^\u0000-\u001f\u007f$`\\]*$/;
+/**
+ * What a quoted string may hold, never a control character. Inside single
+ * quotes both shells take every character literally, `$`, backtick and
+ * backslash included, so a title like 'Save $50' is allowed; the one thing
+ * that ends them is a single quote, which the tokenizer reads as the end.
+ * zsh's RC_QUOTES reads `''` inside as a quote, which is why a quoted string
+ * glued to another is refused below. Inside double quotes both shells expand
+ * `$`, backtick and backslash, so none of the three is allowed there.
+ */
+const SINGLE_BODY = /^[^\u0000-\u001f\u007f]*$/;
+const DOUBLE_BODY = /^[^\u0000-\u001f\u007f$`\\]*$/;
 const NUMBER = /^[0-9]+(\.[0-9]+)?$/;
 
 /**
@@ -105,7 +115,7 @@ function tokenize(command) {
       const end = command.indexOf(quote, i + 1);
       if (end === -1) return null;
       value = command.slice(i + 1, end);
-      if (!QUOTED_BODY.test(value)) return null;
+      if (!(quote === "'" ? SINGLE_BODY : DOUBLE_BODY).test(value)) return null;
       i = end + 1;
     } else {
       let end = command.indexOf(" ", i);
@@ -185,4 +195,4 @@ function canvasCommandAllowed(command, policy) {
   return files === spec.files;
 }
 
-module.exports = { canvasCommandAllowed };
+module.exports = { canvasCommandAllowed, tokenize };

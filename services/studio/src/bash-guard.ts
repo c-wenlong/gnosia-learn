@@ -52,12 +52,22 @@ export function shellWord(value: string): string {
 }
 
 /**
- * Write the hook to `file`, read-only, and return its command line. The mode
+ * Write the hook to `file`, read-only, and return its command line.
+ *
+ * The command line ends `|| exit 2` because the CLI blocks a call only on
+ * exit 2 and lets it run on any other failure: a hook that crashes (its file
+ * deleted or unreadable, node moved, a throw outside the program's own
+ * `try`) would otherwise fail open. The CLI runs the line through a shell,
+ * so any non-zero exit, a signal's included, becomes 2 and blocks. Measured
+ * on 2.1.274 with a hook pointing at a missing file: without the suffix the
+ * command ran, with it the call was blocked.
+ *
+ * The mode
  * is a second lock, not the first: the agent's Edit rules do not reach the
  * file, and a denied Read and Edit rule name it besides.
  */
 export async function writeHook(file: string, source: string, node: string): Promise<string> {
-  const command = `${shellWord(node)} ${shellWord(file)}`;
+  const command = `${shellWord(node)} ${shellWord(file)} || exit 2`;
   await mkdir(path.dirname(file), { recursive: true });
   await chmod(file, 0o644).catch(() => undefined);
   await writeFile(file, source, { encoding: "utf8", mode: 0o444 });

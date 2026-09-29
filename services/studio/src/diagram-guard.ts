@@ -35,13 +35,16 @@ import { candidatePath, candidateSvgPath, jobDir, scratchDir, SERVICE_ROOT } fro
  * allows `npm run --silent canvas -- <verb> ...` for the verbs the agent is
  * taught, with every file argument an absolute path to the candidate, its
  * SVG, or a file in the scratch directory, and every other word plain or
- * quoted without `$`, backtick or backslash. That closes both of the above
+ * quoted (single quotes around anything but a quote, double quotes without
+ * `$`, backtick or backslash). That closes both of the above
  * and every shell form in one rule, and leaves the permission rules exactly
  * as they were, underneath: exit 0 from the hook hands the call to them.
  *
  * What it does not close is what a snippet does once it runs, which is
- * tldrawkc's page in Chromium and not the shell; the design's known gaps
- * keep that one.
+ * tldrawkc's page in Chromium and not the shell. The page has no filesystem
+ * API, and a snippet's requests are to be contained by tldrawkc's own
+ * network block on the page, which lands separately (in the submodule, with
+ * a pointer bump); until then a snippet can reach the network from Chromium.
  */
 
 const CHECKER_FILE = path.join(SERVICE_ROOT, "src", "canvas-guard.cjs");
@@ -54,14 +57,53 @@ export interface CanvasPolicy {
 
 type Check = (command: unknown, policy: CanvasPolicy) => boolean;
 
+const checker = createRequire(import.meta.url)(CHECKER_FILE) as { canvasCommandAllowed: Check; tokenize: (command: string) => string[] | null };
+
 /** The check, from the same file the hook is built from. */
-export const canvasCommandAllowed: Check = (createRequire(import.meta.url)(CHECKER_FILE) as { canvasCommandAllowed: Check }).canvasCommandAllowed;
+export const canvasCommandAllowed: Check = checker.canvasCommandAllowed;
+
+/** The words the check believes the shell will pass, or null for a line it does not read. The fuzz test holds it to bash and zsh. */
+export const canvasTokens: (command: string) => string[] | null = checker.tokenize;
 
 /** The sentence a refused call gets back: fixed, so nothing the agent passed bounces into its context. */
 export const DIAGRAM_GUARD_REFUSAL =
   "Refused by the job's Bash guard: the only command this job runs is `npm run --silent canvas -- <verb> ...` with a verb from new, run, shot, inspect, export, verify, from-mermaid, meta set, api and doctor, " +
   "every file given as an absolute path to your candidate .tldr, its .svg, or a file inside your scratch directory, " +
-  "and every other value a plain word, a number, or a quoted string without $, backtick or backslash; no pipe, list, substitution, redirect, variable or line break.";
+  "and every other value a plain word, a number, or a quoted string (single quotes around anything but a single quote, so 'Save $50' works; double quotes with no $, backtick or backslash); no pipe, list, substitution, redirect, variable or line break.";
+
+/** What the agent can type bare, plus a space, which it quotes without being told. */
+const TYPABLE_PATH = /^[A-Za-z0-9_./:,@+= -]+$/;
+
+/**
+ * Why this machine's paths cannot carry a diagram job, or null when they can.
+ * The doctor's check, so a job is refused before it is queued rather than
+ * failing at its first command.
+ *
+ * The prompt hands the agent its candidate and scratch paths bare, and the
+ * guard accepts a path only as a bare word or quoted. A space the agent
+ * quotes without being told, and jobs under such a path worked before the
+ * guard, so it stays allowed. Any other character the shell acts on (`$`,
+ * a backtick, a backslash, a quote, a glob, `~`, `;` and the rest) would
+ * need a quoting the agent has no reason to pick, and a bare spelling is
+ * refused, so a job would spend its turns on refusals: refused here instead,
+ * naming the path. The node that runs the hook goes on the hook's command
+ * line, single-quoted when it needs it, so only a quote in it is refused.
+ */
+export function diagramPathProblem(home: string, node: string = process.execPath): string | null {
+  let resolvedHome = home;
+  try {
+    resolvedHome = realpathSync(home);
+  } catch {
+    /* not created yet: the one spelling */
+  }
+  for (const spelling of new Set([home, resolvedHome])) {
+    if (TYPABLE_PATH.test(spelling)) continue;
+    const odd = [...new Set([...spelling].filter((character) => !TYPABLE_PATH.test(character)))].map((character) => JSON.stringify(character)).join(" ");
+    return `the studio home path holds ${odd}, which the diagram agent would have to quote in every canvas command and its Bash guard refuses bare; move STUDIO_HOME (or the checkout, for the default .studio) to a path of letters, digits, spaces and . _ - / : , @ + = (${spelling})`;
+  }
+  if (node.includes("'") || /[\u0000-\u001f]/.test(node)) return `the node running the studio has a quote or a control character in its path, so the Bash guard's hook cannot be put on a command line (${node})`;
+  return null;
+}
 
 /** Where the hook sits: the job's workspace root, beside its permission file, which the agent is denied. */
 export function guardPath(jobId: string): string {
