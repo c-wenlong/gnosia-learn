@@ -11,7 +11,6 @@ import {
   formatDuration,
   isActive,
   phaseWords,
-  stepLabel,
   type Job,
 } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-view";
@@ -24,12 +23,18 @@ import { panelHref } from "@/lib/studio-view";
  * grid, which is the whole reason the provider behind it is mounted in the
  * layout rather than in a page.
  *
- * Left to right, as the design lists it: a status dot, the diagram name, the
- * phase in words, `step 4 of 7`, elapsed counting up, an indeterminate bar, and
- * Cancel. The bar is indeterminate on purpose and there is no percentage here
- * or anywhere else (D23) — the phases have wildly different durations, nothing
- * reports progress inside one, and a bar with a number on it would be the kind
- * of fabrication that costs the screen its credibility the first time it sticks.
+ * Left to right: a status dot, the diagram name, the phase in words, elapsed
+ * counting up, and Cancel. There is no percentage here or anywhere else (D23).
+ *
+ * Slimmer since the job moved into the grid ("The job in the grid" in
+ * docs/STUDIO-CHAT-FIRST.md). The tile or the new-diagram card now carries the
+ * step count, the moving bar and the picture, so the strip keeps only what
+ * says "a job is running, and this is it": it is the one place the job shows
+ * when its tile is filtered out, scrolled off, or on the canvas route, which
+ * has no grid. Cancel stays in both places on purpose. On the strip it is the
+ * only way to stop a job whose tile is not on screen, and on the tile it is
+ * next to the picture a person is watching go wrong; they post the same call,
+ * and the second press finds the job already stopping.
  */
 
 export function JobStrip({ path, stream = true }: { path: string; stream?: boolean }) {
@@ -63,7 +68,6 @@ export function JobStrip({ path, stream = true }: { path: string; stream?: boole
       {isActive(job.state) ? (
         <>
           <Elapsed job={job} />
-          {job.state !== "awaiting_review" && <IndeterminateBar />}
           {connection === "polling" && (
             <span className="shrink-0 text-[var(--muted)]" title="The event stream is not connected; this is the polled GET, which is the record anyway.">
               polling
@@ -107,13 +111,7 @@ function Words({ job }: { job: Job }) {
   if (!isActive(job.state)) {
     return <span className="truncate text-[var(--muted)]">{job.state}</span>;
   }
-  return (
-    <>
-      <span className="truncate text-[var(--muted-strong)]">{phaseWords(job)}</span>
-      <span className="shrink-0 text-[var(--muted)]">{stepLabel(job)}</span>
-      {job.attempt > 1 && <span className="shrink-0 text-[var(--muted)]">attempt {job.attempt}</span>}
-    </>
-  );
+  return <span className="truncate text-[var(--muted-strong)]">{phaseWords(job)}</span>;
 }
 
 function Dot({ job }: { job: Job }) {
@@ -139,7 +137,7 @@ function Dot({ job }: { job: Job }) {
 export function Elapsed({ job }: { job: Job }) {
   const now = useNow(job.finished === null);
   return (
-    <span className="shrink-0 tabular-nums text-[var(--muted)]" title="elapsed">
+    <span className="shrink-0 tabular-nums text-[var(--muted)]">
       {formatDuration(elapsedMs(job, now))}
     </span>
   );

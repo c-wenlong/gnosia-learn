@@ -6,6 +6,7 @@ import { DraftPanel } from "@/components/studio/DraftPanel";
 import { DraftsList } from "@/components/studio/DraftsList";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobPanel } from "@/components/studio/JobPanel";
+import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { PlusCard } from "@/components/studio/PlusCard";
 import { DialogHeader, StudioDialog } from "@/components/studio/StudioDialog";
@@ -160,6 +161,9 @@ export default async function StudioPage({
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
 
+  // Every diagram's path, filtered or not: a job drawing onto one of these is
+  // an extend and goes on its tile; any other target is a new diagram's card.
+  const targets = listing.diagrams.map((diagram) => diagram.tldr.path);
   const topicOptions = topicOptionsOf(topics);
   const cap = capFrom(health.data.dailyCap);
   const chatSuggestions = suggestions(
@@ -314,9 +318,13 @@ export default async function StudioPage({
               (view.layout === "grid" ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
                   <PlusCard path={path} />
+                  <NewDiagramJobs targets={targets} path={path} layout="grid" />
                 </div>
               ) : (
-                <PlusCard path={path} layout="list" />
+                <div className="space-y-0.5">
+                  <PlusCard path={path} layout="list" />
+                  <NewDiagramJobs targets={targets} path={path} layout="list" />
+                </div>
               ))}
             {listing.diagrams.length === 0 && listing.errors.length === 0 ? (
               <EmptyDirectory dir={listing.dir} />
@@ -339,10 +347,13 @@ export default async function StudioPage({
                   {view.layout === "grid" ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
                       {at === 0 && <PlusCard path={path} />}
+                      {/* A new diagram being drawn sits beside the way in. */}
+                      {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="grid" />}
                       {group.items.map((diagram) => (
                         <DiagramTile
                           key={diagram.name}
                           diagram={diagram}
+                          path={path}
                           selected={diagram.name === view.selected}
                           selectHref={studioHref(view, { selected: diagram.name })}
                           extendHref={extendFrom(diagram.name)}
@@ -353,6 +364,7 @@ export default async function StudioPage({
                   ) : (
                     <div className="space-y-0.5">
                       {at === 0 && <PlusCard path={path} layout="list" />}
+                      {at === 0 && <NewDiagramJobs targets={targets} path={path} layout="list" />}
                       {group.items.map((diagram) => (
                         <DiagramRow
                           key={diagram.name}

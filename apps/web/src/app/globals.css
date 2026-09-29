@@ -467,6 +467,98 @@ body {
   }
 }
 
+/*
+ * The job loader in the studio grid ("The job in the grid" in
+ * docs/STUDIO-CHAT-FIRST.md): a picture of the diagram, blurred, under a veil
+ * of the surface colour, with a slow light passing over it while the job runs.
+ *
+ * Every colour is a token mixed with transparency, so the veil is the page's
+ * own surface in each of the six modes: a white veil in Classic light, a
+ * charcoal one in dark, cream and navy in Gnosia. A hard-coded veil would be a
+ * grey smear on one of them.
+ */
+.studio-veil {
+  background: color-mix(in srgb, var(--surface) 42%, transparent);
+}
+
+.studio-veil-strong {
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+}
+
+/* The status bar at the foot of a working tile: the surface, nearly opaque,
+   so its 12px text keeps its contrast over any drawing behind it. */
+.studio-glass {
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+@keyframes studio-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* A wide, soft band of the surface colour crossing the picture every few
+   seconds: the NotebookLM "being made" cue, slow enough not to pull the eye
+   from the tile a person is actually looking at. */
+.studio-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    color-mix(in srgb, var(--surface) 55%, transparent) 50%,
+    transparent 75%
+  );
+  animation: studio-shimmer 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes studio-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* A newer picture of the drawing fades in over the one before it, rather than
+   snapping, so a tile that changes every half minute does not flicker. */
+.studio-fade-in {
+  animation: studio-fade-in 700ms ease-out both;
+}
+
+@keyframes studio-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.studio-breathe {
+  animation: studio-breathe 2s ease-in-out infinite;
+}
+
+/* Less movement asked for: the light stops crossing, a new picture replaces
+   the old one at once, and the dot holds still. The words and the elapsed
+   time still say the job is running. */
+@media (prefers-reduced-motion: reduce) {
+  .studio-shimmer::after,
+  .studio-fade-in,
+  .studio-breathe {
+    animation: none;
+  }
+}
+
 /* ==========================================================================
  * Gnosia brand
  *

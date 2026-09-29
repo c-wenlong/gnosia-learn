@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ExtendLink } from "@/components/studio/ExtendLink";
+import { RowJob, TileJob } from "@/components/studio/GridJob";
 import { Chip } from "@/components/studio/StudioChrome";
 import {
   canvasHref,
@@ -29,15 +30,24 @@ import {
  * A card with no topic is not decorated, it is warned about: `diagrams.ts`
  * refuses such a file *by name*, so it will never appear in `/library` at all,
  * and this tile is the only place it is ever visible.
+ *
+ * No `title` attribute anywhere on the tile. The name used to carry one for
+ * when it was cut off, and the browser's own tooltip for it was drawn at the
+ * top-left of the window in the desktop app's browser pane, a stray "A vector
+ * as a list of numbers" floating over the page whenever a tile was hovered. The
+ * name now wraps to two lines instead, which shows it without a tooltip.
  */
 export function DiagramTile({
   diagram,
+  path,
   selectHref,
   extendHref,
   selected,
   showConcepts,
 }: {
   diagram: Diagram;
+  /** This view, which the job loader opens its job panel on. */
+  path: string;
   selectHref: string;
   /** Where Extend goes: this view with a conversation opening on the diagram. */
   extendHref: string;
@@ -54,14 +64,12 @@ export function DiagramTile({
       <Link href={selectHref} scroll={false} className="flex min-w-0 flex-col">
         <Thumbnail diagram={diagram} />
         <div className="flex min-w-0 flex-col gap-1.5 p-3">
-          <span className="truncate text-sm font-medium" title={displayTitle(diagram)}>
-            {displayTitle(diagram)}
-          </span>
+          <span className="line-clamp-2 text-sm font-medium">{displayTitle(diagram)}</span>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {untopiced ? (
               <Chip tone="warn">No topic</Chip>
             ) : (
-              <Chip title={diagram.topic ?? undefined}>{diagram.topic}</Chip>
+              <Chip>{diagram.topic}</Chip>
             )}
             <span className="text-xs text-[var(--muted)]">
               {relativeTime(diagram.tldr.modified)}
@@ -82,6 +90,16 @@ export function DiagramTile({
           )}
         </div>
       </Link>
+      {/* A job drawing onto this diagram covers the thumbnail with its loader.
+          After the tile's link rather than inside it, so its own link and
+          Cancel are not nested in another link, and before the hover
+          controls, so Open canvas and Extend stay above it. */}
+      <TileJob
+        target={diagram.tldr.path}
+        title={displayTitle(diagram)}
+        thumbnail={diagram.svg.exists ? thumbnailHref(diagram.name) : null}
+        path={path}
+      />
       {/* Selecting opens the tile's panel; the two controls here go straight
           to the canvas, or to a conversation about extending the diagram.
           Separate targets, because a grid where one click does everything has
@@ -89,8 +107,16 @@ export function DiagramTile({
           the tile, so Tab reaches them, and while Extend is opening; invisible
           controls take no clicks. */}
       <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
-        <Link href={canvasHref(diagram.name)} className={HOVER_CONTROL}>
-          Open <span className="sr-only">{displayTitle(diagram)} on the </span>canvas
+        {/* The words are one text run, and the accessible name is the whole
+            sentence. The old form put a screen-reader span between "Open" and
+            "canvas" inside this flex link, and a flex container drops the
+            space at the edge of each text run, so it read "Opencanvas". */}
+        <Link
+          href={canvasHref(diagram.name)}
+          aria-label={`Open ${displayTitle(diagram)} on the canvas`}
+          className={HOVER_CONTROL}
+        >
+          Open canvas
         </Link>
         <ExtendLink href={extendHref} className={HOVER_CONTROL} diagram={displayTitle(diagram)} />
       </div>
@@ -181,6 +207,7 @@ export function DiagramRow({
         )}
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{displayTitle(diagram)}</span>
+      <RowJob target={diagram.tldr.path} />
       {diagram.topic === null ? (
         <Chip tone="warn">No topic</Chip>
       ) : (
