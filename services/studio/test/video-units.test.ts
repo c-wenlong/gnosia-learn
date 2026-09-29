@@ -10,7 +10,8 @@ import { BriefError } from "../src/brief";
 import { normalisePreference, readClaudeDefaults, resolveAgentSettings, resolveSetting } from "../src/video/agent-model";
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
 import { buildSettings } from "../src/settings";
-import { GUARD_REFUSAL, guardSource, wrapperCommandAllowed } from "../src/video/bash-guard";
+import { commandPathProblem, GUARD_REFUSAL, guardSource, wrapperCommandAllowed } from "../src/video/bash-guard";
+import { runVideoDoctor } from "../src/video/doctor";
 import { appendRead, LineQueue, readReads, ReadTracker } from "../src/video/calls";
 import { prefixFor, rebasePaths } from "../src/video/checkout";
 import { CopyRefused, safeCopy } from "../src/video/copy";
@@ -96,6 +97,36 @@ describe("the video agent's permission file", () => {
     expect(matcher.ignores("jobs/1f0f0f0f-aaaa-4bbb-8ccc-123456789abc/job.json")).toBe(true);
     expect(matcher.ignores(`jobs/${id}0/job.json`)).toBe(true);
   });
+});
+
+describe("paths the one command cannot carry", () => {
+  it("names a space, or any other character that needs quoting, in the studio home or node's path", () => {
+    expect(commandPathProblem("/Users/me/.self-learn/studio", "/opt/homebrew/bin/node")).toBeNull();
+    expect(commandPathProblem("/Users/me/My Studio", "/opt/homebrew/bin/node")).toBe("the studio home path contains a space; video jobs need a path without one (/Users/me/My Studio)");
+    expect(commandPathProblem("/Users/me/studio's", "/opt/homebrew/bin/node")).toMatch(/^the studio home path contains a character other than/);
+    expect(commandPathProblem("/Users/me/studio", "/Applications/My Node/node")).toBe("the node path contains a space; video jobs need a path without one (/Applications/My Node/node)");
+  });
+
+  it("fails the video doctor, so health says so and no job is queued, before any setup runs", async () => {
+    const saved = { MANIMKC_ROOT: process.env.MANIMKC_ROOT };
+    process.env.STUDIO_HOME = path.join(root, "My Studio");
+    process.env.MANIMKC_ROOT = path.join(root, "no-manimkc");
+    try {
+      const report = await runVideoDoctor();
+      expect(report.ok).toBe(false);
+      expect(report.checks).toContainEqual({ name: "studio home", ok: false, detail: `the studio home path contains a space; video jobs need a path without one (${path.join(root, "My Studio")})` });
+      // A plain name that is a link to a folder with a space: every job path
+      // is resolved, so it is refused too, by its resolved spelling.
+      await mkdir(path.join(root, "Linked Studio"));
+      await symlink(path.join(root, "Linked Studio"), path.join(root, "studio-link"));
+      process.env.STUDIO_HOME = path.join(root, "studio-link");
+      const linked = await runVideoDoctor();
+      expect(linked.checks.find((check) => check.name === "studio home")?.detail).toMatch(/^the studio home path contains a space; video jobs need a path without one \(.*Linked Studio\)$/);
+    } finally {
+      if (saved.MANIMKC_ROOT === undefined) delete process.env.MANIMKC_ROOT;
+      else process.env.MANIMKC_ROOT = saved.MANIMKC_ROOT;
+    }
+  }, 60_000);
 });
 
 describe("the video agent's Bash guard", () => {

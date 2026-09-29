@@ -32,6 +32,28 @@ import type { VideoPaths } from "./paths";
 
 const WORD = /^[A-Za-z0-9_.-]+$/;
 
+/** The characters a path in the Bash prefix, the guard's rule and the hook's command line may hold, unquoted. */
+const PLAIN_PATH = /^[A-Za-z0-9/._-]+$/;
+
+/**
+ * Why this machine's paths cannot carry a video job's one command, or null
+ * when they can. The wrapper sits under the studio home and runs on node, and
+ * both paths go unquoted into the permission file's one Bash prefix, the
+ * guard's exact-match rule and the hook's command line. Quoting them would
+ * make the guard accept one quoted spelling of one path and depend on how the
+ * CLI's matcher reads quotes, which was not measured; so a path that needs
+ * quoting is refused by the video doctor, where health shows it before any
+ * job is queued (Greptile on #201), rather than at a job's setup.
+ */
+export function commandPathProblem(studioHome: string, node: string): string | null {
+  for (const [what, value] of [["studio home", studioHome], ["node", node]] as const) {
+    if (PLAIN_PATH.test(value)) continue;
+    if (value.includes(" ")) return `the ${what} path contains a space; video jobs need a path without one (${value})`;
+    return `the ${what} path contains a character other than letters, digits, "/", ".", "_" and "-"; video jobs need a path without one (${value})`;
+  }
+  return null;
+}
+
 /** Whether `command` is the wrapper and nothing but plain words after it. */
 export function wrapperCommandAllowed(command: string, wrapper: string): boolean {
   if (typeof command !== "string") return false;

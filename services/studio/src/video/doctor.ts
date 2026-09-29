@@ -8,6 +8,7 @@ import { VIDEO_DOCTOR_TTL_MS } from "./config";
 import { buildCheckout, resolvedPaths } from "./checkout";
 import { runSandboxed } from "./exec";
 import { WORKED_HEADER, WORKED_NARRATED } from "./manual";
+import { commandPathProblem } from "./bash-guard";
 import { buildProfile, resolvedStudioHome } from "./sandbox";
 import { discoverToolchain, toolchainProblems, type Toolchain } from "./toolchain";
 import type { VideoPaths } from "./paths";
@@ -159,9 +160,10 @@ export async function runVideoDoctor(): Promise<VideoDoctorReport> {
   const voices = VOICES.map((voice) => voice.id).filter((id) => tools.voicesInstalled.includes(id));
   checks.push({ name: "voices", ok: voices.length > 0, detail: voices.length > 0 ? `installed: ${voices.join(", ")}` : "no kokoro voice from the list is installed" });
   const home = studioHome();
-  if (!/^[A-Za-z0-9/._-]+$/.test(home)) {
-    checks.push({ name: "studio home", ok: false, detail: "STUDIO_HOME holds a character the one allowed Bash prefix cannot carry unquoted" });
-  }
+  // Resolved, since every job path is: a studio home behind a link to a
+  // folder with a space would pass on its own spelling and fail at setup.
+  const pathProblem = commandPathProblem(resolvedStudioHome(), tools.node);
+  if (pathProblem !== null) checks.push({ name: "studio home", ok: false, detail: pathProblem });
   let sandbox = false;
   let metal = false;
   let kokoro = false;
