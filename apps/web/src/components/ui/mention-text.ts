@@ -173,6 +173,19 @@ export function carryMentions<K extends string>(previous: MentionValue<K>, text:
   return kept;
 }
 
+/**
+ * The fallback's line under the field. It cannot draw chips, so it names the
+ * tags the message will send; an `@video` in the text that is not one of them
+ * reads as the word it is (Greptile on #204).
+ */
+export function fallbackTagLine<K extends string>(value: MentionValue<K>, options: readonly MentionOption<K>[]): string {
+  const names = [...new Set(validMentions(value.text, value.mentions).map((mention) => mention.kind))].map(
+    (kind) => options.find((option) => option.id === kind)?.name ?? kind,
+  );
+  const reload = "Tags could not load; reload the page to add one.";
+  return names.length === 0 ? reload : `Sends tagged: ${names.join(" and ")}. ${reload}`;
+}
+
 export function validMentions<K extends string>(text: string, mentions: readonly Mention<K>[] | null | undefined): Mention<K>[] {
   if (!Array.isArray(mentions)) return [];
   const sorted = [...mentions]

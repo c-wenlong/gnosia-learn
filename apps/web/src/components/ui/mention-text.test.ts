@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   carryMentions,
+  fallbackTagLine,
   filterMentionOptions,
   firstActive,
   inlinePieces,
@@ -230,5 +231,18 @@ describe("carryMentions (the plain fallback)", () => {
       { kind: "video", start: 18, end: 24 },
     ]);
     expect(carryMentions(tagged, "@video the loop, not @video")).toEqual([{ kind: "video", start: 0, end: 6 }]);
+  });
+});
+
+describe("fallbackTagLine", () => {
+  const options = [
+    { id: "diagram" as const, name: "Diagram", description: "" },
+    { id: "video" as const, name: "Video", description: "" },
+  ];
+  it("names the tags the fallback will send, and nothing for a typed @video", () => {
+    expect(fallbackTagLine({ text: "@video the loop", mentions: [{ kind: "video", start: 0, end: 6 }] }, options)).toBe(
+      "Sends tagged: Video. Tags could not load; reload the page to add one.",
+    );
+    expect(fallbackTagLine({ text: "@video the loop", mentions: [] }, options)).toBe("Tags could not load; reload the page to add one.");
   });
 });

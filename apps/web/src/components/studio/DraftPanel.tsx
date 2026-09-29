@@ -24,6 +24,7 @@ import type { MentionComposerHandle, MentionComposerProps } from "@/components/u
 import {
   carryMentions,
   EMPTY_MENTION_VALUE,
+  fallbackTagLine,
   inlinePieces,
   isEmptyValue,
   prependValue,
@@ -152,7 +153,7 @@ function PlainFallback(props: MentionComposerProps<DraftKind>) {
         disabledReason={props.disabledReason}
         onModEnter={props.onModEnter}
       />
-      <p className="px-1 text-[12px] leading-4 text-text3">Tags could not load. A tag already in the message still counts; reload the page to add one.</p>
+      <p className="px-1 text-[12px] leading-4 text-text3">{fallbackTagLine(props.value, props.mentions)}</p>
     </div>
   );
 }
