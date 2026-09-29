@@ -58,6 +58,7 @@ const catalogMock = vi.hoisted(() => ({
   topicList: vi.fn(),
   status: vi.fn(),
   preferenceGet: vi.fn(),
+  preferenceSet: vi.fn(),
 }));
 vi.mock("../src/catalog", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/catalog")>();
@@ -68,6 +69,7 @@ vi.mock("../src/catalog", async (importOriginal) => {
 let latestRevision = 5;
 
 const { createApi } = await import("../src/api");
+const { HealthProbes } = await import("../src/health-probes");
 const { JobStore } = await import("../src/store");
 const { Mirrors } = await import("../src/mirrors");
 
@@ -128,6 +130,8 @@ let store: InstanceType<typeof JobStore>;
 let server: ReturnType<typeof createApi>;
 let mirrors: InstanceType<typeof Mirrors>;
 let base: string;
+/** The stand-in runner every server in this file is made with. */
+let runnerStub: Runner;
 const enqueued: { brief: Record<string, unknown>; parent?: Record<string, unknown> }[] = [];
 
 beforeEach(async () => {
@@ -172,6 +176,7 @@ beforeEach(async () => {
       hash: null,
     }),
   } as unknown as Runner;
+  runnerStub = runner;
 
   mirrors = new Mirrors();
   server = createApi({ store, runner, mirrors });
@@ -756,6 +761,99 @@ describe("the agent's model and effort", () => {
       model: { requested: "default", passed: "claude-fable-5-1", source: "claude-settings" },
       effort: { requested: "default", passed: "high", source: "claude-settings" },
     });
+  });
+});
+
+describe("health, with a check that has become slow", () => {
+  const passing = { code: 0, signal: null, stdout: "", stderr: "", json: null, timedOut: false };
+  const failing = { ...passing, code: 1, json: { ok: false, checks: [{ name: "page bundle", status: "fail", detail: "no dist/page" }] } };
+  let probed: ReturnType<typeof createApi>;
+  let probedBase: string;
+
+  beforeEach(async () => {
+    // Every answer is already past its lifetime the moment it lands, so every
+    // health call after the first starts a refresh: the worst case for a
+    // health call that waits on its checks.
+    const probes = new HealthProbes({ doctor: 0, catalog: 0, agent: 60_000 });
+    probed = createApi({ store, runner: runnerStub, mirrors, probes });
+    await new Promise<void>((resolve) => probed.listen(0, "127.0.0.1", resolve));
+    probedBase = `http://127.0.0.1:${(probed.address() as AddressInfo).port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => probed.close(() => resolve()));
+  });
+
+  const health = async () => {
+    const started = performance.now();
+    const body = (await (await fetch(`${probedBase}/api/health`)).json()) as Record<string, unknown>;
+    return { body, ms: performance.now() - started };
+  };
+
+  it("answers from the last check at once, and says it is being checked again", async () => {
+    canvasMock.doctor.mockResolvedValue(passing);
+    const first = await health();
+    expect(first.body.tldrawkc).toBe(true);
+
+    // The doctor now takes as long as a Chromium launch on a loaded machine
+    // (15 to 23 s measured), and Postgres the same: health must not notice.
+    let release: (value: unknown) => void = () => undefined;
+    canvasMock.doctor.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    catalogMock.status.mockImplementation(() => new Promise(() => undefined));
+    const slow = await health();
+    expect(slow.ms).toBeLessThan(200);
+    expect(slow.body.tldrawkc).toBe(true);
+    expect(slow.body.postgres).toBe(true);
+    expect(slow.body.freshness).toMatchObject({
+      tldrawkc: { stale: true, refreshing: true },
+      postgres: { stale: true, refreshing: true },
+      agent: { stale: false, refreshing: false },
+    });
+
+    // When the slow check answers, the next call reports what it said.
+    release(failing);
+    await vi.waitFor(async () => expect((await health()).body.tldrawkc).toBe(false));
+  });
+
+  it("still refuses a job when the doctor fails, whatever health last said", async () => {
+    canvasMock.doctor.mockResolvedValue(passing);
+    expect((await health()).body.tldrawkc).toBe(true);
+    // Health's answer is still the passing one; the gate asks for itself.
+    canvasMock.doctor.mockResolvedValue(failing);
+    const response = await fetch(`${probedBase}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        intent: "show the window halving",
+        topic: "tcp-congestion-control",
+        slug: SLUG,
+        title: "Congestion window",
+        mode: "new",
+        elements: [{ label: "window" }],
+        relations: [],
+      }),
+    });
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as { error: string }).error).toContain("tldrawkc cannot run");
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("reports a setting stored through this runner at once, not after the answer ages out", async () => {
+    const row = (value: unknown) => ({ ok: true, json: { ok: true, value, updatedAt: null }, error: null, offline: false });
+    catalogMock.preferenceGet.mockResolvedValue(row(null));
+    const before = (await health()).body.agent as { diagram: { model: { source: string } } };
+    expect(before.diagram.model.source).toBe("default");
+
+    catalogMock.preferenceSet.mockResolvedValue({ ok: true, json: { ok: true }, error: null, offline: false });
+    catalogMock.preferenceGet.mockImplementation(async (key: string) => row(key === "studioDiagramAgent" ? { model: "opus", effort: "low" } : null));
+    const put = await fetch(`${probedBase}/api/settings/agent`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "diagram", model: "opus", effort: "low" }),
+    });
+    expect(put.status).toBe(200);
+    const after = (await health()).body.agent as { diagram: { model: { passed: string; source: string } } };
+    expect(after.diagram.model).toMatchObject({ passed: "opus", source: "panel" });
   });
 });
 
