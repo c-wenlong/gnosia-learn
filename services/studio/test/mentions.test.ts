@@ -315,6 +315,11 @@ describe("several tags, several briefs (D60, D61)", () => {
     const retry = await prompt(1);
     expect(retry).toContain("Your video brief was refused:\n- video, targetSeconds:");
     expect(retry).toContain("and no other brief");
+    // The retry's reply is the person's to read; its fix is not (Phase 2 measured).
+    expect(retry).toContain("The person does not see this message");
+    expect(retry).toContain("never name the refusal, a field or the fix");
+    expect(retry).not.toContain("summary above it");
+    expect(retry).toContain("with its topic block again when it names a new topic");
     const view = await drafts.view(record.id);
     const replies = view.transcript.filter((entry) => entry.role === "planner");
     expect(replies).toHaveLength(2);

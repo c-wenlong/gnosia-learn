@@ -138,7 +138,7 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
   const idea = text(raw.idea, "idea", 1, 300);
   const audience = oneOf(raw.audience, "audience", AUDIENCES);
   if (typeof raw.targetSeconds !== "number" || !Number.isInteger(raw.targetSeconds) || raw.targetSeconds < 60 || raw.targetSeconds > 600) {
-    throw new BriefError("targetSeconds", `"targetSeconds" must be a whole number from 60 to 600`);
+    throw new BriefError("targetSeconds", `"targetSeconds" must be a whole number from 60 to 600: a video is at least a minute and at most ten`);
   }
   const targetSeconds = raw.targetSeconds;
   const voice = typeof raw.voice === "string" ? raw.voice : "";
@@ -238,10 +238,19 @@ export function validateVideoBrief(input: unknown, vocabulary: Vocabulary): Vali
     }
     const characters = brief.scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + beat.say.length, 0), 0);
     const want = Math.round((targetSeconds / VIDEO_OVER_SPEECH) * CHARS_PER_SECOND);
+    const fits = Math.round(predicted);
+    // Offer the other way out only when it is a length the brief may have:
+    // "set targetSeconds to 41" sent a retry straight into the range check.
+    const otherwise =
+      fits < 60
+        ? "; a video is at least 60 seconds, so the lines must fill a minute"
+        : fits > 600
+          ? "; a video is at most 600 seconds, so an idea that needs more is two videos"
+          : ` or set targetSeconds to ${fits}`;
     throw new BriefError(
       "targetSeconds",
-      `the lines total ${characters} characters, about ${Math.round(predicted)} seconds; the target is ${targetSeconds}, so ` +
-        `${characters < want ? "add" : "cut"} about ${Math.abs(want - characters)} characters or set targetSeconds to ${Math.round(predicted)}`,
+      `the lines total ${characters} characters, about ${fits} seconds; the target is ${targetSeconds}, so ` +
+        `${characters < want ? "add" : "cut"} about ${Math.abs(want - characters)} characters${otherwise}`,
     );
   }
 

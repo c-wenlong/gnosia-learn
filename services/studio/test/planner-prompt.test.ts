@@ -51,6 +51,27 @@ describe("the combined prompt", () => {
     expect(combinedPrompt(["diagram", "video"])).toContain(STORYBOARD_RULES);
   });
 
+  it("gives a video's shortest and longest length, and what to say when asked for less (Phase 2 measured)", () => {
+    const prompt = combinedPrompt(["diagram", "video"]);
+    expect(prompt).toContain("The shortest\n   video is one minute and the longest ten");
+    expect(prompt).toContain("When the person asks\n   for less than a minute, set 60");
+    expect(STORYBOARD_RULES).toContain("never below 60");
+  });
+
+  it("asks for a line or two above a card rather than the card again in prose, and scenes named for what they show", () => {
+    const prompt = combinedPrompt(["diagram", "video"]);
+    // Six of six video replies restated their card, and opened on `why_it_matters`.
+    expect(prompt).not.toContain("first write a short summary");
+    expect(prompt.match(/never list them again in prose/g)).toHaveLength(2);
+    expect(prompt).not.toContain('"name": "why_it_matters"');
+    expect(STORYBOARD_RULES).toContain("Name each scene for what it shows");
+    expect(STORYBOARD_RULES).not.toContain("The first scene says why a viewer should care");
+    // A retry speaks to the person, not about the refusal.
+    expect(prompt).toContain("never name the refusal, a field or\nthe fix");
+    // And the new topic it named, which a retry once dropped and was refused for.
+    expect(prompt).toContain("with its\n`topic` block again when it names a new topic");
+  });
+
   it("is conversation first: no brief without a tag, and the tag is the TAGS block", () => {
     const prompt = combinedPrompt(["diagram", "video"]);
     expect(prompt).toContain("conversation: answer it, and write no brief, whatever it asks for");
