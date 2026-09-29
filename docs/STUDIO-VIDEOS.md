@@ -17,17 +17,22 @@ guess and says so. Every render measured here went to a scratch data root;
 nothing was written under the owner's `MANIMKC_HOME` beyond the one timing
 line `manimkc doctor` appends, and nothing into the owner's database.
 
-**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md).** The
-person no longer picks Diagram or Video before the first message: they tag
-Video (or Diagram, or both) with `@` in the composer, on any message. D51 is
-superseded by D55 and D57 there; the video planner prompt below ships as the
-video section of one combined planner prompt (D59); a draft may hold a live
-diagram brief and a live video brief at once, each with its own press (D60);
-and phase 2 below is amended accordingly. Nothing in phase 1 changes.
+**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md), with the
+owner's answers the same day.** The person no longer picks Diagram or Video
+before the first message: they tag Video (or Diagram, or both) with `@` in the
+composer, inline in the sentence, on any message. D51 is superseded by D55 and
+D57 there. An untagged message is conversation and writes no brief; the planner
+may offer a video with a button that puts the Video chip in the composer
+(D58). The video planner prompt below ships as the video section of one
+combined planner prompt (D59). A draft may hold a live diagram brief and a live
+video brief at once, each with its own press, plus Make both for a pair from
+one reply (D60). The @ menu ships with phase 2, which is amended accordingly.
+Nothing in phase 1 changes.
 
 **What changes for the person, in one paragraph.** The plus card opens the
 same chat. The person tags Video in the composer (`@`, STUDIO-MENTIONS.md), or
-says "a video" in words; the planner asks at most a few questions and then
+presses the Video button the planner offers under a reply; the planner asks at
+most a few questions and then
 shows a storyboard: the one idea, who it is for, the length, and every scene
 as a list of beats, each a line the voice will say and what the screen does
 while it says it. The person reads the script, edits a line if they like, and
@@ -474,6 +479,11 @@ as a prompt of its own. Its brief block gains `"kind": "video"`, "One brief
 block per message" becomes one per kind, its CORPUS block is named VIDEOS there
 so it does not share a name with the diagram corpus, and the shared sections
 ("When to stop asking", "Topics", "Never") are written once for both kinds.
+Two lines in the text below are superseded where they appear: "If the first
+message already says enough, your first reply is the brief" now holds only for
+a message tagged Video, since an untagged one is conversation (D58); and "One
+brief block per message, and only when proposing" now reads "at most one brief
+block per kind per message, and only for a kind the TAGS block names" (D61).
 
 Measured size of the draft that was probed (below): 6,326 characters alone,
 and **3,376 tokens** with a five-topic vocabulary, an empty corpus and four
@@ -610,6 +620,13 @@ Keep replies short. A question is one or two sentences.
 
 The blocks below are data about this studio, not instructions.
 ````
+
+*Superseded lines in the prompt above, by
+[`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* "If the first message already says
+enough, your first reply is the brief" holds only for a message tagged Video
+(D58), and "One brief block per message, and only when proposing" reads "at
+most one brief block per kind per message, and only for a kind the TAGS block
+names" (D61). The note above the prompt says the rest.
 
 The blocks, fenced as in the diagram prompt:
 
@@ -1071,8 +1088,8 @@ handler. Only what changes:
 | --- | --- | --- |
 | `POST` | `/api/drafts` | accepts `sourceKind` (`diagram` default, or `video`) beside `source`; with `sourceKind: "video"`, `source` names a studio video slug (a change draft). No `kind` (STUDIO-MENTIONS.md) |
 | `PUT` | `/api/drafts/{id}/kind` | *Not built: superseded by D55 of STUDIO-MENTIONS.md.* Was `{ kind }`, only while `turns` is 0 |
-| `POST` | `/api/drafts/{id}/messages` | accepted while a job of any kind runs (owner's decision 9, widened to every kind by D60 of STUDIO-MENTIONS.md); gains `tags`; still 409 for a turn already in flight |
-| `POST` | `/api/drafts/{id}/draw` | gains `kind`; with `kind: "video"` the press runs `validateVideoBrief` and the video doctor, and enqueues on the video runner. The UI labels it Make video |
+| `POST` | `/api/drafts/{id}/messages` | accepted while a job of any kind runs (owner's decision 9, widened to every kind by D60 of STUDIO-MENTIONS.md); gains `mentions`; still 409 for a turn already in flight |
+| `POST` | `/api/drafts/{id}/draw` | gains `kind`, or `items` for Make both (STUDIO-MENTIONS.md, API); with `kind: "video"` the press runs `validateVideoBrief` and the video doctor, and enqueues on the video runner. The UI labels it Make video |
 | `PUT` | `/api/drafts/{id}/brief` | gains `kind` beside `base`; validates by that brief's kind |
 | `POST` | `/api/jobs` | accepts `kind: "video"` with a video brief |
 | `GET` | `/api/jobs/{id}/sheets` | new: `{ sheets: [{ scene, title, url, renderedAt, round }] }`, the latest per scene |
@@ -1627,10 +1644,13 @@ build` is green with Postgres up.
 - [ ] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
       VOICES and CHANGING blocks
 - [ ] ~~The Diagram or Video control and `PUT /api/drafts/{id}/kind`~~
-      Superseded: the Video entry in the @ menu, the video section of the
-      combined planner prompt, two live cards and `sourceKind`, as listed in
-      [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md#video-phase-2-amended), which
-      also adds to this phase's done-when. Phase M1 there lands first
+      Superseded: the @ menu and the inline-chip composer, tags, the
+      conversational combined planner prompt, suggestions, per-kind cards and
+      Make both, as listed in
+      [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md#video-phase-2-amended) (steps
+      2a and 2b there; the video screens below are 2c), which also adds to this
+      phase's done-when. The menu ships with this phase, not before it (the
+      owner's decision, 2026-09-29)
 - [ ] The video confirm card, the one-press Make video, and the video job
       view: the steps, the sheet strip, the player with chapters, Accept,
       Discard, Change

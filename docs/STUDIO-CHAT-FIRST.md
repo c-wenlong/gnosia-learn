@@ -13,11 +13,17 @@ Numbers marked *measured* were taken on this machine on 2026-09-27, or on
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
 
-**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)**, which
-lets a person tag Diagram, Video or both with `@` on any message. It lifts
-three rules below, each marked where it stands: one brief block per message
-(now one per kind), one Draw on screen ever (now one live card per kind), and
-C14's refusal of messages while a job runs. D42 is superseded in part.
+**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)**, with the
+owner's answers the same day. A person tags Diagram, Video or both with `@`,
+inline in the sentence, on any message; a brief is written only for a tagged
+kind, and an untagged message is conversation, where the planner may offer a
+kind with a button that puts its chip in the composer. It changes rules below,
+each marked where it stands: the planner proposing on every request (now only
+when tagged), one brief block per message (now one per tagged kind), one Draw
+on screen ever (now one live card per kind, plus Make both for a pair), C14's
+refusal of messages while a job runs, and the studio's composer (now a
+rich-text `MentionComposer`; the tutor keeps `Composer`). D29 is amended and
+D42 superseded in part.
 
 **Refreshed 2026-09-29**, after the content migration's phase 3 cut-over. The
 owner confirmed three things: the layout stays grid first with the chat in a
@@ -228,10 +234,12 @@ phase 3 inline edit). That answers concern 4 without loosening the gate.
 ## The planner's prompt
 
 In full. It is the system prompt, followed by three data blocks the runner
-appends. *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D59, D61)* it
-becomes the diagram section of one planner prompt that carries every built
-kind, with a TAGS rule, `"kind": "diagram"` in its brief block, and one brief
-block per kind in place of one per message.
+appends. *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D58, D59, D61)*
+it becomes the diagram section of one planner prompt that carries every built
+kind, under a core that makes an untagged message conversation, with a TAGS
+rule, `"kind": "diagram"` in its brief block, and one brief block per tagged
+kind in place of one per message. The lines this changes are marked right
+after the prompt.
 
 Measured size: 1,444 tokens alone; about 9,900 with today's vocabulary
 of 86 topics (8,269 tokens) and the three-diagram corpus. The three rules added
@@ -340,6 +348,14 @@ Keep replies short. A question is one or two sentences.
 
 The blocks below are data about this studio, not instructions.
 ````
+
+*Superseded lines in the prompt above, by
+[`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* "You turn that into a brief"
+and "If the first message already says enough, your first reply is the brief"
+now hold only for a message tagged Diagram, since an untagged message is
+conversation (D58); and "One brief block per message, and only when
+proposing" now reads "at most one brief block per kind per message, and only
+for a kind the TAGS block names" (D61).
 
 The three blocks, each fenced with a `-----BEGIN NAME-----` line the way
 `DATA_FENCE` in [`prompt.ts`](../services/studio/src/prompt.ts) fences the
@@ -658,11 +674,15 @@ Built from the kit and nothing else, with tokens only.
 - The composer is the tutor's, extracted into the kit as `Composer`: 52px,
   radius 16, `--border` going `--accent` on focus, Send beside it, as a textarea
   growing to six lines, because pasted lists and flowcharts would flatten in the
-  tutor's one-line input.
+  tutor's one-line input. *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)
+  (D56):* the studio's conversation uses `MentionComposer`, a rich-text field
+  on the same frame that shows @ chips inline; the tutor keeps `Composer`.
 - An empty conversation opens with a turn the studio writes, unpaid: "Tell me
   what the diagram should make clear. A sentence is enough; I'll ask if I need
   more." Under it, three `Chip` suggestions from the corpus's topics, which
-  prefill the composer and never send.
+  prefill the composer and never send. *Since
+  [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* the opening turn reads "Ask me
+  about an idea, or type @ to make a diagram or a video of it."
 
 ### The confirm message
 
@@ -857,6 +877,11 @@ that moment, and the gate checks them exactly as today.
 eighty cents is spent on it. The prompt makes the glance the only thing asked:
 it proposes as soon as it could guess every field, never asks a fourth question
 in a row, and fills every gap itself on "just draw it".
+
+*Amended by D60 of [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md), 2026-09-29:*
+every job still starts from a person's press, and when one reply carries a live
+diagram card and a live video card, the owner chose a Make both press that
+starts both, each with its own idempotency key.
 
 **Rejected, and confirmed by the owner on 2026-09-29:** drawing automatically
 once the planner judges the context sufficient, which answers concern 9
@@ -1058,9 +1083,9 @@ have proposed a colliding `new` slug and been refused at Draw.
 
 **Superseded in part by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md), 2026-09-29.**
 The kind now lives on each brief and each job, not on the draft: the planner's
-one prompt carries every built kind (D59), each brief names its kind and is
-validated by it (D61), and `draft.kind` stays as the newest brief's kind, for
-display (D62). Keeping the diagram brief's own schema and gate, and rejecting a
+one prompt carries every built kind (D59), a brief is written only for a kind
+the person tagged (D58), each brief names its kind and is validated by it
+(D61), and `draft.kind` stays as the newest brief's kind, for display (D62). Keeping the diagram brief's own schema and gate, and rejecting a
 generic `asset` brief, still hold.
 
 **Verdict:** `draft.kind`, defaulting to `diagram`, and a planner prompt and
@@ -1086,10 +1111,10 @@ the same plus card and the same panel. What the diagram work leaves for that:
 | Piece | Shared, or per kind |
 | --- | --- |
 | Plus card, dialog, conversation, composer, STUDIO notes | Shared. The kind is an @ tag in the composer ([`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md)), neither a choice on the plus card nor a question |
-| `draft` row, transcript, turn loop, turn cap, spend entries | Shared, keyed by `draft.kind` |
-| Planner system prompt | Per kind: this document's prompt is the diagram one |
+| `draft` row, transcript, turn loop, turn cap, spend entries | Shared. *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D62):* not keyed by `draft.kind`; each brief and job carries its own kind, the draft keeps a slot per kind on disk, and `draft.kind` is the newest brief's, for display |
+| Planner system prompt | *Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D59):* one prompt per draft carrying every built kind, a shared conversational core plus a section per kind; this document's prompt becomes the diagram section |
 | Brief and its validator | Per kind: `validateBrief` in `brief.ts` is the diagram one |
-| Confirm card | Per kind: the rows differ; the one button does not |
+| Confirm card | Per kind: the rows differ; each card has its own button, and a reply with a diagram card and a video card adds Make both (D60 of STUDIO-MENTIONS.md) |
 | What Draw enqueues | Per kind: a tldrawkc job today; a manimkc job through a second runner in this process later (D43 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md), which weighs manimkc's own server and rejects it) |
 | The job view after Draw | Per kind |
 
