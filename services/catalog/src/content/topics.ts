@@ -19,6 +19,7 @@ import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { diagramPaths } from "./diagram-document";
+import { restampVideoSource, sourceHash } from "./videos";
 import { type ExportType, sha256 } from "./layout";
 import { POSITION_STEP } from "./positions";
 import { andOwnedBy, type Owners, CLI_OWNER, cliScope } from "./scope";
@@ -1035,6 +1036,7 @@ async function usesOf(db: CatalogDatabase, slug: string): Promise<string[]> {
     ],
     ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id`],
     ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug`],
+    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug`],
     [
       "open studio jobs for it",
       sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id`,
@@ -1142,7 +1144,7 @@ export interface RenameResult {
 class RenameNeedsCourses extends Error {}
 
 /** The entity types a rename can touch, which it locks like an import does. */
-const RENAME_LOCKS: readonly RevisionEntityType[] = ["asset", "collection", "concept", "curriculum_item", "diagram", "topic"];
+const RENAME_LOCKS: readonly RevisionEntityType[] = ["asset", "collection", "concept", "curriculum_item", "diagram", "topic", "video"];
 
 /** Every entity whose snapshot names `slug`, by type. Topics are keyed by their slug before the rename. */
 async function namedBy(db: CatalogDatabase, slug: string): Promise<Map<RevisionEntityType, string[]>> {
@@ -1161,6 +1163,7 @@ async function namedBy(db: CatalogDatabase, slug: string): Promise<Map<RevisionE
     ["curriculum_item", await ids(sql`select curriculum_item_id as id from curriculum_item_topic where topic_slug = ${slug}`)],
     ["asset", await ids(sql`select asset_id as id from asset_topic where topic_slug = ${slug}`)],
     ["diagram", await ids(sql`select slug as id from diagram where topic_slug = ${slug}`)],
+    ["video", await ids(sql`select slug as id from video where topic_slug = ${slug}`)],
   ]);
 }
 
@@ -1366,6 +1369,24 @@ async function renameUnder(
       await tx.execute(sql`
         update asset set content_hash = ${sha256(bytes)}, bytes = ${Buffer.byteLength(bytes, "utf8")}, updated_at = now()
         where id = ${`${ASSET_PREFIX.diagrams}${diagramPaths(diagram.slug).tldr}`}`);
+    }
+
+    // 4b. Each studio video's source names its topic twice, in the brief and
+    //     in topic.yml; `topic_slug` followed by cascade already. The source
+    //     hash moves with it, and so does the rendered one when it was the
+    //     same: a restamped slug changes no picture in the cut.
+    const videos = await tx.execute<{ slug: string; source: unknown; source_hash: string; rendered_source_hash: string | null }>(
+      sql`select slug, source, source_hash, rendered_source_hash from video where topic_slug = ${to}`,
+    );
+    for (const row of videos.rows) {
+      const source = restampVideoSource(row.source, from, to);
+      if (source === null) continue;
+      const hash = sourceHash(source);
+      await tx.execute(sql`
+        update video set source = ${JSON.stringify(source)}::jsonb, source_hash = ${hash},
+          rendered_source_hash = case when rendered_source_hash = ${row.source_hash} then ${hash} else rendered_source_hash end,
+          updated_at = now()
+        where slug = ${row.slug}`);
     }
 
     // 5. Open jobs' briefs. `job.topic_slug` followed by cascade; the brief is

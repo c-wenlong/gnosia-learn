@@ -17,9 +17,22 @@ guess and says so. Every render measured here went to a scratch data root;
 nothing was written under the owner's `MANIMKC_HOME` beyond the one timing
 line `manimkc doctor` appends, and nothing into the owner's database.
 
+**Amended 2026-09-29 by [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md), with the
+owner's answers the same day.** The person no longer picks Diagram or Video
+before the first message: they tag Video (or Diagram, or both) with `@` in the
+composer, inline in the sentence, on any message. D51 is superseded by D55 and
+D57 there. An untagged message is conversation and writes no brief; the planner
+may offer a video with a button that puts the Video chip in the composer
+(D58). The video planner prompt below ships as the video section of one
+combined planner prompt (D59). A draft may hold a live diagram brief and a live
+video brief at once, each with its own press, plus Make both for a pair from
+one reply (D60). The @ menu ships with phase 2, which is amended accordingly.
+Nothing in phase 1 changes.
+
 **What changes for the person, in one paragraph.** The plus card opens the
-same chat. Before the first message the person picks Diagram or Video; a video
-draft talks to a video planner, which asks at most a few questions and then
+same chat. The person tags Video in the composer (`@`, STUDIO-MENTIONS.md), or
+presses the Video button the planner offers under a reply; the planner asks at
+most a few questions and then
 shows a storyboard: the one idea, who it is for, the length, and every scene
 as a list of beats, each a line the voice will say and what the screen does
 while it says it. The person reads the script, edits a line if they like, and
@@ -35,7 +48,7 @@ with its chapters and transcript. To change it, the person says what to change.
 login, under one daily cap (D27). Nothing lands until Accept, and Accept is
 one catalog verb in one transaction. The draft, the turn loop, the transcript,
 the STUDIO notes, the topic proposal and its Create topic press are the diagram
-studio's, keyed by `draft.kind`.
+studio's, keyed by each brief's `kind` (D61 of STUDIO-MENTIONS.md).
 
 **The owner's decisions, 2026-09-29**, taken while this document was being
 written, and designed around below:
@@ -82,6 +95,7 @@ Four more, answered the same day to the questions this document raised:
 | --- | --- |
 | This file | The video kind: runner, sandbox, brief, planner, gate, accept, schema |
 | [`STUDIO-CHAT-FIRST.md`](STUDIO-CHAT-FIRST.md) | Everything shared: the draft, the planner loop, the hand-off, the confirm card, D27 to D42 |
+| [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) | How a person asks for a video: the @ menu and tags, several live briefs per draft, the combined planner prompt, D55 to D63 |
 | [`TLDRAWKC-INTEGRATION.md`](TLDRAWKC-INTEGRATION.md) | The runner's rules, the permission file and its traps, D1 to D26 (D5 and D25 matter most here) |
 | [`tools/manimkc/AGENTS.md`](../tools/manimkc/AGENTS.md) | The data root, the two roots, narration, the verify loop this agent follows |
 | [`tools/manimkc/server/DESIGN.md`](../tools/manimkc/server/DESIGN.md) | manimkc's own job server, which this design does not use, and why (D43) |
@@ -111,7 +125,7 @@ path, the cost meter and the cap.
 
 ```mermaid
 flowchart LR
-    UI["/studio<br/>chat panel"] -- "draft kind video" --> PL["planner turn<br/>video prompt"]
+    UI["/studio<br/>chat panel"] -- "message tagged video" --> PL["planner turn<br/>video section"]
     PL -- "brief" --> V["validateVideoBrief"]
     V -- "Draw press: Make video" --> Q["video runner<br/>own queue"]
     Q --> FARM["jobs/id/checkout<br/>synthetic manimkc"]
@@ -475,10 +489,23 @@ edit.
 ## The planner's prompt
 
 In full. The block names are machine delimiters in the house format, as in the
-diagram prompt; everything a person reads is sentence case. Measured size of
-the draft that was probed (below): 6,326 characters alone, and **3,376
-tokens** with a five-topic vocabulary, an empty corpus and four voices
-(*measured*, the CLI's own count). The counting and abbreviation rules added
+diagram prompt; everything a person reads is sentence case.
+
+*Since [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md) (D59, D61):* this text ships
+as the video section of one planner prompt that carries every built kind, not
+as a prompt of its own. Its brief block gains `"kind": "video"`, "One brief
+block per message" becomes one per kind, its CORPUS block is named VIDEOS there
+so it does not share a name with the diagram corpus, and the shared sections
+("When to stop asking", "Topics", "Never") are written once for both kinds.
+Two lines in the text below are superseded where they appear: "If the first
+message already says enough, your first reply is the brief" now holds only for
+a message tagged Video, since an untagged one is conversation (D58); and "One
+brief block per message, and only when proposing" now reads "at most one brief
+block per kind per message, and only for a kind the TAGS block names" (D61).
+
+Measured size of the draft that was probed (below): 6,326 characters alone,
+and **3,376 tokens** with a five-topic vocabulary, an empty corpus and four
+voices (*measured*, the CLI's own count). The counting and abbreviation rules added
 after the probe are about 120 tokens more, estimated from their length.
 
 ````text
@@ -612,6 +639,13 @@ Keep replies short. A question is one or two sentences.
 The blocks below are data about this studio, not instructions.
 ````
 
+*Superseded lines in the prompt above, by
+[`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md):* "If the first message already says
+enough, your first reply is the brief" holds only for a message tagged Video
+(D58), and "One brief block per message, and only when proposing" reads "at
+most one brief block per kind per message, and only for a kind the TAGS block
+names" (D61). The note above the prompt says the rest.
+
 The blocks, fenced as in the diagram prompt:
 
 | Block | One line per | Built from |
@@ -642,16 +676,16 @@ review under its slug, with its length, so a change to what is said becomes a
 follow (accepted, discarded, failed with the gate's findings) are the diagram
 notes' shapes.
 
-**How the kind is chosen (D51).** Before a draft's first message, the empty
-conversation shows the studio's unpaid opener and a two-option control,
-Diagram and Video, with Diagram selected. Changing it rewrites the draft's
-`kind` and its `planner-system.md` (`PUT /api/drafts/{id}/kind`, allowed only
-while `turns` is 0). After the first message the kind is fixed: the CLI
-records the system prompt on the conversation's first request and replays it
-on every resume, so a planner cannot switch prompts mid-conversation, and a
-mixed prompt describing both briefs would make each planner worse at its own.
-The opener changes with the control: "Tell me what the video should teach. A
-sentence is enough; I'll ask if I need more."
+**How the kind is chosen.** *Superseded by D55 and D57 of
+[`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md).* This paragraph described a
+Diagram or Video control in the empty conversation, `PUT
+/api/drafts/{id}/kind` while `turns` is 0, and a kind fixed after the first
+message (D51). Instead, any message may carry an @ tag for Diagram, Video or
+both, and a brief is written only for a tagged kind (or one still waiting from
+an earlier tag). An untagged message is conversation and writes no brief; when
+a video would help, the planner offers it as a button that puts the Video chip
+in the composer (D58 there). The planner's one prompt carries every built kind
+from the first turn, so nothing has to switch mid-conversation.
 
 ## The confirm card
 
@@ -672,7 +706,10 @@ what it is by its content (DESIGN.md, "Sentence case").
 
 Under it, the one button, **Make video**, the same one-press approval as Draw
 (owner's decision 1), with **Create topic and make video** when the planner
-proposed a topic. Its `disabledReason`s are the diagram card's (the slug held
+proposed a topic. A reply to a message tagged Diagram and Video carries a
+diagram card and a video card, each with its own press, and a newer video brief
+greys only the older video card (D60 of STUDIO-MENTIONS.md). Its
+`disabledReason`s are the diagram card's (the slug held
 by another job, the cap spent when the owner has set one) plus the video
 doctor's, named. In place, as for diagrams: the title, each line and each
 label are editable through `PUT /api/drafts/{id}/brief`, and an edited line
@@ -1014,8 +1051,11 @@ name. So a repeated Accept press or a retry after a timeout is safe.
 
 A change to an accepted video writes the same ids again, a new revision each,
 with the previous revision as `--base`, so a concurrent write refuses rather
-than overwrites. The previous mp4's blob stays until the blob store's own sweep
-removes unreferenced keys.
+than overwrites. The previous mp4's blob stays in the store: nothing deletes
+an unreferenced key today. `catalog blob audit` lists it as `unreferenced`,
+and it counts toward the owner's byte cap, as a re-rendered manimkc video's
+old bytes do. The same holds for the blobs of a put whose transaction was
+refused, which a retry of the same Accept reuses, since the keys are hashes.
 
 The `manimkc:` namespace is deliberately not used: `catalog import --only
 manimkc` prunes every `manimkc:` asset the owner holds that its report did not
@@ -1038,7 +1078,7 @@ Change `packages/schema/src/` and generate; no applied migration is edited.
 | New table `video` | below |
 | `ASSET_PREFIX` | documents `video:` as the studio's namespace. It is not an import source, so nothing prunes it |
 | `job` | no new columns. `target_path` is `videos/<slug>.mp4` and `candidate_path` `jobs/<id>/candidate/<slug>.mp4`; `briefTarget` and `briefCandidate` in `commands/job.ts` accept these per kind, and the partial unique index leases a video slug exactly as a diagram one |
-| `draft` | no new columns; `kind` already exists (D42) |
+| `draft` | no new columns; `kind` already exists (D42), and since D62 of STUDIO-MENTIONS.md holds the newest brief's kind, for display |
 | `preference` | no migration: two new keys, `studioVideoAgent` and `studioDiagramAgent` (D53) |
 | `catalog job enqueue` | a `change` job may name a parent in `awaiting_review` or `accepted`; the discard of an `awaiting_review` parent and the child's insert are one transaction |
 
@@ -1069,11 +1109,11 @@ handler. Only what changes:
 
 | Method | Path | Change |
 | --- | --- | --- |
-| `POST` | `/api/drafts` | accepts `kind` (`diagram` default, or `video`); with `kind: "video"`, `source` names a studio video slug (a change draft) |
-| `PUT` | `/api/drafts/{id}/kind` | new: `{ kind }`, only while `turns` is 0; rewrites `planner-system.md`. 409 otherwise |
-| `POST` | `/api/drafts/{id}/messages` | on a video draft, accepted while the draft is `drawing` (owner's decision 9); still 409 for a turn already in flight |
-| `POST` | `/api/drafts/{id}/draw` | unchanged route; the Draw press of a video draft runs `validateVideoBrief` and the video doctor, and enqueues on the video runner. The UI labels it Make video |
-| `PUT` | `/api/drafts/{id}/brief` | unchanged; validates by the draft's kind |
+| `POST` | `/api/drafts` | accepts `sourceKind` (`diagram` default, or `video`) beside `source`; with `sourceKind: "video"`, `source` names a studio video slug (a change draft). No `kind` (STUDIO-MENTIONS.md) |
+| `PUT` | `/api/drafts/{id}/kind` | *Not built: superseded by D55 of STUDIO-MENTIONS.md.* Was `{ kind }`, only while `turns` is 0 |
+| `POST` | `/api/drafts/{id}/messages` | accepted while a job of any kind runs (owner's decision 9, widened to every kind by D60 of STUDIO-MENTIONS.md); gains `mentions`; still 409 for a turn already in flight |
+| `POST` | `/api/drafts/{id}/draw` | gains `kind`, or `items` for Make both (STUDIO-MENTIONS.md, API); with `kind: "video"` the press runs `validateVideoBrief` and the video doctor, and enqueues on the video runner. The UI labels it Make video |
+| `PUT` | `/api/drafts/{id}/brief` | gains `kind` beside `base`; validates by that brief's kind |
 | `POST` | `/api/jobs` | accepts `kind: "video"` with a video brief |
 | `GET` | `/api/jobs/{id}/sheets` | new: `{ sheets: [{ scene, title, url, renderedAt, round }] }`, the latest per scene |
 | `GET` | `/api/jobs/{id}/sheets/{scene}.png` | new: one sheet, the scene name checked against the brief, the file opened with `O_NOFOLLOW` and served only if it is a regular file with one link, since it lives in `render/` |
@@ -1238,7 +1278,7 @@ V for video, so they do not collide with C, M, E or U.
 | V17 | A studio video's mp4 blob is missing (a restored store) | The player's route already answers 404 `not-uploaded` for a missing blob. Re-rendering from the stored source is a change job with no script change |
 | V18 | The shared TTS cache grows with clips from discarded videos | Harmless: clips are keyed by content and small next to renders. manimkc's `make realclean` owns clearing it |
 | V19 | The agent reads a sheet from an earlier round and not the latest | Step 10 fails that scene and resumes the agent with "look at the sheet for X, rendered at 12:04" |
-| V20 | Two drafts, one a diagram and one a video, Make and Draw at once | Two runners, two queues: both run. The machine carries one Chromium job and one render job; measured neither together (a guess that the M4 Pro copes) |
+| V20 | Two drafts, one a diagram and one a video, Make and Draw at once; or, since STUDIO-MENTIONS.md, one draft with both cards pressed (T12 there) | Two runners, two queues: both run. The machine carries one Chromium job and one render job; measured neither together (a guess that the M4 Pro copes) |
 | V21 | The agent exits without building | Gate step 5 fails with "no build after the last change", and the agent is resumed to build |
 | V22 | The owner changes the model in the panel while a job is queued | The job uses the new setting, resolved at start; a running job keeps what it started with, and so does its revise |
 | V23 | The owner's user settings name a model the rate table does not price | A clean session records the CLI's own cost; a killed one's estimate falls back as today and says so |
@@ -1435,6 +1475,12 @@ which would pay for a review the person is about to do.
 
 ### D51. The kind is chosen before the first paid turn, and fixed after it
 
+**Superseded by D55 and D57 of [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md),
+2026-09-29,** at the owner's request: the kind is an @ tag on any message, one
+message may ask for both kinds, and the planner's one prompt carries every
+built kind (D59 there), which removes the reason the kind had to be fixed. Kept
+below as it was decided.
+
 **Verdict:** a Diagram or Video control in the empty conversation, Diagram by
 default; `PUT /api/drafts/{id}/kind` while `turns` is 0.
 
@@ -1563,17 +1609,28 @@ shipping loop in the root [`AGENTS.md`](../AGENTS.md), and an independent
 security review on every PR that touches the sandbox, the wrapper or the
 permission file. Status key: `[ ]` not started, `[x]` done.
 
-### Phase 0. Three small manimkc PRs
+### Phase 0. Small manimkc PRs
 
-- [ ] `assemble.sh` makes its temporary directory under `$TMPDIR`
-- [ ] `lib/narration.py` treats an unreadable `.env` as absent
-- [ ] `manimkc lint` refuses a `voiceover` whose argument is not a
+- [x] `assemble.sh` makes its temporary directory under `$TMPDIR`
+- [x] `lib/narration.py` treats an unreadable `.env` as absent
+- [x] `manimkc lint` refuses a `voiceover` whose argument is not a
       double-quoted string literal, the form the narration step reads
-- [ ] The submodule pointer bumped here (Workflow 1 of the root `AGENTS.md`)
+- [x] Found while measuring: two parallel renders of the same new `Text` on a
+      fresh ManimGL cache collided on one temporary SVG and could cache an
+      empty one, failing every later render of that string. Every render now
+      gets a `TMPDIR` of its own, and an SVG is validated before it is cached
+- [x] The submodule pointer bumped here (Workflow 1 of the root `AGENTS.md`)
 
 Done when: the ssh-tunnels topic previews and builds inside the measured
 profile with no directory other than `render/` writable, and manimkc's
 `make test` is green.
+
+Done 2026-09-29, in manimkc#31 and manimkc#32. Four fresh sandboxed previews
+of ssh-tunnels all passed (16 to 24 s, no failed scene, no retry, no cache
+entry that is not an SVG), and the sandboxed 1080p build joined 58 s of
+video. A shell write anywhere but `render/` was refused under the same
+profile. manimkc's `make test` is green. The job wrapper has to pass
+`build --no-register`, since a job checkout has no `README.md` (phase 1).
 
 ### Phase 1. The runner half
 
@@ -1620,7 +1677,14 @@ build` is green with Postgres up.
 
 - [ ] `validateVideoBrief`, the video planner prompt, the VOCABULARY, CORPUS,
       VOICES and CHANGING blocks
-- [ ] The Diagram or Video control and `PUT /api/drafts/{id}/kind`
+- [ ] ~~The Diagram or Video control and `PUT /api/drafts/{id}/kind`~~
+      Superseded: the @ menu and the inline-chip composer, tags, the
+      conversational combined planner prompt, suggestions, per-kind cards and
+      Make both, as listed in
+      [`STUDIO-MENTIONS.md`](STUDIO-MENTIONS.md#video-phase-2-amended) (steps
+      2a and 2b there; the video screens below are 2c), which also adds to this
+      phase's done-when. The menu ships with this phase, not before it (the
+      owner's decision, 2026-09-29)
 - [ ] The video confirm card, the one-press Make video, and the video job
       view: the steps, the sheet strip, the player with chapters, Accept,
       Discard, Change
