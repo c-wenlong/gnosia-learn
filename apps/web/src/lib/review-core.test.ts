@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildChoices,
+  cardEyebrow,
   cardStats,
   formatAgo,
   formatDue,
@@ -12,6 +13,7 @@ import {
   RATING_IF_CORRECT,
   RATING_IF_WRONG,
   RATING_LABEL,
+  recallPrompt,
   seedOf,
 } from "./review-core";
 
@@ -118,5 +120,34 @@ describe("formatting", () => {
     ).toBe("ease 2.5 · 4 reps · last seen 4 days ago");
     expect(cardStats({ ease: 2.36, repetitions: 1, lastReviewed: null }, now)).toBe("ease 2.36 · 1 rep");
     expect(cardStats({ ease: null, repetitions: 0, lastReviewed: null }, now)).toBe("new card");
+  });
+});
+
+describe("cardEyebrow", () => {
+  const card = { title: "Transformer block", leech: false };
+
+  it("leaves it out when a recall prompt already names the concept", () => {
+    expect(cardEyebrow({ ...card, kind: "recall", prompt: recallPrompt(card.title) })).toBeNull();
+  });
+
+  it("names the concept over a check's question", () => {
+    expect(cardEyebrow({ ...card, kind: "check", prompt: "What does it stack?" })).toBe(
+      "Check · Transformer block",
+    );
+  });
+
+  it("names the concept over a recall card that kept its check's question", () => {
+    // A check whose answer cannot become choices is a recall card whose prompt
+    // is still the question, so the label is the only place the concept is named.
+    expect(cardEyebrow({ ...card, kind: "recall", prompt: "What does it stack?" })).toBe(
+      "Recall · Transformer block",
+    );
+  });
+
+  it("says a leech is one, even when the prompt names the concept", () => {
+    expect(cardEyebrow({ ...card, leech: true, kind: "recall", prompt: recallPrompt(card.title) })).toBe("Leech");
+    expect(cardEyebrow({ ...card, leech: true, kind: "check", prompt: "Why?" })).toBe(
+      "Check · Transformer block · Leech",
+    );
   });
 });
