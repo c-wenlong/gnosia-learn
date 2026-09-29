@@ -42,30 +42,58 @@ export function normalisePreference(value: unknown): AgentPreference {
   return { model, effort };
 }
 
-function isPreference(value: unknown): value is AgentPreference {
-  return typeof value === "object" && value !== null && typeof (value as AgentPreference).model === "string" && typeof (value as AgentPreference).effort === "string";
+export type AgentPreferenceKey = "studioVideoAgent" | "studioDiagramAgent";
+
+/**
+ * What the cache holds for one key: the row, or null for no row. Wrapped so
+ * "there is no row" is a value the cache can remember, and so a copy written
+ * by the build before this one (a bare `{ model, effort }`, which could have
+ * been a real row or the defaults standing in for none) is no copy at all
+ * rather than a row nobody saved.
+ */
+interface StoredCopy {
+  row: AgentPreference | null;
+}
+
+function isStoredCopy(value: unknown): value is StoredCopy {
+  if (typeof value !== "object" || value === null || !("row" in value)) return false;
+  const row = (value as StoredCopy).row;
+  return row === null || (typeof row === "object" && typeof row.model === "string" && typeof row.effort === "string");
 }
 
 /**
- * The panel's value, through the catalog, cached in
- * `$STUDIO_HOME/cache/preferences.<key>.json` as the topics are: with
- * Postgres down a job uses the last good read, and with none, the defaults.
+ * The stored row, or null when the owner has none, through the catalog and
+ * cached in `$STUDIO_HOME/cache/preferences.<key>.json` as the topics are:
+ * with Postgres down a job uses the last good read. With no read ever, it is
+ * null, the same answer as no row, because nothing can say a row exists; that
+ * is "with none, the defaults" of D53, and for the diagram agent the defaults
+ * are what no row means.
  */
-export async function readPreference(key: "studioVideoAgent" | "studioDiagramAgent"): Promise<AgentPreference> {
+export async function readStoredPreference(key: AgentPreferenceKey): Promise<AgentPreference | null> {
   try {
-    const read = await readThrough(
+    const read = await readThrough<StoredCopy>(
       `preferences.${key}`,
       async () => {
         const result = await preferenceGet(key);
         if (!result.ok) throw new Error(result.error ?? "catalog preference get failed");
-        return normalisePreference((result.json as { value?: unknown } | null)?.value ?? null);
+        const value = (result.json as { value?: unknown } | null)?.value ?? null;
+        return { row: value === null ? null : normalisePreference(value) };
       },
-      { isValue: isPreference },
+      { isValue: isStoredCopy },
     );
-    return normalisePreference(read.value);
+    return read.value.row === null ? null : normalisePreference(read.value.row);
   } catch {
-    return DEFAULT_PREFERENCE;
+    return null;
   }
+}
+
+/**
+ * The panel's value with the defaults standing in for no row, which is what
+ * the video agent needs: its default is the owner's Claude Code default
+ * either way.
+ */
+export async function readPreference(key: AgentPreferenceKey): Promise<AgentPreference> {
+  return (await readStoredPreference(key)) ?? DEFAULT_PREFERENCE;
 }
 
 /** The owner's user settings file: `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json`. */

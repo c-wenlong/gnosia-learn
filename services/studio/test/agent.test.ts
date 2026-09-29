@@ -56,6 +56,8 @@ out({
   resumed: process.argv.includes("--resume"),
   manualFile: process.argv.includes("--append-system-prompt-file") ? process.argv[process.argv.indexOf("--append-system-prompt-file") + 1] : null,
   appendText: process.argv.includes("--append-system-prompt"),
+  model: process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : null,
+  effort: process.argv.includes("--effort") ? process.argv[process.argv.indexOf("--effort") + 1] : null,
 });
 out({ type: "system", subtype: "init", model: "claude-sonnet-test", apiKeySource: key ? "ANTHROPIC_API_KEY" : "none" });
 if (key) {
@@ -106,14 +108,20 @@ function shellWithKey(): void {
   process.env.STUDIO_AGENT_TEST_MARKER = "kept";
 }
 
-async function runFake(jobId: string, auth?: "login" | "env", resume = false, manualPath?: string | null) {
+async function runFake(
+  jobId: string,
+  auth?: "login" | "env",
+  resume = false,
+  manualPath?: string | null,
+  flags: { model: string | null; effort?: string | null } = { model: "sonnet" },
+) {
   const lines: string[] = [];
   const inits: { apiKeySource: string | null }[] = [];
   const agent = await startAgent({
     jobId,
     slug: "studio-agent-fixture",
     prompt: "draw it",
-    model: "sonnet",
+    ...flags,
     sessionId: "00000000-0000-4000-8000-00000000abcd",
     resume,
     ...(auth === undefined ? {} : { auth }),
@@ -131,6 +139,24 @@ describe("the agent's working directories", () => {
     const { env } = await runFake("job-dirs");
     expect(env.addDirs).toEqual([scratchDir("job-dirs"), candidateDir("job-dirs")]);
     expect(env.addDirs).not.toContain(jobDir("job-dirs"));
+  });
+});
+
+describe("the agent's model and effort", () => {
+  it("are passed as --model and --effort when the runner resolved them", async () => {
+    const { env } = await runFake("job-model", undefined, false, undefined, { model: "opus", effort: "low" });
+    expect(env.model).toBe("opus");
+    expect(env.effort).toBe("low");
+  });
+
+  it("are left off entirely when the runner resolved no value, so the CLI's own default applies", async () => {
+    const { env } = await runFake("job-no-model", undefined, false, undefined, { model: null, effort: null });
+    expect(env.model).toBeNull();
+    expect(env.effort).toBeNull();
+    // Absent is the same as null: a caller that predates effort passes none.
+    const { env: before } = await runFake("job-no-effort", undefined, false, undefined, { model: "sonnet" });
+    expect(before.model).toBe("sonnet");
+    expect(before.effort).toBeNull();
   });
 });
 

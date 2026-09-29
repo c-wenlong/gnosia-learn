@@ -30,7 +30,7 @@ import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
-import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./video/agent-model";
+import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
 import type { VideoDoctor } from "./video/doctor";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
 
@@ -242,6 +242,12 @@ function view(record: JobRecord): Record<string, unknown> {
     apiKeySource: record.apiKeySource ?? null,
     // The tldraw manual the agent ran with, by the hash that names its file.
     manualHash: record.manualHash ?? null,
+    // The model and effort it was started with, each `{ requested, passed,
+    // source }`, and the model its session said it was (D53). Null on a job
+    // that has not started, or one recorded before the settings panel.
+    agentModel: record.agentModel ?? null,
+    agentEffort: record.agentEffort ?? null,
+    resolvedModel: record.resolvedModel ?? null,
     exitCode: record.exitCode,
     gate: record.gate,
     // The finished-job screen's whole content, computed by the runner when the
@@ -1501,18 +1507,15 @@ async function draftEvents(
 /** What is and is not working right now. */
 /**
  * The model and effort a job started now would get, per kind, and where each
- * came from (D53 of docs/STUDIO-VIDEOS.md). The diagram agent still takes its
- * model from the brief, `sonnet` unless a brief names another, and passes no
- * effort; the panel reaches it in phase 2.
+ * came from (D53 of docs/STUDIO-VIDEOS.md), by the same resolvers the runners
+ * use. The diagram block is for a brief that names no model, which is every
+ * brief the planner writes; one that names a model runs on it.
  */
 async function agentSettings(): Promise<Record<string, unknown>> {
-  const videoAgent = await resolveAgentSettings(await readPreference("studioVideoAgent"), await readClaudeDefaults());
+  const [video, diagram] = await Promise.all([resolveVideoAgent(), resolveDiagramAgent()]);
   return {
-    video: videoAgent,
-    diagram: {
-      model: { requested: "sonnet", passed: "sonnet", source: "brief" },
-      effort: { requested: "default", passed: null, source: "cli" },
-    },
+    video: { model: video.model, effort: video.effort },
+    diagram: { model: diagram.model, effort: diagram.effort },
   };
 }
 

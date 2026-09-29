@@ -9,12 +9,14 @@ import type { JobState } from "@self-learn/schema";
 
 import { type ValidBrief } from "./brief";
 import { AgentRun, startAgent, sweepOrphans, type AgentInit } from "./agent";
+import { resolveDiagramAgent } from "./agent-settings";
 import { buildComparison, readSide, sideFromGate, type Side } from "./compare";
 import {
   agentAuth,
   CONCURRENCY,
   dailyCapUsd,
   DAILY_WINDOW_MS,
+  DEFAULT_MODEL,
   JOB_TIMEOUT_MS,
   MAX_ATTEMPTS,
   RUNNER_NAME,
@@ -54,6 +56,7 @@ import type { ManualSource } from "./manual/source";
 import { dirtyFiles } from "./review";
 import { resolveSource } from "./source-note";
 import type { GateResult, JobRecord, JobStore } from "./store";
+import type { AgentSetting } from "./video/types";
 
 /**
  * The queue, the claim, the attempts and the verdict.
@@ -288,7 +291,7 @@ export class Runner {
   private async costFromDisk(record: JobRecord): Promise<CostReading | null> {
     try {
       const body = await readFile(sessionLogPath(record.id), "utf8");
-      return costFromLog(body, record.brief.model);
+      return costFromLog(body, pricingModel(record));
     } catch {
       return null;
     }
@@ -633,10 +636,12 @@ export class Runner {
         agent: null,
         cancelled: false,
         timedOut: false,
-        // Seeded with the brief's model rather than left null: the stream names
-        // the model on its first assistant event, and an attempt killed before
-        // one arrived would otherwise have tokens it could not price.
-        meter: new JobCostMeter(next.brief.model),
+        // Seeded with a model rather than left null: the stream names the
+        // model on its first assistant event, and an attempt killed before one
+        // arrived would otherwise have tokens it could not price. The job's
+        // own model is not resolved until it starts, so `execute` seeds it
+        // again once it is.
+        meter: new JobCostMeter(pricingModel(next)),
         // Zero, not `Date.now()`: the first line of a job should land a figure
         // rather than wait out a throttle window it never asked for.
         costWrittenAt: 0,
@@ -840,7 +845,21 @@ export class Runner {
     // the system prompt it recorded on that session's first request, so the
     // parent's manual is the one this agent actually reads.
     let manualHash = this.manualFor(record, inherited !== null);
-    record = await this.store.update(id, { agentAuth: auth, manualHash });
+    // The model and effort (D53 of docs/STUDIO-VIDEOS.md), decided here once
+    // for every attempt and never at enqueue, so a change in the settings
+    // panel reaches a job that was already queued. A job that continues its
+    // parent's session keeps the parent's, as it keeps the parent's manual;
+    // a parent recorded before the panel has none, and this one resolves.
+    const { agentModel, agentEffort } = await this.agentSettingsFor(record, inherited !== null);
+    record = await this.store.update(id, { agentAuth: auth, manualHash, agentModel, agentEffort });
+    // Every line so far was the runner's own, so a fresh meter loses nothing,
+    // and it prices an early kill at the model this job actually passes.
+    entry.meter = new JobCostMeter(pricingModel(record));
+    await this.store.emit(id, {
+      type: "step",
+      state: "running",
+      note: `the agent runs with ${settingNote("model", agentModel)} and ${settingNote("effort", agentEffort)}`,
+    });
     await this.store.emit(id, {
       type: "step",
       state: "running",
@@ -933,7 +952,8 @@ export class Runner {
         slug: record.slug,
         ...(source === undefined ? {} : { source }),
         prompt,
-        model: record.brief.model,
+        model: agentModel.passed,
+        effort: agentEffort.passed,
         sessionId: agentSessionId,
         resume: resuming,
         auth,
@@ -1146,6 +1166,24 @@ export class Runner {
   }
 
   /**
+   * Which model and effort a job runs with: its parent's when it continues the
+   * parent's session and the parent recorded both, else resolved now from the
+   * brief, the settings panel and the owner's Claude Code defaults. See
+   * `JobRecord.agentModel` and `agent-settings.ts`.
+   */
+  private async agentSettingsFor(
+    record: JobRecord,
+    continuesParent: boolean,
+  ): Promise<{ agentModel: AgentSetting; agentEffort: AgentSetting }> {
+    if (continuesParent && record.parentJobId !== null) {
+      const parent = this.store.get(record.parentJobId);
+      if (parent?.agentModel && parent.agentEffort) return { agentModel: parent.agentModel, agentEffort: parent.agentEffort };
+    }
+    const resolved = await resolveDiagramAgent(record.brief.model ?? null);
+    return { agentModel: resolved.model, agentEffort: resolved.effort };
+  }
+
+  /**
    * Which manual a job runs with: its parent's when it continues the parent's
    * session, else the newest the runner holds. See `JobRecord.manualHash`.
    */
@@ -1179,7 +1217,7 @@ export class Runner {
   }
 
   /**
-   * The session's `system/init` event: record nothing, say which credential.
+   * The session's `system/init` event: record the model, say which credential.
    *
    * The init line is already in the raw log, verbatim, but it is a single line
    * of several kilobytes and `apiKeySource` is one field somewhere in the
@@ -1187,6 +1225,9 @@ export class Runner {
    * readable in the panel without a JSON parser.
    */
   private async onAgentInit(id: string, auth: AgentAuth, init: AgentInit): Promise<void> {
+    // The one record here: which model the session says it is, since a
+    // `--model` alias, or no flag at all, names it only indirectly.
+    if (init.model !== null) await this.store.update(id, { resolvedModel: init.model });
     await this.store.emit(id, {
       type: "step",
       note: credentialNote(auth, init.apiKeySource),
@@ -1607,6 +1648,29 @@ export function phaseFromLine(line: string): string | null {
   if (line.includes("canvas -- run") || line.includes("canvas -- from-mermaid")) return "drawing";
   if (line.includes("canvas -- new") || line.includes("canvas -- api")) return "planning";
   return null;
+}
+
+/**
+ * The model a cost estimate prices tokens at until the stream names one: the
+ * model the job passed, else the brief's, else `sonnet`. Never null, so a job
+ * that passed no `--model` still has a price for an attempt killed before its
+ * first assistant event; the meter moves to the stream's own model as soon as
+ * one arrives.
+ */
+export function pricingModel(record: JobRecord): string {
+  return record.agentModel?.passed ?? record.brief.model ?? DEFAULT_MODEL;
+}
+
+/** "model opus (the settings panel)", for the step that says what the agent was started with. */
+export function settingNote(name: "model" | "effort", setting: AgentSetting): string {
+  const from: Record<AgentSetting["source"], string> = {
+    panel: "the settings panel",
+    "claude-settings": "your Claude Code default",
+    cli: "the CLI's default",
+    brief: "the brief",
+    default: "the studio's default",
+  };
+  return setting.passed === null ? `no ${name} flag (${from[setting.source]})` : `${name} ${setting.passed} (${from[setting.source]})`;
 }
 
 /**

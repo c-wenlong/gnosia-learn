@@ -9,7 +9,6 @@ import {
   KILL_GRACE_MS,
   MAX_TURNS,
   type AgentAuth,
-  type Model,
 } from "./config";
 import { candidateDir, REPO_ROOT, scratchDir, settingsPath, tmpDir } from "./paths";
 import { signalGroup, sweepByMarker } from "./proc";
@@ -45,7 +44,14 @@ export interface AgentOptions {
   slug: string;
   source?: string;
   prompt: string;
-  model: Model;
+  /**
+   * `--model`, or null for no flag (the CLI's own default under the seal).
+   * Resolved by the runner at job start (`agent-settings.ts`), so an alias or
+   * a full id from the owner's settings, not only the two the brief allows.
+   */
+  model: string | null;
+  /** `--effort`, one of `low` to `max`, or null (or absent) for no flag. */
+  effort?: string | null;
   /** A UUID, minted and persisted before this is called. */
   sessionId: string;
   /** True for attempt two and three: continue the stored session. */
@@ -490,6 +496,12 @@ export function agentEnv(base: NodeJS.ProcessEnv, auth: AgentAuth, tmp: string):
  *   its own snippets and the document it is drawing. The candidate directory
  *   and not the workspace: the workspace root holds the runner's records.
  * - `--max-turns` capped server side regardless of the brief.
+ * - `--model` and `--effort` only when the runner resolved a value for them
+ *   (D53 of docs/STUDIO-VIDEOS.md). The seal above also hides the owner's own
+ *   `model` and `effortLevel`, so "the owner's default" is read and passed
+ *   by the runner, and no flag means the CLI's default under the seal, which
+ *   is not the owner's (measured: `claude-opus-5[1m]` against their
+ *   `claude-fable-5-1`).
  * - `--strict-mcp-config` with an empty `--mcp-config` seals the session from
  *   this machine's own MCP servers, `claude_desktop_config.json` included.
  *   Measured (docs/STUDIO-CHAT-FIRST.md, D34, open question 4): without it, a
@@ -543,8 +555,8 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     scratchDir(options.jobId),
     "--add-dir",
     candidateDir(options.jobId),
-    "--model",
-    options.model,
+    ...(options.model === null ? [] : ["--model", options.model]),
+    ...(options.effort === undefined || options.effort === null ? [] : ["--effort", options.effort]),
     "--max-turns",
     String(MAX_TURNS),
     ...(options.manualPath === undefined || options.manualPath === null
