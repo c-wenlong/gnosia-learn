@@ -1033,8 +1033,11 @@ name. So a repeated Accept press or a retry after a timeout is safe.
 
 A change to an accepted video writes the same ids again, a new revision each,
 with the previous revision as `--base`, so a concurrent write refuses rather
-than overwrites. The previous mp4's blob stays until the blob store's own sweep
-removes unreferenced keys.
+than overwrites. The previous mp4's blob stays in the store: nothing deletes
+an unreferenced key today. `catalog blob audit` lists it as `unreferenced`,
+and it counts toward the owner's byte cap, as a re-rendered manimkc video's
+old bytes do. The same holds for the blobs of a put whose transaction was
+refused, which a retry of the same Accept reuses, since the keys are hashes.
 
 The `manimkc:` namespace is deliberately not used: `catalog import --only
 manimkc` prunes every `manimkc:` asset the owner holds that its report did not

@@ -146,9 +146,52 @@ export const PREFERENCE_KEYS = {
    * from Settings; nothing reads it yet.
    */
   reducedMotion: "reducedMotion",
+  /**
+   * The model and effort the studio's video agent runs with (D53 of
+   * docs/STUDIO-VIDEOS.md): `{ model, effort }`, each `"default"` or a value
+   * the CLI takes. Written from the studio's settings panel; the runner reads
+   * it at job start through `catalog preference get`. See
+   * `studioAgentPreference` for the reading every consumer shares.
+   */
+  studioVideoAgent: "studioVideoAgent",
+  /** The same for the studio's diagram agent. Absent means today's `sonnet`, the runner's default. */
+  studioDiagramAgent: "studioDiagramAgent",
 } as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[keyof typeof PREFERENCE_KEYS];
+
+/** The two preference keys D53 of docs/STUDIO-VIDEOS.md names, and the only ones `catalog preference get` answers. */
+export const STUDIO_AGENT_PREFERENCE_KEYS = [PREFERENCE_KEYS.studioVideoAgent, PREFERENCE_KEYS.studioDiagramAgent] as const;
+export type StudioAgentPreferenceKey = (typeof STUDIO_AGENT_PREFERENCE_KEYS)[number];
+
+/** The effort levels `claude --effort` takes (2.1.274). */
+export const AGENT_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type AgentEffort = (typeof AGENT_EFFORTS)[number];
+
+/** A studio agent's model and effort: `"default"` means the owner's Claude Code default, resolved by the runner. */
+export interface StudioAgentPreference {
+  model: string;
+  effort: "default" | AgentEffort;
+}
+
+/** A model name `claude --model` could take: an alias or a full id, never a flag. */
+const AGENT_MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,79}$/;
+
+/**
+ * A stored `studioVideoAgent` or `studioDiagramAgent` value, read the one way
+ * the web app, the runner and the CLI all read it: each field kept when it is
+ * a value the CLI takes, and `"default"` otherwise, so a hand-edited row can
+ * never put a stray flag on the agent's command line.
+ */
+export function studioAgentPreference(value: unknown): StudioAgentPreference {
+  const record = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const model = typeof record.model === "string" && AGENT_MODEL.test(record.model.trim()) ? record.model.trim() : "default";
+  const effort =
+    typeof record.effort === "string" && (AGENT_EFFORTS as readonly string[]).includes(record.effort)
+      ? (record.effort as AgentEffort)
+      : "default";
+  return { model, effort };
+}
 
 /** Clamp one list of strings the way both the web app and the store must. */
 export function clampKnowledgeList(values: unknown): string[] {
@@ -343,8 +386,12 @@ export const SESSION_STATES = [
 ] as const;
 export type SessionState = (typeof SESSION_STATES)[number];
 
-/** What a generation job produces. One kind today; `video` is phase 5. */
-export const JOB_KINDS = ["diagram"] as const;
+/**
+ * What a generation job produces: a tldraw diagram, or a manimkc video made
+ * through the studio's chat (docs/STUDIO-VIDEOS.md). A video job's
+ * `target_path` is `videos/<slug>.mp4`, a logical name like a diagram's.
+ */
+export const JOB_KINDS = ["diagram", "video"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export const JOB_STATES = [
@@ -424,11 +471,11 @@ export const JOB_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = 
 };
 
 /**
- * What a studio draft's briefs produce (D42 of docs/STUDIO-CHAT-FIRST.md).
- * Only `diagram` exists; a manimkc video is the next kind, through the same
- * chat, and the column is here so that day needs no backfill.
+ * What a studio draft's briefs produce (D42 of docs/STUDIO-CHAT-FIRST.md):
+ * a diagram, or a manimkc video (docs/STUDIO-VIDEOS.md, D51), chosen before
+ * the draft's first paid turn and fixed after it.
  */
-export const DRAFT_KINDS = ["diagram"] as const;
+export const DRAFT_KINDS = ["diagram", "video"] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
 
 /**

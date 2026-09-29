@@ -35,6 +35,7 @@ import {
   tag,
   topic,
   topicRelation,
+  video,
 } from "./content";
 import { indexRun, mirror } from "./operations";
 import {
@@ -68,6 +69,7 @@ export const tables = {
   curriculumItem,
   asset,
   diagram,
+  video,
   assetTopic,
   assetConcept,
   conceptPrerequisite,
@@ -113,6 +115,7 @@ export const CONTENT_TABLES = [
   "curriculumItem",
   "asset",
   "diagram",
+  "video",
   "assetTopic",
   "assetConcept",
   "conceptPrerequisite",
@@ -194,6 +197,8 @@ export type ManimkcTopic = typeof manimkcTopic.$inferSelect;
 export type NewManimkcTopic = typeof manimkcTopic.$inferInsert;
 export type Diagram = typeof diagram.$inferSelect;
 export type NewDiagram = typeof diagram.$inferInsert;
+export type Video = typeof video.$inferSelect;
+export type NewVideo = typeof video.$inferInsert;
 export type SessionLogEntry = typeof sessionLogEntry.$inferSelect;
 export type NewSessionLogEntry = typeof sessionLogEntry.$inferInsert;
 export type ContentRevision = typeof contentRevision.$inferSelect;
