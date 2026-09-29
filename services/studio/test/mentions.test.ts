@@ -508,6 +508,11 @@ describe("Make both (D60)", () => {
     await expect(drafts.draw(id, { items: [{ kind: "diagram", idempotencyKey: "a" }, { kind: "video", idempotencyKey: "a" }] })).rejects.toMatchObject({ status: 400 });
     await expect(drafts.draw(id, { items: [{ kind: "video" }] })).rejects.toMatchObject({ status: 400, detail: { field: "items[0].idempotencyKey" } });
     await expect(drafts.draw(id, { items: [] })).rejects.toMatchObject({ status: 400, detail: { field: "items" } });
+    // A body with `items` that is not a list is not a single press (#207 review).
+    for (const items of [{ kind: "video", idempotencyKey: "v" }, "video", null]) {
+      await expect(drafts.draw(id, { idempotencyKey: "single", items })).rejects.toMatchObject({ status: 400, detail: { field: "items" } });
+    }
+    expect(runner.enqueue).not.toHaveBeenCalled();
   });
 });
 

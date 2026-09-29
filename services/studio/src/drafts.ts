@@ -1942,7 +1942,11 @@ export class Drafts {
   async draw(id: string, input: unknown): Promise<DrawAnswer> {
     const record = this.require(id);
     const body = typeof input === "object" && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-    const single = !Array.isArray(body.items);
+    // `items` present but not a list is a malformed Make both, never one card.
+    if (body.items !== undefined && !Array.isArray(body.items)) {
+      throw new JobRefused(400, `"items" is a list of { kind, idempotencyKey }, one per card`, { field: "items" });
+    }
+    const single = body.items === undefined;
     const rawItems: unknown[] = single ? [{ kind: body.kind ?? "diagram", idempotencyKey: body.idempotencyKey }] : (body.items as unknown[]);
     if (!single && (rawItems.length < 1 || rawItems.length > BRIEF_KINDS.length)) {
       throw new JobRefused(400, `"items" holds one card per kind, at most ${BRIEF_KINDS.length}`, { field: "items" });
