@@ -49,6 +49,10 @@ export function useNow(ticking: boolean = true): number | null {
  */
 export function useElapsed(job: Job): number | null {
   const now = useNow(job.finished === null);
-  if (job.finished !== null) return elapsedMs(job, 0);
+  if (job.finished !== null) {
+    // A stored record is not validated on load, so a finish that does not
+    // parse shows nothing rather than a made-up 0s or a clock that runs on.
+    return Number.isFinite(Date.parse(job.finished)) ? elapsedMs(job, 0) : null;
+  }
   return now === null ? null : elapsedMs(job, now);
 }

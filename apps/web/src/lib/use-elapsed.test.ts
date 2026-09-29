@@ -109,4 +109,9 @@ describe("a finished job", () => {
     expect(container.textContent).toBe("1:15");
     await act(async () => root.unmount());
   });
+
+  it("shows nothing when its finish time does not parse, rather than 0s", () => {
+    const garbled = job({ finished: "not a time" });
+    expect(renderToString(createElement(Clock, { of: garbled }))).toBe("<span>-</span>");
+  });
 });
