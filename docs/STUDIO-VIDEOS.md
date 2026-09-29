@@ -1634,21 +1634,21 @@ profile. manimkc's `make test` is green. The job wrapper has to pass
 
 ### Phase 1. The runner half
 
-- [ ] `services/studio/src/video/`: the job checkout, the render, narration
+- [x] `services/studio/src/video/`: the job checkout, the render, narration
       and gate profiles, the wrapper with its `narrate` verb, the environment
       allowlist, the job cache and its seeding from the shared cache, the video
       doctor, the settings file, the prompt and the manual (generated listing
       plus static sections)
-- [ ] The video runner: queue, the hang timer, spawn through the shared code
+- [x] The video runner: queue, the hang timer, spawn through the shared code
       with the resolved model and effort, the step tracking from
       `calls.ndjson` and the stream, the gate's ten steps, revise, resume,
       cancel, cleanup of `render/`
-- [ ] Migration: the kinds, `video`, the revision entity type; `catalog video
+- [x] Migration: the kinds, `video`, the revision entity type; `catalog video
       put|list|show|checkout`; `catalog preference get`; `catalog job
       enqueue` for video targets and the one-transaction discard and enqueue
-- [ ] The routes: `POST /api/jobs` with a video brief, sheets, media,
+- [x] The routes: `POST /api/jobs` with a video brief, sheets, media,
       health's `video` and `agent` blocks
-- [ ] Tests: both hostile scenes blocked on every probe (skipped with a named
+- [x] Tests: both hostile scenes blocked on every probe (skipped with a named
       reason off macOS); a narration step under its profile voicing a line of
       shell words, unable to read the Hugging Face token or the shared cache,
       and writing nothing outside the job's audio directory; seeding copying
@@ -1672,6 +1672,19 @@ Accept on a scratch database built from `seed/` lands the rows and blobs and
 the library plays it with chapters; Discard leaves the source and no
 `render/`; and `npm run lint && npm run typecheck && npm test && npm run
 build` is green with Postgres up.
+
+**Measured: the first real jobs (2026-09-29, phase 1's PR).** A hand-written
+three-scene narrated brief (five beats, 709 characters, target 60 s) on a
+scratch database built from `seed/`: `awaiting_review` on the first attempt
+with all ten gate steps passed, a 51.6 s video, **$1.69** (`cost_source:
+result`), `claude-fable-5-1` at effort `high` (both from the owner's Claude
+Code settings, `source: claude-settings`), 11 requests, 22 turns, 2 preview
+rounds and 1 build, **197 s** of wall time. Accept landed the `video` row,
+five asset rows and five blobs; the library played it with its chapters and
+transcript. A picture-only revise of it continued the session with all five
+clips seeded from the parent: $0.55, 10 turns, every gate step passed;
+Discard then left `source/` and the clips, and no `render/` or `candidate/`.
+An earlier run of the same brief, before the merge, cost $2.03 in 220 s.
 
 ### Phase 2. The chat and the panel
 
