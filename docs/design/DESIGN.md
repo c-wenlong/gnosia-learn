@@ -44,7 +44,7 @@ for it. Where a decision changes the API it is marked, and expanded under
 | 7 | Social | None: no hearts, no leagues, no friends | A solo adult learner has no reason to be ranked against strangers | [duolingo.md](research/duolingo.md) |
 | 8 | Feedback | Inline verdict with opt-in "Why", plus a session-close screen with real numbers | Both apps do the inline part; the Close phase of the loop needs a home | [brilliant.md](research/brilliant.md), [duolingo.md](research/duolingo.md) |
 | 9 | Home | A Today dashboard | Nothing on the current site surfaces due reviews, the next step or recent activity | [current-app.md](research/current-app.md) |
-| 10 | Course navigation | Linear path, one active node, mastery-coloured, guidebook per unit | Removes "what do I click next"; the guidebook is the concept note | [duolingo.md](research/duolingo.md), [others.md](research/others.md) Khan |
+| 10 | Course navigation | Coursera's course home: one module per URL, a sidebar of modules, the module's topics as item rows marked by mastery, one Continue, a Guidebook per module (revised 2026-09-29; first built as a linear path of unit cards) | Removes "what do I click next" and keeps a long course to one module on screen; the Guidebook is the concept note | [coursera](reference/coursera/README.md), [duolingo.md](research/duolingo.md), [others.md](research/others.md) Khan |
 | 11 | Review rating | Anki four buttons with the resulting interval under each | Maps onto the SM-2 state the database already holds | [others.md](research/others.md) Anki |
 | 12 | Mastery model (API) | One model: chat probes write BKT events | Today two notions of mastery coexist and never reconcile | [current-app.md](research/current-app.md) |
 | 13 | Concept graph | Neighbourhood by default, mastery-coloured; full course behind a toggle | A whole-vault graph is a hairball on first open | [others.md](research/others.md) Obsidian, Math Academy |
@@ -63,8 +63,8 @@ flowchart LR
   Today -->|Continue| Session
   Today -->|Start review| Review
   Today -->|Open workspace| Workspace
-  Courses --> Path[Course path]
-  Path -->|node| Workspace
+  Courses --> Path[Course home]
+  Path -->|topic row| Workspace
   Path -->|Guidebook| Workspace
   Workspace -->|Teach me| Session
   Workspace -->|Review now| Review
@@ -86,7 +86,8 @@ Session. Probe and Teach are steps inside it; Close is its last screen.
 | --- | --- | --- | --- | --- | --- |
 | `/` | Today | [01-today](lofi/01-today.svg), [13-phone-today](lofi/13-phone-today.svg) | `/` course shortlist | due reviews, frontier, target, streak, recent events, course progress | New |
 | `/courses` | Courses | [02-courses](lofi/02-courses.svg) | `/` | `content/courses`, tags, progress | Redesigned |
-| `/courses/[slug]` | Course path | [03-course-path](lofi/03-course-path.svg) | `/courses/[slug]` and `/courses/[slug]/[module]` | modules, topics, concept mastery per topic, assets per module | Redesigned; the module page folds into the path as a unit |
+| `/courses/[slug]` | Course home | [03-course-path](lofi/03-course-path.svg) (superseded by the [Coursera reference](reference/coursera/README.md)) | `/courses/[slug]` | modules, topics, concept mastery per topic, assets per module, the topic vocabulary's summary per module | Redesigned; shows the module the learner is on |
+| `/courses/[slug]/[module]` | Course home, one module | as above | `/courses/[slug]/[module]` | as above | Redesigned; a page of its own again, the same screen with the module the URL names |
 | `/learn` | Learn index | [09-learn-index](lofi/09-learn-index.svg) | `/learn` | concepts, mastery, due, last seen, course link; neighbourhood graph | Redesigned |
 | `/learn/[concept]` | Concept workspace | [04-concept-workspace](lofi/04-concept-workspace.svg) | none (concept notes had no page) | note, prerequisites, dependants, backlinks, sources, tutor thread, mastery and history, checks, assets, graph | New |
 | `/learn/[concept]/session` | Session focus mode | [05-session-focus](lofi/05-session-focus.svg), [06-session-feedback](lofi/06-session-feedback.svg), [07-session-close](lofi/07-session-close.svg), [15-phone-session](lofi/15-phone-session.svg) | `/courses/[slug]/[module]/session` | the tutor's step plan, the concept's checks, assets | Redesigned; moves from topic to concept |
@@ -98,7 +99,7 @@ Session. Probe and Teach are steps inside it; Close is its last screen.
 
 Every desktop frame is 1440 by 900; phone frames are 390 by 844. Content
 that runs past the bottom is clipped at the frame edge, the way a scrolling
-page would be (the course path is the one that does).
+page would be (the course home is the one that does).
 
 ### Today
 
@@ -109,14 +110,30 @@ learner filled by their own definition), Streak (one number, a seven-day
 strip, the leeway remaining), Courses in progress. Nothing here is a game
 element the learner did not choose.
 
-### Course path
+### Course home
 
-One vertical path per course, grouped into unit cards (the modules). Each
-unit header carries Guidebook, which opens the concept note, and the
-assets that belong to the module. Nodes are the topic's concepts, coloured
-by mastery bucket, with one active node carrying Continue. A locked unit is
-drawn, not hidden. The right rail is the course header, the module
-progress list, and the assets for the current module.
+Laid out after Coursera's signed-in course home, in our tokens, font and
+primitives. Three columns: a sidebar with the course code and title and a
+collapsible "Course material" list, one row per module with a status mark
+and its done count, the module on screen tinted; the module in the middle;
+a rail of cards on the right. Each module has its own URL, and the course's
+own URL shows the module the learner is on.
+
+The module column carries the title with the Guidebook beside it, a meta
+row of counts (topics, concepts, assets, done), the topic vocabulary's
+summary as its description, "Show learning objectives" (the topics'
+subtopics), then its topics, resources and assets as item rows in
+collapsible groups. A topic row is a status mark, the title and a grey line
+("3 concepts · Learning"); the active one is tinted and carries Continue,
+and any row opens the topic's concepts, done tick, tutor chat, recap and
+note. A locked module is drawn, not hidden, with a line naming the module
+that opens it. Links to the modules either side close the column. The rail
+is the course's progress with Continue and Reset, the next topic when it is
+in another module, About this course, and related courses.
+
+Coursera's slots with no data behind them (instructors, ratings, level,
+time left, deadlines, item types, the weekly target and timeline) are left
+out rather than invented.
 
 ### Concept workspace
 
@@ -171,7 +188,7 @@ implementation should keep the same vocabulary.
 | Chip, Pill | filters, citations, top bar | citation chips carry `[n] source, locator` |
 | Filter menu | courses, learn, library | a chip reading "Type: Video" that opens a list of the group's options with counts; replaced the hi-fi's chip rows once the option count outgrew a row (IMPLEMENTATION.md, Deviations) |
 | Button | everywhere | primary (filled) and secondary (outlined); one primary per region |
-| Path node, Unit card | course path | node = mastery dot in a ring; active ring in the accent colour |
+| Item row, module row | course home | Coursera's 60px item row with a 20px status mark (done, learning, not started) and a meta line; a module row marks done, in progress, not started or locked |
 | Message | workspace | who, body, citation, Save to note, Why |
 | Rating row | review | four equal-weight buttons, interval under each |
 | Stat tile | close screen | a number and a label |
@@ -198,7 +215,7 @@ do not change. Everything below is on the web side, in
 | Next step, target, streak | Today, top bar | `GET /api/learner/today` aggregating frontier, target progress, streak (derived from the event log, with leeway from preferences), recent events |
 | Target and leeway are the learner's | Settings | new preference keys: `dailyTarget` and `dailyLeeway` (in `PREFERENCE_KEYS` since phase 0), `reminders` |
 | Concept page data | Workspace | `GET /api/concepts/[slug]` returning note body, requires and assumes, dependants, backlinks, sources, checks, mastery with the event trajectory, `asset_concept` rows |
-| Assets explain concepts | Library asset, Workspace, Path | query `asset_concept` wherever an asset is shown; it is in the schema and unread today |
+| Assets explain concepts | Library asset, Workspace, Course home | query `asset_concept` wherever an asset is shown; it is in the schema and unread today |
 | Save to note, Mark watched | Workspace, Library asset | extend `POST /api/learner/note`; a `watched` event kind on the asset |
 | Text search | Library, Learn | a search endpoint over asset titles, transcripts and note bodies |
 
@@ -215,7 +232,7 @@ Current pages, captured on 2026-09-23 from a clean build of `origin/main`.
 | [home](research/assets/current-app/home.png): a course shortlist | Today, decision 9 |
 | [learn](research/assets/current-app/learn.png): stat cards, a full graph, prose per concept | Learn index plus the workspace, decisions 13 and 1 |
 | [library](research/assets/current-app/library.png): every asset, no search | Library with search and concept chips |
-| [course](research/assets/current-app/course.png) and [module](research/assets/current-app/module.png): rows and a checklist | Course path, decision 10 |
+| [course](research/assets/current-app/course.png) and [module](research/assets/current-app/module.png): rows and a checklist | Course home, decision 10 |
 | [session](research/assets/current-app/session.png): a chat that never touches mastery | Session focus mode, decisions 1, 8, 12 |
 | [library-asset](research/assets/current-app/library-asset.png): the asset alone | Library asset with Explains |
 | [studio](research/assets/current-app/studio.png) | unchanged, decision 14 |
