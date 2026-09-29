@@ -153,9 +153,8 @@ beforeEach(async () => {
   };
   videoRunner = {
     enqueue: vi.fn(async (brief: { slug: string; idempotencyKey: string }, parent: { jobId: string; discard: boolean } | undefined, options: { draftId: string }) => {
-      // The real runner marks a parent in review discarded inside the enqueue,
-      // before the draft records the child (D52).
-      if (parent?.discard === true) await videoStore.update(parent.jobId, { state: "discarded" } as never);
+      // The real runner marks a parent in review discarded, `replacedBy` the
+      // child, inside the enqueue and before the draft records the child (D52).
       const record = await videoStore.create({
         id: `job-v-${Math.random().toString(36).slice(2, 8)}`,
         kind: "video",
@@ -171,6 +170,7 @@ beforeEach(async () => {
         gate: null,
         error: null,
       } as never);
+      if (parent?.discard === true) await videoStore.update(parent.jobId, { state: "discarded", replacedBy: record.id } as never);
       return { record, created: true, jobsAhead: 0 };
     }),
     admit: vi.fn(async () => ({ revision: null })),
