@@ -338,4 +338,17 @@ describe("the CLI's own scratchpad", () => {
       rmSync(base, { recursive: true, force: true });
     }
   });
+
+  it("drops both spellings of a root when the workspace is under the symlinked one", () => {
+    // On macOS /tmp is a link to /private/tmp and the CLI resolves a path before
+    // matching it, so keeping the /private/tmp deny would still refuse the
+    // candidate of a STUDIO_HOME written as /tmp/claude-<uid>/...
+    process.env.STUDIO_HOME = path.join("/tmp", `claude-${uid}`, `studio-settings-${randomUUID()}`);
+    try {
+      const rules = claudeTempRules();
+      expect(rules.some((rule) => rule.includes(`/tmp/claude-${uid}`))).toBe(false);
+    } finally {
+      process.env.STUDIO_HOME = home;
+    }
+  });
 });

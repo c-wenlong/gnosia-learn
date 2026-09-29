@@ -363,22 +363,38 @@ export function claudeTempRules(): string[] {
   const bases = ["/tmp", process.env.CLAUDE_CODE_TMPDIR?.trim()].filter(
     (base): base is string => base !== undefined && base !== "",
   );
+  const guarded = [studioHome(), REPO_ROOT];
   const roots = new Set<string>();
   for (const base of bases) {
-    roots.add(path.join(path.resolve(base), `claude-${uid}`));
-    try {
-      roots.add(path.join(realpathSync(base), `claude-${uid}`));
-    } catch {
-      // A base that does not exist has no other spelling.
-    }
+    const root = path.join(path.resolve(base), `claude-${uid}`);
+    // Both spellings go, or neither: the CLI resolves a path before matching
+    // it, so dropping only `/tmp/…` would leave `/private/tmp/…` denying the
+    // job's candidate all the same.
+    if (guarded.some((dir) => contains(root, dir) || contains(resolved(root), resolved(dir)))) continue;
+    roots.add(root);
+    roots.add(resolved(root));
   }
-  const kept = [...roots].filter((root) => !contains(root, studioHome()) && !contains(root, REPO_ROOT));
-  return kept.flatMap((root) => [rule("Read", root, "/**"), rule("Edit", root, "/**")]);
+  return [...roots].flatMap((root) => [rule("Read", root, "/**"), rule("Edit", root, "/**")]);
 }
 
 function contains(parent: string, child: string): boolean {
   const relative = path.relative(parent, path.resolve(child));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+/** `target` with its deepest existing ancestor's symlinks resolved; the rest, which does not exist yet, as written. */
+function resolved(target: string): string {
+  const absoluteTarget = path.resolve(target);
+  let existing = absoluteTarget;
+  for (;;) {
+    try {
+      return path.join(realpathSync(existing), path.relative(existing, absoluteTarget));
+    } catch {
+      const parent = path.dirname(existing);
+      if (parent === existing) return absoluteTarget;
+      existing = parent;
+    }
+  }
 }
 
 /**
