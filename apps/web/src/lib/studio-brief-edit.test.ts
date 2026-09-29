@@ -61,6 +61,12 @@ describe("toEdit and fromEdit", () => {
     expect(fromEdit(BRIEF, edit).relations[0]).toEqual({ from: "Laptop", to: "DERP" });
   });
 
+  it("drops the concepts when the topic changes, since they were filed under the old one", () => {
+    const edit = toEdit(BRIEF, ids());
+    expect(fromEdit(BRIEF, { ...edit, topic: "security" }).concepts).toEqual([]);
+    expect(fromEdit(BRIEF, edit).concepts).toEqual(["nat-traversal"]);
+  });
+
   it("counts a new topic or title as a change and whitespace alone as none", () => {
     const edit = toEdit(BRIEF, ids());
     expect(isChanged(BRIEF, { ...edit, title: `${BRIEF.title}  ` })).toBe(false);
@@ -112,8 +118,13 @@ describe("where a refusal lands", () => {
   });
 
   it("puts a 400 on its field in the validator's words, as a sentence", () => {
-    const problem = saveRefusal(400, { error: 'no topic "x" in the catalog\'s vocabulary', detail: { field: "topic" } }, edit);
-    expect(problem).toEqual({ field: "topic", message: 'No topic "x" in the catalog\'s vocabulary.' });
+    const problem = saveRefusal(400, { error: '"title" is required and must be a non-empty string', detail: { field: "title" } }, edit);
+    expect(problem).toEqual({ field: "title", message: '"title" is required and must be a non-empty string.' });
+  });
+
+  it("says a topic gone from the vocabulary without the CLI's advice", () => {
+    const problem = saveRefusal(400, { error: 'no topic "networking" in the catalog\'s vocabulary. Add it with `catalog topic add`', detail: { field: "topic" } }, edit);
+    expect(problem).toEqual({ field: "topic", message: "“networking” is not in the topic list any more. Pick another topic." });
   });
 
   it("says a 409 in plain words under the buttons", () => {

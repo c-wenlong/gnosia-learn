@@ -72,13 +72,19 @@ export function toEdit(brief: Brief, mint: (prefix: string) => string = localId)
 /**
  * The brief to send: the original with the four edited parts replaced and
  * every text trimmed. Everything the card does not show (intent, slug, mode,
- * concepts, layout, notes, model, source) goes back as it came, because
- * `PUT /api/drafts/{id}/brief` takes a whole brief.
+ * layout, notes, model, source) goes back as it came, because
+ * `PUT /api/drafts/{id}/brief` takes a whole brief; the concepts too, unless
+ * the topic changed.
  */
 export function fromEdit(base: Brief, edit: BriefEdit): Brief {
   const labelOf = new Map(edit.elements.map((element) => [element.id, element.label.trim()]));
+  // The concepts a brief names are filed under its topic, and the runner
+  // refuses one the new topic does not file. The card cannot tell which carry
+  // over, so a new topic starts with none rather than failing its save.
+  const concepts = edit.topic === base.topic ? {} : { concepts: [] };
   return {
     ...base,
+    ...concepts,
     title: edit.title.trim(),
     topic: edit.topic,
     elements: edit.elements.map((element) => ({
@@ -215,7 +221,13 @@ export function fieldFor(path: string | null, edit: BriefEdit): FieldKey {
  */
 export function saveRefusal(status: number, refusal: Refusal, edit: BriefEdit): FieldProblem {
   if (status === 400) {
-    return { field: fieldFor(refusalString(refusal, "field"), edit), message: sentence(refusal.error) };
+    const field = fieldFor(refusalString(refusal, "field"), edit);
+    // The validator's topic sentence is written for the CLI (it names
+    // `catalog topic add`); on the card the way out is the menu beside it.
+    if (field === "topic" && /^no topic /i.test(refusal.error)) {
+      return { field, message: `“${edit.topic}” is not in the topic list any more. Pick another topic.` };
+    }
+    return { field, message: sentence(refusal.error) };
   }
   if (status === 409) {
     switch (refusalReason(refusal)) {
