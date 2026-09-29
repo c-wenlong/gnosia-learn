@@ -42,7 +42,9 @@ afterAll(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-const settings = buildSettings({ jobId: "job-1", slug: "dot-product" });
+// The hook's command line, as `writeDiagramGuard` returns it.
+const GUARD = "/usr/local/bin/node /srv/studio/jobs/job-1/bash-guard.cjs";
+const settings = buildSettings({ jobId: "job-1", slug: "dot-product", guard: GUARD });
 const allow = settings.permissions.allow;
 const deny = settings.permissions.deny;
 
@@ -212,7 +214,7 @@ describe("the candidate lives in the job's own workspace", () => {
     expect(deny).toContain(`Edit(/${other}/**)`);
     expect(allow.some((rule) => rule.includes(other))).toBe(false);
     // And the same rule from the other side: job-other's file allows are not job-1's.
-    const theirs = buildSettings({ jobId: "job-other", slug: "dot-product" });
+    const theirs = buildSettings({ jobId: "job-other", slug: "dot-product", guard: GUARD });
     expect(theirs.permissions.allow).toContain(`Edit(/${candidatePath("job-other", "dot-product")})`);
     expect(theirs.permissions.deny).toContain(`Edit(/${jobDir("job-1")}/**)`);
   });
@@ -224,7 +226,7 @@ describe("the candidate lives in the job's own workspace", () => {
     // uses (node-ignore, gitignore rules); a CLI run against 2.1.274 read the
     // sibling's job.json without them and was refused with them.
     const own = randomUUID();
-    const rules = buildSettings({ jobId: own, slug: "dot-product" }).permissions.deny;
+    const rules = buildSettings({ jobId: own, slug: "dot-product", guard: GUARD }).permissions.deny;
     const prefix = `Read(/${path.join(home, "jobs")}/`;
     const globs = rules.filter((rule) => rule.startsWith(prefix) && /[[?]/.test(rule)).map((rule) => `jobs/${rule.slice(prefix.length, -1)}`);
     expect(globs.length).toBe(own.length + 1);
@@ -283,13 +285,14 @@ describe("the network is off", () => {
 
 describe("the source note", () => {
   it("is readable only when the brief named one", () => {
-    const without = buildSettings({ jobId: "job-2", slug: "dot-product" });
+    const without = buildSettings({ jobId: "job-2", slug: "dot-product", guard: GUARD });
     expect(without.permissions.allow.some((rule) => rule.startsWith("Read(") && rule.includes("concepts"))).toBe(false);
 
     const withSource = buildSettings({
       jobId: "job-2",
       slug: "dot-product",
       source: "learn/concepts/foundations/dot-product.md",
+      guard: GUARD,
     });
     expect(withSource.permissions.allow).toContain(
       `Read(/${absolute("learn/concepts/foundations/dot-product.md")})`,

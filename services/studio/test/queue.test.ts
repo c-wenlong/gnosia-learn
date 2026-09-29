@@ -342,6 +342,24 @@ afterEach(async () => {
   delete process.env.STUDIO_HOME;
 });
 
+describe("a studio home the diagram agent's Bash guard cannot carry", () => {
+  it("refuses the job at enqueue with the reason, and spawns nothing", async () => {
+    const saved = process.env.STUDIO_HOME;
+    process.env.STUDIO_HOME = path.join(tmpdir(), `studio-queue-$dollar-${Date.now()}`);
+    try {
+      const refused = await runner.enqueue(await brief()).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(JobRefused);
+      expect((refused as InstanceType<typeof JobRefused>).status).toBe(503);
+      expect((refused as Error).message).toContain("the diagram agent cannot run from this studio home");
+      expect((refused as Error).message).toContain('"$"');
+      expect(store.list()).toHaveLength(0);
+      expect(agentMock.startAgent).not.toHaveBeenCalled();
+    } finally {
+      process.env.STUDIO_HOME = saved;
+    }
+  });
+});
+
 describe("a catalog that cannot be reached", () => {
   it("keeps the job rather than deleting the only record of it", async () => {
     catalogMock.jobEnqueue.mockResolvedValue({
