@@ -417,6 +417,13 @@ describe("a diagram job", () => {
     expect(await spawned()).toMatchObject({ model: "opus", effort: "low" });
     await runner.settled(record.id);
     expect(store.get(record.id)?.agentModel?.source).toBe("panel");
+    // Only the filled-in sonnet reads as unset: any other model on a
+    // pre-D53 parent's brief was a person's choice, and its revise keeps it.
+    expect(briefModelOf({ brief: { ...brief(), model: "opus" } }, { agentModel: undefined })).toBe("opus");
+    await store.update(record.id, { state: "discarded" } as never);
+    const { record: chosen } = await runner.enqueue({ ...brief(), model: "opus" }, { jobId: "old-parent", agentSessionId: null, changes: "smaller labels" });
+    await runner.settled(chosen.id);
+    expect(store.get(chosen.id)?.agentModel).toMatchObject({ passed: "opus", source: "brief" });
     // Posted today, a brief's sonnet is someone's choice and still wins.
     expect(briefModelOf({ brief: { ...brief(), model: "sonnet" } }, undefined)).toBe("sonnet");
     expect(briefModelOf({ brief: { ...brief(), model: "sonnet" } }, { agentModel: { requested: "opus", passed: "opus", source: "panel" } })).toBe("sonnet");

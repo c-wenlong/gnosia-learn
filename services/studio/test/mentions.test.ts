@@ -631,6 +631,25 @@ describe("a draft from before tags", () => {
     await expect(drafts.drawOne(record.id, "after")).resolves.toMatchObject({ kind: "diagram", created: true });
   });
 
+  it("keeps a stored model other than the filled-in sonnet, through an edit and to the press (#207 review)", async () => {
+    const { record } = await drafts.create({});
+    const legacy = { ...drafts.get(record.id)! } as Record<string, unknown>;
+    for (const key of ["slots", "plannerKinds", "conversational", "sourceKind"]) delete legacy[key];
+    // A model the old validateBrief did not fill in: someone chose it.
+    await writeFile(draftJsonPath(record.id), JSON.stringify({ ...legacy, state: "briefed", brief: { ...good, model: "opus" }, briefSeq: 1, briefBy: "person" }));
+    await drafts.drain();
+    drafts = build();
+    await drafts.load();
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram?.brief).toMatchObject({ model: "opus" });
+    expect(view.brief).toMatchObject({ model: "opus" });
+    // An edit cannot set a model, and does not drop the one in force.
+    await expect(drafts.editBrief(record.id, { ...good, title: "Edited", model: "haiku" }, "1")).resolves.toMatchObject({ changed: true });
+    expect(drafts.get(record.id)?.slots?.diagram?.brief).toMatchObject({ title: "Edited", model: "opus" });
+    await drafts.drawOne(record.id, "chosen-press");
+    expect(runner.enqueue.mock.calls[0]![0]).toMatchObject({ model: "opus" });
+  });
+
   it("loads its one brief as a diagram slot, and reads an untagged message as tagged Diagram", async () => {
     const { record } = await drafts.create({});
     const legacy = { ...drafts.get(record.id)! } as Record<string, unknown>;
@@ -646,7 +665,7 @@ describe("a draft from before tags", () => {
     let view = await drafts.view(record.id);
     expect(view).toMatchObject({ plannerKinds: ["diagram"], conversational: false, state: "briefed" });
     expect(view.slots.diagram).toMatchObject({ state: "briefed", brief: { title: good.title } });
-    // A draft never carries a model; the settings panel decides (the #207 review).
+    // The filled-in sonnet is no one's choice, so the settings panel decides (the #207 review).
     expect(view.slots.diagram?.brief).not.toHaveProperty("model");
     expect(view.brief).not.toHaveProperty("model");
     await drafts.drawOne(record.id, "legacy-press");

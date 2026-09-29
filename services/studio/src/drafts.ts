@@ -606,10 +606,12 @@ export class Drafts {
         // A draft from before D62 keeps its one brief as its diagram slot, and
         // its recorded prompt, which proposes on every message (D61).
         if (loaded.slots === undefined) loaded.slots = legacySlots(loaded);
-        // A draft never carries a model: the settings panel decides (D53). A
-        // brief saved before D53 holds the `sonnet` the old `validateBrief`
-        // filled in, which would otherwise beat the panel at every press.
-        loaded.slots = withoutModels(loaded.slots);
+        // A brief saved before D53 holds the `sonnet` the old `validateBrief`
+        // filled in on every brief, which is no one's choice and would beat
+        // the settings panel at every press, so it goes. Any other stored
+        // model was chosen by a person and stays: it wins at the press, as a
+        // model posted to POST /api/jobs does (D53).
+        loaded.slots = withoutLegacyModels(loaded.slots);
         // A slot drawing with no record of what it was pressed from (a draft
         // from before slots, or a job route that did not say) is drawing the
         // brief in force: otherwise that brief reads as newer and could be
@@ -617,7 +619,7 @@ export class Drafts {
         for (const slot of Object.values(loaded.slots)) {
           if (slot.state === "drawing" && slot.drawnSeq === null) slot.drawnSeq = slot.briefSeq;
         }
-        if (loaded.brief !== null && "model" in loaded.brief) loaded.brief = withoutModel(loaded.brief);
+        if (loaded.brief !== null) loaded.brief = withoutLegacyModel(loaded.brief);
         loaded.plannerKinds = loaded.plannerKinds ?? ["diagram"];
         this.records.set(record.id, { ...loaded, ...summarize(loaded) });
       } catch {
@@ -2524,7 +2526,10 @@ export class Drafts {
         : vocabulary;
       let brief: AnyDraftBrief;
       try {
-        brief = kind === "video" ? withoutVideoKey(validateVideoBrief(raw, checkedAgainst)) : withoutKey(validateBrief(raw, checkedAgainst));
+        brief =
+          kind === "video"
+            ? withoutVideoKey(validateVideoBrief(raw, checkedAgainst))
+            : withoutKey(validateBrief({ ...raw, ...modelOf(slot.brief) }, checkedAgainst));
       } catch (error) {
         if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
         throw error;
@@ -3141,28 +3146,46 @@ const ACTIVE_JOB: readonly string[] = ["queued", "running", "awaiting_review"];
 /**
  * The fields a person's edit may set: the brief as GET returns it, less the
  * key Draw mints, the flowchart Draw attaches (C8), and `model`, which the
- * settings panel decides for every job from a draft (D53).
+ * settings panel decides for every job from a draft (D53). An edit keeps
+ * whatever model the brief it replaces already held (`modelOf`).
  */
 export const EDITABLE_BRIEF_FIELDS = [...PLANNER_BRIEF_FIELDS, "notes", "source"] as const;
 
-/** A brief with any `model` taken off. */
-function withoutModel(brief: AnyDraftBrief): AnyDraftBrief {
+/**
+ * A brief without the `sonnet` the old `validateBrief` filled in on every
+ * brief before D53. Only that value goes: any other model is a person's choice.
+ */
+function withoutLegacyModel(brief: AnyDraftBrief): AnyDraftBrief {
+  if ((brief as { model?: unknown }).model !== "sonnet") return brief;
   const kept: Record<string, unknown> = { ...brief };
   delete kept.model;
   return kept as unknown as AnyDraftBrief;
 }
 
-/** Every slot's brief and pending-edit base without a `model`. */
-function withoutModels(slots: Partial<Record<BriefKind, KindSlot>>): Partial<Record<BriefKind, KindSlot>> {
+/** Every slot's brief and pending-edit base without a pre-D53 filled-in `sonnet`. */
+function withoutLegacyModels(slots: Partial<Record<BriefKind, KindSlot>>): Partial<Record<BriefKind, KindSlot>> {
   const out: Partial<Record<BriefKind, KindSlot>> = {};
   for (const [kind, slot] of Object.entries(slots) as [BriefKind, KindSlot][]) {
     out[kind] = {
       ...slot,
-      brief: slot.brief === null ? null : withoutModel(slot.brief),
-      pendingEdit: slot.pendingEdit === null || slot.pendingEdit.base === null ? slot.pendingEdit : { ...slot.pendingEdit, base: withoutModel(slot.pendingEdit.base) },
+      brief: slot.brief === null ? null : withoutLegacyModel(slot.brief),
+      pendingEdit:
+        slot.pendingEdit === null || slot.pendingEdit.base === null
+          ? slot.pendingEdit
+          : { ...slot.pendingEdit, base: withoutLegacyModel(slot.pendingEdit.base) },
     };
   }
   return out;
+}
+
+/**
+ * The model of the brief an edit replaces, for the edited brief to keep. An
+ * edit cannot set a model (the settings panel decides, D53), and must not
+ * drop one a person chose before either.
+ */
+function modelOf(before: AnyDraftBrief | null): { model?: unknown } {
+  const model = (before as { model?: unknown } | null)?.model;
+  return model === undefined ? {} : { model };
 }
 
 function withoutKey(brief: ValidBrief): DraftBrief {
