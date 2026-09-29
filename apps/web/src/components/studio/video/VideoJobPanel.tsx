@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
 import { useElapsed } from "@/lib/use-elapsed";
@@ -211,7 +212,7 @@ function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
           {model !== null && (
             <span className="text-text3" title={effortTitle(job)}>
               {facts.length > 0 || job.costUsd !== null ? " · " : ""}
-              {model}
+              {modelName(model)}
             </span>
           )}
         </p>

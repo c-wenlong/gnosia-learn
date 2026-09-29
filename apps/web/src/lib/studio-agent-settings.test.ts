@@ -5,6 +5,7 @@ import {
   agentDefaults,
   checkedAgent,
   effortOptions,
+  modelName,
   modelOptions,
   rowPriced,
   rowWarning,
@@ -30,7 +31,7 @@ describe("the settings panel's menus (D53)", () => {
     };
     const defaults = agentDefaults(fromSettings);
     expect(defaults).toEqual({ model: "claude-fable-5-1", effort: "high" });
-    expect(modelOptions("default", defaults)[0]!.label).toBe("Claude Code default (claude-fable-5-1)");
+    expect(modelOptions("default", defaults)[0]!.label).toBe("Claude Code default (Fable 5.1)");
     expect(effortOptions(defaults)[0]!.label).toBe("Claude Code default (High)");
   });
 
@@ -43,17 +44,20 @@ describe("the settings panel's menus (D53)", () => {
     expect(agentDefaults(null)).toBeNull();
   });
 
-  it("offers the priced models, and keeps a stored value outside them", () => {
-    expect(modelOptions("default", null).map((option) => option.value)).toEqual([
-      "default",
-      "fable",
-      "opus",
-      "sonnet",
-      "claude-fable-5-1",
-      "claude-opus-5-5",
-      "claude-sonnet-5-5",
+  it("offers each priced model once, by a name a person reads, and keeps a stored value outside them", () => {
+    expect(modelOptions("default", null).map((option) => `${option.value}: ${option.label}`)).toEqual([
+      "default: Claude Code default",
+      "fable: Fable 5.1",
+      "opus: Opus 5",
+      "claude-opus-5-5: Opus 5.5",
+      "sonnet: Sonnet 5",
+      "claude-sonnet-5-5: Sonnet 5.5",
     ]);
-    expect(modelOptions("claude-sonnet-5", null).at(-1)).toEqual({ value: "claude-sonnet-5", label: "claude-sonnet-5" });
+    // A stored full name of a model the menu offers by its alias is that entry, chosen, not a second one.
+    const stored = modelOptions("claude-fable-5-1", null);
+    expect(stored.filter((option) => option.label === "Fable 5.1")).toEqual([{ value: "claude-fable-5-1", label: "Fable 5.1" }]);
+    expect(stored).toHaveLength(6);
+    expect(modelOptions("claude-haiku-9[1m]", null).at(-1)).toEqual({ value: "claude-haiku-9[1m]", label: "Haiku 9, 1M context" });
     expect(effortOptions(null).map((option) => option.label)).toEqual(["Claude Code default", "Low", "Medium", "High", "Extra high", "Max"]);
   });
 
@@ -82,9 +86,42 @@ describe("GET /api/settings/agent (#207)", () => {
       models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
       defaults: { model: "claude-fable-5-1", effort: "high" },
     });
-    expect(read).toEqual({ models: [{ value: "opus", label: "Opus" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
     expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
     expect(runnerSettings(null)).toEqual({ models: null, defaults: null });
+  });
+
+  it("lists a model the runner offers under two names once, and says the default without its raw id", () => {
+    // What the runner sent in the phase 2 measurement: each family by alias
+    // and by full name, the alias and one full name the same model.
+    const read = runnerSettings({
+      models: [
+        { value: "fable", label: "Fable", id: "claude-fable-5-1" },
+        { value: "opus", label: "Opus", id: "claude-opus-5" },
+        { value: "sonnet", label: "Sonnet", id: "claude-sonnet-5" },
+        { value: "claude-fable-5-1", label: "Claude Fable 5.1", id: "claude-fable-5-1" },
+        { value: "claude-opus-5-5", label: "Claude Opus 5.5", id: "claude-opus-5-5" },
+        { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", id: "claude-sonnet-5-5" },
+      ],
+      defaults: { model: "claude-fable-5-1[1m]", effort: "high" },
+    });
+    const options = modelOptions("default", read.defaults, read.models!);
+    const labels = options.map((option) => option.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).toEqual(["Claude Code default (Fable 5.1, 1M context)", "Fable 5.1", "Opus 5", "Opus 5.5", "Sonnet 5", "Sonnet 5.5"]);
+    expect(labels.join(" ")).not.toContain("[1m]");
+  });
+});
+
+describe("a model's name, for a person", () => {
+  it("reads an alias, a full id and a context-window suffix, and leaves anything else as it is", () => {
+    expect(modelName("claude-fable-5-1[1m]")).toBe("Fable 5.1, 1M context");
+    expect(modelName("claude-opus-5")).toBe("Opus 5");
+    expect(modelName("claude-sonnet-5-5")).toBe("Sonnet 5.5");
+    expect(modelName("sonnet")).toBe("Sonnet");
+    expect(modelName("opus[1m]")).toBe("Opus, 1M context");
+    expect(modelName("claude-opus-5[200k]")).toBe("Opus 5, 200K context");
+    expect(modelName("some-other-model")).toBe("some-other-model");
   });
 });
 
@@ -107,7 +144,7 @@ describe("the late #207 rules", () => {
   });
 
   it("never lists an unpriced stored model as if it were priced, nor a value that is no model name", () => {
-    expect(modelOptions("claude-haiku-9", null, undefined, false).at(-1)).toEqual({ value: "claude-haiku-9", label: "claude-haiku-9 (no price)" });
+    expect(modelOptions("claude-haiku-9", null, undefined, false).at(-1)).toEqual({ value: "claude-haiku-9", label: "Haiku 9 (no price)" });
     expect(modelOptions("Sonnet", null).some((option) => option.value === "Sonnet")).toBe(false);
     expect(modelOptions("opus --x", null).some((option) => option.value === "opus --x")).toBe(false);
   });
