@@ -109,6 +109,7 @@ describe("writing the view back into a URL", () => {
       stream: false,
       shot: "after",
       draft: "draft-1",
+      settings: true,
     };
     const href = studioHref(view);
     const params = Object.fromEntries(new URL(href, "http://x").searchParams);

@@ -249,6 +249,19 @@ Lexical's own site gives its core as about 22 kB minified and gzipped, plus the
 React bindings and two plugins; that figure is theirs, not measured here, and
 phase 2's done-when records the real increase to `/studio`'s first load.
 
+**Measured (2b, 2026-09-29, `next build` with Turbopack, gzip of each route's
+client chunks).** The composer and Lexical load only when a conversation
+opens, as one lazy chunk of **235 kB minified, 75 kB gzipped**: about three
+times Lexical's own figure, most of it `lexical` itself. `/studio`'s first
+load went from 147.5 to 159.9 kB gzipped for the panel's own new code (the
+cards, the video card, the settings panel), with no Lexical in it, and the
+canvas route `/studio/d/<name>` from 40.9 to 41.5 kB for the studio modules
+it shares. Outside the studio, the course pages grew 0.1 kB gzipped (`Glyph`
+became a module of its own) and the concept tutor 0.1 kB (`Composer` reads the
+shared frame classes); every other route is byte-for-byte unchanged. The frame
+classes live in `composer-keys.ts` rather than `classes.ts`, because every
+page's shell loads `classes.ts` and only the two composers read them.
+
 **Rejected:**
 
 | Option | Why not |
@@ -584,9 +597,11 @@ contradicts nothing) costs nothing.
 **Cmd+Enter.** Today Cmd+Enter from an empty composer presses the one live
 Draw. With exactly one live, enabled card it still presses that card. With two,
 it presses the card that has focus within it; from the composer it presses
-nothing, moves focus to Make both when it is shown (otherwise to the first live
-card's button), and announces "Two briefs are ready." A keystroke from the
-composer never starts two paid jobs, or picks one of two, for the person.
+nothing, leaves focus in the composer, and announces "Two briefs are ready.
+Press Make both, or the card you want." A keystroke from the composer never
+starts two paid jobs, or picks one of two, for the person. (Built first as a
+move of focus to Make both; review of #204 found that the person's next
+keystroke, a Space, would then press it, so focus now stays put.)
 `aria-keyshortcuts` goes on the one live button, or on none when there are two.
 
 ### The draft's state (D62)
@@ -1030,7 +1045,7 @@ T for tags, so they do not collide with C, M, E, U or V.
 | T6 | Both tagged, and the planner asks a question first | Allowed by the stop rules; its next reply to a tagged message should carry the briefs. The runner does not police it, and phase 2's done-when measures how often it happens |
 | T7 | Both tagged, the diagram brief valid and the video brief refused | The diagram card is live at once; one retry for the video brief; refused again, the E6 card for the video only, and no Make both |
 | T8 | A newer diagram brief while this draft's diagram job runs | The card is live, Draw disabled with "The diagram is still being drawn" until the job's verdict; the video card and its job are unaffected, and Make both is not shown |
-| T9 | Cmd+Enter with two live cards | Presses the focused card; from the composer, moves focus to Make both (or the first card) and announces. Never starts a job from the composer |
+| T9 | Cmd+Enter with two live cards | Presses the focused card; from the composer, announces that two briefs are ready and leaves focus in the composer. Never starts a job from the composer, and never hands focus to a paid button |
 | T10 | The diagram and the video share a slug | Allowed, and what the prompt asks for: different targets, leases and namespaces |
 | T11 | Both briefs name one proposed topic | The first press, or Make both, creates it; the other slot's pending topic is cleared and its button reads plain |
 | T12 | Both cards pressed, one after the other or from two tabs | Two keys (the kind is in each), two runners, the cap checked by each press. V20's "both run" now happens inside one draft; the machine carries one Chromium job and one render job, still unmeasured together |
@@ -1375,20 +1390,20 @@ shapes as built (the API table above).
 
 **2b, the web app:**
 
-- [ ] `Glyph` moved into the kit; the composer frame's classes shared by
+- [x] `Glyph` moved into the kit; the composer frame's classes shared by
       `Composer` and the new `MentionComposer`
-- [ ] `MentionComposer` on Lexical: the inline chip node, the menu with its
+- [x] `MentionComposer` on Lexical: the inline chip node, the menu with its
       keys, the plus button, `insertMention`, the live region, plain-text
       paste, and the React-free serialiser to `{ text, mentions }` with its
       tests; IMPLEMENTATION.md's kit table gains its row
-- [ ] The transcript draws a message's chips inline; the drafts list shows its
+- [x] The transcript draws a message's chips inline; the drafts list shows its
       kinds; suggestion buttons under the newest reply
-- [ ] One live card per kind, `(seq, kind)` keys everywhere a card is keyed,
+- [x] One live card per kind, `(seq, kind)` keys everywhere a card is keyed,
       Make both for a pair by `requestSeq` whatever replies it landed in, the
       held card with Use this brief, the waiting chip and the Stop waiting
       line, Cmd+Enter with two cards, and the panel staying on the
       conversation while another card is live
-- [ ] The opening line, "Ask me about an idea, or type @ to make a diagram or
+- [x] The opening line, "Ask me about an idea, or type @ to make a diagram or
       a video of it", and the labels (open question 2)
 
 **2c, the video screens**, as STUDIO-VIDEOS.md's phase 2 lists them: the video

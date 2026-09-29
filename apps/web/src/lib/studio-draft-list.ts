@@ -1,4 +1,4 @@
-import type { DraftState, DraftSummary } from "@/lib/studio-drafts";
+import { isDraftKind, type DraftKind, type DraftState, type DraftSummary } from "@/lib/studio-drafts";
 
 /**
  * The drafts list above the studio's grid (phase 3 of
@@ -35,13 +35,16 @@ export interface DraftRow {
   state: string;
   briefed: boolean;
   updated: string;
+  /** The kinds the draft has briefs or jobs of (STUDIO-MENTIONS.md, API), for the row's glyphs. */
+  kinds: DraftKind[];
 }
 
 /** A draft's state, as the list says it. */
-export function stateWords(state: DraftState): string {
+export function stateWords(state: DraftState, kinds: readonly DraftKind[] = []): string {
   switch (state) {
     case "briefed":
-      return "Ready to draw";
+      // A video is made, not drawn; with both, the one word that covers both.
+      return kinds.includes("video") ? "Ready to make" : "Ready to draw";
     case "open":
       return "In conversation";
     case "drawing":
@@ -82,13 +85,15 @@ export function draftRows(
             : extending !== null
               ? `Extending ${extending}`
               : "A conversation with no brief yet";
+      const kinds = Array.isArray(draft.kinds) ? [...new Set(draft.kinds.filter(isDraftKind))] : [];
       return {
         draftId: draft.draftId,
         heading,
         quoted: title === "" && first !== "",
-        state: stateWords(draft.state),
+        state: stateWords(draft.state, kinds),
         briefed: draft.state === "briefed",
         updated: draft.updated,
+        kinds,
       };
     });
 }

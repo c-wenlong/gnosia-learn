@@ -6,6 +6,23 @@
  * worth a test.
  */
 
+/**
+ * The composer's frame, shared by `Composer` (a textarea) and
+ * `MentionComposer` (a rich-text field with chips): radius 16, a 2px
+ * `--border` that goes `--accent` on focus, `--surface` inside. 52px at one
+ * line (the constants below), growing to six. The focus
+ * rule is the caller's, since a textarea takes `focus:` and a frame around an
+ * editable takes `focus-within:`.
+ *
+ * Here rather than in `classes.ts`, which every page's shell loads: only the
+ * two composers read these, so no other route carries them.
+ */
+export const COMPOSER_FRAME = "rounded-2xl border-2 border-border bg-surface transition-colors duration-100";
+/** The composer's text: 15px on a 24px line, as the tutor's input always had. */
+export const COMPOSER_TEXT = "text-[15px] leading-6 text-text";
+/** The 12px line under a composer saying why it, or Send, is disabled. */
+export const COMPOSER_REASON = "px-1 text-[12px] leading-4 text-text2";
+
 /** 15px text on a 24px line, as the tutor's input always had. */
 export const COMPOSER_LINE_PX = 24;
 /** Two 2px borders and two 12px paddings: one line is 52px, the kit height. */

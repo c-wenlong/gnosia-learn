@@ -1,0 +1,122 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  acceptableModel,
+  agentDefaults,
+  checkedAgent,
+  effortOptions,
+  modelOptions,
+  rowPriced,
+  rowWarning,
+  runnerSettings,
+  storedAgent,
+} from "./studio-agent-settings";
+
+describe("the settings panel's menus (D53)", () => {
+  it("defaults videos to the Claude Code default and diagrams to sonnet, today's behaviour", () => {
+    expect(storedAgent("video", undefined)).toEqual({ model: "default", effort: "default" });
+    expect(storedAgent("diagram", null)).toEqual({ model: "sonnet", effort: "default" });
+    expect(storedAgent("video", { model: "opus", effort: "max" })).toEqual({ model: "opus", effort: "max" });
+    expect(storedAgent("video", { model: "--dangerous", effort: "loud" })).toEqual({ model: "default", effort: "default" });
+  });
+
+  it("shows what the default resolves to, from health's agent block", () => {
+    const fromSettings = {
+      video: {
+        model: { requested: "default", passed: "claude-fable-5-1", source: "claude-settings" },
+        effort: { requested: "default", passed: "high", source: "claude-settings" },
+      },
+      diagram: { model: { requested: "sonnet", passed: "sonnet", source: "brief" }, effort: { requested: "default", passed: null, source: "cli" } },
+    };
+    const defaults = agentDefaults(fromSettings);
+    expect(defaults).toEqual({ model: "claude-fable-5-1", effort: "high" });
+    expect(modelOptions("default", defaults)[0]!.label).toBe("Claude Code default (claude-fable-5-1)");
+    expect(effortOptions(defaults)[0]!.label).toBe("Claude Code default (High)");
+  });
+
+  it("prefers the runner's own defaults when it sends them, and says less when it cannot know", () => {
+    expect(agentDefaults({ defaults: { model: "claude-opus-5", effort: null } })).toEqual({ model: "claude-opus-5", effort: null });
+    expect(effortOptions({ model: null, effort: null })[0]!.label).toBe("Claude Code default (the CLI's own)");
+    const hidden = agentDefaults({ video: { model: { requested: "opus", passed: "opus", source: "panel" } } });
+    expect(hidden).toBeNull();
+    expect(modelOptions("opus", hidden)[0]!.label).toBe("Claude Code default");
+    expect(agentDefaults(null)).toBeNull();
+  });
+
+  it("offers the priced models, and keeps a stored value outside them", () => {
+    expect(modelOptions("default", null).map((option) => option.value)).toEqual([
+      "default",
+      "fable",
+      "opus",
+      "sonnet",
+      "claude-fable-5-1",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+    ]);
+    expect(modelOptions("claude-sonnet-5", null).at(-1)).toEqual({ value: "claude-sonnet-5", label: "claude-sonnet-5" });
+    expect(effortOptions(null).map((option) => option.label)).toEqual(["Claude Code default", "Low", "Medium", "High", "Extra high", "Max"]);
+  });
+
+  it("refuses a value the shared reader would not keep as sent", () => {
+    expect(checkedAgent({ model: "opus", effort: "high" })).toEqual({ model: "opus", effort: "high" });
+    expect(checkedAgent({ model: "opus --x", effort: "high" })).toBeNull();
+    expect(checkedAgent({ model: "opus", effort: "loud" })).toBeNull();
+    expect(checkedAgent("opus")).toBeNull();
+  });
+});
+
+describe("what a save may store", () => {
+  it("takes default, a menu model or the value already stored, and refuses a typo", () => {
+    expect(acceptableModel("opus", null)).toBe(true);
+    expect(acceptableModel("default", null)).toBe(true);
+    expect(acceptableModel("opsu", null)).toBe(false);
+    expect(acceptableModel("claude-opus-5[1m]", "claude-opus-5[1m]")).toBe(true);
+    expect(checkedAgent({ model: "opsu", effort: "high" })).toBeNull();
+    expect(checkedAgent({ model: "claude-sonnet-5", effort: "low" }, { model: "claude-sonnet-5", effort: "high" })).toEqual({ model: "claude-sonnet-5", effort: "low" });
+  });
+});
+
+describe("GET /api/settings/agent (#207)", () => {
+  it("takes the runner's priced models and defaults, and falls back to nothing on a bad answer", () => {
+    const read = runnerSettings({
+      models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
+      defaults: { model: "claude-fable-5-1", effort: "high" },
+    });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
+    expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
+    expect(runnerSettings(null)).toEqual({ models: null, defaults: null });
+  });
+});
+
+describe("the late #207 rules", () => {
+  const view = {
+    video: { price: { priced: true, pricedAs: "claude-opus-5" }, warning: null },
+    diagram: {
+      price: { priced: false, pricedAs: "claude-sonnet-5" },
+      warning: '"claude-haiku-9" has no price in the studio\'s rate table, so a job stopped before it reports its own cost is estimated at claude-sonnet-5\'s rates.',
+    },
+  };
+
+  it("reads each row's warning and price, and nothing from a bad answer", () => {
+    expect(rowWarning(view, "video")).toBeNull();
+    expect(rowWarning(view, "diagram")).toMatch(/^"claude-haiku-9" has no price/);
+    expect(rowPriced(view, "diagram")).toBe(false);
+    expect(rowPriced(view, "video")).toBe(true);
+    expect(rowPriced({ video: { price: "yes" } }, "video")).toBeNull();
+    expect(rowWarning(null, "video")).toBeNull();
+  });
+
+  it("never lists an unpriced stored model as if it were priced, nor a value that is no model name", () => {
+    expect(modelOptions("claude-haiku-9", null, undefined, false).at(-1)).toEqual({ value: "claude-haiku-9", label: "claude-haiku-9 (no price)" });
+    expect(modelOptions("Sonnet", null).some((option) => option.value === "Sonnet")).toBe(false);
+    expect(modelOptions("opus --x", null).some((option) => option.value === "opus --x")).toBe(false);
+  });
+
+  it("refuses a model the runner's name rule refuses, capitals included, even when it is the stored one", () => {
+    expect(acceptableModel("Sonnet", null)).toBe(false);
+    expect(acceptableModel("Sonnet", "Sonnet")).toBe(false);
+    expect(acceptableModel("claude-opus-5[1m]", "claude-opus-5[1m]")).toBe(true);
+    expect(acceptableModel("claude-opus-5[1M]", "claude-opus-5[1M]")).toBe(false);
+    expect(checkedAgent({ model: "Sonnet", effort: "high" }, { model: "Sonnet", effort: "high" })).toBeNull();
+  });
+});

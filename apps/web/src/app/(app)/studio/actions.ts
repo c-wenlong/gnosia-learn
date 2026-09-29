@@ -1,8 +1,12 @@
 "use server";
 
+import { readPreference, writePreference } from "@self-learn/catalog/state";
 import { redirect } from "next/navigation";
 
+import { withLearnerStore } from "@/lib/learner-store";
+import { currentOwner } from "@/lib/owner";
 import { requireStudio, studioApi } from "@/lib/studio";
+import { AGENT_KEYS, checkedAgent, storedAgent } from "@/lib/studio-agent-settings";
 import { withOutcome } from "@/lib/studio-view";
 
 /**
@@ -120,4 +124,43 @@ export async function restartMirror(formData: FormData): Promise<void> {
       detail: result.ok ? null : result.detail,
     }),
   );
+}
+
+/** What a settings save came back with: `error` is the sentence the panel shows. */
+export interface AgentSaved {
+  ok: boolean;
+  error: string | null;
+}
+
+/**
+ * The settings panel's save: one row's model and effort (D53 of
+ * docs/STUDIO-VIDEOS.md), as the `studioVideoAgent` or `studioDiagramAgent`
+ * preference of the signed-in owner. The runner reads it at job start
+ * through `catalog preference get`, so a job queued now gets it.
+ *
+ * Returned rather than redirected: the panel stays open on the menu the
+ * person just changed, and says "Saved" or why not beside it. A value the
+ * shared reader would not keep as sent (a model that is not a CLI name, an
+ * effort outside the list) is refused, never stored as something else.
+ */
+export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
+  requireStudio();
+  const kind = String(formData.get("kind") ?? "");
+  if (kind !== "video" && kind !== "diagram") return { ok: false, error: "That is not a studio agent." };
+  const owner = await currentOwner();
+  const sent = { model: String(formData.get("model") ?? ""), effort: String(formData.get("effort") ?? "") };
+  try {
+    return await withLearnerStore(async (db) => {
+      // A model the menu offers, `default`, or the one already stored: a
+      // typo stored here would fail every job of this kind at spawn.
+      const stored = storedAgent(kind, await readPreference(db, AGENT_KEYS[kind], owner));
+      const value = checkedAgent(sent, stored);
+      if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
+      await writePreference(db, AGENT_KEYS[kind], value, owner);
+      return { ok: true, error: null };
+    });
+  } catch (error) {
+    console.warn(`studio settings: save failed — ${error instanceof Error ? error.message : String(error)}`);
+    return { ok: false, error: "Not saved: the catalog did not answer." };
+  }
 }
