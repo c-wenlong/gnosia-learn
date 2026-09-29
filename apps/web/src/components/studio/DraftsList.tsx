@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
+import { KIND_NAME } from "@/lib/studio-cards";
 import { draftRows, LIST_LIMIT, LIST_ROWS, LISTED_STATES } from "@/lib/studio-draft-list";
 import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
@@ -85,6 +87,14 @@ export function DraftsList({
               >
                 {row.quoted ? <>&ldquo;{row.heading}&rdquo;</> : row.heading}
               </span>
+              {row.kinds.length > 0 && (
+                <span className="flex shrink-0 items-center gap-1 text-text3" title={row.kinds.map((kind) => KIND_NAME[kind]).join(" and ")}>
+                  {row.kinds.map((kind) => (
+                    <Glyph key={kind} name={kind} size={16} />
+                  ))}
+                  <span className="sr-only">{row.kinds.map((kind) => KIND_NAME[kind]).join(" and ")}</span>
+                </span>
+              )}
               <span className="flex shrink-0 items-center gap-2 text-[12px] max-sm:pl-7">
                 <span className={cx("inline-flex items-center gap-1.5", row.briefed ? "font-medium text-accent-text" : "text-text2")}>
                   {row.briefed && <span aria-hidden className="size-1.5 rounded-full bg-accent" />}

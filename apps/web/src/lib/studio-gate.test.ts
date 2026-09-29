@@ -119,6 +119,7 @@ describe("every exported server action", () => {
       "exportSvg",
       "inspectDiagram",
       "restartMirror",
+      "saveStudioAgent",
       "verifySvg",
     ]);
   });

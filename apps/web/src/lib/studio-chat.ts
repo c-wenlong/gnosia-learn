@@ -45,7 +45,9 @@ export const GONE = "This conversation is gone. Drafts are kept seven days.";
 /* -------------------------------------------------------------------------- */
 
 /** The fenced blocks a planner reply carries for the runner, never for a person. */
-const MACHINE_TAGS = ["brief", "topic"] as const;
+const MACHINE_TAGS = ["brief", "topic", "suggest", "hold"] as const;
+/** The blocks whose arrival is a brief being checked; `suggest` and `hold` are only cut. */
+const CHECKED_TAGS = ["brief", "topic"] as const;
 
 export interface ReplyView {
   /** The prose a person reads. */
@@ -74,18 +76,18 @@ export function splitReply(text: string, streaming = false): ReplyView {
 
   // Complete blocks: an opening fence line tagged brief or topic, up to the
   // next fence line.
-  const complete = /(^|\n)[ \t]*(`{3,})[ \t]*(brief|topic)\b[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g;
+  const complete = /(^|\n)[ \t]*(`{3,})[ \t]*(brief|topic|suggest|hold)\b[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g;
   rest = rest.replace(complete, (_match, lead: string, _fence: string, tag: string) => {
     if (tag === "brief") hadBrief = true;
     return lead;
   });
 
   // An opening fence with no close: everything from it on is machine text.
-  const open = /(^|\n)[ \t]*`{3,}[ \t]*(brief|topic)\b/.exec(rest);
+  const open = /(^|\n)[ \t]*`{3,}[ \t]*(brief|topic|suggest|hold)\b/.exec(rest);
   if (open !== null) {
     if (open[2] === "brief") hadBrief = true;
     rest = rest.slice(0, open.index + open[1].length);
-    checking = streaming;
+    checking = streaming && (CHECKED_TAGS as readonly string[]).includes(open[2]!);
   } else if (streaming) {
     // The first characters of a fence at the very end: "```", "```br".
     // Held back until the next delta says what they open; a tag that is
@@ -95,7 +97,7 @@ export function splitReply(text: string, streaming = false): ReplyView {
     const fenceDone = tail?.[2].length === 3;
     if (tail !== null && (tag === "" || (fenceDone && MACHINE_TAGS.some((name) => name.startsWith(tag))))) {
       rest = rest.slice(0, tail.index + tail[1].length);
-      checking = tag !== "";
+      checking = tag !== "" && CHECKED_TAGS.some((name) => name.startsWith(tag));
     }
   }
 
@@ -234,14 +236,20 @@ export interface ComposerState {
  * two disable Send and nothing else.
  */
 export function composerState(
-  view: Pick<DraftView, "state" | "inFlight" | "turns" | "turnCap" | "jobId">,
+  view: Pick<DraftView, "state" | "inFlight" | "turns" | "turnCap" | "jobId"> & Partial<Pick<DraftView, "slots">>,
   cap: CapStatus | null,
   pending = false,
   empty = false,
   editing = false,
 ): ComposerState {
-  const placeholder =
-    view.jobId !== null
+  // A runner with per-kind slots (docs/STUDIO-MENTIONS.md) takes messages
+  // while a job runs (C14 lifted), and its conversation starts as a chat.
+  const kinds = view.slots !== undefined;
+  const placeholder = kinds
+    ? empty
+      ? "Ask about an idea, or type @ to make something"
+      : "Reply, or type @ to make something"
+    : view.jobId !== null
       ? "Ask for another diagram, or a change to this one"
       : empty
         ? "Describe the diagram"
@@ -249,7 +257,7 @@ export function composerState(
   if (view.state === "abandoned") {
     return { disabled: true, sendDisabled: true, reason: "This conversation was closed.", placeholder };
   }
-  if (view.state === "drawing") {
+  if (view.state === "drawing" && !kinds) {
     return {
       disabled: true,
       sendDisabled: true,
@@ -371,12 +379,45 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
           ? "That topic was created elsewhere in the meantime. The brief now uses it, so Draw again."
           : sentence(refusal.error),
       );
-    case "not-briefed":
+    case "not-briefed": {
+      const kind = refusalString(refusal, "kind");
+      if (kind === "video") {
+        return own(
+          refusalString(refusal, "state") === "drawing"
+            ? "This conversation's video is already being made."
+            : "There is no video brief to make right now.",
+        );
+      }
       return own(
         refusalString(refusal, "state") === "drawing"
           ? "This conversation's drawing is already in progress."
           : "There is no brief to draw right now.",
       );
+    }
+    case "kind-busy": {
+      // #207: this draft's own job of the kind has not reached a verdict.
+      const video = refusalString(refusal, "kind") === "video";
+      const state = refusalString(refusal, "state");
+      const waiting = state === "awaiting_review" ? " is waiting for review" : ` is still ${video ? "being made" : "being drawn"}`;
+      return own(
+        `The ${video ? "video" : "diagram"} from this conversation${waiting}. Accept, discard or cancel it first.`,
+        refusalString(refusal, "jobId"),
+      );
+    }
+    case "change-not-in-conversation":
+      // #207: a `change` video brief on a slug this conversation did not
+      // open on and did not make.
+      return own(
+        `This brief changes ${refusalString(refusal, "slug") ?? "a video"}, which this conversation did not open on or make. Start the change from that video's Change, or ask for a new video here.`,
+      );
+    case "held": {
+      // #207: the planner put this brief on hold (a `hold` block).
+      const held = (refusal.detail as { held?: { reason?: unknown } } | null)?.held;
+      const reason = typeof held?.reason === "string" && held.reason.trim() !== "" ? held.reason.trim() : null;
+      return own(
+        `This brief is on hold${reason === null ? "" : `: ${reason.replace(/[.!?]$/, "")}`}. Press Use this brief to make it, or ask for a new one.`,
+      );
+    }
     case "in-flight":
       return own("The planner is still answering. Draw once its reply is in.");
     case "draw-in-progress":
@@ -389,6 +430,9 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
       return own(`The new topic was refused: ${sentence(refusal.error)}`);
     default:
       break;
+  }
+  if (status === 400 && refusalString(refusal, "field") === "items") {
+    return own("Make both was sent without its two cards. Press each card on its own.");
   }
   if (status === 409) return own(sentence(refusal.error), refusalString(refusal, "holder"));
   if (status === 429) {
@@ -513,9 +557,12 @@ export function jobPatch(
 }
 
 /** What Start over does first: close this draft, leave it, or refuse. */
-export function startOverStep(state: DraftState): "abandon" | "skip" | "refuse" {
+export function startOverStep(state: DraftState, kinds = false): "abandon" | "skip" | "refuse" {
   if (state === "open" || state === "briefed") return "abandon";
-  if (state === "drawing") return "refuse";
+  // With per-kind slots a draft stays open to messages while a job runs,
+  // and the runner will not abandon it then, so Start over leaves it (and
+  // its job) alone and opens a new conversation, as a done draft is left.
+  if (state === "drawing") return kinds ? "skip" : "refuse";
   return "skip";
 }
 

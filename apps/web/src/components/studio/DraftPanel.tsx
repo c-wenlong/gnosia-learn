@@ -1,42 +1,79 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
 import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
+import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
-import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
+import { PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
 import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
-import { cx } from "@/components/ui/classes";
 import { Composer } from "@/components/ui/Composer";
+import { chipClasses, cx } from "@/components/ui/classes";
+import { COMPOSER_FRAME } from "@/components/ui/composer-keys";
+import { Glyph } from "@/components/ui/Glyph";
+import { MentionChip } from "@/components/ui/MentionChip";
+import type { MentionComposerHandle, MentionComposerProps } from "@/components/ui/MentionComposer";
+import {
+  carryMentions,
+  EMPTY_MENTION_VALUE,
+  fallbackTagLine,
+  inlinePieces,
+  isEmptyValue,
+  prependValue,
+  trimValue,
+  type MentionValue,
+} from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { TopicOption } from "@/data/topics";
 import {
-  askAgainText,
+  askAgainValue,
+  entryBriefs,
+  entryValue,
+  jobKind,
+  KIND_NAME,
+  kindCardStatus,
+  kindDrawKey,
+  kindPendingTopic,
+  kindUnavailable,
+  lastPersonValue,
+  lengthSendBlock,
+  liveCards,
+  openerValue,
+  makeBoth,
+  MENTION_HINT,
+  CHANGE_OPENING_TURN,
+  MENTION_OPENING_TURN,
+  mentionOptions,
+  modEnterPlan,
+  suggestionName,
+  suggestionsFor,
+  topicSuggestionValue,
+  TWO_READY,
+  valueBack,
+  valueSendBlock,
+  waitingKinds,
+  waitingLine,
+  type KindCardStatus,
+  type LiveCard,
+} from "@/lib/studio-cards";
+import {
   capFrom,
-  cardEditable,
-  cardPendingTopic,
-  cardStatus,
   CHECKING_BRIEF,
   composerState,
   costLabel,
-  drawBlock,
-  drawKey,
   drawRefusal,
   EDITING_BRIEF,
   GONE,
   isEmptyConversation,
   jobPatch,
-  lastPersonText,
-  latestBriefSeq,
-  modEnterAction,
-  OPENING_TURN,
   refusalNoted,
   sendRefusal,
   splitReply,
@@ -46,33 +83,87 @@ import {
   threadProblem,
   turnIndicator,
   visibleEntries,
-  wordsBack,
-  type DrawRefusal,
   type CapStatus,
+  type DrawBlock,
+  type DrawRefusal,
   type Suggestion,
   type ThreadProblem,
 } from "@/lib/studio-chat";
 import {
   abandonDraft,
+  drawBoth,
   drawDraft,
   getDraft,
   openDraftEvents,
-  readDailyCap,
+  readStudioHealth,
   refusalReason,
   saveBrief,
   sendMessage,
+  stopWaiting,
+  releaseHold,
+  videoAvailability,
+  diagramAvailability,
+  type DraftKind,
   type DraftView,
+  type TranscriptBrief,
   type TranscriptEntry,
+  type VideoAvailability,
 } from "@/lib/studio-drafts";
-import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, sessionStore, takeOpener } from "@/lib/studio-extend";
+import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, OPENER_EVENT, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
- * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI").
+ * The studio's composer, loaded only when a conversation opens: it carries
+ * Lexical, which the grid behind the panel has no use for (open question 4
+ * of docs/STUDIO-MENTIONS.md). Until it arrives, a frame of the same height
+ * stands in, so the panel does not move.
+ */
+const MentionComposer = dynamic(
+  () =>
+    import("@/components/ui/MentionComposer")
+      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<DraftKind>) => ReactNode)
+      // A chunk that will not load (a rebuild while the tab was open, the
+      // network gone) costs the tags, never the page: the plain composer
+      // stands in, and words still send.
+      .catch(() => PlainFallback),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-end gap-2.5" aria-hidden>
+        <div className={cx("h-[52px] min-w-0 flex-1", COMPOSER_FRAME)} />
+        <div className="h-11 w-[84px] rounded-full bg-surface2" />
+      </div>
+    ),
+  },
+) as (props: MentionComposerProps<DraftKind>) => ReactNode;
+
+/** The kit's plain `Composer` in `MentionComposer`'s place, when Lexical will not load. */
+function PlainFallback(props: MentionComposerProps<DraftKind>) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Composer
+        value={props.value.text}
+        onChange={(text) => props.onChange({ text, mentions: carryMentions(props.value, text) })}
+        onSubmit={(text) => props.onSubmit({ text, mentions: carryMentions(props.value, text) })}
+        label={props.label}
+        placeholder={props.placeholder}
+        disabled={props.disabled}
+        sendDisabled={props.sendDisabled}
+        disabledReason={props.disabledReason}
+        onModEnter={props.onModEnter}
+      />
+      <p className="px-1 text-[12px] leading-4 text-text3">{fallbackTagLine(props.value, props.mentions)}</p>
+    </div>
+  );
+}
+
+/**
+ * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI",
+ * and docs/STUDIO-MENTIONS.md for tags and cards per kind).
  *
  * Two bodies under one header, and the URL says which: the chat
- * (`?draft=`), and the job Draw started with a bar back to the chat
+ * (`?draft=`), and the job a press started with a bar back to the chat
  * (`?draft=&job=`). One component holds both so the conversation's state and
  * its event stream live through the trip to the job and back.
  *
@@ -80,27 +171,44 @@ import { panelHref, titleOf } from "@/lib/studio-view";
  * of the thread, and on arrival from Extend sends the opening message
  * `ExtendStart` handed it, so the planner's first reply says what it sees.
  *
+ * **Tags.** The composer is the kit's `MentionComposer`: `@`, or the plus at
+ * its left, opens a menu of Diagram and Video, and a pick is a chip in the
+ * sentence. A message goes as `{ text, mentions }`. An untagged message is
+ * conversation; the planner may end its reply with a suggestion, drawn as a
+ * button under the newest reply that puts the chip in the composer and sends
+ * nothing (D58).
+ *
+ * **One live card per kind** (D60). A reply may carry a diagram brief and a
+ * video brief, each its own card with its own press, keyed by `(seq, kind)`;
+ * a newer brief greys only the older card of its kind. A diagram and a video
+ * asked for in one message get Make both under the later of the two.
+ *
  * **The runner owns the draft; this is a cache of it**, as `JobsProvider` is
  * of the jobs. `GET /api/drafts/{id}` is the record. The event stream adds
  * the one thing the record cannot, a reply growing as it is written (`delta`),
  * and every other event is a cue to read the record again, so a missed event
  * or a dropped stream costs a moment and nothing else. Every call goes
  * through `studio-drafts.ts`; every judgement about what to show is in
- * `studio-chat.ts`.
+ * `studio-chat.ts` and `studio-cards.ts`.
  */
 
 /** The polled record while a turn is in flight, for when the stream is down. */
 const POLL_IN_FLIGHT_MS = 4_000;
 /**
- * How often focus may re-read the daily cap. `/api/health` runs `doctor`,
- * which the runner caches for 30 seconds, and `claude --version`, so this is
- * the cheapest rate at which each read can still be new.
+ * How often focus may re-read health. `/api/health` runs `doctor`, which the
+ * runner caches for 30 seconds, and `claude --version`, so this is the
+ * cheapest rate at which each read can still be new.
  */
 const CAP_READ_MS = 30_000;
 /** The same limit the runner takes, `STUDIO_TEXT_LIMIT`'s default. */
 const TEXT_LIMIT = 8_000;
 
 type Status = "loading" | "ready" | "gone" | "down";
+type Value = MentionValue<DraftKind>;
+/** A card's identity: its reply and its kind. */
+type CardKey = `${number}:${DraftKind}`;
+
+const cardKey = (seq: number, kind: DraftKind): CardKey => `${seq}:${kind}`;
 
 export function DraftPanel({
   draftId,
@@ -108,8 +216,11 @@ export function DraftPanel({
   path,
   topics,
   titles,
+  videoTitles = {},
   suggestions,
   cap: initialCap,
+  video: initialVideo = null,
+  diagramAgent: initialDiagram = null,
 }: {
   draftId: string;
   /** `?job=`: the job view, with the bar back to the chat. */
@@ -119,9 +230,18 @@ export function DraftPanel({
   topics: TopicOption[];
   /** Each diagram's display title by name, for an extend conversation's header and picture. */
   titles: Readonly<Record<string, string>>;
+  /**
+   * Each video's title by slug, for a Change conversation's header and poster.
+   * Its own map: a diagram and a video can share a slug.
+   */
+  videoTitles?: Readonly<Record<string, string>>;
   suggestions: Suggestion[];
   /** `dailyCap` from `/api/health` at render time. A 429 replaces it. */
   cap: CapStatus | null;
+  /** The video doctor from `/api/health` at render time: whether Video can be tagged and made. */
+  video?: VideoAvailability | null;
+  /** Health's `diagramAgent` at render time (#206): whether Draw can queue a job at all. */
+  diagramAgent?: VideoAvailability | null;
 }) {
   const router = useRouter();
   const { jobs, refresh: refreshJobs } = useStudioJobs();
@@ -131,22 +251,45 @@ export function DraftPanel({
   /** The reply being written, as the last `delta` had it. */
   const [stream, setStream] = useState<{ turn: number; text: string } | null>(null);
   /** The person's turn between Send and the record having it. */
-  const [pending, setPending] = useState<{ text: string; seq: number | null } | null>(null);
+  const [pending, setPending] = useState<{ value: Value; seq: number | null } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [text, setText] = useState("");
+  const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
-  const [drawing, setDrawing] = useState(false);
-  const [refused, setRefused] = useState<(DrawRefusal & { seq: number }) | null>(null);
+  const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
+  const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
+  /** The cards whose press is under way. */
+  const [pressing, setPressing] = useState<ReadonlySet<DraftKind>>(new Set());
+  const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
+  const [bothError, setBothError] = useState<string | null>(null);
   const [confirmStartOver, setConfirmStartOver] = useState(false);
   const [startOverError, setStartOverError] = useState<string | null>(null);
-  /** The live brief is being edited on its card: Draw and Send wait. */
+  const [waitError, setWaitError] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState("");
+  /** A card is being edited: its press and Send wait. */
   const [editing, setEditing] = useState(false);
-  const composer = useRef<HTMLTextAreaElement | null>(null);
+  const composer = useRef<MentionComposerHandle | null>(null);
   const thread = useRef<HTMLDivElement | null>(null);
   const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
   const arriving = arrivingSource(draftId);
+
+  /**
+   * Focus the composer once it is on screen: it loads lazily, and is not
+   * rendered while the panel shows a job, so this tries for a couple of
+   * seconds' worth of frames rather than once.
+   */
+  const focusComposerSoon = useCallback(() => {
+    let frames = 0;
+    const attempt = () => {
+      if (composer.current !== null) {
+        composer.current.focus();
+        return;
+      }
+      if ((frames += 1) < 120) requestAnimationFrame(attempt);
+    };
+    requestAnimationFrame(attempt);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /* The record                                                        */
@@ -188,7 +331,7 @@ export function DraftPanel({
     return fresh;
   }, [draftId]);
 
-  // Several events in one burst (a reply, its brief, the state) are one read.
+  // Several events in one burst (a reply, its briefs, the state) are one read.
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reload = useCallback(() => {
     if (timer.current !== null) clearTimeout(timer.current);
@@ -233,7 +376,9 @@ export function DraftPanel({
         // A reply that ended, or one the runner refused and is retrying, is
         // no longer the text being written: the retry's deltas start again.
         if (event.type === "reply" || event.type === "brief-invalid" || event.type === "error") setStream(null);
-        if (event.type === "state" && (event.data.state === "drawing" || event.data.jobId !== null)) void refreshJobs();
+        if (event.type === "state" && (event.data.state === "drawing" || event.data.jobId !== null || event.data.slots !== undefined)) {
+          void refreshJobs();
+        }
         reload();
       },
     });
@@ -248,24 +393,28 @@ export function DraftPanel({
     return () => clearInterval(every);
   }, [inFlight, load]);
 
-  // Draw's and Send's disabled reasons are re-checked when the panel regains
-  // focus: a job held elsewhere may have been accepted meanwhile, and the
-  // day's spend may have aged out.
+  // The presses' disabled reasons are re-checked when the panel regains
+  // focus: a job held elsewhere may have been accepted meanwhile, the day's
+  // spend may have aged out, and the video doctor may have recovered.
   const capReadAt = useRef(0);
-  const readCap = useCallback(async () => {
+  const readHealth = useCallback(async () => {
     capReadAt.current = Date.now();
-    const next = capFrom(await readDailyCap());
+    const health = await readStudioHealth();
+    if (health === null) return;
+    const next = capFrom(health.dailyCap);
     if (next !== null) setCap(next);
+    setVideo(videoAvailability(health.video));
+    setDiagramAgent(diagramAvailability(health.diagramAgent));
   }, []);
   useEffect(() => {
     const wake = () => {
       void refreshJobs();
       void load();
-      if (Date.now() - capReadAt.current >= CAP_READ_MS) void readCap();
+      if (Date.now() - capReadAt.current >= CAP_READ_MS) void readHealth();
     };
     window.addEventListener("focus", wake);
     return () => window.removeEventListener("focus", wake);
-  }, [refreshJobs, load, readCap]);
+  }, [refreshJobs, load, readHealth]);
 
   // A spent cap frees when its oldest spend leaves the 24-hour window, which
   // the runner names; read it again then rather than waiting for a focus.
@@ -273,9 +422,9 @@ export function DraftPanel({
   useEffect(() => {
     if (!Number.isFinite(freesAt)) return;
     const wait = Math.max(1_000, Math.min(freesAt - Date.now() + 1_000, 2 ** 31 - 1));
-    const timer = setTimeout(() => void readCap(), wait);
+    const timer = setTimeout(() => void readHealth(), wait);
     return () => clearTimeout(timer);
-  }, [freesAt, readCap]);
+  }, [freesAt, readHealth]);
 
   /* ---------------------------------------------------------------- */
   /* Focus and scroll                                                  */
@@ -284,10 +433,21 @@ export function DraftPanel({
   const mode: "chat" | "job" = jobId !== null ? "job" : "chat";
 
   useEffect(() => {
-    // Opening focuses the composer, once it exists.
+    // Opening focuses the composer, once it exists. It loads lazily, so the
+    // first try may find nothing, and the next frames try again.
     if (!ready || mode !== "chat" || focused.current) return;
-    focused.current = true;
-    composer.current?.focus();
+    let frames = 0;
+    let handle = 0;
+    const attempt = () => {
+      if (composer.current !== null) {
+        focused.current = true;
+        composer.current.focus();
+        return;
+      }
+      if ((frames += 1) < 120) handle = requestAnimationFrame(attempt);
+    };
+    attempt();
+    return () => cancelAnimationFrame(handle);
   }, [ready, mode]);
 
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
@@ -303,61 +463,110 @@ export function DraftPanel({
 
   /**
    * One person turn. `keepComposer` is for a turn that was not typed in the
-   * composer (the opener an Extend press hands over), whose composer may hold
-   * a second message that sending this one must not clear.
+   * composer (the opener an Extend press hands over, a Try again), whose
+   * composer may hold a second message that sending this one must not clear.
    */
-  async function send(raw: string, { keepComposer = false }: { keepComposer?: boolean } = {}) {
-    const body = raw.trim();
-    if (body === "" || view === null) return;
+  async function send(raw: Value, { keepComposer = false }: { keepComposer?: boolean } = {}) {
+    const body = trimValue(raw);
+    if (isEmptyValue(body) || view === null) return;
     setSendError(null);
-    setPending({ text: body, seq: null });
-    if (!keepComposer) setText("");
+    setPending({ value: body, seq: null });
+    if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
     const result = await sendMessage(draftId, body);
     if (!result.ok) {
       setPending(null);
-      // Give the words back: a refused turn should not cost the typing.
-      setText((held) => wordsBack(held, body, keepComposer));
+      // Give the words and the chips back: a refused turn should not cost the typing (T17).
+      setValue((held) => valueBack(held, body, keepComposer));
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       setSendError(sendRefusal(result.status, result.refusal));
       void load();
       return;
     }
-    setPending({ text: body, seq: result.data.seq });
+    setPending({ value: body, seq: result.data.seq });
     void load();
   }
 
-  const liveSeq = view === null ? null : latestBriefSeq(view.transcript);
-  const liveEntry = liveSeq === null ? undefined : entries.find((entry) => entry.seq === liveSeq);
-  const liveBrief = liveEntry?.brief ?? null;
-  const drawIsLive = view !== null && liveSeq !== null && cardStatus(view, liveSeq) === "live";
-  const block = view !== null && liveBrief !== null ? drawBlock(liveBrief, view, jobs, cap) : null;
+  // The opener effect below is a callback made once per draft, so it reaches
+  // `send` through this, which always holds the latest render's (whose
+  // `view` is the record, not the first render's null).
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
 
-  async function draw() {
-    if (view === null || !drawIsLive || block !== null || drawing || liveSeq === null) return;
+  const cards = useMemo(
+    () => (view === null ? [] : liveCards(view, jobs, cap, video, diagramAgent)),
+    [view, jobs, cap, video, diagramAgent],
+  );
+  const both = useMemo(() => (editing ? null : makeBoth(cards)), [cards, editing]);
+
+  /** One card's press: Draw, or Make video. */
+  async function press(card: LiveCard) {
+    if (view === null || card.block !== null || pressing.has(card.kind) || editing) return;
     // The notification prompt rides on the press that starts a job: a browser
     // will not show one without a gesture, and the job's ending is what it is
-    // for. Not awaited, so Draw does not wait on the person answering it.
+    // for. Not awaited, so the press does not wait on the person answering it.
     void askToNotify();
-    setDrawing(true);
-    setRefused(null);
-    const result = await drawDraft(draftId, drawKey(draftId, liveSeq, view.jobId));
+    const key = cardKey(card.seq, card.kind);
+    setPressing((held) => new Set(held).add(card.kind));
+    setRefused((held) => ({ ...held, [key]: undefined }));
+    const previous = view.slots?.[card.kind]?.jobId ?? (view.slots === undefined ? view.jobId : null);
+    const others = cards.filter((other) => other.kind !== card.kind);
+    const result = await drawDraft(draftId, kindDrawKey(draftId, card.seq, card.kind, previous), card.kind);
+    setPressing((held) => {
+      const next = new Set(held);
+      next.delete(card.kind);
+      return next;
+    });
     if (!result.ok) {
-      setDrawing(false);
-      setRefused({ seq: liveSeq, ...drawRefusal(result.status, result.refusal) });
+      setRefused((held) => ({ ...held, [key]: { seq: card.seq, ...drawRefusal(result.status, result.refusal) } }));
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       void load();
       return;
     }
     await refreshJobs();
-    router.push(panelHref(path, { job: result.data.jobId, draft: draftId }), { scroll: false });
-    setDrawing(false);
+    // With another card still live, the panel stays on the conversation, so
+    // the second card is not hidden behind the first job (D60).
+    if (others.length === 0) router.push(panelHref(path, { job: result.data.jobId, draft: draftId }), { scroll: false });
+    void load();
+  }
+
+  /** Make both: one press, each card started or refused on its own (D60, T26). */
+  async function pressBoth() {
+    if (view === null || both === null || pressing.size > 0) return;
+    void askToNotify();
+    setBothError(null);
+    const [first, second] = both.cards;
+    setPressing(new Set([first.kind, second.kind]));
+    setRefused((held) => ({ ...held, [cardKey(first.seq, first.kind)]: undefined, [cardKey(second.seq, second.kind)]: undefined }));
+    const items = both.cards.map((card) => ({
+      kind: card.kind,
+      idempotencyKey: kindDrawKey(draftId, card.seq, card.kind, view.slots?.[card.kind]?.jobId ?? null),
+    }));
+    const result = await drawBoth(draftId, items);
+    setPressing(new Set());
+    if (!result.ok) {
+      setBothError(drawRefusal(result.status, result.refusal).text);
+      if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
+      void load();
+      return;
+    }
+    const byKind = new Map(both.cards.map((card) => [card.kind, card]));
+    const next: Partial<Record<CardKey, DrawRefusal & { seq: number }>> = {};
+    for (const item of result.data.results) {
+      const card = byKind.get(item.kind);
+      if (card === undefined || "jobId" in item) continue;
+      next[cardKey(card.seq, card.kind)] = { seq: card.seq, ...drawRefusal(item.status, item.refusal) };
+    }
+    setRefused((held) => ({ ...held, ...next }));
+    await refreshJobs();
     void load();
   }
 
   async function startOver() {
     setConfirmStartOver(false);
     setStartOverError(null);
-    const step = view === null ? "skip" : startOverStep(view.state);
+    const step = view === null ? "skip" : startOverStep(view.state, view.slots !== undefined);
     if (step === "refuse") {
       setStartOverError("A diagram from this conversation is drawing. Cancel or review it first, then start over.");
       return;
@@ -369,71 +578,136 @@ export function DraftPanel({
         return;
       }
     }
-    // A done draft is left as it is: it drew something and stays findable.
+    // A done draft is left as it is: it made something and stays findable.
     await startDraft();
   }
 
-  const drawReady = drawIsLive && block === null && !editing;
-
   /**
-   * The person's edit of the live brief (phase 3). Resolves once the record
-   * holds the result, so the card leaves editing as the stored brief appears
-   * under the runner's note, rather than showing the old brief for a moment.
-   * Focus then goes to the new card's Draw, the next thing to press.
+   * The person's edit of a brief (phase 3), or a brief put back in force as
+   * it is. Resolves once the record holds the result, so the card leaves
+   * editing as the stored brief appears under the runner's note. Focus then
+   * goes to the new card's press, the next thing to press.
    *
    * `base` is the seq of the entry carrying the edited brief, so the runner
-   * refuses an edit of a brief that is no longer in force. A refused save is
-   * the card's to say, under its buttons; only a failed read of the draft
-   * means the conversation is gone. On `brief-changed` the record is read
-   * again, so the newer brief arrives and the edited card keeps its edits,
-   * frozen, above it.
+   * refuses an edit of a brief that is no longer that kind's brief in force.
    */
   const saveEdit = useCallback(
-    async (brief: Brief, base: number): Promise<SaveOutcome> => {
-      const result = await saveBrief(draftId, brief, base);
+    async (brief: Brief | TranscriptBrief["brief"], base: number, kind: DraftKind): Promise<SaveOutcome> => {
+      const result = await saveBrief(draftId, brief, base, kind);
       if (!result.ok) {
         if (refusalReason(result.refusal) === "brief-changed") void load();
         return { ok: false, status: result.status, refusal: result.refusal };
       }
       await load();
-      requestAnimationFrame(() => thread.current?.querySelector<HTMLElement>("[data-studio-draw]")?.focus());
+      requestAnimationFrame(() =>
+        thread.current?.querySelector<HTMLElement>(`[data-studio-draw][data-card-kind="${kind}"]`)?.focus(),
+      );
       return { ok: true };
     },
     [draftId, load],
   );
 
-  // Arriving from Extend, or from Talk it through on a failed job: the opener
-  // left for this draft, taken once so a reload never sends it again, and
-  // sent only into a conversation that is still empty.
+  /** Use this brief on a card the planner put on hold: no turn (D60). */
+  const takeOffHold = useCallback(
+    async (kind: DraftKind, base: number): Promise<string | null> => {
+      const result = await releaseHold(draftId, kind, base);
+      await load();
+      if (result.ok) return null;
+      if (refusalReason(result.refusal) === "brief-changed") return "A newer brief replaced this one. The newest is below.";
+      return `It could not be put back: ${result.refusal.error}`;
+    },
+    [draftId, load],
+  );
+
+  async function stopWaitingFor(kind: DraftKind) {
+    setWaitError(null);
+    const result = await stopWaiting(draftId, kind);
+    if (!result.ok) setWaitError(`It is still waiting: ${result.refusal.error}`);
+    void load();
+  }
+
+  // Arriving from Extend, from Talk it through on a failed job, or from a
+  // video's Change: the opener left for this draft, taken once so a reload
+  // never sends it again, and sent only into a conversation that is still
+  // empty. A page that leaves one while this conversation is already open
+  // says so with `OPENER_EVENT`, and it is taken then.
+  const takeWaitingOpener = useCallback(
+    (current: DraftView) => {
+      const store = sessionStore();
+      const opener = takeOpener(store, draftId);
+      if (opener === null) return;
+      // Arrived: a reload of the press that made this draft may now mint a new one.
+      if (opener.source !== null) forgetExtendKey(store, opener.source);
+      const composed = openerValue(opener);
+      if (composed !== null) {
+        // The composer first, chips ahead of the words, and a send that leaves
+        // it alone: a message queued during the read and a second one still
+        // being typed both survive. The composer may not be on screen yet (the
+        // panel is showing a job, or the field is still loading); it builds
+        // itself from this value when it mounts.
+        // In front of anything already typed, never over it.
+        setValue((held) => prependValue(composed, held));
+        focusComposerSoon();
+      }
+      if (opener.send !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
+        void sendRef.current({ text: opener.send, mentions: [] }, { keepComposer: true });
+      }
+    },
+    [draftId, focusComposerSoon],
+  );
+
   const opened = useRef(false);
   useEffect(() => {
     if (!ready || view === null || opened.current) return;
     opened.current = true;
-    const store = sessionStore();
-    const opener = takeOpener(store, draftId);
-    if (opener === null) return;
-    // Arrived: a reload of the press that made this draft may now mint a new one.
-    if (opener.source !== null) forgetExtendKey(store, opener.source);
-    // The composer first, and a send that leaves it alone: a message queued
-    // during the read and a second one still being typed both survive.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (opener.compose !== "") setText(opener.compose);
-    if (opener.send !== null && isEmptyConversation(view.transcript) && !view.inFlight) {
-      void send(opener.send, { keepComposer: true });
+    takeWaitingOpener(view);
+  }, [ready, view, takeWaitingOpener]);
+
+  const viewRef = useRef<DraftView | null>(null);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  useEffect(() => {
+    const onOpener = (event: Event) => {
+      const detail = (event as CustomEvent<{ draftId?: unknown }>).detail;
+      if (detail?.draftId !== draftId || viewRef.current === null) return;
+      takeWaitingOpener(viewRef.current);
+    };
+    window.addEventListener(OPENER_EVENT, onOpener);
+    return () => window.removeEventListener(OPENER_EVENT, onOpener);
+  }, [draftId, takeWaitingOpener]);
+
+  /**
+   * Cmd or Ctrl+Enter (T9). From inside a card it presses that card. From
+   * the composer, words are sent; from an empty composer the one live card is
+   * pressed, and with two nothing is pressed: focus moves to Make both (or the
+   * first card) and a screen reader hears that two briefs are ready.
+   */
+  function modEnter(from: EventTarget | null) {
+    const inCard = from instanceof Element ? from.closest<HTMLElement>("[data-card]") : null;
+    if (inCard !== null) {
+      const kind = inCard.dataset.card;
+      const card = cards.find((candidate) => candidate.kind === kind && String(candidate.seq) === inCard.dataset.seq);
+      if (card !== undefined && card.block === null) void press(card);
+      return;
     }
-    // `send` is this render's; the guard makes this run once whatever changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, view, draftId]);
+    const plan = modEnterPlan(isEmptyValue(value), cards);
+    if (plan.action === "send") void send(value);
+    else if (plan.action === "press") void press(plan.card);
+    else if (plan.action === "announce") {
+      // Focus stays where it is: a paid button with focus is one stray Space
+      // from a job. Said again even when the words have not changed.
+      setAnnounce("");
+      requestAnimationFrame(() => setAnnounce(TWO_READY));
+    }
+  }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // Cmd or Ctrl+Enter presses a live Draw from anywhere in the panel, and
-    // only while the composer is empty: words there are a correction to send,
-    // not a reason to pay for the old brief. The composer handles its own and
-    // marks the event, so nothing is pressed twice.
+    // The composer handles its own and marks the event, so nothing is pressed twice.
     if (event.defaultPrevented || event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-    if (modEnterAction(text, drawReady) !== "draw") return;
+    if (cards.length === 0) return;
     event.preventDefault();
-    void draw();
+    modEnter(event.target);
   }
 
   /* ---------------------------------------------------------------- */
@@ -449,11 +723,11 @@ export function DraftPanel({
   if (status === "gone") {
     return (
       <>
-        <DialogHeader title="New diagram" />
+        <DialogHeader title="New conversation" />
         <Empty>
           <p className="text-[15px] text-text">{GONE}</p>
           <Button onClick={() => void startDraft()} disabled={starting}>
-            New diagram
+            New conversation
           </Button>
           <Failure text={startError} />
         </Empty>
@@ -481,7 +755,7 @@ export function DraftPanel({
   if (status !== "ready" || view === null) {
     return (
       <>
-        <DialogHeader title="New diagram" />
+        <DialogHeader title="New conversation" />
         <Empty>
           {status === "loading" ? (
             <p className="text-[14px] text-text3" role="status">
@@ -501,13 +775,20 @@ export function DraftPanel({
     );
   }
 
-  const sourceTitle = view.source === null ? null : (titleOf(titles, view.source) ?? view.source);
-  const title = view.title ?? liveBrief?.title ?? (sourceTitle === null ? "New diagram" : `Extending ${sourceTitle}`);
+  const diagramSource = view.sourceKind === undefined || view.sourceKind === "diagram";
+  const sourceTitle =
+    view.source === null ? null : ((diagramSource ? titleOf(titles, view.source) : titleOf(videoTitles, view.source)) ?? view.source);
+  const newestTitle = cards.at(-1)?.brief.title ?? null;
+  const title =
+    view.title ??
+    newestTitle ??
+    (sourceTitle === null ? "New conversation" : diagramSource ? `Extending ${sourceTitle}` : `Changing ${sourceTitle}`);
 
   if (mode === "job" && jobId !== null) {
     const job = jobs.find((entry) => entry.jobId === jobId) ?? null;
     const settled = job !== null && (isTerminal(job.state) || job.state === "awaiting_review");
     const ended = job !== null && isTerminal(job.state);
+    const kind = job === null ? "diagram" : jobKind(job);
     return (
       <>
         <DialogHeader title={job?.title ?? title} meta={cost === null ? undefined : <span title={costTitle}>{cost}</span>} />
@@ -517,16 +798,16 @@ export function DraftPanel({
             <div className="flex flex-wrap items-center gap-3 border-b border-hair px-5 py-3">
               <p className="min-w-0 flex-1 text-[14px] text-text2">
                 {job.state === "accepted"
-                  ? "Accepted. Ask for a change or another diagram in the same conversation."
+                  ? "Accepted. Ask for a change or something new in the same conversation."
                   : job.state === "failed" || job.state === "interrupted"
-                    ? "The drawing did not pass. What the checks found is in the conversation."
+                    ? `${kind === "video" ? "The video" : "The drawing"} did not pass. What the checks found is in the conversation.`
                     : "Ask for a change, or start something new."}
               </p>
               <Button size="sm" href={panelHref(path, { job: null })}>
                 Back to the conversation
               </Button>
               <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
-                New diagram
+                New conversation
               </Button>
               <Failure text={startError} className="basis-full" />
             </div>
@@ -534,7 +815,7 @@ export function DraftPanel({
           <JobPanel jobId={jobId} path={path} embedded inConversation />
           {settled && !ended && (
             <p className="px-5 pb-5 text-[13px] text-text3">
-              Accept or Discard above. Either way, the conversation is where the next diagram starts.
+              Accept or Discard above. Either way, the conversation is where the next one starts.
             </p>
           )}
         </div>
@@ -543,10 +824,18 @@ export function DraftPanel({
   }
 
   const problem = threadProblem(view);
+  const problemKind = problemKindOf(view);
   const empty = isEmptyConversation(view.transcript) && pending === null;
   const composing = composerState(view, cap, pending !== null, empty, editing);
+  const valueBlock = valueSendBlock(value, empty);
+  const tooLong = lengthSendBlock(value, TEXT_LIMIT);
   const busy = view.inFlight || pending !== null;
-  const lastPerson = pending?.text ?? lastPersonText(view.transcript);
+  const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
+  const waiting = waitingKinds(view);
+  const suggested = suggestionsFor(view);
+  const options = mentionOptions(view, video);
+  const kinds = view.slots !== undefined;
+  const opening = kinds ? MENTION_OPENING_TURN : view.source === null ? MENTION_OPENING_TURN : EXTEND_OPENING_TURN;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
@@ -560,11 +849,11 @@ export function DraftPanel({
         aria-label="Conversation"
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
-        {view.source !== null && sourceTitle !== null && <PinnedDiagram name={view.source} title={sourceTitle} />}
+        {view.source !== null && sourceTitle !== null && (diagramSource ? <PinnedDiagram name={view.source} title={sourceTitle} /> : <PinnedVideo slug={view.source} title={sourceTitle} />)}
 
         {empty && (
           <TutorMessage label="Planner">
-            <p className="max-w-[60ch]">{view.source === null ? OPENING_TURN : EXTEND_OPENING_TURN}</p>
+            <p className="max-w-[60ch]">{view.source === null ? opening : diagramSource ? EXTEND_OPENING_TURN : CHANGE_OPENING_TURN}</p>
           </TutorMessage>
         )}
         {/* The corpus's topics are a way into a new diagram; an extend
@@ -575,8 +864,8 @@ export function DraftPanel({
               <Chip
                 key={suggestion.label}
                 onClick={() => {
-                  setText(suggestion.text);
-                  composer.current?.focus();
+                  setValue(topicSuggestionValue(suggestion.label));
+                  focusComposerSoon();
                 }}
               >
                 {suggestion.label}
@@ -591,29 +880,33 @@ export function DraftPanel({
             entry={entry}
             view={view}
             topics={topics}
-            block={entry.seq === liveSeq ? block : null}
-            busy={drawing}
+            jobs={jobs}
+            cards={cards}
+            both={both !== null && both.seq === entry.seq ? both : null}
+            makeBothLive={both !== null}
+            pressing={pressing}
+            refused={refused}
+            entries={entries}
             answering={view.inFlight || pending !== null}
             onSave={saveEdit}
+            onUse={takeOffHold}
             onEditingChange={setEditing}
-            onEditNewest={
-              entry.seq !== liveSeq && liveSeq !== null && cardEditable(cardStatus(view, liveSeq))
-                ? () => thread.current?.querySelector<HTMLButtonElement>("[data-card-edit]")?.click()
-                : undefined
-            }
-            refusal={
-              refused !== null && refused.seq === entry.seq
-                ? { text: refusalNoted(refused, entries) ? null : refused.text, holder: refused.holder }
-                : null
-            }
-            onDraw={() => void draw()}
+            onPress={(card) => void press(card)}
+            onPressBoth={() => void pressBoth()}
+            bothError={bothError}
+            waiting={waiting}
             path={path}
-            jobs={jobs}
+            suggest={suggested !== null && suggested.seq === entry.seq ? suggested.kinds : null}
+            unavailable={(kind) => kindUnavailable(kind, view, video)}
+            onSuggest={(kind) => composer.current?.insertMention(kind)}
+            singleCard={cards.length <= 1}
           />
         ))}
 
         {pending !== null && !view.transcript.some((entry) => entry.seq === pending.seq) && (
-          <UserMessage>{pending.text}</UserMessage>
+          <UserMessage>
+            <Sentence value={pending.value} />
+          </UserMessage>
         )}
 
         {busy && (
@@ -626,8 +919,9 @@ export function DraftPanel({
         {problem !== null && !busy && (
           <Problem
             problem={problem}
-            onRetry={lastPerson === null ? null : () => void send(lastPerson)}
-            onAskAgain={problem.case === "E6" ? () => void send(askAgainText(problem)) : null}
+            kind={problemKind}
+            onRetry={lastPerson === null ? null : () => void send(lastPerson, { keepComposer: true })}
+            onAskAgain={problem.case === "E6" ? () => void send(askAgainValue(problem, kinds ? problemKind : null), { keepComposer: true }) : null}
             blocked={editing ? EDITING_BRIEF : null}
             onStartOver={() => setConfirmStartOver(true)}
             cutOffShown={entries.at(-1)?.interrupted === true}
@@ -644,28 +938,50 @@ export function DraftPanel({
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text">
             <span className="min-w-0 flex-1">
               This conversation has reached its {view.turnCap}-turn limit.
-              {drawIsLive ? " The last brief can still be drawn." : ""}
+              {cards.length > 0 ? " The last brief can still be made." : ""}
             </span>
             <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
-              New diagram
+              New conversation
             </Button>
           </div>
         )}
       </div>
 
       <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
-        <Composer
-          value={text}
-          onChange={setText}
-          onSubmit={(value) => void send(value)}
-          label="Tell the planner what the diagram should show"
+        {waiting.length > 0 && (
+          <div className="mb-2 flex flex-col gap-1 px-1">
+            {waiting.map((item) => (
+              <p key={item.kind} className="flex flex-wrap items-center gap-x-3 text-[12px] leading-4 text-text2">
+                <span className="font-semibold">{waitingLine(item.kind)}</span>
+                <button
+                  type="button"
+                  onClick={() => void stopWaitingFor(item.kind)}
+                  className="font-medium text-accent-text underline-offset-4 hover:underline"
+                >
+                  Stop waiting
+                </button>
+              </p>
+            ))}
+            {waitError !== null && (
+              <p role="alert" className="text-[12px] text-danger">
+                {waitError}
+              </p>
+            )}
+          </div>
+        )}
+        <MentionComposer
+          handleRef={composer}
+          value={value}
+          onChange={setValue}
+          onSubmit={(next) => void send(next)}
+          label="Tell the planner about your idea"
           placeholder={composing.placeholder}
-          maxLength={TEXT_LIMIT}
+          mentions={options}
+          mentionHint={MENTION_HINT}
           disabled={composing.disabled}
-          sendDisabled={composing.sendDisabled}
-          disabledReason={composing.reason ?? undefined}
-          inputRef={composer}
-          onModEnter={drawReady ? () => void draw() : undefined}
+          sendDisabled={composing.sendDisabled || valueBlock !== null || tooLong !== null}
+          disabledReason={composing.reason ?? valueBlock ?? tooLong ?? undefined}
+          onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
           {confirmStartOver ? (
@@ -688,6 +1004,9 @@ export function DraftPanel({
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
           <Failure text={startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)} className="basis-full" />
         </div>
+        <p role="status" aria-live="polite" className="sr-only">
+          {announce}
+        </p>
       </div>
     </div>
   );
@@ -695,62 +1014,194 @@ export function DraftPanel({
 
 /* -------------------------------------------------------------------------- */
 
+/** The kind E6 is about: the refused brief's own, when the runner names one. */
+function problemKindOf(view: Pick<DraftView, "transcript" | "error">): DraftKind | null {
+  if (view.error?.briefKind !== undefined) return view.error.briefKind;
+  const last = visibleEntries(view.transcript).at(-1);
+  const kind = last?.briefInvalid?.kind ?? last?.briefsInvalid?.find((item) => !item.retried)?.kind;
+  return kind ?? null;
+}
+
+/** A sent message's words, with its chips drawn back where they were (D57). */
+function Sentence({ value, waiting = [] }: { value: MentionValue<DraftKind>; waiting?: readonly DraftKind[] }) {
+  return (
+    <>
+      {inlinePieces(value).map((piece, at) =>
+        piece.type === "text" ? (
+          <span key={at}>{piece.text}</span>
+        ) : (
+          <MentionChip key={at} name={KIND_NAME[piece.kind] ?? piece.kind} icon={piece.kind} waiting={waiting.includes(piece.kind)} />
+        ),
+      )}
+    </>
+  );
+}
+
 function Entry({
   entry,
   view,
   topics,
-  block,
-  busy,
-  refusal,
-  onDraw,
-  path,
   jobs,
-  onSave,
-  onEditingChange,
-  onEditNewest,
+  cards,
+  both,
+  makeBothLive,
+  pressing,
+  refused,
+  entries,
   answering,
+  onSave,
+  onUse,
+  onEditingChange,
+  onPress,
+  onPressBoth,
+  bothError,
+  waiting,
+  path,
+  suggest,
+  unavailable,
+  onSuggest,
+  singleCard,
 }: {
-  jobs: readonly Job[];
   entry: TranscriptEntry;
   view: DraftView;
   topics: readonly TopicOption[];
-  block: ReturnType<typeof drawBlock>;
-  busy: boolean;
-  refusal: { text: string | null; holder: string | null } | null;
-  onDraw: () => void;
-  path: string;
-  onSave: (brief: Brief, base: number) => Promise<SaveOutcome>;
-  onEditingChange: (editing: boolean) => void;
-  onEditNewest?: () => void;
+  jobs: readonly Job[];
+  cards: readonly LiveCard[];
+  /** Make both, on the entry it sits under. */
+  both: ReturnType<typeof makeBoth>;
+  /** Whether Make both is shown anywhere in the thread. */
+  makeBothLive: boolean;
+  pressing: ReadonlySet<DraftKind>;
+  refused: Partial<Record<CardKey, DrawRefusal & { seq: number }>>;
+  entries: readonly TranscriptEntry[];
   /** A person turn is in flight: sent, or being answered. */
   answering: boolean;
+  onSave: (brief: Brief | TranscriptBrief["brief"], base: number, kind: DraftKind) => Promise<SaveOutcome>;
+  onUse: (kind: DraftKind, base: number) => Promise<string | null>;
+  onEditingChange: (editing: boolean) => void;
+  onPress: (card: LiveCard) => void;
+  onPressBoth: () => void;
+  bothError: string | null;
+  waiting: readonly { kind: DraftKind; requestSeq: number }[];
+  path: string;
+  /** The kinds the newest reply suggests, on that reply only. */
+  suggest: readonly DraftKind[] | null;
+  unavailable: (kind: DraftKind) => string | null;
+  onSuggest: (kind: DraftKind) => void;
+  /** Whether at most one card is live, so Cmd+Enter presses it. */
+  singleCard: boolean;
 }) {
-  if (entry.role === "person") return <UserMessage>{entry.text}</UserMessage>;
-  const status = entry.brief === undefined ? null : cardStatus(view, entry.seq);
-  const card =
-    entry.brief !== undefined && status !== null ? (
-      <ConfirmCard
-        brief={entry.brief}
-        pendingTopic={cardPendingTopic(status, entry, view)}
-        status={status}
-        topics={topics}
-        block={block}
-        busy={busy}
-        refusal={refusal}
-        onDraw={onDraw}
-        onSave={(brief) => onSave(brief, entry.seq)}
-        onEditingChange={onEditingChange}
-        onEditNewest={onEditNewest}
-        editBlock={answering ? STILL_ANSWERING : busy ? "Draw was just pressed." : null}
-        jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
-        holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
-        sourceChanged={view.sourceChanged === true}
-      />
-    ) : null;
+  if (entry.role === "person") {
+    const tagged = waiting.filter((item) => item.requestSeq === entry.seq).map((item) => item.kind);
+    return (
+      <UserMessage>
+        <Sentence value={entryValue(entry)} waiting={tagged} />
+      </UserMessage>
+    );
+  }
+
+  const briefs = entryBriefs(entry);
+  // With a pair live, Make both is the press the person most likely wants, so
+  // it is the one primary button and each card's own press steps back.
+  const pairedHere = cards.length === 2 && makeBothLive;
+  const renderCard = (item: TranscriptBrief) => {
+    const status: KindCardStatus = kindCardStatus(view, entry.seq, item.kind, jobs);
+    const live = cards.find((card) => card.kind === item.kind && card.seq === entry.seq) ?? null;
+    const block: DrawBlock | null = live?.block ?? null;
+    const key = cardKey(entry.seq, item.kind);
+    const refusal = refused[key];
+    const shownRefusal =
+      refusal === undefined ? null : { text: refusalNoted(refusal, entries) ? null : refusal.text, holder: refusal.holder };
+    const slot = view.slots?.[item.kind] ?? null;
+    const jobIdOf = slot?.jobId ?? (view.slots === undefined ? view.jobId : null);
+    const job = jobIdOf === null ? undefined : jobs.find((candidate) => candidate.jobId === jobIdOf);
+    const jobHref = jobIdOf === null ? null : panelHref(path, { job: jobIdOf });
+    const running = job !== undefined && !isTerminal(job.state);
+    const pendingTopic = kindPendingTopic(status, item.kind, entry, view);
+    const holdReason = slot?.held?.reason ?? null;
+    const editBlock = answering ? STILL_ANSWERING : pressing.has(item.kind) ? "The press is under way." : null;
+    const paired = pairedHere;
+    const holderHref = (holder: string) => panelHref(path, jobPatch(holder, { draftId: view.draftId, jobId: jobIdOf }, jobs));
+    const inner =
+      item.kind === "diagram" ? (
+        <ConfirmCard
+          brief={item.brief}
+          pendingTopic={pendingTopic}
+          status={status}
+          topics={topics}
+          block={block}
+          busy={pressing.has("diagram")}
+          refusal={shownRefusal}
+          onDraw={() => live !== null && onPress(live)}
+          onSave={(brief) => onSave(brief, entry.seq, "diagram")}
+          onEditingChange={onEditingChange}
+          editBlock={editBlock}
+          jobHref={jobHref}
+          jobRunning={running}
+          holderHref={holderHref}
+          sourceChanged={view.sourceChanged === true}
+          holdReason={holdReason}
+          onUse={() => onUse("diagram", entry.seq)}
+          paired={paired}
+          keyShortcut={singleCard}
+        />
+      ) : (
+        <ConfirmCardVideo
+          brief={item.brief}
+          pendingTopic={pendingTopic}
+          status={status}
+          topics={topics}
+          block={block}
+          busy={pressing.has("video")}
+          refusal={shownRefusal}
+          onPress={() => live !== null && onPress(live)}
+          onUse={() => onUse("video", entry.seq)}
+          onPutBack={async () => {
+            const outcome = await onSave(item.brief, entry.seq, "video");
+            return outcome.ok ? null : `It could not be put back: ${outcome.refusal.error}`;
+          }}
+          holdReason={holdReason}
+          jobHref={jobHref}
+          jobRunning={running}
+          holderHref={holderHref}
+          runnerAbbreviations={item.abbreviations}
+          keyShortcut={singleCard}
+          editBlock={editBlock}
+          paired={paired}
+          replacing={live?.replaces != null}
+        />
+      );
+    return (
+      <div key={item.kind} data-card={item.kind} data-seq={entry.seq}>
+        {inner}
+      </div>
+    );
+  };
+
+  // A partly refused reply: the kind being retried shows where its card will be.
+  const retrying = view.inFlight
+    ? [...(entry.briefsInvalid ?? []), ...(entry.briefInvalid !== undefined ? [entry.briefInvalid] : [])]
+        .filter((item) => item.retried && item.kind !== undefined && !briefs.some((brief) => brief.kind === item.kind))
+        .map((item) => item.kind as DraftKind)
+    : [];
+  const cardsHere =
+    briefs.length === 0 && retrying.length === 0 && both === null ? null : (
+      <div className="flex flex-col gap-3">
+        {briefs.map(renderCard)}
+        {both !== null && <MakeBothButton label={both.label} busy={pressing.size > 0} error={bothError} onPress={onPressBoth} />}
+        {retrying.map((kind) => (
+          <p key={kind} className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
+            Checking the {kind} brief
+            <Dots />
+          </p>
+        ))}
+      </div>
+    );
+
   if (entry.role === "studio") {
     // The runner speaking: a centred line, not a bubble and not a third voice.
-    // A person's own edit of the brief is one of these, and carries the
-    // stored brief as the card under it (phase 3).
+    // A person's own edit of a brief is one of these, and carries the stored
+    // brief as the card under it (phase 3).
     return (
       <div className="flex flex-col gap-3">
         {/* An edit's note lists its changes one to a line, which reads as a
@@ -758,13 +1209,13 @@ function Entry({
         <p
           className={cx(
             "mx-auto max-w-[56ch] whitespace-pre-wrap text-[13px] leading-5 text-text3",
-            card === null ? "text-center" : "w-fit text-left",
+            cardsHere === null ? "text-center" : "w-fit text-left",
           )}
         >
           <span className="sr-only">Studio: </span>
           {entry.text}
         </p>
-        {card !== null && <div className="px-1.5">{card}</div>}
+        {cardsHere !== null && <div className="px-1.5">{cardsHere}</div>}
       </div>
     );
   }
@@ -773,8 +1224,49 @@ function Entry({
     <TutorMessage label="Planner">
       {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
       {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
-      {card !== null && <div className="mt-3">{card}</div>}
+      {cardsHere !== null && <div className="mt-3">{cardsHere}</div>}
+      {suggest !== null && suggest.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="Suggested">
+          {suggest.map((kind) => {
+            const reason = unavailable(kind);
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => onSuggest(kind)}
+                disabled={reason !== null}
+                title={reason ?? undefined}
+                aria-label={suggestionName(kind)}
+                className={chipClasses({ size: "sm", className: "disabled:cursor-not-allowed disabled:opacity-50" })}
+              >
+                <Glyph name={kind} size={16} className="text-accent-text" />
+                {KIND_NAME[kind]}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </TutorMessage>
+  );
+}
+
+/** Make both: a primary button under the later card of a pair asked for together (D60). */
+function MakeBothButton({ label, busy, error, onPress }: { label: string; busy: boolean; error: string | null; onPress: () => void }) {
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <div>
+        <Button onClick={onPress} disabled={busy} data-make-both>
+          {busy ? "Queuing both…" : label}
+        </Button>
+      </div>
+      {error === null ? (
+        <p className="text-[12px] leading-4 text-text3">Starts the diagram and the video together. Nothing is spent until you press it.</p>
+      ) : (
+        <p role="alert" className="text-[13px] leading-5 text-text">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -833,6 +1325,7 @@ function Dots() {
 /** E1, E2 and E6: a `--warn-tint` card at the foot of the thread, with what to do. */
 function Problem({
   problem,
+  kind = null,
   onRetry,
   onAskAgain,
   onStartOver,
@@ -840,6 +1333,8 @@ function Problem({
   blocked,
 }: {
   problem: ThreadProblem;
+  /** The kind E6's refused brief was, when the runner names it. */
+  kind?: DraftKind | null;
   /**
    * Why a paid resend waits, or null: the brief is being edited, and a reply
    * may carry a new brief that retires the card with the edits on it.
@@ -875,7 +1370,9 @@ function Problem({
       {problem.case === "E2" && <p>{problem.text}</p>}
       {problem.case === "E6" && (
         <>
-          <p className="font-semibold">The planner&apos;s brief did not pass the studio&apos;s checks twice.</p>
+          <p className="font-semibold">
+            The planner&apos;s {kind === null ? "" : `${kind} `}brief did not pass the studio&apos;s checks twice.
+          </p>
           <p className="break-words font-mono text-[12px] text-text2">{problem.text}</p>
         </>
       )}
@@ -902,7 +1399,7 @@ function Problem({
   );
 }
 
-/** Why New diagram or Start over did nothing, where the press was. */
+/** Why New conversation or Start over did nothing, where the press was. */
 function Failure({ text, className }: { text: string | null; className?: string }) {
   if (text === null) return null;
   return (

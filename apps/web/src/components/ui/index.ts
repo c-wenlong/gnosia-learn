@@ -1,7 +1,9 @@
 /**
  * The redesign's primitives. Every one is safe in a server component except
  * `FilterMenu` and `Composer`, client components that take an `onChange` and
- * so are rendered from another client component; the contract (names and props) is written
+ * so are rendered from another client component (`MentionComposer` is one too,
+ * and deliberately not exported here: it carries Lexical, which only `/studio`
+ * should load); the contract (names and props) is written
  * down in docs/design/IMPLEMENTATION.md.
  */
 export { Button, type ButtonProps } from "./Button";
@@ -13,6 +15,7 @@ export { Divider } from "./Divider";
 export { Eyebrow } from "./Eyebrow";
 export { FeedbackBar } from "./FeedbackBar";
 export { FilterMenu } from "./FilterMenu";
+export { Glyph, type GlyphName } from "./Glyph";
 export { Input } from "./Input";
 export { MasteryDot } from "./MasteryDot";
 export { Panel } from "./Panel";

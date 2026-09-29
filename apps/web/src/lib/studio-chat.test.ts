@@ -262,6 +262,12 @@ describe("Draw", () => {
     expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "open" } }).text).toMatch(/no brief/);
     expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "drawing" } }).text).toMatch(/already in progress/);
     expect(drawRefusal(409, { error: "x", detail: { reason: "in-flight" } }).text).toMatch(/still answering/);
+    expect(drawRefusal(409, { error: "x", detail: { reason: "change-not-in-conversation", kind: "video", slug: "tcp-handshake" } }).text).toBe(
+      "This brief changes tcp-handshake, which this conversation did not open on or make. Start the change from that video's Change, or ask for a new video here.",
+    );
+    expect(drawRefusal(400, { error: "items must be a list", detail: { field: "items" } }).text).toBe(
+      "Make both was sent without its two cards. Press each card on its own.",
+    );
     expect(drawRefusal(409, { error: "x", detail: { reason: "draw-in-progress" } }).text).toMatch(/just pressed/);
     expect(drawRefusal(409, { error: 'a new topic can only be created as "local"', detail: { reason: "topic-owner" } }).text).toBe(
       'A new topic can only be created as "local".',
@@ -410,5 +416,53 @@ describe("the composer after a refused turn", () => {
   it("puts a turn that never was in the composer in front of what it holds, so neither is lost", () => {
     expect(wordsBack("and label the angle", "Add the projection", true)).toBe("Add the projection\nand label the angle");
     expect(wordsBack("", "Add the projection", true)).toBe("Add the projection");
+  });
+});
+
+describe("tags (docs/STUDIO-MENTIONS.md)", () => {
+  it("hides suggest and hold blocks from the prose, and does not call them a brief being checked", () => {
+    const reply = "A picture would help here.\n\n```suggest\n{\"kinds\": [\"diagram\"]}\n```\n\n```hold\n{\"kinds\": [\"video\"], \"reason\": \"wrong topic\"}\n```";
+    expect(splitReply(reply)).toEqual({ prose: "A picture would help here.", hadBrief: false, checking: false });
+    expect(splitReply("Try one.\n```sugg", true)).toEqual({ prose: "Try one.", hadBrief: false, checking: false });
+    expect(splitReply("Here.\n```suggest\n{\"kinds\"", true).checking).toBe(false);
+    expect(splitReply("Here.\n```brief\n{\"kind\"", true).checking).toBe(true);
+  });
+
+  it("takes messages while a job runs once the runner has slots (C14 lifted), and opens as a chat", () => {
+    const drawing = { ...view({ state: "drawing", jobId: "j1" }), slots: {} };
+    const state = composerState(drawing, null, false, false);
+    expect(state.disabled).toBe(false);
+    expect(state.placeholder).toBe("Reply, or type @ to make something");
+    expect(composerState({ ...drawing, state: "open", jobId: null }, null, false, true).placeholder).toBe(
+      "Ask about an idea, or type @ to make something",
+    );
+    expect(composerState(view({ state: "drawing", jobId: "j1" }), null).disabled).toBe(true);
+  });
+});
+
+describe("Start over with per-kind slots (Greptile on #204)", () => {
+  it("leaves a drawing draft alone and opens a new one, where the old runner refused", () => {
+    expect(startOverStep("drawing", true)).toBe("skip");
+    expect(startOverStep("drawing")).toBe("refuse");
+    expect(startOverStep("briefed", true)).toBe("abandon");
+  });
+});
+
+describe("the press refusals #207 adds", () => {
+  it("words kind-busy, held and a video's not-briefed", () => {
+    expect(drawRefusal(409, { error: "busy", detail: { reason: "kind-busy", kind: "video", jobId: "v1", state: "awaiting_review" } })).toEqual({
+      text: "The video from this conversation is waiting for review. Accept, discard or cancel it first.",
+      holder: "v1",
+      error: "busy",
+    });
+    expect(drawRefusal(409, { error: "busy", detail: { reason: "kind-busy", kind: "diagram", jobId: "j1", state: "running" } }).text).toBe(
+      "The diagram from this conversation is still being drawn. Accept, discard or cancel it first.",
+    );
+    expect(drawRefusal(409, { error: "held", detail: { reason: "held", kind: "video", held: { reason: "You said the topic is wrong" } } }).text).toBe(
+      "This brief is on hold: You said the topic is wrong. Press Use this brief to make it, or ask for a new one.",
+    );
+    expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", kind: "video", state: "open" } }).text).toBe(
+      "There is no video brief to make right now.",
+    );
   });
 });

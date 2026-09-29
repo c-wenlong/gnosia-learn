@@ -80,3 +80,25 @@ describe("stateWords", () => {
     ]);
   });
 });
+
+describe("kinds (docs/STUDIO-MENTIONS.md)", () => {
+  it("carries a draft's kinds for its glyphs, and says a briefed video is ready to make", () => {
+    const base = {
+      draftId: "d1",
+      kind: "video" as const,
+      state: "briefed" as const,
+      title: "How attention weights are computed",
+      source: null,
+      turns: 2,
+      costUsd: null,
+      updated: "2026-09-29T00:00:00Z",
+      jobId: null,
+    };
+    const [row] = draftRows([{ ...base, kinds: ["diagram", "video", "nope" as never, "video"] }]);
+    expect(row!.kinds).toEqual(["diagram", "video"]);
+    expect(row!.state).toBe("Ready to make");
+    expect(draftRows([base])[0]!.kinds).toEqual([]);
+    expect(stateWords("briefed", ["diagram"])).toBe("Ready to draw");
+  });
+});
+

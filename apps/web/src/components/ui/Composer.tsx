@@ -4,7 +4,7 @@ import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, typ
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { composerHeight, composerKey, COMPOSER_MAX_ROWS, modEnterTarget } from "./composer-keys";
+import { COMPOSER_FRAME, COMPOSER_MAX_ROWS, COMPOSER_REASON, COMPOSER_TEXT, composerHeight, composerKey, modEnterTarget } from "./composer-keys";
 
 /**
  * Kit composer: the chat input the concept tutor and the studio's planner
@@ -126,8 +126,9 @@ export function Composer({
           autoComplete="off"
           aria-describedby={reason === null ? undefined : reasonId}
           className={cx(
-            "block h-[52px] w-full min-w-0 resize-none rounded-2xl border-2 border-border bg-surface px-4 py-3",
-            "text-[15px] leading-6 text-text outline-none transition-colors duration-100",
+            "block h-[52px] w-full min-w-0 resize-none px-4 py-3 outline-none",
+            COMPOSER_FRAME,
+            COMPOSER_TEXT,
             "placeholder:text-text3 focus:border-accent disabled:cursor-not-allowed disabled:opacity-60",
           )}
         />
@@ -141,7 +142,7 @@ export function Composer({
       </div>
       </div>
       {reason !== null && (
-        <p id={reasonId} className="px-1 text-[12px] leading-4 text-text2">
+        <p id={reasonId} className={COMPOSER_REASON}>
           {reason}
         </p>
       )}

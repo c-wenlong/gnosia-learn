@@ -142,6 +142,11 @@ export interface StudioView {
    * that job with a bar back to the conversation, which is where Draw leads.
    */
   draft: string | null;
+  /**
+   * The studio's settings panel (`?settings=1`): the agents' model and effort
+   * (D53 of docs/STUDIO-VIDEOS.md). In the URL like every other panel.
+   */
+  settings: boolean;
 }
 
 export const DEFAULT_VIEW: StudioView = {
@@ -160,6 +165,7 @@ export const DEFAULT_VIEW: StudioView = {
   stream: true,
   shot: null,
   draft: null,
+  settings: false,
 };
 
 /** Next hands a repeated parameter as an array and a single one as a string. */
@@ -201,6 +207,7 @@ export function parseView(params: RawParams): StudioView {
     layout: member(one(params.view), LAYOUTS, DEFAULT_VIEW.layout),
     selected: one(params.sel),
     panel: flag(one(params.panel), DEFAULT_VIEW.panel),
+    settings: one(params.settings) === "1",
     ...parsePanel(params),
   };
 }
@@ -254,6 +261,7 @@ export function studioHref(view: StudioView, patch: Partial<StudioView> = {}): s
   if (next.draft !== null) params.set("draft", next.draft);
   if (!next.stream) params.set("stream", "off");
   if (next.shot !== null && next.job !== null) params.set("shot", next.shot);
+  if (next.settings) params.set("settings", "1");
   const query = params.toString();
   return query === "" ? "/studio" : `/studio?${query}`;
 }
@@ -275,10 +283,15 @@ export function panelHref(
     shot?: "before" | "after" | null;
     draft?: string | null;
     selected?: string | null;
+    settings?: boolean;
   },
 ): string {
   const [base, existing] = path.split("?");
   const params = new URLSearchParams(existing ?? "");
+  if (patch.settings !== undefined) {
+    if (patch.settings) params.set("settings", "1");
+    else params.delete("settings");
+  }
   if (patch.draft !== undefined) {
     if (patch.draft === null) params.delete("draft");
     else params.set("draft", patch.draft);
