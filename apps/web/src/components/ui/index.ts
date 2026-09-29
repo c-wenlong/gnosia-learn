@@ -26,6 +26,6 @@ export { StatTile, type StatTone } from "./StatTile";
 export { StreakDay } from "./StreakDay";
 export { TargetBar } from "./TargetBar";
 export { UnitHeader } from "./UnitHeader";
-export { buttonClasses, cardClasses, chipClasses, cx, inputClasses } from "./classes";
+export { buttonClasses, cardClasses, chipClasses, cx, inputClasses, LABEL } from "./classes";
 export type { ButtonSize, ButtonVariant, ChipSize } from "./classes";
 export type { FilterOption } from "./filter-menu";

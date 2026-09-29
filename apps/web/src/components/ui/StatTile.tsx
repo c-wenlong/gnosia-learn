@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { cx } from "./classes";
 
 /**
- * Kit `StatTile`, after Duolingo's lesson-complete cards: a coloured frame, an
- * uppercase strip naming the metric, and the value in a surface box. One
+ * Kit `StatTile`, after Duolingo's lesson-complete cards: a coloured frame, a
+ * strip naming the metric in sentence case (uppercase and tracked until
+ * 2026-09-29), and the value in a surface box. One
  * colour per metric on the close screen: right is `ok`, mastery `accent`,
  * review cards `violet`, target `streak`.
  *
@@ -37,7 +38,7 @@ export function StatTile({
 }) {
   return (
     <div className={cx("flex min-w-0 flex-1 flex-col rounded-2xl p-[3px]", className)} style={{ background: TONE[tone] }}>
-      <p className="flex h-[26px] items-center justify-center text-[11px] font-bold uppercase tracking-[0.05em] text-on-tone">
+      <p className="flex h-[26px] items-center justify-center text-[12px] font-bold text-on-tone">
         {label}
       </p>
       <p className="flex h-16 items-center justify-center rounded-[13px] bg-surface text-[26px] font-bold text-text tabular-nums">

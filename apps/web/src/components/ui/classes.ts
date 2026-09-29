@@ -27,6 +27,17 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
  */
 export const TRACK = "bg-track inset-ring inset-ring-border";
 
+/**
+ * A small label over a group, a list or a value: 12/600 in `--text2`,
+ * sentence case, no letter-spacing. The owner retired the kit's 11/700
+ * uppercase tracked eyebrow on 2026-09-29 (AGENTS.md, "Sentence case, and no
+ * label that repeats the page"). The capitals were what made the old label
+ * read as a label, so without them it takes `--text2`, which clears 4.5:1
+ * where `--text3` is a hint colour. `Eyebrow` renders it; a `<label>`, `<dt>`
+ * or `<th>` that cannot be an `Eyebrow` takes the class itself.
+ */
+export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
+
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "ok" | "warn" | "accent" | "brand";
 export type ButtonSize = "md" | "sm";
 
