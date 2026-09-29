@@ -6,7 +6,7 @@ import { MANUAL_SOURCE_DIR } from "../paths";
 
 import { LINT_RULES, STATIC_LINT_NAMES, type LintRule } from "./lints";
 import { compareLintNames, helperListing, lintNamesFromApi, type ApiEntry, type LintComparison } from "./listing";
-import { generatedOptions, STYLE_VALUES } from "./options";
+import { optionsSection } from "./options";
 
 /**
  * The tldraw manual the drawing agent's system prompt carries: the static
@@ -117,14 +117,22 @@ function snippetSection(): string {
     .trimEnd();
 }
 
+export type OptionsSource = "generated" | "static" | "mixed";
+
 export interface Manual {
   text: string;
   /** sha256 of `text`: the name of the file it is written to, and `manualHash` on a job. */
   hash: string;
   /** The helper count the listing carries. */
   helpers: number;
-  /** Where the options section came from this time. */
-  optionsSource: "generated" | "static";
+  /**
+   * Where the options section came from this time: `generated` when every
+   * helper with options had them listed by the tool, `static` when none did,
+   * `mixed` when some did (each helper falls back on its own).
+   */
+  optionsSource: OptionsSource;
+  /** The helpers whose options fell back to the static blocks. */
+  optionsFallback: string[];
   /** The rule names the tool reported, or null when its `getLints` summary named none. */
   lintNames: string[] | null;
   /** The difference from the static table, or null when there was nothing to compare. */
@@ -142,8 +150,7 @@ export function assembleManual(entries: readonly ApiEntry[]): Manual {
     lintNames === null
       ? LINT_RULES
       : lintNames.map((name) => LINT_RULES.find((rule) => rule.name === name) ?? unknownRule(name));
-  const generated = generatedOptions(entries);
-  const options = generated ?? section(sections, "60").replace("{{STYLE_VALUES}}", STYLE_VALUES);
+  const options = optionsSection(entries, section(sections, "60"));
 
   const text = [
     section(sections, "00"),
@@ -153,7 +160,7 @@ export function assembleManual(entries: readonly ApiEntry[]): Manual {
     section(sections, "40"),
     section(sections, "50"),
     helperListing(entries),
-    options,
+    options.text,
     lintSection(rules),
     snippetSection(),
     section(sections, "90"),
@@ -163,7 +170,9 @@ export function assembleManual(entries: readonly ApiEntry[]): Manual {
     text: `${text}\n`,
     hash: createHash("sha256").update(`${text}\n`).digest("hex"),
     helpers: entries.length,
-    optionsSource: generated === null ? "static" : "generated",
+    optionsSource:
+      options.generated.length === 0 ? "static" : options.fallback.length === 0 ? "generated" : "mixed",
+    optionsFallback: options.fallback,
     lintNames,
     lints,
   };
