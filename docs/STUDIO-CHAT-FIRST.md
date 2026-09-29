@@ -412,14 +412,15 @@ a cache read at 0.1x), and the 32 requests the real job made:
 | Less the `canvas api` result it replaces | $0.022 |
 | **Net** | **about $0.047**, against $0.81 for the measured job |
 
-**As built (2026-09-29).** The manual the runner assembles is **11,688
-tokens** (28,812 characters), measured the same way against `claude-sonnet-5`:
-the helper listing is the tool's own 22 entries with every usage line, and the
-options section, the part the measured job was missing, is about a fifth of
-it. At the prices above that is about $0.047 to write and $0.072 to read on
-31 requests, **about $0.10 net per 32-request attempt** after the `canvas api`
-result it replaces, against the $0.047 the draft predicted. Whether it earns
-that back is the phase 2 measurement below.
+**As built (2026-09-29, tldrawkc 95a2bb7).** The manual the runner assembles
+is **15,826 tokens** (38,286 characters), measured the same way against
+`claude-sonnet-5`. The options section, generated from the tool's own
+`api.json` since tldrawkc #18 and the part the measured job was missing, is
+13,657 characters of it; the helper listing, the tool's 22 entries with every
+usage line, is 5,514. At the prices above that is about $0.063 to write and
+$0.098 to read on 31 requests, **about $0.14 net per 32-request attempt** after
+the `canvas api` result it replaces, against the $0.047 the draft predicted.
+Whether it earns that back is the phase 2 measurement below.
 
 It is passed as a file, `--append-system-prompt-file
 $STUDIO_HOME/manual/<hash>.md`, rather than as argv text, and checked on the
@@ -1104,13 +1105,12 @@ Postgres up.
 - [x] The lint-name comparison and the three-snippet test (`/api/health`
       reports `manual: ok | stale | missing` with `manualDetail` naming the
       rule or snippet; the runner also runs the snippets after each new build)
-- [ ] A tldrawkc PR adding each helper's options to `api.json`, then the options
-      section generated from it; the submodule pointer bumped through
-      Workflow 1 of the root `AGENTS.md`. *The studio half is built:
-      `manual/options.ts` generates the section from an `options` field when
-      any helper carries one, and falls back to the static
-      `sections/60-options.md` when none does, which is today's build. The
-      tldrawkc PR and the pointer bump are still open*
+- [x] A tldrawkc PR adding each helper's options to `api.json` (tldrawkc #18,
+      the pointer bumped in #178), then the options section generated from it:
+      per helper, so a helper the tool lists no fields for keeps its static
+      block from `sections/60-options.md`. The value types (colours, fills,
+      dashes, sizes, and the helpers' own unions) stay a static list, because
+      `api.json` prints a type as written and never expands it
 - [x] The drawing spawn passes the manual with `--append-system-prompt-file`
 - [ ] Extend on the tile and in the tile's panel; the EXTENDING block from
       `inspect --json`
