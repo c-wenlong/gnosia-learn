@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { NoteProse } from "@/components/NoteProse";
-import { ConfirmCard } from "@/components/studio/ConfirmCard";
+import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
 import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
@@ -38,6 +38,7 @@ import {
   sendRefusal,
   splitReply,
   startOverStep,
+  STILL_ANSWERING,
   THINKING,
   threadProblem,
   turnIndicator,
@@ -54,12 +55,13 @@ import {
   getDraft,
   openDraftEvents,
   readDailyCap,
+  saveBrief,
   sendMessage,
   type DraftView,
   type TranscriptEntry,
 } from "@/lib/studio-drafts";
 import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, sessionStore, takeOpener } from "@/lib/studio-extend";
-import { isTerminal, type Job } from "@/lib/studio-jobs";
+import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
@@ -133,13 +135,14 @@ export function DraftPanel({
   const [refused, setRefused] = useState<(DrawRefusal & { seq: number }) | null>(null);
   const [confirmStartOver, setConfirmStartOver] = useState(false);
   const [startOverError, setStartOverError] = useState<string | null>(null);
+  /** The live brief is being edited on its card: Draw and Send wait. */
+  const [editing, setEditing] = useState(false);
   const composer = useRef<HTMLTextAreaElement | null>(null);
   const thread = useRef<HTMLDivElement | null>(null);
   const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
 
   const arriving = arrivingSource(draftId);
-  const topicMap = useMemo(() => new Map(topics.map((topic) => [topic.slug, topic])), [topics]);
 
   /* ---------------------------------------------------------------- */
   /* The record                                                        */
@@ -366,7 +369,27 @@ export function DraftPanel({
     await startDraft();
   }
 
-  const drawReady = drawIsLive && block === null;
+  const drawReady = drawIsLive && block === null && !editing;
+
+  /**
+   * The person's edit of the live brief (phase 3). Resolves once the record
+   * holds the result, so the card leaves editing as the stored brief appears
+   * under the runner's note, rather than showing the old brief for a moment.
+   * Focus then goes to the new card's Draw, the next thing to press.
+   */
+  const saveEdit = useCallback(
+    async (brief: Brief): Promise<SaveOutcome> => {
+      const result = await saveBrief(draftId, brief);
+      if (!result.ok) {
+        if (result.status === 404) setStatus("gone");
+        return { ok: false, status: result.status, refusal: result.refusal };
+      }
+      await load();
+      requestAnimationFrame(() => thread.current?.querySelector<HTMLElement>("[data-studio-draw]")?.focus());
+      return { ok: true };
+    },
+    [draftId, load],
+  );
 
   // Arriving from Extend, or from Talk it through on a failed job: the opener
   // left for this draft, taken once so a reload never sends it again, and
@@ -510,7 +533,7 @@ export function DraftPanel({
 
   const problem = threadProblem(view);
   const empty = isEmptyConversation(view.transcript) && pending === null;
-  const composing = composerState(view, cap, pending !== null, empty);
+  const composing = composerState(view, cap, pending !== null, empty, editing);
   const busy = view.inFlight || pending !== null;
   const lastPerson = pending?.text ?? lastPersonText(view.transcript);
 
@@ -556,9 +579,11 @@ export function DraftPanel({
             key={entry.seq}
             entry={entry}
             view={view}
-            topics={topicMap}
+            topics={topics}
             block={entry.seq === liveSeq ? block : null}
             busy={drawing}
+            onSave={saveEdit}
+            onEditingChange={setEditing}
             refusal={
               refused !== null && refused.seq === entry.seq
                 ? { text: refusalNoted(refused, entries) ? null : refused.text, holder: refused.holder }
@@ -662,50 +687,62 @@ function Entry({
   onDraw,
   path,
   jobs,
+  onSave,
+  onEditingChange,
 }: {
   jobs: readonly Job[];
   entry: TranscriptEntry;
   view: DraftView;
-  topics: ReadonlyMap<string, TopicOption>;
+  topics: readonly TopicOption[];
   block: ReturnType<typeof drawBlock>;
   busy: boolean;
   refusal: { text: string | null; holder: string | null } | null;
   onDraw: () => void;
   path: string;
+  onSave: (brief: Brief) => Promise<SaveOutcome>;
+  onEditingChange: (editing: boolean) => void;
 }) {
   if (entry.role === "person") return <UserMessage>{entry.text}</UserMessage>;
+  const status = entry.brief === undefined ? null : cardStatus(view, entry.seq);
+  const card =
+    entry.brief !== undefined && status !== null ? (
+      <ConfirmCard
+        brief={entry.brief}
+        pendingTopic={cardPendingTopic(status, entry, view)}
+        status={status}
+        topics={topics}
+        block={block}
+        busy={busy}
+        refusal={refusal}
+        onDraw={onDraw}
+        onSave={onSave}
+        onEditingChange={onEditingChange}
+        editBlock={view.inFlight ? STILL_ANSWERING : busy ? "Draw was just pressed." : null}
+        jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
+        holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
+        sourceChanged={view.sourceChanged === true}
+      />
+    ) : null;
   if (entry.role === "studio") {
     // The runner speaking: a centred line, not a bubble and not a third voice.
+    // A person's own edit of the brief is one of these, and carries the
+    // stored brief as the card under it (phase 3).
     return (
-      <p className="mx-auto max-w-[56ch] whitespace-pre-wrap text-center text-[13px] leading-5 text-text3">
-        <span className="sr-only">Studio: </span>
-        {entry.text}
-      </p>
+      <div className="flex flex-col gap-3">
+        <p className="mx-auto max-w-[56ch] whitespace-pre-wrap text-center text-[13px] leading-5 text-text3">
+          <span className="sr-only">Studio: </span>
+          {entry.text}
+        </p>
+        {card !== null && <div className="px-1.5">{card}</div>}
+      </div>
     );
   }
   const reply = splitReply(entry.text);
-  const status = entry.brief === undefined ? null : cardStatus(view, entry.seq);
   return (
     <TutorMessage label="Planner">
       {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
       {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
-      {entry.brief !== undefined && status !== null && (
-        <div className="mt-3">
-          <ConfirmCard
-            brief={entry.brief}
-            pendingTopic={cardPendingTopic(status, entry, view)}
-            status={status}
-            topics={topics}
-            block={block}
-            busy={busy}
-            refusal={refusal}
-            onDraw={onDraw}
-            jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
-            holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
-            sourceChanged={view.sourceChanged === true}
-          />
-        </div>
-      )}
+      {card !== null && <div className="mt-3">{card}</div>}
     </TutorMessage>
   );
 }

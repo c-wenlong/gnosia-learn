@@ -10,6 +10,7 @@ import {
   cardStatus,
   composerState,
   costLabel,
+  EDITING_BRIEF,
   drawBlock,
   drawLabel,
   cardPendingTopic,
@@ -186,6 +187,16 @@ describe("composerState", () => {
   it("disables only Send while a reply arrives", () => {
     expect(composerState(view({ inFlight: true }), null)).toMatchObject({ disabled: false, sendDisabled: true, reason: STILL_ANSWERING });
     expect(composerState(view(), null, true)).toMatchObject({ sendDisabled: true });
+  });
+
+  it("holds Send, not typing, while the brief is edited on its card", () => {
+    expect(composerState(view(), null, false, false, true)).toMatchObject({
+      disabled: false,
+      sendDisabled: true,
+      reason: EDITING_BRIEF,
+    });
+    // A reply in flight says so first: it is what the person is waiting on.
+    expect(composerState(view({ inFlight: true }), null, false, false, true).reason).toBe(STILL_ANSWERING);
   });
 
   it("closes for a drawing, the turn cap, the daily cap and an abandoned draft, in that order", () => {
