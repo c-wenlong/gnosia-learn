@@ -46,6 +46,7 @@ export function DiagramView({
   statusHref,
   title,
   caption,
+  heading = true,
 }: {
   /** Already resolved by the caller. */
   src: string;
@@ -54,6 +55,12 @@ export function DiagramView({
   /** The alt text and the visible heading. */
   title: string;
   caption?: string;
+  /**
+   * Draw the title bar. Off where the page names the diagram already (the
+   * library asset page, whose title sits under it), and then "Full size" is a
+   * small link in the corner of the mat instead.
+   */
+  heading?: boolean;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
@@ -87,18 +94,31 @@ export function DiagramView({
   }, [src, attempt]);
 
   return (
-    <figure className="overflow-hidden rounded-[20px] border-2 border-border bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
-        <h3 className="truncate text-[16px] font-bold text-text">{title}</h3>
+    <figure className="relative overflow-hidden rounded-[20px] border-2 border-border bg-surface">
+      {heading ? (
+        <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
+          <h3 className="truncate text-[16px] font-bold text-text">{title}</h3>
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Full size
+          </a>
+        </div>
+      ) : (
+        // Kept when the picture fails too: opening the file itself is then
+        // the one way left to see it, or to see why not.
         <a
           href={src}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-accent-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="absolute top-3 right-3 z-10 rounded-full border border-border bg-surface/90 px-2.5 py-1 text-[12px] font-medium text-accent-text shadow-sm backdrop-blur-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           Full size
         </a>
-      </div>
+      )}
 
       {failure !== null ? (
         <WidgetFailure

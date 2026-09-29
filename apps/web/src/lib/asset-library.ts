@@ -691,14 +691,16 @@ export function searchableText(kind: string, raw: string): string {
 }
 
 /**
- * When the learner last marked this asset watched, or null for never (or for a
- * log that could not be read, which a caption is no worse for omitting).
+ * When the learner last marked this asset watched, null for never, or
+ * `undefined` when the log could not be read. The two are kept apart because
+ * the Details tab says "Not yet" for one and "unknown" for the other: a
+ * learner told they never read something they did would be told a falsehood.
  *
  * Reads the log in full, as `@/lib/habit` does on every request; the event log
  * is one learner's and small. The payload's `asset` is the join, since a
  * `watched` event names no concept.
  */
-export async function readLastWatched(id: string): Promise<string | null> {
+export async function readLastWatched(id: string): Promise<string | null | undefined> {
   const owner = await currentOwner();
   try {
     const events = await readEvents(await catalogDatabase(), owner);
@@ -709,12 +711,12 @@ export async function readLastWatched(id: string): Promise<string | null> {
     return last;
   } catch (error) {
     warn("watched events", error);
-    return null;
+    return undefined;
   }
 }
 
 /** As `readLastWatched`, with the marker that keeps it out of the build. */
-export async function loadLastWatched(id: string): Promise<string | null> {
+export async function loadLastWatched(id: string): Promise<string | null | undefined> {
   await connection();
   return readLastWatched(id);
 }

@@ -103,6 +103,15 @@ describe("DiagramView", () => {
     expect(host.querySelector("[aria-hidden]")).not.toBeNull();
   });
 
+  it("drops its title bar when the page names it, and keeps Full size even when it fails", () => {
+    const host = mount(createElement(DiagramView, { ...props, heading: false }));
+    expect(host.querySelector("h3")).toBeNull();
+    act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
+    expect(host.textContent).toContain("This diagram did not load.");
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Full size");
+    expect(link?.getAttribute("href")).toBe(props.src);
+  });
+
   it("renders a caption only when it is given one", () => {
     const bare = mount(createElement(DiagramView, props));
     expect(bare.querySelector("figcaption")).toBeNull();

@@ -4,6 +4,7 @@ import path from "node:path";
 import { createApi } from "./api";
 import { Drafts } from "./drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
+import { ManualSource } from "./manual/source";
 import { Mirrors } from "./mirrors";
 import { REPO_ROOT, studioHome } from "./paths";
 import { Runner } from "./runner";
@@ -27,6 +28,25 @@ async function main(): Promise<void> {
   const store = new JobStore();
   await store.load();
   const runner = new Runner(store);
+
+  // The tldraw manual, built from the installed tool before anything can
+  // start a job, and checked: its three worked snippets run after each new
+  // build, whenever no job is running or queued (M3). A refresh never throws:
+  // a tool that cannot answer, or a manual that cannot be written, leaves the
+  // studio running without one and says so in /api/health.
+  const manual = new ManualSource({
+    checkSnippets: true,
+    isIdle: () => runner.busy === 0 && store.list({ state: "queued" }).length === 0,
+  });
+  runner.manual = manual;
+  const built = await manual.refresh().catch(() => null);
+  manual.start();
+  process.stdout.write(
+    built === null
+      ? `no tldraw manual: ${manual.status().error ?? "canvas api did not answer"}\n`
+      : `tldraw manual ${built.hash.slice(0, 12)}: ${built.chars} characters, ${built.helpers} helpers, ` +
+          `options ${built.optionsSource}\n`,
+  );
 
   const { interrupted, swept } = await runner.reconcile();
   if (interrupted.length > 0) {
@@ -77,6 +97,7 @@ async function main(): Promise<void> {
     // fallback port for a document that is not open anywhere.
     void mirrors
       .stopAll()
+      .then(() => manual.drain())
       .then(() => drafts.drain())
       .then(() => runner.drain())
       .finally(() => {

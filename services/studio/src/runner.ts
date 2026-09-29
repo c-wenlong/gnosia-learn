@@ -50,6 +50,7 @@ import {
   buildRevisePrompt,
   type CandidateFiles,
 } from "./prompt";
+import type { ManualSource } from "./manual/source";
 import { dirtyFiles } from "./review";
 import { resolveSource } from "./source-note";
 import type { GateResult, JobRecord, JobStore } from "./store";
@@ -144,6 +145,8 @@ export class Runner {
    * stays in memory so the API can answer about it.
    */
   private readonly settledJobs = new Map<string, Promise<void>>();
+  /** Enqueues between their idempotency check and their record, by key. See `enqueue`. */
+  private readonly enqueuing = new Map<string, Promise<{ record: JobRecord; created: boolean; jobsAhead: number }>>();
   private draining = false;
   /**
    * Whether a canvas is open on a diagram, by its logical name. Set by
@@ -157,6 +160,15 @@ export class Runner {
    * drafts exist, so the cap counts a chat as it counts a drawing.
    */
   extraSpend: () => readonly SpendEntry[] = () => [];
+  /**
+   * The tldraw manual the drawing agent's system prompt carries (D30 of
+   * docs/STUDIO-CHAT-FIRST.md). Set by `index.ts`, which refreshes it at
+   * start; `enqueue` refreshes it again, so a job queued after a rebuild of
+   * tldrawkc gets a manual for that build. Null means no manual: every job
+   * runs as it did before the manual existed, which is what a test that never
+   * sets it gets.
+   */
+  manual: ManualSource | null = null;
 
   constructor(store: JobStore) {
     this.store = store;
@@ -375,6 +387,38 @@ export class Runner {
     parent?: ParentJob,
     options: { draftId?: string | null } = {},
   ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
+    // A second submit of a key whose first is still between its checks and
+    // `store.create` waits for that one and returns its job. The store lookup
+    // below cannot see a job that is not created yet, and every await on the
+    // way there (the manual refresh, the catalog's answer about the target) is
+    // a window a double click lands in.
+    const pending = this.enqueuing.get(brief.idempotencyKey);
+    if (pending !== undefined) {
+      const first = await pending;
+      return { record: first.record, created: false, jobsAhead: this.queued().length };
+    }
+    const attempt = this.enqueueOnce(brief, parent, options);
+    this.enqueuing.set(brief.idempotencyKey, attempt);
+    try {
+      return await attempt;
+    } finally {
+      this.enqueuing.delete(brief.idempotencyKey);
+    }
+  }
+
+  private async enqueueOnce(
+    brief: ValidBrief,
+    parent: ParentJob | undefined,
+    options: { draftId?: string | null },
+  ): Promise<{ record: JobRecord; created: boolean; jobsAhead: number }> {
+    // First, so the job this creates starts on a manual for the build
+    // installed now. One short `canvas api --json` when nothing changed; a
+    // failure keeps the manual there was and never refuses the job, since
+    // `doctor` is the gate on a broken tool. Before the idempotency check
+    // rather than after it, so its half second does not sit between that
+    // check and `store.create`, where a double submit could slip past both.
+    await this.manual?.refresh().catch(() => null);
+
     const existing = this.store.byIdempotencyKey(brief.idempotencyKey);
     if (existing !== undefined) {
       return { record: existing, created: false, jobsAhead: this.queued().length };
@@ -768,7 +812,7 @@ export class Runner {
       // same reasoning that moved the gate's freshness check to the parent's
       // start. The other five gate steps still judge the artifact.
     }
-    const files: CandidateFiles = { tldr: record.candidatePath, svg: record.candidateSvgPath };
+    const files: CandidateFiles = { tldr: record.candidatePath, svg: record.candidateSvgPath, scratch: scratchDir(id) };
     const hasMermaid = record.brief.mermaid !== undefined;
     if (hasMermaid) {
       await writeFile(mermaidPath(id), record.brief.mermaid ?? "", "utf8");
@@ -785,7 +829,20 @@ export class Runner {
     // every attempt runs under the same rule and the record says which one it
     // was even if the setting is changed while this job is running.
     const auth = agentAuth();
-    record = await this.store.update(id, { agentAuth: auth });
+    // The manual, decided here once for every attempt (M1). A job that
+    // continues its parent's session inherits the parent's: the CLI replays
+    // the system prompt it recorded on that session's first request, so the
+    // parent's manual is the one this agent actually reads.
+    let manualHash = this.manualFor(record, inherited !== null);
+    record = await this.store.update(id, { agentAuth: auth, manualHash });
+    await this.store.emit(id, {
+      type: "step",
+      state: "running",
+      note:
+        manualHash === null
+          ? "the agent runs without the tldraw manual: none could be built from canvas api"
+          : `the agent's system prompt carries the tldraw manual ${manualHash.slice(0, 12)}`,
+    });
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       if (entry.cancelled) break;
@@ -812,6 +869,23 @@ export class Runner {
       // asked of the state rather than of the attempt number: a fresh session
       // after a failed resume is attempt two and still needs the whole prompt.
       const started = startedSession;
+      // The job's own manual, checked against its hash before every spawn and
+      // put back if it was lost or changed. A session that starts fresh and
+      // cannot have it runs without one and records that, because the record
+      // must name what the agent was given; a resumed one replays its recorded
+      // prompt whatever is passed, so nothing about it changes.
+      const resuming = resumeFromParent || started;
+      let manualFile = manualHash === null ? null : ((await this.manual?.ensureFile(manualHash)) ?? null);
+      if (manualHash !== null && manualFile === null && !resuming) {
+        manualHash = null;
+        record = await this.store.update(id, { manualHash: null });
+        await this.store.emit(id, {
+          type: "step",
+          state: "running",
+          note: "the agent starts without the tldraw manual: its file could not be made to match its hash",
+        });
+      }
+      if (manualHash === null) manualFile = null;
       // A note named as the source is a row since the cut-over, written into
       // scratch for the agent to read (source-note.ts); a file stays a file.
       const source =
@@ -831,6 +905,9 @@ export class Runner {
                 jobId: id,
                 brief: source === undefined ? record.brief : { ...record.brief, source },
                 hasMermaid,
+                // A fresh prompt goes to a fresh session, which is handed the
+                // file below whenever there is a hash.
+                manual: manualHash !== null,
               });
       startedSession = true;
 
@@ -852,8 +929,9 @@ export class Runner {
         prompt,
         model: record.brief.model,
         sessionId: agentSessionId,
-        resume: resumeFromParent || started,
+        resume: resuming,
         auth,
+        manualPath: manualFile,
         onLine: (line) => {
           void this.onAgentLine(id, line);
         },
@@ -894,7 +972,10 @@ export class Runner {
         agentSessionId = randomUUID();
         resumeFromParent = false;
         startedSession = false;
-        record = await this.store.update(id, { agentSessionId });
+        // A fresh session records its own system prompt, so it takes the
+        // newest manual rather than the parent's, and the record says so.
+        manualHash = this.manual?.current()?.hash ?? null;
+        record = await this.store.update(id, { agentSessionId, manualHash });
         findings = [];
         await this.store.emit(id, {
           type: "phase",
@@ -1056,6 +1137,18 @@ export class Runner {
       // bills, and reading the final result event alone forgot the two before it.
       cost: entry.meter.read(),
     });
+  }
+
+  /**
+   * Which manual a job runs with: its parent's when it continues the parent's
+   * session, else the newest the runner holds. See `JobRecord.manualHash`.
+   */
+  private manualFor(record: JobRecord, continuesParent: boolean): string | null {
+    if (continuesParent && record.parentJobId !== null) {
+      const parent = this.store.get(record.parentJobId);
+      if (parent !== undefined) return parent.manualHash ?? null;
+    }
+    return this.manual?.current()?.hash ?? null;
   }
 
   /**
