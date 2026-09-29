@@ -65,7 +65,7 @@ const agentMock = vi.hoisted(() => ({
 }));
 vi.mock("../src/agent", () => agentMock);
 
-const { Runner } = await import("../src/runner");
+const { Runner, briefModelOf } = await import("../src/runner");
 const { JobStore } = await import("../src/store");
 const { diagramAgentSettings, resolveDiagramAgent, resolveVideoAgent } = await import("../src/agent-settings");
 const { readStoredPreference } = await import("../src/video/agent-model");
@@ -371,4 +371,54 @@ describe("a diagram job", () => {
       expect(store.get(record.id)?.agentEffort).toEqual(parent.agentEffort);
     });
   }
+
+  it("reads a pre-D53 parent's filled-in sonnet as unset, so the panel applies to its revise (#207 review)", async () => {
+    const at = new Date(Date.now() - 60_000).toISOString();
+    // A parent from before D53: no agentModel recorded, and the brief carries
+    // the `sonnet` the old validateBrief filled in.
+    await store.create({
+      id: "old-parent",
+      kind: "diagram",
+      state: "discarded",
+      phase: null,
+      brief: { ...brief(), model: "sonnet" },
+      targetPath: targetPath(SLUG),
+      targetSvgPath: targetSvgPath(SLUG),
+      candidatePath: candidatePath("old-parent", SLUG),
+      candidateSvgPath: candidateSvgPath("old-parent", SLUG),
+      topic: "vector-and-linear-algebra-basics",
+      slug: SLUG,
+      attempt: 1,
+      sessionId: null,
+      agentSessionId: null,
+      parentJobId: null,
+      changes: null,
+      idempotencyKey: "old-parent-key",
+      targetHashBefore: null,
+      requestedAt: at,
+      startedAt: at,
+      finishedAt: at,
+      reviewedAt: null,
+      heartbeatAt: null,
+      cancelRequestedAt: null,
+      exitCode: 0,
+      turns: 9,
+      costUsd: null,
+      costSource: null,
+      gate: null,
+      errorKind: null,
+      error: null,
+      written: [],
+      indexed: false,
+      catalogErrors: [],
+    } as JobRecord);
+    catalogMock.preferenceGet.mockResolvedValue(row({ model: "opus", effort: "low" }));
+    const { record } = await runner.enqueue({ ...brief(), model: "sonnet" }, { jobId: "old-parent", agentSessionId: null, changes: "bigger labels" });
+    expect(await spawned()).toMatchObject({ model: "opus", effort: "low" });
+    await runner.settled(record.id);
+    expect(store.get(record.id)?.agentModel?.source).toBe("panel");
+    // Posted today, a brief's sonnet is someone's choice and still wins.
+    expect(briefModelOf({ brief: { ...brief(), model: "sonnet" } }, undefined)).toBe("sonnet");
+    expect(briefModelOf({ brief: { ...brief(), model: "sonnet" } }, { agentModel: { requested: "opus", passed: "opus", source: "panel" } })).toBe("sonnet");
+  });
 });

@@ -602,6 +602,11 @@ export class Drafts {
         // A draft from before D62 keeps its one brief as its diagram slot, and
         // its recorded prompt, which proposes on every message (D61).
         if (loaded.slots === undefined) loaded.slots = legacySlots(loaded);
+        // A draft never carries a model: the settings panel decides (D53). A
+        // brief saved before D53 holds the `sonnet` the old `validateBrief`
+        // filled in, which would otherwise beat the panel at every press.
+        loaded.slots = withoutModels(loaded.slots);
+        if (loaded.brief !== null && "model" in loaded.brief) loaded.brief = withoutModel(loaded.brief);
         loaded.plannerKinds = loaded.plannerKinds ?? ["diagram"];
         this.records.set(record.id, { ...loaded, ...summarize(loaded) });
       } catch {
@@ -3078,8 +3083,32 @@ const JOB_VERDICTS: readonly string[] = ["failed", "cancelled", "interrupted", "
 /** Job states that hold the draft at `drawing`. */
 const ACTIVE_JOB: readonly string[] = ["queued", "running", "awaiting_review"];
 
-/** The fields a person's edit may set: the brief as GET returns it, less the key Draw mints and the flowchart Draw attaches (C8). */
-export const EDITABLE_BRIEF_FIELDS = [...PLANNER_BRIEF_FIELDS, "model", "notes", "source"] as const;
+/**
+ * The fields a person's edit may set: the brief as GET returns it, less the
+ * key Draw mints, the flowchart Draw attaches (C8), and `model`, which the
+ * settings panel decides for every job from a draft (D53).
+ */
+export const EDITABLE_BRIEF_FIELDS = [...PLANNER_BRIEF_FIELDS, "notes", "source"] as const;
+
+/** A brief with any `model` taken off. */
+function withoutModel(brief: AnyDraftBrief): AnyDraftBrief {
+  const kept: Record<string, unknown> = { ...brief };
+  delete kept.model;
+  return kept as unknown as AnyDraftBrief;
+}
+
+/** Every slot's brief and pending-edit base without a `model`. */
+function withoutModels(slots: Partial<Record<BriefKind, KindSlot>>): Partial<Record<BriefKind, KindSlot>> {
+  const out: Partial<Record<BriefKind, KindSlot>> = {};
+  for (const [kind, slot] of Object.entries(slots) as [BriefKind, KindSlot][]) {
+    out[kind] = {
+      ...slot,
+      brief: slot.brief === null ? null : withoutModel(slot.brief),
+      pendingEdit: slot.pendingEdit === null || slot.pendingEdit.base === null ? slot.pendingEdit : { ...slot.pendingEdit, base: withoutModel(slot.pendingEdit.base) },
+    };
+  }
+  return out;
+}
 
 function withoutKey(brief: ValidBrief): DraftBrief {
   const kept: Partial<ValidBrief> = { ...brief };

@@ -1186,11 +1186,11 @@ export class Runner {
     record: JobRecord,
     continuesParent: boolean,
   ): Promise<{ agentModel: AgentSetting; agentEffort: AgentSetting }> {
-    if (continuesParent && record.parentJobId !== null) {
-      const parent = this.store.get(record.parentJobId);
-      if (parent?.agentModel && parent.agentEffort) return { agentModel: parent.agentModel, agentEffort: parent.agentEffort };
+    const parent = record.parentJobId === null ? undefined : this.store.get(record.parentJobId);
+    if (continuesParent && parent?.agentModel && parent.agentEffort) {
+      return { agentModel: parent.agentModel, agentEffort: parent.agentEffort };
     }
-    const resolved = await resolveDiagramAgent(record.brief.model ?? null);
+    const resolved = await resolveDiagramAgent(briefModelOf(record, parent));
     return { agentModel: resolved.model, agentEffort: resolved.effort };
   }
 
@@ -1670,6 +1670,19 @@ export function phaseFromLine(line: string): string | null {
  */
 export function pricingModel(record: JobRecord): string {
   return record.agentModel?.passed ?? record.brief.model ?? DEFAULT_MODEL;
+}
+
+/**
+ * The model a job's brief asks for, if any. A revise or resume copies its
+ * parent's brief, and a parent from before D53 recorded no `agentModel` and
+ * carries the `sonnet` the old `validateBrief` filled in on every brief: that
+ * is no one's choice, so it reads as unset and the settings panel applies
+ * (the #207 review). A brief posted with a model today is honoured.
+ */
+export function briefModelOf(record: Pick<JobRecord, "brief">, parent: Pick<JobRecord, "agentModel"> | undefined): string | null {
+  const model = record.brief.model ?? null;
+  if (model === "sonnet" && parent !== undefined && parent.agentModel === undefined) return null;
+  return model;
 }
 
 /** "model opus (the settings panel)", for the step that says what the agent was started with. */

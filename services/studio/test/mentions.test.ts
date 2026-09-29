@@ -558,13 +558,19 @@ describe("a draft from before tags", () => {
     delete legacy.plannerKinds;
     delete legacy.conversational;
     delete legacy.sourceKind;
-    await writeFile(draftJsonPath(record.id), JSON.stringify({ ...legacy, state: "briefed", brief: good, briefSeq: 1, briefBy: "planner" }));
+    // Saved before D53: the old validateBrief filled in `model: "sonnet"`.
+    await writeFile(draftJsonPath(record.id), JSON.stringify({ ...legacy, state: "briefed", brief: { ...good, model: "sonnet" }, briefSeq: 1, briefBy: "planner" }));
     await drafts.drain();
     drafts = build();
     await drafts.load();
     let view = await drafts.view(record.id);
     expect(view).toMatchObject({ plannerKinds: ["diagram"], conversational: false, state: "briefed" });
     expect(view.slots.diagram).toMatchObject({ state: "briefed", brief: { title: good.title } });
+    // A draft never carries a model; the settings panel decides (the #207 review).
+    expect(view.slots.diagram?.brief).not.toHaveProperty("model");
+    expect(view.brief).not.toHaveProperty("model");
+    await drafts.drawOne(record.id, "legacy-press");
+    expect(runner.enqueue.mock.calls[0]![0]).not.toHaveProperty("model");
     await fake.script([{ text: proposing({ ...good, title: "Revised" }) }]);
     await send(record.id, "make it about loss");
     // No TAGS block: its recorded prompt has never heard of one.
