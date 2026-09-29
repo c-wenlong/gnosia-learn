@@ -48,6 +48,16 @@ export const KIND_NAME: Record<DraftKind, string> = { diagram: "Diagram", video:
 
 /** The opening line of an empty conversation (STUDIO-MENTIONS.md, phase 2b). */
 export const MENTION_OPENING_TURN = "Ask me about an idea, or type @ to make a diagram or a video of it.";
+/** A conversation opened with Change on a video tile (`sourceKind: "video"`): the planner has its brief. */
+export const CHANGE_OPENING_TURN = "I've read this video's brief. Tell me what it should change, or ask me what's in it first.";
+
+/**
+ * A landed video's poster, from the library's asset route: the picture a
+ * Change conversation pins, as Extend pins a diagram's SVG.
+ */
+export function videoPosterHref(slug: string): string {
+  return `/api/assets/${encodeURIComponent(`video:${slug}`)}/poster`;
+}
 export const MENTION_PLACEHOLDER = "Ask about an idea, or type @ to make something";
 /** The menu's foot line: the one thing a person cannot see from the entries. */
 export const MENTION_HINT = "Tag one or both";

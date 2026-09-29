@@ -56,7 +56,11 @@ vi.mock("@/components/studio/JobsProvider", () => ({
   askToNotify: async () => {},
 }));
 vi.mock("@/components/studio/JobPanel", () => ({ JobPanel: () => null }));
-vi.mock("@/components/studio/PinnedDiagram", () => ({ PinnedDiagram: () => null }));
+vi.mock("@/components/studio/PinnedDiagram", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/studio/PinnedDiagram")>()),
+  // The diagram's picture as a marker, so a test can see which one is pinned.
+  PinnedDiagram: ({ name }: { name: string }) => createElement("img", { src: `/diagrams/${name}` }),
+}));
 vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),
   getDraft: mocks.getDraft,
@@ -287,5 +291,18 @@ describe("Start over while a job runs (Greptile on #204)", () => {
     expect(mocks.abandonDraft).not.toHaveBeenCalled();
     expect(mocks.createDraft).toHaveBeenCalledTimes(1);
     expect(host.textContent).not.toMatch(/could not be closed|is drawing/);
+  });
+});
+
+describe("a conversation opened with Change on a video (p2v-video on #203)", () => {
+  it("names, pins and opens on the video, never as a diagram", async () => {
+    const host = await mount(draft({ source: "softmax-basics", sourceKind: "video" }));
+    expect(host.textContent).toContain("Changing softmax-basics");
+    expect(host.textContent).not.toContain("Extending");
+    expect(host.textContent).toContain("I've read this video's brief.");
+    expect(host.textContent).not.toContain("I've read this diagram");
+    const srcs = [...host.querySelectorAll("img")].map((img) => img.getAttribute("src"));
+    expect(srcs).toContain("/api/assets/video%3Asoftmax-basics/poster");
+    expect(srcs.some((src) => src?.includes("/diagrams/"))).toBe(false);
   });
 });

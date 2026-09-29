@@ -10,7 +10,7 @@ import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
 import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
-import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
+import { PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
 import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
@@ -48,6 +48,7 @@ import {
   openerValue,
   makeBoth,
   MENTION_HINT,
+  CHANGE_OPENING_TURN,
   MENTION_OPENING_TURN,
   mentionOptions,
   modEnterPlan,
@@ -840,11 +841,11 @@ export function DraftPanel({
         aria-label="Conversation"
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
-        {view.source !== null && sourceTitle !== null && diagramSource && <PinnedDiagram name={view.source} title={sourceTitle} />}
+        {view.source !== null && sourceTitle !== null && (diagramSource ? <PinnedDiagram name={view.source} title={sourceTitle} /> : <PinnedVideo slug={view.source} title={sourceTitle} />)}
 
         {empty && (
           <TutorMessage label="Planner">
-            <p className="max-w-[60ch]">{view.source !== null && diagramSource ? EXTEND_OPENING_TURN : opening}</p>
+            <p className="max-w-[60ch]">{view.source === null ? opening : diagramSource ? EXTEND_OPENING_TURN : CHANGE_OPENING_TURN}</p>
           </TutorMessage>
         )}
         {/* The corpus's topics are a way into a new diagram; an extend
