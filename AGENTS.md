@@ -325,10 +325,16 @@ Rules of engagement:
   came from: `result` when the agent's session exited cleanly and reported its
   own `total_cost_usd`, `stream` when the runner accumulated it from
   per-message usage after a cancel, timeout or interrupt killed the session
-  before it could report. A `stream` figure is always an under-estimate,
-  measured between 80% and 93% of the true cost across the nine sessions on
-  disk, and the runner never scales it up: a fudge factor would make the
-  number unauditable against the CLI's own figure. An unpriceable model
+  before it could report. Both agents run with `--include-partial-messages`
+  so the meter can read each message's finished output from its
+  `message_delta` frame (`keepsStreamEvent` in `services/studio/src/agent.ts`
+  drops the other partial frames before the log); without it the stream
+  carried only the output count as each message began, 80% to 93% of the
+  true cost on diagram jobs and about two thirds on a video job. A `stream`
+  figure now reaches the CLI's own on a session cut before its result, and
+  is an under-estimate wherever it differs (a kill mid-message loses that
+  message's output). The runner never scales it up: a fudge factor would
+  make the number unauditable against the CLI's own figure. An unpriceable model
   records `null`, never zero, so an unknown cost is not presented as a free
   job; the spend cap's real protection is the fallback that keeps pricing at
   the model the job passed when the stream names one the rate table has never

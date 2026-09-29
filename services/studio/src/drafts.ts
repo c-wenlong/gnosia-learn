@@ -1459,9 +1459,9 @@ export class Drafts {
       ? `Your ${toRetry.length === 1 ? `${toRetry[0]!.kind} brief was` : "briefs were"} refused:\n` +
         toRetry.map((verdict) => `- ${verdict.kind}, ${verdict.field}: ${verdict.message}`).join("\n") +
         `\nFix exactly that and send ${toRetry.length === 1 ? "that whole brief" : "each of those whole briefs"} again, ` +
-        `with its summary above it, and no other brief.`
+        `with its topic block again when it names a new topic, one or two lines above it, and no other brief. ${RETRY_REPLY_RULE}`
       : `Your brief was refused. ${toRetry[0]!.field}: ${toRetry[0]!.message}\n` +
-        `Fix exactly that and send the whole brief again, with the same summary above it.`;
+        `Fix exactly that and send the whole brief again, with the same summary above it. ${RETRY_REPLY_RULE}`;
     await this.write(id, async () => {
       await this.append(id, { type: "studio", text: instruction, internal: true, replySeq: first.seq });
       // The automatic retry counts as a turn (the doc's cost table), however many briefs it fixes.
@@ -3390,6 +3390,17 @@ function safeJson(line: string): Record<string, unknown> | null {
     return null;
   }
 }
+
+/**
+ * How a retry's reply speaks, in the studio's instruction as in the prompt's
+ * "A refused brief": the reply is shown to the person, and the refusal is not.
+ * A retry once answered "(fix: `targetSeconds` set to 60, a valid whole number
+ * in range; script unchanged, total narration length still fits)" to a person
+ * who never saw what it was fixing (Phase 2 measured, docs/STUDIO-VIDEOS.md).
+ */
+export const RETRY_REPLY_RULE =
+  "The person does not see this message: write to them as if proposing for the first time, and never name the refusal, a field or the fix. " +
+  "Only when the fix changes something they asked for, say so in one plain sentence.";
 
 /** The text a set of raw stream lines carries: the result, else the assistant's, else the deltas. */
 export function replyText(lines: readonly string[]): string {
