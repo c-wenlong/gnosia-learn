@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   useSyncExternalStore,
@@ -77,6 +78,7 @@ export function VideoPlayer({
   onPlayback,
   header,
   tabs,
+  seekTo,
 }: {
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
@@ -96,6 +98,12 @@ export function VideoPlayer({
   header?: ReactNode;
   /** Sections after the transcript in the tabbed card under the header. */
   tabs?: TabItem[];
+  /**
+   * A jump asked for from outside the player, such as a chapter list beside
+   * it: each new `key` moves the playhead to `seconds` and plays. The key is
+   * what makes a second press on the same chapter a second jump.
+   */
+  seekTo?: { seconds: number; key: number };
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -141,6 +149,20 @@ export function VideoPlayer({
     setBuffered(0);
     setPaused(true);
   }
+
+  // A jump from outside goes through `seek`, the same path as a click on the
+  // bar, so a jump pressed before the metadata has loaded is held and applied
+  // at `loadedmetadata` rather than lost. Then it plays.
+  const jumpTo = useEffectEvent((seconds: number) => {
+    seek(seconds);
+    void videoRef.current?.play()?.catch(() => undefined);
+  });
+  const seekKey = seekTo?.key;
+  const seekSeconds = seekTo?.seconds;
+  useEffect(() => {
+    if (seekKey === undefined || seekSeconds === undefined) return;
+    jumpTo(seekSeconds);
+  }, [seekKey, seekSeconds]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === frameRef.current);

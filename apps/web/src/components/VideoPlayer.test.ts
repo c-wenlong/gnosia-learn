@@ -252,6 +252,41 @@ describe("VideoPlayer", () => {
     expect(currentChapter(host)).toContain("The body");
   });
 
+  it("jumps when asked from outside, holding a jump made before the metadata", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    let stored = 0;
+    let ready = false;
+    let plays = 0;
+    Object.defineProperty(el, "currentTime", {
+      get: () => stored,
+      set: (value: number) => {
+        if (!ready) throw new Error("The element has not loaded metadata yet.");
+        stored = value;
+      },
+      configurable: true,
+    });
+    el.play = () => {
+      plays += 1;
+      return Promise.resolve();
+    };
+
+    rerender(host, createElement(VideoPlayer, { src: "/v.mp4", chapters, seekTo: { seconds: 20, key: 1 } }));
+    expect(stored).toBe(0);
+    expect(plays).toBe(1);
+    ready = true;
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect(stored).toBe(20);
+
+    // The same chapter pressed again is a second jump: the key, not the time, says so.
+    act(() => {
+      stored = 3;
+    });
+    rerender(host, createElement(VideoPlayer, { src: "/v.mp4", chapters, seekTo: { seconds: 20, key: 2 } }));
+    expect(stored).toBe(20);
+    expect(plays).toBe(2);
+  });
+
   it("drops a pending seek when the source is swapped before it lands", () => {
     const host = mount(createElement(VideoPlayer, { src: "/a.mp4", chapters }));
     const el = video(host);

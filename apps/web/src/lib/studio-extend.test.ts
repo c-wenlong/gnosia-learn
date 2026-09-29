@@ -178,8 +178,16 @@ describe("the opener handed to the conversation", () => {
   it("is read once, so a reload never sends it again", () => {
     const store = memory();
     leaveOpener(store, "d1", { send: EXTEND_OPENER, compose: "", source: null });
-    expect(takeOpener(store, "d1")).toEqual({ send: EXTEND_OPENER, compose: "", source: null });
+    expect(takeOpener(store, "d1")).toEqual({ send: EXTEND_OPENER, compose: "", source: null, mentions: [] });
     expect(takeOpener(store, "d1")).toBeNull();
+  });
+
+  it("carries the chips a video's Change starts the composer with, and nothing else", () => {
+    const store = memory();
+    leaveOpener(store, "d1", { send: null, compose: "say it slower", source: null, mentions: ["video"] });
+    expect(takeOpener(store, "d1")).toEqual({ send: null, compose: "say it slower", source: null, mentions: ["video"] });
+    store.setItem("studio:extend-opener:d2", JSON.stringify({ compose: "x", mentions: ["video", "video", "audio", 3] }));
+    expect(takeOpener(store, "d2")?.mentions).toEqual(["video"]);
   });
 
   it("carries a message sent while the diagram was read, what was left unsent, and the diagram", () => {
@@ -189,6 +197,7 @@ describe("the opener handed to the conversation", () => {
       send: "Add the projection of a onto b",
       compose: "and label the angle",
       source: "dot-product",
+      mentions: [],
     });
   });
 
@@ -196,7 +205,7 @@ describe("the opener handed to the conversation", () => {
     const store = memory();
     expect(takeOpener(store, "d1")).toBeNull();
     store.setItem("studio:extend-opener:d2", "{not json");
-    expect(takeOpener(store, "d2")).toEqual({ send: null, compose: "", source: null });
+    expect(takeOpener(store, "d2")).toEqual({ send: null, compose: "", source: null, mentions: [] });
     expect(takeOpener(blocked(), "d3")).toBeNull();
     expect(takeOpener(null, "d4")).toBeNull();
   });

@@ -47,7 +47,7 @@ export function useNow(ticking: boolean = true): number | null {
  * job's needs the browser's clock: `null` until the page has hydrated, then
  * counting up every second.
  */
-export function useElapsed(job: Job): number | null {
+export function useElapsed(job: Pick<Job, "started" | "requested" | "finished">): number | null {
   const now = useNow(job.finished === null);
   if (job.finished !== null) {
     // A stored record is not validated on load, so a finish that does not

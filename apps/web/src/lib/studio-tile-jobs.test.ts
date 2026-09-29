@@ -11,6 +11,7 @@ import {
   settlePicture,
   showsThumbnail,
   jobForTarget,
+  liveShotFor,
   liveShotHref,
   loaderHeadline,
   loaderStep,
@@ -144,6 +145,27 @@ describe("a new diagram's card", () => {
     // `EXISTING` is the whole listing, not the filtered view.
     const jobs = [job({ target: "learn/assets/matrix.tldr" })];
     expect(newDiagramJobs(jobs, EXISTING, [], [])).toEqual([]);
+  });
+
+  it("is only ever a diagram job: a video, or any later kind, has tiles of its own", () => {
+    const jobs = [
+      job({ jobId: "video", kind: "video", target: "videos/attention.mp4" }),
+      job({ jobId: "other", kind: "audio", target: "learn/assets/span.tldr" }),
+      job({ jobId: "diagram", target: "learn/assets/eigenvectors.tldr" }),
+    ];
+    expect(newDiagramJobs(jobs, EXISTING, [], []).map((entry) => entry.jobId)).toEqual(["diagram"]);
+    // The newest job on the target is a video's: the diagram tile keeps no loader.
+    const onTile = [job({ jobId: "v", kind: "video", target: "learn/assets/dot-product.tldr" }), job({ jobId: "d", target: "learn/assets/dot-product.tldr" })];
+    expect(jobForTarget(onTile, "learn/assets/dot-product.tldr", [], [])?.jobId).toBe("d");
+  });
+});
+
+describe("a video job and the live shot", () => {
+  it("never builds the diagram's live-shot URL, nor polls for it", () => {
+    const video = job({ jobId: "v1", kind: "video", target: "videos/attention.mp4" });
+    expect(liveShotFor(video)).toBeNull();
+    expect(wantsLivePicture(video, true, false)).toBe(false);
+    expect(liveShotFor(job({ jobId: "d1" }))).toBe("/studio/api/jobs/d1/shot?which=live");
   });
 });
 
