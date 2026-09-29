@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { nextIndexForKey, popoverShift, sectionsOf, triggerText, typeaheadIndex, type FilterOption } from "./filter-menu";
+import { nextIndexForKey, popoverShift, sectionsOf, triggerText, typeaheadIndex, valueText, type FilterOption } from "./filter-menu";
 
 const TYPES: FilterOption[] = [
   { value: "", label: "All kinds", short: "All" },
@@ -9,6 +9,13 @@ const TYPES: FilterOption[] = [
   { value: "captions", label: "Captions", count: 23, section: "Companion files" },
   { value: "chapters", label: "Chapters", count: 23, section: "Companion files" },
 ];
+
+describe("valueText", () => {
+  it("prints the value alone, for a menu beside its own label", () => {
+    expect(valueText(TYPES, "video")).toBe("Video");
+    expect(valueText(TYPES, "podcast")).toBe("podcast");
+  });
+});
 
 describe("triggerText", () => {
   it("prints the short form of the default and the label of a pick", () => {

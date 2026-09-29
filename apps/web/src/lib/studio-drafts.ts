@@ -99,6 +99,8 @@ export interface DraftView {
   title: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
+  /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
+  briefSeq?: number | null;
   pendingTopic: PendingTopic | null;
   jobId: string | null;
   turns: number;
@@ -122,6 +124,12 @@ export interface DraftSummary {
   costUsd: number | null;
   updated: string;
   jobId: string | null;
+  /**
+   * The person's first message, whitespace collapsed and cut to 120
+   * characters: what the drafts list shows for a conversation with no brief
+   * yet. Optional: a runner from before phase 3 does not send it.
+   */
+  firstMessage?: string | null;
 }
 
 /**
@@ -266,10 +274,17 @@ export function createDraft(input: { source?: string; idempotencyKey: string }) 
   });
 }
 
-/** `GET /api/drafts`: the drafts list, phase 3's section above the grid. */
-export function listDrafts(query: { state?: DraftState; limit?: number } = {}) {
+/**
+ * `GET /api/drafts`: the drafts list, phase 3's section above the grid.
+ * Several states go as one comma list (`state=open,briefed`); `nonEmpty`
+ * leaves out drafts nobody has said anything in, before the limit applies.
+ */
+export function listDrafts(
+  query: { state?: DraftState | readonly DraftState[]; nonEmpty?: boolean; limit?: number } = {},
+) {
   const params = new URLSearchParams();
-  if (query.state !== undefined) params.set("state", query.state);
+  if (query.state !== undefined) params.set("state", typeof query.state === "string" ? query.state : query.state.join(","));
+  if (query.nonEmpty === true) params.set("nonEmpty", "1");
   if (query.limit !== undefined) params.set("limit", String(query.limit));
   const search = params.toString();
   return call<{ drafts: DraftSummary[]; note: string }>(search === "" ? BASE : `${BASE}?${search}`);
@@ -304,6 +319,38 @@ export function drawDraft(draftId: string, key: string) {
     method: "POST",
     body: JSON.stringify({ idempotencyKey: key }),
   });
+}
+
+/**
+ * `PUT /api/drafts/{id}/brief`: the person's own edit of the live brief (phase
+ * 3). The body is a whole brief; the runner validates it as it validates the
+ * planner's, stores it, and appends a studio note carrying it, so the thread
+ * shows what changed and the planner hears of it on its next turn. An
+ * identical brief is answered 200 and changes nothing.
+ *
+ * `base` is the transcript seq of the entry carrying the brief that was
+ * edited (a planner reply, or the note of an earlier edit). The runner
+ * refuses a base that is no longer the brief in force with 409
+ * `brief-changed`, so an edit of an older brief never lands over a newer one
+ * written meanwhile by the planner or another tab.
+ *
+ * Refusals: 400 with `detail.field` naming the field `validateBrief` refused;
+ * 409 with `detail.reason` `in-flight`, `brief-changed` (a planner reply
+ * replaced the brief while this edit was checked), `draw-in-progress`,
+ * `drawing`, `done` or `abandoned`; 503 when the topic list cannot be read.
+ */
+export function saveBrief(draftId: string, brief: Brief, base: number) {
+  return call<{
+    draftId: string;
+    state: DraftState;
+    brief: Brief;
+    briefSeq?: number | null;
+    pendingTopic: PendingTopic | null;
+    note: string;
+  }>(
+    draftPath(draftId, `/brief?base=${encodeURIComponent(String(base))}`),
+    { method: "PUT", body: JSON.stringify(brief) },
+  );
 }
 
 /** `POST /api/drafts/{id}/abandon`: close it for good. Stops a turn in flight first. */
