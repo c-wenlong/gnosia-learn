@@ -276,7 +276,12 @@ Rules of engagement:
   (`<slug>.tldr` and `.svg`), never into the tree. The permission file allows
   those two files and denies every other job's workspace and the rest of
   `STUDIO_HOME`, a job queued after the agent started included (globs over
-  every id but its own, since the file is written once, at spawn). `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
+  every id but its own, since the file is written once, at spawn). The CLI's
+  own session scratchpad is a write it allows without reading any rule,
+  so the agent runs with `CLAUDE_CODE_TMPDIR` at the job's `tmp/`, which puts
+  the scratchpad inside the job, and the settings deny the default
+  `/tmp/claude-<uid>/` in case a CLI stops honouring the variable (`agentEnv`
+  and `claudeTempRules`). `job.candidate_path` holds `jobs/<id>/candidate/<slug>.tldr`
   relative to `STUDIO_HOME`, and the catalog refuses any other value. A job
   recorded before the move still names `learn/assets/.candidates/<slug>`, which
   the runner resolves against the repository, so it can be accepted, discarded

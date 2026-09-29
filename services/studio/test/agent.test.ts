@@ -48,6 +48,7 @@ out({
   oauthToken: (process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "") !== "",
   configDir: process.env.CLAUDE_CONFIG_DIR ?? null,
   tmpdir: process.env.TMPDIR ?? null,
+  claudeTmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
   marker: process.env.STUDIO_AGENT_TEST_MARKER ?? null,
   addDirs: process.argv.filter((_, i, argv) => argv[i - 1] === "--add-dir"),
   strictMcpConfig: process.argv.includes("--strict-mcp-config"),
@@ -193,6 +194,9 @@ describe("the agent's environment", () => {
     // Everything else still arrives, TMPDIR pointed into the job as before.
     expect(env.marker).toBe("kept");
     expect(env.tmpdir).toBe(tmpDir("job-login"));
+    // And the CLI's own temp root with it, so the session's scratchpad, which
+    // the CLI lets it write without asking any rule, is inside the job.
+    expect(env.claudeTmpdir).toBe(tmpDir("job-login"));
 
     expect(inits).toEqual([{ apiKeySource: "none", model: "claude-sonnet-test" }]);
     expect(outcome.apiKeySource).toBe("none");
@@ -233,12 +237,21 @@ describe("the agent's environment", () => {
     expect(login.PATH).toBe("/usr/bin");
     expect(login.CLAUDE_CONFIG_DIR).toBe("/c");
     expect(login.TMPDIR).toBe("/tmp/job");
+    expect(login.CLAUDE_CODE_TMPDIR).toBe("/tmp/job");
 
     const env = agentEnv(base, "env", "/tmp/job");
     for (const name of AGENT_AUTH_ENV) expect(env[name], name).toBe("x");
     // A copy, never an edit of what it was given.
     expect(base.ANTHROPIC_API_KEY).toBe("x");
     expect(base.TMPDIR).toBeUndefined();
+  });
+
+  it("moves the CLI's temp root into the job even when the runner has one of its own", () => {
+    // A runner started from inside a Claude session can inherit this variable
+    // naming that session's root. The agent must not share it: its scratchpad
+    // would land in somebody else's temp directory.
+    const env = agentEnv({ CLAUDE_CODE_TMPDIR: "/tmp/parent-session" }, "login", "/tmp/job");
+    expect(env.CLAUDE_CODE_TMPDIR).toBe("/tmp/job");
   });
 });
 
