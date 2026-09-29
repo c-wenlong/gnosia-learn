@@ -21,7 +21,11 @@ import { describe, expect, it } from "vitest";
  *   capitals; negative tracking on a display heading is fine;
  * - `text-transform: uppercase`, `small-caps` or positive `letter-spacing`
  *   in a stylesheet;
- * - JSX text typed in capitals ("PLANNER"), which no class would catch.
+ * - JSX text typed in capitals ("PLANNER"), which no class would catch, and
+ *   the same in a string handed to a prop that becomes visible copy or an
+ *   accessible name (`label="PLANNER"`, `title`, `placeholder`,
+ *   `aria-label`, `alt` and the rest of `COPY_PROPS`), or put in braces as a
+ *   child (`{"PLANNER"}`).
  *
  * It reads string literals and JSX text through the TypeScript parser, not
  * the raw file, so a comment explaining the rule does not trip it. An acronym
@@ -67,10 +71,51 @@ const CLASS_RULES: { name: string; pattern: RegExp }[] = [
  */
 const SHOUTED = /^(?=[^a-z]*$)(?=.*[A-Z]{4})(?=(?:[^A-Z]*[A-Z]){5})[A-Z0-9 ·:&'-]+$/;
 
+/**
+ * Props whose string reaches the reader, on screen or through a screen reader.
+ * A `className`, an `href` or a `data-*` value is not copy and is not read.
+ */
+const COPY_PROPS = new Set([
+  "label",
+  "title",
+  "placeholder",
+  "aria-label",
+  "aria-description",
+  "aria-valuetext",
+  "alt",
+  "heading",
+  "headline",
+  "subtitle",
+  "eyebrow",
+  "caption",
+  "description",
+  "meta",
+  "hint",
+  "short",
+  "sendLabel",
+  "disabledReason",
+]);
+
+/** The literal text of a string, or of every literal part of a template. */
+function literalText(node: ts.Node): string | null {
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node)) return [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(" ");
+  return null;
+}
+
+/** Every literal a prop or a braced child can resolve to, through `a ? "B" : "C"` and `a ?? "B"`. */
+function literalsOf(node: ts.Expression | undefined): string[] {
+  if (node === undefined) return [];
+  if (ts.isParenthesizedExpression(node)) return literalsOf(node.expression);
+  if (ts.isConditionalExpression(node)) return [...literalsOf(node.whenTrue), ...literalsOf(node.whenFalse)];
+  if (ts.isBinaryExpression(node)) return [...literalsOf(node.left), ...literalsOf(node.right)];
+  const text = literalText(node);
+  return text === null ? [] : [text];
+}
+
 type Finding = { file: string; line: number; rule: string; text: string };
 
-function scanSource(file: string): Finding[] {
-  const text = readFileSync(file, "utf8");
+function scanSource(file: string, text = readFileSync(file, "utf8")): Finding[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: Finding[] = [];
   const report = (node: ts.Node, rule: string, value: string) =>
@@ -89,6 +134,18 @@ function scanSource(file: string): Finding[] {
     if (ts.isJsxText(node)) {
       const value = node.text.trim();
       if (value !== "" && SHOUTED.test(value)) report(node, "all-caps text", value);
+    }
+    if (ts.isJsxAttribute(node) && COPY_PROPS.has(node.name.getText(source)) && node.initializer !== undefined) {
+      const init = node.initializer;
+      const values = ts.isJsxExpression(init) ? literalsOf(init.expression) : literalsOf(init as ts.Expression);
+      for (const value of values) {
+        if (SHOUTED.test(value.trim())) report(node, `all-caps ${node.name.getText(source)}`, value);
+      }
+    }
+    if (ts.isJsxExpression(node) && (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent))) {
+      for (const value of literalsOf(node.expression)) {
+        if (SHOUTED.test(value.trim())) report(node, "all-caps text", value);
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -117,7 +174,7 @@ describe("sentence case", () => {
   it("no source file uppercases or tracks out a label", () => {
     const found = [...files(WEB_SRC, isSource)]
       .filter((file) => !(path.relative(WEB_SRC, file) in ALLOWED))
-      .flatMap(scanSource);
+      .flatMap((file) => scanSource(file));
     expect(found).toEqual([]);
   });
 
@@ -144,5 +201,13 @@ describe("sentence case", () => {
     expect(SHOUTED.test("SVG")).toBe(false);
     expect(SHOUTED.test("CS4263")).toBe(false);
     expect(SHOUTED.test("Planner")).toBe(false);
+
+    const rules = (snippet: string) => scanSource(path.join(WEB_SRC, "probe.tsx"), snippet).map((f) => f.rule);
+    expect(rules(`const a = <TutorMessage label="PLANNER" />;`)).toEqual(["all-caps label"]);
+    expect(rules(`const a = <Input placeholder={"DESCRIBE IT"} />;`)).toEqual(["all-caps placeholder"]);
+    expect(rules(`const a = <img alt={wide ? "FULL WIDTH" : "Small"} />;`)).toEqual(["all-caps alt"]);
+    expect(rules(`const a = <nav aria-label={\`MAIN MENU \${x}\`} />;`)).toEqual(["all-caps aria-label"]);
+    expect(rules(`const a = <p>{"PLANNER"}</p>;`)).toEqual(["all-caps text"]);
+    expect(rules(`const a = <p title="SVG" aria-label="Export SVG" className="PLANNER" />;`)).toEqual([]);
   });
 });
