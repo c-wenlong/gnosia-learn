@@ -328,6 +328,17 @@ record of what was designed; this is what changed on top of it.
   "concept note"); a note card's concept line that was its own title again;
   the workspace panel header under the phone tab that just opened it.
 
+- **No control that only says it is not built.** Snooze to tomorrow,
+  Reminders, Save to note, Add source and Generate flashcards were drawn
+  disabled with "Not built yet." beside them; they are gone until they exist.
+- **Today has no Streak card.** It repeated the top bar's streak pill, which
+  stays and carries the free misses and today's fact in its tooltip.
+- **"Leech" reads "Keeps slipping"** wherever the reader sees it (the Learn
+  badge and filter, the review card). `leech` stays the field, the filter key
+  and the CLI's word: the `--json` shapes are a contract with the plugin.
+- **"Teach me"**, not "Teach me · focus mode", matching Today's "Continue
+  teaching" to the same page.
+
 The list of every label removed or restyled is in the pull request that made
 the change. `apps/web/src/lib/sentence-case.test.ts` fails the build of an
 `uppercase` class, wide tracking, or JSX text typed in capitals.

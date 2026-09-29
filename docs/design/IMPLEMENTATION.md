@@ -135,7 +135,7 @@ Import from `@/components/ui` or from the file.
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
 | `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "hi" \| "mid"` (`hi` and `mid` are the mastered and learning colours), `label?` (accessible name), `className?`. Full width of its container: size it with a wrapper, not `className` (see Gotchas) | `Bar` |
 | `TargetBar` | `done: number`, `total: number`, `label?`, `className?`: a 20px track with "x / y" beside it | `TargetBar` |
-| `StreakDay` | `letter: string`, `state: StreakDayState` (`done`, `forgiven`, `missed`, `today`, `future`), `isToday?`, `description: string` (what a screen reader hears), `className?`. Feed it from `streakStrip` in `@/lib/today-core` | `StreakDay` |
+| `StreakDay` | Removed 2026-09-29 with Today's Streak card, its only user (see the Streak card rows under Deviations). The habit data still carries `streak.week` | `StreakDay` |
 | `Input` | `pill?: boolean`, `className?`, every `<input>` attribute | `Input` |
 | `SearchField` | `label: string` (screen-reader label, required), `name?` (default `q`), `className?` (the wrapper, e.g. a width), `inputClassName?`, every `<input>` attribute but `type` | `Input` with `pill` |
 | `StatTile` | `value: ReactNode`, `label: string`, `tone: "ok" \| "accent" \| "violet" \| "streak"`, `className?` | `StatTile` |
@@ -158,7 +158,7 @@ The pure helpers beside them:
 | [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags)`, `courseStatus(summary, completed)`, `filterCourses(...)`, `usedTags(...)` |
 | [`@/lib/habit-core`](../../apps/web/src/lib/habit-core.ts) | the `Habit` types, `computeHabit`, `computeStreak`, `computeTarget`, `habitLabels`, `dayKey`, `weekStart`, `addDays`, `parseDailyTarget`, `parseLeeway` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
-| [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `streakStrip`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
+| [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
 
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
@@ -547,22 +547,21 @@ in that session.
 | Workspace left panel | summary, links, sources, backlinks only | the same, plus the whole note behind "Read the whole note" | the panel is "Note & sources"; the note is closed by default to keep the drawn layout |
 | Workspace sources | three coloured sources | "Your note" is always source [1], frontmatter sources follow | no note in the corpus fills `sources:` yet, so the note is the one source every concept has |
 | Workspace tutor | "Learning guide · concise" | the stored tutor style's label ("Learning guide · concise" by default), as a link to Settings | the label is the style the prompt is given; the link says where it changes |
-| Tutor turns | Save to note and Why? | Why? first, sending "Why?"; Save to note last, disabled, with "Not built yet." beside it | extending `POST /api/learner/note` is not in 1c |
-| Studio cards | "Generate flashcards", "Add source" | disabled, with the reason beside each (`disabledReason`) | no feature behind them yet |
+| Tutor turns | Save to note and Why? | Why? only; Save to note was drawn disabled with "Not built yet." until 2026-09-29, when the owner had every not-built control removed | extending `POST /api/learner/note` is not in 1c |
+| Studio cards | "Generate flashcards", "Add source" | not drawn (disabled with a reason until 2026-09-29) | no feature behind them yet, and a control that only says so was removed |
 | Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
 | Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
-| Today, Streak card | "Calendar" link in the title row | not drawn | there is no calendar page to open |
-| Today, Streak card | "Reminders state facts, never guilt" under the strip | "Studied today." or "Nothing recorded yet today." | reminders are not built; the line states today's fact instead |
+| Today, Streak card | the card, with its week of discs | not drawn since 2026-09-29; the top bar's streak pill stays, with the free misses and today's fact in its tooltip | the card repeated the pill (the owner's call). Until then it drew the week with a fifth `forgiven` disc state and no "Calendar" link |
 | Today, Streak strip | four disc states | a fifth, `forgiven`: a dashed `--streak` ring | the habit data has misses the leeway covered, and they should not read as either a done day or a plain miss |
 | Today, Next up | "Next on your path · CP4281 · Module 2" | the course and module when a curriculum item links the concept, otherwise the note's folder ("Next on your path · algorithms") | most notes link no curriculum item yet |
-| Today, Reviews due | Snooze to tomorrow | drawn, disabled, with "Not built yet." beside it | snoozing is out of scope for 1a |
+| Today, Reviews due | Snooze to tomorrow | not drawn (disabled with "Not built yet." until 2026-09-29) | snoozing is out of scope for 1a |
 | Today, Recent activity | one row per concept | one row per sitting (session and kind); a row over several concepts prints "p(L) 2 up · 5 down" instead of one before-and-after | a probe across seven concepts would otherwise fill the card with one session |
 | Today, Full history | a history page | links to `/learn` | there is no history page yet |
 | Today, phone | the page title in the header | "Today" printed under the header, visually hidden from 768px up | the shell's header shows the wordmark, as on Courses |
 | Settings, Theme | System | Light or Dark | the theme is a two-value cookie the root layout reads; a system mode belongs to the shell |
-| Settings, Reminders | "Facts only · 9:00" | a disabled select reading "Off", with a note that nothing is stored | reminders are not built, and `reminders` is not a preference key yet |
+| Settings, Reminders | "Facts only · 9:00" | not drawn (a disabled "Off" until 2026-09-29) | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
-| Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what the choice does today (Reminders and Motion that they are not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
+| Settings, field notes | notes under Daily target and BKT priors only | also under Tutor style and Motion | each says what the choice does today (Motion that it is not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
 | Filter rows on Courses, Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Courses has Progress and Tag, Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows, Courses eleven. Picking "All" clears a group, so there is no separate clear button. Courses' two menus combine (in progress and tagged), where the old chips were one choice among all eleven |
 
 ### Session focus mode (phase 1d)
@@ -640,8 +639,12 @@ Left on purpose:
   node's panel, and is where Continue goes for a topic with no concept note.
   It runs the old topic tutor, which does not read `tutorStyle`. Retiring it
   needs those topics to have concepts first, so it is its own change.
-- **Reminders are not built.** Settings shows a disabled "Off" and Today's
-  Streak card states the day's fact instead.
+- **Reminders, snooze, Save to note, Add source and Generate flashcards are
+  not built,** and since 2026-09-29 none of them is drawn: a disabled control
+  that only says "Not built yet." was the owner's example of copy to remove.
+  The Deviations rows above say where each belongs, and a one-line comment
+  marks the spot where the code would not show it (Snooze, Save to note,
+  Reminders).
 - **`reducedMotion` is stored, not applied.** Only the system's
   `prefers-reduced-motion` is honoured, where a rule exists; the Settings
   note says so.
