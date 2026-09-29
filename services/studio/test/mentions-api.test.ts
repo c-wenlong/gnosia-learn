@@ -303,6 +303,10 @@ describe("the agent settings (D53)", () => {
     expect(stored.status).toBe(200);
     expect(catalogMock.preferenceSet).toHaveBeenCalledWith("studioDiagramAgent", { model: "opus", effort: "low" });
     expect((await put("/api/settings/agent", { kind: "video", model: "--flag", effort: "low" })).status).toBe(400);
+    // The runner's rule, at set time: a name it would read as "default" is refused (#207 review).
+    for (const model of ["Sonnet", "claude_sonnet", "opus[1m]x"]) {
+      expect((await put("/api/settings/agent", { kind: "diagram", model, effort: "low" })).status, model).toBe(400);
+    }
     expect((await put("/api/settings/agent", { kind: "video", model: "default", effort: "extreme" })).status).toBe(400);
     expect((await put("/api/settings/agent", { kind: "podcast", model: "default", effort: "default" })).status).toBe(400);
     catalogMock.preferenceSet.mockResolvedValue({ ok: false, json: null, error: "down", offline: true });

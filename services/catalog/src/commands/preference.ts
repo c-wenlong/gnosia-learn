@@ -107,7 +107,7 @@ export function parsePreferenceValue(raw: string | undefined): StudioAgentPrefer
   const clean = studioAgentPreference(record);
   if (record.model !== clean.model) {
     throw new PreferenceError(
-      `preference set: model must be "default" or a model name the claude CLI takes (letters, digits, . _ - [ ]), not ${JSON.stringify(record.model)}.`,
+      `preference set: model must be "default" or a model name in lower case (letters, digits, dots and hyphens, with at most one [suffix] at the end, as claude-fable-5-1[1m]), not ${JSON.stringify(record.model)}.`,
     );
   }
   if (record.effort !== clean.effort) {

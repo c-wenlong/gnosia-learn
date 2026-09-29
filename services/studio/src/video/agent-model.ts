@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { isAgentModel } from "@self-learn/schema/shared";
+
 import { preferenceGet } from "../catalog";
 import { readThrough } from "../content-cache";
 import type { AgentSetting } from "./types";
@@ -32,12 +34,14 @@ export interface AgentPreference {
 export const DEFAULT_PREFERENCE: AgentPreference = { model: "default", effort: "default" };
 
 /** A model name the CLI takes: an alias or a full id, optionally with a `[1m]` context suffix. */
-const MODEL_NAME = /^[a-z][a-z0-9.-]{0,80}(\[[0-9a-z]{1,8}\])?$/;
+// The model rule is `isAgentModel` in @self-learn/schema/shared, the one the
+// settings route and `catalog preference set` refuse by, so a stored value is
+// never read as something other than what was saved.
 
 /** The stored value, as `{ model, effort }` with `default` for anything missing or not a value the CLI takes. */
 export function normalisePreference(value: unknown): AgentPreference {
   const raw = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-  const model = typeof raw.model === "string" && (raw.model === "default" || MODEL_NAME.test(raw.model)) ? raw.model : "default";
+  const model = typeof raw.model === "string" && (raw.model === "default" || isAgentModel(raw.model)) ? raw.model : "default";
   const effort = typeof raw.effort === "string" && (raw.effort === "default" || (EFFORTS as readonly string[]).includes(raw.effort)) ? raw.effort : "default";
   return { model, effort };
 }
@@ -106,7 +110,7 @@ export function claudeSettingsPath(env: NodeJS.ProcessEnv = process.env): string
 export async function readClaudeDefaults(file: string = claudeSettingsPath()): Promise<{ model: string | null; effort: string | null }> {
   try {
     const parsed = JSON.parse(await readFile(file, "utf8")) as { model?: unknown; effortLevel?: unknown };
-    const model = typeof parsed.model === "string" && MODEL_NAME.test(parsed.model) ? parsed.model : null;
+    const model = isAgentModel(parsed.model) ? parsed.model : null;
     const effort = typeof parsed.effortLevel === "string" && (EFFORTS as readonly string[]).includes(parsed.effortLevel) ? parsed.effortLevel : null;
     return { model, effort };
   } catch {

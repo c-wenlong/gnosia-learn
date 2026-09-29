@@ -12,6 +12,7 @@ import {
   job,
   learner,
   preference,
+  isAgentModel,
   studioAgentPreference,
   video,
 } from "@self-learn/schema";
@@ -786,6 +787,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       [JSON.stringify({ model: "opus", effort: "ultra" }), /effort must be/],
       [JSON.stringify({ model: "opus", effort: "high", extra: 1 }), /other than model and effort: extra/],
       [JSON.stringify({ model: "--flag", effort: "high" }), /model must be/],
+      [JSON.stringify({ model: "Sonnet", effort: "high" }), /model must be/],
+      [JSON.stringify({ model: "claude_sonnet", effort: "high" }), /model must be/],
       [JSON.stringify({ model: "opus" }), /effort must be/],
       [JSON.stringify(["opus"]), /must be a JSON object/],
       ["7", /must be a JSON object/],
@@ -875,5 +878,12 @@ describe("studioAgentPreference", () => {
       model: "default",
       effort: "default",
     });
+    // One rule for set and read (#207 review): what a set would refuse, a
+    // read never keeps, so "Sonnet" can never be saved and then run as default.
+    for (const model of ["Sonnet", "claude_sonnet", "claude-[1m]-5", "opus[1m][x]", "a".repeat(81)]) {
+      expect(studioAgentPreference({ model, effort: "high" }).model, model).toBe("default");
+      expect(isAgentModel(model), model).toBe(false);
+    }
+    expect(isAgentModel("sonnet")).toBe(true);
   });
 });
