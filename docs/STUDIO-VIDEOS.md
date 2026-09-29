@@ -117,7 +117,7 @@ path, the cost meter and the cap.
 | Agent's one command | `npm run --silent canvas` | the job's own wrapper, `jobs/<id>/bin/video` (D45) |
 | Where agent-written code runs | nowhere: a snippet runs in tldrawkc's browser page | inside a per-job OS sandbox (D44) |
 | Workspace | `jobs/<id>/candidate/`, `scratch/` | `jobs/<id>/checkout/` (a synthetic manimkc checkout) and `render/` (D46) |
-| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output and no file written under `render/` (a guess); no attempt or job timer (D54) |
+| Timers | 15 min attempt, 45 min job, 5 min idle | one hang timer: 20 min with no agent output and no wrapper call ending (a guess); no attempt or job timer (D54, amended) |
 | Gate | candidate, inspect, elements and relations, topic, export, verify | source, lint, script and labels, topic, the finished video, sync, length, poster, looked; it reads the agent's build and renders nothing itself |
 | Model and effort | the brief's `model`, `sonnet` by default | the settings panel, the owner's Claude Code default by default (D53) |
 | Accept | `catalog diagram put --job` | `catalog video put --job` |
@@ -1252,7 +1252,7 @@ limit. What remains:
 | Guard | Value | Why |
 | --- | --- | --- |
 | The daily cap | `STUDIO_DAILY_USD`, unset by default. When the owner sets it, a video job and a video planner turn count like any job and turn, in the same window, and a job already running is never stopped | One cap, as D27 and D36; no new limit for videos |
-| Hang timer | 20 minutes with no line from the agent and no file written under `render/`, then the job is stopped as `timeout` | The only timer (D54). A render writes its partial movie files as it goes, so a long render is not a hang; a session that is thinking and writing is not either. 20 minutes is a guess |
+| Hang timer | 20 minutes with no line from the agent and no wrapper call ending (a line in `calls.ndjson`), then the job is stopped as `timeout` | The only timer (D54, amended). A render runs inside one Bash call, which the tool ends at 600 s and then answers on the stream, so a long render is not a hang. Files under `render/` do not count: a scene writes them, so a scene touching one kept a hung session alive forever (the review of #201). 20 minutes is a guess |
 | Attempts | three, as for diagrams: a gate failure resumes the agent with the findings | A retry policy, not a limit on work within an attempt |
 | `--max-turns` | not passed; `STUDIO_VIDEO_MAX_TURNS` exists for the owner to set | No limit by default, as a hand-run session has none |
 | Concurrency | one video job, independent of the diagram runner's one | A correctness choice, not a cost one: scenes already render in parallel inside a job, `min(cores / 3, (RAM - 2 GB) / 1.5 GB, 4)`, 4 on this machine, from manimkc's measured 930 MB and three cores per 1080p scene |
@@ -1270,7 +1270,7 @@ V for video, so they do not collide with C, M, E or U.
 | V3 | `sandbox-exec` is missing | As V2 |
 | V4 | The runner is on Linux | The video kind is off until the bubblewrap profile passes the hostile-scene test there |
 | V5 | A scene builds a narration line at run time (an f-string) | Lint refuses it (phase 0 rule). If it got past, the render fails on a missing clip, and the gate's script step names the line |
-| V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and nothing is written under `render/` for 20 minutes, the hang timer stops the job |
+| V6 | A render never finishes | The Bash tool stops the call at its 600 s ceiling and the agent sees the timeout, as it would by hand; if the agent itself stops producing anything and runs no command for 20 minutes, the hang timer stops the job, whatever a scene keeps writing |
 | V7 | A scene writes until the disk fills | Only `render/` is writable, so it fills the disk with its own job's files and nothing else; the render fails, the agent sees why. No cap, by the owner's decision |
 | V8 | Two drafts make the same slug | The target lease on `videos/<slug>.mp4` refuses the second with 409, named |
 | V9 | The kokoro model is not downloaded | The video doctor fails. The narration step runs with `HF_HUB_OFFLINE=1` and cannot reach the network anyway, so it never downloads during a job |
@@ -1556,6 +1556,14 @@ by default, and names no rendering failure: a compile error, a scene the
 narration model tripped on, a failed join, a preview that times out in the
 Bash tool, are the agent's to read and fix inside its loop, as they are the
 owner's when the skill is run by hand.
+
+*Amended 2026-09-29 (the review of #201):* the hang timer's second clause is
+now a wrapper call ending inside the window, not a file written under
+`render/`. A scene writes under `render/`, so a scene that touched a file in
+a loop kept a hung session alive forever; only the agent can add a line to
+`calls.ndjson`, which sits outside everything a profile may write. A render
+still cannot trip it, since the Bash tool ends a call at 600 s, well inside
+the 20 minutes, and answers on the stream.
 
 **Why:** rendering is dynamic (code written, compiled, a local model started,
 scenes stitched), and a list of failures in the runner would always be a list

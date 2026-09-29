@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -638,7 +638,7 @@ export class VideoRunner {
       if (outcome.stopReason === "idle-timeout") {
         await this.finish(entry, "failed", {
           errorKind: "timeout",
-          error: `the agent said nothing and nothing was written under render/ for ${Math.round(videoHangMs() / 60_000)} minutes, so the job was stopped as hung`,
+          error: `the agent said nothing and ran no command for ${Math.round(videoHangMs() / 60_000)} minutes, so the job was stopped as hung`,
           outcome,
           cost: entry.meter.read(),
         });
@@ -768,7 +768,11 @@ export class VideoRunner {
         onInit: input.onInit,
         attemptMs: null,
         idleMs: hangMs,
-        stillWorking: async () => (await newestWrite(paths.render)) > Date.now() - hangMs,
+        // Only the agent's own doing counts: a wrapper call that ended inside
+        // the hang window. Files under render/ do not, because a scene
+        // writes them, and a scene touching a file forever kept a hung
+        // session alive forever (the review of #201).
+        stillWorking: () => stillWorking(paths, hangMs),
       },
     });
   }
@@ -988,20 +992,22 @@ async function saveSource(paths: VideoPaths): Promise<void> {
   await safeCopy(paths.topicYml, path.join(paths.source, "topic.yml")).catch(() => undefined);
 }
 
-/** The newest modification time under a directory, links not followed; 0 when there is nothing. */
-export async function newestWrite(directory: string, depth = 8): Promise<number> {
-  let newest = 0;
-  const facts = await stat(directory).catch(() => null);
-  if (facts === null) return 0;
-  newest = facts.mtimeMs;
-  if (depth === 0) return newest;
-  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    const child = path.join(directory, entry.name);
-    if (entry.isDirectory()) newest = Math.max(newest, await newestWrite(child, depth - 1));
-    else if (entry.isFile()) newest = Math.max(newest, (await lstat(child).catch(() => null))?.mtimeMs ?? 0);
-  }
-  return newest;
+/**
+ * Whether the agent did something inside the hang window that the stream
+ * does not show: a wrapper call that ended within it. `calls.ndjson` sits in
+ * the job directory, which no profile can write, so only the wrapper, and so
+ * only the agent's Bash tool, adds a line to it.
+ */
+export function agentActive(calls: readonly { endedAt?: string }[], now: number, hangMs: number): boolean {
+  return calls.some((call) => {
+    const ended = Date.parse(call.endedAt ?? "");
+    return Number.isFinite(ended) && ended > now - hangMs;
+  });
+}
+
+/** The hang timer's question for one job, asked when the stream has been silent for `hangMs`. */
+export async function stillWorking(paths: Pick<VideoPaths, "calls">, hangMs: number, now: number = Date.now()): Promise<boolean> {
+  return agentActive(await readCalls(paths.calls), now, hangMs);
 }
 
 /** One wrapper call, as the narration log says it (D24). */

@@ -24,11 +24,12 @@ function integer(name: string, fallback: number, min: number, max: number): numb
 export const VIDEO_CONCURRENCY = integer("STUDIO_VIDEO_CONCURRENCY", 1, 1, 1);
 
 /**
- * The only timer (D54): this long with no line from the agent **and** no file
- * written under the job's `render/`. A render writes its partial movie files
- * as it goes, so a long render is not a hang, and a session that is thinking
- * and writing is not one either. Twenty minutes is a guess, to be reset
- * against the first ten real jobs (phase 3).
+ * The only timer (D54, amended): this long with no line from the agent
+ * **and** no wrapper call ending. A render runs inside one Bash call, which
+ * the tool ends at 600 s and answers on the stream, so a long render is not a
+ * hang. Files under `render/` do not count, since a scene writes them.
+ * Twenty minutes is a guess, to be reset against the first ten real jobs
+ * (phase 3).
  */
 export function videoHangMs(): number {
   return integer("STUDIO_VIDEO_HANG_MS", 20 * 60_000, 30_000, 6 * 3_600_000);

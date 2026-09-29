@@ -35,7 +35,7 @@ const catalogMock = vi.hoisted(() => ({
 }));
 vi.mock("../src/catalog", () => catalogMock);
 
-const { VideoRunner } = await import("../src/video/runner");
+const { VideoRunner, stillWorking } = await import("../src/video/runner");
 const { acceptVideo, discardVideo } = await import("../src/video/review");
 
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
@@ -76,6 +76,26 @@ async function runner(report: Partial<VideoDoctorReport> = {}) {
 function brief(over: Partial<ValidVideoBrief> = {}): ValidVideoBrief {
   return { ...narratedBrief(), idempotencyKey: `key-${Math.random()}`, ...over };
 }
+
+describe("the hang timer's question", () => {
+  it("counts a wrapper call that ended inside the window, and never a file a scene wrote under render/", async () => {
+    const job = path.join(home, "jobs", "hang");
+    const render = path.join(job, "render", "out");
+    await mkdir(render, { recursive: true });
+    const calls = path.join(job, "calls.ndjson");
+    const hangMs = 20 * 60_000;
+    // A scene that keeps touching a file: fresh, and still not the agent.
+    await writeFile(path.join(render, "partial.mp4"), "x");
+    expect(await stillWorking({ calls }, hangMs)).toBe(false);
+    const call = (endedAt: number) => `${JSON.stringify({ verb: "preview", startedAt: new Date(endedAt - 1000).toISOString(), endedAt: new Date(endedAt).toISOString(), exitCode: 0 })}\n`;
+    await writeFile(calls, call(Date.now() - hangMs - 60_000));
+    expect(await stillWorking({ calls }, hangMs)).toBe(false);
+    await writeFile(calls, call(Date.now() - 60_000), { flag: "a" });
+    expect(await stillWorking({ calls }, hangMs)).toBe(true);
+    // And once the window has passed that call, it no longer counts.
+    expect(await stillWorking({ calls }, hangMs, Date.now() + hangMs)).toBe(false);
+  });
+});
 
 describe("the video runner's refusals", () => {
   it("refuses every job while the video doctor fails, and never renders unsandboxed", async () => {
