@@ -15,13 +15,25 @@ import path from "node:path";
  * looked at, which is the honest picture of where the drawing is.
  *
  * The directory is the job's own scratch, `$STUDIO_HOME/jobs/<id>/scratch/`,
- * which the agent may write anything into. So everything here is defensive
- * about what it finds:
+ * which the agent may write anything into, so what is served is checked on
+ * the open file itself, not on the names that led to it:
  *
- * - Nothing is followed through a symlink. The scratch directory itself, a
- *   subdirectory and a file are each checked with `lstat`, and the file is
- *   opened with `O_NOFOLLOW`, so a link swapped in between the look and the
- *   open fails to open rather than serving whatever it points at.
+ * - The file is opened once, with `O_NOFOLLOW` on its last component, and
+ *   that handle is what gets streamed; nothing opens the path a second time.
+ * - `O_NOFOLLOW` says nothing about the directories above the file, so a
+ *   subdirectory (or `scratch` itself) swapped for a symlink between the
+ *   listing and the open could still lead it outside. The opened handle is
+ *   therefore checked against the tree *after* the open: its device and inode
+ *   must be what `lstat` finds at the same path with every directory on the
+ *   way, `scratch` included, a real directory rather than a link, and `scratch`
+ *   must still be the directory the listing started from. A file reached
+ *   through a swapped link has an inode that is not at that path once the link
+ *   is swapped back, and fails.
+ * - The one way to have the same inode at both places is a second name for it:
+ *   a hard link. A file with more than one link is refused, so an outside file
+ *   cannot be hard-linked into scratch and served. What remains possible is a
+ *   file the agent itself could already move into scratch, which it could
+ *   write there anyway.
  * - Only the scratch directory and its immediate subdirectories are read, and
  *   only regular files named `*.png`.
  * - A file must start with the PNG signature and end with the `IEND` chunk.
@@ -56,15 +68,23 @@ export interface LiveShot {
   etag: string;
 }
 
+/** A `LiveShot` with the handle it was verified on, which the caller streams and closes. */
+export interface OpenShot extends LiveShot {
+  handle: FileHandle;
+}
+
 /**
- * The newest complete PNG under `scratch`, or null when there is none yet.
+ * The newest complete PNG under `scratch`, opened and verified, or null when
+ * there is none yet. The caller owns the handle and must close it (streaming
+ * it with `createReadStream` does).
  *
  * Newest by modification time, and by name among files written in the same
  * millisecond, so the answer is stable between two polls of an unchanged
  * directory.
  */
-export async function newestShot(scratch: string): Promise<LiveShot | null> {
-  const root = await lstat(scratch).catch(() => null);
+export async function openNewestShot(scratch: string): Promise<OpenShot | null> {
+  // Inode numbers as bigints: a filesystem is allowed ones past 2^53.
+  const root = await lstat(scratch, { bigint: true }).catch(() => null);
   if (root === null || !root.isDirectory()) return null;
 
   const found: { file: string; name: string; size: number; mtimeMs: number }[] = [];
@@ -92,27 +112,63 @@ export async function newestShot(scratch: string): Promise<LiveShot | null> {
 
   found.sort((a, b) => b.mtimeMs - a.mtimeMs || a.name.localeCompare(b.name));
   for (const candidate of found.slice(0, TRIES)) {
-    const handle = await openShot(candidate.file);
+    const handle = await openNoFollow(candidate.file);
     if (handle === null) continue;
+    let keep = false;
     try {
       const info = await handle.stat();
       if (!info.isFile() || info.size !== candidate.size) continue;
+      if (!(await inside(scratch, root, candidate.name, handle))) continue;
       if (!(await complete(handle, info.size))) continue;
-      return { ...candidate, etag: etagOf(candidate) };
+      keep = true;
+      return { ...candidate, etag: etagOf(candidate), handle };
     } finally {
-      await handle.close();
+      if (!keep) await handle.close();
     }
   }
   return null;
 }
 
+/** The newest picture's facts, with its handle closed: for a test, or a caller that serves nothing. */
+export async function newestShot(scratch: string): Promise<LiveShot | null> {
+  const shot = await openNewestShot(scratch);
+  if (shot === null) return null;
+  const { handle, ...facts } = shot;
+  await handle.close();
+  return facts;
+}
+
 /**
- * Open a file for reading without following a symlink at its last component.
+ * Whether an open handle is the file at `scratch/<name>`, reached through real
+ * directories only, with no second name.
  *
- * Exported for the route, which opens the file a second time to stream it and
- * must not be the place a link swapped in after `newestShot` gets followed.
+ * Checked after the open, so it covers a directory swapped for a link and back
+ * again around the open: the handle keeps the inode it opened, and the path is
+ * read again now. `root` is `scratch` as the listing found it.
  */
-export async function openShot(file: string): Promise<FileHandle | null> {
+export async function inside(
+  scratch: string,
+  root: { dev: bigint; ino: bigint },
+  name: string,
+  handle: FileHandle,
+): Promise<boolean> {
+  const opened = await handle.stat({ bigint: true }).catch(() => null);
+  if (opened === null || !opened.isFile() || opened.nlink !== 1n) return false;
+
+  const now = await lstat(scratch, { bigint: true }).catch(() => null);
+  if (now === null || !now.isDirectory() || now.dev !== root.dev || now.ino !== root.ino) return false;
+
+  const parts = name.split("/");
+  if (parts.length > 2 || parts.some((part) => part === "" || part === "." || part === "..")) return false;
+  if (parts.length === 2) {
+    const sub = await lstat(path.join(scratch, parts[0] ?? ""), { bigint: true }).catch(() => null);
+    if (sub === null || !sub.isDirectory()) return false;
+  }
+  const atPath = await lstat(path.join(scratch, ...parts), { bigint: true }).catch(() => null);
+  return atPath !== null && atPath.isFile() && atPath.dev === opened.dev && atPath.ino === opened.ino;
+}
+
+async function openNoFollow(file: string): Promise<FileHandle | null> {
   try {
     return await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch {

@@ -1,10 +1,11 @@
-import { mkdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { link, lstat, mkdir, open, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { matchesTag, MAX_BYTES, newestShot } from "../src/live-shot";
+import { inside, matchesTag, MAX_BYTES, newestShot, openNewestShot } from "../src/live-shot";
 
 /**
  * The grid's live preview reads the newest picture the agent took of its own
@@ -124,6 +125,81 @@ describe("staying inside the job's scratch", () => {
     await mkdir(path.dirname(linked), { recursive: true });
     await symlink(elsewhere, linked);
     expect(await newestShot(linked)).toBeNull();
+  });
+});
+
+describe("checking the opened file, not the path that led to it", () => {
+  /**
+   * The race `O_NOFOLLOW` cannot see: a subdirectory swapped for a link to
+   * somewhere else, the file opened through it, and the directory swapped
+   * back. The handle holds the outside file; the path now names the inside
+   * one. Played here in order, with the open in the middle.
+   */
+  it("refuses a handle opened through a subdirectory that was a link at the time", async () => {
+    await put("shots/pass1.png", png("inside"), 5);
+    const outside = path.join(root, "outside");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "pass1.png"), png("outside"));
+    const rootInfo = await lstat(scratch, { bigint: true });
+
+    await rename(path.join(scratch, "shots"), path.join(scratch, "shots-real"));
+    await symlink(outside, path.join(scratch, "shots"));
+    const handle = await open(path.join(scratch, "shots", "pass1.png"), constants.O_RDONLY | constants.O_NOFOLLOW);
+    await rm(path.join(scratch, "shots"));
+    await rename(path.join(scratch, "shots-real"), path.join(scratch, "shots"));
+    try {
+      expect(await inside(scratch, rootInfo, "shots/pass1.png", handle)).toBe(false);
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("refuses a handle while the subdirectory on its path is still a link", async () => {
+    const outside = path.join(root, "outside");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "pass1.png"), png());
+    await symlink(outside, path.join(scratch, "shots"));
+    const rootInfo = await lstat(scratch, { bigint: true });
+    const handle = await open(path.join(scratch, "shots", "pass1.png"), constants.O_RDONLY);
+    try {
+      expect(await inside(scratch, rootInfo, "shots/pass1.png", handle)).toBe(false);
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("refuses scratch when it is no longer the directory the listing read", async () => {
+    await put("pass1.png", png(), 5);
+    const rootInfo = await lstat(scratch, { bigint: true });
+    const handle = await open(path.join(scratch, "pass1.png"), constants.O_RDONLY);
+    await rename(scratch, `${scratch}-moved`);
+    await mkdir(scratch);
+    // The same inode, one name, at the same path: only `scratch` itself changed.
+    await rename(path.join(`${scratch}-moved`, "pass1.png"), path.join(scratch, "pass1.png"));
+    try {
+      expect(await inside(scratch, rootInfo, "pass1.png", handle)).toBe(false);
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("refuses a file with a second name, which could be an outside file hard-linked in", async () => {
+    const outside = path.join(root, "secret.png");
+    await writeFile(outside, png("somebody else's"));
+    await link(outside, path.join(scratch, "pass1.png"));
+    expect(await newestShot(scratch)).toBeNull();
+  });
+
+  it("hands back an open handle to the very file it checked", async () => {
+    await put("pass1.png", png("mine"), 5);
+    const shot = await openNewestShot(scratch);
+    expect(shot).not.toBeNull();
+    try {
+      const bytes = await shot!.handle.readFile();
+      expect(bytes.equals(png("mine"))).toBe(true);
+    } finally {
+      await shot?.handle.close();
+    }
   });
 });
 

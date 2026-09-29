@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
@@ -23,7 +24,7 @@ import {
 import { studioBlobStore } from "./blobs";
 import type { Drafts, DraftStreamEvent } from "./drafts";
 import { MirrorRefused, type Mirrors } from "./mirrors";
-import { matchesTag, newestShot, openShot } from "./live-shot";
+import { matchesTag, openNewestShot } from "./live-shot";
 import { scratchDir, shotPath, targetPath, workDir, workSvgPath } from "./paths";
 import { run } from "./proc";
 import { accept, discard, reindex } from "./review";
@@ -1048,7 +1049,8 @@ async function shotBytes(
     "cache-control": "no-cache",
     "last-modified": info.mtime.toUTCString(),
   });
-  createReadStream(file).pipe(response);
+  // As for the live picture: an abort or a read error closes the file.
+  pipeline(createReadStream(file), response, () => undefined);
 }
 
 /**
@@ -1069,7 +1071,9 @@ async function liveShotBytes(
   response: ServerResponse,
   record: JobRecord,
 ): Promise<void> {
-  const shot = await newestShot(scratchDir(record.id));
+  // Opened and checked once, and this handle is what is streamed: no second
+  // open of the path, so nothing swapped in after the check is ever read.
+  const shot = await openNewestShot(scratchDir(record.id));
   const cache = {
     // Revalidated on every poll: the tag is what makes that cheap.
     "cache-control": "private, no-cache",
@@ -1079,28 +1083,22 @@ async function liveShotBytes(
     return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
   }
   if (matchesTag(request.headers["if-none-match"], shot.etag)) {
+    await shot.handle.close();
     response.writeHead(304, { ...cache, etag: shot.etag });
     response.end();
     return;
   }
-  const handle = await openShot(shot.file);
-  if (handle === null) {
-    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
-  }
-  const info = await handle.stat().catch(() => null);
-  if (info === null || !info.isFile() || info.size !== shot.size) {
-    await handle.close();
-    // Rewritten between the look and the open; the next poll gets it whole.
-    return fail(response, 404, `job ${record.id} has no picture yet`, { which: "live", state: record.state });
-  }
   response.writeHead(200, {
     ...cache,
     "content-type": "image/png",
-    "content-length": info.size,
+    "content-length": shot.size,
     etag: shot.etag,
     "last-modified": new Date(shot.mtimeMs).toUTCString(),
   });
-  handle.createReadStream().pipe(response);
+  // `pipeline` rather than `pipe`: a client that goes away mid-picture, or a
+  // read that fails, destroys both ends and closes the handle, where `pipe`
+  // left the stream open and an error on it unhandled.
+  pipeline(shot.handle.createReadStream({ start: 0 }), response, () => undefined);
 }
 
 /**
