@@ -13,6 +13,7 @@ import {
   refusalNumber,
   refusalReason,
   refusalString,
+  saveBrief,
   sendMessage,
   type DraftEvent,
 } from "./studio-drafts";
@@ -50,6 +51,7 @@ describe("the calls", () => {
     await sendMessage("d1", "hello");
     await drawDraft("d1", "key");
     await abandonDraft("d1");
+    await listDrafts({ state: ["open", "briefed"], limit: 50 });
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([path, init]) => `${init.method ?? "GET"} ${path} ${init.body ?? ""}`.trim())).toEqual([
       "GET /studio/api/drafts/a%20b",
@@ -58,7 +60,30 @@ describe("the calls", () => {
       'POST /studio/api/drafts/d1/messages {"text":"hello"}',
       'POST /studio/api/drafts/d1/draw {"idempotencyKey":"key"}',
       "POST /studio/api/drafts/d1/abandon {}",
+      "GET /studio/api/drafts?state=open%2Cbriefed&limit=50",
     ]);
+  });
+
+  it("puts a whole edited brief, and hands back the field a refusal names", async () => {
+    const brief = {
+      intent: "i",
+      topic: "t",
+      slug: "s",
+      title: "T",
+      mode: "new" as const,
+      elements: [{ label: "A" }],
+      relations: [],
+    };
+    const fetchMock = answer(400, { error: '"title" is required', detail: { field: "title" } });
+    const result = await saveBrief("d 1", brief);
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(`${init.method} ${path}`).toBe("PUT /studio/api/drafts/d%201/brief");
+    expect(JSON.parse(String(init.body))).toEqual(brief);
+    expect(init.headers).toEqual({ "content-type": "application/json" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(400);
+    expect(refusalString(result.refusal, "field")).toBe("title");
   });
 
   it("returns a refusal rather than throwing, with its detail", async () => {

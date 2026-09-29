@@ -122,6 +122,12 @@ export interface DraftSummary {
   costUsd: number | null;
   updated: string;
   jobId: string | null;
+  /**
+   * The person's first message, whitespace collapsed and cut to 120
+   * characters: what the drafts list shows for a conversation with no brief
+   * yet. Optional: a runner from before phase 3 does not send it.
+   */
+  firstMessage?: string | null;
 }
 
 /**
@@ -266,10 +272,13 @@ export function createDraft(input: { source?: string; idempotencyKey: string }) 
   });
 }
 
-/** `GET /api/drafts`: the drafts list, phase 3's section above the grid. */
-export function listDrafts(query: { state?: DraftState; limit?: number } = {}) {
+/**
+ * `GET /api/drafts`: the drafts list, phase 3's section above the grid.
+ * Several states go as one comma list (`state=open,briefed`).
+ */
+export function listDrafts(query: { state?: DraftState | readonly DraftState[]; limit?: number } = {}) {
   const params = new URLSearchParams();
-  if (query.state !== undefined) params.set("state", query.state);
+  if (query.state !== undefined) params.set("state", typeof query.state === "string" ? query.state : query.state.join(","));
   if (query.limit !== undefined) params.set("limit", String(query.limit));
   const search = params.toString();
   return call<{ drafts: DraftSummary[]; note: string }>(search === "" ? BASE : `${BASE}?${search}`);
@@ -304,6 +313,24 @@ export function drawDraft(draftId: string, key: string) {
     method: "POST",
     body: JSON.stringify({ idempotencyKey: key }),
   });
+}
+
+/**
+ * `PUT /api/drafts/{id}/brief`: the person's own edit of the live brief (phase
+ * 3). The body is a whole brief; the runner validates it as it validates the
+ * planner's, stores it, and appends a studio note carrying it, so the thread
+ * shows what changed and the planner hears of it on its next turn. An
+ * identical brief is answered 200 and changes nothing.
+ *
+ * Refusals: 400 with `detail.field` naming the field `validateBrief` refused;
+ * 409 with `detail.reason` `in-flight`, `draw-in-progress`, `drawing`, `done`
+ * or `abandoned`; 503 when the topic list cannot be read.
+ */
+export function saveBrief(draftId: string, brief: Brief) {
+  return call<{ draftId: string; state: DraftState; brief: Brief; pendingTopic: PendingTopic | null; note: string }>(
+    draftPath(draftId, "/brief"),
+    { method: "PUT", body: JSON.stringify(brief) },
+  );
 }
 
 /** `POST /api/drafts/{id}/abandon`: close it for good. Stops a turn in flight first. */
