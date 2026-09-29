@@ -8,6 +8,7 @@ import { ResourceList } from "@/components/ResourceList";
 import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { cx, LABEL } from "@/components/ui/classes";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { UnitHeader } from "@/components/ui/UnitHeader";
@@ -56,6 +57,12 @@ export interface RelatedCourse {
  *
  * On a phone the rail's children join the page's column (`contents`), so the
  * course header comes first, then the path, then the lists.
+ *
+ * **Only the module the learner is on starts open.** Every other unit card is
+ * its header alone until opened, so a six-module course reads as its outline
+ * with one module unfolded, not six stacked lists. A module a link points at
+ * (`#<module-slug>`, the Modules card's rows) opens too, and so does a module
+ * that becomes the current one while the page is open.
  */
 export function CoursePath({
   course,
@@ -74,6 +81,11 @@ export function CoursePath({
 }) {
   const { state } = useLearner();
   const visited = useHashModule(course.modules);
+  // A row of the Modules card asks for its module. Counted rather than
+  // remembered, so asking again for one the learner has since shut opens it
+  // again. Needed besides the hash because a Next `Link` changes the hash
+  // with `pushState`, which fires no `hashchange`.
+  const [asked, setAsked] = useState<{ slug: string | null; count: number }>({ slug: null, count: 0 });
 
   const status = useMemo(
     () =>
@@ -107,13 +119,21 @@ export function CoursePath({
             data={modules[m.id]}
             mastery={mastery}
             activeTopicId={status.active?.moduleId === m.id ? status.active.topicId : null}
+            current={m.id === activeModule?.id}
+            targeted={m.slug === visited}
+            asked={asked.slug === m.slug ? asked.count : 0}
           />
         ))}
       </div>
 
       <aside aria-label="Course" className="contents lg:flex lg:w-[360px] lg:shrink-0 lg:flex-col lg:gap-4">
         <HeaderCard course={course} status={status} continueHref={activeHref} className="order-1 lg:order-none" />
-        <ModulesCard course={course} status={status} className="order-3 lg:order-none" />
+        <ModulesCard
+          course={course}
+          status={status}
+          onPick={(slug) => setAsked((a) => ({ slug, count: a.count + 1 }))}
+          className="order-3 lg:order-none"
+        />
         <AssetsCard
           module={activeModule}
           assets={activeModule ? (modules[activeModule.id]?.assets ?? null) : null}
@@ -163,6 +183,9 @@ function UnitCard({
   data,
   mastery,
   activeTopicId,
+  current,
+  targeted,
+  asked,
 }: {
   course: Course;
   module: Module;
@@ -171,11 +194,31 @@ function UnitCard({
   data: PathModuleData | undefined;
   mastery: Record<string, TopicMastery>;
   activeTopicId: string | null;
+  /** The module the learner is on: open unless they shut it. */
+  current: boolean;
+  /** The module the URL's hash names: opened when it becomes so. */
+  targeted: boolean;
+  /** Bumped each time the Modules card asks for this module; 0 when it has not. */
+  asked: number;
 }) {
   const { state } = useLearner();
   const yours = state.userResources[module.id]?.length ?? 0;
   const [guideOpen, setGuideOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
   const guideId = useId();
+  const bodyId = useId();
+  const resourcesId = useId();
+
+  // Open at first for the current module only. Later, becoming the current
+  // module or the one a link points at opens the card; neither ever shuts
+  // one the learner opened. Adjusted during render, the documented way to
+  // follow a prop, so the card never paints shut for a frame first.
+  const [open, setOpen] = useState(current || targeted);
+  const [seen, setSeen] = useState({ current, targeted, asked });
+  if (seen.current !== current || seen.targeted !== targeted || seen.asked !== asked) {
+    if ((current && !seen.current) || (targeted && !seen.targeted) || asked > seen.asked) setOpen(true);
+    setSeen({ current, targeted, asked });
+  }
   const guidebook = data?.guidebook ?? null;
   const assets = data?.assets ?? null;
 
@@ -189,7 +232,11 @@ function UnitCard({
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => setGuideOpen((v) => !v)}
+          onClick={() => {
+            // Opening the Guidebook on a shut card opens the card too.
+            if (!guideOpen) setOpen(true);
+            setGuideOpen((v) => !v);
+          }}
           aria-expanded={guideOpen}
           aria-controls={guideId}
         >
@@ -208,7 +255,7 @@ function UnitCard({
     <section
       id={module.slug}
       aria-label={`Module ${module.order}: ${module.title}`}
-      className="flex scroll-mt-[72px] flex-col gap-3.5 rounded-[20px] border-2 border-border bg-surface p-4 md:scroll-mt-[88px]"
+      className="flex scroll-mt-[72px] flex-col rounded-[20px] border-2 border-border bg-surface p-4 md:scroll-mt-[88px]"
     >
       <UnitHeader
         eyebrow={`Module ${module.order}`}
@@ -216,71 +263,80 @@ function UnitCard({
         subtitle={unitSubtitle(status, previous?.order)}
         muted={status.locked}
         actions={actions}
+        toggle={{
+          open,
+          onToggle: () => setOpen((v) => !v),
+          controls: bodyId,
+          label: `Module ${module.order}: ${module.title}`,
+        }}
       />
 
-      {!guidebook && guideOpen && (
-        <div id={guideId} className="rounded-2xl bg-surface2 p-4">
-          {/* No "Guidebook" label here: the Guidebook button just opened it. */}
-          <p className="text-[14px] text-text2">
-            No concept note covers this module yet, so here is what it sets out to teach.
-          </p>
-          <ol className="mt-3 flex flex-col gap-2.5">
+      {/* Spaced by each part's top margin rather than a gap, so a shut card
+          (or a shut Guidebook) leaves no empty strip behind. */}
+      <Collapse open={open} id={bodyId} className="flex flex-col">
+        {!guidebook && (
+          <Collapse open={guideOpen} id={guideId}>
+            <div className="mt-3.5 rounded-2xl bg-surface2 p-4">
+              {/* No "Guidebook" label here: the Guidebook button just opened it. */}
+              <p className="text-[14px] text-text2">
+                No concept note covers this module yet, so here is what it sets out to teach.
+              </p>
+              <ol className="mt-3 flex flex-col gap-2.5">
+                {module.topics.map((t, i) => (
+                  <li key={t.id} className="text-[14px]">
+                    <p className="font-semibold text-text">
+                      {i + 1}. {t.title}
+                    </p>
+                    {t.subtopics.length > 0 && <p className="text-text2">{t.subtopics.join(" · ")}</p>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </Collapse>
+        )}
+
+        {module.topics.length === 0 ? (
+          <p className="mt-3.5 px-2 text-[14px] text-text2">This module has no topics yet.</p>
+        ) : (
+          <ol className="mt-3.5 flex flex-col px-2">
             {module.topics.map((t, i) => (
-              <li key={t.id} className="text-[14px]">
-                <p className="font-semibold text-text">
-                  {i + 1}. {t.title}
-                </p>
-                {t.subtopics.length > 0 && <p className="text-text2">{t.subtopics.join(" · ")}</p>}
-              </li>
+              <PathTopicRow
+                key={t.id}
+                course={course}
+                module={module}
+                topic={t}
+                mastery={mastery[t.id]}
+                active={t.id === activeTopicId}
+                continueHref={continueHref(course.slug, module.slug, t.id, mastery[t.id])}
+                last={i === module.topics.length - 1}
+              />
             ))}
           </ol>
-        </div>
-      )}
+        )}
 
-      {module.topics.length === 0 ? (
-        <p className="px-2 text-[14px] text-text2">This module has no topics yet.</p>
-      ) : (
-        <ol className="flex flex-col px-2">
-          {module.topics.map((t, i) => (
-            <PathTopicRow
-              key={t.id}
-              course={course}
-              module={module}
-              topic={t}
-              mastery={mastery[t.id]}
-              active={t.id === activeTopicId}
-              continueHref={continueHref(course.slug, module.slug, t.id, mastery[t.id])}
-              last={i === module.topics.length - 1}
-            />
-          ))}
-        </ol>
-      )}
-
-      <details className="group mx-2 border-t border-hair pt-3">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm text-[14px] font-semibold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
-          <span>
-            Resources
-            <span className="ml-2 font-normal text-text3">
-              {module.resources.length} curated{yours > 0 ? ` · ${yours} yours` : ""}
-            </span>
-          </span>
-          <svg
-            viewBox="0 0 20 20"
-            className="h-5 w-5 text-text3 transition-transform duration-150 group-open:rotate-180"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
+        <div className="mx-2 mt-3.5 border-t border-hair pt-3">
+          <button
+            type="button"
+            onClick={() => setResourcesOpen((v) => !v)}
+            aria-expanded={resourcesOpen}
+            aria-controls={resourcesId}
+            className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm text-left text-[14px] font-semibold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <path d="m5 7.5 5 5 5-5" />
-          </svg>
-        </summary>
-        <div className="pt-3">
-          <ResourceList moduleId={module.id} curated={module.resources} />
+            <span>
+              Resources
+              <span className="ml-2 font-normal text-text3">
+                {module.resources.length} curated{yours > 0 ? ` · ${yours} yours` : ""}
+              </span>
+            </span>
+            <CollapseChevron open={resourcesOpen} className="text-text3" />
+          </button>
+          <Collapse open={resourcesOpen} id={resourcesId}>
+            <div className="pt-3">
+              <ResourceList moduleId={module.id} curated={module.resources} />
+            </div>
+          </Collapse>
         </div>
-      </details>
+      </Collapse>
     </section>
   );
 }
@@ -326,7 +382,18 @@ function HeaderCard({
   );
 }
 
-function ModulesCard({ course, status, className }: { course: Course; status: PathStatus; className?: string }) {
+function ModulesCard({
+  course,
+  status,
+  onPick,
+  className,
+}: {
+  course: Course;
+  status: PathStatus;
+  /** A row was chosen: open that module, as well as scrolling to it. */
+  onPick: (slug: string) => void;
+  className?: string;
+}) {
   return (
     <div className={className}>
       <Card as="div" title="Modules">
@@ -338,6 +405,7 @@ function ModulesCard({ course, status, className }: { course: Course; status: Pa
               <li key={m.id}>
                 <Link
                   href={`#${m.slug}`}
+                  onClick={() => onPick(m.slug)}
                   className="flex items-center gap-2.5 rounded-sm text-[13px] text-text hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   <span className="min-w-0 flex-1 truncate">
