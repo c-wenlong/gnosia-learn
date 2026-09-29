@@ -5,8 +5,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatus, type ValidBrief } from "./brief";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
-import { status as catalogStatus } from "./catalog";
-import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { preferenceSet, status as catalogStatus, videoList } from "./catalog";
+import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
 
 import { agentAuthReport, CLAUDE_BIN, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
@@ -31,6 +31,8 @@ import { accept, discard, reindex } from "./review";
 import { JobRefused, noteFor, Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
 import { resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
+import { ratesFor } from "./cost";
+import { EFFORTS, readClaudeDefaults } from "./video/agent-model";
 import type { VideoDoctor } from "./video/doctor";
 import { postVideoJob, videoJobRoutes, videoView, type VideoDeps } from "./video/routes";
 
@@ -331,6 +333,17 @@ async function handle(
     return draftRoutes(request, response, segments, method, url, drafts);
   }
 
+  /* /api/videos: the owner's landed studio videos, for the grid's poster tiles. */
+  if (segments[1] === "videos" && segments.length === 2) {
+    if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/videos does`);
+    return videosRoute(response);
+  }
+
+  /* /api/settings/agent: the two agents' model and effort (D53). */
+  if (segments[1] === "settings" && segments[2] === "agent" && segments.length === 3) {
+    return agentSettingsRoute(request, response, method);
+  }
+
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
   if (segments[1] === "vocabulary" && segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/vocabulary does`);
@@ -410,7 +423,7 @@ async function handle(
   const id = segments[2] ?? "";
   const videoRecord = video?.store.get(id);
   if (video !== undefined && videoRecord !== undefined) {
-    return videoJobRoutes(request, response, segments, method, url, videoRecord, video);
+    return videoJobRoutes(request, response, segments, method, url, videoRecord, video, drafts);
   }
   const record = store.get(id);
   if (record === undefined) {
@@ -681,9 +694,7 @@ async function enqueueChecked(
 function carriedDraft(record: JobRecord, drafts: Drafts | undefined): string | null {
   const id = record.draftId ?? null;
   if (id === null || drafts === undefined) return null;
-  const draft = drafts.get(id);
-  if (draft === undefined || draft.state === "abandoned" || draft.state === "drawing") return null;
-  return draft.jobIds.at(-1) === record.id ? id : null;
+  return drafts.carries(id, record.id, "diagram") ? id : null;
 }
 
 async function followedBy(drafts: Drafts | undefined, job: JobRecord): Promise<void> {
@@ -1373,15 +1384,20 @@ async function draftRoutes(
     try {
       const { record, created } = await drafts.create({
         source: typeof input.source === "string" ? input.source : null,
+        sourceKind: input.sourceKind === undefined || input.sourceKind === null ? null : (input.sourceKind as string),
         idempotencyKey: typeof input.idempotencyKey === "string" ? input.idempotencyKey : null,
       });
       return send(response, created ? 201 : 200, {
         draftId: record.id,
         state: record.state,
+        plannerKinds: record.plannerKinds ?? ["diagram"],
+        sourceKind: record.sourceKind ?? "diagram",
         note: created
           ? record.source === null
-            ? "a new conversation: say what the diagram should make clear"
-            : `a conversation about extending ${record.source}`
+            ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
+            : record.sourceKind === "video"
+              ? `a conversation about changing the video ${record.source}`
+              : `a conversation about extending ${record.source}`
           : `this idempotency key already belongs to draft ${record.id}`,
       });
     } catch (error) {
@@ -1398,6 +1414,40 @@ async function draftRoutes(
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/drafts/{id} does`);
     return send(response, 200, await drafts.view(id));
   }
+  // /api/drafts/{id}/slots/{kind}/stop-waiting|use (D57, D60).
+  if (segments.length === 6 && segments[3] === "slots") {
+    if (method !== "POST") return fail(response, 405, `${method} is not a thing ${url.pathname} does`);
+    const kind = segments[4];
+    try {
+      if (segments[5] === "stop-waiting") {
+        const { changed } = await drafts.stopWaiting(id, kind);
+        const view = await drafts.view(id);
+        return send(response, 200, {
+          draftId: id,
+          kind,
+          changed,
+          slots: view.slots,
+          waiting: view.waiting,
+          note: changed ? `the ${kind} brief is no longer asked for` : `no ${kind} brief was being waited for`,
+        });
+      }
+      if (segments[5] === "use") {
+        const { changed } = await drafts.useBrief(id, kind, url.searchParams.get("base"));
+        const view = await drafts.view(id);
+        return send(response, 200, {
+          draftId: id,
+          kind,
+          changed,
+          slots: view.slots,
+          pair: view.pair,
+          note: changed ? `the ${kind} brief is back in force; the planner hears it on its next turn` : `the ${kind} brief was not on hold`,
+        });
+      }
+    } catch (error) {
+      return refusal(error);
+    }
+    return fail(response, 404, `no route ${method} ${url.pathname}`, { routes: ["POST slots/{kind}/stop-waiting", "POST slots/{kind}/use?base=<seq>"] });
+  }
   if (segments.length !== 4) return fail(response, 404, `no route ${method} ${url.pathname}`);
 
   switch (`${method} ${segments[3]}`) {
@@ -1405,7 +1455,7 @@ async function draftRoutes(
       const input = await body();
       if (input === null) return;
       try {
-        const { seq } = await drafts.send(id, input.text);
+        const { seq } = await drafts.send(id, input.text, input.mentions);
         return send(response, 202, { draftId: id, seq, note: "the planner is answering; follow /events for its reply" });
       } catch (error) {
         return refusal(error);
@@ -1417,12 +1467,28 @@ async function draftRoutes(
       const input = await body();
       if (input === null) return;
       try {
-        const { jobId, created } = await drafts.draw(id, input.idempotencyKey);
+        const answer = await drafts.draw(id, input);
+        if (!answer.single) {
+          return send(response, 200, {
+            draftId: id,
+            results: answer.results,
+            note: answer.results
+              .map((result) => ("jobId" in result ? `${result.kind}: job ${result.jobId}` : `${result.kind}: refused (${result.status})`))
+              .join("; "),
+          });
+        }
+        const { jobId, created, kind, replaces } = answer.result;
         return send(response, created ? 201 : 200, {
           draftId: id,
           jobId,
+          kind,
           state: "drawing",
-          note: created ? `queued as job ${jobId}` : `this press already queued job ${jobId}`,
+          replaces,
+          note: created
+            ? replaces === null
+              ? `queued as job ${jobId}`
+              : `queued as job ${jobId}, replacing ${replaces}, which was discarded in the same step`
+            : `this press already queued job ${jobId}`,
         });
       } catch (error) {
         return refusal(error);
@@ -1440,13 +1506,15 @@ async function draftRoutes(
       const input = await body();
       if (input === null) return;
       try {
-        const { record, changed } = await drafts.editBrief(id, input, url.searchParams.get("base"));
+        const { record, changed, kind } = await drafts.editBrief(id, input, url.searchParams.get("base"), url.searchParams.get("kind"));
+        const slot = record.slots?.[kind];
         return send(response, 200, {
           draftId: id,
+          kind,
           state: record.state,
-          brief: record.brief,
-          briefSeq: record.briefSeq ?? null,
-          pendingTopic: record.pendingTopic,
+          brief: slot?.brief ?? null,
+          briefSeq: slot?.brief === null || slot === undefined ? null : slot.briefSeq,
+          pendingTopic: slot?.pendingTopic ?? null,
           note: changed
             ? "the brief is saved; the planner is told on its next turn, and Draw draws this one"
             : "the brief is unchanged",
@@ -1457,7 +1525,7 @@ async function draftRoutes(
     }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
       });
   }
 }
@@ -1516,7 +1584,106 @@ async function agentSettings(): Promise<Record<string, unknown>> {
   return {
     video: { model: video.model, effort: video.effort },
     diagram: { model: diagram.model, effort: diagram.effort },
+    // What "Claude Code default" resolves to now, for either kind: the
+    // owner's user settings file. The menu shows it whatever a row says.
+    defaults: { model: video.claude.model, effort: video.claude.effort },
   };
+}
+
+/** The models the settings menu offers: every model the rate table prices, by the name `claude --model` takes. */
+const OFFERED_MODELS = [
+  { value: "fable", label: "Fable", id: "claude-fable-5-1" },
+  { value: "opus", label: "Opus", id: "claude-opus-5" },
+  { value: "sonnet", label: "Sonnet", id: "claude-sonnet-5" },
+  { value: "claude-fable-5-1", label: "Claude Fable 5.1", id: "claude-fable-5-1" },
+  { value: "claude-opus-5-5", label: "Claude Opus 5.5", id: "claude-opus-5-5" },
+  { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", id: "claude-sonnet-5-5" },
+] as const;
+
+/** One kind's row, as `GET /api/settings/agent` reports it. */
+async function agentSettingView(kind: "video" | "diagram"): Promise<Record<string, unknown>> {
+  const resolved = kind === "video" ? await resolveVideoAgent() : await resolveDiagramAgent();
+  return {
+    key: kind === "video" ? "studioVideoAgent" : "studioDiagramAgent",
+    stored: resolved.stored,
+    // What the menus show as chosen: the row, else the kind's own default.
+    value: resolved.stored ?? (kind === "video" ? { model: "default", effort: "default" } : { model: "sonnet", effort: "default" }),
+    model: resolved.model,
+    effort: resolved.effort,
+  };
+}
+
+/**
+ * `GET /api/settings/agent`: both rows, what a job started now would get, and
+ * what "Claude Code default" resolves to. `PUT` with `{ kind, model, effort }`
+ * stores one row through `catalog preference set`, owner-scoped, and answers
+ * as `GET`. The web app's own server action writes the same row; either is
+ * read by the runner at the next job's start.
+ */
+async function agentSettingsRoute(request: IncomingMessage, response: ServerResponse, method: string): Promise<void> {
+  const view = async (): Promise<Record<string, unknown>> => {
+    const [video, diagram, claude] = await Promise.all([agentSettingView("video"), agentSettingView("diagram"), readClaudeDefaults()]);
+    return {
+      video,
+      diagram,
+      defaults: claude,
+      models: OFFERED_MODELS.filter((model) => ratesFor(model.id) !== null),
+      efforts: EFFORTS,
+    };
+  };
+  if (method === "GET") return send(response, 200, await view());
+  if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/agent does`);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return fail(response, 400, "the request body is not JSON", (error as Error).message);
+  }
+  if (body.kind !== "video" && body.kind !== "diagram") return fail(response, 400, `"kind" is video or diagram`, { field: "kind" });
+  const value = { model: body.model, effort: body.effort };
+  const clean = studioAgentPreference(value);
+  if (clean.model !== value.model) return fail(response, 400, `"model" is "default" or a model name the claude CLI takes`, { field: "model" });
+  if (clean.effort !== value.effort) return fail(response, 400, `"effort" is "default" or one of ${EFFORTS.join(", ")}`, { field: "effort" });
+  const written = await preferenceSet(body.kind === "video" ? "studioVideoAgent" : "studioDiagramAgent", clean);
+  if (!written.ok) {
+    return fail(response, written.offline ? 503 : 502, `the setting could not be stored: ${written.error ?? "no reason given"}`, {
+      reason: written.offline ? "catalog-unreachable" : "catalog",
+    });
+  }
+  return send(response, 200, await view());
+}
+
+/**
+ * `GET /api/videos`: the owner's landed studio videos, from `catalog video
+ * list` (owner-scoped there). `posterAssetId` is the video's own asset id,
+ * which the web app's `/api/assets/{id}/poster` takes, or null when no poster
+ * was stored. manimkc renders are the library's, not the studio grid's.
+ */
+async function videosRoute(response: ServerResponse): Promise<void> {
+  const listed = await videoList();
+  if (!listed.ok) {
+    return fail(response, listed.offline ? 503 : 502, `the video list could not be read: ${listed.error ?? "no reason given"}`, {
+      reason: listed.offline ? "catalog-unreachable" : "catalog",
+    });
+  }
+  const raw = (listed.json as { videos?: unknown } | null)?.videos;
+  const videos = (Array.isArray(raw) ? raw : [])
+    .filter((video): video is Record<string, unknown> => typeof video === "object" && video !== null && video.origin === "studio" && typeof video.slug === "string")
+    .map((video) => ({
+      slug: video.slug as string,
+      title: typeof video.title === "string" ? video.title : null,
+      topic: typeof video.topic === "string" ? video.topic : null,
+      concepts: Array.isArray(video.concepts) ? video.concepts : [],
+      assetId: typeof video.assetId === "string" ? video.assetId : `video:${video.slug as string}`,
+      posterAssetId: video.poster === null || video.poster === undefined ? null : typeof video.assetId === "string" ? video.assetId : `video:${video.slug as string}`,
+      durationSeconds: typeof video.durationSeconds === "number" ? video.durationSeconds : null,
+      narrated: video.narrated === true,
+      revision: typeof video.revision === "number" ? video.revision : null,
+      updated: typeof video.updatedAt === "string" ? video.updatedAt : null,
+    }));
+  return send(response, 200, { videos, note: `${videos.length} studio video${videos.length === 1 ? "" : "s"}` });
 }
 
 async function health(

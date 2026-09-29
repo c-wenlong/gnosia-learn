@@ -124,6 +124,9 @@ async function readEvents(route: string, done: (text: string) => boolean): Promi
   return text;
 }
 
+/** A message tagged Diagram (D57), as the composer sends one: the chip first. */
+const tagged = (text: string) => ({ text: `@diagram ${text}`, mentions: [{ kind: "diagram", start: 0, end: 8 }] });
+
 describe("the draft routes", () => {
   it("create, talk, read, follow and draw, in the shapes of the API table", async () => {
     await fake.script([{ text: proposing(good), cost: 0.02 }]);
@@ -134,7 +137,7 @@ describe("the draft routes", () => {
     expect(note).toEqual(expect.any(String));
     expect((await post("/api/drafts", { idempotencyKey: "k" })).status).toBe(200);
 
-    const sent = await post(`/api/drafts/${draftId}/messages`, { text: "draw the congestion window" });
+    const sent = await post(`/api/drafts/${draftId}/messages`, tagged("draw the congestion window"));
     expect(sent.status).toBe(202);
     expect(await sent.json()).toMatchObject({ draftId, seq: 2, note: expect.any(String) });
     await drafts.settled(draftId);
@@ -160,14 +163,14 @@ describe("the draft routes", () => {
 
     const list = (await (await fetch(`${base}/api/drafts?state=briefed`)).json()) as { drafts: Record<string, unknown>[] };
     expect(list.drafts).toEqual([
-      { draftId, kind: "diagram", state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
+      { draftId, kind: "diagram", kinds: ["diagram"], state: "briefed", title: "TCP congestion window", firstMessage: expect.any(String), source: null, turns: 1, costUsd: 0.02, updated: expect.any(String), jobId: null },
     ]);
 
     // Replay from the start carries ids; ?after skips what the client has.
     const all = await readEvents(`/api/drafts/${draftId}/events`, (text) => text.includes("event: brief\n"));
     expect(all).toContain("id: 2\nevent: message\n");
     expect(all).toMatch(/id: 3\nevent: reply\n/);
-    expect(all).toMatch(/event: brief\ndata: \{"seq":4,"replySeq":3,"brief":/);
+    expect(all).toMatch(/event: brief\ndata: \{"seq":4,"replySeq":3,"kind":"diagram","brief":/);
     const later = await readEvents(`/api/drafts/${draftId}/events?after=3`, (text) => text.includes("event: brief\n"));
     expect(later).not.toContain("event: message");
 
@@ -181,10 +184,15 @@ describe("the draft routes", () => {
     const again = await post(`/api/drafts/${draftId}/draw`, { idempotencyKey: "press" });
     expect(again.status).toBe(200);
     expect(((await again.json()) as { jobId: string }).jobId).toBe(body.jobId);
-    // Talking while it draws is refused.
-    const busy = await post(`/api/drafts/${draftId}/messages`, { text: "and?" });
+    // Talking while it draws is accepted (C14 lifted by D60); the diagram
+    // card's press is what is held, by kind.
+    const busy = await post(`/api/drafts/${draftId}/draw`, { idempotencyKey: "another" });
     expect(busy.status).toBe(409);
-    expect(await busy.json()).toMatchObject({ error: expect.any(String), detail: { reason: "drawing" } });
+    expect(await busy.json()).toMatchObject({ error: "The diagram is still being drawn", detail: { reason: "kind-busy", kind: "diagram", jobId: body.jobId } });
+    await fake.script([{ text: "It is drawing now." }]);
+    const talk = await post(`/api/drafts/${draftId}/messages`, { text: "and?" });
+    expect(talk.status).toBe(202);
+    await drafts.settled(draftId);
     // Parked on the agent, which never answers, so the teardown does not race the job's own writes.
     await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
   });
@@ -211,7 +219,7 @@ describe("the draft routes", () => {
   it("refuses a job naming a draft while its planner is answering", async () => {
     await fake.script([{ text: proposing(good) }, { text: "still thinking", hangMs: 500 }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
-    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
     await drafts.settled(draftId);
     expect(drafts.get(draftId)?.state).toBe("briefed");
     await post(`/api/drafts/${draftId}/messages`, { text: "one more thing" });
@@ -246,7 +254,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
   async function briefed(): Promise<string> {
     await fake.script([{ text: proposing(good) }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
-    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
     await drafts.settled(draftId);
     expect(drafts.get(draftId)?.state).toBe("briefed");
     return draftId;
@@ -281,7 +289,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(last.brief).toEqual(body.brief);
     const stream = await readEvents(`/api/drafts/${draftId}/events?after=4`, (text) => text.includes("event: brief\n"));
     expect(stream).toMatch(/event: studio\n/);
-    expect(stream).toMatch(/event: brief\ndata: \{"seq":\d+,"replySeq":\d+,"brief":/);
+    expect(stream).toMatch(/event: brief\ndata: \{"seq":\d+,"replySeq":\d+,"kind":"diagram","brief":/);
 
     // The planner's next turn opens with the edit and the brief now in force.
     await fake.script([{ text: "Noted: Server it is." }]);
@@ -293,7 +301,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(prompt).toContain("This is the brief in force");
     expect(prompt!.indexOf("-----END STUDIO-----")).toBeLessThan(prompt!.indexOf("looks right?"));
     // A reply with no brief leaves the draft open, and the edit is still the brief on record.
-    expect(drafts.get(draftId)?.brief?.elements).toEqual(edited.elements);
+    expect((drafts.get(draftId)?.brief as { elements?: unknown } | null)?.elements).toEqual(edited.elements);
 
     // An open draft takes an edit too, and is briefed again; Draw sends the edited labels to the job.
     const again = await put(`/api/drafts/${draftId}/brief`, edited);
@@ -334,7 +342,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(await array.json()).toMatchObject({ error: "the request body must be a JSON object" });
     // A PUT body is JSON or it is refused before any route, as a POST's is.
     expect((await put(`/api/drafts/${draftId}/brief`, good, "text/plain")).status).toBe(403);
-    expect(drafts.get(draftId)?.brief?.elements).toEqual(good.elements);
+    expect((drafts.get(draftId)?.brief as { elements?: unknown } | null)?.elements).toEqual(good.elements);
     expect((await put("/api/drafts/nope/brief", good)).status).toBe(404);
   });
 
@@ -365,7 +373,7 @@ describe("PUT /api/drafts/{id}/brief", () => {
     expect(open.firstMessage).toMatch(/^Show how a very long message/);
     expect((open.firstMessage as string).length).toBeLessThanOrEqual(120);
     expect(open.firstMessage).toMatch(/…$/);
-    expect(list.drafts.find((row) => row.draftId === briefedId)?.firstMessage).toBe("draw it");
+    expect(list.drafts.find((row) => row.draftId === briefedId)?.firstMessage).toBe("@diagram draw it");
     const onlyOpen = (await (await fetch(`${base}/api/drafts?state=open`)).json()) as { drafts: unknown[] };
     expect(onlyOpen.drafts).toHaveLength(1);
 
@@ -384,7 +392,7 @@ describe("resume and revise carry the draft", () => {
   it("a resumed interrupted job is the draft's newest, and the draft follows it", async () => {
     await fake.script([{ text: proposing(good) }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
-    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
     await drafts.settled(draftId);
 
     // The draft's job, as the runner's reconcile leaves it after a restart.
@@ -442,7 +450,7 @@ describe("resume and revise carry the draft", () => {
   it("queues a Resume of an older job standalone, and the draft keeps following its newest", async () => {
     await fake.script([{ text: proposing(good) }]);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
-    await post(`/api/drafts/${draftId}/messages`, { text: "draw it" });
+    await post(`/api/drafts/${draftId}/messages`, tagged("draw it"));
     await drafts.settled(draftId);
     await store.create(interruptedJob("job-older", draftId, "other-slug", "older-key"));
     await drafts.markDrawing(draftId, "job-older");

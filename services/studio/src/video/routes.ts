@@ -10,6 +10,7 @@ import { readCalls } from "./calls";
 import { resolvedPaths } from "./checkout";
 import { candidateNames, sheetPath } from "./paths";
 import { acceptVideo, discardVideo } from "./review";
+import type { Drafts } from "../drafts";
 import { videoNote, type VideoRunner, type VideoStore } from "./runner";
 import type { VideoJobRecord } from "./types";
 
@@ -142,8 +143,12 @@ export async function videoJobRoutes(
   url: URL,
   record: VideoJobRecord,
   deps: VideoDeps,
+  drafts?: Drafts,
 ): Promise<void> {
   const { store, runner } = deps;
+  // T20: a Revise or Resume carries its draft and its kind while the job is
+  // the video slot's newest; anything else queues standalone.
+  const carried = record.draftId !== null && record.draftId !== undefined && drafts?.carries(record.draftId, record.id, "video") === true ? record.draftId : null;
   const id = record.id;
   if (segments.length === 3) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/jobs/{id} does`);
@@ -185,7 +190,9 @@ export async function videoJobRoutes(
         if (changes === "" || changes.length > 2_000) {
           return fail(response, 400, `"changes" is required, at most 2000 characters: what should look different`);
         }
-        const next = await runner.revise(record, changes);
+        const revise = (): Promise<VideoJobRecord> => runner.revise(record, changes, carried);
+        const next = carried !== null && record.state === "awaiting_review" ? await drafts!.replacingDuring(record.id, revise) : await revise();
+        if (carried !== null) await drafts!.markDrawing(carried, next.id, "video");
         return send(response, 201, {
           jobId: next.id,
           state: next.state,
@@ -195,7 +202,8 @@ export async function videoJobRoutes(
         });
       }
       case "POST resume": {
-        const next = await runner.resume(record);
+        const next = await runner.resume(record, carried);
+        if (carried !== null) await drafts!.markDrawing(carried, next.id, "video");
         return send(response, 201, { jobId: next.id, state: next.state, parentJob: id, note: `queued, continuing ${id}` });
       }
       case "GET sheets":

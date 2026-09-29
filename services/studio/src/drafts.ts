@@ -13,7 +13,7 @@ import {
 
 import { BriefError, loadVocabulary, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
 import { canvas, doctor, doctorChecks, type InspectReport } from "./canvas";
-import { draftUpsert, topicAdd, topicAddDryRun, type CatalogResult } from "./catalog";
+import { draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "./catalog";
 import {
   agentAuth,
   PLANNER_CONCURRENCY,
@@ -38,29 +38,50 @@ import {
   workPath,
 } from "./paths";
 import {
+  briefBlocks,
   buildSystemPrompt,
   drawingSummary,
-  evaluateReply,
+  evaluateBrief,
   fence,
+  isVideoBrief,
   mermaidBlocks,
   plannerArgv,
   PLANNER_BRIEF_FIELDS,
+  PLANNER_VIDEO_FIELDS,
   plannerSettings,
+  readHold,
+  readSuggest,
   startPlanner,
+  stripFencedBlocks,
   studioMessage,
   TOPIC_RELATION_KINDS,
   vocabularyBlock,
   vocabularyHash,
   EXTENDING_LINE_CAP,
-  type BriefVerdict,
+  type AnyDraftBrief,
   type CorpusEntry,
   type DraftBrief,
+  type DraftVideoBrief,
+  type KindVerdict,
   type PendingTopic,
   type PlannerOutcome,
   type PlannerRun,
 } from "./planner";
+import {
+  BRIEF_KINDS,
+  buildCombinedSystemPrompt,
+  changingSummary,
+  isBriefKind,
+  lengthOf,
+  type BriefKind,
+  type VideoCorpusEntry,
+} from "./planner-prompt";
 import { JobRefused, type Runner } from "./runner";
 import type { JobRecord, JobStore } from "./store";
+import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
+import { videoKindBuilt } from "./video/config";
+import type { VideoRunner, VideoStore } from "./video/runner";
+import type { VideoJobRecord } from "./video/types";
 
 /**
  * Drafts: the planner conversations, their records and their turns
@@ -98,12 +119,79 @@ export interface TurnSpend extends SpendEntry {
   costSource: CostSource | null;
 }
 
+/** A slot's own state: today's draft states, for one kind alone (D62). */
+export type SlotState = "open" | "briefed" | "drawing" | "done";
+
+/**
+ * One kind's part of a draft (D62 of docs/STUDIO-MENTIONS.md): the brief in
+ * force, who wrote it, its pending topic, the kind's newest job, and the
+ * tag waiting for a brief. In `draft.json` only; the row mirrors the newest
+ * brief of any kind.
+ */
+export interface KindSlot {
+  brief: AnyDraftBrief | null;
+  briefAt: string | null;
+  /** The transcript seq of the entry carrying the brief: what `PUT .../brief?base=` names. */
+  briefSeq: number | null;
+  /** A person's edit stays in force through a reply with no brief; a planner's does not. */
+  briefBy: "planner" | "person" | null;
+  pendingTopic: PendingTopic | null;
+  /** A person's edits since the planner last heard, as one note (see `DraftRecord.pendingEdit`, which it replaces). */
+  pendingEdit: { base: AnyDraftBrief | null; text: string } | null;
+  /** This kind's newest job from this draft. */
+  jobId: string | null;
+  /** The `briefSeq` that job was pressed from, so a newer brief in force is known to be newer. */
+  drawnSeq: number | null;
+  /** The last verdict on this kind's job the draft acted on. */
+  followed: { jobId: string; state: string } | null;
+  /** A tagged request for this kind still owed a brief. */
+  waiting: { requestSeq: number } | null;
+  /** The tagged message the brief in force answered: what pairs two cards for Make both. */
+  requestSeq: number | null;
+  /** Set by a planner `hold` block until Use this brief, an edit, or a new brief. */
+  held: { reason: string; at: string; replySeq: number } | null;
+  state: SlotState;
+}
+
+export function emptySlot(): KindSlot {
+  return {
+    brief: null,
+    briefAt: null,
+    briefSeq: null,
+    briefBy: null,
+    pendingTopic: null,
+    pendingEdit: null,
+    jobId: null,
+    drawnSeq: null,
+    followed: null,
+    waiting: null,
+    requestSeq: null,
+    held: null,
+    state: "open",
+  };
+}
+
 export interface DraftRecord {
   id: string;
-  kind: "diagram";
+  /** The newest brief's kind, for display (D62); `diagram` before any brief. */
+  kind: BriefKind;
+  /** A summary of the slots for the list and the pruner (D62), or `abandoned`. */
   state: DraftState;
+  /** The kinds this draft's planner prompt carries (D59). Absent on a draft from before, which is `["diagram"]`. */
+  plannerKinds?: BriefKind[];
+  /**
+   * True for a draft whose prompt is the combined, conversational one: an
+   * untagged message is conversation. Absent on a draft from before, whose
+   * recorded prompt proposes on every message, so the runner treats its
+   * untagged messages as tagged Diagram (D61).
+   */
+  conversational?: boolean;
+  /** Per kind (D62). Absent on a draft from before; `load` builds its diagram slot. */
+  slots?: Partial<Record<BriefKind, KindSlot>>;
+  /** What `source` names: a diagram (the default) or a studio video. */
+  sourceKind?: BriefKind;
   ownerId: string;
-  /** The slug of the diagram an extend draft was opened on. */
+  /** The slug of the diagram (or, with `sourceKind: "video"`, the studio video) the draft was opened on. */
   source: string | null;
   /** That diagram's document hash when the draft opened (C11). */
   sourceHash: string | null;
@@ -116,7 +204,8 @@ export interface DraftRecord {
   sessionStarted: boolean;
   /** `drafts/<id>/transcript.ndjson`, relative to `$STUDIO_HOME`. */
   transcriptPath: string;
-  brief: DraftBrief | null;
+  /** The newest brief of any kind, mirrored from the slots for the row (D62). */
+  brief: AnyDraftBrief | null;
   briefAt: string | null;
   /**
    * The transcript seq of the entry carrying the brief in force: the planner
@@ -145,6 +234,8 @@ export interface DraftRecord {
   error: string | null;
   /** The field a brief was refused on, beside an `error` of kind `brief-invalid`. */
   errorField?: string | null;
+  /** The kind of that brief. */
+  errorBriefKind?: BriefKind | null;
   idempotencyKey: string;
   /**
    * The hash of the vocabulary the planner has been told of: the system
@@ -178,6 +269,8 @@ export interface TranscriptEvent {
     | "reply"
     | "brief"
     | "brief-invalid"
+    | "brief-ignored"
+    | "stop-waiting"
     | "studio"
     | "draw"
     | "job"
@@ -190,14 +283,43 @@ export interface TranscriptEvent {
 export type DraftRole = "person" | "planner" | "studio";
 
 /** One entry of a draft's transcript, as the API reports it. */
+/** A mention as a message carries it: `text.slice(start, end)` reads `@<kind>`. */
+export interface Mention {
+  kind: BriefKind;
+  start: number;
+  end: number;
+}
+
+/** One brief on a transcript entry (D61). */
+export interface EntryBrief {
+  kind: BriefKind;
+  brief: AnyDraftBrief;
+  pendingTopic?: PendingTopic;
+  /** The tagged message it answered; null on an edit or a draft from before. */
+  requestSeq: number | null;
+}
+
 export interface TranscriptEntry {
   seq: number;
   role: DraftRole;
   text: string;
   at: string;
-  brief?: DraftBrief;
+  /** A person's message: its chips, where they were. */
+  mentions?: Mention[];
+  /** Every brief the entry carries, one per kind. */
+  briefs?: EntryBrief[];
+  /** The last of `briefs`, kept one release for the web app from before (D61). */
+  brief?: AnyDraftBrief;
   pendingTopic?: PendingTopic;
+  briefsInvalid?: { kind: BriefKind; field: string; message: string; retried: boolean }[];
+  /** The last of `briefsInvalid`, kept one release. */
   briefInvalid?: { field: string; message: string; retried: boolean };
+  /** Kinds whose brief the reply carried and the runner dropped, since nothing tagged them (T24). */
+  briefsIgnored?: string[];
+  /** A reply's suggestion buttons (D58). */
+  suggest?: BriefKind[];
+  /** A reply's hold on live cards (D60). */
+  hold?: { kinds: BriefKind[]; reason: string };
   superseded?: boolean;
   internal?: boolean;
   /** A studio note for a person's edit of the brief, which carries that brief. */
@@ -207,12 +329,47 @@ export interface TranscriptEntry {
   costSource?: CostSource | null;
 }
 
+/** A slot, as the API reports it. */
+export interface SlotView {
+  kind: BriefKind;
+  brief: AnyDraftBrief | null;
+  briefAt: string | null;
+  briefSeq: number | null;
+  briefBy: "planner" | "person" | null;
+  pendingTopic: PendingTopic | null;
+  jobId: string | null;
+  /** That job's state, when the runner knows it. */
+  jobState: string | null;
+  waiting: { requestSeq: number } | null;
+  requestSeq: number | null;
+  held: { reason: string; at: string } | null;
+  state: SlotState;
+  /** The brief is in force: its card is live, not greyed. */
+  live: boolean;
+  /** Why its press would be refused now for its job: `kind-busy` with the job. Null when it is free. */
+  busy: { jobId: string; state: string } | null;
+  /**
+   * Video only: the press will replace this draft's video in review, the
+   * parent discarded in the child's own catalog transaction (D52), so the
+   * button reads "Replace and make video". Null otherwise.
+   */
+  replaces: { jobId: string } | null;
+}
+
 /** What `GET /api/drafts/{id}` answers. */
 export interface DraftView {
   draftId: string;
-  kind: "diagram";
+  kind: BriefKind;
   state: DraftState;
+  plannerKinds: BriefKind[];
+  conversational: boolean;
+  sourceKind: BriefKind;
   source: string | null;
+  slots: Partial<Record<BriefKind, SlotView>>;
+  /** Kinds whose tagged request is still owed a brief, oldest request first. */
+  waiting: BriefKind[];
+  /** A diagram and a video card asked for in one message, both live: Make both's pair (D60). */
+  pair: { requestSeq: number; kinds: BriefKind[] } | null;
   /**
    * C11: whether the extend target's checkout differs from what the EXTENDING
    * block summarised: its document hash, or the revision its checkout record
@@ -223,7 +380,8 @@ export interface DraftView {
   sourceRevision: number | null;
   title: string | null;
   transcript: TranscriptEntry[];
-  brief: DraftBrief | null;
+  /** The newest brief of any kind, kept one release for the web app from before (D61). */
+  brief: AnyDraftBrief | null;
   /** The seq of the transcript entry carrying `brief`; what `PUT .../brief?base=` names. */
   briefSeq: number | null;
   pendingTopic: PendingTopic | null;
@@ -233,7 +391,7 @@ export interface DraftView {
   costUsd: number | null;
   costSource: CostSource | null;
   inFlight: boolean;
-  error: { kind: DraftErrorKind; message: string; field?: string } | null;
+  error: { kind: DraftErrorKind; message: string; field?: string; briefKind?: BriefKind } | null;
   created: string;
   updated: string;
   note: string;
@@ -242,7 +400,9 @@ export interface DraftView {
 /** A row of `GET /api/drafts`. */
 export interface DraftSummaryView {
   draftId: string;
-  kind: "diagram";
+  kind: BriefKind;
+  /** The kinds the draft has briefs or jobs of. */
+  kinds: BriefKind[];
   state: DraftState;
   title: string | null;
   /** The person's first message, for a row with no title yet. */
@@ -326,6 +486,8 @@ function vocabularyDown(error: unknown): JobRefused {
 
 export interface CreateInput {
   source?: string | null;
+  /** What `source` names: `diagram` (the default) or a studio `video`. */
+  sourceKind?: string | null;
   idempotencyKey?: string | null;
 }
 
@@ -349,7 +511,14 @@ export class Drafts {
    * topic, the doctor and the enqueue are awaited, and a second press would
    * create the topic twice and queue a second job.
    */
-  private readonly draws = new Map<string, { key: string; result: Promise<{ jobId: string; created: boolean }> }>();
+  private readonly draws = new Map<string, { key: string; result: Promise<unknown> }>();
+  /**
+   * Video jobs in review that a press is replacing right now (D52). The video
+   * runner marks the parent discarded inside the child's enqueue, before the
+   * draft records the child, and that discard is not a verdict to tell the
+   * planner about: the press's own note says what happened.
+   */
+  private readonly replacing = new Set<string>();
   private draining = false;
   /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
@@ -363,14 +532,35 @@ export class Drafts {
   constructor(
     private readonly store: JobStore,
     private readonly runner: Runner,
+    /** The video runner and its store; absent in a studio (or a test) that serves only diagrams. */
+    private readonly video?: { store: VideoStore; runner: VideoRunner },
   ) {
-    store.onStateChange((record, from) => {
+    const follow = (record: JobRecord | VideoJobRecord, kind: BriefKind): void => {
       // A draft that cannot be told is a draft whose record is behind, not a
       // job that failed: the job's own record is already written.
-      void this.onJobState(record, from).catch((error: unknown) => {
+      void this.onJobState(record, kind).catch((error: unknown) => {
         process.stderr.write(`draft ${record.draftId ?? "?"} could not follow job ${record.id}: ${(error as Error).message}\n`);
       });
-    });
+    };
+    store.onStateChange((record) => follow(record, "diagram"));
+    video?.store.onStateChange((record) => follow(record, "video"));
+  }
+
+  /** The kinds a draft made now carries (D59): every kind this build has. */
+  plannerKindsNow(): BriefKind[] {
+    return this.video !== undefined && videoKindBuilt() ? ["diagram", "video"] : ["diagram"];
+  }
+
+  /** A job of either kind, by id. */
+  private jobOf(kind: BriefKind, id: string): JobRecord | VideoJobRecord | undefined {
+    return kind === "diagram" ? this.store.get(id) : this.video?.store.get(id);
+  }
+
+  /** Which runner a job is on, or null when neither knows it. */
+  private kindOfJob(id: string): BriefKind | null {
+    if (this.store.get(id) !== undefined) return "diagram";
+    if (this.video?.store.get(id) !== undefined) return "video";
+    return null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -408,7 +598,12 @@ export class Drafts {
         const briefSeq =
           record.briefSeq ?? (record.brief !== null && typeof lastBrief?.replySeq === "number" ? lastBrief.replySeq : null);
         const briefBy = record.briefBy ?? (record.brief === null ? null : lastBrief?.edit === true ? "person" : "planner");
-        this.records.set(record.id, { ...record, seq, firstMessage, briefSeq, briefBy });
+        const loaded: DraftRecord = { ...record, seq, firstMessage, briefSeq, briefBy };
+        // A draft from before D62 keeps its one brief as its diagram slot, and
+        // its recorded prompt, which proposes on every message (D61).
+        if (loaded.slots === undefined) loaded.slots = legacySlots(loaded);
+        loaded.plannerKinds = loaded.plannerKinds ?? ["diagram"];
+        this.records.set(record.id, { ...loaded, ...summarize(loaded) });
       } catch {
         // A workspace with no readable record is one that was created and
         // never written, or one a person has been poking at: nothing to serve.
@@ -476,7 +671,13 @@ export class Drafts {
                 error: "The reply was cut off: the studio stopped while the planner was answering.",
                 errorField: null,
               }),
-          ...(current.state === "briefed" && !briefed && current.briefBy !== "person" ? { state: "open" as const } : {}),
+          // A draft from before D61 answered every message with a brief or
+          // none, so a cut-off turn ends a planner's diagram brief as a reply
+          // with none would. A tagged request on a conversational draft stays
+          // waiting instead, for the next turn to answer.
+          ...(current.conversational !== true && slotOf(current, "diagram").state === "briefed" && !briefed && slotOf(current, "diagram").briefBy !== "person"
+            ? withSlot(current, "diagram", { state: "open" })
+            : {}),
         });
       });
       interrupted.push(record.id);
@@ -539,6 +740,10 @@ export class Drafts {
       .map((record) => ({
         draftId: record.id,
         kind: record.kind,
+        kinds: BRIEF_KINDS.filter((kind) => {
+          const slot = record.slots?.[kind];
+          return slot !== undefined && (slot.brief !== null || slot.jobId !== null);
+        }),
         state: record.state,
         title: record.title,
         firstMessage: record.firstMessage ?? null,
@@ -575,7 +780,11 @@ export class Drafts {
       draftId: record.id,
       kind: record.kind,
       state: record.state,
+      plannerKinds: plannerKindsOf(record),
+      conversational: record.conversational === true,
+      sourceKind: record.sourceKind ?? "diagram",
       source: record.source,
+      ...this.slotsOf(record),
       sourceChanged: await sourceChanged(record),
       sourceRevision: record.source === null ? null : record.sourceRevision,
       title: record.title,
@@ -596,6 +805,7 @@ export class Drafts {
               kind: record.errorKind,
               message: record.error ?? "",
               ...(record.errorField === undefined || record.errorField === null ? {} : { field: record.errorField }),
+              ...(record.errorBriefKind === undefined || record.errorBriefKind === null ? {} : { briefKind: record.errorBriefKind }),
             },
       created: record.createdAt,
       updated: record.updatedAt,
@@ -618,7 +828,8 @@ export class Drafts {
   /** Merge a patch into the record, write `draft.json`, then mirror it. Call inside `write`. */
   private async save(id: string, patch: Partial<DraftRecord>, options: { mirror?: boolean } = {}): Promise<DraftRecord> {
     const record = this.require(id);
-    const next: DraftRecord = { ...record, ...patch, updatedAt: new Date().toISOString() };
+    const merged: DraftRecord = { ...record, ...patch };
+    const next: DraftRecord = { ...merged, ...summarize(merged), updatedAt: new Date().toISOString() };
     this.records.set(id, next);
     await mkdir(draftDir(id), { recursive: true });
     await atomicWrite(draftJsonPath(id), `${JSON.stringify(next, null, 1)}\n`);
@@ -681,8 +892,85 @@ export class Drafts {
     }
   }
 
+  /** Every slot as the API reports it, the kinds still waiting, and Make both's pair. */
+  private slotsOf(record: DraftRecord): Pick<DraftView, "slots" | "waiting" | "pair"> {
+    const slots: Partial<Record<BriefKind, SlotView>> = {};
+    for (const kind of BRIEF_KINDS) {
+      if (record.slots?.[kind] === undefined) continue;
+      slots[kind] = this.slotView(record, kind);
+    }
+    const waiting = BRIEF_KINDS.filter((kind) => record.slots?.[kind]?.waiting != null).sort(
+      (a, b) => (record.slots![a]!.waiting!.requestSeq - record.slots![b]!.waiting!.requestSeq),
+    );
+    const diagram = slots.diagram;
+    const video = slots.video;
+    const pair =
+      diagram !== undefined &&
+      video !== undefined &&
+      diagram.live &&
+      video.live &&
+      diagram.held === null &&
+      video.held === null &&
+      diagram.requestSeq !== null &&
+      diagram.requestSeq === video.requestSeq
+        ? { requestSeq: diagram.requestSeq, kinds: ["diagram", "video"] as BriefKind[] }
+        : null;
+    return { slots, waiting, pair };
+  }
+
+  private slotView(record: DraftRecord, kind: BriefKind): SlotView {
+    const slot = slotOf(record, kind);
+    const job = slot.jobId === null ? undefined : this.jobOf(kind, slot.jobId);
+    const press = this.pressStatus(record, kind);
+    return {
+      kind,
+      brief: slot.brief,
+      briefAt: slot.briefAt,
+      briefSeq: slot.brief === null ? null : slot.briefSeq,
+      briefBy: slot.briefBy,
+      pendingTopic: slot.pendingTopic,
+      jobId: slot.jobId,
+      jobState: job?.state ?? null,
+      waiting: slot.waiting,
+      requestSeq: slot.requestSeq,
+      held: slot.held === null ? null : { reason: slot.held.reason, at: slot.held.at },
+      state: slot.state,
+      live: slot.brief !== null && (slot.state === "briefed" || slot.state === "drawing"),
+      busy: press.busy,
+      replaces: press.replaces,
+    };
+  }
+
+  /**
+   * What the kind's newest job from this draft means for its press (D60):
+   * queued or running holds it (`kind-busy`); in review holds a diagram, and
+   * holds a video too unless a newer brief on the same slug is in force, when
+   * the press replaces it in one catalog transaction (D52).
+   */
+  private pressStatus(record: DraftRecord, kind: BriefKind): { busy: { jobId: string; state: string } | null; replaces: { jobId: string } | null } {
+    const slot = slotOf(record, kind);
+    const free = { busy: null, replaces: null };
+    if (slot.jobId === null) return free;
+    const job = this.jobOf(kind, slot.jobId);
+    if (job === undefined) return free;
+    if (job.state === "queued" || job.state === "running") return { busy: { jobId: job.id, state: job.state }, replaces: null };
+    if (job.state !== "awaiting_review") return free;
+    if (
+      kind === "video" &&
+      slot.brief !== null &&
+      isVideoBrief(slot.brief) &&
+      slot.briefSeq !== slot.drawnSeq &&
+      slot.brief.slug === job.slug
+    ) {
+      return { busy: null, replaces: { jobId: job.id } };
+    }
+    return { busy: { jobId: job.id, state: job.state }, replaces: null };
+  }
+
   private stateOf(record: DraftRecord): Record<string, unknown> {
     return {
+      ...this.slotsOf(record),
+      kind: record.kind,
       state: record.state,
       jobId: record.jobIds.at(-1) ?? null,
       inFlight: record.inFlight !== null,
@@ -780,8 +1068,22 @@ export class Drafts {
 
   private async createNew(input: CreateInput, key: string | null): Promise<{ record: DraftRecord; created: boolean }> {
     const source = input.source?.trim() || null;
-    if (source !== null && !isDiagramName(source)) {
+    const sourceKind: BriefKind = input.sourceKind === undefined || input.sourceKind === null ? "diagram" : (input.sourceKind as BriefKind);
+    if (!isBriefKind(sourceKind)) {
+      throw new JobRefused(400, `"sourceKind" is diagram or video`, { field: "sourceKind" });
+    }
+    const kinds = this.plannerKindsNow();
+    if (source !== null && sourceKind === "diagram" && !isDiagramName(source)) {
       throw new JobRefused(400, `"${source}" is not a diagram name`, { field: "source" });
+    }
+    if (source !== null && sourceKind === "video") {
+      if (!isDiagramName(source)) throw new JobRefused(400, `"${source}" is not a video slug`, { field: "source" });
+      if (!kinds.includes("video")) {
+        throw new JobRefused(409, "videos are not available on this machine, so a conversation cannot open on one", {
+          reason: "kind-not-in-conversation",
+          kind: "video",
+        });
+      }
     }
 
     let vocabulary: Vocabulary;
@@ -797,11 +1099,13 @@ export class Drafts {
       topic: diagram.topic,
       shapes: diagram.shapes,
     }));
+    const videos = kinds.includes("video") ? await readVideoCorpus() : null;
 
     let extending: string | null = null;
+    let changing: string | null = null;
     let sourceHash: string | null = null;
     let sourceRevision: number | null = null;
-    if (source !== null) {
+    if (source !== null && sourceKind === "diagram") {
       // The same call an extend job makes before drawing (`execute` in
       // runner.ts): the checkout brought up to the latest revision unless it
       // holds uncommitted edits, so the planner and the job read one file.
@@ -822,14 +1126,41 @@ export class Drafts {
       sourceHash = await documentHashOf(checkout.path);
       sourceRevision = checkout.revision;
     }
+    if (source !== null && sourceKind === "video") {
+      // Resolved against studio videos only, owner-scoped by the catalog:
+      // never a same-slug diagram, which is a different thing to change.
+      const shown = await videoShow(source);
+      if (!shown.ok) {
+        throw new JobRefused(shown.offline ? 503 : 502, `the video ${source} could not be read from the catalog: ${shown.error ?? "no reason given"}`, {
+          reason: shown.offline ? "catalog-unreachable" : "catalog",
+        });
+      }
+      const video = (shown.json as { video?: Record<string, unknown> | null } | null)?.video ?? null;
+      if (video === null) {
+        throw new JobRefused(404, `no studio video ${source}`, { reason: "no-video", source });
+      }
+      changing = changingSummary({
+        slug: source,
+        title: typeof video.title === "string" ? video.title : null,
+        topic: typeof video.topic === "string" ? video.topic : null,
+        durationSeconds: typeof video.durationSeconds === "number" ? video.durationSeconds : null,
+        brief: video.brief,
+      });
+      sourceHash = typeof video.sourceHash === "string" ? video.sourceHash : null;
+      sourceRevision = typeof video.revision === "number" ? video.revision : null;
+    }
 
     const id = randomUUID();
     const now = new Date().toISOString();
     const hash = vocabularyHash(vocabulary.entries);
     const record: DraftRecord = {
       id,
-      kind: "diagram",
+      kind: sourceKind,
       state: "open",
+      plannerKinds: kinds,
+      conversational: true,
+      slots: {},
+      sourceKind,
       ownerId: studioOwner(),
       source,
       sourceHash,
@@ -865,19 +1196,26 @@ export class Drafts {
     this.records.set(id, record);
     await this.write(id, async () => {
       await this.save(id, {});
-      await writeFile(plannerSystemPath(id), buildSystemPrompt({ vocabulary: vocabulary.entries, corpus, extending }), "utf8");
+      await writeFile(
+        plannerSystemPath(id),
+        buildCombinedSystemPrompt({ kinds, vocabulary: vocabulary.entries, corpus, videos, extending, changing }),
+        "utf8",
+      );
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
       await this.append(id, {
         type: "created",
-        mode: source === null ? "new" : "extend",
+        mode: source === null ? "new" : sourceKind === "video" ? "change" : "extend",
         source,
+        sourceKind,
         sourceHash,
         sourceRevision,
+        plannerKinds: kinds,
         vocabularyHash: hash,
         // The manual a Draw pressed now would start with, for the record.
         manualHash: this.runner.manual?.current()?.hash ?? null,
         corpus: corpus.length,
         corpusStale: listing?.stale ?? true,
+        ...(videos === null ? {} : { videos: videos.length }),
       });
     });
     return { record: this.require(id), created: true };
@@ -888,20 +1226,40 @@ export class Drafts {
   /* ------------------------------------------------------------------ */
 
   /**
-   * A person's message. Refused with 409 while a turn is in flight or the
-   * draft is drawing, 422 at the turn cap, 429 over the daily cap, and 503 when
-   * every planner slot is busy. Otherwise the message is on disk before this
+   * A person's message, with its tags (D57 of docs/STUDIO-MENTIONS.md).
+   * Refused with 400 for a mention that does not read `@<kind>` where it says,
+   * 409 for a kind this draft's prompt does not carry, 409 while a turn is in
+   * flight or a press is being made, 422 at the turn cap, 429 over the daily
+   * cap, and 503 when every planner slot is busy. Accepted while a job of any
+   * kind runs (C14 lifted by D60). Otherwise the message is on disk before this
    * returns, and the turn runs on.
    */
-  async send(id: string, rawText: unknown): Promise<{ seq: number }> {
+  async send(id: string, rawText: unknown, rawMentions?: unknown): Promise<{ seq: number }> {
     const record = this.require(id);
-    const text = typeof rawText === "string" ? rawText.trim() : "";
+    const raw = typeof rawText === "string" ? rawText : "";
+    const parsed = parseMentions(raw, rawMentions);
+    const lead = raw.length - raw.trimStart().length;
+    const text = raw.trim();
     if (text === "") throw new JobRefused(400, `"text" is required: a message with nothing in it`, { field: "text" });
     if (text.length > TEXT_LIMIT) {
       throw new JobRefused(400, `the message is ${text.length} characters and the cap is ${TEXT_LIMIT}`, {
         field: "text",
         limit: TEXT_LIMIT,
       });
+    }
+    // Positions against the text as stored: the leading whitespace trimmed off.
+    const mentions: Mention[] = parsed.map((mention) => ({ ...mention, start: mention.start - lead, end: mention.end - lead }));
+    const kinds = plannerKindsOf(record);
+    for (const mention of mentions) {
+      if (!kinds.includes(mention.kind)) {
+        throw new JobRefused(409, `this conversation's planner cannot make a ${mention.kind}: start a new conversation to make one`, {
+          reason: "kind-not-in-conversation",
+          kind: mention.kind,
+        });
+      }
+    }
+    if (mentions.length > 0 && record.turns === 0 && withoutMentions(text, mentions).trim() === "") {
+      throw new JobRefused(400, "Say what it should show: a tag alone needs a conversation to make it from", { field: "text" });
     }
     if (record.turns >= PLANNER_TURNS) {
       throw new JobRefused(422, `This conversation has reached its ${PLANNER_TURNS}-turn limit.`, {
@@ -917,14 +1275,8 @@ export class Drafts {
       throw new JobRefused(409, "the planner is still answering the last message", { reason: "in-flight" });
     }
     if (this.draws.has(id)) {
-      throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+      throw new JobRefused(409, "Draw was just pressed on this conversation; wait for it to be queued", {
         reason: "draw-in-progress",
-      });
-    }
-    if (record.state === "drawing") {
-      throw new JobRefused(409, "a drawing from this conversation is in progress: wait for the drawing, or cancel it", {
-        reason: "drawing",
-        jobId: record.jobIds.at(-1) ?? null,
       });
     }
     // The job cap's own refusal, body and all: spend is spend (D36).
@@ -937,11 +1289,33 @@ export class Drafts {
     }
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
 
+    const tags = mentions.map((mention) => mention.kind);
     let seq = 0;
     const turn = this.write(id, async () => {
-      const message = await this.append(id, { type: "message", text });
+      const message = await this.append(id, {
+        type: "message",
+        text,
+        ...(mentions.length === 0 ? {} : { mentions, tags }),
+      });
       seq = message.seq;
       const current = this.require(id);
+      // A tag orders a brief, and the order stands until a brief of it lands,
+      // a newer tag moves it, the person stops waiting, or it is refused twice
+      // (D57). A draft from before tags reads every message as tagged Diagram.
+      const asked: BriefKind[] = current.conversational === true ? tags : ["diagram"];
+      let slots = current.slots ?? {};
+      for (const kind of asked) {
+        const slot = slots[kind] ?? emptySlot();
+        slots = {
+          ...slots,
+          [kind]: {
+            ...slot,
+            ...(current.conversational === true ? { waiting: { requestSeq: message.seq } } : {}),
+            // Another diagram after a finished one opens its slot again.
+            ...(slot.state === "done" ? { state: "open" as const } : {}),
+          },
+        };
+      }
       await this.save(id, {
         turns: current.turns + 1,
         inFlight: { turn: message.seq, startedAt: message.at },
@@ -949,13 +1323,13 @@ export class Drafts {
         errorKind: null,
         error: null,
         errorField: null,
-        // Another diagram after a finished one opens the conversation again.
-        ...(current.state === "done" ? { state: "open" as const } : {}),
+        errorBriefKind: null,
+        slots,
       });
     });
     // Registered synchronously, so a second message in the same tick is 409.
     const whole = turn
-      .then(() => this.converse(id, seq, text))
+      .then(() => this.converse(id, seq, text, tags))
       .catch(async (error: unknown) => {
         await this.write(id, () =>
           this.recordError(id, "agent", `the studio failed while running this turn: ${(error as Error).message}`),
@@ -989,18 +1363,44 @@ export class Drafts {
     }).catch(() => undefined);
   }
 
-  private async recordError(id: string, kind: DraftErrorKind, message: string, field?: string): Promise<void> {
-    await this.append(id, { type: "error", kind, message, ...(field === undefined ? {} : { field }) });
-    await this.save(id, { errorKind: kind, error: message.slice(0, 1_000), errorField: field ?? null });
+  private async recordError(id: string, kind: DraftErrorKind, message: string, field?: string, briefKind?: BriefKind): Promise<void> {
+    await this.append(id, {
+      type: "error",
+      kind,
+      message,
+      ...(field === undefined ? {} : { field }),
+      ...(briefKind === undefined ? {} : { briefKind }),
+    });
+    await this.save(id, { errorKind: kind, error: message.slice(0, 1_000), errorField: field ?? null, errorBriefKind: briefKind ?? null });
   }
 
-  /** One person turn: the planner's reply, then the verdict on any brief in it, with at most one retry. */
-  private async converse(id: string, turn: number, text: string): Promise<void> {
+  /**
+   * One person turn (D57, D61): the planner's reply, then a verdict on each
+   * brief of a kind the message tagged or that is still waiting, with one
+   * shared retry for the refused ones.
+   */
+  private async converse(id: string, turn: number, text: string, tags: BriefKind[]): Promise<void> {
     await this.tellVocabularyChanges(id);
     const record = this.require(id);
-    const notes = [...record.undelivered, ...(record.pendingEdit ? [record.pendingEdit.text] : [])];
-    const prompt = [...notes.map(studioMessage), text].join("\n\n");
-    const delivered = { undelivered: [...record.undelivered], edit: record.pendingEdit?.text ?? null };
+    const conversational = record.conversational === true;
+    const kinds = plannerKindsOf(record);
+    const tagged: BriefKind[] = conversational ? tags : ["diagram"];
+    const waiting = conversational
+      ? kinds
+          .filter((kind) => !tagged.includes(kind) && slotOf(record, kind).waiting !== null)
+          .sort((a, b) => slotOf(record, a).waiting!.requestSeq - slotOf(record, b).waiting!.requestSeq)
+      : [];
+    const edits = kinds.map((kind) => slotOf(record, kind).pendingEdit?.text ?? null).filter((note): note is string => note !== null);
+    const notes = [...record.undelivered, ...edits];
+    const blocks = [
+      ...(waiting.length > 0 ? [fence("WAITING", waiting.join("\n"))] : []),
+      ...(conversational && tagged.length > 0 ? [fence("TAGS", tagged.join("\n"))] : []),
+    ];
+    const prompt = [...notes.map(studioMessage), ...blocks, text].join("\n\n");
+    const delivered = {
+      undelivered: [...record.undelivered],
+      edits: Object.fromEntries(kinds.map((kind) => [kind, slotOf(record, kind).pendingEdit?.text ?? null])) as Partial<Record<BriefKind, string | null>>,
+    };
 
     const first = await this.speak(id, turn, prompt, false);
     // Only a turn that answered has heard its notes. A refused, timed-out or
@@ -1008,43 +1408,70 @@ export class Drafts {
     // than never told.
     if (first === null) return;
     if (notes.length > 0) await this.write(id, () => this.clearDelivered(id, delivered));
-    const verdict = await this.judge(first.text);
-    if (verdict.kind !== "invalid") return this.write(id, () => this.settle(id, first.seq, verdict));
+    const asked = kinds.filter((kind) => tagged.includes(kind) || waiting.includes(kind));
+    const judged = await this.judgeReply(first.text, asked, conversational);
+    const refused = await this.write(id, () =>
+      this.settleReply(id, { replySeq: first.seq, messageSeq: turn, tagged, judged, hold: first.hold, retry: false }),
+    );
+    if (refused.length === 0) return;
 
     const retry = this.require(id).turns < PLANNER_TURNS && this.records.get(id)?.state !== "abandoned";
     await this.write(id, async () => {
-      await this.append(id, {
-        type: "brief-invalid",
-        replySeq: first.seq,
-        field: verdict.field,
-        message: verdict.message,
-        retried: retry,
-      });
-      if (!retry) await this.refusedTwice(id, verdict);
+      for (const verdict of refused) {
+        await this.append(id, {
+          type: "brief-invalid",
+          replySeq: first.seq,
+          kind: verdict.kind,
+          field: verdict.field,
+          message: verdict.message,
+          retried: retry,
+        });
+        if (!retry) await this.refusedTwice(id, verdict);
+      }
     });
     if (!retry) return;
 
-    const instruction =
-      `Your brief was refused. ${verdict.field}: ${verdict.message}\n` +
-      `Fix exactly that and send the whole brief again, with the same summary above it.`;
+    const instruction = conversational
+      ? `Your ${refused.length === 1 ? `${refused[0]!.kind} brief was` : "briefs were"} refused:\n` +
+        refused.map((verdict) => `- ${verdict.kind}, ${verdict.field}: ${verdict.message}`).join("\n") +
+        `\nFix exactly that and send ${refused.length === 1 ? "that whole brief" : "each of those whole briefs"} again, ` +
+        `with its summary above it, and no other brief.`
+      : `Your brief was refused. ${refused[0]!.field}: ${refused[0]!.message}\n` +
+        `Fix exactly that and send the whole brief again, with the same summary above it.`;
     await this.write(id, async () => {
       await this.append(id, { type: "studio", text: instruction, internal: true, replySeq: first.seq });
-      // The automatic retry counts as a turn (the doc's cost table).
+      // The automatic retry counts as a turn (the doc's cost table), however many briefs it fixes.
       await this.save(id, { turns: this.require(id).turns + 1 });
     });
     const second = await this.speak(id, turn, studioMessage(instruction), true);
     if (second === null) return;
-    const again = await this.judge(second.text);
-    if (again.kind !== "invalid") return this.write(id, () => this.settle(id, second.seq, again));
+    // Read for the refused kinds only: a brief of a kind that already passed
+    // is ignored, so the retry cannot replace a card the person is reading.
+    const again = await this.judgeReply(
+      second.text,
+      refused.map((verdict) => verdict.kind),
+      conversational,
+    );
     await this.write(id, async () => {
-      await this.append(id, {
-        type: "brief-invalid",
+      const stillRefused = await this.settleReply(id, {
         replySeq: second.seq,
-        field: again.field,
-        message: again.message,
-        retried: false,
+        messageSeq: turn,
+        tagged: tagged.filter((kind) => refused.some((verdict) => verdict.kind === kind)),
+        judged: again,
+        hold: null,
+        retry: true,
       });
-      await this.refusedTwice(id, again);
+      for (const verdict of stillRefused) {
+        await this.append(id, {
+          type: "brief-invalid",
+          replySeq: second.seq,
+          kind: verdict.kind,
+          field: verdict.field,
+          message: verdict.message,
+          retried: false,
+        });
+        await this.refusedTwice(id, verdict);
+      }
     });
   }
 
@@ -1053,55 +1480,179 @@ export class Drafts {
    * queued while the turn ran (a job's verdict, a later edit) stays for the
    * next one.
    */
-  private async clearDelivered(id: string, delivered: { undelivered: string[]; edit: string | null }): Promise<void> {
+  private async clearDelivered(
+    id: string,
+    delivered: { undelivered: string[]; edits: Partial<Record<BriefKind, string | null>> },
+  ): Promise<void> {
     const current = this.require(id);
     const left = [...current.undelivered];
     for (const note of delivered.undelivered) {
       const at = left.indexOf(note);
       if (at !== -1) left.splice(at, 1);
     }
-    const edit = current.pendingEdit && current.pendingEdit.text === delivered.edit ? null : (current.pendingEdit ?? null);
-    await this.save(id, { undelivered: left, pendingEdit: edit });
+    let patch: Partial<DraftRecord> = { undelivered: left };
+    for (const kind of BRIEF_KINDS) {
+      const edit = slotOf(current, kind).pendingEdit;
+      if (edit !== null && edit.text === delivered.edits[kind]) {
+        patch = { ...patch, ...withSlot({ ...current, ...patch }, kind, { pendingEdit: null }) };
+      }
+    }
+    await this.save(id, patch);
   }
 
-  /** E6: the second refusal is shown, not retried. */
-  private async refusedTwice(id: string, verdict: { field: string; message: string }): Promise<void> {
+  /** E6: the second refusal of a kind's brief is shown, not retried, and that kind stops waiting. */
+  private async refusedTwice(id: string, verdict: { kind: BriefKind; field: string; message: string }): Promise<void> {
+    const conversational = this.require(id).conversational === true;
     await this.recordError(
       id,
       "brief-invalid",
-      `The planner's brief did not pass the studio's checks twice. ${verdict.field}: ${verdict.message}`,
+      conversational
+        ? `The planner's ${verdict.kind} brief did not pass the studio's checks twice. ${verdict.field}: ${verdict.message}`
+        : `The planner's brief did not pass the studio's checks twice. ${verdict.field}: ${verdict.message}`,
       verdict.field,
+      conversational ? verdict.kind : undefined,
     );
     const now = this.require(id);
-    if (now.state === "briefed" && now.briefBy !== "person") await this.save(id, { state: "open" });
+    const slot = slotOf(now, verdict.kind);
+    await this.save(
+      id,
+      withSlot(now, verdict.kind, {
+        waiting: null,
+        ...(slot.state === "briefed" && slot.briefBy !== "person" ? { state: "open" as const } : {}),
+      }),
+    );
   }
 
-  /** A reply with no refusal: a new brief in force, or none, which ends any older one. */
-  private async settle(id: string, replySeq: number, verdict: BriefVerdict): Promise<void> {
+  /**
+   * One reply's verdicts, applied (D60, D61). Returns the refused briefs, for
+   * the caller to retry or show. Call inside `write`.
+   *
+   * - A kind neither tagged by the message nor waiting was never judged: its
+   *   brief is recorded as `brief-ignored` (T24).
+   * - A `hold` puts each named live card on hold, unless the same reply
+   *   replaces it.
+   * - A kind whose waiting was stopped while the turn ran is dropped too: the
+   *   person said they no longer want it.
+   * - A tagged kind with no brief in the reply ends a planner's brief of that
+   *   kind, and stays waiting ("Which briefs a reply ends").
+   */
+  private async settleReply(
+    id: string,
+    input: {
+      replySeq: number;
+      messageSeq: number;
+      tagged: BriefKind[];
+      judged: { verdicts: Map<BriefKind, KindVerdict>; ignored: string[] };
+      hold: { kinds: BriefKind[]; reason: string } | null;
+      retry: boolean;
+    },
+  ): Promise<{ kind: BriefKind; field: string; message: string }[]> {
     const record = this.require(id);
-    if (record.state === "abandoned") return;
-    if (verdict.kind === "none") {
-      // A reply that asks rather than proposes leaves no planner brief in
-      // force; the last one stays on the record, for "Fill the brief myself".
-      // A brief the person edited stays in force: only a newer valid planner
-      // brief replaces it.
-      if (record.state === "briefed" && record.briefBy !== "person") await this.save(id, { state: "open" });
-      return;
+    if (record.state === "abandoned") return [];
+    const conversational = record.conversational === true;
+    for (const kind of input.judged.ignored) {
+      await this.append(id, { type: "brief-ignored", replySeq: input.replySeq, kind });
     }
-    if (verdict.kind !== "valid") return;
-    if (record.state === "done") await this.save(id, { state: "open" });
-    await this.append(id, { type: "brief", replySeq, brief: verdict.brief, pendingTopic: verdict.pendingTopic });
-    await this.save(id, {
-      // A drawing in flight keeps the draft at `drawing`; the new brief is
-      // what the next Draw draws once that job is over.
-      state: record.state === "drawing" ? "drawing" : "briefed",
-      brief: verdict.brief,
-      briefAt: new Date().toISOString(),
-      briefSeq: replySeq,
-      briefBy: "planner",
-      pendingTopic: verdict.pendingTopic,
-      title: verdict.brief.title,
-    });
+    if (input.hold !== null) {
+      const now = new Date().toISOString();
+      let patch: Partial<DraftRecord> = {};
+      for (const kind of input.hold.kinds) {
+        if (input.judged.verdicts.get(kind)?.kind === "valid") continue;
+        patch = { ...patch, ...withSlot({ ...record, ...patch }, kind, { held: { reason: input.hold.reason, at: now, replySeq: input.replySeq } }) };
+      }
+      if (patch.slots !== undefined) await this.save(id, patch);
+    }
+    const refused: { kind: BriefKind; field: string; message: string }[] = [];
+    for (const [kind, verdict] of input.judged.verdicts) {
+      const current = this.require(id);
+      const slot = slotOf(current, kind);
+      if (conversational && slot.waiting === null) {
+        await this.append(id, { type: "brief-ignored", replySeq: input.replySeq, kind, reason: "stopped-waiting" });
+        continue;
+      }
+      if (verdict.kind === "invalid") {
+        refused.push({ kind, field: verdict.field, message: verdict.message });
+        continue;
+      }
+      const requestSeq = slot.waiting?.requestSeq ?? input.messageSeq;
+      await this.append(id, {
+        type: "brief",
+        replySeq: input.replySeq,
+        kind,
+        brief: verdict.brief,
+        pendingTopic: verdict.pendingTopic,
+        requestSeq,
+      });
+      await this.save(
+        id,
+        withSlot(current, kind, {
+          brief: verdict.brief,
+          briefAt: new Date().toISOString(),
+          briefSeq: input.replySeq,
+          briefBy: "planner",
+          pendingTopic: verdict.pendingTopic,
+          requestSeq,
+          waiting: null,
+          held: null,
+          // A job in flight keeps the slot at `drawing`; the new brief is
+          // what the next press makes once that job is over.
+          state: slot.state === "drawing" ? "drawing" : "briefed",
+        }),
+      );
+    }
+    for (const kind of input.tagged) {
+      if (input.judged.verdicts.has(kind)) continue;
+      // A reply that asks rather than proposes leaves no planner brief of the
+      // kind it was asked for in force; the last one stays on the slot, for
+      // "Fill the brief myself". A brief the person edited stays in force.
+      const current = this.require(id);
+      const slot = slotOf(current, kind);
+      if (slot.state === "briefed" && slot.briefBy !== "person") await this.save(id, withSlot(current, kind, { state: "open" }));
+    }
+    return refused;
+  }
+
+  /**
+   * The verdict on each brief a reply carries, for the kinds asked for
+   * (tagged or waiting); every other kind is ignored, never judged. A draft
+   * from before D61 is judged as it was: its last `brief` block, a diagram.
+   */
+  private async judgeReply(
+    text: string,
+    asked: readonly BriefKind[],
+    conversational: boolean,
+  ): Promise<{ verdicts: Map<BriefKind, KindVerdict>; ignored: string[] }> {
+    const verdicts = new Map<BriefKind, KindVerdict>();
+    const ignored: string[] = [];
+    const wanted: { kind: BriefKind; body: string }[] = [];
+    if (!conversational) {
+      const body = fencedLast(text);
+      if (body !== null) wanted.push({ kind: "diagram", body });
+    } else {
+      for (const block of briefBlocks(text)) {
+        if (isBriefKind(block.kind) && asked.includes(block.kind)) wanted.push({ kind: block.kind, body: block.body });
+        else ignored.push(block.kind);
+      }
+    }
+    if (wanted.length === 0) return { verdicts, ignored };
+    let vocabulary: Vocabulary;
+    try {
+      vocabulary = await this.readVocabulary();
+    } catch (error) {
+      for (const { kind } of wanted) {
+        verdicts.set(kind, { kind: "invalid", field: "topic", message: `the topic list cannot be read: ${(error as Error).message}` });
+      }
+      return { verdicts, ignored };
+    }
+    const topics = {
+      dryRun: async (entry: Parameters<typeof topicAddDryRun>[0]) => {
+        const result = await topicAddDryRun(entry);
+        const said = (result.json as { error?: unknown } | null)?.error;
+        return { ...result, error: typeof said === "string" ? said : result.error };
+      },
+    };
+    for (const { kind, body } of wanted) verdicts.set(kind, await evaluateBrief(kind, body, text, vocabulary, topics));
+    return { verdicts, ignored };
   }
 
   /**
@@ -1152,29 +1703,18 @@ export class Drafts {
     return value;
   }
 
-  private async judge(text: string): Promise<BriefVerdict> {
-    let vocabulary: Vocabulary;
-    try {
-      vocabulary = await this.readVocabulary();
-    } catch (error) {
-      return { kind: "invalid", field: "topic", message: `the topic list cannot be read: ${(error as Error).message}` };
-    }
-    return evaluateReply(text, vocabulary, {
-      dryRun: async (entry) => {
-        const result = await topicAddDryRun(entry);
-        const said = (result.json as { error?: unknown } | null)?.error;
-        return { ...result, error: typeof said === "string" ? said : result.error };
-      },
-    });
-  }
-
   /**
    * One planner process: spawn, stream, and write down what came of it.
    * Returns the reply's seq and text, or null when there is no reply to judge
    * (the request was refused, the turn timed out, the seals did not hold, or
    * the draft was abandoned under it).
    */
-  private async speak(id: string, turn: number, prompt: string, retry: boolean): Promise<{ seq: number; text: string } | null> {
+  private async speak(
+    id: string,
+    turn: number,
+    prompt: string,
+    retry: boolean,
+  ): Promise<{ seq: number; text: string; hold: { kinds: BriefKind[]; reason: string } | null } | null> {
     let outcome = await this.spawnOnce(id, turn, prompt, retry);
 
     // C3: the stored session cannot be resumed. A fresh session is given the
@@ -1261,8 +1801,29 @@ export class Drafts {
       return null;
     }
     return this.write(id, async () => {
-      const reply = await this.append(id, { type: "reply", turn, text: run.text, ...cost, ...(retry ? { retry: true } : {}) });
-      return { seq: reply.seq, text: run.text };
+      // A conversational draft's reply may end with a `suggest` and a `hold`
+      // block (D58, D60): read, checked, and stripped from what a person
+      // reads. A retry answers a refusal, so its offers are not read.
+      const current = this.require(id);
+      const conversational = current.conversational === true;
+      const kinds = plannerKindsOf(current);
+      const live = kinds.filter((kind) => {
+        const slot = slotOf(current, kind);
+        return slot.brief !== null && (slot.state === "briefed" || slot.state === "drawing");
+      });
+      const suggest = conversational && !retry ? readSuggest(run.text, kinds) : [];
+      const hold = conversational && !retry ? readHold(run.text, live) : null;
+      const shown = conversational ? stripFencedBlocks(run.text, ["suggest", "hold"]) : run.text;
+      const reply = await this.append(id, {
+        type: "reply",
+        turn,
+        text: shown,
+        ...cost,
+        ...(retry ? { retry: true } : {}),
+        ...(suggest.length > 0 ? { suggest } : {}),
+        ...(hold === null ? {} : { hold }),
+      });
+      return { seq: reply.seq, text: run.text, hold };
     });
   }
 
@@ -1286,7 +1847,10 @@ export class Drafts {
       // A crash between the record and the prompt at creation: write it now,
       // from what the studio knows today.
       const vocabulary = await loadVocabulary();
-      systemPrompt = buildSystemPrompt({ vocabulary: vocabulary.entries, corpus: [] });
+      systemPrompt =
+        record.conversational === true
+          ? buildCombinedSystemPrompt({ kinds: plannerKindsOf(record), vocabulary: vocabulary.entries, corpus: [], videos: [] })
+          : buildSystemPrompt({ vocabulary: vocabulary.entries, corpus: [] });
       await writeFile(plannerSystemPath(id), systemPrompt, "utf8");
       await writeFile(plannerSettingsPath(id), `${JSON.stringify(plannerSettings(), null, 1)}\n`, "utf8");
     }
@@ -1344,79 +1908,195 @@ export class Drafts {
   }
 
   /* ------------------------------------------------------------------ */
-  /* Draw                                                               */
+  /* Draw, Make video, Make both                                        */
   /* ------------------------------------------------------------------ */
 
   /**
-   * The person pressed Draw. With a proposed topic the press creates it first
-   * (`catalog topic add`, the person as author and the draft in the reason),
-   * then the stored brief goes through the job path byte for byte: the
-   * vocabulary as it is now, the doctor, the lease, the mode check and the
-   * cap, all in `runner.enqueue`. Every refusal lands as a STUDIO note (E7)
-   * and the draft stays `briefed`.
+   * A press (D60): `{ idempotencyKey, kind? }` for one card, `kind` defaulting
+   * to `diagram` for a web app from before; or `{ items: [{ kind,
+   * idempotencyKey }, ...] }` for Make both. Each card stands alone: its own
+   * key, its own refusal, its own job. A pending topic both cards name is
+   * created once, and a topic that fails refuses only the cards that name it.
+   *
+   * One card answers as its press always did, refusal thrown. Make both
+   * answers one entry per item, each what that card's own press would have
+   * answered. A repeated key returns the job it already started and tries
+   * only what has not.
    */
-  async draw(id: string, idempotencyKey: unknown): Promise<{ jobId: string; created: boolean }> {
+  async draw(id: string, input: unknown): Promise<DrawAnswer> {
     const record = this.require(id);
-    const key = typeof idempotencyKey === "string" && idempotencyKey.trim() !== "" ? idempotencyKey.trim() : null;
-    if (key === null) throw new JobRefused(400, `"idempotencyKey" is required: it is what makes a second press safe`, { field: "idempotencyKey" });
-    if (key.length > 200) throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
-    const jobKey = `draft:${id}:${key}`;
+    const body = typeof input === "object" && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+    const single = !Array.isArray(body.items);
+    const rawItems: unknown[] = single ? [{ kind: body.kind ?? "diagram", idempotencyKey: body.idempotencyKey }] : (body.items as unknown[]);
+    if (!single && (rawItems.length < 1 || rawItems.length > BRIEF_KINDS.length)) {
+      throw new JobRefused(400, `"items" holds one card per kind, at most ${BRIEF_KINDS.length}`, { field: "items" });
+    }
+    const items: DrawItem[] = rawItems.map((raw, index) => {
+      const item = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+      const at = single ? "" : `items[${index}].`;
+      const kind = item.kind ?? "diagram";
+      if (!isBriefKind(kind)) throw new JobRefused(400, `"${at}kind" is diagram or video`, { field: `${at}kind` });
+      const key = typeof item.idempotencyKey === "string" && item.idempotencyKey.trim() !== "" ? item.idempotencyKey.trim() : null;
+      if (key === null) {
+        throw new JobRefused(400, `"${at}idempotencyKey" is required: it is what makes a second press safe`, { field: `${at}idempotencyKey` });
+      }
+      if (key.length > 200) throw new JobRefused(400, `"${at}idempotencyKey" is over 200 characters`, { field: `${at}idempotencyKey` });
+      if (!plannerKindsOf(record).includes(kind)) {
+        throw new JobRefused(409, `this conversation's planner cannot make a ${kind}`, { reason: "kind-not-in-conversation", kind });
+      }
+      return { kind, jobKey: `draft:${id}:${key}` };
+    });
+    if (new Set(items.map((item) => item.kind)).size !== items.length) {
+      throw new JobRefused(400, "Make both presses one card of each kind", { field: "items" });
+    }
+    if (new Set(items.map((item) => item.jobKey)).size !== items.length) {
+      throw new JobRefused(400, "each card's press needs its own idempotency key", { field: "items" });
+    }
+    const answer = (results: DrawItemResult[]): DrawAnswer => {
+      if (!single) return { single: false, results };
+      const only = results[0]!;
+      if ("refusal" in only) throw new JobRefused(only.status, only.refusal.error, only.refusal.detail);
+      return { single: true, result: only };
+    };
+
     // A repeated press answers with the job the first one made, whether that
     // press is over or still running.
-    const repeated = this.store.byIdempotencyKey(jobKey);
-    if (repeated !== undefined && repeated.draftId === id) return { jobId: repeated.id, created: false };
+    const repeated = (item: DrawItem): DrawItemResult | null => {
+      const job = item.kind === "diagram" ? this.store.byIdempotencyKey(item.jobKey) : this.video?.store.byIdempotencyKey(item.jobKey);
+      return job !== undefined && job.draftId === id ? { kind: item.kind, jobId: job.id, created: false, replaces: null } : null;
+    };
+    const already = items.map(repeated);
+    if (already.every((result) => result !== null)) return answer(already as DrawItemResult[]);
+
+    const composite = items.map((item) => item.jobKey).sort().join("|");
     const pressing = this.draws.get(id);
     if (pressing !== undefined) {
-      if (pressing.key !== jobKey) {
-        throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+      if (pressing.key !== composite) {
+        throw new JobRefused(409, "a press is being made on this conversation; wait for it to be queued", {
           reason: "draw-in-progress",
         });
       }
-      const first = await pressing.result;
-      return { jobId: first.jobId, created: false };
+      const first = (await pressing.result) as DrawItemResult[];
+      return answer(first.map((result) => ("jobId" in result ? { ...result, created: false } : result)));
     }
     if (record.inFlight !== null || this.turnsInFlight.has(id)) {
-      throw new JobRefused(409, "the planner is still answering; Draw once its reply is in", { reason: "in-flight" });
-    }
-    if (record.state !== "briefed" || record.brief === null) {
-      throw new JobRefused(
-        409,
-        record.state === "drawing"
-          ? "this conversation's drawing is already in progress"
-          : `there is no brief to draw: the conversation is ${record.state}`,
-        { reason: "not-briefed", state: record.state },
-      );
+      throw new JobRefused(409, "the planner is still answering; press once its reply is in", { reason: "in-flight" });
     }
     // Registered before the first await, so a turn or a second press in the
     // same tick sees it.
-    const result = this.pressDraw(id, jobKey);
-    this.draws.set(id, { key: jobKey, result });
+    const result = this.pressItems(id, items, already);
+    this.draws.set(id, { key: composite, result });
     try {
-      return await result;
+      return answer(await result);
     } finally {
       this.draws.delete(id);
     }
   }
 
-  private async pressDraw(id: string, jobKey: string): Promise<{ jobId: string; created: boolean }> {
-    try {
-      return await this.drawBriefed(id, jobKey);
-    } catch (error) {
-      if (error instanceof JobRefused) {
-        await this.write(id, async () => {
-          await this.append(id, { type: "draw", refused: { status: error.status, error: error.message, detail: error.detail } });
-          await this.note(id, `Draw was refused: ${error.message}`);
-        });
-      }
-      throw error;
-    }
+  /** One card's press, by key and kind: `draw` with `{ idempotencyKey, kind }`. */
+  async drawOne(
+    id: string,
+    idempotencyKey: unknown,
+    kind: BriefKind = "diagram",
+  ): Promise<{ kind: BriefKind; jobId: string; created: boolean; replaces: string | null }> {
+    const answer = await this.draw(id, { idempotencyKey, kind });
+    if (!answer.single) throw new Error("a single press answered as Make both");
+    return answer.result;
   }
 
-  private async drawBriefed(id: string, jobKey: string): Promise<{ jobId: string; created: boolean }> {
-    const record = this.require(id);
-    const brief = record.brief!;
-    const pending = record.pendingTopic;
+  /** Each card in order: checked, its topic created once, enqueued; a refusal stops only its own card. */
+  private async pressItems(id: string, items: DrawItem[], already: (DrawItemResult | null)[]): Promise<DrawItemResult[]> {
+    const results: (DrawItemResult | null)[] = [...already];
+    const refuse = async (index: number, error: unknown): Promise<void> => {
+      if (!(error instanceof JobRefused)) throw error;
+      const item = items[index]!;
+      results[index] = { kind: item.kind, status: error.status, refusal: { error: error.message, detail: error.detail } };
+      await this.write(id, async () => {
+        await this.append(id, { type: "draw", kind: item.kind, refused: { status: error.status, error: error.message, detail: error.detail } });
+        await this.note(id, `${pressName(item.kind)} was refused: ${error.message}`);
+      });
+    };
 
+    // Everything an enqueue would refuse on is asked first, so a press that
+    // can only fail leaves no topic behind.
+    const prepared = new Map<number, Prepared>();
+    for (const [index, item] of items.entries()) {
+      if (results[index] !== null) continue;
+      try {
+        prepared.set(index, await this.prepare(id, item));
+      } catch (error) {
+        await refuse(index, error);
+      }
+    }
+
+    // Each distinct proposed topic, created once; a refusal refuses only the
+    // cards naming it (T32).
+    const bySlug = new Map<string, number[]>();
+    for (const [index, ready] of prepared) {
+      if (ready.pending === null) continue;
+      bySlug.set(ready.pending.entry.slug, [...(bySlug.get(ready.pending.entry.slug) ?? []), index]);
+    }
+    for (const [, indices] of bySlug) {
+      try {
+        await this.createTopic(id, prepared.get(indices[0]!)!.pending!, indices.map((index) => items[index]!.kind));
+      } catch (error) {
+        for (const index of indices) {
+          prepared.delete(index);
+          await refuse(index, error);
+        }
+      }
+    }
+
+    let rowFresh = false;
+    for (const [index, ready] of prepared) {
+      try {
+        if (!rowFresh) {
+          // The row the job's `draft_id` names has to be there first. A
+          // mirror that failed while Postgres was down left no row, and
+          // nothing since may have asked for another, so this one is fresh.
+          await this.chains.get(id);
+          await this.mirrored(id);
+          const row = await draftUpsert(draftJsonPath(id)).catch(
+            (error: unknown): CatalogResult => ({ ok: false, json: null, error: (error as Error).message, offline: true }),
+          );
+          if (!row.ok) await this.noteCatalogError(id, row.error ?? "catalog draft upsert failed");
+          rowFresh = true;
+        }
+        results[index] = await this.enqueueItem(id, ready);
+      } catch (error) {
+        await refuse(index, error);
+      }
+    }
+    return results as DrawItemResult[];
+  }
+
+  /** One card's checks, before anything is written: every refusal its enqueue would make. */
+  private async prepare(id: string, item: DrawItem): Promise<Prepared> {
+    const record = this.require(id);
+    const slot = slotOf(record, item.kind);
+    if (slot.brief === null || (slot.state !== "briefed" && slot.state !== "drawing")) {
+      throw new JobRefused(409, `there is no ${item.kind} brief to make: its card is ${slot.brief === null ? "empty" : "out of force"}`, {
+        reason: "not-briefed",
+        kind: item.kind,
+        state: slot.state,
+      });
+    }
+    if (slot.held !== null) {
+      throw new JobRefused(409, `On hold: ${slot.held.reason}. Press Use this brief to make it as it stands.`, {
+        reason: "held",
+        kind: item.kind,
+        held: slot.held.reason,
+      });
+    }
+    const press = this.pressStatus(record, item.kind);
+    if (press.busy !== null) {
+      throw new JobRefused(
+        409,
+        item.kind === "video" ? "The video is still being made" : "The diagram is still being drawn",
+        { reason: "kind-busy", kind: item.kind, jobId: press.busy.jobId, state: press.busy.state },
+      );
+    }
+    const pending = slot.pendingTopic;
     if (pending !== null && studioOwner() !== LOCAL_LEARNER_ID) {
       // C16: `catalog topic add` writes as the catalog CLI's owner, `local`,
       // and takes no `--owner` yet, so another owner's topic would be filed
@@ -1430,71 +2110,83 @@ export class Drafts {
         { reason: "topic-owner", topic: pending.entry.slug },
       );
     }
-
-    // Everything the enqueue would refuse on is asked first, so a press that
-    // can only fail leaves no topic behind: the doctor (A8), the brief against
-    // the vocabulary (widened with a proposed topic, in memory), the lease,
-    // the mode against what exists, and the cap. The enqueue asks again, and
-    // the catalog can still refuse in a race with another process taking the
-    // target; a topic created just before that refusal stays, and the next
-    // press draws under it.
-    const checked = await doctor();
-    if (checked.code !== 0) {
-      throw new JobRefused(503, "tldrawkc cannot run on this machine, so nothing was queued", {
-        doctor: doctorChecks(checked).filter((check) => check.status !== "pass"),
-        fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
-      });
+    const briefSeq = slot.briefSeq;
+    if (item.kind === "diagram") {
+      const brief = slot.brief as DraftBrief;
+      const checked = await doctor();
+      if (checked.code !== 0) {
+        throw new JobRefused(503, "tldrawkc cannot run on this machine, so nothing was queued", {
+          doctor: doctorChecks(checked).filter((check) => check.status !== "pass"),
+          fix: ["git submodule update --init tools/tldrawkc", "(cd tools/tldrawkc && npm ci && npm run build)"],
+        });
+      }
+      // C8: a flowchart the person pasted rides along, never through the planner.
+      const mermaid = await this.latestMermaid(id);
+      const ready: Prepared = { kind: "diagram", jobKey: item.jobKey, briefSeq, brief, pending, mermaid, parent: null };
+      await this.runner.admit(validDiagram(ready, await vocabularyFor(pending)));
+      return ready;
     }
-    // C8: a flowchart the person pasted rides along, never through the planner.
-    const mermaid = await this.latestMermaid(id);
-    const posted = { ...brief, ...(mermaid === null ? {} : { mermaid }), idempotencyKey: jobKey };
-    const check = async (widen: PendingTopic | null): Promise<ValidBrief> => {
-      let vocabulary: Vocabulary;
-      try {
-        vocabulary = await loadVocabulary();
-      } catch (error) {
-        throw vocabularyDown(error);
-      }
-      if (widen !== null && !vocabulary.topics.has(widen.entry.slug)) {
-        vocabulary = {
-          ...vocabulary,
-          topics: new Map([...vocabulary.topics, [widen.entry.slug, { title: widen.entry.title, concepts: [] }]]),
-        };
-      }
-      try {
-        return validateBrief(posted, vocabulary);
-      } catch (error) {
-        if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
-        throw error;
-      }
-    };
-    await check(pending);
-    await this.runner.admit(brief);
-
-    if (pending !== null) await this.createTopic(id, pending);
-    const valid = await check(null);
-
-    // The row the job's `draft_id` names has to be there first. A mirror that
-    // failed while Postgres was down left no row, and nothing since may have
-    // asked for another, so this one is fresh rather than awaited.
-    await this.chains.get(id);
-    await this.mirrored(id);
-    const row = await draftUpsert(draftJsonPath(id)).catch(
-      (error: unknown): CatalogResult => ({ ok: false, json: null, error: (error as Error).message, offline: true }),
-    );
-    if (!row.ok) await this.noteCatalogError(id, row.error ?? "catalog draft upsert failed");
-
-    const { record: job, created } = await this.runner.enqueue(valid, undefined, { draftId: id });
-    await this.markDrawing(id, job.id);
-    return { jobId: job.id, created };
+    if (this.video === undefined) {
+      throw new JobRefused(503, "this studio was started without the video runner, so nothing was queued", { reason: "no-video-runner" });
+    }
+    const brief = slot.brief as DraftVideoBrief;
+    // D52: a newer brief on the slug of this draft's video in review replaces
+    // it in one catalog transaction; a change to an accepted one starts from
+    // its source.
+    const newest = slot.jobId === null ? undefined : this.video.store.get(slot.jobId);
+    const parent =
+      press.replaces !== null
+        ? { jobId: press.replaces.jobId, discard: true }
+        : newest !== undefined && newest.state === "accepted" && newest.slug === brief.slug && brief.mode === "change"
+          ? { jobId: newest.id, discard: false }
+          : null;
+    const ready: Prepared = { kind: "video", jobKey: item.jobKey, briefSeq, brief, pending, mermaid: null, parent };
+    await this.video.runner.admit(validVideo(ready, await vocabularyFor(pending)), parent?.discard === true ? parent.jobId : null);
+    return ready;
   }
 
-  /** The Draw press's topic: created, or the reason it could not be. */
-  private async createTopic(id: string, pending: PendingTopic): Promise<void> {
-    const added = await topicAdd(pending.entry, `Create topic and draw, from studio draft ${id}`);
+  /** One checked card, enqueued on its own runner and recorded on the draft. */
+  private async enqueueItem(id: string, ready: Prepared): Promise<DrawItemResult> {
+    const vocabulary = await vocabularyFor(null);
+    if (ready.kind === "diagram") {
+      const { record: job, created } = await this.runner.enqueue(validDiagram(ready, vocabulary), undefined, { draftId: id });
+      await this.markDrawing(id, job.id, "diagram", ready.briefSeq);
+      return { kind: "diagram", jobId: job.id, created, replaces: null };
+    }
+    const video = this.video!;
+    const parent = ready.parent;
+    if (parent?.discard === true) this.replacing.add(parent.jobId);
+    try {
+      const { record: job, created } = await video.runner.enqueue(
+        validVideo(ready, vocabulary),
+        parent === null ? undefined : { jobId: parent.jobId, agentSessionId: null, changes: null, discard: parent.discard },
+        { draftId: id },
+      );
+      await this.markDrawing(id, job.id, "video", ready.briefSeq);
+      if (parent?.discard === true && created) {
+        await this.write(id, () => this.note(id, `The video in review (job ${parent.jobId}) was discarded and replaced by the new brief; nothing of it landed.`));
+      }
+      return { kind: "video", jobId: job.id, created, replaces: parent?.discard === true ? parent.jobId : null };
+    } finally {
+      if (parent?.discard === true) this.replacing.delete(parent.jobId);
+    }
+  }
+
+  /** The press's topic: created, or the reason it could not be. Clears the pending topic on every slot naming it (T11). */
+  private async createTopic(id: string, pending: PendingTopic, kinds: BriefKind[]): Promise<void> {
+    const added = await topicAdd(pending.entry, `Create topic and ${kinds.length > 1 ? "make both" : kinds[0] === "video" ? "make video" : "draw"}, from studio draft ${id}`);
+    const clearAll = (current: DraftRecord): Partial<DraftRecord> => {
+      let patch: Partial<DraftRecord> = {};
+      for (const kind of BRIEF_KINDS) {
+        if (slotOf(current, kind).pendingTopic?.entry.slug === pending.entry.slug) {
+          patch = { ...patch, ...withSlot({ ...current, ...patch }, kind, { pendingTopic: null }) };
+        }
+      }
+      return patch;
+    };
     if (added.ok) {
       await this.write(id, async () => {
-        await this.save(id, { pendingTopic: null });
+        await this.save(id, clearAll(this.require(id)));
         await this.note(id, `Created the topic "${pending.entry.title}" (${pending.entry.slug}).`);
       });
       return;
@@ -1507,19 +2199,27 @@ export class Drafts {
       });
     }
     if (/already exists|exists and is archived/.test(message)) {
-      // C4: someone created it in the meantime. If the brief passes against
-      // the vocabulary as it is now, the pending topic is simply done with.
+      // C4: someone created it in the meantime. If every brief naming it
+      // passes against the vocabulary as it is now, the pending topic is
+      // simply done with.
       let cleared = false;
       try {
-        validateBrief({ ...this.require(id).brief }, await loadVocabulary());
+        const vocabulary = await loadVocabulary();
+        const current = this.require(id);
+        for (const kind of kinds) {
+          const brief = slotOf(current, kind).brief;
+          if (brief === null) continue;
+          if (kind === "video") validateVideoBrief({ ...brief }, vocabulary);
+          else validateBrief({ ...brief }, vocabulary);
+        }
         cleared = true;
       } catch {
         cleared = false;
       }
       if (cleared) {
         await this.write(id, async () => {
-          await this.save(id, { pendingTopic: null });
-          await this.note(id, `The topic "${pending.entry.slug}" exists now, so the next Draw draws under it.`);
+          await this.save(id, clearAll(this.require(id)));
+          await this.note(id, `The topic "${pending.entry.slug}" exists now, so the next press makes it under that topic.`);
         });
       }
       throw new JobRefused(409, message, { reason: "topic-exists", pendingTopicCleared: cleared });
@@ -1539,18 +2239,22 @@ export class Drafts {
   }
 
   /**
-   * A `POST /api/jobs` naming this draft: refused unless the draft could draw
-   * (it exists, it is `briefed`, and no turn or press is running on it), and
-   * then held as a press would be until `release` is called, so nothing can
-   * move the draft while that job is queued.
+   * A `POST /api/jobs` naming this draft: refused unless its diagram card
+   * could be pressed (a brief in force, not held, its kind not busy, and no
+   * turn or press running), and then held as a press would be until `release`
+   * is called, so nothing can move the draft while that job is queued.
    */
   claimForJob(id: string): () => void {
     const record = this.require(id);
-    if (record.state !== "briefed") {
-      throw new JobRefused(409, `draft ${id} is ${record.state}, and only a briefed draft can start a job`, {
+    const slot = slotOf(record, "diagram");
+    if (slot.brief === null || slot.state !== "briefed" || slot.held !== null) {
+      throw new JobRefused(409, `draft ${id} has no diagram brief in force, and only a briefed draft can start a job`, {
         reason: "not-briefed",
         state: record.state,
       });
+    }
+    if (this.pressStatus(record, "diagram").busy !== null) {
+      throw new JobRefused(409, "The diagram is still being drawn", { reason: "kind-busy", kind: "diagram" });
     }
     if (record.inFlight !== null || this.turnsInFlight.has(id)) {
       throw new JobRefused(409, "the planner is still answering on this draft", { reason: "in-flight" });
@@ -1559,8 +2263,8 @@ export class Drafts {
       throw new JobRefused(409, "Draw was just pressed on this conversation", { reason: "draw-in-progress" });
     }
     let release: () => void = () => undefined;
-    const held = new Promise<{ jobId: string; created: boolean }>((resolve) => {
-      release = () => resolve({ jobId: "", created: false });
+    const held = new Promise<unknown>((resolve) => {
+      release = () => resolve([]);
     });
     this.draws.set(id, { key: `job-route:${randomUUID()}`, result: held });
     return () => {
@@ -1570,27 +2274,114 @@ export class Drafts {
   }
 
   /**
-   * A job was queued for this draft: it is drawing now. Also the Resume and
-   * Revise of a draft's job, which carry its draft.
+   * Whether a Revise or a Resume of `jobId` carries this draft (T20): the job
+   * is its kind's newest from the draft, the draft is open to it, and for a
+   * diagram no other drawing is in flight. A video in review may be revised,
+   * which discards it in the child's own transaction (D52).
+   */
+  carries(draftId: string, jobId: string, kind: BriefKind): boolean {
+    const record = this.get(draftId);
+    if (record === undefined || record.state === "abandoned") return false;
+    const slot = slotOf(record, kind);
+    if (slot.jobId !== jobId) return false;
+    return kind === "video" || slot.state !== "drawing";
+  }
+
+  /**
+   * Run `fn` (a Revise from review, which discards its parent in the child's
+   * own transaction) with the parent's discard read as a replacement rather
+   * than a verdict, as a press that replaces a video in review does.
+   */
+  async replacingDuring<T>(parentJobId: string, fn: () => Promise<T>): Promise<T> {
+    this.replacing.add(parentJobId);
+    try {
+      return await fn();
+    } finally {
+      this.replacing.delete(parentJobId);
+    }
+  }
+
+  /**
+   * A job was queued for this draft: its kind's slot is drawing now. Also the
+   * Resume and Revise of a draft's job, which carry its draft and kind (T20).
    *
-   * The job can already be over by the time this runs: `runner.enqueue`
+   * The job can already be over by the time this runs: a runner's enqueue
    * starts it, and a spawn that fails or a cancel can finish it before the
    * draft records its id, when `onJobState` still ignores it as not the
-   * draft's newest. So once the id is recorded, the job's state as it is now
+   * slot's newest. So once the id is recorded, the job's state as it is now
    * is applied too.
    */
-  async markDrawing(id: string, jobId: string): Promise<void> {
+  async markDrawing(id: string, jobId: string, kind?: BriefKind, drawnSeq?: number | null): Promise<void> {
+    const which = kind ?? this.kindOfJob(jobId) ?? "diagram";
     await this.write(id, async () => {
       const record = this.require(id);
       if (!record.jobIds.includes(jobId)) {
-        await this.append(id, { type: "draw", jobId });
+        await this.append(id, { type: "draw", jobId, kind: which });
+        const slot = slotOf(record, which);
         await this.save(id, {
-          state: canTransition(DRAFT_TRANSITIONS, record.state, "drawing") ? "drawing" : record.state,
           jobIds: [...record.jobIds, jobId],
+          ...(record.state === "abandoned"
+            ? {}
+            : withSlot(record, which, { jobId, state: "drawing", drawnSeq: drawnSeq === undefined ? slot.drawnSeq : drawnSeq })),
         });
       }
-      const job = this.store.get(jobId);
-      if (job !== undefined) await this.applyJob(id, job);
+      const job = this.jobOf(which, jobId);
+      if (job !== undefined) await this.applyJob(id, job, which);
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Stop waiting, Use this brief                                       */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * `POST /api/drafts/{id}/slots/{kind}/stop-waiting` (D57): the person no
+   * longer wants the brief a tag ordered, and no turn is spent saying so. A
+   * turn in flight that then carries that brief has it dropped. A kind not
+   * waiting writes nothing.
+   */
+  async stopWaiting(id: string, rawKind: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    this.require(id);
+    const kind = parseKind(rawKind);
+    return this.write(id, async () => {
+      const current = this.require(id);
+      const slot = slotOf(current, kind);
+      if (slot.waiting === null) return { record: current, changed: false };
+      await this.append(id, { type: "stop-waiting", kind, requestSeq: slot.waiting.requestSeq });
+      return { record: await this.save(id, withSlot(current, kind, { waiting: null })), changed: true };
+    });
+  }
+
+  /**
+   * `POST /api/drafts/{id}/slots/{kind}/use?base=<seq>`, Use this brief (D60):
+   * a held card back in force, with no turn; the planner hears it on its next
+   * one. `base` names the held brief, so a newer one is not chosen blind. A
+   * brief not on hold writes nothing.
+   */
+  async useBrief(id: string, rawKind: unknown, rawBase: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
+    const record = this.require(id);
+    const kind = parseKind(rawKind);
+    const base = parseBase(rawBase);
+    if (record.state === "abandoned") {
+      throw new JobRefused(409, "this conversation was closed. Start a new one.", { reason: "abandoned" });
+    }
+    return this.write(id, async () => {
+      const current = this.require(id);
+      const slot = slotOf(current, kind);
+      if (slot.held === null) return { record: current, changed: false };
+      if (base !== slot.briefSeq) {
+        throw new JobRefused(409, "this is not the brief on hold any more; look at the newer one", {
+          reason: "brief-changed",
+          base: slot.briefSeq,
+        });
+      }
+      await this.save(id, withSlot(current, kind, { held: null }));
+      await this.note(
+        id,
+        `The person chose the ${kind} brief "${slot.brief?.title ?? "(untitled)"}" as it stands, with Use this brief: ` +
+          `it is back in force, despite "${slot.held.reason}".`,
+      );
+      return { record: this.require(id), changed: true };
     });
   }
 
@@ -1599,11 +2390,12 @@ export class Drafts {
   /* ------------------------------------------------------------------ */
 
   /**
-   * Refused while anything else could move the draft or its brief: a turn,
-   * a Draw press, a drawing, or a draft that is done or closed. The reasons
-   * are the ones a message and a Draw already give.
+   * Refused while anything else could move this kind's brief: a turn, a
+   * press, its own job drawing the brief in force, or a slot that is done,
+   * or a closed draft. A newer brief that arrived while a job ran is not the
+   * one being drawn, so it may be edited.
    */
-  private assertEditable(id: string): DraftRecord {
+  private assertEditable(id: string, kind: BriefKind): DraftRecord {
     const record = this.require(id);
     if (record.state === "abandoned") {
       throw new JobRefused(409, "this conversation was closed. Start a new one.", { reason: "abandoned" });
@@ -1612,18 +2404,19 @@ export class Drafts {
       throw new JobRefused(409, "the planner is still answering; edit the brief once its reply is in", { reason: "in-flight" });
     }
     if (this.draws.has(id)) {
-      throw new JobRefused(409, "Draw was just pressed on this conversation; wait for the drawing to be queued", {
+      throw new JobRefused(409, "a press is being made on this conversation; wait for it to be queued", {
         reason: "draw-in-progress",
       });
     }
-    if (record.state === "drawing") {
-      throw new JobRefused(409, "a drawing from this conversation is in progress, so its brief cannot change under it", {
+    const slot = slotOf(record, kind);
+    if (slot.state === "drawing" && (slot.brief === null || slot.briefSeq === slot.drawnSeq)) {
+      throw new JobRefused(409, `this conversation's ${kind} is being made from this brief, so it cannot change under it`, {
         reason: "drawing",
-        jobId: record.jobIds.at(-1) ?? null,
+        jobId: slot.jobId,
       });
     }
-    if (record.state === "done") {
-      throw new JobRefused(409, "this conversation's drawing is reviewed; ask the planner for another diagram instead", {
+    if (slot.state === "done") {
+      throw new JobRefused(409, `this conversation's ${kind} is reviewed; ask the planner for another instead`, {
         reason: "done",
       });
     }
@@ -1631,24 +2424,29 @@ export class Drafts {
   }
 
   /**
-   * `PUT /api/drafts/{id}/brief`: a person's own edit of the brief (phase 3,
-   * the confirm card's inline edits). The whole brief is checked by the same
-   * `validateBrief` as a planner's, against the vocabulary as it is now,
-   * widened with the draft's proposed topic when the brief still names it; a
-   * brief on any other topic ends the proposal. Stored disk first, then
-   * mirrored, and the planner is told on its next turn, with the brief now in
-   * force, so it builds on the edit rather than on its own older proposal.
+   * `PUT /api/drafts/{id}/brief?base=<seq>&kind=<kind>`: a person's own edit
+   * of one kind's brief (the confirm card's inline edits). The whole brief is
+   * checked by that kind's validator, against the vocabulary as it is now,
+   * widened with the slot's proposed topic when the brief still names it; a
+   * brief on any other topic ends the proposal. An edit of a held card puts
+   * it back in force, since editing is choosing it. Stored disk first, then
+   * mirrored, and the planner is told on its next turn.
    *
-   * An identical brief on a briefed draft changes nothing and writes nothing.
+   * An identical brief in force and not held changes nothing and writes nothing.
    */
-  async editBrief(id: string, input: unknown, rawBase: unknown): Promise<{ record: DraftRecord; changed: boolean }> {
-    this.assertEditable(id);
+  async editBrief(id: string, input: unknown, rawBase: unknown, rawKind?: unknown): Promise<{ record: DraftRecord; changed: boolean; kind: BriefKind }> {
+    const kind = rawKind === undefined || rawKind === null || rawKind === "" ? "diagram" : parseKind(rawKind);
+    if (!plannerKindsOf(this.require(id)).includes(kind)) {
+      throw new JobRefused(409, `this conversation's planner cannot make a ${kind}`, { reason: "kind-not-in-conversation", kind });
+    }
+    this.assertEditable(id, kind);
     const base = parseBase(rawBase);
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
       throw new JobRefused(400, "the request body must be a JSON object holding a brief", { field: "body" });
     }
+    const fields = kind === "video" ? EDITABLE_VIDEO_FIELDS : EDITABLE_BRIEF_FIELDS;
     const raw: Record<string, unknown> = {};
-    for (const field of EDITABLE_BRIEF_FIELDS) if (field in input) raw[field] = (input as Record<string, unknown>)[field];
+    for (const field of fields) if (field in input) raw[field] = (input as Record<string, unknown>)[field];
     let vocabulary: Vocabulary;
     try {
       vocabulary = await this.readVocabulary();
@@ -1657,31 +2455,32 @@ export class Drafts {
     }
     return this.write(id, async () => {
       // Asked again after the read: a turn or a press may have started since.
-      const current = this.assertEditable(id);
-      const pending = current.pendingTopic;
+      const current = this.assertEditable(id, kind);
+      const slot = slotOf(current, kind);
+      const pending = slot.pendingTopic;
       const keepsPending = pending !== null && raw.topic === pending.entry.slug && !vocabulary.topics.has(pending.entry.slug);
       const checkedAgainst: Vocabulary = keepsPending
         ? { ...vocabulary, topics: new Map([...vocabulary.topics, [pending.entry.slug, { title: pending.entry.title, concepts: [] }]]) }
         : vocabulary;
-      let valid: ValidBrief;
+      let brief: AnyDraftBrief;
       try {
-        valid = validateBrief(raw, checkedAgainst);
+        brief = kind === "video" ? withoutVideoKey(validateVideoBrief(raw, checkedAgainst)) : withoutKey(validateBrief(raw, checkedAgainst));
       } catch (error) {
         if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
         throw error;
       }
-      const brief = withoutKey(valid);
       const pendingTopic = keepsPending ? pending : null;
       // What is already in force is a success whatever the base, so a
       // retried PUT whose first try landed is not refused.
       if (
-        current.state === "briefed" &&
-        JSON.stringify(brief) === JSON.stringify(current.brief) &&
-        pendingTopic === current.pendingTopic
+        (slot.state === "briefed" || slot.state === "drawing") &&
+        slot.held === null &&
+        JSON.stringify(brief) === JSON.stringify(slot.brief) &&
+        pendingTopic === slot.pendingTopic
       ) {
-        return { record: current, changed: false };
+        return { record: current, changed: false, kind };
       }
-      const inForce = current.brief === null ? null : (current.briefSeq ?? null);
+      const inForce = slot.brief === null ? null : slot.briefSeq;
       if (base !== inForce) {
         throw new JobRefused(
           409,
@@ -1689,36 +2488,52 @@ export class Drafts {
           { reason: "brief-changed", base: inForce },
         );
       }
-      const summary = describeBriefEdit(current.brief, brief, { pendingCleared: pending !== null && pendingTopic === null });
+      const describe = (before: AnyDraftBrief | null, after: AnyDraftBrief): string =>
+        kind === "video"
+          ? describeVideoBriefEdit(before as DraftVideoBrief | null, after as DraftVideoBrief, { pendingCleared: pending !== null && pendingTopic === null })
+          : describeBriefEdit(before as DraftBrief | null, after as DraftBrief, { pendingCleared: pending !== null && pendingTopic === null });
+      const summary = describe(slot.brief, brief);
       // The planner hears once per turn: every edit since, from the brief it last knew.
-      const plannerBase = current.pendingEdit ? current.pendingEdit.base : current.brief;
-      const told = describeBriefEdit(plannerBase, brief, { pendingCleared: pending !== null && pendingTopic === null });
-      // In memory at once, before the first await: a Draw pressed from here
-      // on draws this brief, never the one it replaces. The disk record is
-      // written once, after the transcript, so the stream carries `studio`,
-      // `brief`, then `state`.
-      this.records.set(id, {
+      const plannerBase = slot.pendingEdit ? slot.pendingEdit.base : slot.brief;
+      const told = describe(plannerBase, brief);
+      // In memory at once, before the first await: a press from here on makes
+      // this brief, never the one it replaces. The disk record is written
+      // once, after the transcript, so the stream carries `studio`, `brief`,
+      // then `state`.
+      const inMemory: DraftRecord = {
         ...current,
-        state: "briefed",
-        brief,
-        briefAt: new Date().toISOString(),
-        briefBy: "person",
-        pendingTopic,
-        title: brief.title,
+        ...withSlot(current, kind, {
+          state: slot.state === "drawing" ? "drawing" : "briefed",
+          brief,
+          briefAt: new Date().toISOString(),
+          briefBy: "person",
+          pendingTopic,
+          held: null,
+          // A brief of the kind is in force now: the person answered their own tag.
+          waiting: null,
+        }),
         errorKind: null,
         error: null,
         errorField: null,
-      });
-      const note = await this.append(id, { type: "studio", text: summary, edit: true });
-      await this.append(id, { type: "brief", replySeq: note.seq, brief, pendingTopic, edit: true });
-      await this.save(id, {
-        briefSeq: note.seq,
-        pendingEdit: {
-          base: plannerBase,
-          text: `${told}\n\nThis is the brief in force; build on it, and a change is still a whole new brief:\n${JSON.stringify(brief, null, 1)}`,
-        },
-      });
-      return { record: this.require(id), changed: true };
+        errorBriefKind: null,
+      };
+      this.records.set(id, { ...inMemory, ...summarize(inMemory) });
+      const note = await this.append(id, { type: "studio", text: summary, edit: true, kind });
+      await this.append(id, { type: "brief", replySeq: note.seq, kind, brief, pendingTopic, edit: true, requestSeq: slot.requestSeq });
+      const now = this.require(id);
+      await this.save(
+        id,
+        withSlot(now, kind, {
+          briefSeq: note.seq,
+          pendingEdit: {
+            base: plannerBase,
+            text:
+              `${kind === "video" ? "Video brief. " : conversationalPrefix(now)}${told}\n\n` +
+              `This is the brief in force; build on it, and a change is still a whole new brief:\n${JSON.stringify(brief, null, 1)}`,
+          },
+        }),
+      );
+      return { record: this.require(id), changed: true, kind };
     });
   }
 
@@ -1727,75 +2542,122 @@ export class Drafts {
   /* ------------------------------------------------------------------ */
 
   /**
-   * After a start: bring every draft up to its jobs, which the runner's own
-   * reconcile has already moved (a job it found running is `interrupted`)
-   * before any draft was listening. A job that names a draft the draft never
-   * recorded (the runner died between the enqueue and `markDrawing`) is
-   * recorded now, and the newest job's state is applied.
+   * After a start: bring every draft up to its jobs of both kinds, which the
+   * runners' own reconciles have already moved before any draft was
+   * listening. A job that names a draft the draft never recorded (the runner
+   * died between the enqueue and `markDrawing`) is recorded now, as its
+   * kind's newest when it is newer, and that job's state is applied.
    */
   async syncFromJobs(): Promise<void> {
     for (const record of [...this.records.values()]) {
-      const jobs = this.store
-        .list()
-        .filter((job) => job.draftId === record.id)
-        .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+      const jobs: { kind: BriefKind; job: JobRecord | VideoJobRecord }[] = [
+        ...this.store.list().map((job) => ({ kind: "diagram" as const, job })),
+        ...(this.video?.store.list() ?? []).map((job) => ({ kind: "video" as const, job })),
+      ]
+        .filter(({ job }) => job.draftId === record.id)
+        .sort((a, b) => a.job.requestedAt.localeCompare(b.job.requestedAt));
       if (jobs.length === 0) continue;
       await this.write(record.id, async () => {
         const current = this.require(record.id);
-        const missing = jobs.filter((job) => !current.jobIds.includes(job.id)).map((job) => job.id);
+        const missing = jobs.filter(({ job }) => !current.jobIds.includes(job.id)).map(({ job }) => job.id);
         if (missing.length > 0) await this.save(record.id, { jobIds: [...current.jobIds, ...missing] });
-        const newest = this.store.get(this.require(record.id).jobIds.at(-1) ?? "");
-        if (newest === undefined) return;
-        const now = this.require(record.id);
-        if (ACTIVE_JOB.includes(newest.state) && now.state !== "drawing" && canTransition(DRAFT_TRANSITIONS, now.state, "drawing")) {
-          await this.save(record.id, { state: "drawing" });
+        for (const kind of BRIEF_KINDS) {
+          const newest = jobs.filter((entry) => entry.kind === kind).at(-1)?.job;
+          if (newest === undefined) continue;
+          const now = this.require(record.id);
+          const slot = slotOf(now, kind);
+          const known = slot.jobId === null ? undefined : this.jobOf(kind, slot.jobId);
+          if (slot.jobId !== newest.id && (known === undefined || known.requestedAt.localeCompare(newest.requestedAt) < 0)) {
+            await this.save(record.id, withSlot(now, kind, { jobId: newest.id }));
+          }
+          const after = this.require(record.id);
+          const followed = slotOf(after, kind);
+          if (ACTIVE_JOB.includes(newest.state) && followed.jobId === newest.id && followed.state !== "drawing" && after.state !== "abandoned") {
+            await this.save(record.id, withSlot(after, kind, { state: "drawing" }));
+          }
+          await this.applyJob(record.id, newest, kind);
         }
-        await this.applyJob(record.id, newest);
       });
     }
   }
 
   /**
-   * `drawing` follows the job. A failed, cancelled or interrupted drawing puts
-   * the draft back at `briefed` with what went wrong as a STUDIO note, because
-   * the next useful thing is to talk about it (an interrupted one can still be
-   * resumed from the job, which moves the draft back to `drawing`); an
-   * accepted or discarded one is `done`, and an accept tells the planner the
-   * diagram now exists and what was drawn.
+   * A slot follows its job. A failed, cancelled or interrupted one puts the
+   * slot back at `briefed` with what went wrong as a STUDIO note, because the
+   * next useful thing is to talk about it; an accepted or discarded one is
+   * `done`, and an accept tells the planner the thing now exists. A newer
+   * brief that arrived while the job ran stays in force either way. A video
+   * reaching review is told to the planner too, so a change is a `change`
+   * brief on its slug.
    */
-  private async onJobState(job: JobRecord, from: string): Promise<void> {
-    void from;
+  private async onJobState(job: JobRecord | VideoJobRecord, kind: BriefKind): Promise<void> {
     const id = job.draftId;
     if (id === null || id === undefined || !this.records.has(id)) return;
-    await this.write(id, () => this.applyJob(id, job));
+    await this.write(id, () => this.applyJob(id, job, kind));
   }
 
-  /** Act on a job's state, once per verdict, if it is the draft's newest job. Call inside `write`. */
-  private async applyJob(id: string, job: JobRecord): Promise<void> {
+  /** Act on a job's state, once per verdict, if it is its slot's newest job. Call inside `write`. */
+  private async applyJob(id: string, job: JobRecord | VideoJobRecord, kind: BriefKind): Promise<void> {
     const current = this.require(id);
-    if (current.jobIds.at(-1) !== job.id || !JOB_VERDICTS.includes(job.state)) return;
-    if (current.followed?.jobId === job.id && current.followed.state === job.state) return;
-    await this.append(id, { type: "job", jobId: job.id, state: job.state });
+    const slot = slotOf(current, kind);
+    if (slot.jobId !== job.id) return;
+    if (slot.followed?.jobId === job.id && slot.followed.state === job.state) return;
     const followed = { jobId: job.id, state: job.state };
+    if (kind === "video" && job.state === "awaiting_review") {
+      const video = job as VideoJobRecord;
+      await this.append(id, { type: "job", jobId: job.id, state: job.state, kind });
+      await this.note(
+        id,
+        `The video \`${video.slug}\` is ready for review, ${lengthOf(video.gate?.durationSeconds ?? null)}. ` +
+          `A change to what is said is a change brief on the slug ${video.slug}.`,
+      );
+      await this.save(id, withSlot(this.require(id), kind, { followed }));
+      return;
+    }
+    if (!JOB_VERDICTS.includes(job.state)) return;
+    if (job.state === "discarded" && this.replacing.has(job.id)) {
+      // Replaced by this draft's own press (D52): the press says so.
+      await this.append(id, { type: "job", jobId: job.id, state: job.state, kind, replaced: true });
+      await this.save(id, withSlot(current, kind, { followed }));
+      return;
+    }
+    await this.append(id, { type: "job", jobId: job.id, state: job.state, kind });
+    // A newer brief than the one this job made stays the card in force.
+    const newer = slot.brief !== null && slot.drawnSeq !== null && slot.briefSeq !== slot.drawnSeq;
+    const noun = kind === "video" ? `The video ${job.slug}` : `The drawing of ${job.slug}`;
+    const press = pressName(kind);
     if (job.state === "failed" || job.state === "cancelled" || job.state === "interrupted") {
       const findings = job.gate?.findings ?? [];
       const what =
         job.state === "failed" ? "failed" : job.state === "cancelled" ? "was cancelled" : "was interrupted: the studio stopped while it ran";
       await this.note(
         id,
-        `The drawing of ${job.slug} ${what}. ` +
+        `${noun} ${what}. ` +
           (job.state === "interrupted"
-            ? "Resume it from the job, or press Draw again."
+            ? `Resume it from the job, or press ${press} again.`
             : `${findings.length > 0 ? findings.join(" ") : (job.error ?? "no reason recorded")} ` +
-              `The brief is unchanged; say what to change, or press Draw again.`),
+              `The brief is unchanged; say what to change, or press ${press} again.`),
       );
       const now = this.require(id);
-      await this.save(id, { followed, ...(now.state === "drawing" ? { state: "briefed" as const } : {}) });
+      await this.save(id, withSlot(now, kind, { followed, ...(slotOf(now, kind).state === "drawing" ? { state: "briefed" as const } : {}) }));
       return;
     }
-    await this.note(id, job.state === "accepted" ? acceptedNote(job) : `The drawing of ${job.slug} was discarded; nothing landed.`);
+    await this.note(
+      id,
+      job.state === "accepted"
+        ? kind === "video"
+          ? acceptedVideoNote(job as VideoJobRecord)
+          : acceptedNote(job as JobRecord)
+        : `${noun} was discarded; nothing landed.`,
+    );
     const now = this.require(id);
-    await this.save(id, { followed, ...(now.state === "drawing" ? { state: "done" as const } : {}) });
+    await this.save(
+      id,
+      withSlot(now, kind, {
+        followed,
+        ...(slotOf(now, kind).state === "drawing" ? { state: newer ? ("briefed" as const) : ("done" as const) } : {}),
+      }),
+    );
   }
 
   /* ------------------------------------------------------------------ */
@@ -1900,6 +2762,310 @@ export class Drafts {
     for (const run of this.running.values()) await run.stop("shutdown");
     await Promise.all([...this.turnsInFlight.values()].map((turn) => turn.catch(() => undefined)));
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Slots (D62)                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** The kinds a draft's planner prompt carries: `["diagram"]` for a draft from before D59. */
+export function plannerKindsOf(record: Pick<DraftRecord, "plannerKinds">): BriefKind[] {
+  return record.plannerKinds ?? ["diagram"];
+}
+
+/** A kind's slot, or an empty one. */
+export function slotOf(record: Pick<DraftRecord, "slots">, kind: BriefKind): KindSlot {
+  return record.slots?.[kind] ?? emptySlot();
+}
+
+/** The `slots` patch that changes one kind's slot. `save` recomputes the row's summary from it. */
+export function withSlot(record: Pick<DraftRecord, "slots">, kind: BriefKind, patch: Partial<KindSlot>): Pick<DraftRecord, "slots"> {
+  return { slots: { ...(record.slots ?? {}), [kind]: { ...slotOf(record, kind), ...patch } } };
+}
+
+/**
+ * The row's summary of its slots (D62): `abandoned` if abandoned; else
+ * `drawing` if any slot is; else `briefed`; else `done`; else `open`. `brief`,
+ * `briefAt`, `pendingTopic`, `title` and `kind` mirror the newest brief of any
+ * kind, so every `CHECK` on the row holds as written.
+ */
+export function summarize(record: DraftRecord): Pick<DraftRecord, "state" | "kind" | "brief" | "briefAt" | "briefSeq" | "briefBy" | "pendingTopic" | "title"> {
+  let newest: { kind: BriefKind; slot: KindSlot } | null = null;
+  const states: SlotState[] = [];
+  for (const kind of BRIEF_KINDS) {
+    const slot = record.slots?.[kind];
+    if (slot === undefined) continue;
+    states.push(slot.state);
+    // Ties (two briefs in one reply) go to the later kind in the build's order.
+    if (slot.brief !== null && (newest === null || (slot.briefSeq ?? 0) >= (newest.slot.briefSeq ?? 0))) newest = { kind, slot };
+  }
+  const state: DraftState =
+    record.state === "abandoned"
+      ? "abandoned"
+      : states.includes("drawing")
+        ? "drawing"
+        : states.includes("briefed")
+          ? "briefed"
+          : states.includes("done")
+            ? "done"
+            : "open";
+  return {
+    state,
+    kind: newest?.kind ?? record.kind ?? "diagram",
+    brief: newest?.slot.brief ?? null,
+    briefAt: newest?.slot.briefAt ?? null,
+    briefSeq: newest?.slot.briefSeq ?? null,
+    briefBy: newest?.slot.briefBy ?? null,
+    pendingTopic: newest?.slot.pendingTopic ?? null,
+    title: newest?.slot.brief?.title ?? record.title ?? null,
+  };
+}
+
+/** A draft from before D62: its one brief and its jobs, as its diagram slot. */
+export function legacySlots(record: DraftRecord): Partial<Record<BriefKind, KindSlot>> {
+  if (record.brief === null && record.jobIds.length === 0 && record.state !== "done") return {};
+  const state: SlotState = record.state === "abandoned" ? (record.brief === null ? "open" : "briefed") : record.state;
+  return {
+    diagram: {
+      ...emptySlot(),
+      brief: record.brief,
+      briefAt: record.briefAt,
+      briefSeq: record.briefSeq ?? null,
+      briefBy: record.briefBy ?? null,
+      pendingTopic: record.pendingTopic,
+      pendingEdit: record.pendingEdit ?? null,
+      jobId: record.jobIds.at(-1) ?? null,
+      followed: record.followed ?? null,
+      state,
+    },
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mentions (D57)                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The mentions a message carries, checked against the text as sent rather
+ * than trusted: each `text.slice(start, end)` reads exactly `@<kind>`, no two
+ * overlap, and a kind appears once. Refused with `400 { field: "mentions" }`.
+ */
+export function parseMentions(text: string, raw: unknown): Mention[] {
+  if (raw === undefined || raw === null) return [];
+  const refuse = (why: string): never => {
+    throw new JobRefused(400, `"mentions" ${why}`, { field: "mentions" });
+  };
+  if (!Array.isArray(raw)) return refuse("is a list of { kind, start, end }");
+  if (raw.length > BRIEF_KINDS.length) refuse(`holds at most one mention of each kind`);
+  const mentions = raw.map((entry, index): Mention => {
+    const item = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : refuse(`[${index}] is not an object`);
+    const kind = item.kind;
+    if (!isBriefKind(kind)) return refuse(`[${index}].kind is not a kind this studio makes (${BRIEF_KINDS.join(", ")})`);
+    const start = item.start;
+    const end = item.end;
+    if (typeof start !== "number" || typeof end !== "number" || !Number.isInteger(start) || !Number.isInteger(end)) {
+      return refuse(`[${index}] needs whole-number "start" and "end"`);
+    }
+    if (start < 0 || end > text.length || start >= end) return refuse(`[${index}] is out of the text's bounds`);
+    if (text.slice(start, end) !== `@${kind}`) return refuse(`[${index}] does not read "@${kind}" at ${start} to ${end}`);
+    return { kind, start, end };
+  });
+  const sorted = [...mentions].sort((a, b) => a.start - b.start);
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i]!.start < sorted[i - 1]!.end) refuse("overlap");
+  }
+  if (new Set(mentions.map((mention) => mention.kind)).size !== mentions.length) refuse("repeat a kind: one tag of each kind");
+  return mentions;
+}
+
+/** The text with every mention's `@<kind>` taken out: what a bare tag leaves. */
+export function withoutMentions(text: string, mentions: readonly Mention[]): string {
+  let out = "";
+  let at = 0;
+  for (const mention of [...mentions].sort((a, b) => a.start - b.start)) {
+    out += text.slice(at, mention.start);
+    at = mention.end;
+  }
+  return out + text.slice(at);
+}
+
+function parseKind(raw: unknown): BriefKind {
+  if (!isBriefKind(raw)) throw new JobRefused(400, `the kind is ${BRIEF_KINDS.join(" or ")}`, { field: "kind" });
+  return raw;
+}
+
+/** The last `brief` block, however it is tagged inside: how a draft from before D61 read a reply. */
+function fencedLast(text: string): string | null {
+  const blocks = briefBlocks(text);
+  if (blocks.length === 0) return null;
+  // `briefBlocks` keeps the last per kind; a draft from before had one kind,
+  // so the last block written is the last one it returns.
+  return blocks.at(-1)!.body;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The press                                                                  */
+/* -------------------------------------------------------------------------- */
+
+interface DrawItem {
+  kind: BriefKind;
+  /** `draft:<id>:<key>`, the job's own idempotency key. */
+  jobKey: string;
+}
+
+/** One card, checked and ready to enqueue. */
+interface Prepared {
+  kind: BriefKind;
+  jobKey: string;
+  briefSeq: number | null;
+  brief: AnyDraftBrief;
+  pending: PendingTopic | null;
+  mermaid: string | null;
+  /** Video: the job this one starts from, and whether the catalog discards it in the same transaction. */
+  parent: { jobId: string; discard: boolean } | null;
+}
+
+/** One card's answer: its job, or the refusal its own press would have had. */
+export type DrawItemResult =
+  | { kind: BriefKind; jobId: string; created: boolean; replaces: string | null }
+  | { kind: BriefKind; status: number; refusal: { error: string; detail: unknown } };
+
+export type DrawAnswer =
+  | { single: true; result: { kind: BriefKind; jobId: string; created: boolean; replaces: string | null } }
+  | { single: false; results: DrawItemResult[] };
+
+/** What a person pressed, by kind: the words a refusal and a note use. */
+function pressName(kind: BriefKind): string {
+  return kind === "video" ? "Make video" : "Draw";
+}
+
+/** The vocabulary as it is now, widened in memory with a pending topic the catalog does not have yet. */
+async function vocabularyFor(pending: PendingTopic | null): Promise<Vocabulary> {
+  let vocabulary: Vocabulary;
+  try {
+    vocabulary = await loadVocabulary();
+  } catch (error) {
+    throw vocabularyDown(error);
+  }
+  if (pending !== null && !vocabulary.topics.has(pending.entry.slug)) {
+    vocabulary = {
+      ...vocabulary,
+      topics: new Map([...vocabulary.topics, [pending.entry.slug, { title: pending.entry.title, concepts: [] }]]),
+    };
+  }
+  return vocabulary;
+}
+
+/** The stored diagram brief through the job path byte for byte, with the press's key and any pasted flowchart. */
+function validDiagram(ready: Prepared, vocabulary: Vocabulary): ValidBrief {
+  const posted = { ...(ready.brief as DraftBrief), ...(ready.mermaid === null ? {} : { mermaid: ready.mermaid }), idempotencyKey: ready.jobKey };
+  try {
+    return validateBrief(posted, vocabulary);
+  } catch (error) {
+    if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
+    throw error;
+  }
+}
+
+/** The stored video brief through `validateVideoBrief`, with the press's key. */
+function validVideo(ready: Prepared, vocabulary: Vocabulary): ValidVideoBrief {
+  try {
+    return validateVideoBrief({ ...(ready.brief as DraftVideoBrief), idempotencyKey: ready.jobKey }, vocabulary);
+  } catch (error) {
+    if (error instanceof BriefError) throw new JobRefused(400, error.message, { field: error.field });
+    throw error;
+  }
+}
+
+/** `catalog video list`, as the VIDEOS block's entries; null when it cannot be read. */
+async function readVideoCorpus(): Promise<VideoCorpusEntry[] | null> {
+  const listed = await videoList().catch(() => null);
+  if (listed === null || !listed.ok) return null;
+  const videos = (listed.json as { videos?: unknown } | null)?.videos;
+  if (!Array.isArray(videos)) return null;
+  return videos
+    .filter((video): video is Record<string, unknown> => typeof video === "object" && video !== null)
+    .map((video) => ({
+      origin: video.origin === "manimkc" ? "manimkc" : "studio",
+      slug: typeof video.slug === "string" ? video.slug : null,
+      assetId: typeof video.assetId === "string" ? video.assetId : "(unknown)",
+      title: typeof video.title === "string" ? video.title : null,
+      topic: typeof video.topic === "string" ? video.topic : null,
+      durationSeconds: typeof video.durationSeconds === "number" ? video.durationSeconds : null,
+    }));
+}
+
+/** The fields a person's edit of a video brief may set: the planner's, and the concept note it draws from. */
+export const EDITABLE_VIDEO_FIELDS = [...PLANNER_VIDEO_FIELDS, "source"] as const;
+
+function withoutVideoKey(brief: ValidVideoBrief): DraftVideoBrief {
+  const kept: Partial<ValidVideoBrief> = { ...brief };
+  delete kept.idempotencyKey;
+  return kept as DraftVideoBrief;
+}
+
+/** The planner-facing edit note's first words on a conversational draft, so it knows which card changed. */
+function conversationalPrefix(record: Pick<DraftRecord, "conversational">): string {
+  return record.conversational === true ? "Diagram brief. " : "";
+}
+
+/**
+ * The STUDIO note after a person edits a video brief: what changed, field by
+ * field and line by line, capped like the EXTENDING block.
+ */
+export function describeVideoBriefEdit(
+  before: DraftVideoBrief | null,
+  after: DraftVideoBrief,
+  options: { pendingCleared?: boolean } = {},
+): string {
+  const lines: string[] = [];
+  if (before === null) {
+    lines.push(`The person wrote the video brief "${after.title}" by hand.`);
+  } else {
+    for (const field of ["title", "topic", "slug", "mode", "idea", "audience", "targetSeconds", "voice", "source"] as const) {
+      if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+        lines.push(`- ${field}: ${quoted(before[field])} -> ${quoted(after[field])}`);
+      }
+    }
+    if (JSON.stringify(before.concepts) !== JSON.stringify(after.concepts)) {
+      lines.push(`- concepts: ${quoted(before.concepts.join(", "))} -> ${quoted(after.concepts.join(", "))}`);
+    }
+    const names = (brief: DraftVideoBrief): string[] => brief.scenes.map((scene) => scene.name);
+    for (const scene of after.scenes) if (!names(before).includes(scene.name)) lines.push(`- scene added: ${scene.name}`);
+    for (const scene of before.scenes) if (!names(after).includes(scene.name)) lines.push(`- scene removed: ${scene.name}`);
+    if (names(before).filter((name) => names(after).includes(name)).join("\u0000") !== names(after).filter((name) => names(before).includes(name)).join("\u0000")) {
+      lines.push(`- scenes reordered: ${names(after).join(", ")}`);
+    }
+    for (const scene of after.scenes) {
+      const was = before.scenes.find((candidate) => candidate.name === scene.name);
+      if (was === undefined) continue;
+      const count = Math.max(was.beats.length, scene.beats.length);
+      for (let i = 0; i < count; i += 1) {
+        const a = was.beats[i];
+        const b = scene.beats[i];
+        const at = `${scene.name} beat ${i + 1}`;
+        if (a === undefined && b !== undefined) lines.push(`- ${at} added: say ${quoted(b.say)}`);
+        else if (a !== undefined && b === undefined) lines.push(`- ${at} removed: say ${quoted(a.say)}`);
+        else if (a !== undefined && b !== undefined) {
+          for (const field of ["say", "show", "labels", "seconds"] as const) {
+            if (JSON.stringify(a[field]) !== JSON.stringify(b[field])) lines.push(`- ${at} ${field}: ${quoted(a[field])} -> ${quoted(b[field])}`);
+          }
+        }
+      }
+    }
+    lines.unshift(lines.length === 0 ? "The person confirmed the video brief as it stands." : "The person edited the video brief by hand:");
+  }
+  if (options.pendingCleared === true) lines.push("The proposed new topic is dropped: the brief now names a topic that exists.");
+  return lines.slice(0, EXTENDING_LINE_CAP).join("\n");
+}
+
+/** The STUDIO note after a video is accepted: where it landed, so a change is a change brief on its slug. */
+export function acceptedVideoNote(job: VideoJobRecord): string {
+  return (
+    `The video "${job.brief.title}" was accepted and saved as ${job.slug}, under ${job.topic}` +
+    `${job.gate?.durationSeconds === undefined || job.gate?.durationSeconds === null ? "" : `, ${lengthOf(job.gate.durationSeconds)}`}. ` +
+    `It exists now, so a change to what is said is a change brief on the slug ${job.slug}.`
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2185,8 +3351,10 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
         data: {
           seq: event.seq,
           replySeq: event.replySeq,
+          kind: kindOfEvent(event),
           brief: event.brief,
           pendingTopic: event.pendingTopic ?? null,
+          requestSeq: typeof event.requestSeq === "number" ? event.requestSeq : null,
           ...(event.edit === true ? { edit: true } : {}),
         },
       };
@@ -2194,8 +3362,17 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
       return {
         id: event.seq,
         event: "brief-invalid",
-        data: { seq: event.seq, replySeq: event.replySeq, field: event.field, message: event.message, retried: event.retried },
+        data: {
+          seq: event.seq,
+          replySeq: event.replySeq,
+          kind: kindOfEvent(event),
+          field: event.field,
+          message: event.message,
+          retried: event.retried,
+        },
       };
+    case "brief-ignored":
+      return { id: event.seq, event: "brief-ignored", data: { seq: event.seq, replySeq: event.replySeq, kind: event.kind } };
     case "error":
       return {
         id: event.seq,
@@ -2205,6 +3382,7 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
           kind: event.kind,
           message: event.message,
           ...(event.field === undefined ? {} : { field: event.field }),
+          ...(event.briefKind === undefined ? {} : { briefKind: event.briefKind }),
         },
       };
     default:
@@ -2212,11 +3390,22 @@ function streamEventOf(event: TranscriptEvent): DraftStreamEvent | null {
   }
 }
 
+/** A brief event's kind: absent on a draft from before D61, which is a diagram. */
+function kindOfEvent(event: TranscriptEvent): BriefKind {
+  return isBriefKind(event.kind) ? event.kind : "diagram";
+}
+
 function entryOf(event: TranscriptEvent): TranscriptEntry | null {
   const text = typeof event.text === "string" ? event.text : "";
   switch (event.type) {
     case "message":
-      return { seq: event.seq, role: "person", text, at: event.at };
+      return {
+        seq: event.seq,
+        role: "person",
+        text,
+        at: event.at,
+        ...(Array.isArray(event.mentions) && event.mentions.length > 0 ? { mentions: event.mentions as Mention[] } : {}),
+      };
     case "reply":
       return {
         seq: event.seq,
@@ -2224,6 +3413,8 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         text,
         at: event.at,
         ...(event.interrupted === true ? { interrupted: true } : {}),
+        ...(Array.isArray(event.suggest) && event.suggest.length > 0 ? { suggest: event.suggest as BriefKind[] } : {}),
+        ...(typeof event.hold === "object" && event.hold !== null ? { hold: event.hold as { kinds: BriefKind[]; reason: string } } : {}),
         costUsd: typeof event.costUsd === "number" ? event.costUsd : null,
         costSource: (event.costSource as CostSource | null | undefined) ?? null,
       };
@@ -2241,7 +3432,12 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
   }
 }
 
-/** The transcript as the API reports it: person, planner and studio turns, each reply carrying its verdict. */
+/**
+ * The transcript as the API reports it: person, planner and studio turns,
+ * each reply carrying its verdicts per kind (D61). A reply whose every brief
+ * was refused and retried is superseded by the retry's reply; one with a
+ * valid brief stays, and the retry's reply carries the fixed card under it.
+ */
 export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const bySeq = new Map<number, TranscriptEntry>();
@@ -2255,22 +3451,45 @@ export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntr
     const reply = typeof event.replySeq === "number" ? bySeq.get(event.replySeq) : undefined;
     if (reply === undefined) continue;
     if (event.type === "brief") {
-      reply.brief = event.brief as DraftBrief;
-      if (event.pendingTopic !== null && event.pendingTopic !== undefined) reply.pendingTopic = event.pendingTopic as PendingTopic;
+      const kind = kindOfEvent(event);
+      const pendingTopic = event.pendingTopic === null || event.pendingTopic === undefined ? undefined : (event.pendingTopic as PendingTopic);
+      const briefs = (reply.briefs ?? []).filter((brief) => brief.kind !== kind);
+      briefs.push({
+        kind,
+        brief: event.brief as AnyDraftBrief,
+        ...(pendingTopic === undefined ? {} : { pendingTopic }),
+        requestSeq: typeof event.requestSeq === "number" ? event.requestSeq : null,
+      });
+      reply.briefs = briefs;
+      reply.brief = event.brief as AnyDraftBrief;
+      if (pendingTopic !== undefined) reply.pendingTopic = pendingTopic;
     } else if (event.type === "brief-invalid") {
       const retried = event.retried === true;
-      reply.briefInvalid = { field: String(event.field), message: String(event.message), retried };
-      if (retried) reply.superseded = true;
+      const invalid = { field: String(event.field), message: String(event.message), retried };
+      reply.briefsInvalid = [...(reply.briefsInvalid ?? []), { kind: kindOfEvent(event), ...invalid }];
+      reply.briefInvalid = invalid;
+    } else if (event.type === "brief-ignored") {
+      reply.briefsIgnored = [...(reply.briefsIgnored ?? []), String(event.kind)];
     }
+  }
+  for (const entry of entries) {
+    if ((entry.briefsInvalid ?? []).some((invalid) => invalid.retried) && (entry.briefs ?? []).length === 0) entry.superseded = true;
   }
   return entries;
 }
 
-/** The conversation as plain text, for a fresh session that could not resume the old one (C3). */
+/** The conversation as plain text, for a fresh session that could not resume the old one (C3); a tagged message keeps its TAGS block (T22). */
 function conversationText(events: readonly TranscriptEvent[]): string {
+  const tagsBySeq = new Map<number, string[]>();
+  for (const event of events) {
+    if (event.type === "message" && Array.isArray(event.tags) && event.tags.length > 0) tagsBySeq.set(event.seq, event.tags as string[]);
+  }
   return transcriptOf(events)
     .filter((entry) => entry.superseded !== true && entry.internal !== true)
-    .map((entry) => `${entry.role}: ${entry.text}`)
+    .map((entry) => {
+      const tags = tagsBySeq.get(entry.seq);
+      return tags === undefined ? `${entry.role}: ${entry.text}` : `${entry.role}: ${fence("TAGS", tags.join("\n"))}\n${entry.text}`;
+    })
     .join("\n\n");
 }
 
@@ -2293,21 +3512,39 @@ export function acceptedNote(job: JobRecord): string {
 }
 
 export function noteForDraft(record: DraftRecord): string {
+  const live = BRIEF_KINDS.filter((kind) => {
+    const slot = record.slots?.[kind];
+    return slot !== undefined && slot.brief !== null && slot.state === "briefed";
+  });
+  const waiting = BRIEF_KINDS.filter((kind) => record.slots?.[kind]?.waiting != null);
   switch (record.state) {
     case "open":
       return record.inFlight !== null
         ? "the planner is answering"
         : record.turns === 0
-          ? "a new conversation: say what the diagram should make clear"
-          : "the planner is waiting for your reply";
-    case "briefed":
-      return record.pendingTopic !== null
-        ? `a brief is ready on a new topic, ${record.pendingTopic.entry.slug}: Create topic and draw`
-        : "a brief is ready: Draw starts the drawing";
-    case "drawing":
-      return `drawing: job ${record.jobIds.at(-1) ?? "?"}`;
+          ? record.conversational === true
+            ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
+            : "a new conversation: say what the diagram should make clear"
+          : waiting.length > 0
+            ? `the planner owes a ${waiting.join(" and a ")} brief`
+            : "the planner is waiting for your reply";
+    case "briefed": {
+      const pending = BRIEF_KINDS.map((kind) => record.slots?.[kind]?.pendingTopic).find((topic) => topic != null);
+      if (pending != null) return `a brief is ready on a new topic, ${pending.entry.slug}: the press creates it`;
+      return live.length > 1
+        ? "a diagram brief and a video brief are ready: Draw, Make video, or Make both"
+        : live[0] === "video"
+          ? "a video brief is ready: Make video starts it"
+          : "a brief is ready: Draw starts the drawing";
+    }
+    case "drawing": {
+      const jobs = BRIEF_KINDS.map((kind) => record.slots?.[kind])
+        .filter((slot): slot is KindSlot => slot !== undefined && slot.state === "drawing" && slot.jobId !== null)
+        .map((slot) => slot.jobId);
+      return `drawing: job ${jobs.join(", ") || (record.jobIds.at(-1) ?? "?")}`;
+    }
     case "done":
-      return "the drawing is reviewed. Ask for another diagram, or a change to this one";
+      return "the job is reviewed. Ask for another, or a change to this one";
     case "abandoned":
       return "this conversation is closed";
   }
