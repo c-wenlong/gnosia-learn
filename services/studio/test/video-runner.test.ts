@@ -390,4 +390,19 @@ describe("a kick while a job's enqueue has not answered", () => {
     expect(catalogMock.jobClaim).not.toHaveBeenCalled();
     await made.drain();
   });
+
+  it("refuses a cancel until the row exists, which a job finish would otherwise miss", async () => {
+    const made = await runner();
+    const enqueued = made.enqueue(brief());
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    const id = store.list()[0]!.id;
+
+    await expect(made.cancel(id)).rejects.toMatchObject({ status: 409 });
+    expect(store.get(id)?.state).toBe("queued");
+    expect(catalogMock.jobFinish).not.toHaveBeenCalled();
+
+    answer!(ok({ job: {} }));
+    await enqueued;
+    expect((await made.cancel(id)).state).toBe("cancelled");
+  });
 });

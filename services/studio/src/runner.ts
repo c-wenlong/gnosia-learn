@@ -1475,6 +1475,9 @@ export class Runner {
   async cancel(id: string, reason: "requested" | "job-timeout" = "requested"): Promise<JobRecord> {
     const record = this.store.get(id);
     if (record === undefined) throw new JobRefused(404, `no job ${id}`);
+    // Its row may not exist yet, so a `job finish` now would miss it and the
+    // row would land `queued` behind a cancelled record, holding the lease.
+    if (this.unanswered.has(id)) throw new JobRefused(409, `job ${id} is still being queued, so it cannot be cancelled yet: try again in a moment`);
 
     if (record.state === "queued") {
       // Nothing started, so there is nothing to wait for.

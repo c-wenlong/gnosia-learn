@@ -530,6 +530,21 @@ describe("a kick while a job's enqueue has not answered", () => {
     expect(catalogMock.sessionStart).not.toHaveBeenCalled();
     expect(catalogMock.jobClaim).not.toHaveBeenCalled();
   });
+
+  it("refuses a cancel until the row exists, which a job finish would otherwise miss", async () => {
+    const enqueued = runner.enqueue(await brief());
+    await until(() => answer !== null, "the enqueue never reached the catalog");
+    const id = store.list()[0]!.id;
+
+    await expect(runner.cancel(id)).rejects.toMatchObject({ status: 409 });
+    expect(store.get(id)?.state).toBe("queued");
+    expect(catalogMock.jobFinish).not.toHaveBeenCalled();
+
+    answer!(ok);
+    await enqueued;
+    await runner.settled(id);
+    expect(store.get(id)?.state).toBe("awaiting_review");
+  });
 });
 
 describe("the job ceiling", () => {

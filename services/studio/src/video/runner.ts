@@ -315,17 +315,19 @@ export class VideoRunner {
     this.unanswered.add(id);
     try {
       await this.recordAndEnqueue(record, brief, parent, options);
+      if (parent?.discard === true) {
+        const previous = this.store.get(parent.jobId);
+        if (previous !== undefined) {
+          // `replacedBy` rides on the state change itself, so whoever follows
+          // the parent (its draft) reads a replacement, not a verdict. Inside
+          // the window, so the child cannot start reading the parent's
+          // source and clips while this cleanup is still rewriting them.
+          await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString(), replacedBy: id });
+          await this.cleanup(previous, { candidate: true });
+        }
+      }
     } finally {
       this.unanswered.delete(id);
-    }
-    if (parent?.discard === true) {
-      const previous = this.store.get(parent.jobId);
-      if (previous !== undefined) {
-        // `replacedBy` rides on the state change itself, so whoever follows
-        // the parent (its draft) reads a replacement, not a verdict.
-        await this.store.update(parent.jobId, { state: "discarded", reviewedAt: new Date().toISOString(), replacedBy: id });
-        await this.cleanup(previous, { candidate: true });
-      }
     }
     void this.kick();
     return { record, created: true, jobsAhead: Math.max(0, this.queued().length - 1) };
@@ -936,6 +938,8 @@ export class VideoRunner {
   async cancel(id: string): Promise<VideoJobRecord> {
     const record = this.store.get(id);
     if (record === undefined) throw new JobRefused(404, `no job ${id}`);
+    // As in the diagram runner: its row may not exist yet.
+    if (this.unanswered.has(id)) throw new JobRefused(409, `job ${id} is still being queued, so it cannot be cancelled yet: try again in a moment`);
     if (record.state === "queued") {
       const updated = await this.store.update(id, {
         state: "cancelled",
