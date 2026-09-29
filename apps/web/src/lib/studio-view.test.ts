@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   conversationHref,
+  extendFromHref,
   DEFAULT_VIEW,
   NO_TOPIC,
   canvasHref,
@@ -336,6 +337,11 @@ describe("what the panel holds", () => {
     expect(panelHref("/studio?q=x", { draft: "d2" })).toBe("/studio?q=x&draft=d2");
     expect(panelHref("/studio?draft=d1&job=j", { draft: null, job: null })).toBe("/studio");
     expect(studioHref({ ...DEFAULT_VIEW, draft: "d1" })).toBe("/studio?draft=d1");
+  });
+
+  it("opens an Extend press from either screen", () => {
+    expect(extendFromHref("/studio?q=x&job=j1", "dot-product")).toBe("/studio?q=x&extend=dot-product");
+    expect(extendFromHref("/studio/d/dot-product?job=j1", "dot-product")).toBe("/studio?extend=dot-product");
   });
 
   it("leads from a job back to its conversation, from either screen", () => {

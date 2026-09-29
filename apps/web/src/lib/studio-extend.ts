@@ -233,6 +233,39 @@ export function sessionStore(): Storage | null {
   return safely(() => (typeof window === "undefined" ? null : window.sessionStorage), null);
 }
 
+/**
+ * The diagram a Talk it through conversation should open on, or null for a
+ * new one. An extend job was about a diagram that exists, and the planner is
+ * only told what is in a diagram through a draft opened with `source` (the
+ * EXTENDING block). A failed `new` job drew nothing that landed, so there is
+ * no diagram to open.
+ */
+export function talkTarget(brief: { mode: "new" | "extend"; slug: string }): string | null {
+  return brief.mode === "extend" ? brief.slug : null;
+}
+
+const PREFILL_PREFIX = "studio:extend-prefill:";
+
+/**
+ * Words for an Extend press's composer, left by Talk it through before it
+ * opens `?extend=<name>`. With a prefill the press sends no opener: the
+ * person reads and edits the words first, and nothing is paid for until they
+ * press Send.
+ */
+export function leavePrefill(storage: Storage | null, name: string, text: string): void {
+  if (storage === null) return;
+  safely(() => storage.setItem(PREFILL_PREFIX + name, text), undefined);
+}
+
+/** The prefill for `name`, read once and removed; null when there is none. */
+export function takePrefill(storage: Storage | null, name: string): string | null {
+  if (storage === null) return null;
+  const held = safely(() => storage.getItem(PREFILL_PREFIX + name), null);
+  if (held === null) return null;
+  safely(() => storage.removeItem(PREFILL_PREFIX + name), undefined);
+  return held.trim() === "" ? null : held;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The picture across the hand-off                                            */
 /* -------------------------------------------------------------------------- */

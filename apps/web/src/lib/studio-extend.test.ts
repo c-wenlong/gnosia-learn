@@ -8,8 +8,11 @@ import {
   forgetExtendKey,
   leaveOpener,
   readingWords,
+  leavePrefill,
   takeOpener,
+  takePrefill,
   talkItThroughText,
+  talkTarget,
 } from "./studio-extend";
 import { RUNNER_DOWN } from "./studio-drafts";
 
@@ -88,6 +91,21 @@ describe("a refused Extend", () => {
 });
 
 describe("talking a failed job through", () => {
+  it("opens on the diagram an extend job was about, and on nothing for a new one", () => {
+    expect(talkTarget({ mode: "extend", slug: "dot-product" })).toBe("dot-product");
+    expect(talkTarget({ mode: "new", slug: "tcp-window" })).toBeNull();
+  });
+
+  it("hands the Extend panel its prefill once, and nothing for another diagram", () => {
+    const store = memory();
+    leavePrefill(store, "dot-product", "A drawing failed; change it.");
+    expect(takePrefill(store, "other")).toBeNull();
+    expect(takePrefill(store, "dot-product")).toBe("A drawing failed; change it.");
+    expect(takePrefill(store, "dot-product")).toBeNull();
+    expect(takePrefill(blocked(), "dot-product")).toBeNull();
+    expect(takePrefill(null, "dot-product")).toBeNull();
+  });
+
   it("prefills the intent, what it was meant to draw and what went wrong", () => {
     const text = talkItThroughText(
       { title: "TCP window", slug: "tcp-window", mode: "new", intent: "Show how the window shrinks on loss." },

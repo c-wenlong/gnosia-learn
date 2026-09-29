@@ -19,6 +19,7 @@ import {
   noteArrival,
   readingWords,
   sessionStore,
+  takePrefill,
   type ExtendRefusal,
 } from "@/lib/studio-extend";
 import { canvasHref, panelHref } from "@/lib/studio-view";
@@ -76,6 +77,8 @@ export function ExtendStart({
   }, []);
   const composer = useRef<HTMLTextAreaElement | null>(null);
   const running = useRef(false);
+  /** Talk it through left words for this press: the person edits them, and no opener is sent. */
+  const prefilled = useRef(false);
   // Closing the panel mid-read does not stop the post, and its answer must not
   // reopen a conversation the person just closed.
   const mounted = useRef(true);
@@ -115,7 +118,11 @@ export function ExtendStart({
     setOpening(true);
     noteArrival(result.data.draftId, name);
     const { text: draftText, queued: waiting } = typed.current;
-    leaveOpener(store, result.data.draftId, { send: waiting ?? EXTEND_OPENER, compose: draftText, source: name });
+    leaveOpener(store, result.data.draftId, {
+      send: waiting ?? (prefilled.current ? null : EXTEND_OPENER),
+      compose: draftText,
+      source: name,
+    });
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
   }, [name, title, path, router, isClosing, setQueued, setText]);
 
@@ -138,9 +145,16 @@ export function ExtendStart({
     // After the dialog's own effect, which runs after this one and focuses
     // its first control (Close) when it opens: typing straight away should
     // land in the composer, and an Enter there should not close the panel.
-    const later = setTimeout(() => composer.current?.focus(), 0);
+    const later = setTimeout(() => {
+      const prefill = takePrefill(sessionStore(), name);
+      if (prefill !== null) {
+        prefilled.current = true;
+        setText(prefill);
+      }
+      composer.current?.focus();
+    }, 0);
     return () => clearTimeout(later);
-  }, []);
+  }, [name, setText]);
 
   const words = readingWords(now - startedAt);
 

@@ -315,6 +315,17 @@ export function conversationHref(path: string, draftId: string): string {
   return panelHref(from, { draft: draftId, job: null, selected: null, extend: null });
 }
 
+/**
+ * An Extend press on `name`, from wherever a person is: on `/studio` it keeps
+ * the filters and swaps the panel, and from the canvas route it goes to the
+ * grid, where the Extend panel lives.
+ */
+export function extendFromHref(path: string, name: string): string {
+  const [base] = path.split("?");
+  const from = base === "/studio" ? path : "/studio";
+  return panelHref(from, { extend: name, draft: null, job: null, selected: null });
+}
+
 /** Add or remove one topic chip, which is what clicking a chip means. */
 export function toggleTopic(view: StudioView, slug: string): StudioView {
   const topics = view.topics.includes(slug)

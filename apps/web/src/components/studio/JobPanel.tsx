@@ -24,8 +24,8 @@ import {
   type StudioEvent,
 } from "@/lib/studio-jobs";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
-import { leaveOpener, sessionStore, talkItThroughText } from "@/lib/studio-extend";
-import { conversationHref, panelHref } from "@/lib/studio-view";
+import { leaveOpener, leavePrefill, sessionStore, talkItThroughText, talkTarget } from "@/lib/studio-extend";
+import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
 
 /**
  * The right panel while a job is happening, and after it stops.
@@ -555,8 +555,9 @@ function RetryButton({
 
 /**
  * A failed job with no conversation of its own (the brief form started it,
- * before the form was removed) gets one: a new draft whose composer is
- * prefilled, not sent, with what the old brief was for and what went wrong.
+ * before the form was removed) gets one, opened on the diagram when the job
+ * extended one: its composer prefilled, not sent, with what the old brief was
+ * for and what went wrong.
  * The person edits that before a turn is paid for. This replaced Edit brief,
  * which was that job's only way to change what gets drawn.
  */
@@ -587,19 +588,26 @@ function TalkItThrough({
               onFailed("the runner did not return this job's brief, so there is nothing to talk through");
               return;
             }
+            // The headline, not the detail: the detail is often a path or a
+            // stack line, which makes a prefill nobody wants to edit. The
+            // planner has no use for it either; the person can paste it.
+            const words = talkItThroughText(body.brief, failure.headline);
+            const target = talkTarget(body.brief);
+            if (target !== null) {
+              // An extend job: the conversation opens on that diagram through
+              // the Extend panel, so the planner gets its EXTENDING block and
+              // the create's refusals (a diagram since deleted, a failed
+              // inspect) are handled where every Extend handles them.
+              leavePrefill(sessionStore(), target, words);
+              router.push(extendFromHref(path, target), { scroll: false });
+              return;
+            }
             const made = await createDraft({ idempotencyKey: idempotencyKey(`talk:${job.jobId}`) });
             if (!made.ok) {
               onFailed(`a conversation could not start: ${made.refusal.error}`);
               return;
             }
-            // The headline, not the detail: the detail is often a path or a
-            // stack line, which makes a prefill nobody wants to edit. The
-            // planner has no use for it either; the person can paste it.
-            leaveOpener(sessionStore(), made.data.draftId, {
-              send: null,
-              compose: talkItThroughText(body.brief, failure.headline),
-              source: null,
-            });
+            leaveOpener(sessionStore(), made.data.draftId, { send: null, compose: words, source: null });
             router.push(conversationHref(path, made.data.draftId), { scroll: false });
           } catch (error) {
             onFailed((error as Error).message);
