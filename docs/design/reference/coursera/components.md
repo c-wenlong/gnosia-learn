@@ -24,6 +24,7 @@ Screenshots are named `{page}-{theme}-{state}.png`. Desktop shots are 2880x1800 
 | Browse category. Breadcrumb, stats, "Most popular" cards, sticky 304px filter sidebar, 3-column grid, FAQ. | `/browse/data-science` | desktop | [default](screenshots/browse-light-default.png), [full](screenshots/browse-light-full.png) | - |
 | Course landing. Hero, stats card, tabs, About, Outcomes, Modules with rail, Recommendations, Testimonials, Reviews, FAQ. All six tab positions, module expand and details, instructors, offered by, sticky nav and the AI panel captured. | `/learn/machine-learning` | desktop | [ai-panel](screenshots/course-light-ai-panel.png), [default](screenshots/course-light-default.png), [full](screenshots/course-light-full.png), [instructors](screenshots/course-light-instructors.png), [module-details](screenshots/course-light-module-details.png), [module-expanded](screenshots/course-light-module-expanded.png), [offered-by](screenshots/course-light-offered-by.png), [sticky](screenshots/course-light-sticky.png), [tab-about](screenshots/course-light-tab-about.png), [tab-modules](screenshots/course-light-tab-modules.png), [tab-outcomes](screenshots/course-light-tab-outcomes.png), [tab-recommendations](screenshots/course-light-tab-recommendations.png), [tab-reviews](screenshots/course-light-tab-reviews.png), [tab-testimonials](screenshots/course-light-tab-testimonials.png) | [ai-panel](screenshots/course-dark-ai-panel.png), [default](screenshots/course-dark-default.png), [instructors](screenshots/course-dark-instructors.png), [module-details](screenshots/course-dark-module-details.png), [module-expanded](screenshots/course-dark-module-expanded.png), [offered-by](screenshots/course-dark-offered-by.png), [sticky](screenshots/course-dark-sticky.png), [tab-about](screenshots/course-dark-tab-about.png), [tab-modules](screenshots/course-dark-tab-modules.png), [tab-outcomes](screenshots/course-dark-tab-outcomes.png), [tab-recommendations](screenshots/course-dark-tab-recommendations.png), [tab-reviews](screenshots/course-dark-tab-reviews.png), [tab-testimonials](screenshots/course-dark-tab-testimonials.png) |
 | Second course. Same frame as the first course, no Outcomes tab, four modules, an "AI Graded" disclaimer. | `/learn/learning-how-to-learn` | desktop | [default](screenshots/course2-light-default.png), [full](screenshots/course2-light-full.png), [module-details](screenshots/course2-light-module-details.png), [modules-expanded](screenshots/course2-light-modules-expanded.png) | - |
+| Explore topic. Bands of heading column, chip row and four compact cards, a dark band with an arrow link and a scrolling row, degrees, articles, FAQ. Card hover captured; the chip and card states are crops and measurements. | `/explore/generative-ai` | desktop | [card-hover](screenshots/explore-light-card-hover.png), [default](screenshots/explore-light-default.png) | - |
 | Specialization. Same hero and stats card; the course list replaces Modules; Course details opens a panel. | `/specializations/machine-learning-introduction` | desktop | [courses-expanded-2](screenshots/specialization-light-courses-expanded-2.png), [courses-expanded](screenshots/specialization-light-courses-expanded.png), [default](screenshots/specialization-light-default.png), [full-courses-expanded](screenshots/specialization-light-full-courses-expanded.png), [full](screenshots/specialization-light-full.png) | - |
 | Professional certificate. Adds a dismissible promo banner and nine course rows. | `/professional-certificates/google-data-analytics` | desktop | [courses-expanded](screenshots/certificate-light-courses-expanded.png), [default](screenshots/certificate-light-default.png), [full](screenshots/certificate-light-full.png) | - |
 
@@ -33,6 +34,7 @@ Mobile pages (390x844): header 65px with hamburger, wordmark and search icon; a 
 |---|---|
 | Home | [default](screenshots/mobile-home-light-default.png), [full](screenshots/mobile-home-light-full.png) |
 | Search results | [default](screenshots/mobile-search-light-default.png), [full](screenshots/mobile-search-light-full.png) |
+| Explore topic | [default](screenshots/mobile-explore-light-default.png) |
 | Course landing | [default](screenshots/mobile-course-light-default.png), [full](screenshots/mobile-course-light-full.png), [modules-expanded](screenshots/mobile-course-light-modules-expanded.png) |
 | Specialization | [courses-expanded](screenshots/mobile-specialization-light-courses-expanded.png), [default](screenshots/mobile-specialization-light-default.png), [full](screenshots/mobile-specialization-light-full.png) |
 
@@ -63,6 +65,7 @@ Course `machine-learning-duke` and the learner's My Learning page. The `Read on`
 | Filter and sort side sheet | search, Filter & Sort | crop and measurements only; entry [Filter and sort side sheet](#filter-and-sort-side-sheet) |
 | Applied filter chip, filtered results | search | L and D screenshots |
 | Card hover | search | L and D screenshots; shadow and overlay label |
+| Compact card hover | explore, first band | L screenshot `explore-light-card-hover`; entry [Compact course card](#compact-course-card) |
 | AI panel | course, specialization, certificate (desktop) | L and D screenshots; the panel opens by default and squeezes the page to 1024px |
 | Sticky course nav | course, after the hero scrolls away | L and D screenshots; entry [Sticky nav](#sticky-nav) |
 | Module expanded, module details | course Modules | L and D screenshots; entries [Module accordion](#module-accordion) and [Module panel](#module-panel) |
@@ -75,7 +78,7 @@ Course `machine-learning-duke` and the learner's My Learning page. The `Read on`
 | Mobile sheet for a week or course | mobile course and specialization | L screenshots `mobile-course-light-modules-expanded`, `mobile-specialization-light-courses-expanded` |
 | Empty and error states | - | none captured; see Gaps |
 
-Total: 87 screenshots, 166 components measured on public pages and 132 on learner pages.
+Total: 90 screenshots, 193 components measured on public pages and 132 on learner pages.
 
 ## Shared values
 
@@ -90,7 +93,7 @@ Values that apply across entries, from the measurement files.
 | 0.15s | `cubic-bezier(0.4, 0, 0.2, 1)` | background-color | checkbox glyph |
 | 0.15s | `ease-in-out` | transform | FAQ chevron |
 | 0.2s | `ease-in-out` | transform | header container |
-| 0.3s | `cubic-bezier(0, 0, 0.5, 1)` | all | pill, product card, list product card |
+| 0.3s | `cubic-bezier(0, 0, 0.5, 1)` | all | pill, product card, list product card, compact course card |
 
 **Layout grid.** Read on the course page and the search grid at each width.
 
@@ -107,6 +110,7 @@ Values that apply across entries, from the measurement files.
 | Card | Size | Border | Radius | Background | Box shadow | Padding |
 |---|---|---|---|---|---|---|
 | [Product card](#product-card) | 335 x 418.31 | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` | 16px `--cds-border-radius-200` | #ffffff `--cds-color-neutral-background-primary` | none | 0 |
+| [Compact course card](#compact-course-card) | 266.19 x 247.61 | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` | 16px `--cds-border-radius-200` | #ffffff `--cds-color-neutral-background-primary` | none | 0 |
 | [Product card, list variant](#product-card-list-variant) | 664 x 189 | 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak` | 16px `--cds-border-radius-200` | #ffffff `--cds-color-neutral-background-primary` | none | 8px |
 | [Stats card](#stats-card) | 1344 x 114 | 1px solid #e9eef7 `--cds-color-interactive-background-secondary-pressed-weak` | 8px `--cds-border-radius-100` | #ffffff `--cds-color-neutral-background-primary` | #0f1114 @ 0.2 0px 8px 16px 0px, no token | 0 |
 | [Module list](#module-list) | 885.33 x 432 | 2px solid #e9eef7 `--cds-color-interactive-background-secondary-pressed-weak` | 8px `--cds-border-radius-100` | transparent | - | 0 |
@@ -1022,6 +1026,174 @@ cds-Pill-root: partner or domain pill on the home page. Measured as `pill` on th
 | hover | decoration underline |
 
 ![Pill default](components/crops/pill-default.png) ![Pill focus-visible](components/crops/pill-focus-visible.png)
+
+### Explore page: compact card, chips and carousel
+
+The Explore topic page (`/explore/generative-ai`) is a stack of bands. Each band has a 20% heading column (heading, sub text, sometimes an arrow link) and an 80% column with a chip row over a row of compact course cards. The card is the search product card without the skills line or tags. A row that has more cards than fit scrolls sideways with Next and Previous arrows. Below 600 the band stacks and the cards are 150 wide with a third peeking; the mobile user agent hides the arrows, a 390 window with the desktop user agent keeps the Next arrow. Screenshots: [explore-light-default](screenshots/explore-light-default.png), [explore-light-card-hover](screenshots/explore-light-card-hover.png) and [mobile-explore-light-default](screenshots/mobile-explore-light-default.png).
+
+#### Explore band
+Explore page band (Trusted AI Learning): a full-width grey wrapper holding a 20% heading column and an 80% column with the chip row over the card carousel. The wrapper paints the fill; the block inside it (1440 wide, radius 24) paints nothing here. Measured as `explore-band` on the explore page.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 1440 x 351.61; padding 0; radius 0px; background #f2f5fa `--cds-color-interactive-background-secondary-hover-weak`; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; icon 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` |
+| mobile | size 390 x 443.25; icon 20 x 20, colour #0d0f12 `--cds-color-interactive-secondary` |
+
+![Explore band default](components/crops/explore-band-default.png) ![Explore band mobile](components/crops/explore-band-mobile.png)
+
+#### Explore band heading and sub text
+Band heading (h2 "Trusted AI Learning") in the left column: 600 20/24 with the -0.003em tracking of the subtitle styles. Measured as `explore-section-heading` on the explore page.
+
+**Values.** size 164.3 x 24; padding 0; radius 0px; background transparent; font 20/24 600 `--cds-typography-subtitle-large`, ls -0.06px; colour #0d0f12 `--cds-color-interactive-secondary`.
+
+| Part | Values (default) |
+|---|---|
+| `explore-section-sub` | size 243.19 x 120; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-section-heading-link` | size 188.3 x 28; box shadow none; font 20/24 600 `--cds-typography-subtitle-large`, ls -0.06px; colour #0d0f12 `--cds-color-interactive-secondary`; icon 20 x 20, colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, focus-visible |
+
+![Explore band heading and sub text default](components/crops/explore-section-heading-default.png) ![Explore band heading and sub text (explore-section-sub) default](components/crops/explore-section-sub-default.png) ![Explore band heading and sub text (explore-section-heading-link) default](components/crops/explore-section-heading-link-default.png)
+
+#### Explore chip row
+Row of chips above the cards: flex, wrap, 8px between chips, 8px above the cards. Measured as `explore-chip-row` on the explore page.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 1084.8 x 32; padding 0; gap 8px; radius 0px; background transparent; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary` |
+| mobile | size 358 x 72 |
+
+Child layers that carry the look: button, 92.7x32, background #1c2026, border 1px solid #1c2026, radius 32px (`--cds-color-interactive-secondary-selected`); button, 53.2x32, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 32px; button, 111.5x32, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 32px.
+
+![Explore chip row default](components/crops/explore-chip-row-default.png) ![Explore chip row mobile](components/crops/explore-chip-row-mobile.png)
+
+#### Explore chip
+Idle chip (cds-Chip-root): white pill, 1px grey border, 400 14/20 label, 32 tall. Read as loaded: no chip was clicked. Measured as `explore-chip` on the explore page. Hover and pressed change the border, label and fill together: `#0b408b` on `#f0f6ff`, then `#3c0f8a` on `#f9f5ff`. No transition. The ring is an `::after` 2px out with the chip radius.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default (same: focus-visible, mobile) | size 53.19 x 32; padding 4px 12px; border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`; radius 32px `--cds-border-radius-400`; background #ffffff `--cds-color-neutral-background-primary`; font 14/20 400 `--cds-typography-body2`; colour #0d0f12 `--cds-color-interactive-secondary` |
+| hover | border 1px solid #0b408b `--cds-color-interactive-primary-hover`; background #f0f6ff `--cds-color-interactive-background-primary-hover-weak`; colour #0b408b `--cds-color-interactive-primary-hover` |
+| pressed | border 1px solid #3c0f8a `--cds-color-interactive-primary-selected`; background #f9f5ff `--cds-color-interactive-background-primary-selected-weak`; colour #3c0f8a `--cds-color-interactive-primary-selected` |
+
+![Explore chip default](components/crops/explore-chip-default.png) ![Explore chip hover](components/crops/explore-chip-hover.png) ![Explore chip focus-visible](components/crops/explore-chip-focus-visible.png) ![Explore chip pressed](components/crops/explore-chip-pressed.png) ![Explore chip mobile](components/crops/explore-chip-mobile.png)
+
+#### Explore chip, selected
+Selected chip (cds-Chip-selected): near-black fill, white 600 14/20 label with 0.14px tracking, same 32px height and 12px side padding as the idle chip. Measured as `explore-chip-selected` on the explore page. Fill and border `#1c2026`, label white 600 with 0.14px tracking. Hover fills `#0b408b`, pressed `#3c0f8a`.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default (same: focus-visible) | size 92.67 x 32; padding 4px 12px; border 1px solid #1c2026 `--cds-color-interactive-secondary-selected`; radius 32px `--cds-border-radius-400`; background #1c2026 `--cds-color-interactive-secondary-selected`; font 14/20 600 `--cds-typography-action-secondary`, ls 0.14px; colour #ffffff `--cds-color-neutral-primary-invert` |
+| hover | border 1px solid #0b408b `--cds-color-interactive-primary-hover`; background #0b408b `--cds-color-emphasis-primary-background-xstrong` |
+| pressed | border 1px solid #3c0f8a `--cds-color-interactive-primary-selected`; background #3c0f8a `--cds-color-interactive-primary-selected` |
+
+![Explore chip, selected default](components/crops/explore-chip-selected-default.png) ![Explore chip, selected hover](components/crops/explore-chip-selected-hover.png) ![Explore chip, selected focus-visible](components/crops/explore-chip-selected-focus-visible.png) ![Explore chip, selected pressed](components/crops/explore-chip-selected-pressed.png)
+
+#### Explore card row
+The card row (data-testid overflow-carousel): a flex wrapper with -8px -16px margins that holds the scroll container, the card grid inside it and two absolutely placed arrow buttons. With four cards and room for four it does not scroll and both arrows are 0x0. Measured as `explore-carousel` on the explore page. The row is a scroll container (overflow-x auto, `scroll-snap-type: x mandatory`, no scrollbar, `scroll-behavior: smooth`) around a grid with a 12px gap (`--cds-spacing-150`). No card sets a snap alignment, so it does not snap: `scrollLeft = 100` settled at 100.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 1116.8 x 263.61; padding 0; radius 0px; background transparent; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; icon 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` |
+| mobile, narrow | size 390 x 218.25 |
+
+Child layers that carry the look: div, 266.2x247.6, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 16px; div, 18x18, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 5px; div, 266.2x247.6, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 16px.
+
+| Part | Values (default) |
+|---|---|
+| `explore-carousel-content` | size 1116.8 x 247.61; padding 0 0 0 16px; gap 12px; text p 14/24 400, #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+
+![Explore card row default](components/crops/explore-carousel-default.png) ![Explore card row mobile](components/crops/explore-carousel-mobile.png) ![Explore card row narrow](components/crops/explore-carousel-narrow.png)
+
+#### Compact course card
+Compact course card: the search product card (cds-ProductCard-grid) without the skills line or tags. 8px inset 16:9 cover image, partner row, title, one type line. Height follows the tallest card in the row. Measured as `explore-card` on the explore page. Four per row at 1440 (266.19 wide, 12px between), 242 wide in a row that scrolls, 150 wide at 390. The height follows the tallest card in the row (247.6 here). Hover and pressed add `0 0 4px #e9eef7, 0 4px 12px 4px rgba(15,17,20,.1)` over 0.3s `cubic-bezier(0, 0, 0.5, 1)`; the focus ring is on the stretched title link, not the card.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default (same: focus-visible) | size 266.19 x 247.61; padding 0; border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`; radius 16px `--cds-border-radius-200`; background #ffffff `--cds-color-neutral-background-primary`; shadow none; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; transition all 0.3s cubic-bezier(0, 0, 0.5, 1) |
+| hover | shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px, no token |
+| pressed | shadow #e9eef7 0px 0px 4px 0px, #0f1114 @ 0.1 0px 4px 12px 4px, no token |
+| mobile | size 150 x 202.25 |
+
+| Part | Values (default) |
+|---|---|
+| `explore-card-click-area` | size 264.19 x 245.61; text p 14/24 400, #0d0f12 `--cds-color-interactive-secondary` |
+| `explore-card-image-container` | size 248.19 x 139.59; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-card-image` | size 248.19 x 139.59; radius 8px `--cds-border-radius-100`; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-card-content` | size 248.19 x 90.02; padding 8px; gap 8px; text p 14/24 400, #0d0f12 `--cds-color-interactive-secondary` |
+| `explore-card-partner-logo` | size 18 x 18; padding 2px; border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`; radius 5px; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-card-partner-name` | size 41.41 x 24; font 14/24 400; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-card-title` | size 232.19 x 20; font 16/20 600 `--cds-typography-subtitle-medium`, ls -0.048px; colour #0d0f12 `--cds-color-interactive-secondary`; states measured: default, mobile |
+| `explore-card-type` | size 232.19 x 18; font 12/18 400 `--cds-typography-body-tertiary`; colour #48546e `--cds-color-neutral-primary-weak`; states measured: default, mobile |
+| `explore-card-footer` | size 232.19 x 18.02; gap 4px; text p 12/18 400 `--cds-typography-body-tertiary`, #48546e `--cds-color-neutral-primary-weak` |
+
+![Compact course card default](components/crops/explore-card-default.png) ![Compact course card hover](components/crops/explore-card-hover.png) ![Compact course card focus-visible](components/crops/explore-card-focus-visible.png) ![Compact course card pressed](components/crops/explore-card-pressed.png) ![Compact course card mobile](components/crops/explore-card-mobile.png) ![Compact course card (explore-card-image-container) default](components/crops/explore-card-image-container-default.png) ![Compact course card (explore-card-image) default](components/crops/explore-card-image-default.png) ![Compact course card (explore-card-partner-logo) default](components/crops/explore-card-partner-logo-default.png) ![Compact course card (explore-card-partner-name) default](components/crops/explore-card-partner-name-default.png) ![Compact course card (explore-card-title) default](components/crops/explore-card-title-default.png) ![Compact course card (explore-card-type) default](components/crops/explore-card-type-default.png)
+
+#### Compact card title link
+The title link; it is stretched over the whole card, so it takes the card focus ring. Measured as `explore-card-title-link` on the explore page.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 232.19 x 20; padding 0; radius 0px; background transparent; shadow none; font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary` |
+| hover | colour #0b408b `--cds-color-interactive-primary-hover` |
+| focus-visible | radius 4px `--cds-border-radius-50`; shadow #804ee4 0px 0px 0px 1px, #f0f6ff 0px 0px 0px 2px, no token; colour #0b408b `--cds-color-interactive-primary-hover` |
+
+![Compact card title link hover](components/crops/explore-card-title-link-hover.png) ![Compact card title link focus-visible](components/crops/explore-card-title-link-focus-visible.png)
+
+#### Explore dark band
+Dark band (Learn AI with today's most popular certificates): a 1344 wide block with radius 24 on the grey-975 ground, a 20% heading column, an 80% card column, and decorative art absolutely placed behind. The white text and the ghost-invert link sit on it. Measured as `explore-band-dark` on the explore page.
+
+**Values.** size 1344 x 306; padding 16px 16px 16px 32px; radius 24px `--cds-border-radius-300`; background #0d0f12 `--cds-color-emphasis-neutral-background-xxstrong`; font 16/24 400 `--cds-typography-body1`; colour #ffffff `--cds-color-neutral-primary-invert`; icon 0 x 0, colour #ffffff `--cds-color-neutral-primary-invert`.
+
+| Part | Values (default) |
+|---|---|
+| `explore-section-heading-inverse` | size 233.59 x 48; font 20/24 600 `--cds-typography-subtitle-large`, ls -0.06px; colour #ffffff `--cds-color-neutral-primary-invert` |
+| `explore-section-sub-inverse` | size 233.59 x 48; font 16/24 400 `--cds-typography-body1`; colour #ffffff `--cds-color-neutral-primary-invert` |
+
+![Explore dark band default](components/crops/explore-band-dark-default.png) ![Explore dark band (explore-section-heading-inverse) default](components/crops/explore-section-heading-inverse-default.png) ![Explore dark band (explore-section-sub-inverse) default](components/crops/explore-section-sub-inverse-default.png)
+
+#### Explore band arrow link
+The "Explore programs" arrow link under the sub text: cds-button-ghostInvert, a link styled as a button (48 tall, 600 16/24, 0.16px tracking) with a 24px arrow end icon; its left margin is -16px so the text lines up with the heading. Measured as `explore-section-link` on the explore page. A ghost-invert link on the dark band. Hover, focus and pressed only add an underline.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 183.66 x 48; padding 12px 16px; radius 8px `--cds-border-radius-100`; background transparent; font 16/24 600 `--cds-typography-title3`, ls 0.16px; colour #ffffff `--cds-color-neutral-primary-invert`; decoration none; icon 24 x 24, colour #ffffff `--cds-color-neutral-primary-invert` |
+| hover, focus-visible, pressed | decoration underline |
+
+![Explore band arrow link default](components/crops/explore-section-link-default.png) ![Explore band arrow link hover](components/crops/explore-section-link-hover.png) ![Explore band arrow link focus-visible](components/crops/explore-section-link-focus-visible.png) ![Explore band arrow link pressed](components/crops/explore-section-link-pressed.png)
+
+#### Scrolling card row
+A carousel that overflows (20 cards at 242 wide, fixed columns): the scroll container has overflow-x auto, scroll-snap-type x mandatory and no scrollbar. The Next arrow appears at the right end; after one click the Previous arrow appears at the left end and the row has scrolled by four cards. Measured as `explore-carousel-dark` on the explore page. Twenty 242px columns (254 pitch); four cards show whole and five in part at 1440. One click on Next scrolls 1016px, four cards. The row keeps `padding: 0 16px` where the four-card rows have no right padding.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default | size 1062.39 x 290; padding 0; radius 0px; background transparent; font 16/24 400 `--cds-typography-body1`; colour #ffffff `--cds-color-neutral-primary-invert`; icon 0 x 0, colour #0d0f12 `--cds-color-interactive-secondary` |
+| scrolled | icon 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` |
+
+Child layers that carry the look: div, 242x274, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 16px; div, 18x18, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 5px; div, 242x274, background #ffffff `--cds-color-neutral-background-primary`, border 1px solid #c1cbdb `--cds-color-neutral-stroke-primary-weak`, radius 16px.
+
+![Scrolling card row default](components/crops/explore-carousel-dark-default.png) ![Scrolling card row scrolled](components/crops/explore-carousel-dark-scrolled.png)
+
+#### Carousel Next arrow
+Next arrow: a 24px wide button the height of the row, pinned to the right end, a 24px chevron over a white fade (linear-gradient to the right, 0 to 0.8 alpha; hover and pressed swap in a stronger fade), padding 0 0 0 4px. 0x0 when the row does not overflow. Clicking scrolls the row by four cards (1016px at 254 pitch) with scroll-behavior smooth. Measured as `explore-carousel-next` on the explore page. The hover and pressed fade is stronger: `linear-gradient(90deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,.8) 40%, #fff 100%)`. Focus is set after a key press without scrolling, because Shift+Tab from Next walks through the last card and scrolls the row to its end.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default (same: focus-visible) | size 24 x 274; padding 0 0 0 4px; radius 0px; background transparent + linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%); font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; icon 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` |
+| hover | background transparent + linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%); colour #0056d2 `--cds-color-interactive-primary`; icon 24 x 24, colour #0056d2 `--cds-color-interactive-primary` |
+| pressed | background transparent + linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.8) 40%, rgb(255, 255, 255) 100%); colour #0056d2 `--cds-color-interactive-primary`; icon 24 x 24, colour #0056d2 `--cds-color-interactive-primary` |
+| narrow | size 24 x 202.25 |
+
+![Carousel Next arrow default](components/crops/explore-carousel-next-default.png) ![Carousel Next arrow hover](components/crops/explore-carousel-next-hover.png) ![Carousel Next arrow focus-visible](components/crops/explore-carousel-next-focus-visible.png) ![Carousel Next arrow pressed](components/crops/explore-carousel-next-pressed.png) ![Carousel Next arrow narrow](components/crops/explore-carousel-next-narrow.png)
+
+#### Carousel Previous arrow
+Previous arrow: mirror of the Next arrow at the left end (white fade to the left, padding 0 4px 0 0). It is 0x0 until the row has scrolled. Measured as `explore-carousel-prev` on the explore page.
+
+| State | Values (later rows list only what changes from the first row) |
+|---|---|
+| default (same: focus-visible) | size 24 x 274; padding 0 4px 0 0; radius 0px; background transparent + linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%); font 16/24 400 `--cds-typography-body1`; colour #0d0f12 `--cds-color-interactive-secondary`; icon 24 x 24, colour #0d0f12 `--cds-color-interactive-secondary` |
+| hover | background transparent + linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%); colour #0056d2 `--cds-color-interactive-primary`; icon 24 x 24, colour #0056d2 `--cds-color-interactive-primary` |
+| pressed | background transparent + linear-gradient(90deg, rgb(255, 255, 255) 0%, rgba(255, 255, 255, 0.8) 40%, rgba(255, 255, 255, 0.1) 100%); colour #0056d2 `--cds-color-interactive-primary`; icon 24 x 24, colour #0056d2 `--cds-color-interactive-primary` |
+
+![Carousel Previous arrow default](components/crops/explore-carousel-prev-default.png) ![Carousel Previous arrow hover](components/crops/explore-carousel-prev-hover.png) ![Carousel Previous arrow focus-visible](components/crops/explore-carousel-prev-focus-visible.png) ![Carousel Previous arrow pressed](components/crops/explore-carousel-prev-pressed.png)
 
 ### Course landing
 
@@ -2434,6 +2606,7 @@ Child layers that carry the look: a, 28x28, outline 1px auto #005fcc offset 1px.
 - **Disabled primary button:** none appeared. Disabled ghost and disabled secondary were measured in the filter popover and sheet.
 - **Not measured on purpose:** the AI coach panel contents, the cookie banner (OneTrust is in the DOM but showed nothing in a fresh context, so nothing was declined), sign-in and enrolment flows.
 - **Footer link lists:** the link lists under the footer headings did not render in the headless captures, so the footer screenshots show headings over empty space. The footer link entry was measured on the home page.
+- **Explore page:** only the first light band (Trusted AI Learning) and the dark certificates band were measured. Selecting a chip was not tried, so what it does to the row is not recorded; the degrees band, the articles grid, the role tiles and the FAQ were not measured. The "AI courses by leading organizations" chips carry a logo and are 34 tall; they were not measured. Previous exists only after the row has scrolled (measured after one click on Next). Dark screenshots were not taken.
 - **Empty and error states, toasts:** none appeared on any captured page.
 
 ### Signed-in pages
