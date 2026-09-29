@@ -90,9 +90,9 @@ export function DiagramTile({
           controls take no clicks. */}
       <div className="pointer-events-none absolute right-2 top-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none">
         <Link href={canvasHref(diagram.name)} className={HOVER_CONTROL}>
-          Open canvas
+          Open <span className="sr-only">{displayTitle(diagram)} on the </span>canvas
         </Link>
-        <ExtendLink href={extendHref} className={HOVER_CONTROL} />
+        <ExtendLink href={extendHref} className={HOVER_CONTROL} diagram={displayTitle(diagram)} />
       </div>
     </div>
   );

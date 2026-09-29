@@ -15,7 +15,6 @@ import {
   EXTEND_OPENER,
   extendKey,
   extendRefusal,
-  forgetExtendKey,
   leaveOpener,
   noteArrival,
   readingWords,
@@ -37,8 +36,9 @@ import { canvasHref, panelHref } from "@/lib/studio-view";
  * (`router.replace`, so Back does not come here and post again).
  *
  * A refusal stays in this panel, where the press was, with what to do about
- * it: 400 and 404 can only be closed, 502 can be tried again or looked at on
- * the canvas, 503 and a runner that is down can be tried again.
+ * it (`extendRefusal`). Once the draft exists the composer closes and says
+ * so, and what it holds goes with the hand-off: a message sent here as the
+ * first turn, and anything left unsent into the conversation's composer.
  */
 export function ExtendStart({
   name,
@@ -53,17 +53,27 @@ export function ExtendStart({
   listed: boolean;
 }) {
   const router = useRouter();
-  const { close } = useStudioDialog();
+  const { close, isClosing } = useStudioDialog();
   const [refused, setRefused] = useState<ExtendRefusal | null>(null);
+  /** The draft exists and the conversation is on its way: nothing typed now could be carried. */
+  const [opening, setOpening] = useState(false);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
-  const [text, setText] = useState("");
-  const [queued, setQueued] = useState<string | null>(null);
-  // Read inside the post's continuation, which closes over the first render.
+  const [text, setTextState] = useState("");
+  const [queued, setQueuedState] = useState<string | null>(null);
+  // What the post's continuation hands over. Written with the state, in the
+  // same handler, rather than by an effect after the render: a keystroke
+  // made just before the post resolved is in these, where an effect would
+  // not have run yet.
   const typed = useRef({ text: "", queued: null as string | null });
-  useEffect(() => {
-    typed.current = { text, queued };
-  }, [text, queued]);
+  const setText = useCallback((next: string) => {
+    typed.current.text = next;
+    setTextState(next);
+  }, []);
+  const setQueued = useCallback((next: string | null) => {
+    typed.current.queued = next;
+    setQueuedState(next);
+  }, []);
   const composer = useRef<HTMLTextAreaElement | null>(null);
   const running = useRef(false);
   // Closing the panel mid-read does not stop the post, and its answer must not
@@ -86,22 +96,28 @@ export function ExtendStart({
     running.current = false;
     // Closed meanwhile. A draft that was made keeps its key for a while, so
     // pressing Extend on this diagram again opens that one, not a second.
-    if (!mounted.current) return;
+    // The same for a Close, Escape or backdrop click whose navigation has not
+    // landed yet: the hand-off would undo it, and send a paid opener into a
+    // conversation the person closed.
+    if (!mounted.current || isClosing()) return;
     if (!result.ok) {
       setRefused(extendRefusal(result.status, result.refusal, title));
       // A message that was waiting goes back into the composer: a refused
       // press should not cost the typing.
-      const held = typed.current.queued;
+      const { queued: held, text: current } = typed.current;
       setQueued(null);
-      if (held !== null) setText((current) => (current === "" ? held : `${held}\n${current}`));
+      if (held !== null) setText(current === "" ? held : `${held}\n${current}`);
       return;
     }
-    forgetExtendKey(store, name);
+    // From here the composer is closed (`opening`), so what it holds now is
+    // everything there is to carry: a message sent goes as the first turn,
+    // and whatever is left unsent lands in the conversation's composer.
+    setOpening(true);
     noteArrival(result.data.draftId, name);
     const { text: draftText, queued: waiting } = typed.current;
-    leaveOpener(store, result.data.draftId, { send: waiting ?? EXTEND_OPENER, compose: waiting === null ? "" : draftText });
+    leaveOpener(store, result.data.draftId, { send: waiting ?? EXTEND_OPENER, compose: draftText, source: name });
     router.replace(panelHref(path, { extend: null, draft: result.data.draftId }), { scroll: false });
-  }, [name, title, path, router]);
+  }, [name, title, path, router, isClosing, setQueued, setText]);
 
   useEffect(() => {
     // The post runs from an effect because this panel is what a link opens:
@@ -111,7 +127,7 @@ export function ExtendStart({
     void start();
   }, [start]);
 
-  const pending = refused === null;
+  const pending = refused === null && !opening;
   useEffect(() => {
     if (!pending) return;
     const tick = setInterval(() => setNow(Date.now()), 1_000);
@@ -135,7 +151,7 @@ export function ExtendStart({
       <div
         role="log"
         aria-live="polite"
-        aria-busy={pending}
+        aria-busy={refused === null}
         aria-label="Conversation"
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5"
       >
@@ -143,13 +159,13 @@ export function ExtendStart({
 
         {queued !== null && <UserMessage>{queued}</UserMessage>}
 
-        {pending ? (
+        {refused === null ? (
           <div role="status" className="mx-auto flex max-w-[56ch] flex-col items-center gap-1 text-center text-[13px] leading-5 text-text3">
             <span className="flex items-center gap-2">
-              {words.lead}
+              {opening ? "Opening the conversation" : words.lead}
               <Dots />
             </span>
-            {words.more !== null && <span>{words.more}</span>}
+            {!opening && words.more !== null && <span>{words.more}</span>}
           </div>
         ) : (
           <div role="alert" className="flex flex-col gap-3 rounded-xl bg-warn-tint px-4 py-3.5 text-[14px] text-text">
@@ -186,22 +202,29 @@ export function ExtendStart({
 
       {/* Refused, there is nothing to talk to: the composer goes rather than
           sitting there disabled. */}
-      {pending && (
+      {refused === null && (
         <div className="shrink-0 border-t border-hair px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:px-5">
           <Composer
             value={text}
             onChange={setText}
             onSubmit={(value) => {
               const body = value.trim();
-              if (body === "" || queued !== null) return;
+              if (body === "" || queued !== null || opening) return;
               setQueued(body);
               setText("");
             }}
             label="Tell the planner what to add to this diagram"
             placeholder="What should it gain?"
             maxLength={8_000}
+            disabled={opening}
             sendDisabled={queued !== null}
-            disabledReason={queued !== null ? "Your message goes as soon as the diagram is read." : undefined}
+            disabledReason={
+              opening
+                ? "Opening the conversation. What is here goes with it."
+                : queued !== null
+                  ? "Your message goes as soon as the diagram is read."
+                  : undefined
+            }
             inputRef={composer}
           />
         </div>

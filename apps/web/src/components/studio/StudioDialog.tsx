@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 
 import { cx } from "@/components/ui/classes";
@@ -25,10 +25,22 @@ import { cx } from "@/components/ui/classes";
  * pinned and the thread scrolls between them.
  */
 
-const DialogContext = createContext<{ close: () => void } | null>(null);
+interface DialogControls {
+  /** Close the dialog, which navigates to its `closeHref`. */
+  close: () => void;
+  /**
+   * Whether a close is on its way. A panel that is about to navigate the
+   * dialog somewhere else (Extend handing over to its conversation) asks
+   * first, so a person's Close is not undone by a navigation that finished
+   * later.
+   */
+  isClosing: () => boolean;
+}
 
-/** Close the surrounding dialog, which navigates to its `closeHref`. */
-export function useStudioDialog(): { close: () => void } {
+const DialogContext = createContext<DialogControls | null>(null);
+
+/** The surrounding dialog's controls. */
+export function useStudioDialog(): DialogControls {
   const value = useContext(DialogContext);
   if (value === null) throw new Error("useStudioDialog is only usable inside StudioDialog");
   return value;
@@ -62,6 +74,16 @@ export function StudioDialog({
     closing.current = true;
     router.push(closeHref, { scroll: false });
   }, [router, closeHref]);
+  const isClosing = useCallback(() => closing.current, []);
+
+  // The dialog stays mounted across a change of what it holds (a conversation
+  // and the Extend press before it share one). If the URL moved and the
+  // dialog is still here, whatever close was pending lost to that navigation,
+  // and Close has to work again.
+  const search = useSearchParams().toString();
+  useEffect(() => {
+    closing.current = false;
+  }, [search]);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -89,7 +111,7 @@ export function StudioDialog({
   }, []);
 
   return (
-    <DialogContext.Provider value={{ close }}>
+    <DialogContext.Provider value={{ close, isClosing }}>
       <dialog
         ref={ref}
         aria-label={label}

@@ -42,6 +42,7 @@ import {
   threadProblem,
   turnIndicator,
   visibleEntries,
+  wordsBack,
   type DrawRefusal,
   type CapStatus,
   type Suggestion,
@@ -57,9 +58,9 @@ import {
   type DraftView,
   type TranscriptEntry,
 } from "@/lib/studio-drafts";
-import { arrivingSource, EXTEND_OPENING_TURN, sessionStore, takeOpener } from "@/lib/studio-extend";
+import { arrivingSource, EXTEND_OPENING_TURN, forgetExtendKey, sessionStore, takeOpener } from "@/lib/studio-extend";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref, titleOf } from "@/lib/studio-view";
 
 /**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI").
@@ -293,17 +294,22 @@ export function DraftPanel({
   /* Verbs                                                             */
   /* ---------------------------------------------------------------- */
 
-  async function send(raw: string) {
+  /**
+   * One person turn. `keepComposer` is for a turn that was not typed in the
+   * composer (the opener an Extend press hands over), whose composer may hold
+   * a second message that sending this one must not clear.
+   */
+  async function send(raw: string, { keepComposer = false }: { keepComposer?: boolean } = {}) {
     const body = raw.trim();
     if (body === "" || view === null) return;
     setSendError(null);
     setPending({ text: body, seq: null });
-    setText("");
+    if (!keepComposer) setText("");
     const result = await sendMessage(draftId, body);
     if (!result.ok) {
       setPending(null);
       // Give the words back: a refused turn should not cost the typing.
-      setText((held) => (held === "" ? body : held));
+      setText((held) => wordsBack(held, body, keepComposer));
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       setSendError(sendRefusal(result.status, result.refusal));
       void load();
@@ -362,18 +368,25 @@ export function DraftPanel({
 
   const drawReady = drawIsLive && block === null;
 
-  // Arriving from Extend: the opener `ExtendStart` left for this draft, taken
-  // once so a reload never sends it again, and sent only into a conversation
-  // that is still empty.
+  // Arriving from Extend, or from Talk it through on a failed job: the opener
+  // left for this draft, taken once so a reload never sends it again, and
+  // sent only into a conversation that is still empty.
   const opened = useRef(false);
   useEffect(() => {
-    if (!ready || view === null || view.source === null || opened.current) return;
+    if (!ready || view === null || opened.current) return;
     opened.current = true;
-    const opener = takeOpener(sessionStore(), draftId);
+    const store = sessionStore();
+    const opener = takeOpener(store, draftId);
     if (opener === null) return;
+    // Arrived: a reload of the press that made this draft may now mint a new one.
+    if (opener.source !== null) forgetExtendKey(store, opener.source);
+    // The composer first, and a send that leaves it alone: a message queued
+    // during the read and a second one still being typed both survive.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (opener.compose !== "") setText(opener.compose);
-    if (opener.send !== null && isEmptyConversation(view.transcript) && !view.inFlight) void send(opener.send);
+    if (opener.send !== null && isEmptyConversation(view.transcript) && !view.inFlight) {
+      void send(opener.send, { keepComposer: true });
+    }
     // `send` is this render's; the guard makes this run once whatever changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, view, draftId]);
@@ -417,7 +430,7 @@ export function DraftPanel({
   if (status === "loading" && arriving !== null) {
     // Straight from Extend: the picture and the header stay where they were
     // while the record is read, rather than blinking to a blank panel.
-    const arrivingTitle = titles[arriving] ?? arriving;
+    const arrivingTitle = titleOf(titles, arriving) ?? arriving;
     return (
       <>
         <DialogHeader title={`Extending ${arrivingTitle}`} />
@@ -454,7 +467,7 @@ export function DraftPanel({
     );
   }
 
-  const sourceTitle = view.source === null ? null : (titles[view.source] ?? view.source);
+  const sourceTitle = view.source === null ? null : (titleOf(titles, view.source) ?? view.source);
   const title = view.title ?? liveBrief?.title ?? (sourceTitle === null ? "New diagram" : `Extending ${sourceTitle}`);
 
   if (mode === "job" && jobId !== null) {
@@ -689,6 +702,7 @@ function Entry({
             onDraw={onDraw}
             jobHref={view.jobId === null ? null : panelHref(path, { job: view.jobId })}
             holderHref={(holder) => panelHref(path, jobPatch(holder, view, jobs))}
+            sourceChanged={view.sourceChanged === true}
           />
         </div>
       )}

@@ -1,4 +1,4 @@
-import type { Refusal } from "@/lib/studio-drafts";
+import { runnerDown, type Refusal } from "@/lib/studio-drafts";
 
 /**
  * Extend from a tile (docs/STUDIO-CHAT-FIRST.md, phase 2): the words, the
@@ -67,29 +67,39 @@ export interface ExtendRefusal {
  * What a refused `POST /api/drafts { source }` means, keyed on the status the
  * runner gives for a source (phase 1a): 400 a name it will not take, 404 no
  * such diagram, 502 the checkout or `inspect` failed, 503 the topic list could
- * not be read. Status 0 is the fetch itself failing: the runner is down.
+ * not be read. A runner that is down comes first whatever the status: the
+ * studio proxy answers that as a 502 too, and "could not read the diagram"
+ * with an Open canvas would send the person looking in the wrong place.
+ *
+ * The runner's own words are quoted rather than recased: they carry slugs and
+ * paths, and a capital letter on a slug is a different slug.
  */
 export function extendRefusal(status: number, refusal: Refusal, title: string): ExtendRefusal {
-  const detail = detailText(refusal);
+  if (runnerDown(status, refusal)) {
+    return {
+      headline: "The studio runner is not answering.",
+      detail: "Start it with npm run studio from the repository root, then try again.",
+      actions: ["retry", "close"],
+    };
+  }
   switch (status) {
     case 400:
-      return {
-        headline: `${title} cannot be extended from here.`,
-        detail: sentence(refusal.error),
-        actions: ["close"],
-      };
+      return { headline: `${title} cannot be extended from here.`, detail: said(refusal), actions: ["close"] };
     case 404:
+      // Usually a diagram deleted or renamed since the grid was drawn, but
+      // with the catalog down and no local checkout the runner cannot tell,
+      // and its detail says so. Its words decide which, so they are shown and
+      // a retry is offered.
       return {
-        headline: `There is no diagram called ${title} any more.`,
-        detail: "It may have been deleted or renamed since the grid was drawn.",
-        actions: ["close"],
+        headline: `The studio cannot find ${title}.`,
+        detail: `It may have been deleted or renamed since the grid was drawn. ${said(refusal)}`,
+        actions: ["retry", "close"],
       };
     case 502:
       return {
         headline: `The studio could not read ${title}.`,
         detail:
-          `The runner said: ${stop(refusal.error)}${detail === null ? "" : ` ${stop(detail)}`} ` +
-          "The planner learns what is in a diagram only by opening it. " +
+          `${said(refusal)} The planner learns what is in a diagram only by opening it. ` +
           "Opening it on the canvas shows whether the document itself is the problem.",
         actions: ["retry", "canvas", "close"],
       };
@@ -98,40 +108,45 @@ export function extendRefusal(status: number, refusal: Refusal, title: string): 
         headline: "The topic list could not be read.",
         detail:
           "The planner files every diagram under a topic, so it cannot start without the list. " +
-          `Check the catalog's database is up, then try again. The runner said: ${stop(refusal.error)}`,
-        actions: ["retry", "close"],
-      };
-    case 0:
-      return {
-        headline: "The studio runner is not answering.",
-        detail: "Start it with npm run studio from the repository root, then try again.",
+          `Check the catalog's database is up, then try again. ${said(refusal)}`,
         actions: ["retry", "close"],
       };
     default:
-      return {
-        headline: `The runner answered ${status}.`,
-        detail: sentence(refusal.error),
-        actions: ["retry", "close"],
-      };
+      return { headline: `The runner answered ${status}.`, detail: said(refusal), actions: ["retry", "close"] };
   }
 }
 
-function detailText(refusal: Refusal): string | null {
-  if (typeof refusal.detail === "string" && refusal.detail.trim() !== "") return refusal.detail.trim();
-  return null;
+/** `The runner said: "<error>; <detail>".`, the detail only when it is a sentence. */
+function said(refusal: Refusal): string {
+  const parts = [refusal.error, typeof refusal.detail === "string" ? refusal.detail : ""]
+    .map((part) => part.trim().replace(/[.]$/, ""))
+    .filter((part) => part !== "");
+  return parts.length === 0 ? "" : `The runner said: "${parts.join("; ")}".`;
 }
 
-/** End with a full stop, leaving the runner's own words (and a slug's case) alone. */
-function stop(text: string): string {
-  const trimmed = text.trim();
-  return trimmed === "" || /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-}
+/* -------------------------------------------------------------------------- */
+/* Talking a failed job through                                               */
+/* -------------------------------------------------------------------------- */
 
-function sentence(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed === "") return trimmed;
-  const capital = trimmed[0]!.toUpperCase() + trimmed.slice(1);
-  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
+/**
+ * What a new conversation's composer holds when it is opened from a failed
+ * job that had no conversation of its own (a job the brief form started).
+ * Prefilled, never sent: the person reads it and edits it before paying for
+ * a turn. Short on purpose: the intent, what it was meant to draw, and what
+ * went wrong in the runner's words, which is what the planner needs to
+ * propose a changed brief.
+ */
+export function talkItThroughText(
+  brief: { title: string; slug: string; mode: "new" | "extend"; intent: string },
+  failure: string | null,
+): string {
+  const what = brief.mode === "extend" ? `an extension of ${brief.slug}` : `a new diagram, ${brief.slug}`;
+  const lines = [
+    `A drawing of "${brief.title}" (${what}) failed and I want to change its brief.`,
+    `It was meant to show: ${brief.intent.trim()}`,
+  ];
+  if (failure !== null && failure.trim() !== "") lines.push(`What went wrong: ${failure.trim()}`);
+  return lines.join("\n");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -173,19 +188,23 @@ export function extendKey(storage: Storage | null, name: string, fresh: () => st
   return key;
 }
 
-/** The press became a draft: its key has done its job. */
+/** The press's conversation arrived: its key has done its job. */
 export function forgetExtendKey(storage: Storage | null, name: string): void {
   if (storage === null) return;
   safely(() => storage.removeItem(KEY_PREFIX + name), undefined);
 }
 
 /**
- * What the conversation does on arrival: send `send` as the person's first
- * turn when there is one, and put `compose` in the composer.
+ * What a conversation does on arrival: send `send` as the person's first
+ * turn when there is one, then put `compose` in the composer. `source` is the
+ * diagram an Extend press was for, whose idempotency key is forgotten once
+ * the conversation has arrived (not before: a reload of the press until then
+ * must find the same draft).
  */
 export interface ExtendOpener {
   send: string | null;
   compose: string;
+  source: string | null;
 }
 
 export function leaveOpener(storage: Storage | null, draftId: string, opener: ExtendOpener): void {
@@ -202,10 +221,11 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
   const held = safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
   if (held === null) return null;
   safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
-  const parsed = safely(() => JSON.parse(held) as { send?: unknown; compose?: unknown }, {});
+  const parsed = safely(() => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown }, {});
   const send = typeof parsed.send === "string" && parsed.send.trim() !== "" ? parsed.send : null;
   const compose = typeof parsed.compose === "string" ? parsed.compose : "";
-  return { send, compose };
+  const source = typeof parsed.source === "string" && parsed.source !== "" ? parsed.source : null;
+  return { send, compose, source };
 }
 
 /** `window.sessionStorage`, or null where reading it throws or there is no window. */

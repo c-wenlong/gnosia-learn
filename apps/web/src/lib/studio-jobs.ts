@@ -388,7 +388,8 @@ export function narration(events: readonly StudioEvent[], cap = 20): { at: strin
  * What the failure panel offers. `talk` is the way to change what gets drawn:
  * back to the conversation the job came from, where the gate's findings are
  * already a studio note (E8 of docs/STUDIO-CHAT-FIRST.md). It replaced the
- * brief form's Edit brief, and is shown only for a job that has a draft.
+ * brief form's Edit brief: a link to the job's own conversation, or for a
+ * job the form started, a new conversation prefilled with what it was for.
  */
 export type FailureAction = "retry" | "talk" | "doctor" | "resume";
 

@@ -16,11 +16,15 @@ import {
   narration,
   phaseRows,
   stepLabel,
+  type Brief,
   type FailureAction,
+  type FailureReport,
   type Job,
   type PhaseRow,
   type StudioEvent,
 } from "@/lib/studio-jobs";
+import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
+import { leaveOpener, sessionStore, talkItThroughText } from "@/lib/studio-extend";
 import { conversationHref, panelHref } from "@/lib/studio-view";
 
 /**
@@ -252,15 +256,19 @@ export function JobPanel({
             }}
           />
         )}
-        {report?.actions.includes("talk") === true && typeof job.draftId === "string" && !inConversation && (
-          <Link
-            href={conversationHref(path, job.draftId)}
-            scroll={false}
-            className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
-          >
-            Tell the planner what to change
-          </Link>
-        )}
+        {report?.actions.includes("talk") === true &&
+          !inConversation &&
+          (typeof job.draftId === "string" ? (
+            <Link
+              href={conversationHref(path, job.draftId)}
+              scroll={false}
+              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-medium hover:bg-[var(--surface-hover)]"
+            >
+              Tell the planner what to change
+            </Link>
+          ) : (
+            <TalkItThrough job={job} path={path} failure={report} onFailed={(text) => setSaid({ ok: false, text })} />
+          ))}
         {report?.actions.includes("doctor") === true && (
           <Button type="button" disabled={busy} onClick={() => void refresh()} title="The studio checks doctor on every render of this screen">
             Recheck
@@ -541,6 +549,65 @@ function RetryButton({
       }}
     >
       Retry
+    </Button>
+  );
+}
+
+/**
+ * A failed job with no conversation of its own (the brief form started it,
+ * before the form was removed) gets one: a new draft whose composer is
+ * prefilled, not sent, with what the old brief was for and what went wrong.
+ * The person edits that before a turn is paid for. This replaced Edit brief,
+ * which was that job's only way to change what gets drawn.
+ */
+function TalkItThrough({
+  job,
+  path,
+  failure,
+  onFailed,
+}: {
+  job: Job;
+  path: string;
+  failure: FailureReport;
+  onFailed: (text: string) => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        void (async () => {
+          setBusy(true);
+          try {
+            const detail = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}`, { cache: "no-store" });
+            const body = (await detail.json().catch(() => ({}))) as { brief?: Brief };
+            if (!detail.ok || body.brief === undefined) {
+              onFailed("the runner did not return this job's brief, so there is nothing to talk through");
+              return;
+            }
+            const made = await createDraft({ idempotencyKey: idempotencyKey(`talk:${job.jobId}`) });
+            if (!made.ok) {
+              onFailed(`a conversation could not start: ${made.refusal.error}`);
+              return;
+            }
+            const what = [failure.headline, failure.detail].filter((part) => part !== null && part !== "").join(": ");
+            leaveOpener(sessionStore(), made.data.draftId, {
+              send: null,
+              compose: talkItThroughText(body.brief, what.length > 400 ? `${what.slice(0, 400)}…` : what),
+              source: null,
+            });
+            router.push(conversationHref(path, made.data.draftId), { scroll: false });
+          } catch (error) {
+            onFailed((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+    >
+      {busy ? "Opening a conversation…" : "Talk it through"}
     </Button>
   );
 }

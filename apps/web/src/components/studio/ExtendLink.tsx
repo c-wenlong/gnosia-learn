@@ -14,21 +14,36 @@ import Link, { useLinkStatus } from "next/link";
  * every visible tile would otherwise make those reads for a panel nobody
  * opened.
  */
-export function ExtendLink({ href, className }: { href: string; className?: string }) {
+export function ExtendLink({
+  href,
+  className,
+  diagram,
+}: {
+  href: string;
+  className?: string;
+  /**
+   * The diagram's title, heard after "Extend" by a screen reader and not
+   * shown: on a grid of tiles a list of links all named "Extend" says
+   * nothing about which is which.
+   */
+  diagram?: string;
+}) {
   return (
     <Link href={href} scroll={false} prefetch={false} className={className}>
-      <Label />
+      <Label diagram={diagram} />
     </Link>
   );
 }
 
-function Label() {
+function Label({ diagram }: { diagram?: string | undefined }) {
   const { pending } = useLinkStatus();
   // Both words in one cell, the idle one hidden, so the control keeps the
   // wider word's width and nothing beside it moves when it changes.
   return (
     <span data-pending={pending ? "" : undefined} aria-live="polite" className="grid">
-      <span className={`col-start-1 row-start-1 ${pending ? "invisible" : ""}`}>Extend</span>
+      <span className={`col-start-1 row-start-1 ${pending ? "invisible" : ""}`}>
+        Extend{diagram !== undefined && <span className="sr-only"> {diagram}</span>}
+      </span>
       <span aria-hidden={!pending} className={`col-start-1 row-start-1 ${pending ? "animate-pulse motion-reduce:animate-none" : "invisible"}`}>
         Opening…
       </span>

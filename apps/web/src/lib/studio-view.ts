@@ -597,6 +597,15 @@ export function extendHref(name: string): string {
   return panelHref("/studio", { extend: name });
 }
 
+/**
+ * A diagram's display title from a name-to-title record, or null. Own keys
+ * only: a name comes from the URL, and `?extend=constructor` must not find
+ * `Object.prototype.constructor` and render a function as a title.
+ */
+export function titleOf(titles: Readonly<Record<string, string>>, name: string): string | null {
+  return Object.hasOwn(titles, name) ? (titles[name] ?? null) : null;
+}
+
 /** `/studio/d/<name>`, the canvas route. */
 export function canvasHref(name: string): string {
   return `/studio/d/${encodeURIComponent(name)}`;

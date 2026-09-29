@@ -30,6 +30,7 @@ import {
   readOutcome,
   sortDiagrams,
   studioHref,
+  titleOf,
   topicChips,
   type DiagramListing,
   type RawParams,
@@ -197,11 +198,11 @@ export default async function StudioPage({
       );
     }
     if (view.extend !== null) {
-      const title = titles[view.extend] ?? view.extend;
+      const title = titleOf(titles, view.extend) ?? view.extend;
       return (
         <StudioDialog key="conversation" closeHref={closeHref} label={`Extending ${title}`} tall>
           {/* Keyed by name: Extend on another diagram is another press, with its own post. */}
-          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={view.extend in titles} />
+          <ExtendStart key={view.extend} name={view.extend} title={title} path={path} listed={titleOf(titles, view.extend) !== null} />
         </StudioDialog>
       );
     }

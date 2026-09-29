@@ -17,6 +17,7 @@ import {
   sortDiagrams,
   studioHref,
   thumbnailHref,
+  titleOf,
   toggleTopic,
   topicChips,
   type Diagram,
@@ -287,9 +288,17 @@ describe("what the panel holds", () => {
     expect(parsePanel({})).toMatchObject({ job: null, extend: null, stream: true });
   });
 
-  it("no longer reads the brief form's parameter, which went with the form", () => {
-    expect(parsePanel({ new: "" })).not.toHaveProperty("brief");
-    expect(studioHref(parseView({ new: "job-1" }))).toBe("/studio");
+  it("drops the brief form's old parameter when it rebuilds a link", () => {
+    // `?new=` opened the form, which is gone; a bookmark carrying it lands on
+    // the grid rather than on a panel that no longer exists.
+    expect(studioHref(parseView({ new: "job-1", q: "dot" }))).toBe("/studio?q=dot");
+  });
+
+  it("finds a title by the diagram's own name and nothing inherited", () => {
+    const titles = { "dot-product": "Dot product" };
+    expect(titleOf(titles, "dot-product")).toBe("Dot product");
+    expect(titleOf(titles, "constructor")).toBeNull();
+    expect(titleOf(titles, "toString")).toBeNull();
   });
 
   it("opens an extend from a tile's panel, and a picture does not follow it", () => {
