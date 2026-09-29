@@ -33,6 +33,15 @@ export interface RunOptions {
   cwd?: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Spawn into a process group of its own and stop the whole group on a
+   * timeout or an abort, with `stopChild`. Without it only the direct child is
+   * killed, which for `npm run canvas` is the launcher and leaves the tool and
+   * its Chromium running.
+   */
+  group?: boolean;
+  /** Stop the command when this aborts. Needs `group` to reach past the launcher. */
+  signal?: AbortSignal;
 }
 
 export async function run(
@@ -45,7 +54,17 @@ export async function run(
       cwd: options.cwd ?? REPO_ROOT,
       env: options.env ?? process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: options.group === true,
     });
+    const stop = (): void => {
+      if (options.group === true) void stopChild(child);
+      else child.kill("SIGKILL");
+    };
+    const onAbort = (): void => stop();
+    if (options.signal !== undefined) {
+      if (options.signal.aborted) stop();
+      else options.signal.addEventListener("abort", onAbort, { once: true });
+    }
 
     let stdout = "";
     let stderr = "";
@@ -62,15 +81,17 @@ export async function run(
         ? null
         : setTimeout(() => {
             timedOut = true;
-            child.kill("SIGKILL");
+            stop();
           }, options.timeoutMs);
 
     child.on("error", (error) => {
       if (timer !== null) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
       reject(error);
     });
     child.on("close", (code, signal) => {
       if (timer !== null) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
       resolve({ code, signal, stdout, stderr, json: parseJson(stdout), timedOut });
     });
   });
@@ -204,4 +225,29 @@ function answers(target: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
+}
+
+/**
+ * Kill every process whose command line carries `marker`, and return their
+ * pids. The fallback for what a process-group stop cannot reach: Playwright
+ * puts the Chromium it launches in a group of its own, so a caller points the
+ * tool's `TMPDIR` at a directory named for the work and sweeps by that path.
+ * `sweepOrphans` in `agent.ts` does this for a job; the manual's snippet check
+ * does it for its own runs.
+ */
+export async function sweepByMarker(marker: string): Promise<number[]> {
+  const found = await run("pgrep", ["-f", "--", marker], { timeoutMs: 10_000 }).catch(() => null);
+  if (found === null) return [];
+  const pids = found.stdout
+    .split("\n")
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  return pids;
 }
