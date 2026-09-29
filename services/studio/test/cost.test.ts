@@ -165,6 +165,113 @@ describe("accumulating a real session", () => {
   });
 });
 
+/** One message's frames as `--include-partial-messages` prints them, in order. */
+function partialMessage(id: string, output: number, lineage: string | null = null): object[] {
+  const usage = {
+    input_tokens: 2,
+    cache_creation_input_tokens: 1_000,
+    cache_read_input_tokens: 10_000,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1_000 },
+    output_tokens: 1,
+  };
+  const frame = (event: object) => ({ type: "stream_event", parent_tool_use_id: lineage, event });
+  return [
+    frame({ type: "message_start", message: { id, model: "claude-sonnet-5", usage } }),
+    { type: "assistant", parent_tool_use_id: lineage, message: { id, model: "claude-sonnet-5", usage, content: [{ type: "thinking" }] } },
+    { type: "assistant", parent_tool_use_id: lineage, message: { id, model: "claude-sonnet-5", usage, content: [{ type: "tool_use" }] } },
+    // The delta's cache counts carry no TTL split; only its output is read.
+    frame({ type: "message_delta", usage: { input_tokens: 2, cache_creation_input_tokens: 1_000, cache_read_input_tokens: 10_000, output_tokens: output } }),
+  ];
+}
+
+describe("the partial frames (Phase 2 measured)", () => {
+  it("counts a message's finished output from its message_delta, once", () => {
+    const meter = new JobCostMeter("sonnet");
+    for (const event of [...partialMessage("m1", 900), ...partialMessage("m2", 1_500)]) meter.observeEvent(event);
+    const reading = meter.read();
+    expect(reading.messages).toBe(2);
+    // Before this, the stream said 1 + 1: the count as each message began.
+    expect(reading.usage.outputTokens).toBe(2_400);
+    expect(reading.usage.inputTokens).toBe(4);
+    expect(reading.usage.cacheWrite1hTokens).toBe(2_000);
+    expect(reading.usage.cacheWrite5mTokens).toBe(0);
+    expect(reading.usage.cacheReadTokens).toBe(20_000);
+    expect(reading.source).toBe("stream");
+  });
+
+  it("counts output as it arrives, so a figure read mid-job already has it", () => {
+    const meter = new JobCostMeter("sonnet");
+    const frames = partialMessage("m1", 900);
+    for (const event of frames.slice(0, 3)) meter.observeEvent(event);
+    expect(meter.read().usage.outputTokens).toBe(1);
+    meter.observeEvent(frames[3]);
+    expect(meter.read().usage.outputTokens).toBe(900);
+    // A repeated delta is the same message's last word, not more of it.
+    meter.observeEvent(frames[3]);
+    expect(meter.read().usage.outputTokens).toBe(900);
+  });
+
+  it("credits a delta to the message on its own line of descent, and drops one with no start", () => {
+    const meter = new JobCostMeter("sonnet");
+    const outer = partialMessage("outer", 700);
+    const inner = partialMessage("inner", 300, "toolu_1");
+    // A sub-agent's message starts inside the outer one; each delta is its own.
+    for (const event of [outer[0], inner[0], inner[1], inner[3], outer[1], outer[3]]) meter.observeEvent(event!);
+    expect(meter.read().usage.outputTokens).toBe(1_000);
+    const orphan = new JobCostMeter("sonnet");
+    orphan.observeEvent(partialMessage("x", 500)[3]);
+    expect(orphan.read().usage.outputTokens).toBe(0);
+    expect(orphan.read().usd).toBeNull();
+  });
+
+  it("still lets the result event settle the attempt, and starts the next one clean", () => {
+    const meter = new JobCostMeter("sonnet");
+    for (const event of partialMessage("m1", 900)) meter.observeEvent(event);
+    meter.observeEvent({ type: "result", total_cost_usd: 0.05, usage: { input_tokens: 2, cache_creation_input_tokens: 1_000, cache_read_input_tokens: 10_000, output_tokens: 900 } });
+    expect(meter.read()).toMatchObject({ usd: 0.05, source: "result" });
+    // The same id on the next attempt is a new message there.
+    for (const event of partialMessage("m1", 400)) meter.observeEvent(event);
+    expect(meter.read().usage.outputTokens).toBe(1_300);
+    expect(meter.read().source).toBe("stream");
+  });
+});
+
+describe("a real session with the partial frames (Phase 2 measured)", () => {
+  // `session-partial.ndjson`: a real diagram job run on 2026-09-29 with
+  // `--include-partial-messages`, reduced the same way as the two above. Nine
+  // messages, $0.444758 by the CLI's own figure, 5,082 output tokens. The
+  // meter this replaced summed 68 of them from the stream, $0.394618 (88.7%).
+  const EXACT_PARTIAL_USD = 0.444758;
+  const cut = (body: string, before: (event: { type?: string; event?: { type?: string } }) => boolean, last = false): string => {
+    const lines = body.split("\n").filter((line) => line !== "");
+    const events = lines.map((line) => JSON.parse(line) as { type?: string; event?: { type?: string } });
+    const index = last ? events.findLastIndex(before) : events.findIndex(before);
+    return `${lines.slice(0, index).join("\n")}\n`;
+  };
+
+  it("reports the CLI's own figure from the result event", async () => {
+    const reading = costFromLog(await read("session-partial"));
+    expect(reading).toMatchObject({ usd: EXACT_PARTIAL_USD, source: "result" });
+    expect(reading.usage.outputTokens).toBe(5_082);
+  });
+
+  it("reaches the whole cost from the stream alone when the session is cut before its result", async () => {
+    const reading = costFromLog(cut(await read("session-partial"), (event) => event.type === "result"));
+    expect(reading.source).toBe("stream");
+    expect(reading.messages).toBe(9);
+    expect(reading.usage.outputTokens).toBe(5_082);
+    expect(reading.usd).toBeCloseTo(EXACT_PARTIAL_USD, 6);
+  });
+
+  it("stays at or under the true figure when a kill lands mid-message", async () => {
+    // Before the last message's delta: its output was never reported.
+    const reading = costFromLog(cut(await read("session-partial"), (event) => event.event?.type === "message_delta", true));
+    expect(reading.source).toBe("stream");
+    expect(reading.usd!).toBeLessThan(EXACT_PARTIAL_USD);
+    expect(reading.usd! / EXACT_PARTIAL_USD).toBeGreaterThan(0.95);
+  });
+});
+
 describe("a job that took more than one attempt", () => {
   it("adds every attempt, rather than reporting the last one", async () => {
     const meter = new JobCostMeter("sonnet");

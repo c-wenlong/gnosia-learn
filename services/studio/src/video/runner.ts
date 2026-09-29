@@ -11,7 +11,7 @@ import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEnt
 import { cacheDir } from "../content-cache";
 import { jobDir } from "../paths";
 import { sweepByMarker } from "../proc";
-import { credentialNote, JobRefused } from "../runner";
+import { credentialNote, credentialRecord, JobRefused } from "../runner";
 import { resolveSource } from "../source-note";
 import type { RecordStore } from "../store";
 import { readClaudeDefaults, readPreference, resolveAgentSettings } from "./agent-model";
@@ -98,6 +98,53 @@ function ownerHome(): string {
   } catch {
     return process.env.HOME ?? "/";
   }
+}
+
+/**
+ * The video agent's argv: the diagram agent's seals, this job's permission
+ * file, two `--add-dir`s (three with a source note), and the model and effort
+ * resolved for the job. Exported for its test.
+ */
+export function videoAgentArgv(input: {
+  paths: Pick<VideoPaths, "settings" | "lib" | "out">;
+  prompt: string;
+  sessionId: string;
+  resume: boolean;
+  manual: string | null;
+  model: string | null;
+  effort: string | null;
+  source: string | undefined;
+}): string[] {
+  const { paths } = input;
+  const maxTurns = videoMaxTurns();
+  return [
+    "-p",
+    input.prompt,
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    // The cost meter's output count (`keepsStreamEvent` in ../agent).
+    "--include-partial-messages",
+    "--settings",
+    paths.settings,
+    "--setting-sources",
+    "",
+    "--permission-prompts",
+    "none",
+    "--strict-mcp-config",
+    "--mcp-config",
+    '{"mcpServers":{}}',
+    "--add-dir",
+    paths.lib,
+    "--add-dir",
+    paths.out,
+    ...(input.source === undefined ? [] : ["--add-dir", path.dirname(input.source)]),
+    ...(input.model === null ? [] : ["--model", input.model]),
+    ...(input.effort === null ? [] : ["--effort", input.effort]),
+    ...(maxTurns === null ? [] : ["--max-turns", String(maxTurns)]),
+    ...(input.manual === null ? [] : ["--append-system-prompt-file", input.manual]),
+    ...(input.resume ? ["--resume", input.sessionId] : ["--session-id", input.sessionId]),
+  ];
 }
 
 export class VideoRunner {
@@ -648,6 +695,7 @@ export class VideoRunner {
         onInit: (init) => {
           initNoted = (async () => {
             await this.store.update(id, { resolvedModel: init.model, apiKeySource: init.apiKeySource });
+            await this.store.appendRaw(id, credentialRecord(auth, init.apiKeySource));
             await this.store.emit(id, { type: "step", state: "running", note: credentialNote(auth, init.apiKeySource) });
             await this.store.emit(id, { type: "step", state: "running", note: `the agent runs ${init.model ?? "a model it did not name"}` });
           })().catch(() => undefined);
@@ -782,33 +830,7 @@ export class VideoRunner {
     onInit: (init: { apiKeySource: string | null; model: string | null }) => void;
   }): AgentRun {
     const { paths } = input;
-    const maxTurns = videoMaxTurns();
-    const argv = [
-      "-p",
-      input.prompt,
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--settings",
-      paths.settings,
-      "--setting-sources",
-      "",
-      "--permission-prompts",
-      "none",
-      "--strict-mcp-config",
-      "--mcp-config",
-      '{"mcpServers":{}}',
-      "--add-dir",
-      paths.lib,
-      "--add-dir",
-      paths.out,
-      ...(input.source === undefined ? [] : ["--add-dir", path.dirname(input.source)]),
-      ...(input.model === null ? [] : ["--model", input.model]),
-      ...(input.effort === null ? [] : ["--effort", input.effort]),
-      ...(maxTurns === null ? [] : ["--max-turns", String(maxTurns)]),
-      ...(input.manual === null ? [] : ["--append-system-prompt-file", input.manual]),
-      ...(input.resume ? ["--resume", input.sessionId] : ["--session-id", input.sessionId]),
-    ];
+    const argv = videoAgentArgv(input);
     const env = agentEnv(process.env, input.auth, paths.tmp);
     // An uncached preview of a whole video took up to 131 seconds (measured),
     // past the Bash tool's two-minute default; the tool's own ceiling instead.

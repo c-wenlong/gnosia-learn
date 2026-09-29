@@ -2171,6 +2171,12 @@ factor would make the figure unauditable against the CLI's own, which is the
 one check that catches a stale rate table. So the row records where its number
 came from and every surface that shows a figure shows that beside it.
 
+*Since the phase 2 video measurement* (docs/STUDIO-VIDEOS.md), both agents
+run with `--include-partial-messages` and the meter reads the finished
+`output_tokens` from each message's `message_delta` frame, so a session cut
+before its result now reaches the CLI's own figure; `cost.ts` has the
+re-measurement. The rule above stands: marked, never scaled.
+
 **A SIGTERM'd `claude -p` flushes no result event.** Left open while this was
 built, because all nine sessions on disk had exited cleanly and had one, and
 settled on the live run: the cancelled job's transcript has none. The meter

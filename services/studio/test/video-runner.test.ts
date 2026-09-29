@@ -36,7 +36,7 @@ const catalogMock = vi.hoisted(() => ({
 }));
 vi.mock("../src/catalog", () => catalogMock);
 
-const { VideoRunner, stillWorking, IN_FLIGHT_MAX_MS } = await import("../src/video/runner");
+const { VideoRunner, stillWorking, IN_FLIGHT_MAX_MS, videoAgentArgv } = await import("../src/video/runner");
 const { acceptVideo, discardVideo } = await import("../src/video/review");
 
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
@@ -77,6 +77,25 @@ async function runner(report: Partial<VideoDoctorReport> = {}) {
 function brief(over: Partial<ValidVideoBrief> = {}): ValidVideoBrief {
   return { ...narratedBrief(), idempotencyKey: `key-${Math.random()}`, ...over };
 }
+
+describe("the video agent's argv", () => {
+  it("asks for the partial frames, so the live cost counts output as it is written", () => {
+    // Phase 2 measured: the stream summed 932 output tokens against 20,630 in
+    // the made video's result, since only `message_delta` carries the count.
+    const argv = videoAgentArgv({
+      paths: { settings: "/s.json", lib: "/lib", out: "/out" },
+      prompt: "make it",
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      resume: false,
+      manual: null,
+      model: "sonnet",
+      effort: null,
+      source: undefined,
+    });
+    expect(argv).toContain("--include-partial-messages");
+    expect(argv.slice(argv.indexOf("--output-format"), argv.indexOf("--output-format") + 2)).toEqual(["--output-format", "stream-json"]);
+  });
+});
 
 describe("the hang timer's question", () => {
   it("counts a wrapper call that ended inside the window, and never a file a scene wrote under render/", async () => {

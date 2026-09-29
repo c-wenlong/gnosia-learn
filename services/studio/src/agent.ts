@@ -164,6 +164,30 @@ export interface RunWatch {
   stillWorking?: () => Promise<boolean>;
 }
 
+/**
+ * Whether a line of the agent's stdout reaches `onLine`, and so the session
+ * log, the cost meter and every reader of either.
+ *
+ * Both agents run with `--include-partial-messages`, and for one reason: an
+ * assistant event carries the output count from its message's first frame,
+ * before a word was written, and nothing else in the stream corrects it. A
+ * video job's stream summed 932 output tokens against 20,630 in its result
+ * (Phase 2 measured in docs/STUDIO-VIDEOS.md), so a killed job would have
+ * recorded about a third too little. The `message_delta` frame carries the
+ * finished count, and `message_start` names the message it belongs to.
+ *
+ * Every other partial frame is a piece of text, thinking or tool input that
+ * the assistant event repeats whole when the block ends. Kept, they would
+ * double the log for nothing, so they are dropped here, after the idle timer
+ * has seen them: a model writing a long file is working, not silent.
+ */
+export function keepsStreamEvent(event: Record<string, unknown>): boolean {
+  if (event.type !== "stream_event") return true;
+  const inner = event.event;
+  const type = typeof inner === "object" && inner !== null ? (inner as { type?: unknown }).type : undefined;
+  return type === "message_start" || type === "message_delta";
+}
+
 export class AgentRun {
   private readonly child: ChildProcess;
   private readonly options: RunWatch;
@@ -240,8 +264,9 @@ export class AgentRun {
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (line.trim() === "") continue;
-          this.options.onLine(line);
           const event = safeParse(line);
+          if (event !== null && !keepsStreamEvent(event)) continue;
+          this.options.onLine(line);
           if (event === null) continue;
           if (event.type === "system" && event.subtype === "init") {
             apiKeySource = typeof event.apiKeySource === "string" ? event.apiKeySource : null;
@@ -277,7 +302,8 @@ export class AgentRun {
       });
 
       this.child.on("close", (code, signal) => {
-        if (buffer.trim() !== "") this.options.onLine(buffer);
+        const tail = buffer.trim() === "" ? null : safeParse(buffer);
+        if (buffer.trim() !== "" && (tail === null || keepsStreamEvent(tail))) this.options.onLine(buffer);
         this.clearTimers();
         resolve({
           exitCode: code,
@@ -551,6 +577,9 @@ export async function startAgent(options: AgentOptions): Promise<AgentRun> {
     "--output-format",
     "stream-json",
     "--verbose",
+    // For the cost meter: the `message_delta` frame is the only place the
+    // stream says how many tokens a message wrote (`keepsStreamEvent`).
+    "--include-partial-messages",
     "--settings",
     file,
     "--setting-sources",

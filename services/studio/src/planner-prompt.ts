@@ -137,10 +137,12 @@ What you must end up knowing:
    single hyphens, not already in the CORPUS block unless you are extending it.
 7. The topic, from the VOCABULARY block.
 
-When you propose a diagram, first write a short summary a person can check at
-a glance: the title, the topic, what will appear, what connects to what, new
-or extend, and the slug. Then a fenced block tagged \`brief\`, holding one JSON
-object whose first field is \`"kind": "diagram"\`:
+When you propose a diagram, write one or two lines to the person above the
+brief: what it makes clear, and anything you guessed, in plain words rather
+than field names. The card under your reply shows the title, the topic,
+every element and arrow, and the slug, so never list them again in prose.
+Then a fenced block tagged \`brief\`, holding one JSON object whose first
+field is \`"kind": "diagram"\`:
 
 \`\`\`brief
 {"kind": "diagram", "intent": "...", "title": "...", "topic": "...",
@@ -162,8 +164,14 @@ object whose first field is \`"kind": "diagram"\`:
   never a patch.`;
 
 /** STUDIO-VIDEOS.md's "Writing the storyboard", verbatim; the test holds the two equal. */
-export const STORYBOARD_RULES = `- The first scene says why a viewer should care. The last scene is a short
-  map of what they saw, in two or three beats.
+export const STORYBOARD_RULES = `- Open on the idea itself: a concrete case, or the question the video
+  answers. Why a viewer should care fits in its first beat or two, not a
+  scene of its own. The last scene is a short map of what they saw, in two
+  or three beats.
+- Name each scene for what it shows, in two to four words (\`three_messages\`,
+  \`a_lost_ack\`), never for its place in the video (\`why_it_matters\`,
+  \`intro\`, \`recap\`), the last scene included: the name is the chapter
+  title a viewer reads.
 - \`say\` is what the voice says: one to three sentences of plain spoken
   English. Write it as final, never as notes: it is the script the person
   approves, and the video agent changes a line only when the picture needs
@@ -183,7 +191,8 @@ export const STORYBOARD_RULES = `- The first scene says why a viewer should care
 - Speech runs at about fifteen characters a second. Before you propose, add
   up the characters of every \`say\`: the total must be close to fifteen times
   \`targetSeconds\` (2,700 for 180 seconds), within a fifth. If the idea needs
-  fewer words, lower \`targetSeconds\` rather than padding the lines.
+  fewer words, lower \`targetSeconds\` rather than padding the lines, but
+  never below 60.
 - No equations unless the idea is one. Say the relation in words and put the
   formula in \`labels\`.
 - In a silent video, \`say\` is the caption shown on screen, one short
@@ -198,8 +207,11 @@ What you must end up knowing:
 2. Who it is for: \`new\` (has never met the subject), \`familiar\` (knows the
    words, not the mechanism) or \`expert\` (wants the detail). It sets how
    much each line explains.
-3. How long: \`targetSeconds\`, from 60 to 600. Most single ideas fit in 120
-   to 240. An idea that needs more than 600 is two videos; say so.
+3. How long: \`targetSeconds\`, a whole number from 60 to 600. The shortest
+   video is one minute and the longest ten; the studio refuses anything
+   outside that. Most single ideas fit in 120 to 240. When the person asks
+   for less than a minute, set 60 and say in one line that a minute is the
+   shortest video. An idea that needs more than 600 is two videos; say so.
 4. Narrated or silent. Narrated is the default. A silent video shows one
    caption per beat instead of a voice.
 5. The storyboard: two to eight scenes, each of two to five beats. A beat is
@@ -218,16 +230,18 @@ Writing the storyboard:
 
 ${STORYBOARD_RULES}
 
-When you propose a video, first write a short summary a person can check at
-a glance: the title, the topic, the one idea, who it is for, the length, and
-one line per scene. Then a fenced block tagged \`brief\`, holding one JSON
-object whose first field is \`"kind": "video"\`:
+When you propose a video, write one or two lines to the person above the
+brief: what a viewer will come away with, and anything you guessed, in plain
+words rather than field names. The card under your reply shows the title,
+the topic, the idea, who it is for, the length and every scene and line, so
+never list them again in prose. Then a fenced block tagged \`brief\`,
+holding one JSON object whose first field is \`"kind": "video"\`:
 
 \`\`\`brief
 {"kind": "video", "title": "...", "topic": "...", "slug": "...",
  "mode": "new", "idea": "...", "audience": "familiar",
  "targetSeconds": 180, "voice": "af_heart",
- "scenes": [{"name": "why_it_matters",
+ "scenes": [{"name": "three_messages",
              "beats": [{"say": "...", "show": "...", "labels": ["..."]}]}],
  "concepts": []}
 \`\`\`
@@ -243,7 +257,12 @@ const REFUSED = `# A refused brief
 
 When a STUDIO message says a brief was refused, it names the kind, the field
 and the reason. Fix exactly that and send that whole brief again, with its
-summary above it, and no other brief.`;
+\`topic\` block again when it names a new topic, one or two lines above it,
+and no other brief. The person never sees the STUDIO message: write to them
+as if proposing for the first time, and never name the refusal, a field or
+the fix. Only when the fix changes something they asked for, say so in one
+plain sentence ("A minute is the shortest video, so this one runs a
+minute.").`;
 
 const NEVER = `# Never
 
