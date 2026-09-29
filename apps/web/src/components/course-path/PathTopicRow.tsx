@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
+import { cx, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { PathNode } from "@/components/ui/PathNode";
 import { conceptHref, nodeCaption, topicSessionHref, type TopicMastery } from "@/lib/course-path";
@@ -150,7 +150,7 @@ function TopicPanel({
     <div id={id} hidden={hidden} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
       {mastery && (
         <section>
-          <h4 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Concepts</h4>
+          <h4 className={LABEL}>Concepts</h4>
           <ul className="mt-2 flex flex-col gap-1.5">
             {mastery.concepts.map((c) => (
               <li key={c.slug} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -169,7 +169,7 @@ function TopicPanel({
 
       {topic.subtopics.length > 0 && (
         <section>
-          <h4 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">Covers</h4>
+          <h4 className={LABEL}>Covers</h4>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-text2">
             {topic.subtopics.map((s) => (
               <li key={s}>{s}</li>
@@ -204,7 +204,7 @@ function TopicPanel({
       )}
 
       <div>
-        <label htmlFor={noteId} className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">
+        <label htmlFor={noteId} className={LABEL}>
           Your note
         </label>
         <textarea

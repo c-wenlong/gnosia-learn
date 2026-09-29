@@ -208,6 +208,34 @@ export function queueDomain(domains: readonly (string | null)[]): string | null 
   return best[1] * 2 > domains.length ? `mostly ${best[0]}` : null;
 }
 
+/** What a leech is called on screen. `leech` stays the field's name everywhere else. */
+export const LEECH_LABEL = "Keeps slipping";
+
+/** The prompt of a card built from a note with no check: "Recall: <title>". */
+export function recallPrompt(title: string): string {
+  return `Recall: ${title}`;
+}
+
+/**
+ * The label over a card's prompt, or null when it would only repeat it.
+ *
+ * A check names its concept here, since its prompt is a question. A recall
+ * card built from a note is prompted "Recall: <title>", so its label would
+ * say the heading twice and is left out; but a recall card built from a check
+ * whose answer cannot become choices keeps the check's question as its
+ * prompt, and there the label is the only place the concept is named. A leech
+ * says "Keeps slipping" either way: the reader's word for it, where the
+ * catalog and the CLI keep Anki's.
+ */
+export function cardEyebrow(item: Pick<ReviewItem, "kind" | "title" | "prompt" | "leech">): string | null {
+  const named = item.kind === "recall" && item.prompt.trim() === recallPrompt(item.title).trim();
+  const parts = [
+    named ? null : `${item.kind === "check" ? "Check" : "Recall"} · ${item.title}`,
+    item.leech ? LEECH_LABEL : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
 /** The footer's card line: "ease 2.5 · 4 reps · last seen 4 days ago", or "new card". */
 export function cardStats(item: Pick<ReviewItem, "ease" | "repetitions" | "lastReviewed">, now: Date): string {
   if (item.ease === null) return "new card";

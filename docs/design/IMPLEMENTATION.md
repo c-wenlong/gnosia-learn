@@ -83,8 +83,17 @@ a hex value in a component.
 **Type.** `font-sans` is Figtree (next/font, self-hosted), the body default
 at 15px/1.5. `font-display` is Georgia from the system: page titles at
 28/700, concept titles at 26 to 32/700, the wordmark at 20/700. Card titles
-16/700, eyebrows 11/700 uppercase, button labels 15/600, dense rows 14,
-lesson prose 17. `font-mono` is still Geist Mono, for code.
+16/700, eyebrows and small labels 12/600 in `--text2` (`LABEL` in
+`components/ui/classes.ts`), button labels 15/600, dense rows 14, lesson
+prose 17. `font-mono` is still Geist Mono, for code.
+
+**Sentence case, everywhere.** No `uppercase`, no tracked-out label, no
+title, badge, table head or button typed in capitals; an acronym stays one.
+Until 2026-09-29 the eyebrows were 11/700 uppercase tracked and the stat
+tile strip was uppercase; the owner retired both, with every label that
+repeats what the layout, a heading or an icon already says. The rule and its
+reasons are in [DESIGN.md](DESIGN.md#sentence-case-2026-09-29) and
+AGENTS.md; `apps/web/src/lib/sentence-case.test.ts` enforces the styling.
 
 **Radius.** 20 cards, 16 panels and unit headers, 12 choice rows and
 placeholders, 8 inputs, a pill for buttons, chips, pills and search. No
@@ -117,16 +126,16 @@ Import from `@/components/ui` or from the file.
 | `Button` | `variant?: "primary" \| "secondary" \| "ghost" \| "ok" \| "warn" \| "accent" \| "brand"` (default primary), `size?: "md" \| "sm"` (44px or 36px), `block?: boolean`, `href?: string` (renders a `next/link`, plus `prefetch?`), `disabledReason?: string` (with `disabled`: why, as 12px text beside the button tied by `aria-describedby`, since a disabled button takes no focus and its `title` reaches nobody; omit it when the reason is already on screen), `className?`, and every `<button>` or `<a>` attribute. Default `type="button"`. A link has no disabled state | `Btn` |
 | `Card` | `title?: ReactNode`, `action?: ReactNode`, `tight?: boolean` (padding 14), `as?: "section" \| "div" \| "article" \| "li"`, `className?`, `id?`, `aria-label?` | `Card` |
 | `CardAction` | `href`, `children`: the "See all" link for a card's `action` slot | `Card` action |
-| `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `bodyClassName?` | `Panel` |
+| `Panel` | `title?`, `actions?` (a 48px header with a hairline under it), `as?: "section" \| "div" \| "aside"`, `className?`, `headerClassName?` (hide the header where a tab row already names the panel), `titleClassName?` (hide only the title, where the header's actions must still show), `bodyClassName?` | `Panel` |
 | `Chip` | `active?: boolean`, `size?: "md" \| "sm"` (34px or 28px), `href?` (a link), `onClick?` (a toggle with `aria-pressed`), `title?`, `className?`. Neither `href` nor `onClick` renders a static label | `Chip` |
 | `FilterMenu` | `label: string` ("Type"), `options: FilterOption[]` (`value`, `label`, `short?` for the trigger, `count?` at the right, `detail?` as a muted second line, `section?` heading), `value`, `defaultValue` (the "All" value; any other fills the trigger), `onChange(value)`, `busy?` (dims the trigger while a navigation runs), `className?`. A `Chip`-styled trigger reading "Label: Value" over an ARIA listbox: arrows, Home, End, typeahead, Enter or Space picks, Escape, Tab or a click outside closes. The first option is "All" and is how a filter is cleared. Single-select. A client component, the kit's only one; its model is the React-free `filter-menu.ts` | none (see Deviations) |
 | `Composer` | `value`, `onChange(value)`, `onSubmit(value)`, `label` (screen-reader name), `placeholder?`, `maxLength?`, `disabled?` (the field and Send), `sendDisabled?` (Send only, as while a reply arrives), `disabledReason?` (12px under the field, tied by `aria-describedby`), `autoFocus?`, `inputRef?`, `onModEnter?` (Cmd/Ctrl+Enter; sends when absent), `maxRows?` (default 6), `sendLabel?`. The chat input the concept tutor and the studio's planner share: a 52px textarea at radius 16 growing to six lines, Enter sends, Shift+Enter is a new line, and an IME's Enter is left alone. A client component; its key and height rules are the React-free `composer-keys.ts` | the tutor's input |
 | `Pill` | `dot?: string` (a CSS colour, e.g. `"var(--streak)"`), `title?`, `className?` | `Pill` |
-| `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "div"`, `className?` | `Eyebrow` |
+| `Eyebrow` | `as?: "p" \| "span" \| "h2" \| "h3" \| "h4" \| "div"`, `className?`. 12/600 sentence case in `--text2` since 2026-09-29; only for a label the heading under it does not already say | `Eyebrow` |
 | `MasteryDot` | `bucket: MasteryBucket`, `size?: number` (px, default 14), `showLabel?: boolean`, `pL?: number \| null` (printed with the label), `className?` | `Mastery`, `MasteryLabel` |
 | `ProgressBar` | `percent?: number` (0 to 100) or `progress?: ProgressCounts`, `showLabel?` (defaults on only with `progress`), `size?: "md" \| "sm"` (8px or 6px), `tone?: "accent" \| "ok" \| "hi" \| "mid"` (`hi` and `mid` are the mastered and learning colours), `label?` (accessible name), `className?`. Full width of its container: size it with a wrapper, not `className` (see Gotchas) | `Bar` |
 | `TargetBar` | `done: number`, `total: number`, `label?`, `className?`: a 20px track with "x / y" beside it | `TargetBar` |
-| `StreakDay` | `letter: string`, `state: StreakDayState` (`done`, `forgiven`, `missed`, `today`, `future`), `isToday?`, `description: string` (what a screen reader hears), `className?`. Feed it from `streakStrip` in `@/lib/today-core` | `StreakDay` |
+| `StreakDay` | Removed 2026-09-29 with Today's Streak card, its only user (see the Streak card rows under Deviations). The habit data still carries `streak.week` | `StreakDay` |
 | `Input` | `pill?: boolean`, `className?`, every `<input>` attribute | `Input` |
 | `SearchField` | `label: string` (screen-reader label, required), `name?` (default `q`), `className?` (the wrapper, e.g. a width), `inputClassName?`, every `<input>` attribute but `type` | `Input` with `pill` |
 | `StatTile` | `value: ReactNode`, `label: string`, `tone: "ok" \| "accent" \| "violet" \| "streak"`, `className?` | `StatTile` |
@@ -149,7 +158,7 @@ The pure helpers beside them:
 | [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags)`, `courseStatus(summary, completed)`, `filterCourses(...)`, `usedTags(...)` |
 | [`@/lib/habit-core`](../../apps/web/src/lib/habit-core.ts) | the `Habit` types, `computeHabit`, `computeStreak`, `computeTarget`, `habitLabels`, `dayKey`, `weekStart`, `addDays`, `parseDailyTarget`, `parseLeeway` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), the validators the preference route runs (`validateDailyTarget`, `validateLeeway`, `validateTutorStyle`, `validateMotionMode`), and the words (`describeTarget`, `describeLeeway`, `targetChoices`) |
-| [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `streakStrip`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
+| [`@/lib/today-core`](../../apps/web/src/lib/today-core.ts) | the Today model (`TodayModel`) and its pure parts: `activityRows`, `dueLabel`, `countCheckBlocks`, `targetRows`, `coursesInProgress`, `pastDayLabel`, `futureDayLabel` |
 
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
@@ -331,7 +340,7 @@ What 1c shipped, and the contract 1d (session focus mode) builds on.
 | [`@/lib/concept-workspace`](../../apps/web/src/lib/concept-workspace.ts) | Server. `readConceptWorkspace(slug)` (and `loadConceptWorkspace` for pages) does the reads: the knowledge base, the note, the event log, the review card, the asset links. The page, `GET /api/concepts/[slug]` and the tutor all go through it |
 | [`@/lib/concept-graph`](../../apps/web/src/lib/concept-graph.ts) | Pure. `neighbourhood`, `courseScope` (course, or the note's folder when it is in no course, with the transitive reduction applied), `dependantsOf`, `backlinksOf`, `defaultSelection`, `layoutGraph` |
 | [`ConceptGraph`](../../apps/web/src/components/ConceptGraph.tsx) | The graph drawing, rewritten: mastery-bucket dots, prerequisites above, the selected concept ringed, its own edges in the accent. Nodes are links (`hrefFor`, server) or buttons (`onSelect`, client) |
-| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files |
+| [`Cite`](../../apps/web/src/components/ui/Cite.tsx), [`TutorMessage`, `UserMessage`](../../apps/web/src/components/ui/Message.tsx) | The kit's citation chip and chat turns, server-safe, imported from their files. `TutorMessage`'s `label` ("Tutor", "Planner") names the turn for a screen reader only; the visible eyebrow over each reply went on 2026-09-29, since the turn's shape already says who is speaking |
 
 **Backlinks** are the concepts whose `requires` or `assumes` names this one;
 **dependants** ("Leads to") are the `requires` half only. **Check status** in
@@ -531,29 +540,28 @@ in that session.
 | Review, header | "CP4281 mostly" | the note folder ("mostly transformers") | a concept belongs to a folder for certain and to a course only through its topics; the folder is the honest label |
 | Review, phone header | "Review" | the wordmark | the shell's rule, as on every phone page |
 | Review, close screen | not drawn | title, three stat tiles (reviewed, again, next due), Back to Today | the brief's close screen, from the session close's parts |
-| Learn index header | "Add concept" button | rendered disabled, with the CLI command beside it as its `disabledReason`; hidden on a phone | concepts are added by the `learn` CLI; the web app never writes the content half |
+| Learn index header | "Add concept" button | not drawn since 2026-09-29 (until then disabled, with the CLI command as its reason) | concepts are added by the `learn` CLI and the web app has no way to add one, so the owner's rule on controls for what the app cannot do applies |
 | Learn index graph card | a placeholder with "toggle: full course" | a Neighbourhood / Course chip pair in the card header; Course reads "Folder" for a concept in no course | 24 of 32 concepts link to no curriculum item, so "course" falls back to the note's folder |
 | Learn index table | no selected row | the selected row is tinted `--surface2`; clicking a row selects it, the title links to the workspace | the graph follows the selection, so the selection has to show |
 | Course graph | not drawn | the transitive reduction of the edges | the algorithms folder drawn with every edge was a hairball |
 | Workspace left panel | summary, links, sources, backlinks only | the same, plus the whole note behind "Read the whole note" | the panel is "Note & sources"; the note is closed by default to keep the drawn layout |
 | Workspace sources | three coloured sources | "Your note" is always source [1], frontmatter sources follow | no note in the corpus fills `sources:` yet, so the note is the one source every concept has |
 | Workspace tutor | "Learning guide · concise" | the stored tutor style's label ("Learning guide · concise" by default), as a link to Settings | the label is the style the prompt is given; the link says where it changes |
-| Tutor turns | Save to note and Why? | Why? first, sending "Why?"; Save to note last, disabled, with "Not built yet." beside it | extending `POST /api/learner/note` is not in 1c |
-| Studio cards | "Generate flashcards", "Add source" | disabled, with the reason beside each (`disabledReason`) | no feature behind them yet |
+| Tutor turns | Save to note and Why? | Why? only; Save to note was drawn disabled with "Not built yet." until 2026-09-29, when the owner had every not-built control removed | extending `POST /api/learner/note` is not in 1c |
+| Studio cards | "Generate flashcards", "Add source" | not drawn (disabled with a reason until 2026-09-29) | no feature behind them yet, and a control that only says so was removed |
 | Workspace tutor | not drawn | `?ask=<text>` prefills the tutor's input (never sends it) and opens the Tutor tab on a phone | a session's "Ask the tutor" lands here with its question |
 | Workspace panels | fixed three columns | 250 and 270px side panels from 900px, 290 and 310 from 1280px; tabs below 900px; each side panel collapses to a 48px rail | the brief's collapse and phone rules |
-| Today, Streak card | "Calendar" link in the title row | not drawn | there is no calendar page to open |
-| Today, Streak card | "Reminders state facts, never guilt" under the strip | "Studied today." or "Nothing recorded yet today." | reminders are not built; the line states today's fact instead |
+| Today, Streak card | the card, with its week of discs | not drawn since 2026-09-29; the top bar's streak pill stays, and is a button (`HabitPill`) whose popover and accessible name carry the free misses and today's fact | the card repeated the pill (the owner's call). Until then it drew the week with a fifth `forgiven` disc state and no "Calendar" link |
 | Today, Streak strip | four disc states | a fifth, `forgiven`: a dashed `--streak` ring | the habit data has misses the leeway covered, and they should not read as either a done day or a plain miss |
 | Today, Next up | "Next on your path · CP4281 · Module 2" | the course and module when a curriculum item links the concept, otherwise the note's folder ("Next on your path · algorithms") | most notes link no curriculum item yet |
-| Today, Reviews due | Snooze to tomorrow | drawn, disabled, with "Not built yet." beside it | snoozing is out of scope for 1a |
+| Today, Reviews due | Snooze to tomorrow | not drawn (disabled with "Not built yet." until 2026-09-29) | snoozing is out of scope for 1a |
 | Today, Recent activity | one row per concept | one row per sitting (session and kind); a row over several concepts prints "p(L) 2 up · 5 down" instead of one before-and-after | a probe across seven concepts would otherwise fill the card with one session |
 | Today, Full history | a history page | links to `/learn` | there is no history page yet |
 | Today, phone | the page title in the header | "Today" printed under the header, visually hidden from 768px up | the shell's header shows the wordmark, as on Courses |
 | Settings, Theme | System | Light or Dark | the theme is a two-value cookie the root layout reads; a system mode belongs to the shell |
-| Settings, Reminders | "Facts only · 9:00" | a disabled select reading "Off", with a note that nothing is stored | reminders are not built, and `reminders` is not a preference key yet |
+| Settings, Reminders | "Facts only · 9:00" | not drawn (a disabled "Off" until 2026-09-29) | reminders are not built, and `reminders` is not a preference key yet |
 | Settings, Model providers | "Order: 3 free tiers" | the configured providers' ids in order, the labels and models as a tooltip | the full labels do not fit the 300px box |
-| Settings, field notes | notes under Daily target and BKT priors only | also under Reminders, Tutor style and Motion | each says what the choice does today (Reminders and Motion that they are not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
+| Settings, field notes | notes under Daily target and BKT priors only | also under Tutor style and Motion | each says what the choice does today (Motion that it is not applied, Tutor style where it is used), so a stored choice does not pretend to do something |
 | Filter rows on Courses, Learn and Library | a row of chips, one per option | one `FilterMenu` per group: Courses has Progress and Tag, Learn has Status, Library has Type and Course (and Topic while `?topic=` is set). Each option carries its count | the option count outgrew a row: Library showed twenty chips over three rows, Courses eleven. Picking "All" clears a group, so there is no separate clear button. Courses' two menus combine (in progress and tagged), where the old chips were one choice among all eleven |
 
 ### Session focus mode (phase 1d)
@@ -580,13 +588,14 @@ in that session.
 | Where | Hi-fi | Built | Why |
 | --- | --- | --- | --- |
 | Library filter row | six kind chips and three course chips on one line | a Type menu and a Course menu, then the sort and the search on the right; the companion kinds (captions, chapters, diagram source, transcript) are a "Companion files" section at the foot of the Type menu, and the count line says how many rows All kinds leaves out | ten courses and four companion kinds did not fit one line; the companion kinds are values of the same `?kind=`, so a second control for them would disagree with the Type trigger whenever one was chosen |
+| Library card | a "video" label in the empty thumbnail, a lowercase kind chip, "concept note" on the meta line | an empty thumbnail box, the kind chip in sentence case ("Note"), and the meta line without "concept note"; "svg" is "SVG"; a note whose concept is itself shows the mastery label instead of its title a second time | the kind was printed up to three times on one card (2026-09-29) |
 | Library course options | "CP4281" | the course code, with its title as a muted second line and its asset count at the right | the title was a tooltip on the old chips; in a list it has room to be read |
 | Library count | "208 assets" | the standalone count (135), or "12 of 135 assets" once anything is filtered | the other 71 rows are companion files the default view leaves out |
 | Library card meta | "4:12 · manim" | the tool and the size ("manim · 9.6 MB") | the catalog records no duration |
 | Library card concept | a concept with a mastery dot on every card | the first concept from `asset_concept` with its dot and "+n" for more; with none, the asset's topic in plain text and no dot | only notes, sessions and the two diagrams have `asset_concept` rows; no video does yet |
 | Library grid | fixed 300px cards | an auto-fill grid, 280px minimum | four across at 1392px and one on a phone |
 | Library search | DESIGN.md's API table proposed a search endpoint | the page's own `?q=`, searched on the server during render; no JSON endpoint | the library is the only caller today; phase 1c's Learn search can lift `searchHits` and `readSearchText` behind a route when it needs one |
-| Asset page eyebrow | "RENDERED 2026-09-12" | "INDEXED" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
+| Asset page eyebrow | "RENDERED 2026-09-12" | "indexed" and the day the row entered the catalog | the catalog knows when it indexed a file, not when manimkc rendered it |
 | Asset page Mark watched | on a video | "Mark read" on anything that is not a video; a video has no button and records itself | one `watched` event kind either way; a video appends it once 90% of it has played (`POST /api/learner/playback`), since a button asked the reader to report something the player already knew |
 | Asset page Add to note | always drawn | drawn only when the asset explains a concept, linking to that concept's workspace | with no concept there is no note to add to |
 | Asset page Explains | always two rows | "No concept is linked to this asset yet." when there are none; "not started" in place of p(L) for a concept with no evidence | a prior is not a measurement |
@@ -631,8 +640,12 @@ Left on purpose:
   node's panel, and is where Continue goes for a topic with no concept note.
   It runs the old topic tutor, which does not read `tutorStyle`. Retiring it
   needs those topics to have concepts first, so it is its own change.
-- **Reminders are not built.** Settings shows a disabled "Off" and Today's
-  Streak card states the day's fact instead.
+- **Reminders, snooze, Save to note, Add source and Generate flashcards are
+  not built,** and since 2026-09-29 none of them is drawn: a disabled control
+  that only says "Not built yet." was the owner's example of copy to remove.
+  The Deviations rows above say where each belongs, and a one-line comment
+  marks the spot where the code would not show it (Snooze, Save to note,
+  Reminders).
 - **`reducedMotion` is stored, not applied.** Only the system's
   `prefers-reduced-motion` is honoured, where a rule exists; the Settings
   note says so.

@@ -9,20 +9,19 @@ import { ASSET_PROBLEMS } from "@/lib/asset-problems";
  * at that size when there is nothing to show).
  *
  * A video's poster or the diagram itself when the file route can serve them,
- * the kind in words otherwise. A picture that fails to load falls back to the
- * same box, reading "unavailable", with the reason from the status route as
+ * an empty box otherwise: the kind is already the caption beside it, so the
+ * box does not say it again. A picture that fails to load falls back to the
+ * same box, reading "Unavailable", with the reason from the status route as
  * its tooltip: the rail has no room for the library's failure panel, but it
  * still says why rather than leaving a broken image.
  */
 export function AssetThumb({
   src,
   statusHref,
-  label,
   contain = false,
 }: {
   src: string | null;
   statusHref: string | undefined;
-  label: string;
   /** Fit the whole picture in, for a diagram; a poster fills the box. */
   contain?: boolean;
 }) {
@@ -48,7 +47,7 @@ export function AssetThumb({
   const reason = failure?.code ? ASSET_PROBLEMS[failure.code].label : undefined;
   return (
     <span className="block w-[72px] shrink-0" title={failure ? (reason ?? "Preview unavailable") : undefined}>
-      <Placeholder label={failure ? "unavailable" : label.toLowerCase()} height={48} className="px-1" />
+      <Placeholder label={failure ? "Unavailable" : undefined} height={48} className="px-1" />
     </span>
   );
 }

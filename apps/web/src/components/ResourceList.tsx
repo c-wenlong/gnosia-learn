@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { Resource } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
-import { inputClasses } from "@/components/ui/classes";
+import { inputClasses, LABEL } from "@/components/ui/classes";
 import { useLearner } from "@/lib/learner-context";
 
 const typeLabel: Record<string, string> = {
@@ -73,7 +73,7 @@ export function ResourceList({
   return (
     <section className="space-y-4 text-[14px]">
       <div>
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">
+        <h3 className={LABEL}>
           Curated resources
         </h3>
         {curated.length === 0 ? (
@@ -98,7 +98,7 @@ export function ResourceList({
       </div>
 
       <div>
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.05em] text-text3">
+        <h3 className={LABEL}>
           Your resources
         </h3>
         {user.length === 0 ? (

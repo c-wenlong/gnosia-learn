@@ -37,8 +37,10 @@ action is "Open your book", which goes to `/sign-in`.
 KNOW") read as generated. Of the four references, Brilliant and Khan Academy
 use none; Duolingo uppercases only its buttons, and Masterclass only its one
 hero headline. Labels, kickers and card headings on the public pages are
-sentence case. The one exception is the wordmark, whose spaced capitals are
-the logo's own lettering.
+sentence case. Since 2026-09-29 the same holds on every page of the app,
+and a label that only repeats the heading or the layout is left out
+([DESIGN.md](DESIGN.md#sentence-case-2026-09-29)). The one exception is the
+wordmark, whose spaced capitals are the logo's own lettering.
 
 ## Palette
 

@@ -414,7 +414,7 @@ function CodeBlock({ info, text, className }: { info: string; text: string; clas
       className={`${className} overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--sidebar-bg)]`}
     >
       {info !== "" && (
-        <p className="border-b border-[var(--border)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+        <p className="border-b border-[var(--border)] px-3 py-1.5 font-mono text-xs text-[var(--muted)]">
           {info}
         </p>
       )}

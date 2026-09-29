@@ -277,9 +277,9 @@ export function pathStatus(
   };
 }
 
-/** "4 of 4 mastered", "1 of 5 done", or "locked until Module 1". */
+/** "4 of 4 mastered", "1 of 5 done", or "Locked until Module 1". */
 export function unitSubtitle(status: ModuleStatus, previousOrder: number | undefined): string {
-  if (status.locked && previousOrder !== undefined) return `locked until Module ${previousOrder}`;
+  if (status.locked && previousOrder !== undefined) return `Locked until Module ${previousOrder}`;
   return `${status.done} of ${status.total} ${status.conceptBacked ? "mastered" : "done"}`;
 }
 

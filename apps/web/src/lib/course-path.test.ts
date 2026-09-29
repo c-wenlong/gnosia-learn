@@ -246,7 +246,7 @@ describe("labels", () => {
     );
     expect(unitSubtitle(s.modules[0]!, undefined)).toBe("1 of 1 mastered");
     expect(unitSubtitle(s.modules[1]!, 1)).toBe("0 of 2 done");
-    expect(unitSubtitle(s.modules[2]!, 2)).toBe("locked until Module 2");
+    expect(unitSubtitle(s.modules[2]!, 2)).toBe("Locked until Module 2");
     expect(courseSummaryLine(s)).toBe("3 modules · 4 topics · 25% done");
   });
 
