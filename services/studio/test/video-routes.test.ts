@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -18,6 +19,18 @@ import { topicListAnswer } from "./vocabulary";
  * (a link in `render/` refused, byte ranges for the mp4), and health's
  * `video` and `agent` blocks.
  */
+
+/** Every handle `open` returned, by path, so a test can see whether one was closed. */
+const opened = vi.hoisted(() => [] as { file: string; handle: import("node:fs/promises").FileHandle }[]);
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  const open = async (...args: Parameters<typeof actual.open>) => {
+    const handle = await actual.open(...args);
+    opened.push({ file: String(args[0]), handle });
+    return handle;
+  };
+  return { ...actual, open, default: { ...actual, open } };
+});
 
 vi.mock("../src/canvas", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/canvas")>();
@@ -121,6 +134,51 @@ describe("the video routes", () => {
     expect((await fetch(`${base}/api/jobs/${job.id}/media/two-boxes.chapters.json`)).status).toBe(404);
     expect((await fetch(`${base}/api/jobs/${job.id}/media/copies.json`)).status).toBe(404);
     expect((await fetch(`${base}/api/jobs/${job.id}/media/..%2Fjob.json`)).status).toBe(404);
+  });
+
+  it("closes the file when a client aborts a range request mid-body, as a seek does", async () => {
+    const job = await reviewedJob();
+    const candidate = path.join(home, "jobs", job.id, "candidate");
+    await mkdir(candidate, { recursive: true });
+    const file = path.join(candidate, "two-boxes.mp4");
+    // Far more than one socket buffer, so the body is still streaming when the client goes.
+    await writeFile(file, Buffer.alloc(16 * 1024 * 1024, 7));
+    // By name: the route opens the resolved path, which is /private/var on macOS where tmpdir says /var.
+    const handles = () => opened.filter((entry) => entry.file.endsWith(`${job.id}/candidate/two-boxes.mp4`)).map((entry) => entry.handle);
+    const closed = () => handles().filter((handle) => handle.fd === -1).length;
+    opened.length = 0;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const req = httpRequest(`${base}/api/jobs/${job.id}/media/two-boxes.mp4`, { headers: { range: "bytes=1024-" } }, (res) => {
+          expect(res.statusCode).toBe(206);
+          res.once("data", () => {
+            req.destroy();
+            resolve();
+          });
+        });
+        req.on("error", (error) => {
+          if ((error as NodeJS.ErrnoException).code !== "ECONNRESET") reject(error);
+        });
+        req.end();
+      });
+      // Without the fix nothing ever calls close: the handle waits for the garbage collector.
+      expect(handles()).toHaveLength(1);
+      const deadline = Date.now() + 3_000;
+      while (closed() === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(closed()).toBe(1);
+      // And a sheet, served whole, still closes its handle when it ends.
+      const scenes = path.join(home, "jobs", job.id, "render", "out", "studio", "two-boxes", "scenes");
+      await mkdir(scenes, { recursive: true });
+      await writeFile(path.join(scenes, "TB1_WhyItMatters.sheet.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      const sheet = await fetch(`${base}/api/jobs/${job.id}/sheets/TB1_WhyItMatters.png`);
+      expect(Buffer.from(await sheet.arrayBuffer())).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      const sheetHandle = opened.find((entry) => entry.file.endsWith("scenes/TB1_WhyItMatters.sheet.png"))?.handle;
+      const after = Date.now() + 3_000;
+      while (sheetHandle?.fd !== -1 && Date.now() < after) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(sheetHandle?.fd).toBe(-1);
+    } finally {
+      opened.length = 0;
+    }
   });
 
   it("serves a scene's sheet by its class, and refuses a sheet that is a link", async () => {

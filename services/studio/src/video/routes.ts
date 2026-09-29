@@ -1,7 +1,8 @@
-import { constants, createReadStream } from "node:fs";
+import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 
 import { BriefError, loadVocabulary } from "../brief";
 import { JobRefused } from "../runner";
@@ -283,6 +284,28 @@ async function openServable(file: string): Promise<{ handle: import("node:fs/pro
   return { handle, size: facts.size, mtime: facts.mtime };
 }
 
+/**
+ * Send an opened file and close it however the response ends.
+ *
+ * `pipe` alone left the handle open when the browser aborted a range request
+ * mid-body, which a video player does on every seek: the response closed, the
+ * read stream was unpiped and paused rather than destroyed, and its `close`
+ * never came, so the handle waited for the garbage collector (36 "Closing file
+ * descriptor on garbage collection" warnings after one session of playing and
+ * seeking, Phase 2 measured in docs/STUDIO-VIDEOS.md). `pipeline` destroys the
+ * read stream when the response closes early, and the handle's own stream
+ * closes the handle when it is destroyed or ends.
+ */
+function streamHandle(
+  handle: import("node:fs/promises").FileHandle,
+  response: ServerResponse,
+  range: { start: number; end: number } | null = null,
+): void {
+  const stream = handle.createReadStream(range === null ? {} : { start: range.start, end: range.end });
+  // A client that went away is the ordinary end of a seek, not an error.
+  pipeline(stream, response).catch(() => undefined);
+}
+
 async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name: string): Promise<void> {
   const scene = name.endsWith(".png") ? name.slice(0, -4) : "";
   if (!record.classes.includes(scene)) return fail(response, 404, "no such scene in this job's brief");
@@ -296,7 +319,7 @@ async function sheetBytes(response: ServerResponse, record: VideoJobRecord, name
     "cache-control": "no-cache",
     "last-modified": opened.mtime.toUTCString(),
   });
-  createReadStream("", { fd: opened.handle.fd, autoClose: false }).on("close", () => void opened.handle.close()).pipe(response);
+  streamHandle(opened.handle, response);
 }
 
 /**
@@ -350,7 +373,7 @@ async function media(request: IncomingMessage, response: ServerResponse, record:
     "x-content-type-options": "nosniff",
     "cache-control": "no-cache",
   });
-  createReadStream("", { fd: opened.handle.fd, start, end, autoClose: false }).on("close", () => void opened.handle.close()).pipe(response);
+  streamHandle(opened.handle, response, { start, end });
 }
 
 function events(request: IncomingMessage, response: ServerResponse, store: VideoStore, record: VideoJobRecord): void {
