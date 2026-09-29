@@ -5,8 +5,9 @@ document carries the whole studio: the schema, the runner, the gate, accept and
 discard. This one carries only what changes when a person stops filling in a
 form and starts talking.
 
-**Status: phase 1 built** (#172, #173); **phase 2's manual built** (the runner
-half; see [Phases](#phases)). Numbers marked
+**Status: phase 1 built** (#172, #173); **phase 2 built** (#175, #179) and
+measured, with three of its four "done when" parts holding and the fourth not
+recorded ([Phase 2 measured](#phase-2-measured)). Numbers marked
 *measured* were taken on this machine on 2026-09-27 against the installed CLI
 (`claude` 2.1.274, `claude-sonnet-5`) and the installed tldrawkc build; every
 other number is a guess and says so.
@@ -420,7 +421,11 @@ is **15,826 tokens** (38,286 characters), measured the same way against
 usage line, is 5,514. At the prices above that is about $0.063 to write and
 $0.098 to read on 31 requests, **about $0.14 net per 32-request attempt** after
 the `canvas api` result it replaces, against the $0.047 the draft predicted.
-Whether it earns that back is the phase 2 measurement below.
+Re-measured the same way on tldrawkc b0d2d0e (#181 dropped `labelColor` from
+`text`): **15,785 tokens** (38,208 characters; 16,540 input tokens with it
+against 755 with `x`). Whether it earns that back is measured in
+[Phase 2 measured](#phase-2-measured): on one simple brief it cost $0.137
+more and saved no requests.
 
 It is passed as a file, `--append-system-prompt-file
 $STUDIO_HOME/manual/<hash>.md`, rather than as argv text, and checked on the
@@ -432,6 +437,9 @@ attempt as well, so the two agree after a compaction too.
 Attempts two and three resume the session inside the hour, so they read the
 manual rather than writing it. Whether the eleven lookup calls disappear is what
 phase 2 measures rather than assumes; if they do, the manual pays for itself.
+On the one brief measured, the run without the manual made no lookup calls in
+the first place, so there was nothing for it to remove (n=1; see
+[Phase 2 measured](#phase-2-measured)).
 
 ### How it is assembled, and why it cannot drift
 
@@ -1123,6 +1131,121 @@ compared on requests, turns spent outside the draw-look-fix loop, and cost, and
 the numbers are in the PR; an extend draft on `dot-product` names that
 diagram's elements in its first reply; and the gate passes on the extended
 drawing.
+
+**Not ticked yet.** Three of the four parts held (below). The fourth, the gate
+on the extended drawing, was not recorded: the drawing job ran, but reading
+its result was refused by the measuring session's permission layer, so its
+outcome is unknown rather than failed.
+
+#### Phase 2 measured
+
+*Measured* on 2026-09-29 with `claude` 2.1.274, `claude-sonnet-5` for the
+planner and the drawing agent, and tldrawkc b0d2d0e for every drawing. The
+runners ran from worktrees on ports 7391 and 7392 against a scratch database
+built from `seed/` the way `scripts/e2e.mjs` builds it (five topics in four
+domains). They were driven over HTTP with no browser and no form.
+
+**Ten drafts, first message to a brief that passes `validateBrief`.** Draw
+was not pressed on any of them.
+
+| # | First message (abridged) | Person turns | Questions | Retry | New topic | Brief | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Tomasulo from issue to write-back: stations, CDB, renaming | 1 | 0 | no | no | 7 / 7 | $0.031 |
+| 2 | The ReAct loop: reason, tool, observation, repeat | 1 | 0 | no | no | 5 / 5 | $0.019 |
+| 3 | LLM training stages and the data that feeds each | 1 | 0 | yes, on `concepts` | no | 9 / 8 | $0.026 |
+| 4 | "compare what an agent keeps in its context window with ... long-term memory" | 1 | 0 | no | no | 6 / 0 | $0.011 |
+| 5 | TCP's three-way handshake | 2 | 1 | no | yes, domain `networking` (new) | 6 / 7 | $0.032 |
+| 6 | Photosynthesis: light reactions and the Calvin cycle | 1 | 0 | no | yes, domain `biology` (new) | 8 / 8 | $0.022 |
+| 7 | "git rebase vs merge. just draw it" | 1 | 0 | no | yes, domain `software-engineering` (new) | 6 / 0 | $0.017 |
+| 8 | "something about caching" | 2 | 1 | no | yes, domain `distributed-systems` (new) | 4 / 7 | $0.029 |
+| 9 | A DNS lookup from browser cache to authoritative server | 1 | 0 | no | yes, domain `computer-networks` (new) | 5 / 6 | $0.028 |
+| 10 | Matrix-vector multiplication as a linear transformation | 1 | 0 | no | yes, domain `foundations` | 7 / 6 | $0.031 |
+
+Brief is elements / relations. Ten of ten passed within their one retry, and
+one needed it. The median is one person turn and $0.027 per draft, and the
+ten cost $0.245 over 13 counted turns (12 from the person, one retry). The
+retry in draft 3 was a concept (`pretraining`) not filed under the topic.
+The planner's own reply said it would drop the field, and it still sent it.
+Things seen along the way:
+
+- The planner asked two questions. Draft 8's was the one it should ask
+  ("which caching?", with options). Draft 5's asked leave to propose a new
+  topic. The prompt's topic rule makes that question unnecessary, and draft 6,
+  7, 9 and 10 did not ask it.
+- Two networking drafts proposed two different new domains, `networking` (5)
+  and `computer-networks` (9). A pending topic is created only at Draw, so
+  each draft sees only the vocabulary as it stands. Drawing both would file
+  one subject under two domains.
+- The comparisons (4, 7) come with no relations and no column heading
+  elements. They pass validation, and the side each item sits on is only in
+  its `note`.
+
+**The same brief drawn without the manual and with it.** Draft 1's brief
+(Tomasulo, 7 elements, 7 relations, `flow-lr`) went through `POST /api/jobs`
+once on a runner at e0d6a5e, the first parent of #175, and once on main at
+b8f0e37. Both runners used the same tldrawkc build and the same migrations
+(head 0014). The prompts also differ beyond the manual: main's asks for
+`verify` and a look at its PNG, and drops the `canvas api` step. **n=1 for
+each.**
+
+| | Without the manual | With the manual |
+| --- | --- | --- |
+| API requests (distinct assistant messages) | 11 | 11 |
+| Agent turns (`num_turns`) | 13 | 12 |
+| Tool calls | 10 | 10 |
+| Calls outside the draw, look, fix loop | 1: `canvas api` | 2: an `inspect ...; echo "EXIT:$?"` the allowlist refused, and a snippet written to the CLI's own scratchpad before the job's scratch directory |
+| Reads of tldrawkc source, `grep`, `ls`, `cat` | 0 | 0 |
+| Snippet passes (`canvas run`) | 2 | 1 |
+| `verify`, and a look at its PNG | not asked | yes (2 calls) |
+| First request | 45,142 tokens written to the cache | 61,281 tokens written to the cache |
+| Cache writes / reads over the run | 64,120 / 563,681 | 77,591 / 710,004 |
+| Cost | **$0.429** (`result`) | **$0.566** (`result`) |
+| Wall time, start to finish | 1 min 41 s | 2 min 26 s |
+| Gate | passed: 14 shapes, 7 bindings, 0 lints, 4 of 4 verify checks | passed: 15 shapes (a title), 7 bindings, 0 lints, 4 of 4 verify checks |
+
+Neither run's first request read anything from the cache, so both paid their
+own write. The manual added $0.137, which is the $0.14 predicted, and saved
+no requests: the run without it made none of the source reads or refused
+commands the tailscale job made (11 of 32). This brief needs only `box` and
+`connect`, whose usage lines `canvas api` already prints. The run with the
+manual drew in one pass rather than two, added a title, and routed the return
+arrow under the row rather than as a curve over it. That is one look at two
+pictures, not a measurement.
+
+**Recommendation (n=1).** Keep the manual for now, and do not trim it on this
+evidence. On a brief that needs only boxes and arrows it is pure cost, about a
+third more per drawing, and the saving it was built for never had a chance to
+show. The next measurement is a brief that needs options (a `comparison`
+layout with `alignContainers`, a timeline with `line`), drawn with and
+without. If that run also makes no lookups, cut the options section, which is
+13,657 of the 38,208 characters, down to the helpers `canvas api` does not
+explain.
+
+**Extend on `dot-product`.** The seed has no such diagram, so revision 564 of
+the owner's was copied out read-only with `catalog diagram checkout --dir` and
+stored in the scratch database with `diagram put`. The draft was created with
+`source: "dot-product"`, and the web app's opener was sent. The planner's
+first reply ($0.016), verbatim:
+
+> The current diagram ("The dot product: pair the slots, multiply, add") walks through computing a·b for two 2-slot vectors: it pairs up slots (a1×b1, a2×b2), sums the products to get a·b = 23, and then shows what the sign of the result means geometrically — positive (vectors lean the same way), zero (right angles), or negative (point opposite ways).
+>
+> What would you like to add to it?
+
+It names the slots, the two products, the sum of 23 and all three sign cases,
+which are the diagram's labels. The second message asked for
+`a · b = |a| |b| cos θ` connected to the three sign cases. The first brief was
+refused on `relations[1].to`: it drew arrows to the existing sign-case shapes
+without listing them as elements. The retry listed them and passed (5
+elements, 4 relations, $0.053 for the draft's three counted turns). Draw
+queued job `30ad124a`, which ran. Its gate result was not recorded (see "Not
+ticked yet" above). One thing for the planner prompt: an extend brief whose
+arrows land on existing shapes has to name them as elements, and the prompt
+does not say so.
+
+**Spend.** $1.36 known: $0.245 for the ten drafts, $0.068 to re-measure the
+manual, $0.429 and $0.566 for the two drawings, and $0.053 for the extend
+draft. The extend job's own cost was not read, so the total is higher by that
+amount, about $0.4 to $0.6 going by the two drawings above.
 
 ### Phase 3. Polish
 
