@@ -92,6 +92,14 @@ describe("the calls", () => {
     expect(refusalString(result.refusal, "field")).toBe("title");
   });
 
+  it("leaves the model out of a saved brief: the runner keeps the replaced brief's own (#207)", async () => {
+    const fetchMock = answer(200, {});
+    await saveBrief("d1", { intent: "i", topic: "t", slug: "s", title: "T", mode: "new", model: "opus", elements: [], relations: [] } as never, 3);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("model");
+    expect(JSON.parse(String(init.body)).title).toBe("T");
+  });
+
   it("returns a refusal rather than throwing, with its detail", async () => {
     answer(422, { error: "turn cap", detail: { reason: "turn-cap", turns: 20, turnCap: 20 } });
     const result = await sendMessage("d1", "x");

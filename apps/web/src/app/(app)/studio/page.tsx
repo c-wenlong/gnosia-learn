@@ -22,7 +22,16 @@ import {
 } from "@/components/studio/StudioControls";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import { AGENT_ROWS, agentDefaults, effortOptions, modelOptions, runnerSettings, storedAgent } from "@/lib/studio-agent-settings";
+import {
+  AGENT_ROWS,
+  agentDefaults,
+  effortOptions,
+  modelOptions,
+  rowPriced,
+  rowWarning,
+  runnerSettings,
+  storedAgent,
+} from "@/lib/studio-agent-settings";
 import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
@@ -175,7 +184,8 @@ export default async function StudioPage({
     : [null, null];
   // The runner's menu (the models it can price) and its defaults when it
   // answers (#207), else health's defaults and the built-in list.
-  const fromRunner = runnerSettings(runnerAgents?.ok ? runnerAgents.data : null);
+  const agentRows = runnerAgents?.ok ? runnerAgents.data : null;
+  const fromRunner = runnerSettings(agentRows);
   const defaults = fromRunner.defaults ?? agentDefaults(health.data.agent);
   const videoState = videoAvailability(health.data.video);
   const diagramState = diagramAvailability(health.data.diagramAgent);
@@ -208,8 +218,9 @@ export default async function StudioPage({
                 ...row,
                 value: agents.values[row.kind],
                 fallback: storedAgent(row.kind, null),
-                models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined),
+                models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined, rowPriced(agentRows, row.kind)),
                 efforts: effortOptions(defaults),
+                warning: rowWarning(agentRows, row.kind),
               }))}
             />
           </div>

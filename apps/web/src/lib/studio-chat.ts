@@ -404,6 +404,12 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
         refusalString(refusal, "jobId"),
       );
     }
+    case "change-not-in-conversation":
+      // #207: a `change` video brief on a slug this conversation did not
+      // open on and did not make.
+      return own(
+        `This brief changes ${refusalString(refusal, "slug") ?? "a video"}, which this conversation did not open on or make. Start the change from that video's Change, or ask for a new video here.`,
+      );
     case "held": {
       // #207: the planner put this brief on hold (a `hold` block).
       const held = (refusal.detail as { held?: { reason?: unknown } } | null)?.held;
@@ -424,6 +430,9 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
       return own(`The new topic was refused: ${sentence(refusal.error)}`);
     default:
       break;
+  }
+  if (status === 400 && refusalString(refusal, "field") === "items") {
+    return own("Make both was sent without its two cards. Press each card on its own.");
   }
   if (status === 409) return own(sentence(refusal.error), refusalString(refusal, "holder"));
   if (status === 429) {

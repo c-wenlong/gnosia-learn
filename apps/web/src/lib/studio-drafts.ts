@@ -571,8 +571,20 @@ export function saveBrief(draftId: string, brief: Brief | VideoBrief, base: numb
       draftId,
       `/brief?base=${encodeURIComponent(String(base))}${kind === "diagram" ? "" : `&kind=${encodeURIComponent(kind)}`}`,
     ),
-    { method: "PUT", body: JSON.stringify(brief) },
+    { method: "PUT", body: JSON.stringify(withoutModel(brief)) },
   );
+}
+
+/**
+ * A brief as a save sends it: without `model`. Since D53 the model is the
+ * settings panel's, and the runner keeps the model of the brief an edit
+ * replaces (#207), so the card has nothing to say about it.
+ */
+function withoutModel(brief: Brief | VideoBrief): Brief | VideoBrief {
+  if (!("model" in brief)) return brief;
+  const { model: _model, ...rest } = brief as Brief;
+  void _model;
+  return rest;
 }
 
 /** `POST /api/drafts/{id}/abandon`: close it for good. Stops a turn in flight first. */

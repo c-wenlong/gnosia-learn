@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { acceptableModel, agentDefaults, checkedAgent, runnerSettings, effortOptions, modelOptions, storedAgent } from "./studio-agent-settings";
+import {
+  acceptableModel,
+  agentDefaults,
+  checkedAgent,
+  effortOptions,
+  modelOptions,
+  rowPriced,
+  rowWarning,
+  runnerSettings,
+  storedAgent,
+} from "./studio-agent-settings";
 
 describe("the settings panel's menus (D53)", () => {
   it("defaults videos to the Claude Code default and diagrams to sonnet, today's behaviour", () => {
@@ -75,5 +85,38 @@ describe("GET /api/settings/agent (#207)", () => {
     expect(read).toEqual({ models: [{ value: "opus", label: "Opus" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
     expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
     expect(runnerSettings(null)).toEqual({ models: null, defaults: null });
+  });
+});
+
+describe("the late #207 rules", () => {
+  const view = {
+    video: { price: { priced: true, pricedAs: "claude-opus-5" }, warning: null },
+    diagram: {
+      price: { priced: false, pricedAs: "claude-sonnet-5" },
+      warning: '"claude-haiku-9" has no price in the studio\'s rate table, so a job stopped before it reports its own cost is estimated at claude-sonnet-5\'s rates.',
+    },
+  };
+
+  it("reads each row's warning and price, and nothing from a bad answer", () => {
+    expect(rowWarning(view, "video")).toBeNull();
+    expect(rowWarning(view, "diagram")).toMatch(/^"claude-haiku-9" has no price/);
+    expect(rowPriced(view, "diagram")).toBe(false);
+    expect(rowPriced(view, "video")).toBe(true);
+    expect(rowPriced({ video: { price: "yes" } }, "video")).toBeNull();
+    expect(rowWarning(null, "video")).toBeNull();
+  });
+
+  it("never lists an unpriced stored model as if it were priced, nor a value that is no model name", () => {
+    expect(modelOptions("claude-haiku-9", null, undefined, false).at(-1)).toEqual({ value: "claude-haiku-9", label: "claude-haiku-9 (no price)" });
+    expect(modelOptions("Sonnet", null).some((option) => option.value === "Sonnet")).toBe(false);
+    expect(modelOptions("opus --x", null).some((option) => option.value === "opus --x")).toBe(false);
+  });
+
+  it("refuses a model the runner's name rule refuses, capitals included, even when it is the stored one", () => {
+    expect(acceptableModel("Sonnet", null)).toBe(false);
+    expect(acceptableModel("Sonnet", "Sonnet")).toBe(false);
+    expect(acceptableModel("claude-opus-5[1m]", "claude-opus-5[1m]")).toBe(true);
+    expect(acceptableModel("claude-opus-5[1M]", "claude-opus-5[1M]")).toBe(false);
+    expect(checkedAgent({ model: "Sonnet", effort: "high" }, { model: "Sonnet", effort: "high" })).toBeNull();
   });
 });

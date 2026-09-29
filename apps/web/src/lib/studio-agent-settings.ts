@@ -1,5 +1,6 @@
 import {
   AGENT_EFFORTS,
+  isAgentModel,
   PREFERENCE_KEYS,
   studioAgentPreference,
   type StudioAgentPreference,
@@ -138,12 +139,18 @@ export function modelOptions(
   current: string,
   defaults: AgentDefaults | null,
   models: readonly { value: string; label: string }[] = MODEL_CHOICES,
+  currentPriced: boolean | null = null,
 ): FilterOption<string>[] {
   const options: FilterOption<string>[] = [
     { value: "default", label: defaultLabel(defaults?.model, defaults !== null) },
     ...models.map((choice) => ({ value: choice.value, label: choice.label })),
   ];
-  if (!options.some((option) => option.value === current)) options.push({ value: current, label: current });
+  // A stored model outside the menu's list is offered only when it is a model
+  // name, and says so when the runner could not price it (#207), so it never
+  // sits among the priced ones looking like one of them.
+  if (!options.some((option) => option.value === current) && isAgentModel(current)) {
+    options.push({ value: current, label: currentPriced === false ? `${current} (no price)` : current });
+  }
   return options;
 }
 
@@ -179,5 +186,33 @@ export function checkedAgent(value: unknown, stored: StudioAgentPreference | nul
  * would fail every job of that kind at spawn.
  */
 export function acceptableModel(model: string, stored: string | null): boolean {
-  return model === "default" || MODEL_CHOICES.some((choice) => choice.value === model) || model === stored;
+  if (model === "default") return true;
+  // The one name rule the runner and the catalog share (`isAgentModel`: lower
+  // case, one bracketed suffix at most), so "Sonnet" is refused here as there.
+  if (!isAgentModel(model)) return false;
+  return MODEL_CHOICES.some((choice) => choice.value === model) || model === stored;
+}
+
+/**
+ * A row's warning from `GET /api/settings/agent` (#207): a model the rate
+ * table cannot price still runs, and a stopped job is then estimated at
+ * another model's rates. Null when there is none, or the runner did not say.
+ */
+export function rowWarning(raw: unknown, kind: AgentKind): string | null {
+  const warning = rowOf(raw, kind)?.warning;
+  return typeof warning === "string" && warning.trim() !== "" ? warning.trim() : null;
+}
+
+/** Whether the runner can price what the row runs now: `price.priced`, or null when it did not say. */
+export function rowPriced(raw: unknown, kind: AgentKind): boolean | null {
+  const price = rowOf(raw, kind)?.price;
+  if (typeof price !== "object" || price === null) return null;
+  const priced = (price as { priced?: unknown }).priced;
+  return typeof priced === "boolean" ? priced : null;
+}
+
+function rowOf(raw: unknown, kind: AgentKind): Record<string, unknown> | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const row = (raw as Record<string, unknown>)[kind];
+  return typeof row === "object" && row !== null ? (row as Record<string, unknown>) : null;
 }

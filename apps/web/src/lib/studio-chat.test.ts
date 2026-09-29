@@ -262,6 +262,12 @@ describe("Draw", () => {
     expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "open" } }).text).toMatch(/no brief/);
     expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", state: "drawing" } }).text).toMatch(/already in progress/);
     expect(drawRefusal(409, { error: "x", detail: { reason: "in-flight" } }).text).toMatch(/still answering/);
+    expect(drawRefusal(409, { error: "x", detail: { reason: "change-not-in-conversation", kind: "video", slug: "tcp-handshake" } }).text).toBe(
+      "This brief changes tcp-handshake, which this conversation did not open on or make. Start the change from that video's Change, or ask for a new video here.",
+    );
+    expect(drawRefusal(400, { error: "items must be a list", detail: { field: "items" } }).text).toBe(
+      "Make both was sent without its two cards. Press each card on its own.",
+    );
     expect(drawRefusal(409, { error: "x", detail: { reason: "draw-in-progress" } }).text).toMatch(/just pressed/);
     expect(drawRefusal(409, { error: 'a new topic can only be created as "local"', detail: { reason: "topic-owner" } }).text).toBe(
       'A new topic can only be created as "local".',

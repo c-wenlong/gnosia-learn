@@ -24,6 +24,8 @@ export interface AgentRow {
   fallback: StudioAgentPreference;
   models: FilterOption<string>[];
   efforts: FilterOption<string>[];
+  /** The runner's warning for this row (an unpriced model), shown quietly under it. */
+  warning?: string | null;
 }
 
 /**
@@ -124,6 +126,7 @@ export function StudioSettings({
                 onChange={(effort) => change(row.kind, { effort: effort as StudioAgentPreference["effort"] })}
               />
             </div>
+            {row.warning && <p className="text-[12px] leading-4 text-text2">{row.warning}</p>}
             {note !== undefined && (
               <p role={note.ok ? "status" : "alert"} className={cx("text-[12px] leading-4", note.ok ? "text-text3" : "text-danger")}>
                 {note.text}
