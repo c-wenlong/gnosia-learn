@@ -215,11 +215,30 @@ export interface ExtendOpener {
   send: string | null;
   compose: string;
   source: string | null;
+  /**
+   * Chips the composer starts with, before `compose`: a video's Change hands
+   * its words to the conversation with the Video chip already in place
+   * (STUDIO-MENTIONS.md, 2c). Absent is none.
+   */
+  mentions?: ("diagram" | "video")[];
 }
 
 export function leaveOpener(storage: Storage | null, draftId: string, opener: ExtendOpener): void {
   if (storage === null) return;
   safely(() => storage.setItem(OPENER_PREFIX + draftId, JSON.stringify(opener)), undefined);
+}
+
+/**
+ * Said on `window` after `leaveOpener`, for a conversation that is already
+ * on screen: its panel read its opener when it mounted and will not mount
+ * again, so the video job view's Change, shown inside that conversation,
+ * tells it there is a new one to take. `detail` is `{ draftId }`.
+ */
+export const OPENER_EVENT = "studio:opener";
+
+export function announceOpener(draftId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPENER_EVENT, { detail: { draftId } }));
 }
 
 /**
@@ -231,11 +250,17 @@ export function takeOpener(storage: Storage | null, draftId: string): ExtendOpen
   const held = safely(() => storage.getItem(OPENER_PREFIX + draftId), null);
   if (held === null) return null;
   safely(() => storage.removeItem(OPENER_PREFIX + draftId), undefined);
-  const parsed = safely(() => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown }, {});
+  const parsed = safely(
+    () => JSON.parse(held) as { send?: unknown; compose?: unknown; source?: unknown; mentions?: unknown },
+    {},
+  );
   const send = typeof parsed.send === "string" && parsed.send.trim() !== "" ? parsed.send : null;
   const compose = typeof parsed.compose === "string" ? parsed.compose : "";
   const source = typeof parsed.source === "string" && parsed.source !== "" ? parsed.source : null;
-  return { send, compose, source };
+  const mentions = Array.isArray(parsed.mentions)
+    ? [...new Set(parsed.mentions.filter((kind): kind is "diagram" | "video" => kind === "diagram" || kind === "video"))]
+    : [];
+  return { send, compose, source, mentions };
 }
 
 /** `window.sessionStorage`, or null where reading it throws or there is no window. */
