@@ -6,6 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { TopicRecap } from "@/components/TopicRecap";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
+import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { PathNode } from "@/components/ui/PathNode";
 import { conceptHref, nodeCaption, topicSessionHref, type TopicMastery } from "@/lib/course-path";
@@ -84,33 +85,25 @@ export function PathTopicRow({
             aria-label={`${open ? "Hide" : "Show"} notes and links for ${topic.title}`}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text3 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <svg
-              viewBox="0 0 20 20"
-              className={cx("h-5 w-5 transition-transform duration-150", open && "rotate-180")}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="m5 7.5 5 5 5-5" />
-            </svg>
+            <CollapseChevron open={open} />
           </button>
         </div>
-        {opened && (
-          <TopicPanel
-            hidden={!open}
-            // A reset clears the notes on the server; a new epoch remounts the
-            // panel so the draft does not write the old note straight back.
-            key={state.epoch}
-            id={panelId}
-            course={course}
-            module={module}
-            topic={topic}
-            mastery={mastery}
-          />
-        )}
+        {/* The panel glides open and shut; it is mounted on first open and
+            then kept, so closing it keeps the note's pending keystrokes. */}
+        <Collapse open={open}>
+          {opened && (
+            <TopicPanel
+              // A reset clears the notes on the server; a new epoch remounts the
+              // panel so the draft does not write the old note straight back.
+              key={state.epoch}
+              id={panelId}
+              course={course}
+              module={module}
+              topic={topic}
+              mastery={mastery}
+            />
+          )}
+        </Collapse>
       </div>
     </li>
   );
@@ -118,14 +111,12 @@ export function PathTopicRow({
 
 function TopicPanel({
   id,
-  hidden,
   course,
   module,
   topic,
   mastery,
 }: {
   id: string;
-  hidden: boolean;
   course: Course;
   module: Module;
   topic: Topic;
@@ -147,7 +138,7 @@ function TopicPanel({
   const hasRecap = Boolean(state.knowledge[topic.id]);
 
   return (
-    <div id={id} hidden={hidden} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
+    <div id={id} className="mb-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
       {mastery && (
         <section>
           <h4 className={LABEL}>Concepts</h4>
