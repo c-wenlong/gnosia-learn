@@ -22,7 +22,7 @@ import {
 } from "@/components/studio/StudioControls";
 import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import { AGENT_ROWS, agentDefaults, effortOptions, modelOptions, storedAgent } from "@/lib/studio-agent-settings";
+import { AGENT_ROWS, agentDefaults, effortOptions, modelOptions, runnerSettings, storedAgent } from "@/lib/studio-agent-settings";
 import { readStudioAgents } from "@/lib/studio-agents";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
@@ -168,8 +168,13 @@ export default async function StudioPage({
   // both to say why the other side is not there rather than linking to a 404.
   const shown = view.shot !== null && view.job !== null ? await openShot(view.job) : null;
   // The settings panel's two rows, read only when it is open.
-  const agents = view.settings ? await readStudioAgents() : null;
-  const defaults = agentDefaults(health.data.agent);
+  const [agents, runnerAgents] = view.settings
+    ? await Promise.all([readStudioAgents(), studioApi<unknown>("/api/settings/agent")])
+    : [null, null];
+  // The runner's menu (the models it can price) and its defaults when it
+  // answers (#207), else health's defaults and the built-in list.
+  const fromRunner = runnerSettings(runnerAgents?.ok ? runnerAgents.data : null);
+  const defaults = fromRunner.defaults ?? agentDefaults(health.data.agent);
   const videoState = videoAvailability(health.data.video);
 
   // Every diagram's path, filtered or not: a job drawing onto one of these is
@@ -200,7 +205,7 @@ export default async function StudioPage({
                 ...row,
                 value: agents.values[row.kind],
                 fallback: storedAgent(row.kind, null),
-                models: modelOptions(agents.values[row.kind].model, defaults),
+                models: modelOptions(agents.values[row.kind].model, defaults, fromRunner.models ?? undefined),
                 efforts: effortOptions(defaults),
               }))}
             />

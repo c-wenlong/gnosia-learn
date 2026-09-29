@@ -441,3 +441,22 @@ describe("Start over with per-kind slots (Greptile on #204)", () => {
     expect(startOverStep("briefed", true)).toBe("abandon");
   });
 });
+
+describe("the press refusals #207 adds", () => {
+  it("words kind-busy, held and a video's not-briefed", () => {
+    expect(drawRefusal(409, { error: "busy", detail: { reason: "kind-busy", kind: "video", jobId: "v1", state: "awaiting_review" } })).toEqual({
+      text: "The video from this conversation is waiting for review. Accept, discard or cancel it first.",
+      holder: "v1",
+      error: "busy",
+    });
+    expect(drawRefusal(409, { error: "busy", detail: { reason: "kind-busy", kind: "diagram", jobId: "j1", state: "running" } }).text).toBe(
+      "The diagram from this conversation is still being drawn. Accept, discard or cancel it first.",
+    );
+    expect(drawRefusal(409, { error: "held", detail: { reason: "held", kind: "video", held: { reason: "You said the topic is wrong" } } }).text).toBe(
+      "This brief is on hold: You said the topic is wrong. Press Use this brief to make it, or ask for a new one.",
+    );
+    expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", kind: "video", state: "open" } }).text).toBe(
+      "There is no video brief to make right now.",
+    );
+  });
+});

@@ -181,6 +181,10 @@ export function kindCardStatus(
   const slot = slotOf(view, kind);
   if (slot === null) return "closed";
   if (slot.held !== null && slot.held !== undefined) return "onHold";
+  // The runner's own word, when it sends one (#207): in force and pressable,
+  // or a brief this kind's job was made from.
+  if (slot.live === true) return "live";
+  if (slot.live === false && (slot.state === "drawing" || slot.state === "done")) return "drawn";
   if (slot.state === "briefed") return "live";
   if (slot.state === "open") return "held";
   // drawing or done: was the job made from this brief, or from an older one?
@@ -204,14 +208,17 @@ export function kindCardEditable(status: KindCardStatus): boolean {
 export function kindPendingTopic(
   status: KindCardStatus,
   kind: DraftKind,
-  entry: Pick<TranscriptEntry, "pendingTopic">,
+  entry: Pick<TranscriptEntry, "pendingTopic"> & Partial<Pick<TranscriptEntry, "brief" | "briefs">>,
   view: Pick<DraftView, "slots" | "pendingTopic">,
 ): PendingTopic | null {
   if (status === "live" || status === "held" || status === "onHold") {
     if (view.slots === undefined) return view.pendingTopic;
     return slotOf(view, kind)?.pendingTopic ?? null;
   }
-  return entry.pendingTopic ?? null;
+  // An older card keeps what its own brief proposed (#207 puts it on the
+  // brief), else what the reply proposed.
+  const own = entryBriefs(entry as Pick<TranscriptEntry, "brief" | "briefs">).find((item) => item.kind === kind)?.pendingTopic;
+  return own ?? entry.pendingTopic ?? null;
 }
 
 /** The tagged message the card answered, which pairs it for Make both. */
@@ -246,8 +253,22 @@ export const KIND_BUSY: Record<DraftKind, string> = {
  * card's press is disabled until it does (D60, T8). A job in review counts,
  * since Accept or Discard is still to come.
  */
-export function kindBusy(view: Pick<DraftView, "slots">, kind: DraftKind, jobs: readonly Job[]): Job | null {
-  const jobId = slotOf(view, kind)?.jobId ?? null;
+export function kindBusy(
+  view: Pick<DraftView, "slots">,
+  kind: DraftKind,
+  jobs: readonly Job[],
+): Pick<Job, "jobId" | "state"> | null {
+  const slot = slotOf(view, kind);
+  // The runner says which job holds the press (#207); the jobs list is the
+  // fallback for a runner that does not, and the fresher of the two when a
+  // job reached its verdict since the draft was read.
+  if (slot?.busy !== undefined) {
+    if (slot.busy === null) return null;
+    const listed = jobs.find((entry) => entry.jobId === slot.busy!.jobId);
+    if (listed !== undefined && isTerminal(listed.state)) return null;
+    return { jobId: slot.busy.jobId, state: (listed?.state ?? slot.busy.state) as Job["state"] };
+  }
+  const jobId = slot?.jobId ?? null;
   if (jobId === null) return null;
   const job = jobs.find((entry) => entry.jobId === jobId);
   return job !== undefined && !isTerminal(job.state) ? job : null;

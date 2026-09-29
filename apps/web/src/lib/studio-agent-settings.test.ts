@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { acceptableModel, agentDefaults, checkedAgent, effortOptions, modelOptions, storedAgent } from "./studio-agent-settings";
+import { acceptableModel, agentDefaults, checkedAgent, runnerSettings, effortOptions, modelOptions, storedAgent } from "./studio-agent-settings";
 
 describe("the settings panel's menus (D53)", () => {
   it("defaults videos to the Claude Code default and diagrams to sonnet, today's behaviour", () => {
@@ -34,7 +34,15 @@ describe("the settings panel's menus (D53)", () => {
   });
 
   it("offers the priced models, and keeps a stored value outside them", () => {
-    expect(modelOptions("default", null).map((option) => option.value)).toEqual(["default", "fable", "opus", "sonnet"]);
+    expect(modelOptions("default", null).map((option) => option.value)).toEqual([
+      "default",
+      "fable",
+      "opus",
+      "sonnet",
+      "claude-fable-5-1",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+    ]);
     expect(modelOptions("claude-sonnet-5", null).at(-1)).toEqual({ value: "claude-sonnet-5", label: "claude-sonnet-5" });
     expect(effortOptions(null).map((option) => option.label)).toEqual(["Claude Code default", "Low", "Medium", "High", "Extra high", "Max"]);
   });
@@ -55,5 +63,17 @@ describe("what a save may store", () => {
     expect(acceptableModel("claude-opus-5[1m]", "claude-opus-5[1m]")).toBe(true);
     expect(checkedAgent({ model: "opsu", effort: "high" })).toBeNull();
     expect(checkedAgent({ model: "claude-sonnet-5", effort: "low" }, { model: "claude-sonnet-5", effort: "high" })).toEqual({ model: "claude-sonnet-5", effort: "low" });
+  });
+});
+
+describe("GET /api/settings/agent (#207)", () => {
+  it("takes the runner's priced models and defaults, and falls back to nothing on a bad answer", () => {
+    const read = runnerSettings({
+      models: [{ value: "opus", label: "Opus", id: "claude-opus-5" }, { value: 3 }],
+      defaults: { model: "claude-fable-5-1", effort: "high" },
+    });
+    expect(read).toEqual({ models: [{ value: "opus", label: "Opus" }], defaults: { model: "claude-fable-5-1", effort: "high" } });
+    expect(modelOptions("default", read.defaults, read.models!).map((option) => option.value)).toEqual(["default", "opus"]);
+    expect(runnerSettings(null)).toEqual({ models: null, defaults: null });
   });
 });

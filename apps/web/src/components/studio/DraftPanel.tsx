@@ -997,6 +997,7 @@ export function DraftPanel({
 
 /** The kind E6 is about: the refused brief's own, when the runner names one. */
 function problemKindOf(view: Pick<DraftView, "transcript" | "error">): DraftKind | null {
+  if (view.error?.briefKind !== undefined) return view.error.briefKind;
   const last = visibleEntries(view.transcript).at(-1);
   const kind = last?.briefInvalid?.kind ?? last?.briefsInvalid?.find((item) => !item.retried)?.kind;
   return kind ?? null;

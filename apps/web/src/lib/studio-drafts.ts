@@ -43,8 +43,15 @@ export type DraftMention = Mention<DraftKind>;
 
 /** One brief a planner reply (or an edit's note) carries, with the tagged message it answers (D61). */
 export type TranscriptBrief =
-  | { kind: "diagram"; brief: Brief; requestSeq: number | null }
-  | { kind: "video"; brief: VideoBrief; requestSeq: number | null; abbreviations?: string[] };
+  | { kind: "diagram"; brief: Brief; requestSeq: number | null; pendingTopic?: PendingTopic | null }
+  | {
+      kind: "video";
+      brief: VideoBrief;
+      requestSeq: number | null;
+      pendingTopic?: PendingTopic | null;
+      /** V11's words the voice would read as words. Not built on the runner yet (#207); read when present. */
+      abbreviations?: string[];
+    };
 
 /** A `hold` block the planner ended an untagged reply with: the kinds it contradicts, and why (D60). */
 export interface HoldBlock {
@@ -58,6 +65,8 @@ export interface HoldBlock {
  * the planner put the brief on hold.
  */
 export interface DraftSlot {
+  /** The slot's own kind (#207). */
+  kind?: DraftKind;
   brief: Brief | VideoBrief | null;
   briefAt?: string | null;
   /** The transcript seq of the entry carrying the brief in force. */
@@ -72,10 +81,15 @@ export interface DraftSlot {
   /** Set while the brief in force is on hold. */
   held: { reason: string; at?: string } | null;
   state: "open" | "briefed" | "drawing" | "done";
+  /** The state of `jobId`, as the runner last saw it (#207). */
+  jobState?: string | null;
+  /** The runner's own word that this slot's brief is in force and pressable (#207). */
+  live?: boolean;
+  /** This kind's job from the draft that has not reached a verdict, which holds the press (#207). */
+  busy?: { jobId: string; state: string } | null;
   /**
    * The job a press of this kind would discard and replace in one
-   * transaction: a video in review, changed by a newer brief (D52). The
-   * runner's name for it was still to be settled when this was written;
+   * transaction: a video in review, changed by a newer brief (D52).
    * `replacesJob` below is the one place that reads it.
    */
   replaces?: { jobId: string } | string | null;
@@ -124,6 +138,8 @@ export interface DraftError {
   kind: "agent" | "brief-invalid" | "timeout" | "interrupted";
   message: string;
   field?: string;
+  /** The kind whose brief the error is about (#207). */
+  briefKind?: DraftKind;
 }
 
 export interface BriefInvalid {
@@ -156,6 +172,8 @@ export interface TranscriptEntry {
   hold?: HoldBlock | null;
   /** Refused briefs of a reply, by kind, when more than one kind was judged. */
   briefsInvalid?: BriefInvalid[];
+  /** Kinds whose brief the runner dropped because nothing tagged or awaited them (T24). Never shown. */
+  briefsIgnored?: DraftKind[];
   /** On the same reply, when its topic is a proposal rather than a slug that exists. */
   pendingTopic?: PendingTopic;
   /** On a planner reply whose brief failed. */
@@ -184,6 +202,12 @@ export interface DraftView {
   slots?: DraftSlots;
   /** The kinds this draft's planner prompt carries (D59). Absent means `["diagram"]`, a draft from before. */
   plannerKinds?: DraftKind[];
+  /** False for a draft from before the combined prompt, whose untagged messages count as tagged Diagram (#207). */
+  conversational?: boolean;
+  /** The kinds still owed a brief, oldest request first (#207). The slots' `waiting` says the same per kind. */
+  waiting?: DraftKind[];
+  /** A diagram and a video card live, not held, answering one message: Make both's pair (#207). */
+  pair?: { requestSeq: number; kinds: DraftKind[] } | null;
   /**
    * C11: the diagram's checkout moved on since the EXTENDING block was built
    * from it. Optional: a runner from before it does not send it.
@@ -266,6 +290,7 @@ export const DRAFT_EVENT_TYPES = [
   "studio",
   "brief",
   "brief-invalid",
+  "brief-ignored",
   "state",
   "error",
 ] as const;
@@ -282,6 +307,7 @@ export interface BriefEvent {
   seq: number;
   replySeq: number;
   kind?: DraftKind;
+  requestSeq?: number | null;
   brief: Brief | VideoBrief;
   pendingTopic: PendingTopic | null;
 }
@@ -294,6 +320,8 @@ export interface BriefInvalidEvent extends BriefInvalid {
 export interface StateEvent {
   state: DraftState;
   slots?: DraftSlots;
+  waiting?: DraftKind[];
+  pair?: { requestSeq: number; kinds: DraftKind[] } | null;
   jobId: string | null;
   inFlight: boolean;
   turns: number;
@@ -313,6 +341,7 @@ export type DraftEvent =
   | { type: "message" | "reply" | "studio"; data: TranscriptEntry }
   | { type: "brief"; data: BriefEvent }
   | { type: "brief-invalid"; data: BriefInvalidEvent }
+  | { type: "brief-ignored"; data: { seq: number; replySeq: number; kind: DraftKind } }
   | { type: "state"; data: StateEvent }
   | { type: "error"; data: ErrorEvent };
 
@@ -423,7 +452,17 @@ export function sendMessage(draftId: string, body: string | { text: string; ment
  * transcript as a studio note (E7).
  */
 export function drawDraft(draftId: string, key: string, kind: DraftKind = "diagram") {
-  return call<{ draftId: string; jobId: string; state: DraftState; kind?: DraftKind; note: string }>(draftPath(draftId, "/draw"), {
+  return call<{
+    draftId: string;
+    jobId: string;
+    state: DraftState;
+    kind?: DraftKind;
+    /** False when the key had already started this job (#207). */
+    created?: boolean;
+    /** The video in review this press discarded, or null (#207). */
+    replaces?: string | null;
+    note: string;
+  }>(draftPath(draftId, "/draw"), {
     method: "POST",
     // `kind` goes only when it is not the default, so a Draw is the body a
     // runner from before STUDIO-MENTIONS.md already takes.
@@ -433,7 +472,7 @@ export function drawDraft(draftId: string, key: string, kind: DraftKind = "diagr
 
 /** One item of Make both's answer: the job it started, or the refusal its own press would have had. */
 export type DrawItemResult =
-  | { kind: DraftKind; jobId: string }
+  | { kind: DraftKind; jobId: string; created?: boolean; replaces?: string | null }
   | { kind: DraftKind; status: number; refusal: Refusal };
 
 /**
@@ -461,7 +500,12 @@ export function drawResults(raw: unknown): DrawItemResult[] {
     const item = entry as Record<string, unknown>;
     if (!isDraftKind(item.kind)) continue;
     if (typeof item.jobId === "string") {
-      out.push({ kind: item.kind, jobId: item.jobId });
+      out.push({
+        kind: item.kind,
+        jobId: item.jobId,
+        ...(typeof item.created === "boolean" ? { created: item.created } : {}),
+        ...(typeof item.replaces === "string" || item.replaces === null ? { replaces: item.replaces as string | null } : {}),
+      });
       continue;
     }
     const status = typeof item.status === "number" ? item.status : 500;

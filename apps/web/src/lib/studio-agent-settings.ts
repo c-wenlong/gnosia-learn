@@ -32,15 +32,38 @@ export const AGENT_ROWS: { kind: AgentKind; name: string }[] = [
 ];
 
 /**
- * The models the menu offers: the ones the runner's rate table prices, by
- * the alias `claude --model` takes. Phase 2 adds Fable's rates beside the
- * menu that offers it (the runner's half).
+ * The models the menu offers when the runner does not say: the list
+ * `GET /api/settings/agent` sends (#207, `OFFERED_MODELS` in
+ * `services/studio/src/api.ts`), every one the rate table prices, by the name
+ * `claude --model` takes. The runner's own list wins when it answers, since it
+ * drops a model its rate table cannot price; this copy is also what a save
+ * may store.
  */
 export const MODEL_CHOICES: { value: string; label: string }[] = [
   { value: "fable", label: "Fable" },
   { value: "opus", label: "Opus" },
   { value: "sonnet", label: "Sonnet" },
+  { value: "claude-fable-5-1", label: "Claude Fable 5.1" },
+  { value: "claude-opus-5-5", label: "Claude Opus 5.5" },
+  { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
 ];
+
+/**
+ * `GET /api/settings/agent` (#207), read defensively: its model list and what
+ * "Claude Code default" resolves to. Either is null when the runner did not
+ * answer or sent something else, and the page falls back to health's
+ * `agent.defaults` and `MODEL_CHOICES`.
+ */
+export function runnerSettings(raw: unknown): { models: { value: string; label: string }[] | null; defaults: AgentDefaults | null } {
+  if (typeof raw !== "object" || raw === null) return { models: null, defaults: null };
+  const body = raw as { models?: unknown; defaults?: unknown };
+  const models = Array.isArray(body.models)
+    ? body.models
+        .filter((model): model is { value: string; label: string } => typeof model === "object" && model !== null && typeof (model as { value?: unknown }).value === "string" && typeof (model as { label?: unknown }).label === "string")
+        .map((model) => ({ value: model.value, label: model.label }))
+    : [];
+  return { models: models.length > 0 ? models : null, defaults: agentDefaults({ defaults: body.defaults }) };
+}
 
 const EFFORT_LABELS: Record<(typeof AGENT_EFFORTS)[number], string> = {
   low: "Low",
@@ -111,10 +134,14 @@ export function defaultLabel(resolved: string | null | undefined, known: boolean
 }
 
 /** The model menu: the default with what it resolves to, then each priced model, then a stored value outside those. */
-export function modelOptions(current: string, defaults: AgentDefaults | null): FilterOption<string>[] {
+export function modelOptions(
+  current: string,
+  defaults: AgentDefaults | null,
+  models: readonly { value: string; label: string }[] = MODEL_CHOICES,
+): FilterOption<string>[] {
   const options: FilterOption<string>[] = [
     { value: "default", label: defaultLabel(defaults?.model, defaults !== null) },
-    ...MODEL_CHOICES.map((choice) => ({ value: choice.value, label: choice.label })),
+    ...models.map((choice) => ({ value: choice.value, label: choice.label })),
   ];
   if (!options.some((option) => option.value === current)) options.push({ value: current, label: current });
   return options;

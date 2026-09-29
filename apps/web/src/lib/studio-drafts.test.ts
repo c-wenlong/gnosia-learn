@@ -163,7 +163,7 @@ describe("openDraftEvents", () => {
     const source = FakeSource.last!;
     expect(source.url).toBe("/studio/api/drafts/d1/events?after=7");
     expect([...source.listeners.keys()].sort()).toEqual(
-      ["brief", "brief-invalid", "delta", "error", "message", "reply", "state", "studio"].sort(),
+      ["brief", "brief-ignored", "brief-invalid", "delta", "error", "message", "reply", "state", "studio"].sort(),
     );
     source.onopen?.();
     source.emit("delta", '{"turn":3,"text":"Hel"}');
@@ -273,14 +273,14 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
     answer(200, {
       draftId: "d1",
       results: [
-        { kind: "diagram", jobId: "j1" },
+        { kind: "diagram", jobId: "j1", created: true, replaces: null },
         { kind: "video", status: 503, refusal: { error: "the video doctor fails", detail: { reason: "video-unavailable" } } },
         { kind: "nope", jobId: "j2" },
       ],
     });
     const result = await drawBoth("d1", []);
     expect(result.ok && result.data.results).toEqual([
-      { kind: "diagram", jobId: "j1" },
+      { kind: "diagram", jobId: "j1", created: true, replaces: null },
       { kind: "video", status: 503, refusal: { error: "the video doctor fails", detail: { reason: "video-unavailable" } } },
     ]);
     expect(drawResults(null)).toEqual([]);

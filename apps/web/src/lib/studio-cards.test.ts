@@ -430,3 +430,22 @@ describe("a malformed video brief", () => {
     expect(briefs.map((item) => item.kind)).toEqual(["diagram"]);
   });
 });
+
+describe("the runner's own slot fields (#207)", () => {
+  it("takes live and busy from the slot when it sends them", () => {
+    const current = bothAsked();
+    current.slots!.video = slot({ ...current.slots!.video, state: "drawing", live: true, busy: { jobId: "v1", state: "running" } });
+    expect(kindCardStatus(current, 2, "video")).toBe("live");
+    expect(kindBusy(current, "video", [])?.jobId).toBe("v1");
+    expect(kindBusy(current, "video", [job({ jobId: "v1", state: "accepted" })])).toBeNull();
+    current.slots!.video = slot({ ...current.slots!.video, live: false, busy: null });
+    expect(kindCardStatus(current, 2, "video")).toBe("drawn");
+    expect(kindBusy(current, "video", [job({ jobId: "v1", state: "running" })])).toBeNull();
+  });
+
+  it("keeps an older card's own proposed topic from its brief", () => {
+    const pending = { entry: { slug: "attn", title: "Attention", domain: "ml", summary: null, aliases: [], relations: [] }, nearMatches: [] };
+    const entry = { briefs: [{ kind: "video" as const, brief: VIDEO, requestSeq: 1, pendingTopic: pending }] };
+    expect(kindPendingTopic("stale", "video", entry, bothAsked())).toBe(pending);
+  });
+});

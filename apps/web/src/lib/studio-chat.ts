@@ -379,12 +379,39 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
           ? "That topic was created elsewhere in the meantime. The brief now uses it, so Draw again."
           : sentence(refusal.error),
       );
-    case "not-briefed":
+    case "not-briefed": {
+      const kind = refusalString(refusal, "kind");
+      if (kind === "video") {
+        return own(
+          refusalString(refusal, "state") === "drawing"
+            ? "This conversation's video is already being made."
+            : "There is no video brief to make right now.",
+        );
+      }
       return own(
         refusalString(refusal, "state") === "drawing"
           ? "This conversation's drawing is already in progress."
           : "There is no brief to draw right now.",
       );
+    }
+    case "kind-busy": {
+      // #207: this draft's own job of the kind has not reached a verdict.
+      const video = refusalString(refusal, "kind") === "video";
+      const state = refusalString(refusal, "state");
+      const waiting = state === "awaiting_review" ? " is waiting for review" : ` is still ${video ? "being made" : "being drawn"}`;
+      return own(
+        `The ${video ? "video" : "diagram"} from this conversation${waiting}. Accept, discard or cancel it first.`,
+        refusalString(refusal, "jobId"),
+      );
+    }
+    case "held": {
+      // #207: the planner put this brief on hold (a `hold` block).
+      const held = (refusal.detail as { held?: { reason?: unknown } } | null)?.held;
+      const reason = typeof held?.reason === "string" && held.reason.trim() !== "" ? held.reason.trim() : null;
+      return own(
+        `This brief is on hold${reason === null ? "" : `: ${reason.replace(/[.!?]$/, "")}`}. Press Use this brief to make it, or ask for a new one.`,
+      );
+    }
     case "in-flight":
       return own("The planner is still answering. Draw once its reply is in.");
     case "draw-in-progress":
