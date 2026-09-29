@@ -240,6 +240,8 @@ interface GraphNode {
   summary?: string;
   requires: string[];
   assumes: string[];
+  /** `requires` then `assumes`: everything that should come earlier. */
+  ordering: string[];
   tags?: string[];
   sources?: string[];
   domain?: string | null;
@@ -247,7 +249,10 @@ interface GraphNode {
 
 interface Graph {
   nodes: Map<string, GraphNode>;
+  /** Reverse index over `requires` only: who is gated by this concept. */
   dependents: Map<string, string[]>;
+  /** Reverse index over `requires` and `assumes`: who is ordered after it. */
+  orderDependents: Map<string, string[]>;
 }
 
 interface FrontierEntry {
@@ -1767,8 +1772,12 @@ commands.doctor = async ({ values }, session) => {
     if (!node.title) {
       problems.push({ severity: "warn", kind: "missing-title", message: `${id} has no title` });
     }
+    // Either kind of edge, in either direction, connects a note. Counting
+    // `requires` alone called 71 of 193 notes orphans on the owner's graph
+    // when 50 of them had `assumes` edges, which the doc tells authors to
+    // prefer when in doubt: the warning was punishing the rule.
     const orphan =
-      node.requires.length === 0 && (graph.dependents.get(id) ?? []).length === 0;
+      node.ordering.length === 0 && (graph.orderDependents.get(id) ?? []).length === 0;
     if (orphan && graph.nodes.size > 1) {
       problems.push({
         severity: "warn",

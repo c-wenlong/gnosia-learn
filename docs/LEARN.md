@@ -442,7 +442,10 @@ defensible as ordering and wrong as a gate. That edge is now `assumes`: the
 ordering knowledge is kept, the blocking is gone.
 
 When in doubt, use `assumes`. Over-declaring a hard prerequisite produces a
-graph where nothing is ever at the frontier.
+graph where nothing is ever at the frontier. `doctor` treats either kind of
+edge, in either direction, as a connection: a note with only `assumes` edges
+is background-ordered, not an orphan, and its warning is kept for a note with
+no edge at all.
 
 A concept's place on a course is authored on the course side, as
 `topics[].concepts` in the course's file (`catalog course export`, edit,

@@ -408,6 +408,24 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
       await rm(path.join(root, "learn", "concepts", "fixtures", "widgets.md"), { force: true });
     });
 
+    it("doctor calls a note an orphan only when it has no edge of either kind", async () => {
+      // `background` has an `assumes` edge and nothing else; the doc tells
+      // authors to prefer that kind when in doubt, so it must not be the
+      // thing the orphan warning fires on. `solo` has no edge at all.
+      const dir = path.join(root, "learn", "concepts", "fixtures");
+      await writeFile(path.join(dir, "background.md"), "---\nid: background\ntitle: Background\nassumes: [alpha]\n---\n\n# Background\n", "utf8");
+      await writeFile(path.join(dir, "solo.md"), "---\nid: solo\ntitle: Solo\n---\n\n# Solo\n", "utf8");
+      try {
+        const { stdout } = await learn("doctor", "--json").catch((error: { stdout: string }) => error);
+        const report = JSON.parse(stdout) as { problems: { kind: string; message: string }[] };
+        const orphans = report.problems.filter((p) => p.kind === "orphan").map((p) => p.message);
+        expect(orphans).toEqual(["solo is connected to nothing — is a prerequisite missing?"]);
+      } finally {
+        await rm(path.join(dir, "background.md"), { force: true });
+        await rm(path.join(dir, "solo.md"), { force: true });
+      }
+    });
+
     it("map prints the map, and writes a file only when --out names one", async () => {
       const { stdout } = await learn("map");
       expect(stdout).toContain("# Knowledge Map");
