@@ -1,10 +1,18 @@
 import type { BlobStore } from "@self-learn/blob";
-import { COURSES_DIR, TAGS_FILE, TOPICS_FILE } from "@self-learn/content";
+import {
+  COURSE_COVER_EXTENSIONS,
+  COURSES_DIR,
+  type CourseCoverExtension,
+  coverFileName,
+  TAGS_FILE,
+  TOPICS_FILE,
+} from "@self-learn/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ASSET_PREFIX } from "../index/source";
 import { openBlobStore, readBlob } from "./blob";
+import { keyParts, storedCredit } from "./cover-image";
 import { diagramPaths, documentBytes } from "./diagram-document";
 import { type ExportFile, type ExportType, sha256 } from "./layout";
 import { readNoteRows } from "./note-rows";
@@ -117,7 +125,7 @@ export async function renderType(
     case "tags":
       return [await renderTags(db, filter)];
     case "courses":
-      return renderCourses(db, filter);
+      return renderCourses(db, options.store, filter);
     case "concepts":
       return renderConcepts(db, filter);
     case "sessions":
@@ -261,12 +269,24 @@ interface CourseMetadata {
  * One `content/courses/<code>.yaml` per live course, in the key order the
  * files are written in. Archived modules and items are left out: the course
  * file no longer lists them, which is why they were archived (D12).
+ *
+ * A course with a cover also writes `content/courses/<code>.cover.<ext>`, its
+ * bytes read from the blob store (`store`, else the one the process opens)
+ * and checked against the key's hash, and its file names it under `cover:`
+ * with the credit from `metadata.coverCredit`.
  */
-async function renderCourses(db: CatalogDatabase, filter?: RenderFilter): Promise<ExportFile[]> {
+async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: RenderFilter): Promise<ExportFile[]> {
   const courses = kept(
-    await rows<{ id: string; slug: string; title: string; position: number; metadata: CourseMetadata }>(
+    await rows<{
+      id: string;
+      slug: string;
+      title: string;
+      position: number;
+      metadata: CourseMetadata;
+      cover_blob_key: string | null;
+    }>(
       db,
-      sql`select id, slug, title, position, metadata from collection
+      sql`select id, slug, title, position, metadata, cover_blob_key from collection
           where kind = 'course' and archived_at is null order by position, id`,
     ),
     filter?.courses,
@@ -325,6 +345,8 @@ async function renderCourses(db: CatalogDatabase, filter?: RenderFilter): Promis
 
   const problems: string[] = [];
   const files: ExportFile[] = [];
+  /** Opened on the first cover, so an export with none never needs a store. */
+  let store: BlobStore | undefined;
   for (const course of courses) {
     const meta = course.metadata;
     const code = typeof meta.code === "string" ? meta.code : null;
@@ -350,6 +372,28 @@ async function renderCourses(db: CatalogDatabase, filter?: RenderFilter): Promis
     }
     lines.push(`inferred: ${String(meta.inferred)}`);
     lines.push(`tags: ${flowList((tags.get(course.id) ?? []).map((r) => r.tag_id))}`);
+    if (course.cover_blob_key !== null) {
+      const { sha256: hash, ext } = keyParts(course.cover_blob_key);
+      const credit = storedCredit(meta);
+      if (!(COURSE_COVER_EXTENSIONS as readonly string[]).includes(ext)) {
+        problems.push(`course "${course.id}" has a cover of type .${ext}, which a course file cannot name`);
+      } else if (credit === null) {
+        problems.push(`course "${course.id}" has a cover and no metadata.coverCredit`);
+      } else {
+        const file = coverFileName(code, ext as CourseCoverExtension);
+        lines.push("cover:");
+        lines.push(`${pad(2)}file: ${blockScalar(file)}`);
+        lines.push(`${pad(2)}photographer: ${blockScalar(credit.photographer)}`);
+        lines.push(`${pad(2)}source: ${blockScalar(credit.source)}`);
+        lines.push(`${pad(2)}licence: ${blockScalar(credit.licence)}`);
+        try {
+          store ??= given ?? openBlobStore();
+          files.push({ path: `${COURSES_DIR}/${file}`, bytes: await readBlob(store, course.cover_blob_key, hash) });
+        } catch (error) {
+          problems.push(`${COURSES_DIR}/${file}: ${(error as Error).message}`);
+        }
+      }
+    }
     lines.push("modules:");
     for (const mod of modules.get(course.id) ?? []) {
       lines.push(`${pad(2)}- id: ${blockScalar(mod.id)}`);

@@ -21,6 +21,7 @@ import type {
   SourceRepo,
 } from "@self-learn/schema";
 
+import type { CoverCredit } from "../content/cover-image";
 import type { ImportedLog } from "../content/session-logs";
 import type { Vocabulary } from "./vocabulary";
 
@@ -96,6 +97,14 @@ export interface IndexContext {
    * that has none.
    */
   knownDiagrams: () => Promise<ReadonlyMap<string, { svgBlobKey: string | null; svgDocumentHash: string | null }>>;
+  /**
+   * Each of the owner's courses that has a cover: its blob key and credit,
+   * by course id. The courses source reads it because a course file from
+   * before covers existed has no `cover:`, and must not take away a cover
+   * the database holds; one whose `cover:` differs is refused, as `course
+   * import` refuses it. Empty for a database with none, or before 0016.
+   */
+  knownCovers: () => Promise<ReadonlyMap<string, { key: string; credit: CoverCredit | null }>>;
 }
 
 /** Rows produced by one source, keyed by the table they belong in. */
@@ -160,8 +169,20 @@ export interface SourceBlob {
   bytes: number;
 }
 
+/** A course's cover as a read saw it: its key and credit, or null for none. */
+export type CoverRead = { key: string; credit: CoverCredit | null } | null;
+
 export interface SourceResult extends SourceNotes {
   rows: SourceRows;
+  /**
+   * The courses source's view of each course's stored cover, by course id,
+   * as `knownCovers` answered during the read: what its keep-or-refuse
+   * decisions were made against. The writer reads the covers again under
+   * its locks and refuses the whole source when any moved in between (a
+   * `catalog course cover` that committed mid-import), rather than writing
+   * back a cover it no longer holds.
+   */
+  coversRead?: ReadonlyMap<string, CoverRead>;
   /** Files to store before the rows are written; see `SourceBlob`. */
   blobs?: SourceBlob[];
   scope?: ReplaceScope;

@@ -9,13 +9,14 @@ import {
   stampCourse,
   type WriteThroughSummary,
 } from "../content/courses";
+import { type CourseCoverOptions, type CourseCoverResult, setCourseCover } from "../content/course-cover";
 import { archiveItem, type ItemResult, purgeItem, restoreItem } from "../content/items";
 import { importRoot } from "../content/write-through";
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
 
 /**
- * `catalog course import|export` and `catalog item archive|restore|purge`:
+ * `catalog course import|export|cover` and `catalog item archive|restore|purge`:
  * the connection and the printing. What each does, and the rules it keeps, is
  * in `../content/courses.ts` and `../content/items.ts`.
  */
@@ -23,6 +24,7 @@ import { databaseUrl, redactUrl } from "../env";
 export type CourseImportCommandResult = CourseImportResult & { database: string };
 export type CourseExportCommandResult = CourseExportResult & { database: string; out: string | null };
 export type ItemCommandResult = ItemResult & { database: string; verb: ItemVerb };
+export type CourseCoverCommandResult = CourseCoverResult & { database: string };
 
 export const ITEM_VERBS = ["archive", "restore", "purge"] as const;
 export type ItemVerb = (typeof ITEM_VERBS)[number];
@@ -62,6 +64,34 @@ export async function runCourseExport(options: { id: string; out?: string }): Pr
     await writeFile(out, yaml, "utf8");
   }
   return { database: redactUrl(url), out, ...result, yaml };
+}
+
+/** `catalog course cover`: the rules are in `../content/course-cover.ts`. */
+export async function runCourseCover(options: Omit<CourseCoverOptions, "store">): Promise<CourseCoverCommandResult> {
+  const url = databaseUrl();
+  return withDatabase(async ({ db }) => ({ database: redactUrl(url), ...(await setCourseCover(db, options)) }));
+}
+
+export function formatCourseCover(result: CourseCoverCommandResult): string {
+  const lines = [`database  ${result.database}`];
+  const describe = (state: { key: string; credit: { photographer: string } | null } | null) =>
+    state === null ? "none" : `${state.key}${state.credit === null ? "" : ` (${state.credit.photographer})`}`;
+  const head = result.dryRun ? "dry run, nothing stored or written: " : "";
+  if (!result.changed) {
+    lines.push(`${head}course ${result.course}: the cover is already ${describe(result.cover)}; no revision`);
+  } else {
+    const revision = result.revisionId === null ? "" : `, revision ${result.revisionId}`;
+    lines.push(`${head}course ${result.course}: cover ${result.action === "clear" ? "cleared" : "set"}${revision}`);
+    lines.push(`  before  ${describe(result.previous)}`, `  after   ${describe(result.cover)}`);
+  }
+  if (result.cover !== null) {
+    lines.push(
+      `  ${result.cover.mime}, ${result.cover.bytes} bytes, ` +
+        (result.dryRun ? "not stored (dry run)" : result.uploaded ? "uploaded now" : "already in the store"),
+    );
+  }
+  lines.push(...writeThroughLines(result.writeThrough));
+  return lines.join("\n");
 }
 
 /**

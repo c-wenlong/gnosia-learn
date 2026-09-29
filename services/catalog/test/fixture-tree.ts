@@ -43,6 +43,7 @@ export async function makeFixture(): Promise<Fixture> {
       knownCurriculumItems: async () => new Set<string>(),
       knownAssets: async () => new Map<string, string>(),
       knownDiagrams: async () => new Map(),
+      knownCovers: async () => new Map(),
       ...overrides,
     }),
     cleanup: () => rm(root, { recursive: true, force: true }),

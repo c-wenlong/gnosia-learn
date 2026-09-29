@@ -1,4 +1,3 @@
-import { coverSrc } from "@/lib/course-covers";
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import type { Course, TagMeta } from "@/lib/types";
 
@@ -35,7 +34,7 @@ export interface CourseSummary {
   title: string;
   /** Modular credits, as the course path prints them ("4 MC"). */
   credits: number;
-  /** The cover photo's public path, or null to draw the code placeholder. */
+  /** The cover photo's URL (`coverUrl`), or null to draw the code placeholder. */
   cover: string | null;
   tags: Pick<TagMeta, "id" | "label">[];
   moduleCount: number;
@@ -47,13 +46,39 @@ export interface CourseSummary {
   topics: CourseSummaryTopic[];
 }
 
-export function toCourseSummary(course: Course, tags: readonly TagMeta[]): CourseSummary {
+/**
+ * The query parameter that pins a cover URL to one image, and its value for
+ * an image: the first 16 hex digits of its sha256. The route caches a URL
+ * whose version names the image it serves for good (`immutable`), and any
+ * other for no time at all, so a replaced cover can never show its old photo.
+ */
+export const COVER_VERSION_PARAM = "v";
+
+export function coverVersion(sha256: string): string {
+  return sha256.slice(0, 16);
+}
+
+/**
+ * Where a course's cover is served: the cover route, by slug, versioned by
+ * the image's hash. The row stores the blob key, never this URL
+ * (`collection.cover_blob_key`), so the URL can change with the route and a
+ * cloud store without a migration.
+ */
+export function coverUrl(slug: string, sha256: string): string {
+  return `/api/courses/${encodeURIComponent(slug)}/cover?${COVER_VERSION_PARAM}=${coverVersion(sha256)}`;
+}
+
+/**
+ * `coverSha256`: the stored cover's hash, when the course has a cover in the
+ * blob store (`getCourseCovers`); null or absent draws the placeholder.
+ */
+export function toCourseSummary(course: Course, tags: readonly TagMeta[], coverSha256: string | null = null): CourseSummary {
   return {
     slug: course.slug,
     code: course.code,
     title: course.title,
     credits: course.credits,
-    cover: coverSrc(course.slug),
+    cover: coverSha256 === null ? null : coverUrl(course.slug, coverSha256),
     tags: tags.map(({ id, label }) => ({ id, label })),
     moduleCount: course.modules.length,
     topics: course.modules.flatMap((m) =>

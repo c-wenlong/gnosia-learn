@@ -146,6 +146,21 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Added
 
+- **Course cover photos are blobs, named by the course row.** The ten photos
+  that were `apps/web/public/course-covers/` move into the blob store:
+  migration 0016 adds `collection.cover_blob_key` (a course only, always with
+  `metadata.coverCredit`: photographer, source page, licence), and the web
+  app serves each from `/api/courses/<slug>/cover` to the signed-in owner,
+  cached for good under a URL versioned by the image's hash. `catalog course
+  cover <id> --file IMAGE --photographer P --source URL --licence L --reason R`
+  sets or replaces one (`--clear` removes it), and
+  `node scripts/move-course-covers.mjs --from <dir>` moved the ten. An export
+  writes `content/courses/<code>.cover.<ext>` beside the course file, which
+  names it under `cover:`, and an import stores it back under the same key;
+  the seed's course carries its cover. Until the cloud adapter arrives,
+  covers show only where the `fs` store is, and a card with none draws its
+  code placeholder.
+
 - **The asset library: `/library` and `/library/[id]`.** Every piece that made
   this possible landed separately — the queries, the components, the file route
   — and this is the surface that puts them together. `Library` is in the

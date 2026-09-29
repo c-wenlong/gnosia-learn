@@ -8,6 +8,11 @@ prereq: 120 units only
 notes: Strongest overlap with agent internals, tool use, and transformer architecture.
 inferred: false
 tags: [agentic-ai, transformers]
+cover:
+  file: cp4284.cover.webp
+  photographer: Brecht Corbeel (@brechtcorbeel)
+  source: https://unsplash.com/photos/a-glowing-cpu-on-a-circuit-board-with-illuminated-traces-iyyP3vPPWpk
+  licence: Unsplash License
 modules:
   - id: cp4284-m1
     slug: m1-llm-foundations-recap
