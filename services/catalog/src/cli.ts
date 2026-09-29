@@ -20,6 +20,7 @@ import { runDiagramCommand } from "./commands/diagram";
 import {
   formatDraft,
   readDraftFile,
+  runDraftDelete,
   runDraftList,
   runDraftShow,
   runDraftUpsert,
@@ -159,8 +160,9 @@ Commands:
                            that owner's jobs only (default: local).
   draft <verb>             The studio's planner conversations: upsert --file
                            FILE (the runner's draft.json), show --id ID, ls
-                           [--state S] [--limit N]. --owner ID acts on that
-                           owner's drafts only (default: local).
+                           [--state S] [--limit N], delete --id ID (only when
+                           no job names it). --owner ID acts on that owner's
+                           drafts only (default: local).
   diagram <verb>           Diagrams in the database: put, checkout, commit,
                            list, show. \`catalog diagram --help\` has the
                            flags.
@@ -1073,8 +1075,13 @@ async function draftCommand(positionals: string[], values: Values): Promise<Draf
     }
     case "ls":
       return runDraftList({ state: values.state, limit: number(values.limit, "--limit"), owner: values.owner });
+    case "delete": {
+      const id = values.id ?? positionals[2];
+      if (id === undefined) throw new Usage("draft delete needs --id <id>");
+      return runDraftDelete(id, values.owner);
+    }
     default:
-      throw new Usage("usage: draft upsert|show|ls");
+      throw new Usage("usage: draft upsert|show|ls|delete");
   }
 }
 

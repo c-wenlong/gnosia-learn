@@ -5,7 +5,7 @@ import { draft, job, learner, LOCAL_LEARNER_ID, topic } from "@self-learn/schema
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { draftRow, runDraftList, runDraftShow, runDraftUpsert, type DraftDocument } from "../src/commands/draft";
+import { draftRow, runDraftDelete, runDraftList, runDraftShow, runDraftUpsert, type DraftDocument } from "../src/commands/draft";
 import { runEnqueue, runShow } from "../src/commands/job";
 import { applyMigrations } from "../src/migrations";
 import { makeFixture, type Fixture } from "./fixture-tree";
@@ -139,6 +139,28 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
       ).rejects.toThrow(new RegExp(`no draft "${name}"`));
     }
     expect(await scratch.db.select().from(job)).toHaveLength(0);
+  });
+
+  it("deletes a draft only when no job names it, and only the owner's", async () => {
+    await runDraftUpsert(doc("d-idle"));
+    await runDraftUpsert(doc("d-drew", { state: "briefed", brief: { slug: "three" } }));
+    await runDraftUpsert(doc("d-theirs"), OTHER);
+    await runEnqueue({
+      brief: { kind: "diagram", topic: "alpha", target: "learn/assets/three.tldr", idempotencyKey: "k-drew", draft: "d-drew" },
+      repoRoot: fixture.root,
+    });
+
+    expect(await runDraftDelete("d-idle")).toMatchObject({ deleted: true, outcome: "deleted", jobs: 0 });
+    // A job names it, even a failed one: the conversation outlives nothing it explains (D40).
+    expect(await runDraftDelete("d-drew")).toMatchObject({ deleted: false, outcome: "has-jobs", jobs: 1 });
+    // Another owner's row is "no draft", and stays.
+    expect(await runDraftDelete("d-theirs")).toMatchObject({ deleted: false, outcome: "no-draft" });
+    expect(await runDraftDelete("d-never")).toMatchObject({ deleted: false, outcome: "no-draft" });
+    const left = (await scratch.db.select({ id: draft.id }).from(draft)).map((row) => row.id).sort();
+    expect(left).toEqual(["d-drew", "d-theirs"]);
+    const [linked] = await scratch.db.select({ draftId: job.draftId }).from(job);
+    expect(linked?.draftId).toBe("d-drew");
+    await expect(runDraftDelete("../x")).rejects.toThrow(/not a draft id/);
   });
 
   it("holds the paired checks in the table itself", async () => {

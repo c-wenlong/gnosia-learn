@@ -19,8 +19,8 @@ import { withDatabase, type CatalogDatabase } from "../db";
  * `catalog draft`: the studio's planner conversations (docs/STUDIO-CHAT-FIRST.md,
  * D32), as rows.
  *
- * Three verbs, mirroring `catalog job`: `upsert` writes one draft from a JSON
- * file, `show` reads one, `ls` lists them. The runner is the only writer, and
+ * Four verbs: `upsert` writes one draft from a JSON file, `show` reads one,
+ * `ls` lists them, as `catalog job` does, and `delete` is the pruner's (D40). The runner is the only writer, and
  * it writes `drafts/<id>/draft.json` first (rule 7 of the studio): this row is
  * the query surface and a mirror of that file, so `upsert` takes the whole
  * record rather than a transition.
@@ -102,7 +102,22 @@ export interface DraftListResult {
   drafts: DraftSummary[];
 }
 
-export type DraftResult = DraftUpsertResult | DraftShowResult | DraftListResult;
+export interface DraftDeleteResult {
+  ok: true;
+  command: "draft delete";
+  id: string;
+  deleted: boolean;
+  /**
+   * `deleted`: the row is gone. `no-draft`: this owner has no such row, so
+   * no job row can name it either (`job.draft_id` is a foreign key).
+   * `has-jobs`: a job row names it, and it stays (D40).
+   */
+  outcome: "deleted" | "no-draft" | "has-jobs";
+  /** How many job rows name the draft, any owner's. */
+  jobs: number;
+}
+
+export type DraftResult = DraftUpsertResult | DraftShowResult | DraftListResult | DraftDeleteResult;
 
 const iso = (value: Date | null): string | null => (value === null ? null : value.toISOString());
 
@@ -347,6 +362,53 @@ export async function runDraftShow(id: string, owner: string = CLI_OWNER): Promi
   });
 }
 
+/**
+ * `catalog draft delete --id ID`: the pruner's half in Postgres (D40 of
+ * docs/STUDIO-CHAT-FIRST.md). The row goes only when no `job` row names it,
+ * whoever's job it is.
+ *
+ * The check and the delete share a transaction that locks the draft row
+ * first. `job.draft_id` is `ON DELETE SET NULL`, so a delete that raced a job
+ * insert would quietly cut that job loose from its conversation: the insert's
+ * foreign-key check holds a share lock on the row, `FOR UPDATE` waits for it,
+ * and the count after the wait is a fresh statement that sees the job.
+ *
+ * A row that is not there, or is another owner's, is `no-draft` rather than a
+ * refusal: the runner's workspace is what it prunes, and a draft whose mirror
+ * never landed has nothing here to delete.
+ */
+export async function runDraftDelete(id: string, owner: string = CLI_OWNER): Promise<DraftDeleteResult> {
+  if (!DRAFT_ID.test(id)) {
+    throw new DraftError(`${JSON.stringify(id)} is not a draft id: letters, digits and dashes, up to 64.`);
+  }
+  return withDatabase(({ db }) =>
+    db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ id: draftTable.id })
+        .from(draftTable)
+        .where(and(eq(draftTable.id, id), eq(draftTable.ownerId, owner)))
+        .for("update");
+      const [counted] = await tx
+        .select({ total: sql<number>`count(*)::int` })
+        .from(jobTable)
+        .where(eq(jobTable.draftId, id));
+      const jobs = counted?.total ?? 0;
+      const result = (outcome: DraftDeleteResult["outcome"]): DraftDeleteResult => ({
+        ok: true as const,
+        command: "draft delete" as const,
+        id,
+        deleted: outcome === "deleted",
+        outcome,
+        jobs,
+      });
+      if (row === undefined) return result("no-draft");
+      if (jobs > 0) return result("has-jobs");
+      await tx.delete(draftTable).where(and(eq(draftTable.id, id), eq(draftTable.ownerId, owner)));
+      return result("deleted");
+    }),
+  );
+}
+
 export const DRAFT_LIST_LIMIT = 20;
 export const DRAFT_LIST_LIMIT_MAX = 100;
 
@@ -406,6 +468,12 @@ export function formatDraft(result: DraftResult): string {
         ...(d.error === null ? [] : [`  error     ${d.errorKind ?? "?"}: ${d.error}`]),
       ].join("\n");
     }
+    case "draft delete":
+      return result.outcome === "deleted"
+        ? `deleted ${result.id}`
+        : result.outcome === "has-jobs"
+          ? `kept ${result.id}: ${result.jobs} job${result.jobs === 1 ? "" : "s"} name it`
+          : `no draft ${result.id}`;
     case "draft ls":
       if (result.drafts.length === 0) return "no drafts";
       return `${result.drafts.map(line).join("\n")}\n\n${result.drafts.length} of ${result.total}`;
