@@ -597,9 +597,11 @@ contradicts nothing) costs nothing.
 **Cmd+Enter.** Today Cmd+Enter from an empty composer presses the one live
 Draw. With exactly one live, enabled card it still presses that card. With two,
 it presses the card that has focus within it; from the composer it presses
-nothing, moves focus to Make both when it is shown (otherwise to the first live
-card's button), and announces "Two briefs are ready." A keystroke from the
-composer never starts two paid jobs, or picks one of two, for the person.
+nothing, leaves focus in the composer, and announces "Two briefs are ready.
+Press Make both, or the card you want." A keystroke from the composer never
+starts two paid jobs, or picks one of two, for the person. (Built first as a
+move of focus to Make both; review of #204 found that the person's next
+keystroke, a Space, would then press it, so focus now stays put.)
 `aria-keyshortcuts` goes on the one live button, or on none when there are two.
 
 ### The draft's state (D62)
@@ -788,7 +790,7 @@ T for tags, so they do not collide with C, M, E, U or V.
 | T6 | Both tagged, and the planner asks a question first | Allowed by the stop rules; its next reply to a tagged message should carry the briefs. The runner does not police it, and phase 2's done-when measures how often it happens |
 | T7 | Both tagged, the diagram brief valid and the video brief refused | The diagram card is live at once; one retry for the video brief; refused again, the E6 card for the video only, and no Make both |
 | T8 | A newer diagram brief while this draft's diagram job runs | The card is live, Draw disabled with "The diagram is still being drawn" until the job's verdict; the video card and its job are unaffected, and Make both is not shown |
-| T9 | Cmd+Enter with two live cards | Presses the focused card; from the composer, moves focus to Make both (or the first card) and announces. Never starts a job from the composer |
+| T9 | Cmd+Enter with two live cards | Presses the focused card; from the composer, announces that two briefs are ready and leaves focus in the composer. Never starts a job from the composer, and never hands focus to a paid button |
 | T10 | The diagram and the video share a slug | Allowed, and what the prompt asks for: different targets, leases and namespaces |
 | T11 | Both briefs name one proposed topic | The first press, or Make both, creates it; the other slot's pending topic is cleared and its button reads plain |
 | T12 | Both cards pressed, one after the other or from two tabs | Two keys (the kind is in each), two runners, the cap checked by each press. V20's "both run" now happens inside one draft; the machine carries one Chromium job and one render job, still unmeasured together |

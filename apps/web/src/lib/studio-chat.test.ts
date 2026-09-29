@@ -433,3 +433,11 @@ describe("tags (docs/STUDIO-MENTIONS.md)", () => {
     expect(composerState(view({ state: "drawing", jobId: "j1" }), null).disabled).toBe(true);
   });
 });
+
+describe("Start over with per-kind slots (Greptile on #204)", () => {
+  it("leaves a drawing draft alone and opens a new one, where the old runner refused", () => {
+    expect(startOverStep("drawing", true)).toBe("skip");
+    expect(startOverStep("drawing")).toBe("refuse");
+    expect(startOverStep("briefed", true)).toBe("abandon");
+  });
+});

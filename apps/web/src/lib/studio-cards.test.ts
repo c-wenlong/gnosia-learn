@@ -20,6 +20,7 @@ import {
   mentionOptions,
   modEnterPlan,
   openerValue,
+  lengthSendBlock,
   newestBriefSeq,
   plannerKindsOf,
   pressLabel,
@@ -313,12 +314,11 @@ describe("Make both", () => {
 
 describe("Cmd+Enter (T9)", () => {
   const cards = liveCards(bothAsked(), [], null, null);
-  it("sends words, presses the one live card, and moves focus when there are two", () => {
-    expect(modEnterPlan(false, cards, null)).toEqual({ action: "send" });
-    expect(modEnterPlan(true, cards.slice(0, 1), null)).toEqual({ action: "press", card: cards[0] });
-    expect(modEnterPlan(true, cards, makeBoth(cards))).toEqual({ action: "focus", target: "both" });
-    expect(modEnterPlan(true, cards, null)).toEqual({ action: "focus", target: cards[0] });
-    expect(modEnterPlan(true, [], null)).toEqual({ action: "none" });
+  it("sends words, presses the one live card, and with two only announces: focus never moves to a paid button", () => {
+    expect(modEnterPlan(false, cards)).toEqual({ action: "send" });
+    expect(modEnterPlan(true, cards.slice(0, 1))).toEqual({ action: "press", card: cards[0] });
+    expect(modEnterPlan(true, cards)).toEqual({ action: "announce" });
+    expect(modEnterPlan(true, [])).toEqual({ action: "none" });
   });
 });
 
@@ -414,5 +414,19 @@ describe("openerValue", () => {
     });
     expect(openerValue({ compose: "just words" })).toEqual({ text: "just words", mentions: [] });
     expect(openerValue({ compose: "", mentions: [] })).toBeNull();
+  });
+});
+
+describe("an over-long message", () => {
+  it("blocks Send with the count, and only Send", () => {
+    expect(lengthSendBlock({ text: "x".repeat(8_000), mentions: [] }, 8_000)).toBeNull();
+    expect(lengthSendBlock({ text: "x".repeat(16_500), mentions: [] }, 8_000)).toBe("16,500 of 8,000 characters. Cut it down to send.");
+  });
+});
+
+describe("a malformed video brief", () => {
+  it("is left out of the entry's cards rather than drawn", () => {
+    const briefs = entryBriefs({ briefs: [{ kind: "video", brief: { title: "no scenes" } as never, requestSeq: 1 }, { kind: "diagram", brief: DIAGRAM, requestSeq: 1 }] });
+    expect(briefs.map((item) => item.kind)).toEqual(["diagram"]);
   });
 });

@@ -15,12 +15,20 @@ import { useStartDraft } from "@/components/studio/PlusCard";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { Composer } from "@/components/ui/Composer";
 import { chipClasses, cx } from "@/components/ui/classes";
 import { COMPOSER_FRAME } from "@/components/ui/composer-keys";
 import { Glyph } from "@/components/ui/Glyph";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle, MentionComposerProps } from "@/components/ui/MentionComposer";
-import { EMPTY_MENTION_VALUE, inlinePieces, isEmptyValue, trimValue, type MentionValue } from "@/components/ui/mention-text";
+import {
+  EMPTY_MENTION_VALUE,
+  inlinePieces,
+  isEmptyValue,
+  prependValue,
+  trimValue,
+  type MentionValue,
+} from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import type { TopicOption } from "@/data/topics";
 import {
@@ -34,6 +42,7 @@ import {
   kindPendingTopic,
   kindUnavailable,
   lastPersonValue,
+  lengthSendBlock,
   liveCards,
   openerValue,
   makeBoth,
@@ -106,15 +115,44 @@ import { panelHref, titleOf } from "@/lib/studio-view";
  * of docs/STUDIO-MENTIONS.md). Until it arrives, a frame of the same height
  * stands in, so the panel does not move.
  */
-const MentionComposer = dynamic(() => import("@/components/ui/MentionComposer").then((module) => module.MentionComposer), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-end gap-2.5" aria-hidden>
-      <div className={cx("h-[52px] min-w-0 flex-1", COMPOSER_FRAME)} />
-      <div className="h-11 w-[84px] rounded-full bg-surface2" />
+const MentionComposer = dynamic(
+  () =>
+    import("@/components/ui/MentionComposer")
+      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<DraftKind>) => ReactNode)
+      // A chunk that will not load (a rebuild while the tab was open, the
+      // network gone) costs the tags, never the page: the plain composer
+      // stands in, and words still send.
+      .catch(() => PlainFallback),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-end gap-2.5" aria-hidden>
+        <div className={cx("h-[52px] min-w-0 flex-1", COMPOSER_FRAME)} />
+        <div className="h-11 w-[84px] rounded-full bg-surface2" />
+      </div>
+    ),
+  },
+) as (props: MentionComposerProps<DraftKind>) => ReactNode;
+
+/** The kit's plain `Composer` in `MentionComposer`'s place, when Lexical will not load. */
+function PlainFallback(props: MentionComposerProps<DraftKind>) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Composer
+        value={props.value.text}
+        onChange={(text) => props.onChange({ text, mentions: [] })}
+        onSubmit={(text) => props.onSubmit({ text, mentions: [] })}
+        label={props.label}
+        placeholder={props.placeholder}
+        disabled={props.disabled}
+        sendDisabled={props.sendDisabled}
+        disabledReason={props.disabledReason}
+        onModEnter={props.onModEnter}
+      />
+      <p className="px-1 text-[12px] leading-4 text-text3">Tags could not load. Reload the page to tag a diagram or a video.</p>
     </div>
-  ),
-}) as (props: MentionComposerProps<DraftKind>) => ReactNode;
+  );
+}
 
 /**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI",
@@ -433,6 +471,14 @@ export function DraftPanel({
     void load();
   }
 
+  // The opener effect below is a callback made once per draft, so it reaches
+  // `send` through this, which always holds the latest render's (whose
+  // `view` is the record, not the first render's null).
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
+
   const cards = useMemo(() => (view === null ? [] : liveCards(view, jobs, cap, video)), [view, jobs, cap, video]);
   const both = useMemo(() => (editing ? null : makeBoth(cards)), [cards, editing]);
 
@@ -502,7 +548,7 @@ export function DraftPanel({
   async function startOver() {
     setConfirmStartOver(false);
     setStartOverError(null);
-    const step = view === null ? "skip" : view.slots !== undefined && view.state === "drawing" ? "abandon" : startOverStep(view.state);
+    const step = view === null ? "skip" : startOverStep(view.state, view.slots !== undefined);
     if (step === "refuse") {
       setStartOverError("A diagram from this conversation is drawing. Cancel or review it first, then start over.");
       return;
@@ -581,15 +627,14 @@ export function DraftPanel({
         // being typed both survive. The composer may not be on screen yet (the
         // panel is showing a job, or the field is still loading); it builds
         // itself from this value when it mounts.
-        setValue(composed);
+        // In front of anything already typed, never over it.
+        setValue((held) => prependValue(composed, held));
         focusComposerSoon();
       }
       if (opener.send !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
-        void send({ text: opener.send, mentions: [] }, { keepComposer: true });
+        void sendRef.current({ text: opener.send, mentions: [] }, { keepComposer: true });
       }
     },
-    // `send` is this render's; each caller runs this once per opener.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [draftId, focusComposerSoon],
   );
 
@@ -628,14 +673,14 @@ export function DraftPanel({
       if (card !== undefined && card.block === null) void press(card);
       return;
     }
-    const plan = modEnterPlan(isEmptyValue(value), cards, both);
+    const plan = modEnterPlan(isEmptyValue(value), cards);
     if (plan.action === "send") void send(value);
     else if (plan.action === "press") void press(plan.card);
-    else if (plan.action === "focus") {
-      const selector =
-        plan.target === "both" ? "[data-make-both]" : `[data-studio-draw][data-card-kind="${plan.target.kind}"]`;
-      thread.current?.querySelector<HTMLElement>(selector)?.focus();
-      setAnnounce(TWO_READY);
+    else if (plan.action === "announce") {
+      // Focus stays where it is: a paid button with focus is one stray Space
+      // from a job. Said again even when the words have not changed.
+      setAnnounce("");
+      requestAnimationFrame(() => setAnnounce(TWO_READY));
     }
   }
 
@@ -764,6 +809,7 @@ export function DraftPanel({
   const empty = isEmptyConversation(view.transcript) && pending === null;
   const composing = composerState(view, cap, pending !== null, empty, editing);
   const valueBlock = valueSendBlock(value, empty);
+  const tooLong = lengthSendBlock(value, TEXT_LIMIT);
   const busy = view.inFlight || pending !== null;
   const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
   const waiting = waitingKinds(view);
@@ -913,13 +959,9 @@ export function DraftPanel({
           placeholder={composing.placeholder}
           mentions={options}
           mentionHint={MENTION_HINT}
-          disabled={composing.disabled || value.text.length > TEXT_LIMIT * 2}
-          sendDisabled={composing.sendDisabled || valueBlock !== null || value.text.length > TEXT_LIMIT}
-          disabledReason={
-            composing.reason ??
-            valueBlock ??
-            (value.text.length > TEXT_LIMIT ? `A message holds at most ${TEXT_LIMIT.toLocaleString()} characters.` : undefined)
-          }
+          disabled={composing.disabled}
+          sendDisabled={composing.sendDisabled || valueBlock !== null || tooLong !== null}
+          disabledReason={composing.reason ?? valueBlock ?? tooLong ?? undefined}
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
@@ -1193,7 +1235,7 @@ function MakeBothButton({ label, busy, error, onPress }: { label: string; busy: 
   return (
     <div className="flex flex-col gap-1.5 pt-1">
       <div>
-        <Button onClick={onPress} disabled={busy} data-make-both aria-keyshortcuts="Meta+Enter Control+Enter">
+        <Button onClick={onPress} disabled={busy} data-make-both>
           {busy ? "Queuing both…" : label}
         </Button>
       </div>

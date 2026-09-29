@@ -521,9 +521,12 @@ export function jobPatch(
 }
 
 /** What Start over does first: close this draft, leave it, or refuse. */
-export function startOverStep(state: DraftState): "abandon" | "skip" | "refuse" {
+export function startOverStep(state: DraftState, kinds = false): "abandon" | "skip" | "refuse" {
   if (state === "open" || state === "briefed") return "abandon";
-  if (state === "drawing") return "refuse";
+  // With per-kind slots a draft stays open to messages while a job runs,
+  // and the runner will not abandon it then, so Start over leaves it (and
+  // its job) alone and opens a new conversation, as a done draft is left.
+  if (state === "drawing") return kinds ? "skip" : "refuse";
   return "skip";
 }
 

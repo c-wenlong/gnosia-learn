@@ -2,7 +2,7 @@ import type { MentionOption, MentionValue } from "@/components/ui/mention-text";
 import { isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/components/ui/mention-text";
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive, isTerminal } from "@/lib/studio-jobs";
-import type { VideoBrief } from "@/lib/studio-brief-video";
+import { isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";
 import {
   capSentence,
   cardStatus,
@@ -53,7 +53,7 @@ export const MENTION_PLACEHOLDER = "Ask about an idea, or type @ to make somethi
 export const MENTION_HINT = "Tag one or both";
 /** T15: a bare tag in an empty conversation gives the planner nothing to go on. */
 export const SAY_WHAT = "Say what it should show";
-export const TWO_READY = "Two briefs are ready.";
+export const TWO_READY = "Two briefs are ready. Press Make both, or the card you want.";
 
 /** The @ menu's entries (STUDIO-MENTIONS.md, "What is in it"). */
 const ENTRIES: Record<DraftKind, MentionOption<DraftKind>> = {
@@ -114,8 +114,11 @@ export function mentionOptions(view: Pick<DraftView, "plannerKinds">, video: Vid
 export function entryBriefs(entry: Pick<TranscriptEntry, "brief" | "briefs">): TranscriptBrief[] {
   if (Array.isArray(entry.briefs) && entry.briefs.length > 0) {
     const seen = new Set<DraftKind>();
-    // One per kind, the last of each (D61's "last block wins", per kind).
+    // One per kind, the last of each (D61's "last block wins", per kind). A
+    // video brief too malformed to draw a card from is left out rather than
+    // taking the panel down with it.
     return [...entry.briefs].reverse().filter((item) => {
+      if (item.kind === "video" && !isVideoBrief(item.brief)) return false;
       if (seen.has(item.kind)) return false;
       seen.add(item.kind);
       return true;
@@ -395,24 +398,19 @@ export function makeBoth(cards: readonly LiveCard[]): MakeBoth | null {
 
 /**
  * Cmd or Ctrl+Enter from the composer (T9). Words in the field are sent.
- * From an empty field, exactly one live and enabled card is pressed; with two
- * the key presses nothing and moves focus to Make both (or the first card),
- * since a keystroke from the composer never starts two paid jobs, or picks
- * one of two, for the person.
+ * From an empty field, exactly one live and enabled card is pressed. With
+ * two, nothing is pressed and focus stays in the composer: the person hears
+ * that two briefs are ready and presses the one they mean. Moving focus to a
+ * paid button would let the next keystroke (a Space) press it.
  */
 export function modEnterPlan(
   empty: boolean,
   cards: readonly LiveCard[],
-  both: MakeBoth | null,
-): { action: "send" } | { action: "none" } | { action: "press"; card: LiveCard } | { action: "focus"; target: "both" | LiveCard } {
+): { action: "send" } | { action: "none" } | { action: "press"; card: LiveCard } | { action: "announce" } {
   if (!empty) return { action: "send" };
   const ready = cards.filter((card) => card.block === null);
   if (ready.length === 1 && cards.length === 1) return { action: "press", card: ready[0]! };
-  if (cards.length >= 2) {
-    if (both !== null) return { action: "focus", target: "both" };
-    const first = ready[0] ?? cards[0]!;
-    return { action: "focus", target: first };
-  }
+  if (cards.length >= 2) return { action: "announce" };
   return { action: "none" };
 }
 
@@ -469,6 +467,15 @@ export function suggestionName(kind: DraftKind): string {
 /* -------------------------------------------------------------------------- */
 /* The composer                                                               */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Why Send waits on the length of what is in the field, or null. Only Send:
+ * the field stays editable, so the person can cut it back down.
+ */
+export function lengthSendBlock(value: MentionValue, limit: number): string | null {
+  if (value.text.length <= limit) return null;
+  return `${value.text.length.toLocaleString("en")} of ${limit.toLocaleString("en")} characters. Cut it down to send.`;
+}
 
 /**
  * Why Send waits for what is in the field, or null (T15): a bare tag in an
